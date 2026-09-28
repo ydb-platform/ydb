@@ -1,6 +1,6 @@
 # Query plan optimization
 
-It's very useful to to analyze execution plans for queries in order to detect and eliminate the causes of possible inefficiencies. {{ ydb-short-name }} provides two types of query plans: logical plan and execution plan. Logical plan is better suited for analyzing complex queries with a large number of [JOIN](../../yql/reference/syntax/select/join.md) operators. Execution plan is more detailed: it additionally shows the stages of the distributed plan and connectors between them, which makes it more convenient for analyzing simple OLTP queries.
+It's very useful to analyze execution plans for queries in order to detect and eliminate the causes of possible inefficiencies. {{ ydb-short-name }} provides two types of query plans: logical plan and execution plan. Logical plan is better suited for analyzing complex queries with a large number of [JOIN](../../yql/reference/syntax/select/join.md) operators. Execution plan is more detailed: it additionally shows the stages of the distributed plan and connectors between them, which makes it more convenient for analyzing simple OLTP queries.
 
 ## Logical Query Plan
 
@@ -50,9 +50,9 @@ Let's build a query execution plan for this query. You can do this via either UI
            Tables: ["episodes"]
   ```
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
-  You can also build a query plan via [Embedded UI](../../reference/embedded-ui/ydb-monitoring.md). You need to navigate to the database page, go to the `Query` section, type the query text, and click on `Explain`:
+  You can also build a query plan via [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md). You need to navigate to the database page, go to the `Query` section, type the query text, and click on `Explain`:
 
   ![explain_ui](../../_assets/explain_ui.png)
 
@@ -101,7 +101,7 @@ Let's build the query plan using the secondary index `title_index`. Secondary in
            Tables: ["episodes/title_index/indexImplTable"]
   ```
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
   ![explain_ui](../../_assets/explain_with_index_ui.png)
 

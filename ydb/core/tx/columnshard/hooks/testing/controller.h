@@ -343,6 +343,14 @@ public:
         return ShardActuals.size();
     }
 
+    const ::NKikimr::NColumnShard::TColumnShard* GetTheOnlyShard() const {
+        TGuard<TMutex> g(Mutex);
+        AFL_VERIFY(ShardActuals.size() == 1);
+        return ShardActuals.begin()->second;
+    }
+
+    ui64 GetNodePortionsCountLimitVerified(const ui64 tabletId = 0) const;
+
     void DisableBackground(const EBackground id) {
         TGuard<TMutex> g(Mutex);
         DisabledBackgrounds.emplace(id);

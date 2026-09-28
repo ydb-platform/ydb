@@ -18,9 +18,9 @@ The access levels displayed with the `-l` or `-a` option reflect the [hierarchic
 
 Only access levels that are granted to the user are listed:
 
-- **Database** (presence in `database_allowed_sids`) — Grants the right to access the Embedded UI only as "database users": they can open the UI and see database-scoped data, but not cluster-wide data or cluster-level operations.
-- **Viewer** (presence in `viewer_allowed_sids`) — Grants the right to access the Embedded UI, without the ability to make changes.
-- **Monitoring** (presence in `monitoring_allowed_sids`) — Grants the right to perform actions in the Embedded UI that change the system state.
+- **Database** (presence in `database_allowed_sids`) — Grants the right to access the {{ ydb-ui-name }} only as "database users": they can open the UI and see database-scoped data, but not cluster-wide data or cluster-level operations.
+- **Viewer** (presence in `viewer_allowed_sids`) — Grants the right to access the {{ ydb-ui-name }}, without the ability to make changes.
+- **Monitoring** (presence in `monitoring_allowed_sids`) — Grants the right to perform actions in the {{ ydb-ui-name }} that change the system state.
 - **Administration** (presence in `administration_allowed_sids`) — Grants the right to perform administrative actions on databases or the cluster.
 - **Register node** (presence in `register_dynamic_node_allowed_sids`) — Grants the right to register dynamic nodes with the cluster.
 - **Bootstrap** (presence in `bootstrap_allowed_sids`) — Grants the right to perform bootstrap operations.

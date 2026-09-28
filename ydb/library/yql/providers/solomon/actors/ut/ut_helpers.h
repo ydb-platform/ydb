@@ -19,7 +19,9 @@ void InitAsyncOutput(
     NSo::NProto::TDqSolomonShard&& settings,
     i64 freeSpace = 100000);
 
-NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud);
+NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(
+    bool isCloud,
+    NUdf::TDataTypeId timestampType = NUdf::TDataType<NUdf::TTimestamp>::Id);
 
 NUdf::TUnboxedValue CreateStruct(
     NKikimr::NMiniKQL::THolderFactory& holderFactory,

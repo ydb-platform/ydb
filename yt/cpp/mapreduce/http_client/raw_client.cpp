@@ -50,15 +50,15 @@ void CheckError(const TString& requestId, NHttp::IResponsePtr response)
         }
 
         if (TExpectedErrorGuard::IsErrorExpected(errorResponse)) {
-            YT_LOG_INFO("Received expected error, RSP %v - HTTP %v - %v",
-                requestId,
-                response->GetStatusCode(),
-                errorResponse.AsStrBuf());
+            YT_TLOG_INFO("Response carries an expected HTTP error")
+                .With("RequestId", requestId)
+                .With("HttpCode", response->GetStatusCode())
+                .With("Error", errorResponse.AsStrBuf());
         } else {
-            YT_LOG_ERROR("RSP %v - HTTP %v - %v",
-                requestId,
-                response->GetStatusCode(),
-                errorResponse.AsStrBuf());
+            YT_TLOG_ERROR("Response carries an HTTP error")
+                .With("RequestId", requestId)
+                .With("HttpCode", response->GetStatusCode())
+                .With("Error", errorResponse.AsStrBuf());
         }
 
         ythrow errorResponse;
@@ -346,20 +346,21 @@ void THttpRawClient::PingTransaction(const TTransactionId& transactionId)
     node["transaction_id"] = GetGuidAsString(transactionId);
     auto strParams = NodeToYsonString(node);
 
-    YT_LOG_DEBUG("REQ %v - sending request (HostName: %v; Method POST %v; X-YT-Parameters (sent in body): %v)",
-        requestId,
-        Context_.ServerName,
-        url,
-        strParams);
+    YT_TLOG_DEBUG("Sending request")
+        .With("RequestId", requestId)
+        .With("HostName", Context_.ServerName)
+        .With("Method", "POST")
+        .With("Url", url)
+        .With("Parameters", strParams);
 
     auto response = NConcurrency::WaitFor(PingHttpClient_->Post(url, TSharedRef::FromString(strParams), headers))
         .ValueOrThrow();
     CheckError(requestId, response);
 
-    YT_LOG_DEBUG("RSP %v - received response %v bytes. (%v)",
-        requestId,
-        response->ReadAll().size(),
-        strParams);
+    YT_TLOG_DEBUG("Response received")
+        .With("RequestId", requestId)
+        .With("Size", response->ReadAll().size())
+        .With("Parameters", strParams);
 }
 
 void THttpRawClient::AbortTransaction(
@@ -1275,10 +1276,12 @@ void THttpRawClient::InitPingClient() {
     if (Context_.UseTLS) {
         auto httpsClientConfig = NYT::New<NHttps::TClientConfig>();
         httpsClientConfig->MaxIdleConnections = 16;
+        httpsClientConfig->DnsResolveOptions = GetDnsResolveOptions(Context_.Config);
         PingHttpClient_ = NHttps::CreateClient(std::move(httpsClientConfig), std::move(httpPoller));
     } else {
         auto httpClientConfig = NYT::New<NHttp::TClientConfig>();
         httpClientConfig->MaxIdleConnections = 16;
+        httpClientConfig->DnsResolveOptions = GetDnsResolveOptions(Context_.Config);
         PingHttpClient_ = NHttp::CreateClient(std::move(httpClientConfig), std::move(httpPoller));
     }
 }

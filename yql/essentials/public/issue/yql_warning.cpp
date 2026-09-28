@@ -37,7 +37,7 @@ TWarningPolicy::TWarningPolicy(bool isReplay)
 
 void TWarningPolicy::AddRule(const TWarningRule& rule)
 {
-    TString pattern = rule.GetPattern();
+    const TString& pattern = rule.GetPattern();
     if (pattern.empty()) {
         return;
     }

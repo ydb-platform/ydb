@@ -32,6 +32,11 @@ namespace NKikimr::NBlobDepot {
             SyncMode = settings->HasSyncMode();
             AsyncMode = settings->HasAsyncMode();
             Enabled = true;
+
+            CurrentMaxWritesInFlight = MaxWritesInFlight();
+            CurrentMaxDeletesInFlight = MaxDeletesInFlight();
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_DELETE_MAX_IN_FLIGHT] = CurrentMaxDeletesInFlight;
+            Self->TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT] = CurrentMaxWritesInFlight;
         } else {
             SyncMode = false;
             AsyncMode = false;

@@ -30,16 +30,20 @@ public:
     TCoroutineBase(const TCoroutineBase& other) = delete;
     TCoroutineBase& operator=(const TCoroutineBase& other) = delete;
 
-    ~TCoroutineBase();
-
     bool IsCompleted() const noexcept;
 
 protected:
     template <NMpl::CInvocable<void()> TBody>
     explicit TCoroutineBase(TBody body, EExecutionStackKind stackKind);
 
+    ~TCoroutineBase();
+
     void Resume();
     void Suspend();
+
+    //! If the coroutine is still running (suspended mid-body), resumes it to
+    //! unwind via TCoroutineAbandonedException.
+    void Abandon();
 
 private:
     enum class EState
@@ -51,11 +55,10 @@ private:
 
     std::shared_ptr<NThreading::TExecutionStack> CoroutineStack_;
 
-    // Points to a TExceptionSafeContext placed on the stack of the thread that
-    // called Resume(). Owning the caller context per-invocation (rather than as
-    // a member captured once at construction) keeps TSAN's fiber and ASAN's
-    // stack bounds in sync with the thread actually driving the coroutine,
-    // which may differ from the thread that constructed it.
+    // Points to the TExceptionSafeContext on the stack of the thread that called
+    // Resume(). Capturing it per invocation rather than once at construction keeps
+    // TSAN's fiber and ASAN's stack bounds in sync with the thread actually driving
+    // the coroutine, which may differ from the one that constructed it.
     TExceptionSafeContext* CallerContext_ = nullptr;
 
     // We have to delay initialization of this object until the body
@@ -117,6 +120,8 @@ public:
         TCallee&& callee,
         EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
+    ~TCoroutine();
+
     template <class... TParams>
     const std::optional<R>& Run(TParams&&... params);
 
@@ -150,6 +155,8 @@ public:
     TCoroutine(
         TCallee&& callee,
         EExecutionStackKind stackKind = DefaultExecutionStackKind);
+
+    ~TCoroutine();
 
     template <class... TParams>
     bool Run(TParams&&... params);

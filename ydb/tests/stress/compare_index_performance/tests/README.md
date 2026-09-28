@@ -61,15 +61,16 @@ sanity check) or two different refs — **without a local build**.
 | `compare_rows` | `10000` | rows in the generated database |
 | `compare_threads` | `10` | client threads |
 | `compare_targets` | `1000` | number of query targets |
+| `compare_index_type` | `` | value passed to the selected workload as `--index-type`; empty uses its default |
 | `compare_ref` | `main` | baseline S3 ref (download URL + report label) |
 | `compare_current_ref` | `` | current S3 ref; empty → use the locally built `ydbd` |
 | `compare_build_preset` | `release` | S3 preset for downloads + report label (e.g. `release`, `relwithdebinfo`, `profile`) |
 | `compare_baseline_ydbd` | `` | explicit baseline `ydbd` path (skips S3) |
 | `compare_current_ydbd` | `` | explicit current `ydbd` path (skips build/S3) |
-| `compare_baseline_feature_flags` | `` | comma-separated feature flags for the baseline cluster |
-| `compare_current_feature_flags` | `` | comma-separated feature flags for the current cluster |
 | `compare_baseline_table_service_config` | `` | comma-separated `key=value` for the baseline `table_service_config` |
 | `compare_current_table_service_config` | `` | comma-separated `key=value` for the current `table_service_config` |
+| `compare_main_config` | `` | comma-separated top-level `key=value` config overrides for the baseline/main cluster |
+| `compare_current_config` | `` | comma-separated top-level `key=value` config overrides for the current cluster |
 | `compare_flamegraph` | `` | `1`/`true` → collect CPU flamegraphs (see below) |
 | `compare_perf_sudo` | `` | `1`/`true` → run `perf` under `sudo` |
 | `compare_perf_freq` | `50` | `perf record -F` sampling frequency |
@@ -86,10 +87,17 @@ into booleans, numeric values into ints/floats; everything else is kept as a
 string. Keys may be dotted paths into nested submessages, e.g.
 `resource_manager.kqp_level_cache_max_size_bytes=314572800`; they are merged
 recursively, so the untouched defaults of that submessage (such as
-`resource_manager.channel_buffer_size`) are preserved. Feature flags follow the
-same `key=value` convention: a bare `enable_foo` (or `enable_foo=true`) enables
-the flag, `enable_foo=false` disables it. The fulltext test additionally enables
+`resource_manager.channel_buffer_size`) are preserved. The fulltext test enables
 `enable_fulltext_index` on both sides automatically.
+
+`compare_main_config` and `compare_current_config` use the same value coercion
+and dotted-path syntax, but their paths start at the top-level YAML config. This
+allows any mapping section to be overridden, for example
+`data_shard_config.stats_report_interval_seconds=1` or
+`table_service_config.resource_manager.kqp_level_cache_max_size_bytes=314572800`.
+Feature flags can be configured through the generic inputs, for example
+`feature_flags.enable_foo=true`. Generic config overrides are applied last if
+the same field is also set through a `table_service_config` compatibility option.
 
 > **A/B a flag that only exists on one side.** A feature flag or config field
 > that a binary doesn't know is rejected as an unknown YAML field, so pass a
@@ -143,8 +151,7 @@ the toolkit in `contrib/tools/flame-graph` (shipped to the sandbox via `DATA`):
 ./ya make --build relwithdebinfo -tA \
   ydb/tests/stress/compare_index_performance/tests \
   --test-param compare_workload=vector \
-  --test-param compare_current_feature_flags=enable_vector_index \
-  --test-param compare_current_table_service_config=enable_vector_index_read=true \
+  --test-param compare_current_config=feature_flags.enable_vector_index=true,table_service_config.enable_vector_index_read=true \
   --test-param compare_flamegraph=1 \
   --test-param compare_perf_sudo=1
 
@@ -153,6 +160,12 @@ the toolkit in `contrib/tools/flame-graph` (shipped to the sandbox via `DATA`):
   ydb/tests/stress/compare_index_performance/tests \
   --test-param compare_workload=vector \
   --test-param compare_current_table_service_config=resource_manager.kqp_level_cache_max_size_bytes=314572800
+
+# A/B an option in any other top-level config section.
+./ya make --build relwithdebinfo -tA \
+  ydb/tests/stress/compare_index_performance/tests \
+  --test-param compare_workload=vector \
+  --test-param compare_current_config=data_shard_config.stats_report_interval_seconds=1
 
 # Import data from S3 instead of auto-generating (uses a fixed dataset).
 ./ya make --build relwithdebinfo -tA \

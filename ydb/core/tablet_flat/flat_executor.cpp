@@ -31,6 +31,7 @@
 #include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -40,6 +41,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -133,6 +135,13 @@ private:
     bool Active = false;
 };
 
+static TActorActivityType DetectOwnerActivityType(NFlatExecutorSetup::ITablet* owner) {
+    if (auto* actor = dynamic_cast<IActor*>(owner)) {
+        return actor->GetActivityType();
+    }
+    return TActorActivityType();
+}
+
 TExecutor::TExecutor(
         NFlatExecutorSetup::ITablet* owner,
         const TActorId& ownerActorId)
@@ -140,6 +149,7 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
+    , OwnerActivityType(DetectOwnerActivityType(owner))
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
@@ -251,7 +261,7 @@ void TExecutor::Broken(EBrokenReason reason) {
     if (Owner) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
         Owner->Detach(OwnerCtx());
     }
 
@@ -367,8 +377,7 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
-    Y_ASSERT(yellowChannels);
-    if (Owner->ReassignChannelsEnabled()) {
+    if (Owner->ReassignChannelsEnabled() && !yellowChannels.empty()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
             if (auto logl = Logger->Log(ELnLev::Notice)) {
@@ -866,7 +875,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     }
 
     if (!Counters) {
@@ -957,7 +966,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 void TExecutor::DetachTablet() {
     ForceSendCounters();
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     return PassAway();
 }
 
@@ -2025,6 +2034,11 @@ bool TExecutor::CancelTransaction(ui64 id) {
 
 void TExecutor::ExecuteTransaction(TSeat* seat) {
     TActiveTransactionZone activeTransaction(this);
+    // Attribute allocations to the owner tablet's activity type when known.
+    std::optional<NProfiling::TMemoryTagScope> ownerScope;
+    if (OwnerActivityType != TActorActivityType()) {
+        ownerScope.emplace(OwnerActivityType.GetIndex());
+    }
     ++seat->Retries;
 
     THPTimer cpuTimer;
@@ -2392,34 +2406,43 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
         }
 
-        // Generate a special part switch for removed row versions
+        // Limit the number of ranges per switch and verify the exact protobuf
+        // size below before passing it to the single-blob writer. Currently, one RemovedRanges element in
+        // RowVersionChanges takes at most 50 bytes in the protobuf wire format.
+        static constexpr size_t MaxRemovedRangesPerSwitch = 64 * 1024;
         for (auto& xpair : change->RemovedRowVersions) {
             const auto tableId = xpair.first;
+            const auto& ranges = xpair.second;
 
             CompactionLogic->ReflectRemovedRowVersions(tableId);
 
-            NKikimrExecutorFlat::TTablePartSwitch proto;
-            proto.SetTableId(tableId);
+            for (size_t offset = 0; offset < ranges.size();) {
+                NKikimrExecutorFlat::TTablePartSwitch proto;
+                proto.SetTableId(tableId);
 
-            auto *changesProto = proto.MutableRowVersionChanges();
-            changesProto->SetTable(tableId);
+                auto *changesProto = proto.MutableRowVersionChanges();
+                changesProto->SetTable(tableId);
 
-            for (auto& range : xpair.second) {
-                auto *rangeProto = changesProto->AddRemovedRanges();
+                const size_t end = Min(ranges.size(), offset + MaxRemovedRangesPerSwitch);
+                for (; offset < end; ++offset) {
+                    const auto& range = ranges[offset];
+                    auto *rangeProto = changesProto->AddRemovedRanges();
 
-                auto *lower = rangeProto->MutableLower();
-                lower->SetStep(range.Lower.Step);
-                lower->SetTxId(range.Lower.TxId);
+                    auto *lower = rangeProto->MutableLower();
+                    lower->SetStep(range.Lower.Step);
+                    lower->SetTxId(range.Lower.TxId);
 
-                auto *upper = rangeProto->MutableUpper();
-                upper->SetStep(range.Upper.Step);
-                upper->SetTxId(range.Upper.TxId);
+                    auto *upper = rangeProto->MutableUpper();
+                    upper->SetStep(range.Upper.Step);
+                    upper->SetTxId(range.Upper.TxId);
+                }
+
+                auto body = proto.SerializeAsString();
+                Y_DEBUG_ABORT_UNLESS(body.size() < NBlockIO::BlockSize);
+                auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+
+                Y_UNUSED(glob);
             }
-
-            auto body = proto.SerializeAsString();
-            auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
-
-            Y_UNUSED(glob);
         }
 
         for (auto num : xrange(change->Deleted.size())) {
@@ -4014,6 +4037,12 @@ void TExecutor::UpdateUsedTabletMemory() {
 }
 
 void TExecutor::UpdateCounters(const TActorContext &ctx) {
+    if (GcLogic && Counters) {
+        if (const ui64 dropped = GcLogic->TakeSentinelDroppedMarks()) {
+            Counters->Cumulative()[TExecutorCounters::GC_SENTINEL_DROPPED_MARKS].Increment(dropped);
+        }
+    }
+
     TAutoPtr<TTabletCountersBase> executorCounters;
     TAutoPtr<TTabletCountersBase> externalTabletCounters;
 
@@ -5069,6 +5098,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     }
 
+    cfg.DataKind = DataKindByTabletType(Owner->TabletType());
+
     TLogoBlobID mask(Owner->TabletID(), Generation(), step, Max<ui8>(), 0, 0);
 
     if (auto logl = Logger->Log(ELnLev::Info)) {
@@ -5238,6 +5269,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();
     }
+
+    comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);

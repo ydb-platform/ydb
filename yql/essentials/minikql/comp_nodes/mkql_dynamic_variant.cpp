@@ -99,7 +99,6 @@ private:
         return res;
     }
 
-private:
     const THashMap<TStringBuf, ui32> Fields_;
 };
 

@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxCreateStreamResult: public TTxBase {
@@ -18,40 +20,42 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"rid", rid});
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown target",
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
         if (target->GetStreamState() != TReplication::EStreamState::Creating) {
-            CLOG_W(ctx, "Stream state mismatch"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", state# " << target->GetStreamState());
+            YDB_LOG_WARN_CTX(ctx, "Stream state mismatch",
+                {"rid", rid},
+                {"tid", tid},
+                {"state", target->GetStreamState()});
             return true;
         }
 
         if (Ev->Get()->IsSuccess()) {
             target->SetStreamState(TReplication::EStreamState::Ready);
 
-            CLOG_N(ctx, "Stream created"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_NOTICE_CTX(ctx, "Stream created",
+                {"rid", rid},
+                {"tid", tid});
         } else {
             const auto& status = Ev->Get()->Status;
 
@@ -63,11 +67,11 @@ public:
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
                 << ": " << target->GetIssue());
 
-            CLOG_E(ctx, "Create stream error"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", status# " << status.GetStatus()
-                << ", issue# " << status.GetIssues().ToOneLineString());
+            YDB_LOG_ERROR_CTX(ctx, "Create stream error",
+                {"rid", rid},
+                {"tid", tid},
+                {"status", status.GetStatus()},
+                {"issue", status.GetIssues().ToOneLineString()});
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -82,7 +86,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

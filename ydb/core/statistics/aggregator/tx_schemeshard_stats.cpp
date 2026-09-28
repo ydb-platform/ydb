@@ -111,6 +111,9 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
         for (auto& entry : statRecord.GetEntries()) {
             auto pathId = TPathId::FromProto(entry.GetPathId());
+            if (Self->IsStatisticsTable(pathId)) {
+                continue;
+            }
             newPathIds.insert(pathId);
             if (oldPathIds.find(pathId) == oldPathIds.end()) {
                 TStatisticsAggregator::TScheduleTraversal traversalTable;

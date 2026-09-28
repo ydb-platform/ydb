@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#include <util/folder/dirut.h>
 #include <util/system/fs.h>
 
 namespace NKikimr {
@@ -30,6 +31,7 @@ NKikimrConfig::TAppConfig AppCfg() {
     auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
     spilling->SetEnable(true);
     spilling->SetRoot("./spilling/");
+    MakeDirIfNotExist("./spilling");
 
     return appCfg;
 }
@@ -50,6 +52,7 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
 
     spilling->SetEnable(enableSpilling);
     spilling->SetRoot("./spilling/");
+    MakeDirIfNotExist("./spilling");
     if (limitFileSize) {
         spilling->SetMaxTotalSize(1);
     }
@@ -80,7 +83,6 @@ constexpr auto SimpleGraceJoinWithSpillingQuery = R"(
 constexpr auto SimpleWideSortWithSpillingQuery = R"(
         --!syntax_v1
         PRAGMA ydb.EnableSpillingNodes="WideSort";
-        PRAGMA ydb.WindowFunctionsV2 = "true";
         SELECT Key, Value,
             ROW_NUMBER() OVER (PARTITION BY Key ORDER BY Value) as rn
         FROM `/Root/KeyValue`
@@ -297,7 +299,9 @@ Y_UNIT_TEST(SelfJoin) {
 
 Y_UNIT_TEST(WideSortSpillingPragmaParsed) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfg());
+    auto appCfg = AppCfg();
+    appCfg.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+    TKikimrRunner kikimr(appCfg);
 
     auto db = kikimr.GetQueryClient();
 
@@ -328,7 +332,9 @@ Y_UNIT_TEST(WideSortSpillingPragmaParseError) {
 Y_UNIT_TEST_TWIN(WideSortSpillingInRuntimeNodes, EnabledSpilling) {
     double reasonableTreshold = EnabledSpilling ? 0.01 : 100;
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(reasonableTreshold));
+    auto appCfg = AppCfgLowComputeLimits(reasonableTreshold);
+    appCfg.MutableTableServiceConfig()->SetEnableWindowFunctionsV2(true);
+    TKikimrRunner kikimr(appCfg);
 
     auto db = kikimr.GetQueryClient();
 

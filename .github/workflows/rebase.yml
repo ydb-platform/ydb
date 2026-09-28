@@ -179,6 +179,9 @@ jobs:
           token: ${{ secrets.YDBOT_TOKEN }}
           fetch-depth: 0
           filter: blob:none
+          # SECURITY: This opts into fork checkout under pull_request_target.
+          # Keep subsequent operations limited to git; never execute PR files.
+          allow-unsafe-pr-checkout: true
 
       - name: Configure git
         run: |

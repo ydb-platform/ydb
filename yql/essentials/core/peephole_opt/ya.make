@@ -3,6 +3,8 @@ LIBRARY()
 ENABLE(SKIP_YQL_STYLE_CPP)
 
 SRCS(
+    yql_opt_block_rewriter.h
+    yql_opt_block_rewriter.cpp
     yql_opt_json_peephole_physical.h
     yql_opt_json_peephole_physical.cpp
     yql_opt_peephole_physical.h

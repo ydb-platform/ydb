@@ -31,6 +31,7 @@
 #include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/tablet_flat/flat_executor_recovery.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/dbs_controller.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -701,6 +702,8 @@ TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type) {
         return TTabletTypes::TenantSlotBroker;
     case NKikimrConfig::TBootstrap::CONSOLE:
         return TTabletTypes::Console;
+    case NKikimrConfig::TBootstrap::DBS_CONTROLLER:
+        return TTabletTypes::DbsController;
     default:
         Y_ABORT("unknown tablet type");
     }
@@ -778,6 +781,11 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
     case TTabletTypes::Dummy:
         createFunc = &CreateSimpleTablet;
         break;
+#if defined(YDB_EMBEDDED_NBS_ENABLED)
+    case TTabletTypes::DbsController:
+        createFunc = &NYdb::NBS::NBlockStore::NStorage::NDbsController::CreateDbsControllerTablet;
+        break;
+#endif
     default:
         return nullptr;
     }

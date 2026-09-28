@@ -1,4 +1,3 @@
-/* syntax version 1 */
 select
 Yson::IsEntity(Yson::From(NULL)),
 Yson::IsEntity(Yson::From(Void())),

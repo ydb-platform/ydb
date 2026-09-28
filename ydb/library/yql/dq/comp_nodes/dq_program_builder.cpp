@@ -7,6 +7,18 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
+namespace {
+
+void ValidateHashJoinKeyColumns(EJoinKind joinKind, const TArrayRef<const ui32>& leftKeyColumns,
+                                const TArrayRef<const ui32>& rightKeyColumns) {
+    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    }
+}
+
+} // namespace
+
 TDqProgramBuilder::TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry)
     : TProgramBuilder(env, functionRegistry)
 {}
@@ -184,14 +196,7 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
                                                 const TJoinFilterLambda& rightFilter,
                                                 const TJoinCommonFilterLambda& commonFilter) {
 
-    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
-    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
-
-    // A hash table lookup marks the build side rows as matched before the filters run, so unmatched
-    // left rows of a LeftIsBuild join could no longer be told apart.
-    const bool hasFilters = leftFilter || rightFilter || commonFilter;
-    MKQL_ENSURE(!hasFilters || !settings.LeftIsBuild(), "Join filters are not supported with LeftIsBuild block join");
+    ValidateHashJoinKeyColumns(joinKind, leftKeyColumns, rightKeyColumns);
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftStream);
@@ -201,7 +206,11 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     callableBuilder.Add(AsTuple(rightKeyColumns));
     callableBuilder.Add(AsTuple(leftRenames));
     callableBuilder.Add(AsTuple(rightRenames));
-    callableBuilder.Add(NewTuple({NewDataLiteral(static_cast<ui32>(settings.BuildSide))}));
+    TRuntimeNode::TList settingsNodes = {NewDataLiteral(static_cast<ui32>(settings.BuildSide))};
+    if (!settings.EqualNullsKeys.empty()) {
+        settingsNodes.push_back(AsTuple(settings.EqualNullsKeys));
+    }
+    callableBuilder.Add(NewTuple(settingsNodes));
     AddJoinFilters(callableBuilder, leftStream, rightStream, joinKind, leftFilter, rightFilter, commonFilter);
 
     return TRuntimeNode(callableBuilder.Build(), false);
@@ -216,9 +225,7 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
                                                  const TJoinFilterLambda& rightFilter,
                                                  const TJoinCommonFilterLambda& commonFilter) {
 
-    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
-    MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    ValidateHashJoinKeyColumns(joinKind, leftKeyColumns, rightKeyColumns);
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftFlow);

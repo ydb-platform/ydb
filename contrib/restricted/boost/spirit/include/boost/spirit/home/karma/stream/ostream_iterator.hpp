@@ -1,4 +1,5 @@
 //  Copyright (c) 2001-2011 Hartmut Kaiser
+//  Copyright (c) 2025 Joaquin M Lopez Munoz
 // 
 //  Distributed under the Boost Software License, Version 1.0. (See accompanying 
 //  file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -30,7 +31,7 @@ namespace boost { namespace spirit { namespace karma
     public:
         typedef std::output_iterator_tag iterator_category;
         typedef void value_type;
-        typedef void difference_type;
+        typedef std::ptrdiff_t difference_type;
         typedef void pointer;
         typedef void reference;
         typedef Elem char_type;

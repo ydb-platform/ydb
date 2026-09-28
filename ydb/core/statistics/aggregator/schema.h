@@ -81,6 +81,7 @@ struct TAggregatorSchema : NIceDb::Schema {
         struct ColumnTags     : Column<4, NScheme::NTypeIds::String> {};
         struct Status         : Column<5, NScheme::NTypeIds::Uint64> {};
         struct Path           : Column<6, NScheme::NTypeIds::String> {};
+        struct SampleRate     : Column<7, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<OperationId, OwnerId, LocalPathId>;
         using TColumns = TableColumns<
@@ -89,7 +90,8 @@ struct TAggregatorSchema : NIceDb::Schema {
             LocalPathId,
             ColumnTags,
             Status,
-            Path
+            Path,
+            SampleRate
         >;
     };
 

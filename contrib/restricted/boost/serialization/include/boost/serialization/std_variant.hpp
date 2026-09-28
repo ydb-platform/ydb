@@ -176,7 +176,7 @@ inline void serialize(
 
 // Specialization for std::monostate
 template<class Archive>
-void serialize(Archive &ar, std::monostate &, const unsigned int /*version*/)
+void serialize(Archive &, std::monostate &, const unsigned int /*version*/)
 {}
 
 } // namespace serialization

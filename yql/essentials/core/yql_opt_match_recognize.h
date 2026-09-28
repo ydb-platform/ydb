@@ -4,6 +4,6 @@
 
 namespace NYql {
 
-TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr &node, TExprContext &ctx, TTypeAnnotationContext& typeAnnCtx);
+TExprNode::TPtr ExpandMatchRecognize(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typeAnnCtx);
 
-} //namespace NYql
+} // namespace NYql

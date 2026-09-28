@@ -1,0 +1,12 @@
+(module
+    (import "env" "memory" (memory i64 8 2097152))
+    (import "env" "BridgeGetInt64" (func $get (param i64) (result i64)))
+    (import "env" "BridgeIsNull" (func $null (param i64) (result i32)))
+    (import "env" "BridgeMakeInt64" (func $make (param i64) (result i64)))
+    (import "helpers" "helpers_scale" (func $helpers_scale (param i64) (result i64)))
+    (func (export "scale") (param i64) (param $result i64) (param $arg0 i64)
+        (if (call $null (local.get $arg0))
+            (then (i64.store (local.get $result) (i64.const 0)))
+            (else (i64.store (local.get $result)
+                (call $make (call $helpers_scale (call $get (local.get $arg0))))))))
+)

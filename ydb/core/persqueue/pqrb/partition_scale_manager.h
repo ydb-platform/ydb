@@ -5,6 +5,7 @@
 #include "partition_scale_manager_graph_cmp.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include "ydb/core/persqueue/public/utils.h"
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -17,13 +18,13 @@
 #include <util/generic/fwd.h>
 #include <util/generic/string.h>
 
-#include <map>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <utility>
 
 namespace NKikimr {
 namespace NPQ {
 
-class TPartitionScaleManager {
+class TPartitionScaleManager : public TLogPrefix {
 private:
     struct TBalancerConfig {
         TBalancerConfig(
@@ -65,18 +66,19 @@ public:
         TMaybe<TString> splitBoundary,
         const TActorContext& ctx);
     void HandleScaleRequestResult(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
+    void AbortInflightScaleRequest(const TActorContext& ctx);
     std::expected<void, std::string> HandleMirrorTopicDescriptionResult(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
     void TrySendScaleRequest(const TActorContext& ctx);
     void UpdateBalancerConfig(ui64 pathId, int version, const NKikimrPQ::TPQTabletConfig& config);
-    void UpdateDatabasePath(const TString& dbPath);
+    void UpdateDatabasePath(const TString& dbPath, const TActorContext& ctx);
     void Die(const TActorContext& ctx);
 
 private:
     using TPartitionSplit = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionSplit;
     using TPartitionMerge = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionMerge;
     using TPartitionBoundary = NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary;
-    using TPartitionsToSplitMap = std::map<ui32, TPartitionScaleOperationInfo>;
+    using TPartitionsToSplitMap = absl::flat_hash_map<ui32, TPartitionScaleOperationInfo>;
 
     class TScaleRequest {
     public:
@@ -104,8 +106,8 @@ private:
     TRequests<TPartitionSplit> BuildSplitRequest(size_t& allowedSplitsCount);
     TRequests<TPartitionMerge> BuildMergeRequest(size_t& allowedSplitsCount);
     TBuildSplitScaleRequestResult BuildSplitScaleRequest(const TPartitionScaleOperationInfo& splitParameters) const;
-    std::vector<TPartitionsToSplitMap::const_iterator> ReorderSplits() const;
-    TString LogPrefix() const;
+    std::vector<ui32> ReorderSplits() const;
+    TStructuredMessage LogPrefix() const override;
     void ClearMirrorInfo();
     void UpdateMirrorRootPartitionsSet();
 
@@ -132,7 +134,6 @@ private:
 
     bool RequestInflight = false;
     bool MirroredFromSomewhere = false;
-    bool RootPartitionsResetRequestInflight = false;
 };
 
 } // namespace NPQ

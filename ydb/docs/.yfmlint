@@ -49,8 +49,8 @@ log-levels:
   MD052: 'error' # Reference links and images should use a label that is defined
   MD053: 'error' # Link and image reference definitions should be needed
   MD054: 'error' # Link and image style
-  MD055: 'error' # Table pipe style
-  MD056: 'error' # Table column count
+  MD055: 'disabled' # Table pipe style
+  MD056: 'disabled' # Table column count
 
   YFM001: 'error' # Inline code length
   YFM002: 'error' # No header found in the file for the link text

@@ -6,9 +6,9 @@
 
 1. Проанализируйте статистику балансировщика Hive.
 
-    1. Откройте [Встроенный UI](../../../../reference/embedded-ui/index.md).
+    1. Откройте [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md).
 
-    1. Нажмите на ссылку **Developer UI** в правом верхнем углу Встроенного UI.
+    1. Нажмите на ссылку **Developer UI** в правом верхнем углу {{ ydb-ui-name }}.
 
     1. В **Developer UI** перейдите на страницу **Tablets > Hive > App**.
 

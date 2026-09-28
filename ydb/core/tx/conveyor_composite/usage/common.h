@@ -1,17 +1,10 @@
 #pragma once
+#include <ydb/core/tx/conveyor_composite/common/category.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
 namespace NKikimr::NConveyorComposite {
 using ITask = NConveyor::ITask;
 class TCPULimitsConfig;
-
-enum class ESpecialTaskCategory {
-    Insert = 0 /* "insert" */,
-    Compaction = 1 /* "compaction" */,
-    Normalizer = 2 /* "normalizer" */,
-    Scan = 3 /* "scan" */,
-    Deduplication = 4 /* "deduplication" */
-};
 
 class TProcessGuard: TNonCopyable {
 private:
@@ -31,13 +24,18 @@ public:
     explicit TProcessGuard(const ESpecialTaskCategory category, const TString& scopeId, const ui64 externalProcessId,
         const TCPULimitsConfig& cpuLimits, const std::optional<NActors::TActorId>& actorId);
 
+    bool SendTaskToExecute(const std::shared_ptr<ITask>& task) const;
+
     void Finish();
 
     TProcessGuard(TProcessGuard&& other)
         : Category(other.Category)
         , ScopeId(other.ScopeId)
         , ExternalProcessId(other.ExternalProcessId)
-        , ServiceActorId(other.ServiceActorId) {
+        , InternalProcessId(other.InternalProcessId)
+        , Finished(other.Finished)
+        , ServiceActorId(std::move(other.ServiceActorId)) {
+        other.Finished = true;
         other.ServiceActorId.reset();
     }
 

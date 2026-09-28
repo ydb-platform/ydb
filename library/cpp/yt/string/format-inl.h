@@ -603,7 +603,7 @@ inline void FormatValue(TStringBuilderBase* builder, const std::string_view& val
 // std::filesystem::path
 inline void FormatValue(TStringBuilderBase* builder, const std::filesystem::path& value, TStringBuf spec)
 {
-    FormatValue(builder, std::string(value), spec);
+    FormatValue(builder, value.string(), spec);
 }
 #endif
 
@@ -875,7 +875,7 @@ void FormatValue(TStringBuilderBase* builder, const TEnumIndexedArray<E, T>& col
 {
     builder->AppendChar('{');
     bool firstItem = true;
-    for (const auto& index : TEnumTraits<E>::GetDomainValues()) {
+    for (const auto& index : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (!firstItem) {
             builder->AppendString(DefaultJoinToStringDelimiter);
         }

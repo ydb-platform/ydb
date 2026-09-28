@@ -33,8 +33,8 @@ public:
         Inner->SetRequestState(state, timestamp);
     }
 
-    void SetPoolId(TString poolId) override {
-        Inner->SetPoolId(poolId);
+    void SetPoolContext(TString poolId, TString classifiedBy) override {
+        Inner->SetPoolContext(std::move(poolId), std::move(classifiedBy));
     }
 
 private:
@@ -147,6 +147,7 @@ public:
         auto wrapper = std::make_shared<TWmSessionUpdaterWrapper>(FinalState, msg->WmSessionUpdater);
 
         auto* proxyMsg = new NWorkloadManager::TEvPlaceRequestIntoPool(
+            msg->QueryId,
             msg->DatabaseId,
             msg->SessionId,
             msg->PoolId,
@@ -162,7 +163,7 @@ public:
             senderForWorkload = Register(interceptor);
         }
 
-        Send(new IEventHandle(WorkloadServiceId, senderForWorkload, proxyMsg));
+        Send(new IEventHandle(WorkloadServiceId, senderForWorkload, proxyMsg, 0, ev->Cookie));
     }
 
 private:
@@ -177,9 +178,14 @@ private:
 class TQuerySessionReader {
 public:
     struct Row {
-        std::optional<std::string> WmPoolId;
-        std::optional<std::string> WmState;
         std::optional<std::string> SessionId;
+        std::optional<std::string> State;
+        std::optional<std::string> WmPoolId;
+        std::optional<std::string> WmClassifiedBy;
+        std::optional<TInstant> StateChangeAt;
+        std::optional<TInstant> QueryStartAt;
+        // Deprecated columns kept in the read for regression assertions.
+        std::optional<std::string> WmState;
         std::optional<TInstant> WmEnterTime;
         std::optional<TInstant> WmExitTime;
     };
@@ -189,17 +195,27 @@ public:
         : Ydb(ydb)
     {}
 
-    void FetchAll(const TString& query) {
+    void FetchAll(TStringBuf query) {
+        Fetch(TStringBuilder() << "Query = '" << query << "'");
+    }
+
+    void FetchBySessionId(TStringBuf sessionId) {
+        Fetch(TStringBuilder() << "SessionId = '" << sessionId << "'");
+    }
+
+private:
+    void Fetch(TStringBuf predicate) {
         using namespace fmt::literals;
 
         Results.clear();
         TString q = fmt::format(R"(
-            SELECT SessionId, WmPoolId, WmState, WmEnterTime, WmExitTime
+            SELECT SessionId, State, WmPoolId, WmClassifiedBy, StateChangeAt, QueryStartAt,
+                   WmState, WmEnterTime, WmExitTime
             FROM `.sys/query_sessions`
-            WHERE State = 'EXECUTING' and Query = '{query}'
-            ORDER By WmState
+            WHERE {predicate}
+            ORDER BY SessionId
         )",
-            "query"_a = query
+            "predicate"_a = predicate
         );
 
         auto result = Ydb->ExecuteQuery(q, TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
@@ -209,22 +225,21 @@ public:
         auto parser = std::make_unique<NYdb::TResultSetParser>(rs);
 
         while (parser->TryNextRow()) {
-            auto wmState = parser->ColumnParser("WmState").GetOptionalUtf8();
-            auto wmPoolId = parser->ColumnParser("WmPoolId").GetOptionalUtf8();
-            auto sessionId = parser->ColumnParser("SessionId").GetOptionalUtf8();
-            auto wmEnterTime = parser->ColumnParser("WmEnterTime").GetOptionalTimestamp();
-            auto wmExitTime = parser->ColumnParser("WmExitTime").GetOptionalTimestamp();
-
             Results.push_back(Row{
-                .WmPoolId = wmPoolId,
-                .WmState = wmState,
-                .SessionId = sessionId,
-                .WmEnterTime = wmEnterTime,
-                .WmExitTime = wmExitTime
+                .SessionId       = parser->ColumnParser("SessionId").GetOptionalUtf8(),
+                .State           = parser->ColumnParser("State").GetOptionalUtf8(),
+                .WmPoolId        = parser->ColumnParser("WmPoolId").GetOptionalUtf8(),
+                .WmClassifiedBy  = parser->ColumnParser("WmClassifiedBy").GetOptionalUtf8(),
+                .StateChangeAt   = parser->ColumnParser("StateChangeAt").GetOptionalTimestamp(),
+                .QueryStartAt    = parser->ColumnParser("QueryStartAt").GetOptionalTimestamp(),
+                .WmState         = parser->ColumnParser("WmState").GetOptionalUtf8(),
+                .WmEnterTime     = parser->ColumnParser("WmEnterTime").GetOptionalTimestamp(),
+                .WmExitTime      = parser->ColumnParser("WmExitTime").GetOptionalTimestamp(),
             });
         }
     }
 
+public:
     Row operator[](size_t index) const {
         Y_ENSURE(index < Results.size());
         return Results[index];
@@ -295,9 +310,8 @@ private:
 
 Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     ///
-    /// Executes a query and processes all WM states up to the specified final state.
-    /// It captures session data from .sys/query_sessions by 'parking' the request
-    /// in the interceptor actor, ensuring a race-free read before actual SQL execution starts.
+    /// Executes a query in a user-supplied pool, freezing WM at `state` so the
+    /// session row can be observed at that step of the queue lifecycle.
     ///
     TQuerySessionReader ReadQuerySessionAfterState(ISessionUpdater::EState state) {
         TQuerySessionTestFixture f("my_pool", state);
@@ -307,14 +321,11 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         auto future = f.GetYdb()->ExecuteQueryAsync(query, myPool);
         auto runtime = f.GetYdb()->GetRuntime();
 
-        // Stop a request before a real execution to prevent read races from a .sys/query_sessions
-        // The request is now 'parked' in the interceptor actor
         auto ev = runtime->GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edge);
 
         TQuerySessionReader reader(f.GetYdb());
         reader.FetchAll(query);
 
-        // Continue a request execution by sending the event back to the interceptor
         runtime->Send(new IEventHandle(ev->Sender, edge, ev->Release().Release()));
 
         auto result = future.GetResult();
@@ -323,46 +334,27 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         return reader;
     }
 
-    Y_UNIT_TEST(TestWmStateNone) {  
-        auto reader = ReadQuerySessionAfterState(ISessionUpdater::NONE);
-
-        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "NONE");
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
-        UNIT_ASSERT(!reader[0].WmEnterTime);
-        UNIT_ASSERT(!reader[0].WmExitTime);
-    }
-
-    Y_UNIT_TEST(TestWmStatePending) {
+    ///
+    /// RFC C2: request parked in the local pending queue.
+    /// Displayed State must be QUEUED; QueryStartAt is NULL until execution starts.
+    ///
+    Y_UNIT_TEST(TestStateQueuedPending) {
         auto reader = ReadQuerySessionAfterState(ISessionUpdater::PENDING);
 
         UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "PENDING");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].State, "QUEUED");
         UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
-        UNIT_ASSERT(reader[0].WmEnterTime);
-        UNIT_ASSERT(!reader[0].WmExitTime);
-    }
-
-    Y_UNIT_TEST(TestWmStateExited) {
-        auto reader = ReadQuerySessionAfterState(ISessionUpdater::EXITED);
-
-        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "EXITED");
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
-        UNIT_ASSERT(reader[0].WmEnterTime);
-        UNIT_ASSERT(reader[0].WmExitTime);
-        UNIT_ASSERT(*reader[0].WmEnterTime < *reader[0].WmExitTime);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, "USER");
+        UNIT_ASSERT(reader[0].StateChangeAt);
+        UNIT_ASSERT(!reader[0].QueryStartAt);
     }
 
     ///
-    /// Verifies the full lifecycle of a queued request within a Resource Pool.
-    /// The test simulates a pool limit exhaustion (limit=1), forcing the second
-    /// query into a 'DELAYED' state. It then ensures that once the first query
-    /// is released, the second one correctly transitions to 'EXITED' state,
-    /// preserving its original 'WmEnterTime' and recording a valid 'WmExitTime'.
+    /// RFC C2: request parked in the delayed_requests table.
+    /// Collapses to the same displayed State = QUEUED as PENDING.
     ///
-    Y_UNIT_TEST(TestWmStateDelayedToExited) {
-        TQuerySessionTestFixture f("my_pool", ISessionUpdater::EXITED, /*limit=*/1);
+    Y_UNIT_TEST(TestStateQueuedDelayed) {
+        TQuerySessionTestFixture f("my_pool", ISessionUpdater::DELAYED, /*limit=*/1);
         auto myPool = TQueryRunnerSettings().PoolId("my_pool");
         auto& runtime = *f.GetYdb()->GetRuntime();
 
@@ -372,39 +364,27 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         TActorId edgeHanging = f.SetupInterceptor(qHanging);
         TActorId edgeDelayed = f.SetupInterceptor(qDelayed);
 
-        // Stop a first request before a real execution to fill limits
         auto hangingRequest = f.GetYdb()->ExecuteQueryAsync(qHanging, myPool);
         auto evHanging = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edgeHanging);
-        
-        // Run a second request which has to be placed in a Delayed Queue
-        auto delayedRequest = f.GetYdb()->ExecuteQueryAsync(qDelayed, myPool);
 
-        // Wait for condition
+        auto delayedRequest = f.GetYdb()->ExecuteQueryAsync(qDelayed, myPool);
         f.GetYdb()->WaitPoolState({.DelayedRequests = 1, .RunningRequests = 1});
 
         TQuerySessionReader reader(f.GetYdb());
         reader.FetchAll(qDelayed);
         UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "DELAYED");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].State, "QUEUED");
         UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
-        UNIT_ASSERT(reader[0].WmEnterTime);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, "USER");
+        UNIT_ASSERT(reader[0].StateChangeAt);
+        UNIT_ASSERT(!reader[0].QueryStartAt);
+        // Deprecated columns must stay NULL even while the request is DELAYED.
+        UNIT_ASSERT(!reader[0].WmState);
+        UNIT_ASSERT(!reader[0].WmEnterTime);
         UNIT_ASSERT(!reader[0].WmExitTime);
 
-        // Continue the first request and wait for the second request to be about to execute
         runtime.Send(new IEventHandle(evHanging->Sender, edgeHanging, evHanging->Release().Release()));
         auto evDelayed = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edgeDelayed);
- 
-        TQuerySessionReader reader2(f.GetYdb());
-        reader2.FetchAll(qDelayed);
-        UNIT_ASSERT_VALUES_EQUAL(reader2.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reader2[0].WmState, "EXITED");
-        UNIT_ASSERT_VALUES_EQUAL(reader2[0].WmPoolId, "my_pool");
-        UNIT_ASSERT(reader2[0].WmEnterTime);
-        UNIT_ASSERT(reader2[0].WmExitTime);
-        UNIT_ASSERT(*reader2[0].WmEnterTime < *reader2[0].WmExitTime);
-        UNIT_ASSERT_VALUES_EQUAL(*reader[0].WmEnterTime, *reader2[0].WmEnterTime);
-
-        // Continue the second request
         runtime.Send(new IEventHandle(evDelayed->Sender, edgeDelayed, evDelayed->Release().Release()));
 
         hangingRequest.GetResult();
@@ -412,58 +392,149 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
     }
 
     ///
-    /// Verifies that session metadata and Workload Manager (WM) state are correctly
-    /// cleaned up and reset when a KQP session is reused for a new query.
-    /// The test ensures that reusing a session via TableClient properly invokes
-    /// WmState->Clean(), resetting timestamps and states in the .sys/query_sessions table.
+    /// RFC C3: after the request leaves the queue, displayed State is EXECUTING
+    /// and StateChangeAt / QueryStartAt both equal the queue-exit time.
     ///
-    Y_UNIT_TEST(TestWmStateCleanupOnSessionReuse) {
-        using namespace NYdb::NTable;
+    Y_UNIT_TEST(TestStateExecutingAfterQueue) {
+        auto reader = ReadQuerySessionAfterState(ISessionUpdater::EXITED);
 
-        // We use PENDING state because AttachQueryText calls Clean() before placing request into pool
-        TQuerySessionTestFixture f(NResourcePool::DEFAULT_POOL_ID, ISessionUpdater::PENDING);
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].State, "EXECUTING");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, "USER");
+        UNIT_ASSERT(reader[0].StateChangeAt);
+        UNIT_ASSERT(reader[0].QueryStartAt);
+        UNIT_ASSERT_VALUES_EQUAL(*reader[0].StateChangeAt, *reader[0].QueryStartAt);
+    }
+
+    ///
+    /// RFC C3.1: request that hits the default pool through the classifier fallback
+    /// must show WmClassifiedBy = "NONE". Uses TableClient because IYdbSetup's
+    /// runner always attaches a PoolId to the request; TableClient sends no
+    /// PoolId, letting the classifier reach its Default branch.
+    ///
+    Y_UNIT_TEST(TestStateExecutingDefaultPool) {
+        using namespace NYdb::NTable;
+        TQuerySessionTestFixture f(NResourcePool::DEFAULT_POOL_ID, ISessionUpdater::EXITED);
+        const TString& query = TSampleQueries::TSelect42::Query;
+        TActorId edge = f.SetupInterceptor(query);
         auto& runtime = *f.GetYdb()->GetRuntime();
 
+        auto session = f.GetYdb()->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto future = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx());
+        auto ev = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edge);
+
+        TQuerySessionReader reader(f.GetYdb());
+        reader.FetchAll(query);
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].State, "EXECUTING");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, NResourcePool::DEFAULT_POOL_ID);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, "NONE");
+
+        runtime.Send(new IEventHandle(ev->Sender, edge, ev->Release().Release()));
+        UNIT_ASSERT(future.GetValueSync().IsSuccess());
+    }
+
+    ///
+    /// RFC C3.2: request routed by a classifier match must show
+    /// WmClassifiedBy = "CLASSIFIER: <name>".
+    ///
+    Y_UNIT_TEST(TestStateExecutingClassifiedByClassifier) {
+        using namespace NYdb::NTable;
+        TQuerySessionTestFixture f("my_pool", ISessionUpdater::EXITED);
+
+        const TString classifierId = "my_pool_classifier";
+        auto ddl = f.GetYdb()->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER )" << classifierId << R"( WITH (
+                RESOURCE_POOL="my_pool",
+                RANK=20
+            );
+        )", TQueryRunnerSettings().PoolId(NResourcePool::DEFAULT_POOL_ID));
+        UNIT_ASSERT_VALUES_EQUAL_C(ddl.GetStatus(), NYdb::EStatus::SUCCESS, ddl.GetIssues().ToString());
+        f.GetYdb()->WaitForClassifierPropagation();
+
+        const TString& query = TSampleQueries::TSelect42::Query;
+        TActorId edge = f.SetupInterceptor(query);
+        auto& runtime = *f.GetYdb()->GetRuntime();
+
+        auto session = f.GetYdb()->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto future = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx());
+        auto ev = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edge);
+
+        TQuerySessionReader reader(f.GetYdb());
+        reader.FetchAll(query);
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].State, "EXECUTING");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmPoolId, "my_pool");
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, TString("CLASSIFIER: ") + classifierId);
+
+        runtime.Send(new IEventHandle(ev->Sender, edge, ev->Release().Release()));
+        UNIT_ASSERT(future.GetValueSync().IsSuccess());
+    }
+
+    ///
+    /// RFC C1: after the query finishes the session goes IDLE — Query is cleared,
+    /// WmPoolId / WmClassifiedBy / QueryStartAt must all be NULL.
+    ///
+    Y_UNIT_TEST(TestStateIdle) {
+        using namespace NYdb::NTable;
+        TQuerySessionTestFixture f("my_pool", ISessionUpdater::EXITED);
         auto db = f.GetYdb()->GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        auto sessionId = session.GetId();
+        const auto sessionId = session.GetId();
 
-        // Execute the first query
-        const TString qFirst = "SELECT 11;";
-        TActorId edge1 = f.SetupInterceptor(qFirst);
-        auto future1 = session.ExecuteDataQuery(qFirst, TTxControl::BeginTx().CommitTx());
-        auto ev1 = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edge1);
-        
+        auto res = session.ExecuteDataQuery(TSampleQueries::TSelect42::Query,
+                                            TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
         TQuerySessionReader reader(f.GetYdb());
-        reader.FetchAll(qFirst);
+        reader.FetchBySessionId(sessionId);
         UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].SessionId, sessionId);
-        UNIT_ASSERT_VALUES_EQUAL(reader[0].WmState, "PENDING");
-        UNIT_ASSERT(reader[0].WmEnterTime);
-        UNIT_ASSERT(!reader[0].WmExitTime);
+        UNIT_ASSERT_VALUES_EQUAL(reader[0].State, "IDLE");
+        UNIT_ASSERT(!reader[0].WmPoolId);
+        UNIT_ASSERT(!reader[0].WmClassifiedBy);
+        UNIT_ASSERT(!reader[0].QueryStartAt);
+    }
 
-        // Resume and wait for the first query to finish
-        runtime.Send(new IEventHandle(ev1->Sender, edge1, ev1->Release().Release()));
-        UNIT_ASSERT(future1.GetValueSync().IsSuccess());
+    ///
+    /// RFC C4: with ResourcePools disabled the classifier is never invoked, so
+    /// SetPoolContext is never called — WmPoolId / WmClassifiedBy stay NULL for the
+    /// whole session lifecycle. State can still be IDLE or EXECUTING.
+    ///
+    Y_UNIT_TEST(TestStateWmDisabled) {
+        using namespace NYdb::NTable;
+        auto ydb = TYdbSetupSettings()
+            .NodeCount(1)
+            .EnableResourcePools(false)
+            .EnableStreamingQueries(false)
+            .Create();
 
-        // Execute the second query in the same session
-        const TString qSecond = "SELECT 12;";
-        TActorId edge2 = f.SetupInterceptor(qSecond);
-        auto future2 = session.ExecuteDataQuery(qSecond, TTxControl::BeginTx().CommitTx());
-        auto ev2 = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edge2);
+        auto session = ydb->GetTableClient().CreateSession().GetValueSync().GetSession();
+        const auto sessionId = session.GetId();
 
-        TQuerySessionReader reader2(f.GetYdb());
-        reader2.FetchAll(qSecond);
-        UNIT_ASSERT_VALUES_EQUAL(reader2.Size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(reader2[0].SessionId, sessionId);
-        UNIT_ASSERT_VALUES_EQUAL(reader2[0].WmState, "PENDING");
-        UNIT_ASSERT(reader2[0].WmEnterTime);
-        UNIT_ASSERT(!reader2[0].WmExitTime);
-        UNIT_ASSERT(*reader[0].WmEnterTime < *reader2[0].WmEnterTime);
-        
-        // Resume and wait for the second query to finish
-        runtime.Send(new IEventHandle(ev2->Sender, edge2, ev2->Release().Release()));
-        UNIT_ASSERT(future2.GetValueSync().IsSuccess());
+        auto res = session.ExecuteDataQuery(TSampleQueries::TSelect42::Query,
+                                            TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(res.IsSuccess());
+
+        TQuerySessionReader reader(ydb);
+        reader.FetchBySessionId(sessionId);
+        UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+        UNIT_ASSERT(!reader[0].WmPoolId);
+        UNIT_ASSERT(!reader[0].WmClassifiedBy);
+    }
+
+    ///
+    /// RFC: WmState / WmEnterTime / WmExitTime are deprecated and MUST always be NULL,
+    /// regardless of the actual queue state.
+    ///
+    Y_UNIT_TEST(TestDeprecatedColumnsAlwaysNull) {
+        for (auto state : {ISessionUpdater::NONE, ISessionUpdater::PENDING, ISessionUpdater::EXITED}) {
+            auto reader = ReadQuerySessionAfterState(state);
+            UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
+            UNIT_ASSERT_C(!reader[0].WmState,     "WmState must be NULL for state=" << ui32(state));
+            UNIT_ASSERT_C(!reader[0].WmEnterTime, "WmEnterTime must be NULL for state=" << ui32(state));
+            UNIT_ASSERT_C(!reader[0].WmExitTime,  "WmExitTime must be NULL for state=" << ui32(state));
+        }
     }
 }
 

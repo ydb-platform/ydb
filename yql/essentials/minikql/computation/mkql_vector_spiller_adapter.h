@@ -208,7 +208,6 @@ private:
         State_ = EState::AcceptingData;
     }
 
-private:
     EState State_ = EState::AcceptingData;
 
     ISpiller::TPtr Spiller_;

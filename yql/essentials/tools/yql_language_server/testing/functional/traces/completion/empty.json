@@ -38,133 +38,155 @@
           "filterText": "select",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "SELECT"
+          "label": "SELECT",
+          "sortText": "0"
         },
         {
           "filterText": "pragma",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "PRAGMA"
+          "label": "PRAGMA",
+          "sortText": "1"
         },
         {
           "filterText": "from",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "FROM"
+          "label": "FROM",
+          "sortText": "2"
         },
         {
           "filterText": "use",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "USE"
+          "label": "USE",
+          "sortText": "3"
         },
         {
           "filterText": "insert",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "INSERT"
+          "label": "INSERT",
+          "sortText": "4"
         },
         {
           "filterText": "with",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "WITH"
+          "label": "WITH",
+          "sortText": "5"
         },
         {
           "filterText": "declare",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "DECLARE"
+          "label": "DECLARE",
+          "sortText": "6"
         },
         {
           "filterText": "define",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "DEFINE"
+          "label": "DEFINE",
+          "sortText": "7"
         },
         {
           "filterText": "do",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "DO"
+          "label": "DO",
+          "sortText": "8"
         },
         {
           "filterText": "import",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "IMPORT"
+          "label": "IMPORT",
+          "sortText": "9"
         },
         {
           "filterText": "evaluate",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "EVALUATE"
+          "label": "EVALUATE",
+          "sortText": "A"
         },
         {
           "filterText": "commit",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "COMMIT"
+          "label": "COMMIT",
+          "sortText": "B"
         },
         {
           "filterText": "replace",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "REPLACE"
+          "label": "REPLACE",
+          "sortText": "C"
         },
         {
           "filterText": "process",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "PROCESS"
+          "label": "PROCESS",
+          "sortText": "D"
         },
         {
           "filterText": "values",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "VALUES"
+          "label": "VALUES",
+          "sortText": "E"
         },
         {
           "filterText": "drop",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "DROP"
+          "label": "DROP",
+          "sortText": "F"
         },
         {
           "filterText": "discard",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "DISCARD"
+          "label": "DISCARD",
+          "sortText": "G"
         },
         {
           "filterText": "reduce",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "REDUCE"
+          "label": "REDUCE",
+          "sortText": "H"
         },
         {
           "filterText": "export",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "EXPORT"
+          "label": "EXPORT",
+          "sortText": "I"
         },
         {
           "filterText": "upsert",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "UPSERT"
+          "label": "UPSERT",
+          "sortText": "J"
         },
         {
           "filterText": "explain",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "EXPLAIN"
+          "label": "EXPLAIN",
+          "sortText": "K"
         },
         {
           "filterText": "combine",
           "insertTextFormat": 1,
           "kind": 14,
-          "label": "COMBINE"
+          "label": "COMBINE",
+          "sortText": "L"
         }
       ]
     }

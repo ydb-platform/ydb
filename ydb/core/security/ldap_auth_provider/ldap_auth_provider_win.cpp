@@ -2,7 +2,6 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/login/protos/login.pb.h>
 #include <ydb/core/base/ticket_parser.h>
-#include <ydb/core/security/ticket_parser_log.h>
 #include "ldap_auth_provider.h"
 
 #include <winldap.h>

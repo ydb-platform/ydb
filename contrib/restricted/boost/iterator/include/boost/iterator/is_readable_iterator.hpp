@@ -6,6 +6,7 @@
 
 #include <iterator>
 #include <type_traits>
+#include <boost/config.hpp>
 
 namespace boost {
 namespace iterators {
@@ -60,9 +61,18 @@ struct is_readable_iterator :
 {
 };
 
+#if !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+template< typename T >
+BOOST_INLINE_VARIABLE constexpr bool is_readable_iterator_v = iterators::is_readable_iterator< T >::value;
+#endif // !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+
 } // namespace iterators
 
 using iterators::is_readable_iterator;
+
+#if !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+using iterators::is_readable_iterator_v;
+#endif // !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
 
 } // namespace boost
 

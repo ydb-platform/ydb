@@ -137,6 +137,30 @@ public:
 
 using TPortionInfoForCompaction = NPortion::TPortionInfoForCompaction;
 
+class TOptimizerRuntimeSettings {
+private:
+    std::optional<ui64> NodePortionsCountLimit;
+
+public:
+    void SetNodePortionsCountLimit(const std::optional<ui64>& nodePortionsCountLimit) {
+        NodePortionsCountLimit = nodePortionsCountLimit;
+    }
+
+    const std::optional<ui64>& GetNodePortionsCountLimit() const {
+        return NodePortionsCountLimit;
+    }
+
+    void LoadFromAppData();
+    void ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config);
+    void RefreshNodePortionsCountLimitCounter() const;
+
+    static std::shared_ptr<TOptimizerRuntimeSettings> MakeDefault() {
+        auto settings = std::make_shared<TOptimizerRuntimeSettings>();
+        settings->LoadFromAppData();
+        return settings;
+    }
+};
+
 class IOptimizerPlanner {
 private:
     friend class IOptimizerPlannerConstructor;
@@ -151,6 +175,8 @@ private:
     double WeightKff = 1;
     static inline TAtomicCounter NodePortionsCounter = 0;
     static inline std::atomic<ui64> DynamicPortionsCountLimit = 1000000;
+    // Local tablet runtime settings (from ColumnShardConfig CMS snapshot), not process-global.
+    std::shared_ptr<TOptimizerRuntimeSettings> RuntimeSettings;
     TPositiveControlInteger LocalPortionsCount;
     std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
 
@@ -208,6 +234,20 @@ public:
         return DynamicPortionsCountLimit.load() * NKikimr::NOlap::TGlobalLimits::AveragePortionSizeLimit;
     }
 
+    static ui64 GetDefaultNodePortionsCountLimit() {
+        return DynamicPortionsCountLimit.load();
+    }
+
+    void SetRuntimeSettings(const std::shared_ptr<TOptimizerRuntimeSettings>& runtimeSettings) {
+        RuntimeSettings = runtimeSettings;
+        Counters->NodePortionsCountLimit->Set(GetNodePortionsCountLimit());
+        Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
+    }
+
+    const std::shared_ptr<TOptimizerRuntimeSettings>& GetRuntimeSettings() const {
+        return RuntimeSettings;
+    }
+
     virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoForCompaction& /*info*/) const {
         return baseLevel;
     }
@@ -216,7 +256,7 @@ public:
         : PathId(pathId)
         , NodePortionsCountLimit(nodePortionsCountLimit)
     {
-        Counters->NodePortionsCountLimit->Set(NodePortionsCountLimit ? *NodePortionsCountLimit : DynamicPortionsCountLimit.load());
+        Counters->NodePortionsCountLimit->Set(GetNodePortionsCountLimit());
         Counters->BadPortionsCountLimit->Set(GetBadPortionsLimit());
     }
 
@@ -246,20 +286,13 @@ public:
 
     ui64 GetBadPortionsLimit() const;
 
-    ui64 GetNodePortionsCountLimit() const {
-        return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
-    }
+    ui64 GetNodePortionsCountLimit() const;
 
     bool IsHighPriority() const {
         if (!AppDataVerified().FeatureFlags.GetEnableCompactionOverloadDetection()) {
             return false;
         }
-        if (NodePortionsCountLimit) {
-            if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * *NodePortionsCountLimit), ui64(1)), NodePortionsCounter.Val())) {
-                return true;
-            }
-        } else if (std::cmp_less_equal(
-                       std::max(static_cast<ui64>(0.7 * DynamicPortionsCountLimit.load()), ui64(1)), NodePortionsCounter.Val())) {
+        if (std::cmp_less_equal(std::max(static_cast<ui64>(0.7 * GetNodePortionsCountLimit()), ui64(1)), NodePortionsCounter.Val())) {
             return true;
         }
         return DoIsOverloaded();
@@ -367,14 +400,16 @@ public:
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
         YDB_READONLY_DEF(EOptimizerStrategy, DefaultStrategy);
+        YDB_READONLY_DEF(std::shared_ptr<TOptimizerRuntimeSettings>, RuntimeSettings);
 
     public:
-        TBuildContext(
-            const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages,
+            const std::shared_ptr<arrow::Schema>& pkSchema, const std::shared_ptr<TOptimizerRuntimeSettings>& runtimeSettings = nullptr)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema)
             , DefaultStrategy(EOptimizerStrategy::Default)
+            , RuntimeSettings(runtimeSettings)
         {   //TODO configure me via DDL
         }
     };
@@ -438,6 +473,7 @@ public:
             return result;
         }
         (*result)->WeightKff = WeightKff;
+        (*result)->SetRuntimeSettings(context.GetRuntimeSettings());
         return result;
     }
 

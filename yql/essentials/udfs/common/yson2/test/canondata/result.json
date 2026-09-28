@@ -1,312 +1,310 @@
 {
-    "test.test[AccessJson]": [
+    "test.test[Access-Results]": [
         {
-            "uri": "file://test.test_AccessJson_/results.txt"
+            "uri": "file://test.test_Access-Results_/results.txt"
         }
     ],
-    "test.test[Access]": [
+    "test.test[AccessJson-Results]": [
         {
-            "uri": "file://test.test_Access_/results.txt"
+            "uri": "file://test.test_AccessJson-Results_/results.txt"
         }
     ],
-    "test.test[AsBoolAndFilter]": [
+    "test.test[As-Results]": [
         {
-            "uri": "file://test.test_AsBoolAndFilter_/results.txt"
+            "uri": "file://test.test_As-Results_/results.txt"
         }
     ],
-    "test.test[AsFail]": [
+    "test.test[AsBoolAndFilter-Results]": [
         {
-            "uri": "file://test.test_AsFail_/extracted"
+            "uri": "file://test.test_AsBoolAndFilter-Results_/results.txt"
         }
     ],
-    "test.test[As]": [
+    "test.test[AsFail-Results]": [
+        "<tmp_path>/program.sql:<main>:3:11: Error: Expected boolean, but got: entity (#)\n\t    Yson::AsBool('#'y);\n\t          ^"
+    ],
+    "test.test[AttrAs-Results]": [
         {
-            "uri": "file://test.test_As_/results.txt"
+            "uri": "file://test.test_AttrAs-Results_/results.txt"
         }
     ],
-    "test.test[AttrAs]": [
+    "test.test[Attrs-Results]": [
         {
-            "uri": "file://test.test_AttrAs_/results.txt"
+            "uri": "file://test.test_Attrs-Results_/results.txt"
         }
     ],
-    "test.test[Attrs]": [
+    "test.test[AutoConvertTo-Results]": [
         {
-            "uri": "file://test.test_Attrs_/results.txt"
+            "uri": "file://test.test_AutoConvertTo-Results_/results.txt"
         }
     ],
-    "test.test[AutoConvertTo]": [
+    "test.test[Contains-Results]": [
         {
-            "uri": "file://test.test_AutoConvertTo_/results.txt"
+            "uri": "file://test.test_Contains-Results_/results.txt"
         }
     ],
-    "test.test[Contains]": [
+    "test.test[ConvertTo-Results]": [
         {
-            "uri": "file://test.test_Contains_/results.txt"
+            "uri": "file://test.test_ConvertTo-Results_/results.txt"
         }
     ],
-    "test.test[ConvertTo]": [
+    "test.test[Dicts-Results]": [
         {
-            "uri": "file://test.test_ConvertTo_/results.txt"
+            "uri": "file://test.test_Dicts-Results_/results.txt"
         }
     ],
-    "test.test[Dicts]": [
+    "test.test[EmptyDicts-Results]": [
         {
-            "uri": "file://test.test_Dicts_/results.txt"
+            "uri": "file://test.test_EmptyDicts-Results_/results.txt"
         }
     ],
-    "test.test[EmptyDicts]": [
+    "test.test[EmptyLists-Results]": [
         {
-            "uri": "file://test.test_EmptyDicts_/results.txt"
+            "uri": "file://test.test_EmptyLists-Results_/results.txt"
         }
     ],
-    "test.test[EmptyLists]": [
+    "test.test[Equals-Results]": [
         {
-            "uri": "file://test.test_EmptyLists_/results.txt"
+            "uri": "file://test.test_Equals-Results_/results.txt"
         }
     ],
-    "test.test[Equals]": [
+    "test.test[From-Results]": [
         {
-            "uri": "file://test.test_Equals_/results.txt"
+            "uri": "file://test.test_From-Results_/results.txt"
         }
     ],
-    "test.test[FromTooManyArgs]": [
+    "test.test[FromTooManyArgs-Results]": [
         {
-            "uri": "file://test.test_FromTooManyArgs_/extracted"
+            "uri": "file://test.test_FromTooManyArgs-Results_/extracted"
         }
     ],
-    "test.test[From]": [
+    "test.test[GenericConvertTo-Results]": [
         {
-            "uri": "file://test.test_From_/results.txt"
+            "uri": "file://test.test_GenericConvertTo-Results_/results.txt"
         }
     ],
-    "test.test[GenericConvertToEmptyStruct]": [
+    "test.test[GenericConvertToEmptyStruct-Results]": [
         {
-            "uri": "file://test.test_GenericConvertToEmptyStruct_/results.txt"
+            "uri": "file://test.test_GenericConvertToEmptyStruct-Results_/results.txt"
         }
     ],
-    "test.test[GenericConvertToWithAutoConvert]": [
+    "test.test[GenericConvertToWithAutoConvert-Results]": [
         {
-            "uri": "file://test.test_GenericConvertToWithAutoConvert_/results.txt"
+            "uri": "file://test.test_GenericConvertToWithAutoConvert-Results_/results.txt"
         }
     ],
-    "test.test[GenericConvertToWithNoStrict]": [
+    "test.test[GenericConvertToWithNoStrict-Results]": [
         {
-            "uri": "file://test.test_GenericConvertToWithNoStrict_/results.txt"
+            "uri": "file://test.test_GenericConvertToWithNoStrict-Results_/results.txt"
         }
     ],
-    "test.test[GenericConvertTo]": [
+    "test.test[GenericFrom-Results]": [
         {
-            "uri": "file://test.test_GenericConvertTo_/results.txt"
+            "uri": "file://test.test_GenericFrom-Results_/results.txt"
         }
     ],
-    "test.test[GenericFrom]": [
+    "test.test[Get-Results]": [
         {
-            "uri": "file://test.test_GenericFrom_/results.txt"
+            "uri": "file://test.test_Get-Results_/results.txt"
         }
     ],
-    "test.test[GetHash]": [
+    "test.test[GetHash-Results]": [
         {
-            "uri": "file://test.test_GetHash_/results.txt"
+            "uri": "file://test.test_GetHash-Results_/results.txt"
         }
     ],
-    "test.test[Get]": [
+    "test.test[GoodForYsonBadForJson-Results]": [
         {
-            "uri": "file://test.test_Get_/results.txt"
+            "uri": "file://test.test_GoodForYsonBadForJson-Results_/results.txt"
         }
     ],
-    "test.test[GoodForYsonBadForJson]": [
+    "test.test[IgnoreCaseFuncs-Results]": [
         {
-            "uri": "file://test.test_GoodForYsonBadForJson_/results.txt"
+            "uri": "file://test.test_IgnoreCaseFuncs-Results_/results.txt"
         }
     ],
-    "test.test[IgnoreCaseFuncs]": [
+    "test.test[ImplicitFromRes-Results]": [
         {
-            "uri": "file://test.test_IgnoreCaseFuncs_/results.txt"
+            "uri": "file://test.test_ImplicitFromRes-Results_/results.txt"
         }
     ],
-    "test.test[ImplicitFromRes]": [
+    "test.test[InvalidMapKey-Results]": [
         {
-            "uri": "file://test.test_ImplicitFromRes_/results.txt"
+            "uri": "file://test.test_InvalidMapKey-Results_/extracted"
         }
     ],
-    "test.test[InvalidMapKey]": [
+    "test.test[IsType-Results]": [
         {
-            "uri": "file://test.test_InvalidMapKey_/extracted"
+            "uri": "file://test.test_IsType-Results_/results.txt"
         }
     ],
-    "test.test[IsType]": [
+    "test.test[IterateAttrs-Results]": [
         {
-            "uri": "file://test.test_IsType_/results.txt"
+            "uri": "file://test.test_IterateAttrs-Results_/results.txt"
         }
     ],
-    "test.test[IterateAttrs]": [
+    "test.test[IterateList-Results]": [
         {
-            "uri": "file://test.test_IterateAttrs_/results.txt"
+            "uri": "file://test.test_IterateList-Results_/results.txt"
         }
     ],
-    "test.test[IterateList]": [
+    "test.test[IterateMap-Results]": [
         {
-            "uri": "file://test.test_IterateList_/results.txt"
+            "uri": "file://test.test_IterateMap-Results_/results.txt"
         }
     ],
-    "test.test[IterateMap]": [
+    "test.test[IterateScalars-Results]": [
         {
-            "uri": "file://test.test_IterateMap_/results.txt"
+            "uri": "file://test.test_IterateScalars-Results_/results.txt"
         }
     ],
-    "test.test[IterateScalars]": [
+    "test.test[JsonSerializeSkipMapEntity-Results]": [
         {
-            "uri": "file://test.test_IterateScalars_/results.txt"
+            "uri": "file://test.test_JsonSerializeSkipMapEntity-Results_/results.txt"
         }
     ],
-    "test.test[JsonSerializeSkipMapEntity]": [
+    "test.test[JsonWithNanAsString-Results]": [
         {
-            "uri": "file://test.test_JsonSerializeSkipMapEntity_/results.txt"
+            "uri": "file://test.test_JsonWithNanAsString-Results_/results.txt"
         }
     ],
-    "test.test[JsonWithNanAsString]": [
+    "test.test[JsonWithUtf8-Results]": [
         {
-            "uri": "file://test.test_JsonWithNanAsString_/results.txt"
+            "uri": "file://test.test_JsonWithUtf8-Results_/results.txt"
         }
     ],
-    "test.test[JsonWithUtf8]": [
+    "test.test[Lists-Results]": [
         {
-            "uri": "file://test.test_JsonWithUtf8_/results.txt"
+            "uri": "file://test.test_Lists-Results_/results.txt"
         }
     ],
-    "test.test[Lists]": [
+    "test.test[Lookup-Results]": [
         {
-            "uri": "file://test.test_Lists_/results.txt"
+            "uri": "file://test.test_Lookup-Results_/results.txt"
         }
     ],
-    "test.test[Lookup]": [
+    "test.test[MapKeyEscape-Results]": [
         {
-            "uri": "file://test.test_Lookup_/results.txt"
+            "uri": "file://test.test_MapKeyEscape-Results_/results.txt"
         }
     ],
-    "test.test[MapKeyEscape]": [
+    "test.test[MutCreateFreezeFail-Results]": [
         {
-            "uri": "file://test.test_MapKeyEscape_/results.txt"
+            "uri": "file://test.test_MutCreateFreezeFail-Results_/extracted"
         }
     ],
-    "test.test[MutCreateFreezeFail]": [
+    "test.test[MutDownUpDict-Results]": [
         {
-            "uri": "file://test.test_MutCreateFreezeFail_/extracted"
+            "uri": "file://test.test_MutDownUpDict-Results_/results.txt"
         }
     ],
-    "test.test[MutDownUpDict]": [
+    "test.test[MutDownUpList-Results]": [
         {
-            "uri": "file://test.test_MutDownUpDict_/results.txt"
+            "uri": "file://test.test_MutDownUpList-Results_/results.txt"
         }
     ],
-    "test.test[MutDownUpList]": [
+    "test.test[MutExists-Results]": [
         {
-            "uri": "file://test.test_MutDownUpList_/results.txt"
+            "uri": "file://test.test_MutExists-Results_/results.txt"
         }
     ],
-    "test.test[MutExists]": [
+    "test.test[MutInsert-Results]": [
         {
-            "uri": "file://test.test_MutExists_/results.txt"
+            "uri": "file://test.test_MutInsert-Results_/results.txt"
         }
     ],
-    "test.test[MutInsert]": [
+    "test.test[MutKeepAttrDict-Results]": [
         {
-            "uri": "file://test.test_MutInsert_/results.txt"
+            "uri": "file://test.test_MutKeepAttrDict-Results_/results.txt"
         }
     ],
-    "test.test[MutKeepAttrDict]": [
+    "test.test[MutKeepAttrList-Results]": [
         {
-            "uri": "file://test.test_MutKeepAttrDict_/results.txt"
+            "uri": "file://test.test_MutKeepAttrList-Results_/results.txt"
         }
     ],
-    "test.test[MutKeepAttrList]": [
+    "test.test[MutTryDown-Results]": [
         {
-            "uri": "file://test.test_MutKeepAttrList_/results.txt"
+            "uri": "file://test.test_MutTryDown-Results_/results.txt"
         }
     ],
-    "test.test[MutTryDown]": [
+    "test.test[MutUpdate-Results]": [
         {
-            "uri": "file://test.test_MutTryDown_/results.txt"
+            "uri": "file://test.test_MutUpdate-Results_/results.txt"
         }
     ],
-    "test.test[MutUpdate]": [
+    "test.test[MutUpsert-Results]": [
         {
-            "uri": "file://test.test_MutUpdate_/results.txt"
+            "uri": "file://test.test_MutUpsert-Results_/results.txt"
         }
     ],
-    "test.test[MutUpsert]": [
+    "test.test[MutView-Results]": [
         {
-            "uri": "file://test.test_MutUpsert_/results.txt"
+            "uri": "file://test.test_MutView-Results_/results.txt"
         }
     ],
-    "test.test[MutView]": [
+    "test.test[Mutate-Results]": [
         {
-            "uri": "file://test.test_MutView_/results.txt"
+            "uri": "file://test.test_Mutate-Results_/results.txt"
         }
     ],
-    "test.test[Mutate]": [
+    "test.test[NegativeArrayIndex-Results]": [
         {
-            "uri": "file://test.test_Mutate_/results.txt"
+            "uri": "file://test.test_NegativeArrayIndex-Results_/results.txt"
         }
     ],
-    "test.test[NegativeArrayIndex]": [
+    "test.test[ParseString-Results]": [
         {
-            "uri": "file://test.test_NegativeArrayIndex_/results.txt"
+            "uri": "file://test.test_ParseString-Results_/results.txt"
         }
     ],
-    "test.test[ParseString]": [
+    "test.test[Scalars-Results]": [
         {
-            "uri": "file://test.test_ParseString_/results.txt"
+            "uri": "file://test.test_Scalars-Results_/results.txt"
         }
     ],
-    "test.test[Scalars]": [
+    "test.test[Serialize-Results]": [
         {
-            "uri": "file://test.test_Scalars_/results.txt"
+            "uri": "file://test.test_Serialize-Results_/results.txt"
         }
     ],
-    "test.test[SerializeDouble]": [
+    "test.test[SerializeDouble-Results]": [
         {
-            "uri": "file://test.test_SerializeDouble_/results.txt"
+            "uri": "file://test.test_SerializeDouble-Results_/results.txt"
         }
     ],
-    "test.test[Serialize]": [
+    "test.test[StringStrictError-Results]": [
         {
-            "uri": "file://test.test_Serialize_/results.txt"
+            "uri": "file://test.test_StringStrictError-Results_/extracted"
         }
     ],
-    "test.test[StringStrictError]": [
+    "test.test[TryAs-Results]": [
         {
-            "uri": "file://test.test_StringStrictError_/extracted"
+            "uri": "file://test.test_TryAs-Results_/results.txt"
         }
     ],
-    "test.test[TryAsFail]": [
+    "test.test[TryAsFail-Results]": [
         {
-            "uri": "file://test.test_TryAsFail_/results.txt"
+            "uri": "file://test.test_TryAsFail-Results_/results.txt"
         }
     ],
-    "test.test[TryAs]": [
+    "test.test[Utf8-Results]": [
         {
-            "uri": "file://test.test_TryAs_/results.txt"
+            "uri": "file://test.test_Utf8-Results_/results.txt"
         }
     ],
-    "test.test[Utf8]": [
+    "test.test[WeakYsonRest-Results]": [
         {
-            "uri": "file://test.test_Utf8_/results.txt"
+            "uri": "file://test.test_WeakYsonRest-Results_/results.txt"
         }
     ],
-    "test.test[WeakYsonRest]": [
+    "test.test[WithAttrs-Results]": [
         {
-            "uri": "file://test.test_WeakYsonRest_/results.txt"
+            "uri": "file://test.test_WithAttrs-Results_/results.txt"
         }
     ],
-    "test.test[WithAttrs]": [
+    "test.test[YPath-Results]": [
         {
-            "uri": "file://test.test_WithAttrs_/results.txt"
-        }
-    ],
-    "test.test[YPath]": [
-        {
-            "uri": "file://test.test_YPath_/results.txt"
+            "uri": "file://test.test_YPath-Results_/results.txt"
         }
     ]
 }

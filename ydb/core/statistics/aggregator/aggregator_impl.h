@@ -27,6 +27,7 @@
 
 #include <util/generic/intrlist.h>
 
+#include <optional>
 #include <random>
 
 namespace NKikimr::NStat {
@@ -46,6 +47,8 @@ public:
     TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info);
 
 private:
+    friend struct TStatisticsAggregatorTestAccess;
+
     using TSSId = ui64;
     using TNodeId = ui32;
 
@@ -73,6 +76,7 @@ private:
             EvPropagateTimeout,
             EvScheduleTraversal,
             EvAnalyzeDeadline,
+            EvScheduleForceTraversal,
 
             EvEnd
         };
@@ -82,6 +86,7 @@ private:
         struct TEvProcessUrgent : public TEventLocal<TEvProcessUrgent, EvProcessUrgent> {};
         struct TEvPropagateTimeout : public TEventLocal<TEvPropagateTimeout, EvPropagateTimeout> {};
         struct TEvScheduleTraversal : public TEventLocal<TEvScheduleTraversal, EvScheduleTraversal> {};
+        struct TEvScheduleForceTraversal : public TEventLocal<TEvScheduleForceTraversal, EvScheduleForceTraversal> {};
         struct TEvAnalyzeDeadline : public TEventLocal<TEvAnalyzeDeadline, EvAnalyzeDeadline> {};
 
     };
@@ -123,10 +128,15 @@ private:
 
     void Handle(TEvStatistics::TEvAnalyze::TPtr& ev);
     void Handle(TEvStatistics::TEvStatTableCreationResponse::TPtr& ev);
+    void ResolveStatisticsTablePathId();
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
+    bool IsStatisticsTable(const TPathId& pathId) const;
     void Handle(TEvStatistics::TEvSaveStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvDeleteStatisticsQueryResponse::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeActorResult::TPtr& ev);
     void Handle(TEvPrivate::TEvScheduleTraversal::TPtr& ev);
+    void Handle(TEvPrivate::TEvScheduleForceTraversal::TPtr& ev);
+    void StartTraversalScheduler();
     void Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev);
@@ -175,6 +185,9 @@ private:
     bool IsChangeRatioAboveThreshold(
         const TChangeCounters& lastAnalyze, const TChangeCounters& current) const;
     TChangeCounters GetCurrentChangeCounters(const TPathId& pathId) const;
+    std::optional<ui64> GetTableBytesSize(const TPathId& pathId) const;
+    const NKikimrStat::TPathEntry* FindBaseStatisticsEntry(
+        const TPathId& pathId, NKikimrStat::TSchemeShardStats& stats) const;
 
     // Returns cached change counters, rebuilding the cache from BaseStatistics
     // if it is invalid. The cache is invalidated when BaseStatistics is updated
@@ -211,10 +224,12 @@ private:
 
             hFunc(TEvStatistics::TEvAnalyze, Handle);
             hFunc(TEvStatistics::TEvStatTableCreationResponse, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(TEvStatistics::TEvSaveStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvDeleteStatisticsQueryResponse, Handle);
             hFunc(TEvStatistics::TEvAnalyzeActorResult, Handle);
             hFunc(TEvPrivate::TEvScheduleTraversal, Handle);
+            hFunc(TEvPrivate::TEvScheduleForceTraversal, Handle);
             hFunc(TEvStatistics::TEvAnalyzeStatus, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
             hFunc(TEvStatistics::TEvAnalyzeCancel, Handle);
@@ -293,12 +308,15 @@ private:
     bool ProcessUrgentInFlight = false;
 
     bool IsStatisticsTableCreated = false;
+    TPathId StatisticsTablePathId;
     bool PendingSaveStatistics = false;
     std::deque<TStatisticsItem> StatisticsToSave;
     bool PendingDeleteStatistics = false;
 
     // period for both force and schedule traversals
     static constexpr TDuration TraversalPeriod = TDuration::Seconds(1);
+    // A periodic tick or its transaction is pending.
+    bool TraversalSchedulerStarted = false;
     // if table traverse time is older, than traserse it on schedule
     static constexpr TDuration ScheduleTraversalPeriod = TDuration::Hours(24);
 
@@ -346,6 +364,7 @@ private: // stored in local db
     TInstant TraversalStartTime;
     TActorId AnalyzeActorId;
     TActorId SaveQueryActorId;
+    bool FinishingTraversal = false;
 
     std::unordered_map<TPathId, TScheduleTraversal> ScheduleTraversals;
     std::unordered_map<ui64, std::unordered_set<TPathId>> ScheduleTraversalsBySchemeShard;
@@ -358,7 +377,8 @@ private: // stored in local db
         TPathId PathId;
         TVector<ui32> ColumnTags;
         TString Path;            // full table path, persisted in ForceTraversalTables
-        ui32 ShardsTotal = 0;   // set by TEvAnalyzeActorProgress; 1 for row tables
+        double SampleRate = 1.0;
+        ui32 ShardsTotal = 0;   // set by TEvAnalyzeActorProgress
         ui32 ShardsDone  = 0;   // incremented per scan completion (current batch)
 
         enum class EStatus : ui8 {

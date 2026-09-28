@@ -242,6 +242,15 @@ def npyiter_has_multi_index(it: "nditer"):
     return result
 
 
+def test_get_multi_index_iter_next(it: "nditer", cnp.ndarray[cnp.float64_t, ndim=2] arr):
+    cdef cnp.NpyIter* cit = npyiter_from_nditer_obj(it)
+    cdef cnp.NpyIter_GetMultiIndexFunc get_multi_index = \
+        cnp.NpyIter_GetGetMultiIndex(cit, NULL)
+    cdef cnp.NpyIter_IterNextFunc iternext = \
+        cnp.NpyIter_GetIterNext(cit, NULL)
+    return 1
+
+
 def npyiter_has_finished(it: "nditer"):
     cdef cnp.NpyIter* cit
     try:
@@ -266,3 +275,9 @@ def inc2_cfloat_struct(cnp.ndarray[cnp.cfloat_t] arr):
     # This works in both modes
     arr[1].real = arr[1].real + 1
     arr[1].imag = arr[1].imag + 1
+
+
+def check_npy_uintp_type_enum():
+    # Regression test for gh-27890: cnp.NPY_UINTP was not defined.
+    # Cython would fail to compile this before gh-27890 was fixed.
+    return cnp.NPY_UINTP > 0

@@ -2,6 +2,7 @@
 #include "local_topic_client_helpers.h"
 #include "local_topic_io_session_common.h"
 
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/library/actors/core/actorsystem.h>
@@ -9,6 +10,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/services/persqueue_v1/actors/read_session_actor.h>
 
+#include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <util/generic/guid.h>
@@ -141,6 +143,11 @@ class TLocalTopicReadSessionActor final
         std::optional<TDuration> MaxLag;
         std::vector<i64> PartitionIds;
         bool AutoPartitioningSupport = false;
+    };
+
+    struct TPartitionCommitState {
+        ui64 NextReadOffset = 0;
+        TDisjointIntervalTree<ui64> PendingRanges;
     };
 
 public:
@@ -290,25 +297,37 @@ private:
     }
 
     void Handle(TEvPartition::TEvOffsetsCommitRequest::TPtr& ev) {
-        const auto partitionSessionId = ev->Get()->PartitionSessionId;
-        const auto start = ev->Get()->StartOffset;
-        const auto end = ev->Get()->EndOffset;
-        YDB_LOG_DEBUG("Partition offsets commit request",
-            {"logPrefix", LogPrefix()},
-            {"session", partitionSessionId},
-            {"start", start},
-            {"end", end});
+        const auto& request = *ev->Get();
+        auto& ranges = PartitionCommitStates[request.PartitionSessionId].PendingRanges;
+        Y_VALIDATE(request.StartOffset < request.EndOffset, "Invalid commit offset range");
+        Y_VALIDATE(!ranges.Intersects(request.StartOffset, request.EndOffset), "Commit range overlaps skipped offsets");
+        ranges.InsertInterval(request.StartOffset, request.EndOffset);
 
-        TRpcIn message;
+        for (const auto& [start, end] : ranges) {
+            if (start >= request.EndOffset) {
+                break;
+            }
 
-        auto& commitRequest = *message.mutable_commit_offset_request()->add_commit_offsets();
-        commitRequest.set_partition_session_id(partitionSessionId);
+            const auto endOffset = Min(end, request.EndOffset);
+            YDB_LOG_DEBUG("Partition offsets commit request",
+                {"logPrefix", LogPrefix()},
+                {"session", request.PartitionSessionId},
+                {"start", start},
+                {"end", endOffset});
 
-        auto& offsets = *commitRequest.add_offsets();
-        offsets.set_start(start);
-        offsets.set_end(end);
+            TRpcIn message;
 
-        AddSessionEvent(std::move(message));
+            auto& commitRequest = *message.mutable_commit_offset_request()->add_commit_offsets();
+            commitRequest.set_partition_session_id(request.PartitionSessionId);
+
+            auto& offsets = *commitRequest.add_offsets();
+            offsets.set_start(start);
+            offsets.set_end(endOffset);
+
+            AddSessionEvent(std::move(message));
+        }
+
+        ranges.EraseInterval(0, request.EndOffset);
     }
 
     void Handle(TEvPartition::TEvConfirmCreate::TPtr& ev) {
@@ -334,6 +353,8 @@ private:
         }
         if (commitOffset) {
             startResponse.set_commit_offset(*commitOffset);
+            auto& nextOffset = PartitionCommitStates[partitionSessionId].NextReadOffset;
+            nextOffset = Max(nextOffset, *commitOffset);
         }
         if (maxOffset) {
             startResponse.set_max_offset(*maxOffset);
@@ -371,7 +392,7 @@ private:
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::InitResponse& message) {
         SessionStartedAt = TInstant::Now();
         SessionId = message.session_id();
-        YDB_LOG_INFO("Session initialized with",
+        YDB_LOG_INFO("Session initialized",
             {"logPrefix", LogPrefix()},
             {"id", SessionId});
         ContinueReading();
@@ -381,9 +402,9 @@ private:
         const auto responseSize = message.bytes_size();
         ServerMemoryDelta -= responseSize;
         Counters->BytesReadCompressed->Add(responseSize);
-        YDB_LOG_TRACE("Received read response with new",
+        YDB_LOG_TRACE("Received read response",
             {"logPrefix", LogPrefix()},
-            {"size", responseSize},
+            {"responseSize", responseSize},
             {"serverMemoryDelta", ServerMemoryDelta});
 
         for (auto& partitionData : *message.mutable_partition_data()) {
@@ -444,7 +465,16 @@ private:
                         if (decompressedMsg.Meta) {
                             offset = static_cast<ui64>(event.offset()) + static_cast<ui64>(decompressedMsg.Meta->OffsetDelta);
                             seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(decompressedMsg.Meta->SequenceDelta);
-                            createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + decompressedMsg.Meta->TimestampDelta);
+                            createTime = TInstant::MilliSeconds(NKafka::GetRecordTimestamp(*codecResult.BatchBaseTimestampMs, decompressedMsg.Meta->TimestampDelta));
+                        }
+
+                        if (!ReadSettings.Consumer.empty()) {
+                            auto& state = PartitionCommitStates[partitionSessionId];
+                            auto& nextOffset = state.NextReadOffset;
+                            if (offset > nextOffset) {
+                                state.PendingRanges.InsertInterval(nextOffset, offset);
+                            }
+                            nextOffset = Max(nextOffset, offset + 1);
                         }
 
                         messagesSize += decompressedMsg.Data.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();
@@ -483,7 +513,7 @@ private:
         for (const auto& commitOffset : message.partitions_committed_offsets()) {
             const auto partitionSessionId = commitOffset.partition_session_id();
             const auto offset = commitOffset.committed_offset();
-            YDB_LOG_DEBUG("Partition offset commited",
+            YDB_LOG_DEBUG("Partition offset committed",
                 {"logPrefix", LogPrefix()},
                 {"session", partitionSessionId},
                 {"offset", offset});
@@ -497,10 +527,10 @@ private:
 
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::PartitionSessionStatusResponse& message) {
         const auto partitionSessionId = message.partition_session_id();
-        YDB_LOG_DEBUG("Partition status",
+        YDB_LOG_DEBUG("Partition status response",
             {"logPrefix", LogPrefix()},
             {"session", partitionSessionId},
-            {"response", message});
+            {"message", message});
 
         AddOutgoingEvent(TReadSessionEvent::TPartitionSessionStatusEvent(
             GetPartitionSession(partitionSessionId),
@@ -517,12 +547,12 @@ private:
         const auto partitionSessionId = info.partition_session_id();
         const auto committedOffset = message.committed_offset();
         const auto& offsets = message.partition_offsets();
-        YDB_LOG_DEBUG("Start session with id commited offsets",
+        YDB_LOG_DEBUG("Start partition session",
             {"logPrefix", LogPrefix()},
-            {"partition", partitionId},
+            {"partitionId", partitionId},
             {"partitionSessionId", partitionSessionId},
-            {"offset", committedOffset},
-            {"range", offsets});
+            {"committedOffset", committedOffset},
+            {"partitionOffsets", offsets});
 
         auto partitionSession = MakeIntrusive<TLocalPartitionSession>(ActorContext().ActorSystem(), SelfId(), TLocalPartitionSession::TSettings{
             .PartitionSessionId = partitionSessionId,
@@ -530,6 +560,11 @@ private:
             .TopicPath = info.path(),
             .ReadSessionId = SessionId,
         });
+
+        auto& commitState = PartitionCommitStates[partitionSessionId];
+        commitState.NextReadOffset = committedOffset;
+        commitState.PendingRanges.Clear();
+
         if (const auto [it, inserted] = PartitionSessions.emplace(partitionSessionId, partitionSession); !inserted) {
             // After internal server retry session may be reconnected
             YDB_LOG_NOTICE("Partition reconnected",
@@ -549,10 +584,10 @@ private:
     void ComputeSessionMessage(const Ydb::Topic::StreamReadMessage::StopPartitionSessionRequest& message) {
         const auto partitionSessionId = message.partition_session_id();
         const auto committedOffset = message.committed_offset();
-        YDB_LOG_DEBUG("Partition received stop event, commited",
+        YDB_LOG_DEBUG("Partition received stop event",
             {"logPrefix", LogPrefix()},
             {"session", partitionSessionId},
-            {"offset", committedOffset});
+            {"committedOffset", committedOffset});
 
         if (!message.graceful()) {
             return AddOutgoingSessionClosedEvent(partitionSessionId, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost);
@@ -575,7 +610,7 @@ private:
         const auto partitionSessionId = message.partition_session_id();
         const auto& adjacentIds = message.adjacent_partition_ids();
         const auto& childIds = message.child_partition_ids();
-        YDB_LOG_DEBUG("Partition received end event adjacent child",
+        YDB_LOG_DEBUG("Partition received end event",
             {"logPrefix", LogPrefix()},
             {"session", partitionSessionId},
             {"adjacentIds", adjacentIds.size()},
@@ -607,7 +642,7 @@ private:
 
         const auto readMemoryBudget = MaxMemoryUsage - InflightMemory;
         if (ServerMemoryDelta >= readMemoryBudget) {
-            YDB_LOG_TRACE("Server already has enough memory, skip reading, read memory",
+            YDB_LOG_TRACE("Server already has enough memory, skip reading",
                 {"logPrefix", LogPrefix()},
                 {"serverMemoryDelta", ServerMemoryDelta},
                 {"budget", readMemoryBudget});
@@ -656,6 +691,7 @@ private:
     i64 ServerMemoryDelta = 0;
     TString SessionId;
     std::unordered_map<i64, TPartitionSession::TPtr> PartitionSessions;
+    std::unordered_map<i64, TPartitionCommitState> PartitionCommitStates;
 };
 
 // Supposed to be used from actor system, so all blocking methods are not supported.

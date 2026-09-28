@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
@@ -68,6 +69,83 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         auto result = runtime.WaitFuture(future);
         UNIT_ASSERT(!result.IsSuccess());
+    }
+
+    Y_UNIT_TEST(ResultChannelFlowControlSmoke) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+
+        auto result = kikimr.RunCall([&] {
+            return db.ExecuteQuery("SELECT * FROM `/Root/EightShard`;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 24);
+    }
+
+    Y_UNIT_TEST(ResultChannelFlowControlPauseResume) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+
+        TKikimrRunner kikimr(settings);
+        const ui32 totalRows = 2000;
+        kikimr.RunCall([&] { CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        TActorId executerId;
+        THashSet<ui32> pausedChannels;
+        bool resuming = false;
+        ui64 rowsWhilePaused = 0;
+        ui64 rowsAfterResume = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType) {
+                auto& record = ev->Get<TEvKqpExecuter::TEvStreamData>()->Record;
+                auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                resp->Record.SetEnough(false);
+
+                executerId = ev->Sender;
+                if (!resuming) {
+                    pausedChannels.insert(record.GetChannelId());
+                    rowsWhilePaused += record.GetResultSet().rows().size();
+                    resp->Record.SetFreeSpace(-1);
+                } else {
+                    rowsAfterResume += record.GetResultSet().rows().size();
+                    resp->Record.SetFreeSpace(100_MB);
+                }
+
+                runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto streamSender = runtime.AllocateEdgeActor();
+        NDataShard::NKqpHelpers::SendRequest(runtime, streamSender,
+            NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false));
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(!pausedChannels.empty());
+        UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
+            "not all rows should be delivered while every result channel is paused");
+
+        resuming = true;
+        // StreamExecuteScanQuery historically resumes with ChannelId=0 while result channel ids start from 1.
+        auto resumeAck = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(0, 0);
+        resumeAck->Record.SetEnough(false);
+        resumeAck->Record.SetFreeSpace(100_MB);
+        runtime.Send(new IEventHandle(executerId, sender, resumeAck.Release()));
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(streamSender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
+            reply->Get()->Record.GetResponse().DebugString());
+
+        UNIT_ASSERT_GT(rowsAfterResume, 0);
+        UNIT_ASSERT_VALUES_EQUAL(rowsWhilePaused + rowsAfterResume, totalRows);
     }
 
     // TODO: Test shard write shuffle.

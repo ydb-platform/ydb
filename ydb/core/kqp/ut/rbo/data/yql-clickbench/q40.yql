@@ -1,0 +1,8 @@
+SELECT TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst, COUNT(*) AS PageViews
+FROM `/Root/hits`
+WHERE
+    CounterID = 62 AND EventDate >= Date('2013-07-01') AND EventDate <= Date('2013-07-31') AND IsRefresh == 0
+GROUP BY
+    TraficSourceID, SearchEngineID, AdvEngineID, IF (SearchEngineID = 0 AND AdvEngineID = 0, Referer, '') AS Src,
+    URL AS Dst
+ORDER BY PageViews DESC LIMIT 10;

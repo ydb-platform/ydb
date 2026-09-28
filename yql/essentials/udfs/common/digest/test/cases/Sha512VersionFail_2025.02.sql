@@ -1,5 +1,10 @@
-/* syntax version 1 */
-SELECT 
-    Digest::Sha512(key) AS sha512
+$input = AsList(
+    <|key: "1"|>,
+    <|key: "2"|>,
+    <|key: "3"|>,
+    <|key: ""|>,
+);
 
-FROM Input;
+SELECT
+    Digest::Sha512(key) AS sha512
+FROM AS_TABLE($input);

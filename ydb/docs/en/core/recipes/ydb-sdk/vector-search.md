@@ -252,7 +252,7 @@ The vector is stored using type `String`. See the documentation on [exact vector
 
 - Java
 
-  Create a table for documents and their vector representations. Use `SessionRetryContext` from the [Connecting to {{ ydb-short-name }}](%7B#connect-ydb%7D) section.
+  Create a table for documents and their vector representations. Use `SessionRetryContext` from the [Connecting to {{ ydb-short-name }}](#connect-ydb) section.
 
 
   ```java

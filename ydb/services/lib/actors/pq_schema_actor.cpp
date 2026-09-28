@@ -1,22 +1,7 @@
 #include "pq_schema_actor.h"
 
-#include <ydb/core/ydb_convert/topic_description.h>
-#include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
-#include <ydb/core/base/feature_flags.h>
-#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/core/util/proto_duration.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
-
-#include <ydb/public/api/protos/ydb_topic.pb.h>
-
-#include <yql/essentials/public/decimal/yql_decimal.h>
-
-#include <util/string/vector.h>
-
-#include <library/cpp/digest/md5/md5.h>
 
 #include <expected>
 
@@ -145,87 +130,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
-    }
-
-    TString ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
-        if (alter.has_set_important()) {
-            consumer.set_important(alter.set_important());
-        }
-        if (alter.has_set_read_from()) {
-            consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
-        }
-        if (alter.has_set_supported_codecs()) {
-            consumer.mutable_supported_codecs()->CopyFrom(alter.set_supported_codecs());
-        }
-        for (const auto& [attrName, attrValue] : alter.alter_attributes()) {
-            (*consumer.mutable_attributes())[attrName] = attrValue;
-        }
-        if (alter.has_set_availability_period()) {
-            consumer.mutable_availability_period()->CopyFrom(alter.set_availability_period());
-        }
-        if (alter.has_reset_availability_period()) {
-            consumer.clear_availability_period();
-        }
-
-        if (alter.has_alter_streaming_consumer_type()) {
-            if (!consumer.has_streaming_consumer_type()) {
-                return "Cannot alter consumer type";
-            }
-        } else if (alter.has_alter_shared_consumer_type()) {
-            if (!consumer.has_shared_consumer_type()) {
-                return "Cannot alter consumer type";
-            }
-
-            auto* type = consumer.mutable_shared_consumer_type();
-            auto& alterType = alter.alter_shared_consumer_type();
-
-            if (alterType.has_set_default_processing_timeout()) {
-                type->mutable_default_processing_timeout()->CopyFrom(alterType.set_default_processing_timeout());
-            }
-
-            if (alterType.has_set_receive_message_delay()) {
-                type->mutable_receive_message_delay()->CopyFrom(alterType.set_receive_message_delay());
-            }
-
-            if (alterType.has_set_receive_message_wait_time()) {
-                type->mutable_receive_message_wait_time()->CopyFrom(alterType.set_receive_message_wait_time());
-            }
-
-            if (alterType.has_alter_dead_letter_policy()) {
-                auto& alterPolicy = alterType.alter_dead_letter_policy();
-                auto* policy = type->mutable_dead_letter_policy();
-                if (alterPolicy.has_set_enabled()) {
-                    policy->set_enabled(alterPolicy.set_enabled());
-                }
-
-                if (alterPolicy.has_alter_condition()) {
-                    policy->mutable_condition()->set_max_processing_attempts(alterPolicy.alter_condition().set_max_processing_attempts());
-                }
-
-                if (alterPolicy.has_alter_move_action()) {
-                    if (!policy->has_move_action()) {
-                        return "Cannot alter move action";
-                    }
-                    if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
-                        if (alterPolicy.alter_move_action().set_dead_letter_queue().empty()) {
-                            return "Dead letter queue cannot be empty";
-                        }
-                        policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
-                    }
-                } else if (alterPolicy.has_set_move_action()) {
-                    if (alterPolicy.set_move_action().dead_letter_queue().empty()) {
-                        return "Dead letter queue cannot be empty";
-                    }
-                    policy->clear_action();
-                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
-                } else if (alterPolicy.has_set_delete_action()) {
-                    policy->clear_action();
-                    policy->mutable_delete_action();
-                }
-            }
-        }
-
-        return {};
     }
 
     TString RemoveReadRuleFromConfig(

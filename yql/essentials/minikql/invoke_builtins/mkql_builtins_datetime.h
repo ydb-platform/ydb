@@ -4,8 +4,7 @@
 
 #include <yql/essentials/minikql/mkql_date_scaler.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename TDateType>
 inline bool IsBadDateTime(TScaledDate val) {
@@ -271,5 +270,4 @@ inline Value* GenFromScaledDate<NUdf::TDataType<NUdf::TInterval64>>(Value* value
 
 #endif
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

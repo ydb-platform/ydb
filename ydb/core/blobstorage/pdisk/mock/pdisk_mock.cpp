@@ -1,8 +1,10 @@
 #include "pdisk_mock.h"
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/interval_set.h>
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_compaction_arbiter.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_quota_record.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
@@ -447,6 +449,30 @@ class TPDiskMockActor : public TActorBootstrapped<TPDiskMockActor> {
     TImpl& Impl;
     const TString Prefix;
 
+    // Planned level compaction (EnableVDiskPlannedCompaction), exactly as a real PDisk arbitrates it.
+    struct TArbiterSpace : NPDisk::TCompactionArbiter::ISpace {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TPDiskMockActor& Self;
+
+        explicit TArbiterSpace(TPDiskMockActor& self)
+            : Self(self)
+        {}
+
+        TColor::E GetColor() const override {
+            return StatusFlagToSpaceColor(Self.GetStatusFlags());
+        }
+
+        bool Fits(NPDisk::TOwner /*owner*/, ui32 chunks) const override {
+            // the test Handle(TEvChunkReserve) applies
+            return Self.Impl.GetNumFreeChunks() >= chunks
+                && Self.EstimateAllocationColor(chunks) < TColor::BLACK;
+        }
+    };
+    std::unique_ptr<NPDisk::TCompactionArbiter> Arbiter;
+    ui32 ArbiterFreeChunks = Max<ui32>();
+    NPDisk::TStatusFlags ArbiterStatusFlags = 0;
+
 public:
     TPDiskMockActor(TPDiskMockState::TPtr state)
         : State(std::move(state)) // to keep ownership
@@ -461,8 +487,61 @@ public:
     }
 
     void Bootstrap() {
+        if (HasAppData() && AppData()->FeatureFlags.GetEnableVDiskPlannedCompaction()) {
+            Arbiter = std::make_unique<NPDisk::TCompactionArbiter>(NKikimrBlobStorage::TPDiskSpaceColor::YELLOW);
+        }
         Become(&TThis::StateNormal);
         ReportMetrics();
+    }
+
+    void SendArbiterOutbox(NPDisk::TCompactionArbiter::TOutbox& out) {
+        for (auto& msg : out) {
+            Send(msg.Recipient, msg.Event.release(), IEventHandle::FlagTrackDelivery);
+        }
+        out.clear();
+    }
+
+    void Handle(NPDisk::TEvCompactionBidder::TPtr ev) {
+        const auto *msg = ev->Get();
+        const auto it = Impl.Owners.find(msg->Owner);
+        if (!Arbiter || it == Impl.Owners.end() || it->second.Slain || it->second.OwnerRound != msg->OwnerRound) {
+            return;
+        }
+        NPDisk::TCompactionArbiter::TOutbox out;
+        Arbiter->Handle(*msg, ev->Sender, TArbiterSpace(*this), out);
+        SendArbiterOutbox(out);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr ev) {
+        if (Arbiter && ev->Get()->SourceType == NPDisk::TEvCompactionArbiter::EventType) {
+            NPDisk::TCompactionArbiter::TOutbox out;
+            Arbiter->DropActor(ev->Sender, TArbiterSpace(*this), out);
+            SendArbiterOutbox(out);
+        }
+    }
+
+    void DropCompactionBidders(ui8 ownerId) {
+        if (Arbiter) {
+            NPDisk::TCompactionArbiter::TOutbox out;
+            Arbiter->DropOwner(ownerId, TArbiterSpace(*this), out);
+            SendArbiterOutbox(out);
+        }
+    }
+
+    // After every event: tell the arbiter when the space it sees has changed.
+    void UpdateArbiter() {
+        if (!Arbiter) {
+            return;
+        }
+        const ui32 freeChunks = Impl.GetNumFreeChunks();
+        const NPDisk::TStatusFlags flags = GetStatusFlags();
+        if (freeChunks != ArbiterFreeChunks || flags != ArbiterStatusFlags) {
+            ArbiterFreeChunks = freeChunks;
+            ArbiterStatusFlags = flags;
+            NPDisk::TCompactionArbiter::TOutbox out;
+            Arbiter->OnSpaceChanged(TArbiterSpace(*this), out);
+            SendArbiterOutbox(out);
+        }
     }
 
     void ReportMetrics() {
@@ -527,6 +606,7 @@ public:
 
             // drop data from any reserved chunks and return them to free pool
             Impl.ResetOwnerReservedChunks(*owner);
+            DropCompactionBidders(ownerId);
 
             // fill in the response
             TVector<TChunkIdx> ownedChunks(owner->CommittedChunks.begin(), owner->CommittedChunks.end());
@@ -614,6 +694,7 @@ public:
                 owner.LogDataSize = 0;
                 owner.LastLsn = 0;
                 owner.StartingPoints.clear();
+                DropCompactionBidders(ownerId);
                 found = true;
                 break;
             }
@@ -732,6 +813,10 @@ public:
         // send the results
         for (auto& msg : results) {
             auto *ev = msg->CastAsLocal<NPDisk::TEvLogResult>();
+            // Filled in here rather than where the result was created: the whole queue
+            // has been applied by now, so this describes the disk the VDisk is about to
+            // be told about, not the one it was when the batch started.
+            ev->Headroom = GetSpaceHeadroom();
             const TActorId& recipient = msg->Recipient;
             YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Sending TEvLogResult",
                 {"marker", "PDM12"},
@@ -773,7 +858,17 @@ public:
                 {"msg", msg->ToString()},
                 {"VDiskId", owner.VDiskId});
             for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
-                Impl.DeleteChunk(owner, chunkIdx);
+                if (msg->IsDDisk && !owner.ReservedChunks.contains(chunkIdx)) {
+                    status = NKikimrProto::ERROR;
+                    errorReason = TStringBuilder() << "Can't forget chunkIdx# " << chunkIdx
+                        << ": chunk is not reserved or decommitted by this owner";
+                    break;
+                }
+            }
+            if (status == NKikimrProto::OK) {
+                for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
+                    Impl.DeleteChunk(owner, chunkIdx);
+                }
             }
         }
         Send(ev->Sender, new NPDisk::TEvChunkForgetResult(status, {}, errorReason), 0, ev->Cookie);
@@ -812,14 +907,18 @@ public:
         Y_VERIFY(!Impl.CheckIsReadOnlyOwner(msg));
         auto res = std::make_unique<NPDisk::TEvChunkReserveResult>(NKikimrProto::OK, GetStatusFlags());
         if (TImpl::TOwner *owner = Impl.FindOwner(msg, res)) {
-            if (Impl.GetNumFreeChunks() < msg->SizeChunks) {
+            const auto estimatedColor = EstimateAllocationColor(msg->SizeChunks);
+            res->EstimatedColor = estimatedColor;
+            const bool refusedByColor = estimatedColor >= msg->RefuseAtColor;
+            if (Impl.GetNumFreeChunks() < msg->SizeChunks || refusedByColor) {
+                const char *error = refusedByColor ? "color bound exceeded" : "no free chunks";
                 YDB_LOG_PDISK_MOCK(PRI_NOTICE, "Received TEvChunkReserve",
                     {"marker", "PDM09"},
                     {"msg", msg->ToString()},
-                    {"error", "no free chunks"});
+                    {"error", error});
                 res->Status = NKikimrProto::OUT_OF_SPACE;
                 res->StatusFlags = GetStatusFlags() | ui32(NKikimrBlobStorage::StatusNotEnoughDiskSpaceForOperation);
-                res->ErrorReason = "no free chunks";
+                res->ErrorReason = error;
             } else {
                 YDB_LOG_PDISK_MOCK(PRI_DEBUG, "Received TEvChunkReserve",
                     {"marker", "PDM07"},
@@ -833,6 +932,7 @@ public:
                     {"marker", "PDM10"},
                     {"msg", res->ToString()});
             }
+            res->Headroom = GetSpaceHeadroom();
         }
         Send(ev->Sender, res.release());
     }
@@ -983,6 +1083,8 @@ public:
                 {"marker", "PDM16"},
                 {"msg", res->ToString()});
         }
+        // After the write, so that a chunk this request allocated is already counted.
+        res->Headroom = GetSpaceHeadroom();
         Send(ev->Sender, res.release());
     }
 
@@ -1115,6 +1217,7 @@ public:
             owner.LogDataSize = 0;
             owner.LastLsn = 0;
             owner.StartingPoints.clear();
+            DropCompactionBidders(msg->Owner);
         }
 
         Send(ev->Sender, res.release());
@@ -1126,6 +1229,7 @@ public:
             Impl.GetNumFreeChunks(), Impl.TotalChunks, Impl.TotalChunks - Impl.GetNumFreeChunks(),
             Impl.Owners.size(), 0u, 0, TString());
         res->NormalizedOccupancy = GetOccupancy();
+        res->Headroom = GetSpaceHeadroom();
         Impl.FindOwner(msg, res); // to ensure correct owner/round
         Send(ev->Sender, res.release());
     }
@@ -1240,6 +1344,39 @@ public:
             : Impl.Occupancy;
     }
 
+    // Colour the owner would be in once this many chunks are taken, mirroring
+    // TPDisk::AllocateChunkForOwner. Without a quota model there are no colour
+    // boundaries to run into, so nothing is ever refused on colour.
+    NKikimrBlobStorage::TPDiskSpaceColor::E EstimateAllocationColor(ui32 count) {
+        if (Impl.SpaceColorPolicy != TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
+            return NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+        }
+        GetStatusFlags(); // resyncs the shared quota with the free chunk count
+        double occupancy;
+        return Impl.ChunkSharedQuota->EstimateSpaceColor(count, &occupancy);
+    }
+
+    TSpaceHeadroom GetSpaceHeadroom() {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        if (Impl.SpaceColorPolicy != TPDiskMockState::ESpaceColorPolicy::SharedQuota) {
+            // Without a quota model there are no color boundaries to run into, so
+            // everything the disk physically has is headroom.
+            const ui64 free = Impl.GetNumFreeChunks();
+            return {true, free, free, free, free, free};
+        }
+        GetStatusFlags(); // resyncs the shared quota with the free chunk count
+        TSpaceHeadroom headroom;
+        headroom.Valid = true;
+        headroom.ToPreOrange = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::PRE_ORANGE);
+        headroom.ToOrange = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::ORANGE);
+        headroom.ToRed = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::RED);
+        headroom.ToBlack = Impl.ChunkSharedQuota->GetHeadroomBelow(TColor::BLACK);
+        // The mock has no static group reserve to hold anything back, so housekeeping sees
+        // exactly the same room as everything else.
+        headroom.AllocatableToBlack = headroom.ToBlack;
+        return headroom;
+    }
+
     void ErrorHandle(NPDisk::TEvYardInit::TPtr &ev) {
         Send(ev->Sender, new NPDisk::TEvYardInitResult(NKikimrProto::CORRUPTED, State->GetStateErrorReason()));
     }
@@ -1311,7 +1448,8 @@ public:
     }
 
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
-        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()));
+        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, State->GetStateErrorReason()),
+            0, ev->Get()->IsDDisk ? ev->Cookie : 0);
     }
 
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {
@@ -1370,8 +1508,18 @@ public:
 
     void Ignore() {}
 
-    STRICT_STFUNC(StateNormal,
+    STFUNC(StateNormal) {
+        const bool poison = ev->GetTypeRewrite() == TEvents::TSystem::Poison;
+        StateNormalImpl(ev);
+        if (!poison) {
+            UpdateArbiter();
+        }
+    }
+
+    STRICT_STFUNC(StateNormalImpl,
         hFunc(NPDisk::TEvYardInit, Handle);
+        hFunc(NPDisk::TEvCompactionBidder, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(NPDisk::TEvYardResize, Handle);
         hFunc(NPDisk::TEvLog, Handle);
         hFunc(NPDisk::TEvChunkForget, Handle);
@@ -1406,6 +1554,8 @@ public:
 
     STRICT_STFUNC(StateError,
         hFunc(NPDisk::TEvYardInit, ErrorHandle);
+        IgnoreFunc(NPDisk::TEvCompactionBidder);
+        IgnoreFunc(TEvents::TEvUndelivered);
         hFunc(NPDisk::TEvYardResize, ErrorHandle);
         hFunc(NPDisk::TEvCheckSpace, ErrorHandle);
         hFunc(NPDisk::TEvLog, ErrorHandle);

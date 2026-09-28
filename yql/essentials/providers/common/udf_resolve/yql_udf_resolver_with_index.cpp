@@ -28,7 +28,6 @@ class TUdfResolverWithIndex: public IUdfResolver {
     public:
         using TPtr = TIntrusivePtr<TResourceFile>;
 
-    public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)
             : Link(std::move(link))
         {
@@ -50,7 +49,6 @@ class TUdfResolverWithIndex: public IUdfResolver {
             return MakeIntrusive<TResourceFile>(std::move(alias), TVector<TString>(modules.begin(), modules.end()), std::move(link));
         }
 
-    public:
         TFileLinkPtr Link;
         TUserDataBlock Block;
         TImport Import;
@@ -277,7 +275,6 @@ private:
         return file;
     }
 
-private:
     mutable TMutex Lock_;
     const TUdfIndex::TPtr UdfIndex_;
     const IUdfResolver::TPtr Fallback_;

@@ -237,7 +237,7 @@ public:
 
 private:
     void VisitToken(const TToken& token) {
-        auto str = token.GetValue();
+        const auto& str = token.GetValue();
         if (str == "<EOF>") {
             return;
         }
@@ -654,7 +654,7 @@ private:
     }
 
     void MarkToken(const TToken& token) {
-        auto str = token.GetValue();
+        const auto& str = token.GetValue();
         if (str == "<EOF>") {
             return;
         }
@@ -882,7 +882,7 @@ private:
     void VisitPragma(const TRule_pragma_stmt& msg) {
         NewLine();
         VisitKeyword(msg.GetToken1());
-        auto prefix = msg.GetRule_opt_id_prefix_or_type2();
+        const auto& prefix = msg.GetRule_opt_id_prefix_or_type2();
         if (prefix.HasBlock1()) {
             Visit(prefix.GetBlock1().GetRule_an_id_or_type1());
             VisitKeyword(prefix.GetBlock1().GetToken2());
@@ -994,7 +994,8 @@ private:
 
     void VisitSmartParenthesis(const TRule_smart_parenthesis& msg) {
         if (!IsSelect(msg)) {
-            return VisitAllFields(msg.GetDescriptor(), msg);
+            VisitAllFields(msg.GetDescriptor(), msg);
+            return;
         }
 
         Y_ENSURE(msg.GetBlock2().HasAlt1());
@@ -1180,6 +1181,16 @@ private:
     void VisitDropTable(const TRule_drop_table_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_drop_table_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitCreateSymlink(const TRule_create_symlink_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_symlink_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropSymlink(const TRule_drop_symlink_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_symlink_stmt::GetDescriptor(), msg);
     }
 
     void VisitAnalyze(const TRule_analyze_stmt& msg) {
@@ -2675,6 +2686,20 @@ private:
         NewLine();
     }
 
+    void VisitOrdinaryGroupingSetList(const TRule_ordinary_grouping_set_list& msg) {
+        NewLine();
+        PushCurrentIndent();
+        Visit(msg.GetRule_ordinary_grouping_set1());
+        for (const auto& block : msg.GetBlock2()) {
+            Visit(block.GetToken1());
+            NewLine();
+            Visit(block.GetRule_ordinary_grouping_set2());
+        }
+
+        PopCurrentIndent();
+        NewLine();
+    }
+
     void VisitGroupingSetsSpecification(const TRule_grouping_sets_specification& msg) {
         Visit(msg.GetToken1());
         Visit(msg.GetToken2());
@@ -2992,12 +3017,16 @@ private:
     void VisitTtlTierAction(const TRule_ttl_tier_action& msg) {
         switch (msg.GetAltCase()) {
             case TRule_ttl_tier_action::kAltTtlTierAction1:
-                // | TO EXTERNAL DATA SOURCE an_id
+                // | TO EXTERNAL DATA SOURCE an_id (DOT an_id)?
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken1());
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken2());
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken3());
                 VisitKeyword(msg.GetAlt_ttl_tier_action1().GetToken4());
                 Visit(msg.GetAlt_ttl_tier_action1().GetRule_an_id5());
+                if (msg.GetAlt_ttl_tier_action1().HasBlock6()) {
+                    Visit(msg.GetAlt_ttl_tier_action1().GetBlock6().GetToken1());
+                    Visit(msg.GetAlt_ttl_tier_action1().GetBlock6().GetRule_an_id2());
+                }
                 break;
             case TRule_ttl_tier_action::kAltTtlTierAction2:
                 // | DELETE
@@ -3164,7 +3193,7 @@ private:
 
         bool pushedIndent = false;
         for (; begin != end; ++begin) {
-            const auto op = getOp(*begin);
+            const auto& op = getOp(*begin);
             const auto opSize = BinaryOpTokenSize(op);
             const bool hasFirstNewline = LastLine_ != ParsedTokens_[TokenIndex_].Line;
             const bool hasSecondNewline = ParsedTokens_[TokenIndex_].Line != ParsedTokens_[TokenIndex_ + opSize].Line;
@@ -3205,7 +3234,6 @@ private:
         CurrentIndent_ -= OneIndent;
     }
 
-private:
     const TStaticData& StaticData_;
     const TParsedTokenList& ParsedTokens_;
     const TParsedTokenList& Comments_;
@@ -3307,6 +3335,7 @@ TStaticData::TStaticData()
           {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
           {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
           {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
+          {TRule_ordinary_grouping_set_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrdinaryGroupingSetList)},
           {TRule_grouping_sets_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingSetsSpecification)},
           {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
           {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},
@@ -3354,6 +3383,8 @@ TStaticData::TStaticData()
           {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},
           {TRule_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTable)},
           {TRule_drop_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTable)},
+          {TRule_create_symlink_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateSymlink)},
+          {TRule_drop_symlink_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropSymlink)},
           {TRule_use_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUse)},
           {TRule_into_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoTable)},
           {TRule_commit_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCommit)},

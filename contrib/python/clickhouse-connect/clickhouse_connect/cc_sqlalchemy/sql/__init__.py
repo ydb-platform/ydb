@@ -1,8 +1,9 @@
 from typing import Any, cast
 
 from sqlalchemy import Table, and_
-from sqlalchemy.sql.selectable import FromClause, Select
+from sqlalchemy.sql.selectable import CTE, FromClause, HasCTE, Select
 
+from clickhouse_connect import driver_name
 from clickhouse_connect.cc_sqlalchemy.sql.clauses import ArrayJoin, LimitByClause, PreWhereClause
 from clickhouse_connect.cc_sqlalchemy.sql.clauses import array_join as _array_join_fromclause
 from clickhouse_connect.cc_sqlalchemy.sql.clauses import ch_join as _ch_join_fromclause
@@ -11,6 +12,10 @@ from clickhouse_connect.driver.binding import quote_identifier
 # Non-rendering statement-hint dialect tag. Used only to force distinct
 # compiled-statement cache keys when FINAL/SAMPLE/PREWHERE/LIMIT BY are applied.
 _CH_MODIFIER_DIALECT = "_ch_modifier"
+
+# SQLAlchemy renders CTE prefixes between the name and the body, which is exactly where
+# ClickHouse expects the materialization keyword: WITH <name> AS MATERIALIZED (...).
+_MATERIALIZED_KEYWORD = "MATERIALIZED"
 
 
 def full_table(table_name: str, schema: str | None = None) -> str:
@@ -158,6 +163,47 @@ def limit_by(select_stmt: Select, by_clauses: Any, limit: int, offset: int | Non
     return new_stmt
 
 
+def _validate_cte_options(recursive: bool, materialized: bool) -> None:
+    if recursive and materialized:
+        raise ValueError("materialized CTEs cannot be recursive")
+
+
+def _apply_materialized(new_cte: CTE, materialized: bool) -> CTE:
+    if not materialized:
+        return new_cte
+    # SQLAlchemy renders CTE prefixes between the name and the body, which is exactly
+    # where ClickHouse expects the keyword. Scoping it to this dialect keeps a statement
+    # shared with another backend compiling unchanged there.
+    return new_cte.prefix_with(_MATERIALIZED_KEYWORD, dialect=driver_name)
+
+
+def cte(
+    statement: HasCTE,
+    name: str | None = None,
+    recursive: bool = False,
+    nesting: bool = False,
+    materialized: bool = False,
+) -> CTE:
+    """Standard SQLAlchemy `cte()` plus `materialized=True` for `WITH <name> AS MATERIALIZED (...)`.
+
+    A materialized CTE body is computed once instead of being inlined at every reference.
+    Requires ClickHouse 26.3 or later. The server only honors the keyword when the
+    analyzer and the `enable_materialized_cte` setting are enabled for the query:
+
+        stmt = select(...).execution_options(
+            settings={"enable_materialized_cte": 1, "enable_analyzer": 1}
+        )
+
+    Use this with the standard `sqlalchemy.select`. Statements built with
+    `cc_sqlalchemy.select` have the same options on their own `.cte()` method.
+    Raises `ValueError` when `recursive` and `materialized` are both true.
+    """
+    if not isinstance(statement, HasCTE):
+        raise TypeError(f"cte() expects a SQLAlchemy statement that supports CTEs. Got {type(statement).__name__}")
+    _validate_cte_options(recursive, materialized)
+    return _apply_materialized(statement.cte(name=name, recursive=recursive, nesting=nesting), materialized)
+
+
 def _select_ch_join(
     self: Select,
     right: Any,
@@ -277,6 +323,20 @@ class ClickHouseSelect(Select[Any]):
 
     def prewhere(self, whereclause: Any) -> "ClickHouseSelect":
         return cast("ClickHouseSelect", prewhere(self, whereclause))
+
+    def cte(
+        self,
+        name: str | None = None,
+        recursive: bool = False,
+        nesting: bool = False,
+        materialized: bool = False,
+    ) -> CTE:
+        """Standard `Select.cte()` plus `materialized=True` for `AS MATERIALIZED`.
+
+        See :func:`cte` for the server requirements.
+        """
+        _validate_cte_options(recursive, materialized)
+        return _apply_materialized(super().cte(name=name, recursive=recursive, nesting=nesting), materialized)
 
     def limit_by(self, by_clauses: Any, limit: int, offset: int | None = None) -> "ClickHouseSelect":
         return cast("ClickHouseSelect", limit_by(self, by_clauses, limit, offset))

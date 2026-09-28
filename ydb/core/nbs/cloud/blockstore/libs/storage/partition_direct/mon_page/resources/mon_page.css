@@ -18,6 +18,100 @@
     cursor: pointer;
 }
 
+.dbg-config-legend-item {
+    text-align: center;
+    padding: 5px;
+}
+.dbg-config-both {
+    background-color: #dff0d8;
+}
+.dbg-config-ddisk {
+    background-color: #d9edf7;
+}
+.dbg-config-pbuffer {
+    background-color: #b8daff;
+}
+.dbg-config-fresh {
+    background-color: #eef8ee;
+}
+.dbg-config-rotten {
+    background-color: #f2dede;
+}
+
+.vchunk-host-state {
+    text-align: center;
+    vertical-align: middle;
+}
+.vchunk-touched-marker {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1px solid #777;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+.vchunk-touched-on {
+    background-color: #5cb85c;
+}
+.vchunk-touched-off {
+    background-color: #eee;
+}
+.vchunk-host-state {
+    min-width: 2.5em;
+    font-weight: bold;
+}
+.vchunk-host-legend {
+    width: auto;
+}
+.vchunk-host-legend .vchunk-host-state {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+.vchunk-host-primary {
+    background-color: #dff0d8;
+}
+.vchunk-host-fresh {
+    background-color: #fcf8e3;
+}
+.vchunk-host-handoff {
+    background-color: #d9edf7;
+}
+.vchunk-host-rotten {
+    background-color: #f2dede;
+}
+.vchunk-host-disabled {
+    background-color: #eee;
+    color: #777;
+}
+.vchunk-host-demoted {
+    background-color: #fafafa;
+    color: #aaa;
+}
+
+.chaos-cell {
+    text-align: center;
+}
+.chaos-toggle-form {
+    display: inline-block;
+    margin: 0;
+    vertical-align: middle;
+}
+.chaos-toggle {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: 1px solid #888;
+    border-radius: 2px;
+    cursor: pointer;
+    vertical-align: middle;
+}
+.chaos-toggle-on {
+    background-color: #5cb85c;
+}
+.chaos-toggle-off {
+    background-color: #d9534f;
+}
+
 .lat-controls {
     margin: 0.5em 0;
 }

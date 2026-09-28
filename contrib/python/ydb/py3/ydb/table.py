@@ -1053,6 +1053,7 @@ class ISession(abc.ABC):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):
         """
         Perform an read table request.
@@ -1101,7 +1102,7 @@ class ISession(abc.ABC):
     @abstractmethod
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -1322,7 +1323,7 @@ class TableClient(BaseTableClient["SyncDriver"]):
         Create a YDB table.
 
         :param path: A table path
-        :param table_description: TableDescription instanse.
+        :param table_description: TableDescription instance.
         :param settings: An instance of BaseRequestSettings that describes how rpc should be invoked.
 
         :return: Operation or YDB error otherwise.
@@ -1772,6 +1773,7 @@ class BaseSession(ISession):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):
         """
         Perform an read table request.
@@ -1794,6 +1796,7 @@ class BaseSession(ISession):
             ordered,
             row_limit,
             use_snapshot=use_snapshot,
+            return_not_null_data_as_optional=return_not_null_data_as_optional,
         )
         stream_it = self._driver(
             request,
@@ -1881,7 +1884,7 @@ class BaseSession(ISession):
 
     def explain(self, yql_text, settings=None):
         """
-        Expiremental API.
+        Experimental API.
 
         :param yql_text:
         :param settings:
@@ -2032,6 +2035,7 @@ class Session(BaseSession):
         row_limit=None,
         settings=None,
         use_snapshot=None,
+        return_not_null_data_as_optional=None,
     ):
         """
         Perform an read table request.
@@ -2056,6 +2060,7 @@ class Session(BaseSession):
             ordered,
             row_limit,
             use_snapshot=use_snapshot,
+            return_not_null_data_as_optional=return_not_null_data_as_optional,
         )
         stream_it = self._driver(
             request,
@@ -2556,7 +2561,7 @@ class BaseTxContext(ITxContext):
 
     def _check_split(self, allow=""):
         """
-        Deny all operaions with transaction after commit/rollback.
+        Deny all operations with transaction after commit/rollback.
         Exception: double commit and double rollbacks, because it is safe
         """
         allow_split_transaction = (

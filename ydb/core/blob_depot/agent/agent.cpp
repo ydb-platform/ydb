@@ -3,6 +3,8 @@
 #include "blocks.h"
 #include "blob_mapping_cache.h"
 
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+
 namespace NKikimr::NBlobDepot {
 
     TBlobDepotAgent::TBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId)
@@ -31,7 +33,14 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::Bootstrap() {
         Become(&TThis::StateFunc);
 
+        TControlBoard::RegisterSharedControl(S3MaxGetsInFlight, AppData()->Icb->BlobDepotControls.S3MaxGetsInFlight);
+
         SetupCounters();
+
+        CurrentMaxS3GetsInFlight = MaxS3GetsInFlight();
+        if (S3GetsMaxInFlightCounter) {
+            *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
+        }
 
         if (TabletId && TabletId != Max<ui64>()) {
             ConnectToBlobDepot();
@@ -87,6 +96,7 @@ namespace NKikimr::NBlobDepot {
         S3GetsOk = s3->GetCounter("GetsOk", true);
         S3GetsError = s3->GetCounter("GetsError", true);
         S3GetsSlowDown = s3->GetCounter("GetsSlowDown", true);
+        S3GetThrottleActivations = s3->GetCounter("GetThrottleActivations", true);
         S3GetsInFlightCounter = s3->GetCounter("GetsInFlight", false);
         S3GetsMaxInFlightCounter = s3->GetCounter("GetsMaxInFlight", false);
         S3GetsPendingQueueSizeCounter = s3->GetCounter("GetsPendingQueueSize", false);

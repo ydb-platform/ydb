@@ -16,9 +16,9 @@
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
-  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
 
   ```sql
   CREATE TABLE `evals` (
@@ -69,7 +69,7 @@ ydb import file csv --header --null-value "" --path evals evals.csv
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
   ```sql
   SELECT

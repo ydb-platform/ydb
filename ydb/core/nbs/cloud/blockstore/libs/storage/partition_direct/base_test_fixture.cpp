@@ -60,7 +60,7 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -89,12 +89,12 @@ void TBaseFixture::Init()
     DirectBlockGroup->ReadBlocksFromPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
-         TBlockRange64 range,
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
         Y_UNUSED(traceId);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(THostIndex{0}, hostIndex);
@@ -117,14 +117,14 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         ui64 lsn,
-         TBlockRange64 range,
+         TPBufferKey pBufferKey,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
         Y_UNUSED(traceId);
         Y_UNUSED(hostIndex);
-        Y_UNUSED(lsn);
+        Y_UNUSED(pBufferKey);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -153,7 +153,7 @@ void TBaseFixture::Init()
     DirectBlockGroup->WriteBlocksToDDiskHandler = [&]   //
         (ui32 vChunkIndex,
          THostIndex hostIndex,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -163,15 +163,15 @@ void TBaseFixture::Init()
         UNIT_ASSERT_VALUES_EQUAL(FreshDDisk, hostIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
+        const ui64 sizeBytes = range.Size() * BlockSize;
         TString copiedData;
-        copiedData.resize(CopyRangeSize);
+        copiedData.resize(sizeBytes);
         SgListCopy(
             guardedSglist.Acquire().Get(),
             TBlockDataRef{copiedData.data(), copiedData.size()});
 
         const ui64 offsetBlocks = range.Start - ExpectedRange.Start;
         const ui64 offsetBytes = offsetBlocks * BlockSize;
-        const ui64 sizeBytes = range.Size() * BlockSize;
         TString expectedData =
             TString(RangeData.data() + offsetBytes, sizeBytes);
         UNIT_ASSERT_VALUES_EQUAL(expectedData, copiedData);
@@ -225,6 +225,18 @@ void TBaseFixture::Init()
         return NThreading::MakeFuture<TDBGRestoreResponse>(
             {.Error = MakeError(S_OK)});
     };
+}
+
+void TBaseFixture::TearDown(NUnitTest::TTestContext& context)
+{
+    Y_UNUSED(context);
+
+    // Keep DirectBlockGroup alive across the join. ~TVChunk runs on the
+    // executor thread and must not drop the last TExecutor reference there:
+    // TExecutor::Stop() would Join() the thread it is running on.
+    if (DirectBlockGroup) {
+        DirectBlockGroup->GetExecutor()->Stop();
+    }
 }
 
 TGuardedSgList TBaseFixture::MakeSgList() const
@@ -301,7 +313,17 @@ size_t TBaseFixture::ReplyUpdateRequests()
 {
     auto requests = std::move(PartitionDirectService->UpdateConfigRequests);
     for (auto& r: requests) {
-        r.Promise.SetValue();
+        r.Promise.SetValue(EPersistResult::Success);
+    }
+    return requests.size();
+}
+
+size_t TBaseFixture::ReplyUpdateDirtyMapStateRequests()
+{
+    auto requests =
+        std::move(PartitionDirectService->UpdateDirtyMapStateRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue(EPersistResult::Success);
     }
     return requests.size();
 }

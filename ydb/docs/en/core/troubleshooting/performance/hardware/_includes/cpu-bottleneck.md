@@ -1,6 +1,6 @@
-1. Use **Diagnostics** in the [Embedded UI](../../../../reference/embedded-ui/index.md) to analyze CPU utilization in all pools:
+1. Use **Diagnostics** in the [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md) to analyze CPU utilization in all pools:
 
-    1. In the [Embedded UI](../../../../reference/embedded-ui/index.md), go to the **Databases** tab and click on the database.
+    1. In the [{{ ydb-ui-name }}](../../../../reference/ydb-ui/index.md), go to the **Databases** tab and click on the database.
 
     1. On the **Navigation** tab, ensure the required database is selected.
 
@@ -8,7 +8,7 @@
 
     1. On the **Info** tab, click the **CPU** button and see if any pools show high CPU usage.
 
-        ![](../_assets/embedded-ui-cpu-system-pool.png)
+        ![](../_assets/ydb-ui-cpu-system-pool.png)
 
 1. Use Grafana charts to analyze CPU utilization in all pools:
 

@@ -75,14 +75,20 @@ struct TInputType {
 
 class TInputSpec : public NYql::NPureCalc::TInputSpecBase {
 public:
-    explicit TInputSpec(const NYT::TNode& schema)
-        : Schemas({schema})
+    TInputSpec(const NYT::TNode& schema, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, NMonitoring::TDynamicCounterPtr memoryQuotaCounters)
+        : MemoryQuotaManager(std::move(memoryQuotaManager))
+        , MemoryQuotaCounters(std::move(memoryQuotaCounters))
+        , Schemas({schema})
     {}
 
 public:
     const TVector<NYT::TNode>& GetSchemas() const override {
         return Schemas;
     }
+
+public:
+    const NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
+    const NMonitoring::TDynamicCounterPtr MemoryQuotaCounters;
 
 private:
     const TVector<NYT::TNode> Schemas;
@@ -93,6 +99,7 @@ public:
     TInputConsumer(const TInputSpec& spec, NYql::NPureCalc::TWorkerHolder<NYql::NPureCalc::IPushStreamWorker> worker)
         : Worker(std::move(worker))
     {
+        LimitAllocator(Worker->GetScopedAlloc(), spec.MemoryQuotaManager, "FilterAlloc", spec.MemoryQuotaCounters);
         const NKikimr::NMiniKQL::TStructType* structType = Worker->GetInputType();
         const ui64 count = structType->GetMembersCount();
 
@@ -276,12 +283,16 @@ public:
         IProcessedDataConsumer::TPtr consumer,
         NYT::TNode inputSchema,
         NYT::TNode outputSchema,
-        TString query
+        TString query,
+        NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager,
+        NMonitoring::TDynamicCounterPtr memoryQuotaCounters
     )
         : Consumer_(std::move(consumer))
         , InputSchema_(std::move(inputSchema))
         , OutputSchema_(std::move(outputSchema))
         , Query_(std::move(query))
+        , MemoryQuotaManager_(std::move(memoryQuotaManager))
+        , MemoryQuotaCounters_(std::move(memoryQuotaCounters))
     {}
 
     NYql::NPureCalc::IConsumer<TInputType>& GetConsumer() {
@@ -294,7 +305,7 @@ public:
         // Program should be stateless because input values
         // allocated on another allocator and should be released
         Program_ = programFactory->MakePushStreamProgram(
-            TInputSpec(InputSchema_),
+            TInputSpec(InputSchema_, MemoryQuotaManager_, MemoryQuotaCounters_),
             TOutputSpec(OutputSchema_),
             Query_,
             NYql::NPureCalc::ETranslationMode::SQL
@@ -311,6 +322,8 @@ private:
     NYT::TNode InputSchema_;
     NYT::TNode OutputSchema_;
     TString Query_;
+    const NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager_;
+    const NMonitoring::TDynamicCounterPtr MemoryQuotaCounters_;
 
     THolder<NYql::NPureCalc::TPushStreamProgram<TInputSpec, TOutputSpec>> Program_;
     THolder<NYql::NPureCalc::IConsumer<TInputType>> InputConsumer_;
@@ -340,7 +353,7 @@ public:
     }
 
     void Compile() override {
-        YDB_LOG_TRACE("Send compile request with id",
+        YDB_LOG_TRACE("Send compile request",
             {"logPrefix", LogPrefix},
             {"cookie", Cookie_});
 
@@ -357,7 +370,7 @@ public:
     }
 
     void AbortCompilation() override {
-        YDB_LOG_TRACE("Send abort compile request with id",
+        YDB_LOG_TRACE("Send abort compile request",
             {"logPrefix", LogPrefix},
             {"cookie", Cookie_});
         NActors::TActivationContext::ActorSystem()->Send(
@@ -379,7 +392,7 @@ public:
 
     void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
-        YDB_LOG_ERROR("Program compilation",
+        YDB_LOG_ERROR("Program compilation failed",
             {"logPrefix", LogPrefix},
             {"error", status.GetErrorMessage()});
         CompileErrors_->Inc();
@@ -473,7 +486,7 @@ private:
         "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
     );
 
-    YDB_LOG_DEBUG("Generated sql:\n",
+    YDB_LOG_DEBUG("Generated program sql",
         {"logPrefix", LogPrefix},
         {"result", result});
     return result;
@@ -481,7 +494,7 @@ private:
 
 }  // anonymous namespace
 
-IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) {
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer, NYql::NDq::IMemoryQuotaManager::TPtr memoryQuotaManager, NMonitoring::TDynamicCounterPtr memoryQuotaCounters) {
     auto query = GenerateSql(consumer);
 
     if (!query) {
@@ -492,7 +505,9 @@ IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) 
         consumer,
         MakeInputSchema(consumer),
         MakeOutputSchema(consumer),
-        std::move(query)
+        std::move(query),
+        std::move(memoryQuotaManager),
+        std::move(memoryQuotaCounters)
     );
 }
 

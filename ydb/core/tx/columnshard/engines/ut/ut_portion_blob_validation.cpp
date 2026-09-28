@@ -38,9 +38,6 @@ ISnapshotSchema::TPtr MakeSchemaWithBlobBloom() {
     *proto.MutableColumns()->Add() = columns[1].CreateColumn(ValueColumnId);
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(1);
-    proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
-    *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 
     NIndexes::TRequestSettings bloomRequest;
     bloomRequest.FalsePositiveProbability = NIndexes::NDefaults::FalsePositiveProbability;

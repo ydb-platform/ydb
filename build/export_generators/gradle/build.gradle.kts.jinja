@@ -1,6 +1,12 @@
 {%- set publish = target.publish -%}
 {%- set mainClass = target.app_main_class -%}
 {%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
+{%- set has_junit6_test = extra_targets|selectattr('junit6_test') -%}
+{%- if target.required_jdk -%}
+{%-     set jdk_version = target.required_jdk -%}
+{%- else -%}
+{%-     set jdk_version = target.jdk_version -%}
+{%- endif -%}
 plugins {
 {%  if mainClass -%}
     `application`
@@ -33,11 +39,25 @@ java {
     withJavadocJar()
 }
 
+{%  if jdk_version -%}
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set({{ jdk_version }})
+}
+
+tasks.withType<Javadoc>().configureEach {
+    (options as CoreJavadocOptions).addStringOption("source", "{{ jdk_version }}")
+}
+
+{%  endif -%}
 dependencies {
 {%  if has_junit5_test -%}
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")
     api("org.apache.commons:commons-math3:3.6.1")
     api("com.google.guava:guava:31.0.1-jre")
+{%  endif -%}
+{%  if has_junit6_test -%}
+    testImplementation("org.junit.jupiter:junit-jupiter:6.0.2")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:6.0.2")
 {%  endif -%}
 {%  for library in target.consumer -%}
 {%      set classpath = library.classpath -%}
@@ -71,7 +91,7 @@ dependencies {
 {%  endfor -%}
 }
 
-{%  if has_junit5_test -%}
+{%  if has_junit5_test or has_junit6_test -%}
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }

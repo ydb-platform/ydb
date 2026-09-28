@@ -223,6 +223,7 @@ class TTablet : public TActor<TTablet> {
     TIntrusivePtr<TTabletStorageInfo> Info;
     TIntrusivePtr<TTabletSetupInfo> SetupInfo;
     ui32 SuggestedGeneration;
+    ui32 ActualGeneration;
     bool NeedCleanupOnLockedPath;
     ui32 GcCounter;
     THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
@@ -321,7 +322,7 @@ class TTablet : public TActor<TTablet> {
 
     ui64 TabletID() const;
 
-    void ReportTabletStateChange(ETabletState state);
+    void ReportTabletStateChange(ETabletState state, ui32 generation);
     void PromoteToCandidate(ui32 gen);
     void TabletBlockBlobStorage();
     void TabletRebuildGraph();

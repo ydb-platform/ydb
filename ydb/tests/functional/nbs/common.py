@@ -7,16 +7,22 @@ import re
 import string
 import requests
 import time
+import urllib.parse
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.functional.nbs.helpers import execute_ydbd, execute_dstool_grpc
+try:
+    from ydb.tests.functional.nbs.lib.helpers import execute_ydbd, execute_dstool_grpc
+except ImportError:
+    from ydb.tests.functional.nbs.helpers import execute_ydbd, execute_dstool_grpc
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_DISK_BLOCKS_COUNT = 1048576
+DBG_LINK_RE = re.compile(r'page=dbg&dbg=(\d+)')
+PBUFFER_PB_RE = re.compile(r'persistent_buffer\?pb=([^"\'&\s]+)')
 
 
 class NbsTestBase:
@@ -29,19 +35,20 @@ class NbsTestBase:
     @pytest.fixture(autouse=True)
     def setup(self):
         nbs_database_name = "/Root/NBS"
-        self.cluster = KiKiMR(
-            KikimrConfigGenerator(
-                erasure=Erasure.MIRROR_3_DC,
-                enable_nbs=True,
-                nbs_database_name=nbs_database_name,
-                additional_log_configs={
-                    'NBS_PARTITION': LogLevels.INFO,
-                    'NBS2_LOAD_TEST': LogLevels.DEBUG,
-                    'NBS_VOLUME': LogLevels.DEBUG,
-                    'NBS_SS_PROXY': LogLevels.DEBUG,
-                },
-            )
+        configurator = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            enable_nbs=True,
+            nbs_database_name=nbs_database_name,
+            additional_log_configs={
+                'NBS_PARTITION': LogLevels.INFO,
+                'NBS2_LOAD_TEST': LogLevels.DEBUG,
+                'NBS_VOLUME': LogLevels.DEBUG,
+                'NBS_SS_PROXY': LogLevels.DEBUG,
+            },
         )
+        # These load-actor/vhost tests are not limited to a single disk.
+        configurator.yaml_config['nbs_config']['nbs_frontend_config'] = {'enabled': False}
+        self.cluster = KiKiMR(configurator)
         self.cluster.start()
         self.start_nbs(nbs_database_name)
 
@@ -95,26 +102,209 @@ class NbsTestBase:
 
         execute_ydbd(self.cluster, "token", ['admin', 'bs', 'config', 'invoke', '--proto', define_ddisk_pool])
 
-    def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT):
+    def _dstool_nbs_partition_json(self, args, operation_name, disk_id):
         """
-        Create a disk with specified number of blocks
+        Invoke ``dstool nbs partition ...`` and parse the JSON object it prints.
         """
-        execute_dstool_grpc(
+        proc = execute_dstool_grpc(
             self.cluster,
             "token",
+            args,
+            check_exit_code=False,
+            return_process=True,
+        )
+
+        stdout = proc.std_out.decode('utf-8')
+        stderr = proc.std_err.decode('utf-8')
+
+        try:
+            return json.loads(stdout)
+        except json.JSONDecodeError as e:
+            assert False, (
+                f"{operation_name} for disk {disk_id} did not return JSON: "
+                f"{e}; stdout={stdout}, stderr={stderr}"
+            )
+
+    def create_partition(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
+        """
+        Create a disk and return the parsed CreatePartition JSON result.
+        """
+        return self._dstool_nbs_partition_json(
             [
                 'nbs',
                 'partition',
                 'create',
                 '--pool',
                 self.ddisk_pool_name,
-                '--block-size=4096',
+                f'--block-size={block_size}',
                 f'--blocks-count={blocks_count}',
                 '--type=ssd',
                 '--disk-id',
                 disk_id,
             ],
+            'CreatePartition',
+            disk_id,
         )
+
+    def create_disk(self, disk_id, blocks_count=DEFAULT_DISK_BLOCKS_COUNT, block_size=4096):
+        """
+        Create a disk with specified number of blocks.
+        Returns the partition tablet id.
+
+        UNAVAILABLE is retried: a previous case's node restart can leave DDisk
+        allocation briefly unready even after mon is up.
+        """
+        deadline = time.time() + 40
+        output = None
+        while time.time() < deadline:
+            output = self.create_partition(disk_id, blocks_count, block_size=block_size)
+            if output.get('status') == 'SUCCESS':
+                tablet_id = output.get('tabletId', '')
+                assert tablet_id, f"CreatePartition did not return tabletId: {output}"
+                return tablet_id
+            if output.get('status') != 'UNAVAILABLE':
+                break
+            self.on_create_unavailable()
+            time.sleep(1)
+        assert output.get('status') == 'SUCCESS', (
+            f"CreatePartition failed for disk {disk_id}: {output}"
+        )
+
+    def resize_partition(self, disk_id, blocks_count):
+        """
+        Grow a disk to ``blocks_count`` blocks and return the parsed JSON.
+        """
+        return self._dstool_nbs_partition_json(
+            [
+                'nbs',
+                'partition',
+                'resize',
+                '--disk-id',
+                disk_id,
+                f'--blocks-count={blocks_count}',
+            ],
+            'ResizePartition',
+            disk_id,
+        )
+
+    def resize_disk(self, disk_id, blocks_count):
+        """
+        Grow a disk to ``blocks_count`` blocks via ResizePartition.
+
+        Returns the BlocksCount reported by the RPC (scheme size). The
+        partition tablet currently accepts the alter as a no-op, so IO
+        still uses the original capacity.
+        """
+        output = self.resize_partition(disk_id, blocks_count)
+        assert output.get('status') == 'SUCCESS', (
+            f"ResizePartition failed for disk {disk_id}: {output}"
+        )
+        grown = output.get('blocksCount')
+        assert grown is not None, (
+            f"ResizePartition did not return blocksCount: {output}"
+        )
+        assert int(grown) == int(blocks_count), (
+            f"ResizePartition returned blocksCount={grown}, expected {blocks_count}"
+        )
+        return int(grown)
+
+    def on_create_unavailable(self):
+        """Hook for shared-cluster suites to recover a wedged NBS tenant."""
+
+    def mon_base_url(self):
+        node = self.cluster.nodes[1]
+        return f'http://{node.host}:{node.mon_port}'
+
+    def fetch_mon(self, path, timeout=5):
+        url = f'{self.mon_base_url()}{path}'
+        response = requests.get(url, timeout=timeout)
+        assert response.status_code == 200, (
+            f"Mon request failed: {url} status={response.status_code} body={response.text[:500]}"
+        )
+        return response.text
+
+    def fetch_partition_dbg_page(self, tablet_id, dbg_index=None, allow_missing=False):
+        path = f'/tablets/app?TabletID={tablet_id}&page=dbg'
+        if dbg_index is not None:
+            path += f'&dbg={dbg_index}'
+        if not allow_missing:
+            return self.fetch_mon(path)
+
+        url = f'{self.mon_base_url()}{path}'
+        response = requests.get(url, timeout=5)
+        # After SchemeShard drops the volume, Hive deletes the tablet; the mon
+        # proxy may return a non-200 / "tablet not found" page.
+        if response.status_code != 200:
+            return ''
+        return response.text
+
+    @staticmethod
+    def pbuffer_node_id(pb_service_id):
+        # ActorId::ToString is "[nodeId:poolId:localId]".
+        match = re.fullmatch(r'\[(\d+):\d+:\d+\]', pb_service_id)
+        assert match, f"unexpected PBuffer service id format: {pb_service_id}"
+        return int(match.group(1))
+
+    def fetch_pbuffer_page(self, pb_service_ids):
+        """
+        Fetch Persistent Buffer mon pages for the given service ids (grouped by
+        node — the mon actor only lists local PBuffers), with tablet LSN table.
+        """
+        by_node = {}
+        for pb in pb_service_ids:
+            by_node.setdefault(self.pbuffer_node_id(pb), []).append(pb)
+
+        pages = []
+        for node_id, pbs in sorted(by_node.items()):
+            params = [
+                ('formPresent', '1'),
+                ('describeFreeSpace', '0'),
+                ('showTablets', '1'),
+                ('autoRefresh', '0'),
+            ]
+            for pb in pbs:
+                params.append(('pb', pb))
+            query = urllib.parse.urlencode(params, doseq=True)
+            pages.append(
+                self.fetch_mon(f'/node/{node_id}/actors/persistent_buffer?{query}')
+            )
+        return '\n'.join(pages)
+
+    @staticmethod
+    def parse_dbg_indexes(html):
+        return [int(x) for x in DBG_LINK_RE.findall(html)]
+
+    @staticmethod
+    def parse_pbuffer_service_ids(html):
+        ids = []
+        for encoded in PBUFFER_PB_RE.findall(html):
+            ids.append(urllib.parse.unquote(encoded))
+        return ids
+
+    def collect_pbuffer_service_ids(self, tablet_id, dbg_indexes):
+        pb_ids = []
+        seen = set()
+        for dbg_index in dbg_indexes:
+            html = self.fetch_partition_dbg_page(tablet_id, dbg_index)
+            for pb_id in self.parse_pbuffer_service_ids(html):
+                if pb_id not in seen:
+                    seen.add(pb_id)
+                    pb_ids.append(pb_id)
+        return pb_ids
+
+    def wait_until(self, predicate, timeout_seconds=60, sleep_seconds=1, description=''):
+        deadline = time.time() + timeout_seconds
+        last_error = None
+        while time.time() < deadline:
+            try:
+                if predicate():
+                    return
+                last_error = None
+            except AssertionError as e:
+                last_error = e
+            time.sleep(sleep_seconds)
+        detail = f': {last_error}' if last_error else ''
+        assert False, f'Timed out waiting for {description or "condition"}{detail}'
 
     def delete_disk(self, disk_id):
         """
@@ -181,20 +371,27 @@ class NbsTestBase:
         )
 
     def get_load_actor_adapter_actor_id(self, disk_id):
-        get_load_actor_res = json.loads(
-            execute_dstool_grpc(
-                self.cluster,
-                "token",
-                ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+        """
+        Return the load-actor adapter id once the partition has registered it.
+
+        A zero id means the tablet answered before the adapter existed.
+        """
+        deadline = time.time() + 40
+        last = None
+        while time.time() < deadline:
+            last = json.loads(
+                execute_dstool_grpc(
+                    self.cluster,
+                    "token",
+                    ['nbs', 'partition', 'get-load-actor-adapter-actor-id', '--disk-id', disk_id],
+                )
             )
-        )
-
-        status = get_load_actor_res["status"]
-        actor_id = get_load_actor_res["actorId"]
-        assert status == "success"
-        assert actor_id != ""
-
-        return actor_id
+            status = last.get("status")
+            actor_id = last.get("actorId") or ""
+            if status == "success" and actor_id not in ("", "[0:0:0]"):
+                return actor_id
+            time.sleep(1)
+        assert False, f"Load actor adapter is not ready for disk {disk_id}: {last}"
 
     def write(self, actor_id, index, data):
         execute_dstool_grpc(
@@ -373,7 +570,7 @@ class NbsTestBase:
         """
         # Verify basic success (Result field may not be present, which means success)
         if 'Result' in results:
-            assert results['Result'] == 0, "Load actor run finished with error"
+            assert results['Result'] == 0, f"Load actor run finished with error: {results}"
 
         # Verify IOPS and throughput are non-zero
         assert 'Iops' in results, f"Missing Iops in results: {results}"

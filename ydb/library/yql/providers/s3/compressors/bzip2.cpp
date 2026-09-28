@@ -48,7 +48,7 @@ TReadBuffer::~TReadBuffer() {
 }
 
 void TReadBuffer::InitDecoder() {
-    YQL_ENSURE(BZ2_bzDecompressInit(&BzStream_, 0, 0) == BZ_OK, "Can not init bzip engine.");
+    YQL_ENSURE(BZ2_bzDecompressInit(&BzStream_, 0, 0) == BZ_OK, "Cannot init bzip engine.");
 }
 
 void TReadBuffer::FreeDecoder() {
@@ -92,7 +92,7 @@ class TCompressor : public TOutputQueue<> {
 public:
     TCompressor(int blockSize100k) {
         Zero(BzStream_);
-        YQL_ENSURE(BZ2_bzCompressInit(&BzStream_, blockSize100k, 0, 30) == BZ_OK, "Can not init deflate engine.");
+        YQL_ENSURE(BZ2_bzCompressInit(&BzStream_, blockSize100k, 0, 30) == BZ_OK, "Cannot init deflate engine.");
     }
 
     ~TCompressor() {

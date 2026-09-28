@@ -6,6 +6,7 @@
 
 #include <util/generic/cast.h>
 #include <util/datetime/base.h>
+#include <util/datetime/process_uptime.h>
 #include <util/string/builder.h>
 
 #ifndef _little_endian_
@@ -14,6 +15,17 @@
 
 namespace NMonitoring {
     namespace {
+        ui32 DefaultStartTimeSeconds() noexcept {
+            static const ui32 startTimeSeconds = []() -> ui32 {
+                try {
+                    return static_cast<ui32>((TInstant::Now() - ProcessUptime()).Seconds());
+                } catch (...) {
+                    return 0;
+                }
+            }();
+            return startTimeSeconds;
+        }
+
         ///////////////////////////////////////////////////////////////////////
         // TEncoderSpackV1
         ///////////////////////////////////////////////////////////////////////
@@ -34,6 +46,9 @@ namespace NMonitoring {
                 , MetricName_(Version_ == SV1_02 ? LabelNamesPool_.PutIfAbsent(metricNameLabel) : nullptr)
             {
                 MetricsMergingMode_ = mergingMode;
+                if (Version_ == SV1_04) {
+                    CommonStartTimeSeconds_ = DefaultStartTimeSeconds();
+                }
 
                 LabelNamesPool_.SetSorted(true);
                 LabelValuesPool_.SetSorted(true);
@@ -96,7 +111,7 @@ namespace NMonitoring {
                 header.Version = Version_;
                 header.TimePrecision = EncodeTimePrecision(TimePrecision_);
                 header.Compression = EncodeCompression(Compression_);
-                if (Version_ == SV1_03) {
+                if (Version_ == SV1_03 || Version_ == SV1_04) {
                     header.LabelNamesSize = static_cast<ui32>(LabelNamesPool_.Count());
                     header.LabelValuesSize = static_cast<ui32>(LabelValuesPool_.Count());
                 } else {
@@ -116,7 +131,7 @@ namespace NMonitoring {
                 }
 
                 // (2) write string pools
-                if (Version_ == SV1_03) {
+                if (Version_ == SV1_03 || Version_ == SV1_04) {
                     auto strPoolWrite = [this](TStringBuf str, ui32, ui32) {
                         WriteVarUInt32(Out_, static_cast<ui32>(str.size()));
                         Out_->Write(str);
@@ -135,6 +150,10 @@ namespace NMonitoring {
                 // (3) write common time
                 WriteTime(CommonTime_);
 
+                if (Version_ == SV1_04) {
+                    WriteFixed(CommonStartTimeSeconds_);
+                }
+
                 // (4) write common labels' indexes
                 WriteLabels(CommonLabels_, nullptr);
 
@@ -146,8 +165,16 @@ namespace NMonitoring {
                     Out_->Write(&typesByte, sizeof(typesByte));
 
                     // (5.2) flags byte
-                    ui8 flagsByte = metric.IsMemOnly & 0x01;
+                    const bool writeStartTime = Version_ == SV1_04
+                        && metric.HasStartTime
+                        && metric.StartTimeSeconds != CommonStartTimeSeconds_
+                        && (metric.MetricType == EMetricType::RATE || metric.MetricType == EMetricType::HIST_RATE);
+                    ui8 flagsByte = (metric.IsMemOnly & 0x01) | (static_cast<ui8>(writeStartTime) << 1);
                     Out_->Write(&flagsByte, sizeof(flagsByte));
+
+                    if (writeStartTime) {
+                        WriteFixed(metric.StartTimeSeconds);
+                    }
 
                     // v1.2 format addition — metric name
                     if (Version_ == SV1_02) {
@@ -340,5 +367,14 @@ namespace NMonitoring {
         EMetricsMergingMode mergingMode
     ) {
         return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_03, "");
+    }
+
+    IMetricEncoderPtr EncoderSpackV14(
+        IOutputStream* out,
+        ETimePrecision timePrecision,
+        ECompression compression,
+        EMetricsMergingMode mergingMode
+    ) {
+        return MakeHolder<TEncoderSpackV1>(out, timePrecision, compression, mergingMode, SV1_04, "");
     }
 }

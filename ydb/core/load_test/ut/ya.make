@@ -1,12 +1,14 @@
-UNITTEST_FOR(ydb/core/load_test)
+UNITTEST()
 
 FORK_SUBTESTS(MODULO)
 
 SIZE(MEDIUM)
 
 PEERDIR(
+    library/cpp/protobuf/util
     ydb/core/blobstorage/ut_blobstorage/lib
-    ydb/core/testlib/default
+    ydb/core/load_test/blobstorage
+    ydb/core/load_test/nbs
 )
 
 YQL_LAST_ABI_VERSION()

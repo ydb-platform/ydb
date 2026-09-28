@@ -32,8 +32,8 @@ Y_UNIT_TEST(Basic) {
     TString query = "/*+ some() */ SELECT /*+ foo(one) */ --+ bar(two)";
     auto hintsWithPos = CollectHints(query);
     UNIT_ASSERT(hintsWithPos.size() == 1);
-    NYql::TPosition pos = hintsWithPos.begin()->first;
-    TVector<TSQLHint> hints = hintsWithPos.begin()->second;
+    const NYql::TPosition& pos = hintsWithPos.begin()->first;
+    const TVector<TSQLHint>& hints = hintsWithPos.begin()->second;
 
     UNIT_ASSERT_EQUAL(pos.Row, 1);
     UNIT_ASSERT_EQUAL(pos.Column, 15);

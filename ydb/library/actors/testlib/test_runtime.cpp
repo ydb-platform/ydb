@@ -1779,6 +1779,9 @@ namespace NActors {
         }
 
         InitActorSystemSetup(*setup, node);
+        if (SetupNodeSubSystems) {
+            SetupNodeSubSystems(nodeIndex, setup.Get());
+        }
 
         return setup;
     }

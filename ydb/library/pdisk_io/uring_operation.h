@@ -21,7 +21,7 @@ class TUringOperationBase {
 public:
     // NHPTimer cycle count captured by TUringRouter right before the operation
     // is submitted to the kernel (SQE prepared). Used together with the
-    // completion timestamp (captured by the completion poller) to build a
+    // completion timestamp (captured by the I/O thread) to build a
     // TDeviceIoSample for device-overestimation tracking. 0 if unset.
     ui64 SubmitCycles = 0;
 
@@ -35,18 +35,20 @@ public:
     virtual ~TUringOperationBase();
 
 public:
-    // Callbacks
+    // TUringRouter invokes exactly one terminal callback for every operation
+    // accepted by Submit().
 
-    // Called from the dedicated completion polling thread outside actor system,
+    // Called from the dedicated I/O thread outside actor system,
     // thus MUST NOT use TActivationContext, instead should use actorSystem->Send().
     // After OnComplete() returns, TUringRouter will not access object anymore.
     virtual void OnComplete(NActors::TActorSystem* actorSystem) noexcept = 0;
 
-    // A cleanup callback called by TUringRouter::Stop() for CQEs drained
-    // after shutdown without invoking OnComplete. Use this to release operation-
-    // owned memory/resources for in-flight requests that are no longer delivered.
+    // Called from the dedicated I/O thread when shutdown drops an accepted
+    // operation before kernel submission. Use this to release
+    // operation-owned memory/resources. Use the supplied actor system for messages;
+    // TActivationContext is unavailable here too.
     // After OnDrop() returns, TUringRouter will not access object anymore.
-    virtual void OnDrop() noexcept = 0;
+    virtual void OnDrop(NActors::TActorSystem*) noexcept = 0;
 
 public:
     // Prepare a single-buffer I/O.
@@ -70,8 +72,11 @@ public:
     void SetOperationType(EOperationType opType) { OperationType = opType; }
     EOperationType GetOperationType() const { return OperationType; }
 
+    bool IsFixedBuffer() const { return FixedBuffer; }
+    ui16 GetBufIndex() const { return BufIndex; }
+
     // Returns the number of bytes remaining in the current (possibly partially
-    // advanced) iovec window — used by OnComplete to detect short I/O.
+    // advanced) iovec window. This is zero after a successful logical completion.
     // Invariant: GetOperationBytes() == TotalSize - BytesProcessed.
     size_t GetOperationBytes() const {
 #if defined(__linux__)
@@ -81,8 +86,17 @@ public:
 #endif
     }
 
-    void SetResult(i32 result) { Result = result; }
-    i32 GetResult() const { return Result; }
+    // Logical terminal result: the total requested byte count on success,
+    // or -errno on failure.
+    void SetResult(i64 result) { Result = result; }
+    i64 GetResult() const { return Result; }
+
+    // Transfer accumulated short-I/O accounting to the completion consumer.
+    ui64 TakeShortIoCount() {
+        const ui64 count = ShortIoCount;
+        ShortIoCount = 0;
+        return count;
+    }
 
     ui64 GetTotalSize() const { return TotalSize; }
 
@@ -102,10 +116,15 @@ public:
     // Reset all submission/completion state so the object can be reused from a pool.
     // Must be called before PrepareIov() when recycling an operation.
     void ResetSubmissionState() {
+        SubmitCycles = 0;
         Result = 0;
+        ShortIoCount = 0;
+        IsContinuation = false;
         OperationType = ENOT_SET;
         TotalSize = 0;
         DiskOffset = 0;
+        FixedBuffer = false;
+        BufIndex = 0;
 #if defined(__linux__)
         Iov.clear();
         IovBegin = 0;
@@ -123,8 +142,20 @@ public:
 #endif
 
 private:
-    // Filled by TUringRouter on completion
-    i32 Result = 0;  // io_uring cqe->res: bytes transferred on success, -errno on failure
+    // Set by TUringRouter::ReadFixed/WriteFixed before the operation is handed
+    // to the I/O thread.
+    void SetFixedBuffer(ui16 bufIndex) {
+        FixedBuffer = true;
+        BufIndex = bufIndex;
+    }
+
+    // Filled by TUringRouter at logical completion, across all physical CQEs.
+    i64 Result = 0;
+
+    ui64 ShortIoCount = 0;
+
+    // Router-owned continuation of an operation that has already made progress.
+    bool IsContinuation = false;
 
     // Submission metadata for non-fixed Read/Write operations.
 
@@ -137,6 +168,11 @@ private:
 
     ui64 DiskOffset = 0;
 
+    // Fixed-buffer operations must remember their registered-buffer index
+    // until the I/O thread prepares the SQE.
+    bool FixedBuffer = false;
+    ui16 BufIndex = 0;
+
 #if defined(__linux__)
     // Iovec array for readv/writev submissions.  Supports scatter-gather: holds one
     // entry for single-buffer I/O or N entries for multi-segment writes.
@@ -144,10 +180,10 @@ private:
     TStackVec<struct iovec, MAX_STACK_IOVS> Iov;
 
     // Index into Iov of the first not-yet-completed iovec.
-    // Advanced by AdvanceIov() on short I/O retries.
+    // Advanced by AdvanceIov() on successful physical completions.
     size_t IovBegin = 0;
 
-    // Cumulative bytes consumed by AdvanceIov() across short-I/O retries.
+    // Cumulative bytes consumed by AdvanceIov() across physical completions.
     // GetOperationBytes() == TotalSize - BytesProcessed (remaining window).
     ui64 BytesProcessed = 0;
 #endif

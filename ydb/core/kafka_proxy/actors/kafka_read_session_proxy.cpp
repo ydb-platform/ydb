@@ -72,7 +72,7 @@ void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvLeaveGroupRequest::TPtr& ev
 void KafkaReadSessionProxyActor::Handle(TEvKafka::TEvFetchRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvKafka::TEvFetchRequest",
         {LogPrefix()});
-    Register(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
+    RegisterWithSameMailbox(CreateKafkaFetchActor(Context, ev->Get()->CorrelationId, ev->Get()->Request));
 }
 
 TSyncGroupResponseData::TPtr KafkaReadSessionProxyActor::CreateChangeResponse(TSyncGroupRequestData&) {

@@ -16,11 +16,56 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
+#include <library/cpp/lwtrace/all.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
+    Y_UNIT_TEST(OptimizerStatsSysViewWithLwTrace) {
+        NLWTrace::TManager lwManager(*Singleton<NLWTrace::TProbeRegistry>(), true);
+        {
+            NLWTrace::TQuery query;
+            auto* block = query.AddBlocks();
+            block->MutableProbeDesc()->SetProvider("YDB_CS_DATA_SOURCE");
+            block->MutableProbeDesc()->SetName("StartSourceProcessing");
+            block->AddAction()->MutableLogAction();
+            lwManager.New("ydbbugs_915", query);
+        }
+
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            auto settings = TKikimrSettings().SetWithSampleTables(false);
+            settings.AppConfig.MutableColumnShardConfig()->SetReaderClassName(reader);
+            TKikimrRunner kikimr(settings);
+
+            auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+
+            TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+            auto tableClient = kikimr.GetTableClient();
+            {
+                auto alterQuery =
+                    R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                    {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_count_available" : 2},
+                                 {"class_name" : "OneLayer", "expected_portion_size" : 40000, "size_limit_guarantee" : 100000000, "bytes_limit_fraction" : 1}]}`);
+                )";
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+            }
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 1000);
+
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT * FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
+            )")
+                          .GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            UNIT_ASSERT_C(!rows.empty(), reader);
+        }
+    }
+
     Y_UNIT_TEST(SpecialSliceToOneLayer) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -876,6 +921,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
 
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         auto tableClient = kikimr.GetTableClient();
@@ -900,6 +947,9 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         }
 
         UNIT_ASSERT_VALUES_EQUAL(SelectPortionCount(tableClient, "/Root/olapStore/olapTable"), 12);
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
 
         csController->WaitCompactions(TDuration::Seconds(10));
         csController->WaitActualization(TDuration::Seconds(10));

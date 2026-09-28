@@ -176,8 +176,11 @@ public:
     // idempotent and there is no way to roll back a partially-sent batch.
     // Silently ignore checkpoint calls so the actor can coexist with
     // checkpoint-enabled pipelines.
-    void LoadState(const TSinkState&) override {}
-    void CommitState(const NDqProto::TCheckpoint&) override {}
+    void LoadState(const TSinkState&, const NDqProto::TCheckpoint&) override {}
+
+    void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
+        Callbacks->OnAsyncOutputStateCommitted(OutputIndex, checkpoint);
+    }
 
     i64 GetFreeSpace() const override {
         return FreeSpace;
@@ -367,6 +370,7 @@ private:
                 httpRequest->Set(authorizationHeader, "OAuth " + authToken);
                 break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+            case NSo::NProto::ESolomonClusterType::CT_MONIUM:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
@@ -469,6 +473,7 @@ private:
         NJson::TJsonParser parser;
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+            case NSo::NProto::ESolomonClusterType::CT_MONIUM:
                 parser.AddField("sensorsProcessed", true);
                 break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
@@ -630,7 +635,8 @@ TString GetSolomonUrl(const TString& endpoint, bool useSsl, const TString& proje
     TUrlBuilder builder((useSsl ? "https://" : "http://") + endpoint);
 
     switch (type) {
-        case NSo::NProto::ESolomonClusterType::CT_SOLOMON: {
+        case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+        case NSo::NProto::ESolomonClusterType::CT_MONIUM: {
             builder.AddPathComponent("api");
             builder.AddPathComponent("v2");
             builder.AddPathComponent("push");

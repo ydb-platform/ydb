@@ -233,10 +233,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemountTableCommand
+struct TRemountTableCommand
     : public TTabletCommandBase<NApi::TRemountTableOptions>
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TRemountTableCommand);
 
     static void Register(TRegistrar /*registrar*/)

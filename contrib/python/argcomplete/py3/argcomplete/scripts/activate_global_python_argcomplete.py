@@ -32,7 +32,9 @@ source "{activator}"
 # End added by argcomplete
 """
 
-parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+)
 parser.add_argument("-y", "--yes", help="automatically answer yes for all questions", action="store_true")
 parser.add_argument("--dest", help='Specify the shell completion modules directory to install into, or "-" for stdout')
 parser.add_argument("--user", help="Install into user directory", action="store_true")
@@ -40,18 +42,18 @@ argcomplete.autocomplete(parser)
 args = None
 
 
-def get_local_dir():
+def get_local_dir() -> str:
     try:
         return subprocess.check_output(["brew", "--prefix"]).decode().strip()
     except (FileNotFoundError, subprocess.CalledProcessError):
         return "/usr/local"
 
 
-def get_zsh_system_dir():
+def get_zsh_system_dir() -> str:
     return f"{get_local_dir()}/share/zsh/site-functions"
 
 
-def get_bash_system_dir():
+def get_bash_system_dir() -> str:
     if "BASH_COMPLETION_COMPAT_DIR" in os.environ:
         return os.environ["BASH_COMPLETION_COMPAT_DIR"]
     elif sys.platform == "darwin":
@@ -60,15 +62,15 @@ def get_bash_system_dir():
         return "/etc/bash_completion.d"  # created by bash-completion
 
 
-def get_activator_dir():
+def get_activator_dir() -> str:
     return os.path.join(os.path.abspath(os.path.dirname(argcomplete.__file__)), "bash_completion.d")
 
 
-def get_activator_path():
+def get_activator_path() -> str:
     return os.path.join(get_activator_dir(), "_python-argcomplete")
 
 
-def install_to_destination(dest):
+def install_to_destination(dest: str) -> None:
     activator = get_activator_path()
     if dest == "-":
         with open(activator) as fh:
@@ -92,7 +94,7 @@ def install_to_destination(dest):
         )
 
 
-def get_consent():
+def get_consent() -> bool:
     assert args is not None
     if args.yes is True:
         return True
@@ -106,7 +108,7 @@ def get_consent():
             return False
 
 
-def append_to_config_file(path, shellcode):
+def append_to_config_file(path: str | os.PathLike[str], shellcode: str) -> None:
     if os.path.exists(path):
         with open(path, 'r') as fh:
             if shellcode in fh.read():
@@ -124,23 +126,23 @@ def append_to_config_file(path, shellcode):
     print("Added.", file=sys.stderr)
 
 
-def link_zsh_user_rcfile(zsh_fpath=None):
+def link_zsh_user_rcfile(zsh_fpath: str | None = None) -> None:
     zsh_rcfile = os.path.join(os.path.expanduser(os.environ.get("ZDOTDIR", "~")), ".zshenv")
     append_to_config_file(zsh_rcfile, zsh_shellcode.format(zsh_fpath=zsh_fpath or get_activator_dir()))
 
 
-def link_bash_user_rcfile():
+def link_bash_user_rcfile() -> None:
     bash_completion_user_file = os.path.expanduser("~/.bash_completion")
     append_to_config_file(bash_completion_user_file, bash_shellcode.format(activator=get_activator_path()))
 
 
-def link_user_rcfiles():
+def link_user_rcfiles() -> None:
     # TODO: warn if running as superuser
     link_zsh_user_rcfile()
     link_bash_user_rcfile()
 
 
-def add_zsh_system_dir_to_fpath_for_user():
+def add_zsh_system_dir_to_fpath_for_user() -> None:
     if "zsh" not in os.environ.get("SHELL", ""):
         return
     try:
@@ -154,7 +156,7 @@ def add_zsh_system_dir_to_fpath_for_user():
         pass
 
 
-def main():
+def main() -> None:
     global args
     args = parser.parse_args()
 
@@ -190,4 +192,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main())  # type: ignore[func-returns-value]

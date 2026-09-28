@@ -14,13 +14,11 @@ class TScannerConstructorContext {
 private:
     YDB_READONLY(TSnapshot, Snapshot, TSnapshot::Zero());
     YDB_READONLY(ui32, ItemsLimit, 0);
-    YDB_READONLY(TReadMetadataBase::ESorting, Sorting, TReadMetadataBase::ESorting::NONE);
 
 public:
-    TScannerConstructorContext(const TSnapshot& snapshot, const ui32 itemsLimit, const TReadMetadataBase::ESorting sorting)
+    TScannerConstructorContext(const TSnapshot& snapshot, const ui32 itemsLimit)
         : Snapshot(snapshot)
         , ItemsLimit(itemsLimit)
-        , Sorting(sorting)
     {
     }
 };
@@ -44,7 +42,6 @@ class IScannerConstructor {
 protected:
     const TSnapshot Snapshot;
     const ui64 ItemsLimit;
-    const TReadMetadataBase::ESorting Sorting;
     TConclusionStatus ParseProgram(const TProgramParsingContext& context, const NKikimrSchemeOp::EOlapProgramType programType,
         const TString& serializedProgram, TReadDescription& read, const NArrow::NSSA::IColumnResolver& columnResolver) const;
 
@@ -57,14 +54,16 @@ public:
     using TFactory = NObjectFactory::TParametrizedObjectFactory<IScannerConstructor, TString, TScannerConstructorContext>;
     virtual ~IScannerConstructor() = default;
 
+    virtual EReaderClass GetReaderClass() const = 0;
+
     IScannerConstructor(const TScannerConstructorContext& context)
         : Snapshot(context.GetSnapshot())
         , ItemsLimit(context.GetItemsLimit())
-        , Sorting(context.GetSorting())
     {
     }
 
-    TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(const NKikimrKqp::TEvKqpScanCursor& proto) const;
+    TConclusion<std::shared_ptr<IScanCursor>> BuildCursorFromProto(
+        const NKikimrKqp::TEvKqpScanCursor& proto, const ESourcesSorting sourcesSorting) const;
     virtual TConclusionStatus ParseProgram(
         const TProgramParsingContext& context, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const = 0;
     virtual std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const NColumnShard::TColumnShard* self) const = 0;

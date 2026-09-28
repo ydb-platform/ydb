@@ -580,8 +580,7 @@ public:
 
         const auto& accessServiceProto = Config.Proto.GetAccessService();
         if (accessServiceProto.GetEnable()) {
-            NCloud::TAccessServiceSettings asSettings;
-            asSettings.Endpoint = accessServiceProto.GetEndpoint();
+            NCloud::TAccessServiceSettings asSettings(accessServiceProto.GetEndpoint(), "ydb-cp");
             if (accessServiceProto.GetPathToRootCA()) {
                 asSettings.CertificateRootCA = TUnbufferedFileInput(accessServiceProto.GetPathToRootCA()).ReadAll();
             }

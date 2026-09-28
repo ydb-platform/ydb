@@ -8,6 +8,7 @@
 #include <yt/yql/providers/yt/lib/schema/schema.h>
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <yql/essentials/providers/common/proto/static_gateways_config.pb.h>
 
 namespace NYql {
 
@@ -45,6 +46,7 @@ TExecContextBaseSimple::TExecContextBaseSimple(
     : Gateway(gateway)
     , FunctionRegistry_(services->FunctionRegistry)
     , Config_(services->Config)
+    , StaticConfig_(services->StaticConfig)
     , Clusters_(clusters)
     , MkqlCompiler_(mkqlCompiler)
     , UrlMapper_(urlMapper)
@@ -65,7 +67,7 @@ void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks)
     UserFiles_ = MakeIntrusive<TUserFiles>(*UrlMapper_, activeYtCluster);
     for (const auto& file: userDataBlocks) {
         auto block = file.second;
-        if (!Config_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
+        if (!StaticConfig_->GetMrJobUdfsDir().empty() && block.Usage.Test(EUserDataBlockUsage::Udf) && block.Type == EUserDataType::PATH) {
             TFsPath path = block.Data;
             TString fileName = path.Basename();
 #ifdef _win_
@@ -73,7 +75,7 @@ void TExecContextBaseSimple::MakeUserFiles(const TUserDataTable& userDataBlocks)
             changedName.ChopSuffix(".dll");
             fileName = TString("lib") + changedName + ".so";
 #endif
-            block.Data = TFsPath(Config_->GetMrJobUdfsDir()) / fileName;
+            block.Data = TFsPath(StaticConfig_->GetMrJobUdfsDir()) / fileName;
             TString md5;
             if (block.FrozenFile) {
                 md5 = block.FrozenFile->GetMd5();
@@ -153,6 +155,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
             }
 
             const bool enableQLFilter = settings->_EnableQLFilter.Get(Cluster_).GetOrElse(DEFAULT_ENABLE_QL_FILTER);
+            const ui32 qlFilterDepthLimit = settings->QLFilterDepthLimit.Get(Cluster_).GetOrElse(DEFAULT_QL_FILTER_DEPTH_LIMIT);
             TNodeMap<TMaybe<TString>> inputQueries;
 
             for (auto path: section.Paths()) {
@@ -186,7 +189,7 @@ void TExecContextBaseSimple::SetInput(TExprBase input, bool forcePathColumns, co
                 if (enableQLFilter && pathInfo.QLFilter) {
                     auto queryIter = inputQueries.find(pathInfo.QLFilter.Get());
                     if (queryIter == inputQueries.end()) {
-                        queryIter = inputQueries.insert({pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter)}).first;
+                        queryIter = inputQueries.emplace(pathInfo.QLFilter.Get(), GenerateInputQuery(pathInfo.QLFilter, qlFilterDepthLimit)).first;
                     }
                     if (queryIter->second) {
                         richYPath.InputQuery(*queryIter->second);
@@ -372,7 +375,11 @@ TString TExecContextBaseSimple::GetAuth(const TYtSettings::TConstPtr& config) co
 
     if (!auth || auth->empty()) {
         if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
-            auth = ytTokenResolver->ResolveClusterToken(Cluster_);
+            auto ytName = Clusters_->TryGetYtName(Cluster_);
+            if (!ytName) {
+                ythrow yexception() << "Unknown cluster name: " << Cluster_;
+            }
+            auth = ytTokenResolver->ResolveClusterToken(ytName, *BaseSession_->Credentials_);
         }
     }
 

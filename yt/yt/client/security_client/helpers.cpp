@@ -25,6 +25,11 @@ TYPath GetAccountPath(const std::string& name)
     return "//sys/accounts/" + ToYPathLiteral(name);
 }
 
+TYPath GetMediumPath(const std::string& name)
+{
+    return "//sys/media/" + ToYPathLiteral(name);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 ESecurityAction CheckPermissionsByAclAndSubjectClosure(

@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk.h"
+#include "blobstorage_pdisk_defs.h"
 #include "blobstorage_pdisk_logreader_base.h"
 #include "blobstorage_pdisk_tools.h"
 
@@ -110,10 +111,7 @@ struct TOwnerData {
     {}
 
     bool IsStaticGroupOwner() const {
-        if (VDiskId == TVDiskID::InvalidId) {
-            return false;
-        }
-        return TGroupID(VDiskId.GroupID).ConfigurationType() == EGroupConfigurationType::Static;
+        return IsStaticGroupVDisk(VDiskId);
     }
 
     bool IsNextLsnOk(const ui64 lsn) const {

@@ -4,10 +4,10 @@ namespace NKikimr {
 namespace NKqp {
 
 namespace {
-const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg", "variance_1_1", "distinct"};
+const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg", "variance_1_1", "some", "distinct"};
 
 bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connection) {
-    return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection);
+    return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection) || IsConnection<TMapConnection>(connection);
 }
 
 bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const TIntrusivePtr<IOperator>& input, TPlanProps& props) {
@@ -45,7 +45,8 @@ bool IsSuitableToPropagateAggregateThroughStage(const TIntrusivePtr<IOperator>& 
 }
 
 std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
-    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1" || aggFunc == "distinct") {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1" || aggFunc == "some" ||
+        aggFunc == "distinct") {
         return std::make_pair(aggFunc, aggFunc);
     }
     if (aggFunc == "count") {
@@ -91,8 +92,6 @@ bool TPropagateAggregateThroughStageRule::QuickMatch(const TIntrusivePtr<IOperat
 }
 
 TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(ctx);
-
     if (!IsSuitableToPropagateAggregateThroughStage(input)) {
         return input;
     }
@@ -113,7 +112,9 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
         opProps.StageId = inputStageId;
 
         TIntrusivePtr<TConnection> connection;
-        if (!aggregate->GetKeyColumns().empty()) {
+        if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
+            connection = MakeIntrusive<TMapConnection>(outputIndex);
+        } else if (!aggregate->GetKeyColumns().empty()) {
             TVector<TInfoUnit> shuffleByKeys;
             if (aggregate->IsDistinctAll()) {
                 for (const auto& aggTraits : aggregate->GetAggregationTraits()) {

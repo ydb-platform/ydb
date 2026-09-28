@@ -18,7 +18,6 @@ public:
     {
     }
 
-public:
     TNew Fetch() override {
         return Functor_(Old_->Fetch());
     }
@@ -37,7 +36,6 @@ public:
     {
     }
 
-public:
     void OnObject(TNew object) override {
         Old_->OnObject(Functor_(object));
     }
@@ -58,7 +56,6 @@ public:
     {
     }
 
-public:
     void OnObject(T t) override {
         Consumer_->OnObject(t);
     }

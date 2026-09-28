@@ -66,7 +66,9 @@ public:
                                                       originalContext.CountersProvider,
                                                       originalContext.LogProvider,
                                                       originalContext.LangVer,
-                                                      originalContext.GetRuntimeSettingsSharedPtr()),
+                                                      originalContext.GetRuntimeSettingsSharedPtr(),
+                                                      originalContext.BridgeMode,
+                                                      originalContext.BridgeBinaryPath),
 
                   originalContext.Mutables,
                   *NYql::NUdf::GetYqlMemoryPool(),

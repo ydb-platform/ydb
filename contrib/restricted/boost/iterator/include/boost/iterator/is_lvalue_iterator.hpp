@@ -4,6 +4,7 @@
 #ifndef IS_LVALUE_ITERATOR_DWA2003112_HPP
 #define IS_LVALUE_ITERATOR_DWA2003112_HPP
 
+#include <boost/config.hpp>
 #include <boost/iterator/detail/type_traits/conjunction.hpp>
 
 #include <iterator>
@@ -71,10 +72,22 @@ struct is_non_const_lvalue_iterator :
 {
 };
 
+#if !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+template< typename T >
+BOOST_INLINE_VARIABLE constexpr bool is_lvalue_iterator_v = iterators::is_lvalue_iterator< T >::value;
+template< typename T >
+BOOST_INLINE_VARIABLE constexpr bool is_non_const_lvalue_iterator_v = iterators::is_non_const_lvalue_iterator< T >::value;
+#endif // !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+
 } // namespace iterators
 
 using iterators::is_lvalue_iterator;
 using iterators::is_non_const_lvalue_iterator;
+
+#if !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
+using iterators::is_lvalue_iterator_v;
+using iterators::is_non_const_lvalue_iterator_v;
+#endif // !defined(BOOST_NO_CXX14_VARIABLE_TEMPLATES)
 
 } // namespace boost
 

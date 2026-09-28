@@ -1498,6 +1498,8 @@ struct Schema : NIceDb::Schema {
         struct RowIdColumnBuildId : Column<56, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
+        struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
+        struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1558,7 +1560,9 @@ struct Schema : NIceDb::Schema {
             AutoUniqueIndexName,
             RowIdColumnBuildId,
             RowIdUniqueBuildId,
-            ParentBuildId
+            ParentBuildId,
+            IsRebuild,
+            RebuildIndexName
         >;
     };
 
@@ -1644,6 +1648,14 @@ struct Schema : NIceDb::Schema {
         struct FirstTokenRows : Column<18, NScheme::NTypeIds::Uint64> {};
         struct LastTokenRows : Column<19, NScheme::NTypeIds::Uint64> {};
 
+        // For prefixed fulltext_relevance indexes
+        struct FirstPrefix : Column<20, NScheme::NTypeIds::String> {};
+        struct FirstPrefixDocCount : Column<21, NScheme::NTypeIds::Uint64> {};
+        struct FirstPrefixSumDocLength : Column<22, NScheme::NTypeIds::Uint64> {};
+        struct LastPrefix : Column<23, NScheme::NTypeIds::String> {};
+        struct LastPrefixDocCount : Column<24, NScheme::NTypeIds::Uint64> {};
+        struct LastPrefixSumDocLength : Column<25, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<Id, OwnerShardIdx, LocalShardIdx>;
         using TColumns = TableColumns<
             Id,
@@ -1664,7 +1676,13 @@ struct Schema : NIceDb::Schema {
             FirstToken,
             LastToken,
             FirstTokenRows,
-            LastTokenRows
+            LastTokenRows,
+            FirstPrefix,
+            FirstPrefixDocCount,
+            FirstPrefixSumDocLength,
+            LastPrefix,
+            LastPrefixDocCount,
+            LastPrefixSumDocLength
         >;
     };
 
@@ -2648,6 +2666,9 @@ struct Schema : NIceDb::Schema {
         struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
         struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
 
+        struct DomainOwnerId :          Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainLocalId :          Column<17, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2664,7 +2685,9 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             IsCancelled,
-            CancellationReason
+            CancellationReason,
+            DomainOwnerId,
+            DomainLocalId
         >;
     };
 

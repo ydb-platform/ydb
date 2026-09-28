@@ -2,6 +2,7 @@ PROTO_LIBRARY()
 
 SRCS(
     gateways_config.proto
+    static_gateways_config.proto
     udf_resolver.proto
 )
 

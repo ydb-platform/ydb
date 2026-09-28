@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include "fiber_manager.h"
+
 #include <yt/yt/core/misc/jitter.h>
 
 namespace NYT::NConcurrency {
@@ -137,6 +139,13 @@ void TPrefetchingThrottlerConfig::Register(TRegistrar registrar)
 
 namespace {
 
+void ValidateFiberStackSizes(const THashMap<EExecutionStackKind, size_t>& stackSizes)
+{
+    for (auto [stackKind, stackSize] : stackSizes) {
+        TFiberManager::ValidateFiberStackSize(stackKind, stackSize);
+    }
+}
+
 void ValidateFiberStackPoolSizes(const THashMap<EExecutionStackKind, int>& poolSizes)
 {
     for (auto [stackKind, poolSize] : poolSizes) {
@@ -152,6 +161,10 @@ void ValidateFiberStackPoolSizes(const THashMap<EExecutionStackKind, int>& poolS
 TFiberManagerConfigPtr TFiberManagerConfig::ApplyDynamic(const TFiberManagerDynamicConfigPtr& dynamicConfig) const
 {
     auto result = New<TFiberManagerConfig>();
+    result->FiberStackSizes = FiberStackSizes;
+    for (auto [key, value] : dynamicConfig->FiberStackSizes) {
+        result->FiberStackSizes[key] = value;
+    }
     for (auto [key, value] : dynamicConfig->FiberStackPoolSizes) {
         result->FiberStackPoolSizes[key] = value;
     }
@@ -162,12 +175,15 @@ TFiberManagerConfigPtr TFiberManagerConfig::ApplyDynamic(const TFiberManagerDyna
 
 void TFiberManagerConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("fiber_stack_sizes", &TThis::FiberStackSizes)
+        .Default();
     registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
         .Default();
     registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
         .Default(NConcurrency::DefaultMaxIdleFibers);
 
     registrar.Postprocessor([] (TThis* config) {
+        ValidateFiberStackSizes(config->FiberStackSizes);
         ValidateFiberStackPoolSizes(config->FiberStackPoolSizes);
     });
 }
@@ -176,12 +192,15 @@ void TFiberManagerConfig::Register(TRegistrar registrar)
 
 void TFiberManagerDynamicConfig::Register(TRegistrar registrar)
 {
+    registrar.Parameter("fiber_stack_sizes", &TThis::FiberStackSizes)
+        .Default();
     registrar.Parameter("fiber_stack_pool_sizes", &TThis::FiberStackPoolSizes)
         .Default();
     registrar.Parameter("max_idle_fibers", &TThis::MaxIdleFibers)
         .Default();
 
     registrar.Postprocessor([] (TThis* config) {
+        ValidateFiberStackSizes(config->FiberStackSizes);
         ValidateFiberStackPoolSizes(config->FiberStackPoolSizes);
     });
 }

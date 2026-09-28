@@ -34,6 +34,8 @@ TCommandClusterBootstrap::TCommandClusterBootstrap()
 void TCommandClusterBootstrap::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("uuid", "Self-assembly UUID").RequiredArgument("STRING").StoreResult(&SelfAssemblyUUID);
+    config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
+        .StoreTrue(&AllowUnknownFields);
     config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = true;
 }
@@ -45,7 +47,8 @@ void TCommandClusterBootstrap::Parse(TConfig& config) {
 int TCommandClusterBootstrap::Run(TConfig& config) {
     auto driver = CreateDriver(config);
     NYdb::NConfig::TConfigClient client(driver);
-    auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
+    auto settings = NYdb::NConfig::TBootstrapClusterSettings().AllowUnknownFields(AllowUnknownFields);
+    auto result = client.BootstrapCluster(SelfAssemblyUUID, settings).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return EXIT_SUCCESS;
 }

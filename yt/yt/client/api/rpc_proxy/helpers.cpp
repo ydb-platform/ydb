@@ -589,7 +589,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         if (protoSchema.has_type() && GetPhysicalType(v1Type) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"type\" do not match")
                 .With("type_v3", ToString(*columnType))
-                .With("type", protoSchema.type());
+                .With("type", physicalType);
         }
     } else if (protoSchema.has_logical_type()) {
         auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
@@ -597,7 +597,7 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
                 .With("logical_type", ToString(*columnType))
-                .With("type", protoSchema.type());
+                .With("type", physicalType);
         }
     } else if (protoSchema.has_type()) {
         columnType = MakeLogicalType(GetLogicalType(physicalType), protoSchema.required());
@@ -736,6 +736,8 @@ void ToProto(
     protoStatistics->set_incomplete_input(statistics.IncompleteInput);
     protoStatistics->set_incomplete_output(statistics.IncompleteOutput);
     protoStatistics->set_query_count(statistics.QueryCount);
+    protoStatistics->set_scan_order(
+        static_cast<NProto::TQueryStatistics::EReportedScanOrder>(statistics.ScanOrder));
 
     ToProto(protoStatistics->mutable_inner_statistics(), statistics.InnerStatistics);
 }
@@ -775,6 +777,7 @@ void FromProto(
     statistics->IncompleteInput = protoStatistics.incomplete_input();
     statistics->IncompleteOutput = protoStatistics.incomplete_output();
     statistics->QueryCount = protoStatistics.query_count();
+    statistics->ScanOrder = FromProto<NQueryClient::EReportedScanOrder>(protoStatistics.scan_order());
 
     FromProto(&statistics->InnerStatistics, protoStatistics.inner_statistics());
 }
@@ -1383,6 +1386,46 @@ void FromProto(
     const TProtobufString& protoCookie)
 {
     *cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonStringBuf(protoCookie));
+}
+
+void ToProto(
+    TProtobufString* protoCookie,
+    const TFilePartitionCookiePtr& cookie)
+{
+    auto cookieBytes = ConvertToYsonString(cookie);
+    *protoCookie = cookieBytes.ToString();
+}
+
+void FromProto(
+    TFilePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie)
+{
+    *cookie = ConvertTo<TFilePartitionCookiePtr>(TYsonStringBuf(protoCookie));
+}
+
+void ToProto(
+    NProto::TFilePartition* protoFilePartition,
+    const NApi::TFilePartition& filePartition)
+{
+    ToProto(protoFilePartition->mutable_cookie(), filePartition.Cookie);
+    protoFilePartition->set_length(filePartition.Length);
+}
+
+void FromProto(
+    NApi::TFilePartition* filePartition,
+    const NProto::TFilePartition& protoFilePartition)
+{
+    FromProto(&filePartition->Cookie, protoFilePartition.cookie());
+    filePartition->Length = protoFilePartition.length();
+}
+
+void FromProto(
+    NApi::TFilePartitions* filePartitions,
+    const NProto::TRspPartitionFile& protoRspPartitionFile)
+{
+    FromProto(
+        &filePartitions->Partitions,
+        protoRspPartitionFile.partitions());
 }
 
 void ToProto(
@@ -2456,6 +2499,7 @@ bool IsChaosRetriableError(const TError& error)
             code == NTabletClient::EErrorCode::SyncReplicaNotInSync ||
             code == NTableClient::EErrorCode::UnableToSynchronizeReplicationCard ||
             code == NTabletClient::EErrorCode::TabletReplicationEraMismatch ||
+            code == NTabletClient::EErrorCode::TabletReplicationEraIsUnknown ||
             code == NChaosClient::EErrorCode::ShortcutNotFound ||
             code == NChaosClient::EErrorCode::ShortcutHasDifferentEra ||
             code == NChaosClient::EErrorCode::ShortcutRevoked ||
@@ -2475,6 +2519,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkTabletStoreToggleConflict) ||
         error.FindMatching(NTabletClient::EErrorCode::HunkStoreAllocationFailed) ||
+        error.FindMatching(NTabletClient::EErrorCode::TabletServantIsNotActive) ||
+        error.FindMatching(NTabletClient::EErrorCode::ReadOnlySmoothMovementStage) ||
         IsChaosRetriableError(error);
 }
 

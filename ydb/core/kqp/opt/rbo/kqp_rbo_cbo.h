@@ -1,3 +1,5 @@
+#pragma once
+
 #include "kqp_operator.h"
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 
@@ -5,10 +7,11 @@ namespace NKikimr::NKqp::NOpt {
 
 struct TRBORelOptimizerNode : public TRelOptimizerNode {
 
-    TRBORelOptimizerNode(TVector<TString> labels, TOptimizerStatistics stats, TIntrusivePtr<IOperator> op) :
+    TRBORelOptimizerNode(TVector<TString> labels, TOptimizerStatistics stats, TIntrusivePtr<IOperator> op, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& map) :
         TRelOptimizerNode(labels[0], std::move(stats)),
         _Labels(labels),
-        Op(op)
+        Op(op),
+        CBOToColumns(map)
         {}
 
     TVector<TString> Labels() override {
@@ -34,6 +37,7 @@ struct TRBORelOptimizerNode : public TRelOptimizerNode {
 
     TVector<TString> _Labels;
     TIntrusivePtr<IOperator> Op;
+    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> CBOToColumns;
 };
 
 struct TRBOProviderContext : public TKqpProviderContext {
@@ -46,11 +50,7 @@ struct TRBOProviderContext : public TKqpProviderContext {
         const TVector<TJoinColumn>& rightJoinKeys,
         NKqp::EJoinAlgoType joinAlgo,
         EJoinKind joinKind
-    ) override {
-        if (joinAlgo != NKqp::EJoinAlgoType::MapJoin && joinAlgo != NKqp::EJoinAlgoType::GraceJoin) {
-            return false;
-        }
-        return TKqpProviderContext::IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
-    }
+    ) override;
+
 };
 }

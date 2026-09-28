@@ -78,6 +78,82 @@ Y_UNIT_TEST_SUITE(TFulltextIndexTests) {
         }
     }
 
+    Y_UNIT_TEST(CreateTableSuperLemmerDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                Type: EIndexTypeGlobalFulltextPlain
+                FulltextIndexDescription {
+                    Settings {
+                        columns {
+                            column: "text"
+                            analyzers {
+                                tokenizer: STANDARD
+                                language: "russian"
+                                use_filter_superlemmer: true
+                            }
+                        }
+                    }
+                }
+            }
+        )", {{NKikimrScheme::StatusPreconditionFailed, "SuperLemmer support is disabled"}});
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"), {
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableSuperLemmerEnabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableSuperLemmer(true));
+        ui64 txId = 100;
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "id" Type: "Uint64" }
+                Columns { Name: "text" Type: "String" }
+                KeyColumnNames: ["id"]
+            }
+            IndexDescription {
+                Name: "idx_fulltext"
+                KeyColumnNames: ["text"]
+                Type: EIndexTypeGlobalFulltextPlain
+                FulltextIndexDescription {
+                    Settings {
+                        columns {
+                            column: "text"
+                            analyzers {
+                                tokenizer: STANDARD
+                                language: "russian"
+                                use_filter_superlemmer: true
+                            }
+                        }
+                    }
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/idx_fulltext"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+    }
+
     Y_UNIT_TEST(CreateTablePrefix) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

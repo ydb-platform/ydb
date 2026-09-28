@@ -3,9 +3,9 @@
 #include <ydb/core/formats/arrow/arrow_helpers_minikql.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/kqp/common/kqp_types.h>
-#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/minikql/minikql.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
@@ -106,7 +106,7 @@ arrow::Status AppendCell(arrow::RecordBatchBuilder& builder, const TCell& cell, 
 
 arrow::Status AppendValue(arrow::RecordBatchBuilder& builder, const NUdf::TUnboxedValue& value, ui32 colNum, const NKikimr::NMiniKQL::TType* type) {
     try {
-        NKqp::NFormats::AppendElement(value, builder.GetField(colNum), type);
+        NMkql::AppendElement(value, builder.GetField(colNum), type);
     } catch (const std::exception& e) {
         return arrow::Status::FromArgs(arrow::StatusCode::Invalid, e.what());
     }

@@ -2,10 +2,70 @@
 
 #include "reflection.h"
 
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
 #include <util/stream/output.h>
 
+#include <tuple>
+
 namespace NYql {
+
+namespace NDetail {
+
+template <typename TElementOut>
+class TRangeOut {
+public:
+    template <typename TRange>
+    void operator()(IOutputStream& stream, const TRange& range) const {
+        stream << "{";
+        Y_DEFER {
+            stream << "}";
+        };
+
+        bool isFirst = true;
+        for (const auto& value : range) {
+            if (!isFirst) {
+                stream << ", ";
+            }
+
+            isFirst = false;
+            TElementOut{}(stream, value);
+        }
+    }
+};
+
+template <typename... TElementOut>
+class TTupleOut {
+public:
+    template <typename TTuple>
+    void operator()(IOutputStream& stream, const TTuple& value) const {
+        stream << "{";
+        Y_DEFER {
+            stream << "}";
+        };
+
+        bool isFirst = true;
+        std::apply(
+            [&](const auto&... values) {
+                (OutElement<TElementOut>(stream, isFirst, values), ...);
+            },
+            value);
+    }
+
+private:
+    template <typename TOut, typename TValue>
+    static void OutElement(IOutputStream& stream, bool& isFirst, const TValue& value) {
+        if (!isFirst) {
+            stream << ", ";
+        }
+
+        isFirst = false;
+        TOut{}(stream, value);
+    }
+};
+
+} // namespace NDetail
 
 template <typename T>
 struct TOut;
@@ -39,7 +99,9 @@ struct TOut<T> {
         };
 
         bool isFirst = true;
-        R.ForEachFieldValue(value, [&]<auto k>(const auto& value) {
+        R.ForEachFieldValue(value, [&]<size_t Index, auto k>(const auto& value) {
+            Y_UNUSED(Index);
+
             using TValue = std::remove_cvref_t<decltype(value)>;
 
             if (!isFirst) {
@@ -65,23 +127,16 @@ struct TOut<TMaybe<T>> {
 };
 
 template <COut T>
-struct TOut<TVector<T>> {
-    void operator()(IOutputStream& stream, const TVector<T>& value) {
-        stream << "{";
-        Y_DEFER {
-            stream << "}";
-        };
+struct TOut<TVector<T>>: NDetail::TRangeOut<TOut<T>> {
+};
 
-        bool isFirst = true;
-        for (const auto& value : value) {
-            if (!isFirst) {
-                stream << ", ";
-            }
+template <COut T, typename THasher, typename TEqual, typename TAllocator>
+struct TOut<THashSet<T, THasher, TEqual, TAllocator>>: NDetail::TRangeOut<TOut<T>> {
+};
 
-            isFirst = false;
-            TOut<T>{}(stream, value);
-        }
-    }
+template <COut TKey, COut TValue, typename THasher, typename TEqual, typename TAllocator>
+struct TOut<THashMap<TKey, TValue, THasher, TEqual, TAllocator>>
+    : NDetail::TRangeOut<NDetail::TTupleOut<TOut<TKey>, TOut<TValue>>> {
 };
 
 } // namespace NYql

@@ -4,18 +4,18 @@
 #include "helpers.h"
 #include "private.h"
 
-#include <yt/yt/client/table_client/config.h>
+#include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/rowset.h>
+#include <yt/yt/client/api/transaction.h>
+
+#include <yt/yt/client/table_client/check_schema_compatibility.h>
 #include <yt/yt/client/table_client/comparator.h>
+#include <yt/yt/client/table_client/config.h>
+#include <yt/yt/client/table_client/helpers.h>
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/schema.h>
-#include <yt/yt/client/table_client/helpers.h>
-#include <yt/yt/client/table_client/check_schema_compatibility.h>
 
 #include <yt/yt/client/tablet_client/table_mount_cache.h>
-
-#include <yt/yt/client/api/rowset.h>
-#include <yt/yt/client/api/client.h>
-#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/transaction_client/helpers.h>
 
@@ -460,9 +460,14 @@ private:
 
             if (metaColumnId) {
                 const auto& metaValue = row[*metaColumnId];
-                YT_VERIFY(metaValue.Type == EValueType::Any || metaValue.Type == EValueType::Null);
                 if (metaValue.Type == EValueType::Any) {
-                    partitionInfo.ConsumerMeta = ConvertTo<TConsumerMeta>(FromUnversionedValue<TYsonString>(metaValue));
+                    try {
+                        partitionInfo.ConsumerMeta = ConvertTo<TConsumerMeta>(FromUnversionedValue<TYsonString>(metaValue));
+                    } catch (const std::exception& ex) {
+                        YT_TLOG_DEBUG("Failed to parse consumer meta, ignoring it")
+                            .With("PartitionIndex", partitionInfo.PartitionIndex)
+                            .With(TError(ex));
+                    }
                 }
             }
 

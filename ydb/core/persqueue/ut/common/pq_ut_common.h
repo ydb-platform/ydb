@@ -91,6 +91,8 @@ struct TTestContext {
     THashMap<ui32, ui32> MsgSeqNoMap;
     THashMap<ui32, TString> OwnerCookieMap;
     bool EnableDetailedPQLog = ENABLE_DETAILED_PQ_LOG;
+    ui64 NextPqConfigTxId = 12345;
+    ui64 NextPqConfigPlanStep = 1;
 
     TTestContext() {
         TabletId = MakeTabletID(false, 1);
@@ -279,14 +281,34 @@ struct TConsumerPreparationParameters {
 
     std::optional<ui64> ReadSpeedInBytesPerSecond;
     std::optional<ui64> ReadSpeedInMessagesPerSecond;
+    std::optional<NKikimrPQ::TPQTabletConfig::EConsumerType> Type;
+    bool KeepMessageOrder = false;
 };
 
+NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
+    const TTabletPreparationParameters& parameters,
+    TConstArrayRef<TConsumerPreparationParameters> users,
+    TTestActorRuntime& runtime,
+    ui32 version);
+
+void SendPQTabletConfig(
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    const TActorId& edge,
+    const NKikimrPQ::TPQTabletConfig& tabletConfig,
+    ui64 txId,
+    ui64 planStep);
+
+// txId и planStep по умолчанию берутся из возрастающего счётчика: каждый вызов - отдельная
+// транзакция. Явные значения нужны только там, где тест проверяет конкретную пару
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TConstArrayRef<TConsumerPreparationParameters> users,
     TTestActorRuntime& runtime,
     ui64 tabletId,
-    TActorId edge);
+    TActorId edge,
+    ui64 txId = 0,
+    ui64 planStep = 0);
 
 
 struct TBalancerParams {

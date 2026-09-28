@@ -171,6 +171,9 @@ public:
     using TTypedRequest = TTypedServiceRequest<TRequestMessage>;
     using TTypedResponse = TTypedServiceResponse<TResponseMessage>;
 
+    using TRequestPool = TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>;
+    using TResponsePool = TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>;
+
     TGenericTypedServiceContext(
         TIntrusivePtr<TServiceContext> context,
         const THandlerInvocationOptions& options)
@@ -179,8 +182,8 @@ public:
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
         Response_ = underlyingContext->IsPooled()
-            ? ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>().Allocate()
-            : std::make_shared<TTypedResponse>();
+            ? ResponsePool().AllocateUnique()
+            : TResponsePool::AllocateUniqueUnpooled();
         Response_->Context_ = underlyingContext.Get();
 
         if (this->GetResponseCodec() == NCompression::ECodec::None) {
@@ -191,11 +194,9 @@ public:
     bool DeserializeRequest()
     {
         const auto& underlyingContext = this->GetUnderlyingContext();
-        if (underlyingContext->IsPooled()) {
-            Request_ = ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>().Allocate();
-        } else {
-            Request_ = std::make_shared<TTypedRequest>();
-        }
+        Request_ = underlyingContext->IsPooled()
+            ? RequestPool().AllocateUnique()
+            : TRequestPool::AllocateUniqueUnpooled();
 
         Request_->Context_ = underlyingContext.Get();
         const auto& tracker = Request_->Context_->GetMemoryUsageTracker();
@@ -274,7 +275,7 @@ public:
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error deserializing request attachments")
-                    .With(TError(ex)));
+                    .With(ex));
                 return false;
             }
 
@@ -331,8 +332,18 @@ public:
 protected:
     const THandlerInvocationOptions Options_;
 
-    typename TObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>::TObjectPtr Request_;
-    typename TObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>::TObjectPtr Response_;
+    typename TRequestPool::TObjectUniquePtr Request_;
+    typename TResponsePool::TObjectUniquePtr Response_;
+
+    static TRequestPool& RequestPool()
+    {
+        return ObjectPool<TTypedRequest, TPooledTypedRequestTraits<TRequestMessage>>();
+    }
+
+    static TResponsePool& ResponsePool()
+    {
+        return ObjectPool<TTypedResponse, TPooledTypedResponseTraits<TResponseMessage>>();
+    }
 
     struct TSerializedResponse
     {
@@ -626,7 +637,7 @@ protected:
         //! Also system methods do not require authentication.
         bool System = false;
 
-        //! Log level for events emitted via |Set(Request|Response)Info|-like functions.
+        //! Log level for the request and response log messages.
         NLogging::ELogLevel LogLevel = NLogging::ELogLevel::Debug;
         //! Log level for events emitted when method fails, by default |LogLevel| is used.
         std::optional<NLogging::ELogLevel> ErrorLogLevel;
@@ -1196,7 +1207,7 @@ private:
 
     // Not std::optional to guarantee lock freeness; -1 means inf.
     std::atomic<int> QueueSizeLimit_ = -1;
-    std::atomic<int> QueueByteSizeLimit_ = -1;
+    std::atomic<i64> QueueByteSizeLimit_ = -1;
     // TODO(h0pless): Add ConcurrencyLimit and ConcurrencyByteLimit.
 
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;

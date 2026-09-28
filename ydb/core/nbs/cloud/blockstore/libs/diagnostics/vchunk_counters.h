@@ -1,25 +1,16 @@
 
 #pragma once
 
+#include "vchunk_stats.h"
+
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum class EVChunkOperation
-{
-    Read,
-    Write,
-    Flush,
-    Erase,
-    EraseBelated,
-
-    MAX
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
+// Solomon sensors of one EVChunkOperation at disk level. ReplyOk/ReplyErr are
+// derivative; Pending and MinLsn are absolute.
 class TVChunkRequestCounters
 {
 private:
@@ -27,17 +18,21 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr ReplyErr;
     NMonitoring::TDynamicCounters::TCounterPtr Pending;
     NMonitoring::TDynamicCounters::TCounterPtr MinLsn;
+    TVChunkOperationStats LastPublished;
 
 public:
+    // Binds to the operation subgroup (or no-ops when parent is null).
     explicit TVChunkRequestCounters(NMonitoring::TDynamicCounterPtr parent);
 
-    void RequestFinished(bool ok);
-    void UpdatePending(ui64 count);
-    void UpdateMinLsn(ui64 lsn);
+    // Writes stats into the sensors. ReplyOk/ReplyErr receive the delta
+    // against LastPublished; a decrease is skipped (a vchunk dropped out).
+    void Publish(const TVChunkOperationStats& stats);
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Disk-level vchunk Solomon counters: one operation subgroup, no per-vchunk
+// labels. Publish is called from the periodic gather, not from the datapath.
 class TVChunkCounters
 {
 private:
@@ -48,11 +43,11 @@ private:
     TVChunkRequestCounters EraseBelated;
 
 public:
+    // Binds to operation=Read|Write|Flush|Erase|EraseBelated subgroups.
     explicit TVChunkCounters(NMonitoring::TDynamicCounterPtr parent);
 
-    void RequestFinished(EVChunkOperation operation, bool ok);
-    void UpdatePending(EVChunkOperation operation, ui64 count);
-    void UpdateMinLsn(EVChunkOperation operation, ui64 lsn);
+    // Publishes the disk-wide aggregate.
+    void Publish(const TVChunkStats& total);
 
 private:
     TVChunkRequestCounters& Get(EVChunkOperation operation);

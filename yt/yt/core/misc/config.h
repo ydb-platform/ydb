@@ -147,10 +147,9 @@ DEFINE_REFCOUNTED_TYPE(TAdaptiveHedgingManagerConfig)
 
 namespace NDetail {
 
-class TExponentialBackoffOptionsSerializer
+struct TExponentialBackoffOptionsSerializer
     : public virtual NYTree::TExternalizedYsonStruct
 {
-public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TExponentialBackoffOptions, TExponentialBackoffOptionsSerializer);
 
     static void Register(TRegistrar registrar);
@@ -158,10 +157,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TConstantBackoffOptionsSerializer
+struct TConstantBackoffOptionsSerializer
     : public NYTree::TExternalizedYsonStruct
 {
-public:
     REGISTER_EXTERNALIZED_YSON_STRUCT(TConstantBackoffOptions, TConstantBackoffOptionsSerializer);
 
     static void Register(TRegistrar registrar);

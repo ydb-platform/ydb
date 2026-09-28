@@ -17,6 +17,19 @@ using namespace NYdb;
 using TBackupPathTestFixture = TS3BackupTestFixture;
 using TBackupPathTestFixtureFs = TFsBackupTestFixture;
 
+class TPathAliasExplicitExportFixture : public TFsBackupTestFixture {
+public:
+    TPathAliasExplicitExportFixture() {
+        AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
+        auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
+        alias->SetSrc("/export-alias");
+        alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
+        auto* decoy = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
+        decoy->SetSrc("/Root/RecursiveFolderProcessing/Table0");
+        decoy->SetDst("/Root/DoesNotExist");
+    }
+};
+
 namespace {
 
 using namespace fmt::literals;
@@ -1977,6 +1990,17 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 }
 
 } // anonymous namespace
+
+Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
+    Y_UNIT_TEST(ExplicitItemSourceIsRewrittenOnce) {
+        auto settings = MakeExportSettings("/Root/RecursiveFolderProcessing");
+        settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/export-alias", .Dst = "archive"});
+        auto future = YdbExportClient().ExportToFs(settings);
+        UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "Export request did not complete");
+        WaitOpSuccess(future.ExtractValueSync());
+        UNIT_ASSERT((TFsPath(GetTempDir().Path()) / "archive" / "scheme.pb").Exists());
+    }
+}
 
 Y_UNIT_TEST_SUITE_F(BackupPathTestFs, TBackupPathTestFixtureFs) {
     Y_UNIT_TEST(ImportFilterByYdbObjectPath) {

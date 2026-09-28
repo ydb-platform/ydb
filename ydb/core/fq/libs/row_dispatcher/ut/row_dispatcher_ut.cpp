@@ -1,11 +1,13 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher.h>
+#include <ydb/core/fq/libs/row_dispatcher/probes.h>
 #include <ydb/core/fq/libs/row_dispatcher/actors_factory.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
@@ -169,11 +171,11 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
-    void MockNewDataArrived(ui64 partitionId, TActorId topicSessionId, TActorId readActorId) {
+    void MockNewDataArrived(ui64 partitionId, TActorId topicSessionId, TActorId readActorId, ui64 generation = 1) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvNewDataArrived>();
         event->Record.SetPartitionId(partitionId);
         event->ReadActorId = readActorId;
-        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
+        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release(), 0, generation));
     }
 
     void MockMessageBatch(ui64 partitionId, TActorId topicSessionId, TActorId readActorId, ui64 generation) {
@@ -183,12 +185,12 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release(), 0, generation));
     }
 
-    void MockSessionError(TActorId topicSessionId, TActorId readActorId, ui32 partitionId, bool isFatalError = false) {
+    void MockSessionError(TActorId topicSessionId, TActorId readActorId, ui32 partitionId, bool isFatalError = false, ui64 generation = 1) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvSessionError>();
         event->ReadActorId = readActorId;
         event->IsFatalError = isFatalError;
         event->Record.SetPartitionId(partitionId);
-        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release()));
+        Runtime.Send(new IEventHandle(RowDispatcher, topicSessionId, event.release(), 0, generation));
     }
     
     void MockHeartbeat(ui64 partitionId, TActorId readActorId, ui64 generation) {
@@ -209,9 +211,10 @@ public:
         Runtime.Send(new IEventHandle(RowDispatcher, readActorId, event.release(), 0, generation));
     }
 
-    void ExpectStartSession(NActors::TActorId actorId) {
+    void ExpectStartSession(NActors::TActorId actorId, ui64 expectedGeneration = 1) {
         auto eventHolder = Runtime.GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(actorId);
         UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, expectedGeneration);
     }
 
     void ExpectPoisonPill(NActors::TActorId actorId) {
@@ -264,7 +267,7 @@ public:
     }
 
     void ProcessData(NActors::TActorId readActorId, ui64 partId, NActors::TActorId topicSessionActorId, ui64 generation = 1, ui64 seqNo = 1) {
-        MockNewDataArrived(partId, topicSessionActorId, readActorId);
+        MockNewDataArrived(partId, topicSessionActorId, readActorId, generation);
         ExpectNewDataArrived(readActorId, partId);
 
         MockGetNextBatch(partId, readActorId, generation, seqNo);
@@ -295,6 +298,140 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(RowDispatcherTests) {
+
+    Y_UNIT_TEST_TWIN_F(IgnoreEventsFromReplacedConsumer, SharedSession, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        const auto oldSession = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(oldSession);
+        if (SharedSession) {
+            MockAddSession(Source1, {PartitionId0}, ReadActorId2);
+            ExpectStartSessionAck(ReadActorId2);
+            ExpectStartSession(oldSession);
+        }
+
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1, 2);
+        ExpectStartSessionAck(ReadActorId1, 2);
+        const auto newSession = SharedSession ? oldSession : ExpectRegisterTopicSession();
+        ExpectStopSession(oldSession);
+        ExpectStartSession(newSession, 2);
+
+        ui64 notifications = 0;
+        ui64 batches = 0;
+        ui64 errors = 0;
+        auto oldFilter = Runtime.SetEventFilter([&](auto&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->Recipient == ReadActorId1) {
+                notifications += ev->GetTypeRewrite() == TEvRowDispatcher::TEvNewDataArrived::EventType;
+                batches += ev->GetTypeRewrite() == TEvRowDispatcher::TEvMessageBatch::EventType;
+                errors += ev->GetTypeRewrite() == TEvRowDispatcher::TEvSessionError::EventType;
+            }
+            return false;
+        });
+        Y_DEFER { Runtime.SetEventFilter(std::move(oldFilter)); };
+
+        MockNewDataArrived(PartitionId0, oldSession, ReadActorId1, 1);
+        MockMessageBatch(PartitionId0, oldSession, ReadActorId1, 1);
+        MockSessionError(oldSession, ReadActorId1, PartitionId0, true, 1);
+        if (!SharedSession) {
+            // Even a matching reader generation cannot identify a replacement topic actor.
+            MockNewDataArrived(PartitionId0, oldSession, ReadActorId1, 2);
+            MockMessageBatch(PartitionId0, oldSession, ReadActorId1, 2);
+            MockSessionError(oldSession, ReadActorId1, PartitionId0, true, 2);
+        }
+        ProcessData(ReadActorId1, PartitionId0, newSession, 2);
+        UNIT_ASSERT_VALUES_EQUAL(notifications, 1);
+        UNIT_ASSERT_VALUES_EQUAL(batches, 1);
+        UNIT_ASSERT_VALUES_EQUAL(errors, 0);
+    }
+
+    Y_UNIT_TEST_F(IgnoreStatisticsFromReplacedConsumer, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        const auto session = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(session);
+        MockAddSession(Source1, {PartitionId0}, ReadActorId2);
+        ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(session);
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1, 2);
+        ExpectStartSessionAck(ReadActorId1, 2);
+        ExpectStopSession(session);
+        ExpectStartSession(session, 2);
+
+        TTopicSessionStatistic stat;
+        stat.SessionKey = {Source1.GetReadGroup(), Source1.GetEndpoint(), Source1.GetDatabase(), Source1.GetTopicPath(), PartitionId0};
+        auto& client = stat.Clients.emplace_back();
+        client.ReadActorId = ReadActorId1;
+        client.Generation = 1;
+        client.PartitionId = PartitionId0;
+        client.Offset = 1000;
+        Runtime.Send(new IEventHandle(RowDispatcher, session, new TEvRowDispatcher::TEvSessionStatistic(stat)));
+
+        auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvStatistics>(ReadActorId1, TDuration::Seconds(5));
+        UNIT_ASSERT(event);
+        UNIT_ASSERT_VALUES_EQUAL(event->Cookie, 2);
+        UNIT_ASSERT_VALUES_EQUAL(event->Get()->Record.PartitionSize(), 0);
+
+        client.Generation = 2;
+        client.Offset = 10;
+        Runtime.Send(new IEventHandle(RowDispatcher, session, new TEvRowDispatcher::TEvSessionStatistic(stat)));
+        Runtime.WaitFor("current generation statistics", [&] {
+            auto current = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvStatistics>(ReadActorId1, TDuration::Seconds(5));
+            if (!current || !current->Get()->Record.PartitionSize()) {
+                return false;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(current->Get()->Record.GetPartition(0).GetNextMessageOffset(), 10);
+            return true;
+        }, TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST_F(ShutdownStopsOwnedActors, TFixture) {
+        MockAddSession(Source1, {PartitionId0, PartitionId1}, ReadActorId1);
+        const auto firstSession = ExpectRegisterTopicSession();
+        const auto secondSession = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(firstSession);
+        ExpectStartSession(secondSession);
+
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor,
+            new TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 1)));
+        Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(Coordinator1);
+
+        TSet<TActorId> children;
+        auto observer = Runtime.AddObserver<NActors::TEvents::TEvPoison>([&](auto& ev) {
+            if (ev->Sender == RowDispatcher) {
+                children.insert(ev->Recipient);
+            }
+        });
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor, new NActors::TEvents::TEvPoison()));
+        ExpectPoisonPill(firstSession);
+        ExpectPoisonPill(secondSession);
+        Runtime.WaitFor("row dispatcher children stopped", [&] { return children.size() == 3; }, TDuration::Seconds(10));
+        UNIT_ASSERT(!children.contains(Coordinator1));
+
+        children.insert(RowDispatcher);
+        for (const auto& actorId : children) {
+            Runtime.Send(new IEventHandle(actorId, EdgeActor, new NActors::TEvents::TEvPing(), IEventHandle::FlagTrackDelivery));
+            auto ev = Runtime.GrabEdgeEvent<NActors::TEvents::TEvUndelivered>(EdgeActor);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Sender, actorId);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Reason, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
+        }
+    }
+
+    Y_UNIT_TEST_F(FirstCoordinatorChangeWithTracing, TFixture) {
+        NLWTrace::TProbeRegistry registry;
+        registry.AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
+        NLWTrace::TManager manager(registry, true);
+        NLWTrace::TQuery query;
+        auto* block = query.AddBlocks();
+        block->MutableProbeDesc()->SetName("CoordinatorChanged");
+        block->MutableProbeDesc()->SetProvider("FQ_ROW_DISPATCHER_PROVIDER");
+        block->AddAction()->MutableLogAction();
+        manager.New("first_coordinator", query);
+        Runtime.Send(new IEventHandle(RowDispatcher, EdgeActor,
+            new TEvRowDispatcher::TEvCoordinatorChanged(Coordinator1, 0)));
+        Runtime.GrabEdgeEvent<NActors::TEvents::TEvPing>(Coordinator1);
+    }
+
     Y_UNIT_TEST_F(OneClientOneSession, TFixture) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId1);
         auto topicSessionId = ExpectRegisterTopicSession();
@@ -468,7 +605,7 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockAddSession(Source1, {PartitionId0}, ReadActorId3, generation);
         auto topicSessionId = ExpectRegisterTopicSession();
         ExpectStartSessionAck(ReadActorId3, generation);
-        ExpectStartSession(topicSessionId);
+        ExpectStartSession(topicSessionId, generation);
         ProcessData(ReadActorId3, PartitionId0, topicSessionId, generation, 2);
 
         MockNoSession(ReadActorId3, generation - 1); // Ignore NoSession with wrong generation.
@@ -546,7 +683,32 @@ Y_UNIT_TEST_SUITE(RowDispatcherTests) {
         MockHeartbeat(PartitionId0, ReadActorId1, generation);
         ExpectNoSession(ReadActorId1, generation);
     }
+
+    Y_UNIT_TEST_F(TwoSessionsFatalError, TFixture) {
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto session1 = ExpectRegisterTopicSession();
+        ExpectStartSessionAck(ReadActorId1);
+        ExpectStartSession(session1);
+
+        MockAddSession(Source1, {PartitionId0}, ReadActorId2);
+        ExpectStartSessionAck(ReadActorId2);
+        ExpectStartSession(session1);   // ReadActorId2 goes to the existing session1
+
+        // 1 topic session / 2 consumers for one partition
+
+        MockSessionError(session1, ReadActorId1, PartitionId0, true);       // fatal error, consumer (ReadActorId1) deleted
+        ExpectSessionError(ReadActorId1);
+        ExpectPoisonPill(session1);
+
+        // ReadActorId1 restarts the session, TEvStartSession is forwarded to a new topic session
+        MockAddSession(Source1, {PartitionId0}, ReadActorId1);
+        auto newSession1 = ExpectRegisterTopicSession();
+        ExpectStartSession(newSession1);
+
+        MockSessionError(session1, ReadActorId2, PartitionId0, true);       // fatal error, consumer (ReadActorId2) deleted
+        ExpectSessionError(ReadActorId2);
+        ExpectPoisonPill(session1);
+    }
 }
 
 }
-

@@ -59,8 +59,9 @@ def all_warnings():
         except AttributeError:
             pass
 
-    with warnings.catch_warnings(record=True) as w, mock.patch.dict(
-        os.environ, {"TRAITLETS_ALL_DEPRECATIONS": "1"}
+    with (
+        warnings.catch_warnings(record=True) as w,
+        mock.patch.dict(os.environ, {"TRAITLETS_ALL_DEPRECATIONS": "1"}),
     ):
         warnings.simplefilter("always")
         yield w
@@ -109,7 +110,7 @@ def expected_warnings(matching):
                     if match in remaining:
                         remaining.remove(match)
             if not found:
-                raise ValueError("Unexpected warning: %s" % str(warn.message))
+                raise ValueError(f"Unexpected warning: {warn.message!s}")
         if len(remaining) > 0:
-            msg = "No warning raised matching:\n%s" % "\n".join(remaining)
+            msg = "No warning raised matching:\n{}".format("\n".join(remaining))
             raise ValueError(msg)

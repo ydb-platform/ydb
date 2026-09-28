@@ -15,6 +15,8 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr::NSysView {
 
 using namespace NActors;
@@ -91,23 +93,20 @@ public:
             }});
 
             insert({TSchema::WmPoolId::ColumnId, [] (const TNodeInfo& info, ui32) {   // 17
-                return TCell(info.GetWmPoolId().data(), info.GetWmPoolId().size());
+                return info.HasWmPoolId() ? TCell(info.GetWmPoolId().data(), info.GetWmPoolId().size()) : TCell();
             }});
 
-            insert({TSchema::WmState::ColumnId, [] (const TNodeInfo& info, ui32) {   // 18
-                return TCell(info.GetWmState().data(), info.GetWmState().size());
-            }});
-
-            insert({TSchema::WmEnterTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 19
-                return info.GetWmEnterTime() ? TCell::Make<ui64>(info.GetWmEnterTime()) : TCell();
-            }});
-
-            insert({TSchema::WmExitTime::ColumnId, [] (const TNodeInfo& info, ui32) {  // 20
-                return info.GetWmExitTime() ? TCell::Make<ui64>(info.GetWmExitTime()) : TCell();
-            }});
+            // Columns 18/19/20 are deprecated and always NULL, reserved for a future removal.
+            insert({TSchema::WmState::ColumnId,     [] (const TNodeInfo&, ui32) { return TCell(); }});  // 18
+            insert({TSchema::WmEnterTime::ColumnId, [] (const TNodeInfo&, ui32) { return TCell(); }});  // 19
+            insert({TSchema::WmExitTime::ColumnId,  [] (const TNodeInfo&, ui32) { return TCell(); }});  // 20
 
             insert({TSchema::TraceId::ColumnId, [] (const TNodeInfo& info, ui32) {  // 21
                 return info.HasTraceId() ? TCell(info.GetTraceId().data(), info.GetTraceId().size()) : TCell();
+            }});
+
+            insert({TSchema::WmClassifiedBy::ColumnId, [] (const TNodeInfo& info, ui32) {  // 22
+                return info.HasWmClassifiedBy() ? TCell(info.GetWmClassifiedBy().data(), info.GetWmClassifiedBy().size()) : TCell();
             }});
         }
     };
@@ -155,8 +154,8 @@ public:
             hFunc(NKqp::TEvKqp::TEvListSessionsResponse, Handle);
             hFunc(NKqp::TEvKqp::TEvListProxyNodesResponse, Handle);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TSessionsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TSessionsScan: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -218,8 +217,9 @@ private:
 
             req->Record.SetFreeSpace(FreeSpace);
 
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Send request to node, node_id="  << nodeId << ", request: " << req->Record.ShortDebugString());
+            YDB_LOG_DEBUG("TSessionsScan::StartScan: sending list sessions request to node",
+                {"nodeId", nodeId},
+                {"request", req->Record.ShortDebugString()});
 
             Send(kqpProxyId, req.release(), 0, nodeId);
             PendingRequest = true;
@@ -249,8 +249,8 @@ private:
     void Undelivered(TEvents::TEvUndelivered::TPtr& ev) {
         if (ev->Get()->SourceType == NKqp::TKqpEvents::EvListSessionsRequest) {
             ui32 nodeId = ev->Cookie;
-            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Received undelivered response for node_id: " << nodeId);
+            YDB_LOG_INFO("TSessionsScan::Undelivered: list sessions response undelivered",
+                {"nodeId", nodeId});
             StartScan();
         }
     }

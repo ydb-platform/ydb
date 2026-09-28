@@ -1,47 +1,162 @@
 # monitoring_config
 
-Секция `monitoring_config` файла конфигурации {{ ydb-short-name }} задаёт параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md). Ниже описаны настройки, связанные с [аутентификацией](../../security/authentication.md) на отдельных страницах встроенного мониторинга.
-
-```yaml
-monitoring_config:
-  # аутентификация на страницах /counters и /healthcheck
-  require_counters_authentication: false
-  require_healthcheck_authentication: false
-```
+Секция `monitoring_config` файла конфигурации {{ ydb-short-name }} задаёт параметры [YDB Monitoring](../ydb-ui/ydb-monitoring.md).
 
 ## Аутентификация на страницах мониторинга {#authentication}
 
+В этом разделе описаны настройки, связанные с [аутентификацией](../../security/authentication.md) на отдельных страницах встроенного мониторинга.
+
 #|
 || Параметр | Описание ||
-|| `require_counters_authentication` | Режим обязательной [аутентификации](../../security/authentication.md) на страницах `/counters` и `/counters/hosts`.
+|| `require_counters_authentication` | Режим обязательной аутентификации на страницах `/counters` и `/counters/hosts`.
 
 Возможные значения:
 
-- `true` — доступ к `/counters` и `/counters/hosts` только с [аутентификационным токеном](../../concepts/glossary.md#auth-token); запросы проходят аутентификацию и проверку прав.
+- `true` — доступ к `/counters` и `/counters/hosts` только с [аутентификационным токеном](../../concepts/glossary.md#auth-token); запросы проходят аутентификацию и проверку [прав](../../concepts/glossary.md#access-right).
 
-    Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в секции [security_config](./security_config.md) файла конфигурации {{ ydb-short-name }}.
+    Значение `true` допустимо только при включенном режиме обязательной аутентификации в секции [security_config](./security_config.md) файла конфигурации {{ ydb-short-name }}.
 
-- `false` — запросы к `/counters` и `/counters/hosts` могут выполняться без [аутентификационного токена](../../concepts/glossary.md#auth-token).
+- `false` — запросы к `/counters` и `/counters/hosts` могут выполняться без аутентификационного токена.
 
 Значение по умолчанию: `false`.
     ||
-|| `require_healthcheck_authentication` | Дополнительное требование [аутентификации](../../security/authentication.md) для эндпоинта `/healthcheck` поверх общих правил кластера.
+|| `require_healthcheck_authentication` | Дополнительное требование аутентификации для эндпоинта `/healthcheck` поверх общих правил кластера.
 
 Возможные значения:
 
-- `true` — любой ответ `/healthcheck`, включая [формат Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) (параметр `format=prometheus`), выдаётся только при запросе с [аутентификационным токеном](../../concepts/glossary.md#auth-token); запросы проходят аутентификацию и проверку прав.
+- `true` — любой ответ `/healthcheck`, включая [формат Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) (параметр `format=prometheus`), выдаётся только при запросе с аутентификационным токеном; запросы проходят аутентификацию и проверку прав.
 
-    Значение `true` допустимо только при включенном режиме обязательной [аутентификации](../../security/authentication.md) в секции [security_config](./security_config.md) файла конфигурации {{ ydb-short-name }}.
+    Значение `true` допустимо только при включенном режиме обязательной аутентификации в секции security_config файла конфигурации {{ ydb-short-name }}.
 
-- `false` — при обязательной аутентификации в кластере запросы к `/healthcheck` без токена по-прежнему допускаются, если запрошен вывод в [формате Prometheus](https://prometheus.io/docs/instrumenting/exposition_formats/) (`format=prometheus`). Для остальных форматов ответа `/healthcheck` действуют общие правила (см. примечание ниже).
+- `false` — при обязательной аутентификации в кластере запросы к `/healthcheck` без токена по-прежнему допускаются, если запрошен вывод в формате Prometheus (`format=prometheus`). Для остальных форматов ответа `/healthcheck` действуют общие правила (см. примечание ниже).
 
 Значение по умолчанию: `false`.
 
 {% note info %}
 
-Если в [security_config](./security_config.md) включена обязательная [аутентификация](../../security/authentication.md), то для ответов `/healthcheck` в любом формате, кроме Prometheus, токен обязателен независимо от значения `require_healthcheck_authentication`.
+Если в security_config включена обязательная аутентификация, то для ответов `/healthcheck` в любом формате, кроме Prometheus, токен обязателен независимо от значения `require_healthcheck_authentication`.
 
 {% endnote %}
 
 ||
 |#
+
+Пример задания параметров с включённой аутентификацией на отдельных страницах встроенного мониторинга.
+
+```yaml
+monitoring_config:
+  # аутентификация на страницах /counters и /healthcheck
+  require_counters_authentication: true
+  require_healthcheck_authentication: true
+```
+
+## TLS на страницах мониторинга {#tls}
+
+{{ ydb-short-name }} открывает отдельный HTTP-порт для работы [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), отображения [метрик](../../devops/observability/monitoring.md) и других вспомогательных команд.
+
+На HTTP-порту можно включить [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security), таким образом порт начнёт принимать только HTTPS-соединения. Обычные HTTP-запросы при этом будут отклоняться на уровне TLS-рукопожатия без какого-либо ответа и без редиректа на HTTPS. Одновременная работа HTTP и HTTPS на разных портах не поддерживается: мониторинг использует один порт, который работает только как HTTP либо только как HTTPS.
+
+TLS включается указанием SSL-сертификата (поддерживаются цепочки сертификатов) и приватного SSL-ключа (поддерживаются ключи следующих типов: RSA, ECDSA и PKCS#8) без пароля, т.к. зашифрованные ключи не поддерживаются.
+
+Ниже описаны параметры TLS для мониторинга. При смене значения этих параметров необходимо перезапустить узлы кластера, на которых были сделаны изменения.
+
+#|
+|| Параметр | Описание ||
+||
+
+`monitoring_certificate`
+
+|
+
+Параметр для передачи содержимого SSL-сертификата и приватного SSL-ключа напрямую в [формате PEM](https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail) без использования отдельных файлов. Требования к содержимому параметра:
+
+- сначала указывается сертификат сервера;
+
+- затем последовательно указываются промежуточные сертификаты при их наличии;
+
+- затем указывается приватный ключ без пароля.
+
+При указании этого параметра встроенный интерфейс автоматически начинает обрабатывать запросы с использованием указанного SSL-сертификата. Если указан параметр `monitoring_certificate`, параметры `monitoring_certificate_file` и `monitoring_private_key_file` игнорируются.
+
+Значение по умолчанию: пустая строка.
+
+||
+||
+
+`monitoring_certificate_file`
+
+|
+
+Путь к файлу сертификата для доступа по SSL в формате PEM. Файл может дополнительно содержать приватный SSL-ключ без пароля. Этот приватный ключ будет использоваться в случае, если не указан параметр `monitoring_private_key_file`.
+
+При указании параметра `monitoring_certificate_file` встроенный интерфейс автоматически начинает обрабатывать запросы с использованием указанного SSL-сертификата.
+
+Значение по умолчанию: пустая строка.
+
+||
+||
+
+`monitoring_private_key_file`
+|
+
+Путь к файлу приватного SSL-ключа в формате PEM без пароля. При указании этого параметра должен быть задан параметр `monitoring_certificate_file`. Если в файле, указанном в параметре `monitoring_certificate_file`, содержится приватный SSL-ключ, он будет проигнорирован, то есть приоритет в задании приватного ключа имеет параметр `monitoring_private_key_file`.
+
+Значение по умолчанию: пустая строка.
+
+||
+||
+
+`monitoring_ca_file`
+
+|
+
+Путь к файлу с корневым (CA) сертификатом. Включает запрос клиентского сертификата при TLS-handshake для мониторинга.
+
+Возможные значения:
+
+- Непустой путь — сервер запрашивает клиентский сертификат. Если сертификат предъявлен, он проверяется на TLS-уровне при [аутентификации устройств](../../security/authentication.md#device-auth-interfaces) (соединение с недоверенным сертификатом не устанавливается); после успешно пройденной проверки сервер приоритетно использует [аутентификационный токен](../../concepts/glossary.md#auth-token) для аутентификации клиента, а при отсутствии токена выполняется аутентификация по [клиентскому сертификату](../../security/authentication.md#client-certificate). Если сертификат не предъявлен, то при настройке `client_certificate_required: true` соединение не устанавливается.
+
+- Пустая строка — сервер не запрашивает клиентский сертификат при TLS-handshake; аутентификация устройств и аутентификация по клиентскому сертификату для мониторинга при такой настройке недоступны.
+
+Параметр игнорируется, если параметрами `monitoring_certificate` или `monitoring_certificate_file`+`monitoring_private_key_file` не включен TLS.
+
+Значение по умолчанию: пустая строка.
+
+||
+||
+
+`client_certificate_required`
+
+|
+
+Требование клиентского сертификата при TLS-handshake для мониторинга.
+
+Возможные значения:
+
+- `true` — сервер требует клиентский сертификат: соединение без сертификата или с недоверенным сертификатом не устанавливается. Можно указать `true` только вместе с заданным `monitoring_ca_file`.
+
+- `false` — наличие клиентского сертификата не обязательно; поведение при запросе сертификата определяется параметром `monitoring_ca_file`.
+
+Значение по умолчанию: `false`.
+
+||
+|#
+
+Пример включения mTLS для мониторинга: запрос клиентского сертификата без обязательности его предъявления.
+
+```yaml
+monitoring_config:
+  monitoring_certificate_file: /path/to/cert.pem # для включения TLS
+  monitoring_private_key_file: /path/to/key.pem
+  monitoring_ca_file: /path/to/ca.pem # запрос клиентского сертификата (mTLS)
+```
+
+Пример включения mTLS для мониторинга: требование клиентского сертификата с его обязательным предъявлением.
+
+```yaml
+monitoring_config:
+  monitoring_certificate_file: /path/to/cert.pem
+  monitoring_private_key_file: /path/to/key.pem
+  monitoring_ca_file: /path/to/ca.pem
+  client_certificate_required: true
+```

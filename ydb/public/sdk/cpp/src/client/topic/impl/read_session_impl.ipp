@@ -3290,7 +3290,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
                         continue;
                     }
                     seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(recordMeta.SequenceDelta);
-                    createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + recordMeta.TimestampDelta);
+                    createTime = TInstant::MilliSeconds(NKafka::GetRecordTimestamp(*codecResult.BatchBaseTimestampMs, recordMeta.TimestampDelta));
                 }
 
                 TReadSessionEvent::TDataReceivedEvent::TMessageInformation messageInfo(

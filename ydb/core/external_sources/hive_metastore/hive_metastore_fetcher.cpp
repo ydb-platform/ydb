@@ -76,8 +76,8 @@ public:
         auto request = std::get<0>(Requests);
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-            YDB_LOG_ERROR("Handle TEvHiveGetTableResult",
-                {"hiveMetastoreFetcher", issues.ToString(true)});
+            YDB_LOG_ERROR("Handle TEvHiveGetTableResult failed",
+                {"issues", issues.ToOneLineString()});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;
@@ -103,8 +103,8 @@ public:
         const auto& request = std::get<1>(Requests);
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-            YDB_LOG_ERROR("Handle TEvHiveGetTableStatisticsResult",
-                {"hiveMetastoreFetcher", issues.ToString(true)});
+            YDB_LOG_ERROR("Handle TEvHiveGetTableStatisticsResult failed",
+                {"issues", issues.ToOneLineString()});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;
@@ -133,8 +133,8 @@ public:
         auto request = std::get<2>(Requests);
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-            YDB_LOG_ERROR("Process TEvHiveGetPartitionsResult",
-                {"hiveMetastoreFetcher", issues.ToString(true)});
+            YDB_LOG_ERROR("Process TEvHiveGetPartitionsResult failed",
+                {"issues", issues.ToOneLineString()});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;
@@ -162,8 +162,8 @@ public:
         auto request = std::get<1>(Requests);
         const auto& issues = ev.Get()->Get()->Issues;
         if (issues) {
-            YDB_LOG_ERROR("Process TEvHiveGetPartitionsResult",
-                {"hiveMetastoreFetcher", issues.ToString(true)});
+            YDB_LOG_ERROR("Process TEvHiveGetPartitionsResult failed",
+                {"issues", issues.ToOneLineString()});
             request->Get()->Promise.SetException(std::make_exception_ptr(yexception() << issues.ToString(true)));
             PassAway();
             return;

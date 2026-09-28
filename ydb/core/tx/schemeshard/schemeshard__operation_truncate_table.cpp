@@ -7,55 +7,44 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TConfigureParts: public TSubOperationState {
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TTruncateTable TConfigureParts"
-            << " operationId# " << OperationId;
-    }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {});
+        IgnoreMessages({});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvProposeTransactionResult"
-                               << " at tabletId# " << ssId);
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvProposeTransactionResult"
-                                << " message# " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxTruncateTable);
 
         if (NTableState::CheckPartitioningChangedForTableModification(*txState, context)) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " UpdatePartitioningForTableModification");
+            YDB_LOG_DEBUG_CTX(context.Ctx, "UpdatePartitioningForTableModification");
             NTableState::UpdatePartitioningForTableModification(OperationId, *txState, context);
         }
 
@@ -94,28 +83,20 @@ public:
 };
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TTruncateTable TPropose"
-            << " operationId# " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    DebugHint() << " HandleReply TEvSchemaChanged"
-                                << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -123,12 +104,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", stepId: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -161,11 +140,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -184,6 +159,8 @@ public:
 };
 
 class TTruncateTable: public TSubOperation {
+    virtual const char* Name() const override final { return "TTruncateTable"; }
+
 public:
     using TSubOperation::TSubOperation;
     static TTxState::ETxState NextState() {
@@ -221,6 +198,8 @@ public:
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+        YDB_LOG_INFO_CTX(context.Ctx, "");
+
         // Begin check conditions
         const TTabletId ssId = context.SS->SelfTabletId();
 
@@ -312,10 +291,7 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TTruncateTable AbortPropose"
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -329,12 +305,13 @@ enum ESchemeObjectType {
 
 // Second tree's level
     GenericIndex,                // used for secondary, unique and fulltext indexes
-    GlobalVectorIndex,           // global vector index require special processing
-    PrefixVectorIndex,           // prefix vector index require special processing
+    GlobalVectorIndex,           // global vector index requires special processing
+    PrefixVectorIndex,           // prefixed vector index requires special processing
+    FulltextCompactIndex,        // compact fulltext index has a sequence under indexImplTable
 
 // Third tree's level
-    GenericIndexImplTable,       // used for other index impl tables
-    IndexImplPrefixTable,        // impl prefix table require special processing
+    GenericIndexImplTable,       // simple index impl table
+    IndexImplWithSequence,       // index impl table with a sequence
 };
 
 // About DfsOnTableChildrenTree.
@@ -427,12 +404,18 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+                                if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::FulltextCompactIndex)) {
+                                    return false;
+                                }
+
+                                break;
+                            }
                             case NKikimrSchemeOp::EIndexTypeGlobalJson:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-                            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
-                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                             case NKikimrSchemeOp::EIndexTypeGlobal:
                             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
                                 if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GenericIndex)) {
@@ -473,6 +456,7 @@ bool DfsOnTableChildrenTree(
 
         case ESchemeObjectType::GlobalVectorIndex:
         case ESchemeObjectType::PrefixVectorIndex:
+        case ESchemeObjectType::FulltextCompactIndex:
         case ESchemeObjectType::GenericIndex: {
             for (const auto& [childName, childPathId] : currentPath.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -489,9 +473,9 @@ bool DfsOnTableChildrenTree(
 
                 switch (srcChildPath.Base()->PathType) {
                     case NKikimrSchemeOp::EPathType::EPathTypeTable: {
-                        constexpr TStringBuf prefixTableName = "indexImplPrefixTable";
-                        if (objectType == ESchemeObjectType::PrefixVectorIndex && srcChildPath.PathString().EndsWith(prefixTableName)) {
-                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::IndexImplPrefixTable)) {
+                        if (objectType == ESchemeObjectType::PrefixVectorIndex && srcChildPath.PathString().EndsWith("indexImplPrefixTable") ||
+                            objectType == ESchemeObjectType::FulltextCompactIndex && srcChildPath.PathString().EndsWith("indexImplTable")) {
+                            if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::IndexImplWithSequence)) {
                                 return false;
                             }
                         } else {
@@ -513,11 +497,11 @@ bool DfsOnTableChildrenTree(
             break;
         }
 
-        case ESchemeObjectType::IndexImplPrefixTable: {
+        case ESchemeObjectType::IndexImplWithSequence: {
             if (currentPath.Base()->GetChildren().size() != 1 ||
                 currentPath.Child(currentPath.Base()->GetChildren().begin()->first).Base()->PathType != NKikimrSchemeOp::EPathType::EPathTypeSequence
             ) {
-                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "Index impl prefix tables can contain only sequence")};
+                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder() << currentPath.PathString() << " should contain only 1 sequence")};
                 return false;
             }
 
@@ -560,7 +544,7 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
     // 'IsResolved' check is necessary because the dfs implementation expects that the vertex coming into the function exists.
     // If we do not do this check, then the Y_VERIFY may fire if the path does not exist.
 
-    // Since one check was added, it makes sense to add all the checks at once, 
+    // Since one check was added, it makes sense to add all the checks at once,
     // so as not to generate a large set of sub-operations in case even the main table is "wrong".
     TPath::TChecker checks = mainTablePath.Check();
     checks
@@ -585,3 +569,4 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
 
 }
 
+#undef YDB_LOG_THIS_FILE_COMPONENT

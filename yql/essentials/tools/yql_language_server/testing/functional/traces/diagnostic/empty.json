@@ -1,0 +1,52 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": ""
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/diagnostic",
+    "params": {
+      "identifier": "YQL",
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      },
+      "previousResultId": "0"
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "result": {
+      "items": [
+        {
+          "code": "YQL_NO_STATEMENTS",
+          "message": "At least one statement was expected, but got none",
+          "range": {
+            "end": {
+              "character": 1,
+              "line": 0
+            },
+            "start": {
+              "character": 0,
+              "line": 0
+            }
+          },
+          "severity": 1,
+          "source": "translator"
+        }
+      ],
+      "kind": "full",
+      "resultId": "1"
+    }
+  }
+]

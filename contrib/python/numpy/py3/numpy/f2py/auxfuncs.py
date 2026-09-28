@@ -13,7 +13,6 @@ import sys
 import re
 import types
 from functools import reduce
-from copy import deepcopy
 
 from . import __version__
 from . import cfuncs
@@ -27,7 +26,7 @@ __all__ = [
     'hasexternals', 'hasinitvalue', 'hasnote', 'hasresultnote',
     'isallocatable', 'isarray', 'isarrayofstrings',
     'ischaracter', 'ischaracterarray', 'ischaracter_or_characterarray',
-    'iscomplex',
+    'iscomplex', 'iscstyledirective',
     'iscomplexarray', 'iscomplexfunction', 'iscomplexfunction_warn',
     'isdouble', 'isdummyroutine', 'isexternal', 'isfunction',
     'isfunction_wrap', 'isint1', 'isint1array', 'isinteger', 'isintent_aux',
@@ -44,7 +43,7 @@ __all__ = [
     'isunsigned_long_long', 'isunsigned_long_longarray', 'isunsigned_short',
     'isunsigned_shortarray', 'l_and', 'l_not', 'l_or', 'outmess', 'replace',
     'show', 'stripcomma', 'throw_error', 'isattr_value', 'getuseblocks',
-    'process_f2cmap_dict'
+    'process_f2cmap_dict', 'containscommon'
 ]
 
 
@@ -422,6 +421,11 @@ def getdimension(var):
 
 def isrequired(var):
     return not isoptional(var) and isintent_nothide(var)
+
+
+def iscstyledirective(f2py_line):
+    directives = {"callstatement", "callprotoargument", "pymethoddef"}
+    return any(directive in f2py_line.lower() for directive in directives)
 
 
 def isintent_in(var):

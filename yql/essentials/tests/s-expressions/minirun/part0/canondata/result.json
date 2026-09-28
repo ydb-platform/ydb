@@ -587,6 +587,20 @@
             "uri": "https://{canondata_backend}/1775059/859a07feef8e40497c12c615a8aa01c1439f1d8d/resource.tar.gz#test.test_Optimizers-MoveExtractMembersOverExtend-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Debug]": [
+        {
+            "checksum": "55b9ca6ccc7d1ca0946d60bfab2109dc",
+            "size": 1073,
+            "uri": "https://{canondata_backend}/1889210/307147b3e1b8c63eb3bd1a3f2a7364bb8ab92130/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Results]": [
+        {
+            "checksum": "d14dcbca03c83cdc2125658f7031af41",
+            "size": 2177,
+            "uri": "https://{canondata_backend}/1899731/117b9874e975a561af1e4e382b23ce8fbd0cea2f/resource.tar.gz#test.test_Optimizers-PruneUnusedColumnsOverSqlCombineMultiUsage-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Pure-PureNonList-default.txt-Debug]": [
         {
             "checksum": "945b27d67b88cbf719544cd33ed18e31",

@@ -19,12 +19,38 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <util/system/env.h>
 
 namespace NYql {
 
 const TString LineageComponent = "Lineage";
 const TString LineageResultLabel = "LineageResult";
 const TString StandaloneLineageLabel = "StandaloneLineage";
+
+namespace {
+
+bool IsLineageResourceLimitError(const std::exception& error) {
+    const TStringBuf message = error.what();
+    return message == "Out of memory" || message == "Lineage is too large";
+}
+
+void EnsureLineageCalculated(const std::exception_ptr& lineageError, bool resourceLimitExceeded) {
+    if (lineageError && !resourceLimitExceeded && GetEnv("YQL_LINEAGE_CHECK")) {
+        std::rethrow_exception(lineageError);
+    }
+}
+
+TString MakeLineageErrorYson(TStringBuf message) {
+    TStringStream s;
+    NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
+    writer.OnBeginMap();
+    writer.OnKeyedItem("Error");
+    writer.OnStringScalar(message);
+    writer.OnEndMap();
+    return s.Str();
+}
+
+} // namespace
 
 TTransformationPipeline::TTransformationPipeline(
     TIntrusivePtr<TTypeAnnotationContext> ctx,
@@ -197,6 +223,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 }
                             }
                             std::exception_ptr lineageError;
+                            bool lineageResourceLimitExceeded = false;
                             typeCtx->LineageStats.Correct = true;
                             try {
                                 TLineageRunOptions lineageOptions;
@@ -208,6 +235,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                 YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                                 typeCtx->LineageStats.Correct = false;
                                 lineageError = std::current_exception();
+                                lineageResourceLimitExceeded = IsLineageResourceLimitError(e);
                             }
                             if (!loadedLineage.empty()) {
                                 // if lineage calculation is failed, but loaded lineage exists, rethrow exception for replay mode
@@ -223,6 +251,7 @@ TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(boo
                                     throw yexception() << "Lineage in replay is different";
                                 }
                             }
+                            EnsureLineageCalculated(lineageError, lineageResourceLimitExceeded);
                             if (typeCtx->QContext && typeCtx->QContext.CanWrite() && *typeCtx->LineageStats.Correct) {
                                 typeCtx->QContext.GetWriter()->Put({.Component = LineageComponent, .Label = LineageResultLabel}, calculatedLineage).GetValueSync();
                                 YQL_LOG(INFO) << "Lineage is saved to QStorage";
@@ -336,13 +365,8 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                 } catch (const std::exception& e) {
                     YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
                     typeCtx->LineageStats.CorrectStandalone = false;
-                    TStringStream s;
-                    NYson::TYsonWriter writer(&s, NYson::EYsonFormat::Binary);
-                    writer.OnBeginMap();
-                    writer.OnKeyedItem("Error");
-                    writer.OnStringScalar(e.what());
-                    writer.OnEndMap();
-                    lineageOut = s.Str();
+                    EnsureLineageCalculated(std::current_exception(), IsLineageResourceLimitError(e));
+                    lineageOut = MakeLineageErrorYson(e.what());
                 }
                 if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
                     auto loaded = typeCtx->QContext.GetReader()->Get({.Component = LineageComponent, .Label = StandaloneLineageLabel}).GetValueSync();

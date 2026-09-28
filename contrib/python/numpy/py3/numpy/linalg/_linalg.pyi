@@ -8,12 +8,14 @@ from typing import (
     SupportsIndex,
     SupportsInt,
     NamedTuple,
-    Generic,
 )
 
 import numpy as np
 from numpy import (
-    generic,
+    # re-exports
+    vecdot,
+
+    # other
     floating,
     complexfloating,
     signedinteger,
@@ -24,12 +26,13 @@ from numpy import (
     float64,
     complex128,
 )
-
-from numpy.linalg import LinAlgError as LinAlgError
-
+from numpy.linalg import LinAlgError
+from numpy._core.fromnumeric import matrix_transpose
+from numpy._core.numeric import tensordot
 from numpy._typing import (
     NDArray,
     ArrayLike,
+    DTypeLike,
     _ArrayLikeUnknown,
     _ArrayLikeBool_co,
     _ArrayLikeInt_co,
@@ -38,18 +41,50 @@ from numpy._typing import (
     _ArrayLikeComplex_co,
     _ArrayLikeTD64_co,
     _ArrayLikeObject_co,
-    DTypeLike,
 )
 
-_T = TypeVar("_T")
-_ArrayType = TypeVar("_ArrayType", bound=NDArray[Any])
-_SCT = TypeVar("_SCT", bound=generic, covariant=True)
-_SCT2 = TypeVar("_SCT2", bound=generic, covariant=True)
+__all__ = [
+    "matrix_power",
+    "solve",
+    "tensorsolve",
+    "tensorinv",
+    "inv",
+    "cholesky",
+    "eigvals",
+    "eigvalsh",
+    "pinv",
+    "slogdet",
+    "det",
+    "svd",
+    "svdvals",
+    "eig",
+    "eigh",
+    "lstsq",
+    "norm",
+    "qr",
+    "cond",
+    "matrix_rank",
+    "LinAlgError",
+    "multi_dot",
+    "trace",
+    "diagonal",
+    "cross",
+    "outer",
+    "tensordot",
+    "matmul",
+    "matrix_transpose",
+    "matrix_norm",
+    "vector_norm",
+    "vecdot",
+]
 
-_2Tuple: TypeAlias = tuple[_T, _T]
+_ArrayType = TypeVar("_ArrayType", bound=NDArray[Any])
+
 _ModeKind: TypeAlias = L["reduced", "complete", "r", "raw"]
 
-__all__: list[str]
+###
+
+fortran_int = np.intc
 
 class EigResult(NamedTuple):
     eigenvalues: NDArray[Any]
@@ -140,11 +175,11 @@ def matrix_power(
 ) -> NDArray[Any]: ...
 
 @overload
-def cholesky(a: _ArrayLikeInt_co) -> NDArray[float64]: ...
+def cholesky(a: _ArrayLikeInt_co, /, *, upper: bool = False) -> NDArray[float64]: ...
 @overload
-def cholesky(a: _ArrayLikeFloat_co) -> NDArray[floating[Any]]: ...
+def cholesky(a: _ArrayLikeFloat_co, /, *, upper: bool = False) -> NDArray[floating[Any]]: ...
 @overload
-def cholesky(a: _ArrayLikeComplex_co) -> NDArray[complexfloating[Any, Any]]: ...
+def cholesky(a: _ArrayLikeComplex_co, /, *, upper: bool = False) -> NDArray[complexfloating[Any, Any]]: ...
 
 @overload
 def outer(x1: _ArrayLikeUnknown, x2: _ArrayLikeUnknown) -> NDArray[Any]: ...
@@ -337,12 +372,16 @@ def norm(
 @overload
 def matrix_norm(
     x: ArrayLike,
+    /,
+    *,
     ord: None | float | L["fro", "nuc"] = ...,
     keepdims: bool = ...,
 ) -> floating[Any]: ...
 @overload
 def matrix_norm(
     x: ArrayLike,
+    /,
+    *,
     ord: None | float | L["fro", "nuc"] = ...,
     keepdims: bool = ...,
 ) -> Any: ...
@@ -350,6 +389,8 @@ def matrix_norm(
 @overload
 def vector_norm(
     x: ArrayLike,
+    /,
+    *,
     axis: None = ...,
     ord: None | float = ...,
     keepdims: bool = ...,
@@ -357,6 +398,8 @@ def vector_norm(
 @overload
 def vector_norm(
     x: ArrayLike,
+    /,
+    *,
     axis: SupportsInt | SupportsIndex | tuple[int, ...] = ...,
     ord: None | float = ...,
     keepdims: bool = ...,
@@ -371,37 +414,49 @@ def multi_dot(
 
 def diagonal(
     x: ArrayLike,  # >= 2D array
+    /,
+    *,
     offset: SupportsIndex = ...,
 ) -> NDArray[Any]: ...
 
 def trace(
     x: ArrayLike,  # >= 2D array
+    /,
+    *,
     offset: SupportsIndex = ...,
     dtype: DTypeLike = ...,
 ) -> Any: ...
 
 @overload
 def cross(
-    a: _ArrayLikeUInt_co,
-    b: _ArrayLikeUInt_co,
+    x1: _ArrayLikeUInt_co,
+    x2: _ArrayLikeUInt_co,
+    /,
+    *,
     axis: int = ...,
 ) -> NDArray[unsignedinteger[Any]]: ...
 @overload
 def cross(
-    a: _ArrayLikeInt_co,
-    b: _ArrayLikeInt_co,
+    x1: _ArrayLikeInt_co,
+    x2: _ArrayLikeInt_co,
+    /,
+    *,
     axis: int = ...,
 ) -> NDArray[signedinteger[Any]]: ...
 @overload
 def cross(
-    a: _ArrayLikeFloat_co,
-    b: _ArrayLikeFloat_co,
+    x1: _ArrayLikeFloat_co,
+    x2: _ArrayLikeFloat_co,
+    /,
+    *,
     axis: int = ...,
 ) -> NDArray[floating[Any]]: ...
 @overload
 def cross(
-    a: _ArrayLikeComplex_co,
-    b: _ArrayLikeComplex_co,
+    x1: _ArrayLikeComplex_co,
+    x2: _ArrayLikeComplex_co,
+    /,
+    *,
     axis: int = ...,
 ) -> NDArray[complexfloating[Any, Any]]: ...
 

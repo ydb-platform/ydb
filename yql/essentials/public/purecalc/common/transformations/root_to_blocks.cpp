@@ -23,7 +23,6 @@ public:
     {
     }
 
-public:
     void Rewind() override {
         Wrapped_ = false;
     }

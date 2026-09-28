@@ -51,6 +51,7 @@ PEERDIR(
     ydb/library/keys
     ydb/library/pdisk_io
     ydb/library/security
+    ydb/library/superlemmer_stub
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/library/yql/udfs/common/hybrid_search
     ydb/library/yql/udfs/common/knn
@@ -72,6 +73,7 @@ PEERDIR(
     yql/essentials/udfs/common/set
     yql/essentials/udfs/common/stat
     yql/essentials/udfs/common/string
+    ydb/core/formats/arrow/program/olap_kernels
     yql/essentials/udfs/common/top
     yql/essentials/udfs/common/topfreq
     yql/essentials/udfs/common/unicode_base

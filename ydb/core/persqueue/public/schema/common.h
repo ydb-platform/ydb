@@ -61,6 +61,7 @@ ui32 ConvertDurationToMs32(const google::protobuf::Duration& duration);
 
 std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration);
 std::expected<i32, TString> CheckRetentionPeriod(i64 seconds);
+TResult ValidateTopicPartitionCount(i64 count, TStringBuf what);
 std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeriod(
     const google::protobuf::Duration& duration,
     std::string_view consumerName
@@ -133,6 +134,9 @@ TResult ProcessConsumerType(
         }
 
         if (deadLetterPolicy.has_move_action()) {
+            if (deadLetterPolicy.move_action().dead_letter_queue().empty()) {
+                return {Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty"};
+            }
             consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
             consumer->SetDeadLetterQueue(deadLetterPolicy.move_action().dead_letter_queue());
         } else if (deadLetterPolicy.has_delete_action()) {

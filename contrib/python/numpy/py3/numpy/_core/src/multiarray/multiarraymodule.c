@@ -157,12 +157,13 @@ PyArray_GetPriority(PyObject *obj, double default_)
         return NPY_SCALAR_PRIORITY;
     }
 
-    ret = PyArray_LookupSpecial_OnInstance(obj, npy_interned_str.array_priority);
-    if (ret == NULL) {
-        if (PyErr_Occurred()) {
-            /* TODO[gh-14801]: propagate crashes during attribute access? */
-            PyErr_Clear();
-        }
+    if (PyArray_LookupSpecial_OnInstance(
+            obj, npy_interned_str.array_priority, &ret) < 0) {
+        /* TODO[gh-14801]: propagate crashes during attribute access? */
+        PyErr_Clear();
+        return default_;
+    }
+    else if (ret == NULL) {
         return default_;
     }
 
@@ -1214,6 +1215,7 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
         goto clean_ret;
     }
 
+    int needs_pyapi = PyDataType_FLAGCHK(PyArray_DESCR(ret), NPY_NEEDS_PYAPI);
     NPY_BEGIN_THREADS_DESCR(PyArray_DESCR(ret));
     is1 = PyArray_STRIDES(ap1)[0];
     is2 = PyArray_STRIDES(ap2)[0];
@@ -1224,6 +1226,9 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
     n = n - n_left;
     for (i = 0; i < n_left; i++) {
         dot(ip1, is1, ip2, is2, op, n, ret);
+        if (needs_pyapi && PyErr_Occurred()) {
+            goto done;
+        }
         n++;
         ip2 -= is2;
         op += os;
@@ -1235,19 +1240,21 @@ _pyarray_correlate(PyArrayObject *ap1, PyArrayObject *ap2, int typenum,
         op += os * (n1 - n2 + 1);
     }
     else {
-        for (i = 0; i < (n1 - n2 + 1); i++) {
+        for (i = 0; i < (n1 - n2 + 1) && (!needs_pyapi || !PyErr_Occurred());
+             i++) {
             dot(ip1, is1, ip2, is2, op, n, ret);
             ip1 += is1;
             op += os;
         }
     }
-    for (i = 0; i < n_right; i++) {
+    for (i = 0; i < n_right && (!needs_pyapi || !PyErr_Occurred()); i++) {
         n--;
         dot(ip1, is1, ip2, is2, op, n, ret);
         ip1 += is1;
         op += os;
     }
 
+done:
     NPY_END_THREADS_DESCR(PyArray_DESCR(ret));
     if (PyErr_Occurred()) {
         goto clean_ret;
@@ -2703,13 +2710,13 @@ fail:
 }
 
 static int
-einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
-                       PyArrayObject **op)
+einsum_sub_op_from_str(
+        Py_ssize_t nargs, PyObject *const *args,
+        PyObject **str_obj, char **subscripts, PyArrayObject **op)
 {
-    int i, nop;
+    Py_ssize_t nop = nargs - 1;
     PyObject *subscripts_str;
 
-    nop = PyTuple_GET_SIZE(args) - 1;
     if (nop <= 0) {
         PyErr_SetString(PyExc_ValueError,
                         "must specify the einstein sum subscripts string "
@@ -2722,7 +2729,7 @@ einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
     }
 
     /* Get the subscripts string */
-    subscripts_str = PyTuple_GET_ITEM(args, 0);
+    subscripts_str = args[0];
     if (PyUnicode_Check(subscripts_str)) {
         *str_obj = PyUnicode_AsASCIIString(subscripts_str);
         if (*str_obj == NULL) {
@@ -2739,15 +2746,13 @@ einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
     }
 
     /* Set the operands to NULL */
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         op[i] = NULL;
     }
 
     /* Get the operands */
-    for (i = 0; i < nop; ++i) {
-        PyObject *obj = PyTuple_GET_ITEM(args, i+1);
-
-        op[i] = (PyArrayObject *)PyArray_FROM_OF(obj, NPY_ARRAY_ENSUREARRAY);
+    for (Py_ssize_t i = 0; i < nop; ++i) {
+        op[i] = (PyArrayObject *)PyArray_FROM_OF(args[i+1], NPY_ARRAY_ENSUREARRAY);
         if (op[i] == NULL) {
             goto fail;
         }
@@ -2756,7 +2761,7 @@ einsum_sub_op_from_str(PyObject *args, PyObject **str_obj, char **subscripts,
     return nop;
 
 fail:
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         Py_XDECREF(op[i]);
         op[i] = NULL;
     }
@@ -2860,13 +2865,12 @@ einsum_list_to_subscripts(PyObject *obj, char *subscripts, int subsize)
  * Returns -1 on error, number of operands placed in op otherwise.
  */
 static int
-einsum_sub_op_from_lists(PyObject *args,
-                char *subscripts, int subsize, PyArrayObject **op)
+einsum_sub_op_from_lists(Py_ssize_t nargs, PyObject *const *args,
+                         char *subscripts, int subsize, PyArrayObject **op)
 {
     int subindex = 0;
-    npy_intp i, nop;
 
-    nop = PyTuple_Size(args)/2;
+    Py_ssize_t nop = nargs / 2;
 
     if (nop == 0) {
         PyErr_SetString(PyExc_ValueError, "must provide at least an "
@@ -2879,15 +2883,12 @@ einsum_sub_op_from_lists(PyObject *args,
     }
 
     /* Set the operands to NULL */
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         op[i] = NULL;
     }
 
     /* Get the operands and build the subscript string */
-    for (i = 0; i < nop; ++i) {
-        PyObject *obj = PyTuple_GET_ITEM(args, 2*i);
-        int n;
-
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         /* Comma between the subscripts for each operand */
         if (i != 0) {
             subscripts[subindex++] = ',';
@@ -2898,14 +2899,13 @@ einsum_sub_op_from_lists(PyObject *args,
             }
         }
 
-        op[i] = (PyArrayObject *)PyArray_FROM_OF(obj, NPY_ARRAY_ENSUREARRAY);
+        op[i] = (PyArrayObject *)PyArray_FROM_OF(args[2*i], NPY_ARRAY_ENSUREARRAY);
         if (op[i] == NULL) {
             goto fail;
         }
 
-        obj = PyTuple_GET_ITEM(args, 2*i+1);
-        n = einsum_list_to_subscripts(obj, subscripts+subindex,
-                                      subsize-subindex);
+        int n = einsum_list_to_subscripts(
+                args[2*i + 1], subscripts+subindex, subsize-subindex);
         if (n < 0) {
             goto fail;
         }
@@ -2913,10 +2913,7 @@ einsum_sub_op_from_lists(PyObject *args,
     }
 
     /* Add the '->' to the string if provided */
-    if (PyTuple_Size(args) == 2*nop+1) {
-        PyObject *obj;
-        int n;
-
+    if (nargs == 2*nop+1) {
         if (subindex + 2 >= subsize) {
             PyErr_SetString(PyExc_ValueError,
                     "subscripts list is too long");
@@ -2925,9 +2922,8 @@ einsum_sub_op_from_lists(PyObject *args,
         subscripts[subindex++] = '-';
         subscripts[subindex++] = '>';
 
-        obj = PyTuple_GET_ITEM(args, 2*nop);
-        n = einsum_list_to_subscripts(obj, subscripts+subindex,
-                                      subsize-subindex);
+        int n = einsum_list_to_subscripts(
+                args[2*nop], subscripts+subindex, subsize-subindex);
         if (n < 0) {
             goto fail;
         }
@@ -2940,7 +2936,7 @@ einsum_sub_op_from_lists(PyObject *args,
     return nop;
 
 fail:
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         Py_XDECREF(op[i]);
         op[i] = NULL;
     }
@@ -2949,36 +2945,39 @@ fail:
 }
 
 static PyObject *
-array_einsum(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
+array_einsum(PyObject *NPY_UNUSED(dummy),
+        PyObject *const *args, Py_ssize_t nargsf, PyObject *kwnames)
 {
     char *subscripts = NULL, subscripts_buffer[256];
     PyObject *str_obj = NULL, *str_key_obj = NULL;
-    PyObject *arg0;
-    int i, nop;
+    int nop;
     PyArrayObject *op[NPY_MAXARGS];
     NPY_ORDER order = NPY_KEEPORDER;
     NPY_CASTING casting = NPY_SAFE_CASTING;
+    PyObject *out_obj = NULL;
     PyArrayObject *out = NULL;
     PyArray_Descr *dtype = NULL;
     PyObject *ret = NULL;
+    NPY_PREPARE_ARGPARSER;
 
-    if (PyTuple_GET_SIZE(args) < 1) {
+    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
+
+    if (nargs < 1) {
         PyErr_SetString(PyExc_ValueError,
                         "must specify the einstein sum subscripts string "
                         "and at least one operand, or at least one operand "
                         "and its corresponding subscripts list");
         return NULL;
     }
-    arg0 = PyTuple_GET_ITEM(args, 0);
 
     /* einsum('i,j', a, b), einsum('i,j->ij', a, b) */
-    if (PyBytes_Check(arg0) || PyUnicode_Check(arg0)) {
-        nop = einsum_sub_op_from_str(args, &str_obj, &subscripts, op);
+    if (PyBytes_Check(args[0]) || PyUnicode_Check(args[0])) {
+        nop = einsum_sub_op_from_str(nargs, args, &str_obj, &subscripts, op);
     }
     /* einsum(a, [0], b, [1]), einsum(a, [0], b, [1], [0,1]) */
     else {
-        nop = einsum_sub_op_from_lists(args, subscripts_buffer,
-                                    sizeof(subscripts_buffer), op);
+        nop = einsum_sub_op_from_lists(nargs, args, subscripts_buffer,
+                                       sizeof(subscripts_buffer), op);
         subscripts = subscripts_buffer;
     }
     if (nop <= 0) {
@@ -2986,63 +2985,26 @@ array_einsum(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
     }
 
     /* Get the keyword arguments */
-    if (kwds != NULL) {
-        PyObject *key, *value;
-        Py_ssize_t pos = 0;
-        while (PyDict_Next(kwds, &pos, &key, &value)) {
-            char *str = NULL;
-
-            Py_XDECREF(str_key_obj);
-            str_key_obj = PyUnicode_AsASCIIString(key);
-            if (str_key_obj != NULL) {
-                key = str_key_obj;
-            }
-
-            str = PyBytes_AsString(key);
-
-            if (str == NULL) {
-                PyErr_Clear();
-                PyErr_SetString(PyExc_TypeError, "invalid keyword");
-                goto finish;
-            }
-
-            if (strcmp(str,"out") == 0) {
-                if (PyArray_Check(value)) {
-                    out = (PyArrayObject *)value;
-                }
-                else {
-                    PyErr_SetString(PyExc_TypeError,
-                                "keyword parameter out must be an "
-                                "array for einsum");
-                    goto finish;
-                }
-            }
-            else if (strcmp(str,"order") == 0) {
-                if (!PyArray_OrderConverter(value, &order)) {
-                    goto finish;
-                }
-            }
-            else if (strcmp(str,"casting") == 0) {
-                if (!PyArray_CastingConverter(value, &casting)) {
-                    goto finish;
-                }
-            }
-            else if (strcmp(str,"dtype") == 0) {
-                if (!PyArray_DescrConverter2(value, &dtype)) {
-                    goto finish;
-                }
-            }
-            else {
-                PyErr_Format(PyExc_TypeError,
-                            "'%s' is an invalid keyword for einsum",
-                            str);
-                goto finish;
-            }
+    if (kwnames != NULL) {
+        if (npy_parse_arguments("einsum", args+nargs, 0, kwnames,
+                "$out", NULL, &out_obj,
+                "$order", &PyArray_OrderConverter, &order,
+                "$casting", &PyArray_CastingConverter, &casting,
+                "$dtype", &PyArray_DescrConverter2, &dtype,
+                NULL, NULL, NULL) < 0) {
+            goto finish;
         }
+        if (out_obj != NULL && !PyArray_Check(out_obj)) {
+            PyErr_SetString(PyExc_TypeError,
+                        "keyword parameter out must be an "
+                        "array for einsum");
+            goto finish;
+        }
+        out = (PyArrayObject *)out_obj;
     }
 
     ret = (PyObject *)PyArray_EinsteinSum(subscripts, nop, op, dtype,
-                                        order, casting, out);
+                                          order, casting, out);
 
     /* If no output was supplied, possibly convert to a scalar */
     if (ret != NULL && out == NULL) {
@@ -3050,7 +3012,7 @@ array_einsum(PyObject *NPY_UNUSED(dummy), PyObject *args, PyObject *kwds)
     }
 
 finish:
-    for (i = 0; i < nop; ++i) {
+    for (Py_ssize_t i = 0; i < nop; ++i) {
         Py_XDECREF(op[i]);
     }
     Py_XDECREF(dtype);
@@ -3548,30 +3510,18 @@ array_can_cast_safely(PyObject *NPY_UNUSED(self),
          * TODO: `PyArray_IsScalar` should not be required for new dtypes.
          *       weak-promotion branch is in practice identical to dtype one.
          */
-        if (get_npy_promotion_state() == NPY_USE_WEAK_PROMOTION) {
-            PyObject *descr = PyObject_GetAttr(from_obj, npy_interned_str.dtype);
-            if (descr == NULL) {
-                goto finish;
-            }
-            if (!PyArray_DescrCheck(descr)) {
-                Py_DECREF(descr);
-                PyErr_SetString(PyExc_TypeError,
-                    "numpy_scalar.dtype did not return a dtype instance.");
-                goto finish;
-            }
-            ret = PyArray_CanCastTypeTo((PyArray_Descr *)descr, d2, casting);
+        PyObject *descr = PyObject_GetAttr(from_obj, npy_interned_str.dtype);
+        if (descr == NULL) {
+            goto finish;
+        }
+        if (!PyArray_DescrCheck(descr)) {
             Py_DECREF(descr);
+            PyErr_SetString(PyExc_TypeError,
+                "numpy_scalar.dtype did not return a dtype instance.");
+            goto finish;
         }
-        else {
-            /* need to convert to object to consider old value-based logic */
-            PyArrayObject *arr;
-            arr = (PyArrayObject *)PyArray_FROM_O(from_obj);
-            if (arr == NULL) {
-                goto finish;
-            }
-            ret = PyArray_CanCastArrayTo(arr, d2, casting);
-            Py_DECREF(arr);
-        }
+        ret = PyArray_CanCastTypeTo((PyArray_Descr *)descr, d2, casting);
+        Py_DECREF(descr);
     }
     else if (PyArray_IsPythonNumber(from_obj)) {
         PyErr_SetString(PyExc_TypeError,
@@ -4517,7 +4467,7 @@ static struct PyMethodDef array_module_methods[] = {
         METH_FASTCALL, NULL},
     {"c_einsum",
         (PyCFunction)array_einsum,
-        METH_VARARGS|METH_KEYWORDS, NULL},
+        METH_FASTCALL|METH_KEYWORDS, NULL},
     {"correlate",
         (PyCFunction)array_correlate,
         METH_FASTCALL | METH_KEYWORDS, NULL},
@@ -4626,14 +4576,6 @@ static struct PyMethodDef array_module_methods[] = {
     {"get_handler_version",
         (PyCFunction) get_handler_version,
         METH_VARARGS, NULL},
-    {"_get_promotion_state",
-        (PyCFunction)npy__get_promotion_state,
-        METH_NOARGS, "Get the current NEP 50 promotion state."},
-    {"_set_promotion_state",
-         (PyCFunction)npy__set_promotion_state,
-         METH_O, "Set the NEP 50 promotion state.  This is not thread-safe.\n"
-                 "The optional warnings can be safely silenced using the \n"
-                 "`np._no_nep50_warning()` context manager."},
     {"_set_numpy_warn_if_no_mem_policy",
          (PyCFunction)_set_numpy_warn_if_no_mem_policy,
          METH_O, "Change the warn if no mem policy flag for testing."},
@@ -5097,6 +5039,24 @@ PyMODINIT_FUNC PyInit__multiarray_umath(void) {
         goto err;
     }
 
+    /*
+     * Initialize the default PyDataMem_Handler capsule singleton.
+     */
+    PyDataMem_DefaultHandler = PyCapsule_New(
+            &default_handler, MEM_HANDLER_CAPSULE_NAME, NULL);
+    if (PyDataMem_DefaultHandler == NULL) {
+        goto err;
+    }
+
+    /*
+     * Initialize the context-local current handler
+     * with the default PyDataMem_Handler capsule.
+     */
+    current_handler = PyContextVar_New("current_allocator", PyDataMem_DefaultHandler);
+    if (current_handler == NULL) {
+        goto err;
+    }
+
     if (initumath(m) != 0) {
         goto err;
     }
@@ -5131,7 +5091,7 @@ PyMODINIT_FUNC PyInit__multiarray_umath(void) {
      * init_string_dtype() but that needs to happen after
      * the legacy dtypemeta classes are available.
      */
-    
+
     if (npy_cache_import_runtime(
             "numpy.dtypes", "_add_dtype_helper",
             &npy_runtime_imports._add_dtype_helper) == -1) {
@@ -5144,23 +5104,6 @@ PyMODINIT_FUNC PyInit__multiarray_umath(void) {
         goto err;
     }
     PyDict_SetItemString(d, "StringDType", (PyObject *)&PyArray_StringDType);
-
-    /*
-     * Initialize the default PyDataMem_Handler capsule singleton.
-     */
-    PyDataMem_DefaultHandler = PyCapsule_New(
-            &default_handler, MEM_HANDLER_CAPSULE_NAME, NULL);
-    if (PyDataMem_DefaultHandler == NULL) {
-        goto err;
-    }
-    /*
-     * Initialize the context-local current handler
-     * with the default PyDataMem_Handler capsule.
-     */
-    current_handler = PyContextVar_New("current_allocator", PyDataMem_DefaultHandler);
-    if (current_handler == NULL) {
-        goto err;
-    }
 
     // initialize static reference to a zero-like array
     npy_static_pydata.zero_pyint_like_arr = PyArray_ZEROS(

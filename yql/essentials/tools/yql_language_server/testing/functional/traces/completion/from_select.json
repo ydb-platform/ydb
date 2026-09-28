@@ -38,7 +38,8 @@
           "filterText": "a",
           "insertTextFormat": 1,
           "kind": 5,
-          "label": "a"
+          "label": "a",
+          "sortText": "0"
         }
       ]
     }

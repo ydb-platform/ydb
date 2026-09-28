@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxCreateDstResult: public TTxBase {
@@ -18,31 +20,33 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        CLOG_D(ctx, "Execute: " << Ev->Get()->ToString());
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", Ev->Get()->ToString()});
 
         const auto rid = Ev->Get()->ReplicationId;
         const auto tid = Ev->Get()->TargetId;
 
         Replication = Self->Find(rid);
         if (!Replication) {
-            CLOG_W(ctx, "Unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown replication",
+                {"rid", rid});
             return true;
         }
 
         auto* target = Replication->FindTarget(tid);
         if (!target) {
-            CLOG_W(ctx, "Unknown target"
-                << ": rid# " << rid
-                << ", tid# " << tid);
+            YDB_LOG_WARN_CTX(ctx, "Unknown target",
+                {"rid", rid},
+                {"tid", tid});
             return true;
         }
 
         if (target->GetDstState() != TReplication::EDstState::Creating && target->GetDstState() != TReplication::EDstState::Alter) {
-            CLOG_W(ctx, "Dst state mismatch"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", state# " << target->GetDstState());
+            YDB_LOG_WARN_CTX(ctx, "Dst state mismatch",
+                {"rid", rid},
+                {"tid", tid},
+                {"state", target->GetDstState()});
             return true;
         }
 
@@ -50,10 +54,10 @@ public:
             target->SetDstPathId(Ev->Get()->DstPathId);
             target->SetDstState(TReplication::EDstState::Ready);
 
-            CLOG_N(ctx, "Target dst created"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", pathId# " << Ev->Get()->DstPathId);
+            YDB_LOG_NOTICE_CTX(ctx, "Target dst created",
+                {"rid", rid},
+                {"tid", tid},
+                {"pathId", Ev->Get()->DstPathId});
         } else {
             target->SetDstState(TReplication::EDstState::Error);
             target->SetIssue(TStringBuilder() << "Create dst error"
@@ -63,11 +67,11 @@ public:
             Replication->SetState(TReplication::EState::Error, TStringBuilder() << "Error in target #" << target->GetId()
                 << ": " << target->GetIssue());
 
-            CLOG_E(ctx, "Create dst error"
-                << ": rid# " << rid
-                << ", tid# " << tid
-                << ", " << NKikimrScheme::EStatus_Name(Ev->Get()->Status)
-                << ", " << Ev->Get()->Error);
+            YDB_LOG_ERROR_CTX(ctx, "Create dst error",
+                {"rid", rid},
+                {"tid", tid},
+                {"status", NKikimrScheme::EStatus_Name(Ev->Get()->Status)},
+                {"error", Ev->Get()->Error});
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -86,7 +90,8 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
 
         if (Replication) {
             Replication->Progress(ctx);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/datetime/base.h>
+
 namespace NYql::NDq {
 
 /*

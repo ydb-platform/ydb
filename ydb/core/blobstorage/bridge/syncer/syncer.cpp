@@ -467,7 +467,10 @@ namespace NKikimr::NBridge {
         } else if (msg.GroupId == SourceGroupId.GetRawId()) { // it was a data query for copying
             for (size_t i = 0; i < msg.ResponseSz; ++i) {
                 if (auto& r = msg.Responses[i]; r.Status == NKikimrProto::OK) {
-                    // rewrite this blob with keep flag, if set
+                    // rewrite this blob with keep flag, if set; DataKind is deliberately left at
+                    // USER -- it is a per-request admission hint that is never stored with the blob,
+                    // so the original kind cannot be recovered here, and a lagging pile should not
+                    // spend the system reserve on catching up
                     IssueQuery(true, std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
                         .BlobId = r.Id,
                         .Buffer = TRope(TRcBuf(r.Buffer)),

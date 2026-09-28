@@ -72,8 +72,6 @@ Prepare the {{ ydb-short-name }} configuration file according to your chosen top
         node: [1, 2, 3]
         nto_select: 3
         ssid: 1
-    table_service_config:
-    sql_version: 1
     actor_system_config:
     executor:
       - name: System
@@ -259,8 +257,6 @@ Prepare the {{ ydb-short-name }} configuration file according to your chosen top
         node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
         nto_select: 9
         ssid: 1
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     executor:
       - name: System
@@ -446,8 +442,6 @@ Prepare the {{ ydb-short-name }} configuration file according to your chosen top
         node: [1, 2, 3, 4, 5, 6, 7, 8]
         nto_select: 5
         ssid: 1
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     executor:
       - name: System
@@ -653,7 +647,7 @@ sudo chmod 700 /opt/ydb/certs
 
 {% endlist %}
 
-After starting the static nodes, verify they are running via the {{ ydb-short-name }} built-in web interface (Embedded UI):
+After starting the static nodes, verify they are running via {{ ydb-ui-name }}:
 
 1. Open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static node;
 2. Go to the **Nodes** tab;
@@ -848,17 +842,17 @@ When running account creation and group assignment commands, the {{ ydb-short-na
 
 Where `<node.ydb.tech>` is the FQDN of the server running the dynamic node serving the `/Root/testdb` database.
 
-## Checking Access to the Built-in Web Interface
+## Checking Access to {{ ydb-ui-name }}
 
-To check access to the {{ ydb-short-name }} built-in web interface, open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
+To check access to {{ ydb-ui-name }}, open `https://<node.ydb.tech>:8765` in your browser, where `<node.ydb.tech>` is the FQDN of the server running any static {{ ydb-short-name }} node.
 
 Configure your browser to trust the Certificate Authority that issued certificates for the {{ ydb-short-name }} cluster. Otherwise, you will see a warning about an untrusted certificate.
 
-If authentication is enabled in the cluster, the browser will prompt for login and password. After entering valid credentials, the built-in web interface welcome page will appear. The available features and user interface are described in [{#T}](../../../../reference/embedded-ui/index.md).
+If authentication is enabled in the cluster, the browser will prompt for login and password. After entering valid credentials, the {{ ydb-ui-name }} welcome page will appear. The available features and user interface are described in [{#T}](../../../../reference/ydb-ui/index.md).
 
 {% note info %}
 
-A common way to provide access to the {{ ydb-short-name }} built-in web interface is to set up a fault-tolerant HTTP balancer using `haproxy`, `nginx`, or similar software. HTTP balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation guide.
+A common way to provide access to {{ ydb-ui-name }} is to set up a fault-tolerant HTTP balancer using `haproxy`, `nginx`, or similar software. HTTP balancer configuration details are beyond the scope of the standard {{ ydb-short-name }} installation guide.
 
 {% endnote %}
 

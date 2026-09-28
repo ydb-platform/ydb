@@ -98,11 +98,13 @@ private:
 public:
     const ::NMonitoring::THistogramPtr ReceiveTaskHistogram;
     const ::NMonitoring::TDynamicCounters::TCounterPtr ReceiveTaskDuration;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr BadConfigNotifications;
 
     TCounters(const TString& module, TIntrusivePtr<::NMonitoring::TDynamicCounters> baseSignals)
         : TBase(module, baseSignals)
         , ReceiveTaskHistogram(TBase::GetHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
         , ReceiveTaskDuration(TBase::GetDeriviative("ReceiveTask/Duration/Us"))
+        , BadConfigNotifications(TBase::GetDeriviative("BadConfigNotifications"))
     {
     }
 

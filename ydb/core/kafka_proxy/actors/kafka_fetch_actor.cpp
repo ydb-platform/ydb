@@ -74,7 +74,7 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
             .CanReadBatches = true,
             .RequestId = 0,
             .RlCtx = Context->RlContext,
-            .UserToken = Context->UserToken
+            .UserToken = Context->Token.UserToken
         };
         auto fetchActor = NKikimr::NPQ::CreatePQFetchRequestActor(request, NKikimr::MakeSchemeCacheID(), ctx.SelfID);
         auto actorId = ctx.Register(fetchActor);
@@ -106,6 +106,11 @@ TVector<NKikimr::NPQ::TPartitionFetchRequest> TKafkaFetchActor::PrepareFetchRequ
         partPQRequest.Partition = partKafkaRequest.Partition;
         partPQRequest.Offset = partKafkaRequest.FetchOffset;
         partPQRequest.MaxBytes = partKafkaRequest.PartitionMaxBytes;
+        // librdkafka treats Fetch records length -1 (null) as a protocol error
+        // ("invalid MessageSetSize -1"). Empty partitions must be encoded as
+        // zero-length bytes, like Apache Kafka and the pre-26-3 TKafkaRecords
+        // serializer (which wrote size 0 for unset). See LOGBROKER-10644.
+        topicKafkaResponse.Partitions[partIndex].Records = TString();
     }
     return partPQRequests;
 }
@@ -178,7 +183,12 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
         partKafkaResponse.HighWatermark = partPQResponse.GetReadResult().GetMaxOffset();
         partKafkaResponse.LastStableOffset = partPQResponse.GetReadResult().GetMaxOffset();
         Response->ThrottleTimeMs = std::max(Response->ThrottleTimeMs, static_cast<i32>(partPQResponse.GetReadResult().GetWaitQuotaTimeMs()));
+        if (partPQResponse.GetReadResult().GetErrorCode() == NPersQueue::NErrorCode::EErrorCode::OK && topicResponse.Topic.has_value()) {
+            Context->RememberTopicAclOk(TString(topicResponse.Topic.value()));
+        }
         if (partPQResponse.GetReadResult().GetResult().size() == 0) {
+            // Keep zero-length records set in PrepareFetchRequestData; do not
+            // clear back to null (would serialize as MessageSetSize=-1).
             continue;
         }
 
@@ -258,7 +268,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
     };
 
     for (const auto& result : partPQResponse.GetReadResult().GetResult()) {
-        const auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
+        auto dataChunk = NKikimr::GetDeserializedData(result.GetData());
         if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
             continue;
         }
@@ -279,6 +289,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         if (isKafkaBatch) {
             flushRecordsBatch();
+            SetKafkaBatchBaseOffset(*dataChunk.MutableData(), result.GetOffset());
             addRawKafkaBatch(dataChunk, result.GetLogicalMessageCount());
             continue;
         }

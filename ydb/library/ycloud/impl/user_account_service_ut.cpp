@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TUserAccountServiceTest) {
 
         // User Account Service
         ui16 servicePort = tp.GetPort(8443);
-        IActor* userAccountService = NCloud::CreateUserAccountService("localhost:" + ToString(servicePort));
+        IActor* userAccountService = NCloud::CreateUserAccountService("localhost:" + ToString(servicePort), "");
         runtime->Register(userAccountService);
 
         // User Account Service Mock
@@ -57,5 +57,8 @@ Y_UNIT_TEST_SUITE(TUserAccountServiceTest) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_EQUAL(result->Response.id(), "user1");
+        with_lock (userAccountServiceMock.MetadataMutex) {
+            UNIT_ASSERT_STRING_CONTAINS(userAccountServiceMock.CapturedUserAgent, "ydb/");
+        }
     }
 }

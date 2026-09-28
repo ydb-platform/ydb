@@ -5,7 +5,6 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/scheme_board.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 #include <util/generic/string.h>
 #include <util/string/builder.h>

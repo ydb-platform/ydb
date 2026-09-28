@@ -23,7 +23,16 @@ from clickhouse_connect.driver._backendclient import SyncBackendClient
 from clickhouse_connect.driver.binding import (
     use_form_encoding,  # noqa: F401  (compatibility re-export)
 )
-from clickhouse_connect.driver.common import coerce_bool, coerce_int, dict_add, dict_copy
+from clickhouse_connect.driver.client import _HTTP_RESERVED_SETTING_NAMES, _HTTP_RESERVED_SETTING_PREFIXES
+from clickhouse_connect.driver.common import (
+    ShowClickHouseErrors,
+    coerce_bool,
+    coerce_int,
+    coerce_show_clickhouse_errors,
+    dict_add,
+    dict_copy,
+    format_uri_host,
+)
 from clickhouse_connect.driver.exceptions import ProgrammingError
 from clickhouse_connect.driver.httputil import (
     ResponseSource,  # noqa: F401  (compatibility re-export)
@@ -33,6 +42,7 @@ from clickhouse_connect.driver.httputil import (
     get_proxy_manager,
 )
 from clickhouse_connect.driver.query import TzMode, TzSource
+from clickhouse_connect.driver.rustcodec import NativeCodec, _make_native_transform
 from clickhouse_connect.driver.transform import NativeTransform
 
 logger = logging.getLogger(__name__)
@@ -56,6 +66,8 @@ class HttpClient(SyncBackendClient):
         "role",
     }
     optional_transport_settings = {"send_progress_in_http_headers", "http_headers_progress_interval_ms", "enable_http_compression"}
+    _reserved_setting_names = set(_HTTP_RESERVED_SETTING_NAMES)
+    _reserved_setting_prefixes = _HTTP_RESERVED_SETTING_PREFIXES
     _owns_pool_manager = False
 
     # R0917: too-many-positional-arguments
@@ -88,7 +100,7 @@ class HttpClient(SyncBackendClient):
         server_host_name: str | None = None,
         tz_source: TzSource | None = None,
         tz_mode: str | None = None,
-        show_clickhouse_errors: bool | None = None,
+        show_clickhouse_errors: bool | str | None = None,
         autogenerate_session_id: bool | None = None,
         autogenerate_query_id: bool | None = None,
         tls_mode: str | None = None,
@@ -96,6 +108,7 @@ class HttpClient(SyncBackendClient):
         form_encode_query_params: bool = False,
         rename_response_column: str | None = None,
         headers: dict[str, str] | None = None,
+        native_codec: NativeCodec | None = None,
     ):
         """
         Create an HTTP ClickHouse Connect client
@@ -104,7 +117,7 @@ class HttpClient(SyncBackendClient):
         proxy_path = proxy_path.lstrip("/")
         if proxy_path:
             proxy_path = "/" + proxy_path
-        self.url = f"{interface}://{host}:{port}{proxy_path}"
+        self.url = f"{interface}://{format_uri_host(host)}:{port}{proxy_path}"
         client_headers: dict[str, str] = {}
         self.params = dict_copy(HttpClient.params)
         ch_settings = dict_copy(settings, self.params)
@@ -153,7 +166,10 @@ class HttpClient(SyncBackendClient):
         if headers:
             client_headers.update(headers)
         self._write_format = "Native"
-        self._transform = NativeTransform()
+        self._transform = _make_native_transform(native_codec)
+        if not isinstance(self._transform, NativeTransform):
+            # The codec is a client-level choice, so the tag is applied at construction rather than per call.
+            add_integration_tag(client_headers, self._reported_libs, "clickhouse-connect-core")
 
         # There are use cases when the client needs to disable timeouts.
         if connect_timeout is not None:
@@ -248,12 +264,12 @@ class HttpClient(SyncBackendClient):
         self._backend.http_retries = value
 
     @property
-    def show_clickhouse_errors(self) -> bool:  # type: ignore[override]
+    def show_clickhouse_errors(self) -> ShowClickHouseErrors:
         return self._backend.show_clickhouse_errors
 
     @show_clickhouse_errors.setter
-    def show_clickhouse_errors(self, value: bool) -> None:
-        self._backend.show_clickhouse_errors = value
+    def show_clickhouse_errors(self, value: ShowClickHouseErrors | str | None) -> None:
+        self._backend.show_clickhouse_errors = coerce_show_clickhouse_errors(value)
 
     @property
     def _autogenerate_query_id(self) -> bool:

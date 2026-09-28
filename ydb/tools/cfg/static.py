@@ -30,6 +30,7 @@ from ydb.tools.cfg import base, types, utils
 from ydb.tools.cfg.templates import (
     dynamic_cfg_new_style,
     kikimr_cfg_for_dynamic_node,
+    kikimr_cfg_for_dynamic_node_new_style,
     kikimr_cfg_for_dynamic_slot,
     kikimr_cfg_for_static_node,
     kikimr_cfg_for_static_node_new_style,
@@ -568,6 +569,22 @@ class StaticConfigGenerator(object):
     @property
     def kikimr_cfg(self):
         if self.__is_dynamic_node:
+            if self.__cluster_details.use_new_style_kikimr_cfg:
+                return kikimr_cfg_for_dynamic_node_new_style(
+                    self.__node_broker_port,
+                    self._database,
+                    self.__ic_port,
+                    self.__grpc_port,
+                    self.__mon_port,
+                    self.__kikimr_home,
+                    self._enable_cores,
+                    self.__cluster_details.default_log_level,
+                    kikimr_binaries_base_path='/Berkanavt/kikimr',
+                    mon_address=self.__cluster_details.monitor_address,
+                    cert_params=self.__cluster_details.ic_cert_params,
+                    use_auth_token_file=self._use_auth_token_file,
+                )
+
             return kikimr_cfg_for_dynamic_node(
                 self.__node_broker_port,
                 self._database,

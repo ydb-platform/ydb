@@ -533,7 +533,7 @@ Y_UNIT_TEST(TestStreamTopSort) {
     const auto graph = setup.BuildGraph(pgmRoot);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;
@@ -590,7 +590,7 @@ Y_UNIT_TEST(TestStreamTop) {
     const auto graph = setup.BuildGraph(pgmSorted);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;
@@ -642,7 +642,7 @@ Y_UNIT_TEST(TestFlowTopSort) {
     const auto graph = setup.BuildGraph(pgmRoot);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;
@@ -699,7 +699,7 @@ Y_UNIT_TEST(TestFlowTop) {
     const auto graph = setup.BuildGraph(pgmSorted);
     const auto& value = graph->GetValue();
 
-    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<ui64>());
+    NYql::FastPartialSort(test.begin(), test.begin() + n, test.end(), std::greater<>());
     test.resize(n);
 
     std::vector<ui64> res;

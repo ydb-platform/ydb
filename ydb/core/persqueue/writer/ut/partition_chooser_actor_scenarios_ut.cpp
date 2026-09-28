@@ -481,7 +481,7 @@ struct TEnv {
         std::optional<ui32> prefered = std::nullopt)
     {
         auto actorId = Runtime.Register(new TSMPartitionChooserActor<TPipeCreator>(
-            Edge, Chooser, Graph, Converter, sourceId, prefered, {}));
+            Edge, Config, Chooser, Graph, Converter, sourceId, prefered, {}));
         Runtime.EnableScheduleForActor(actorId);
         Runtime.DispatchEvents();
         return actorId;

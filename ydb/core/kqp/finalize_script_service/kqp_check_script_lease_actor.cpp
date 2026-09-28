@@ -87,7 +87,7 @@ public:
         RefreshLeasePeriod = std::max(nodesCount, static_cast<size_t>(1)) * CHECK_PERIOD;
         HasNodesInfo = true;
 
-        YDB_LOG_DEBUG("Handle discover tenant nodes result, number of nodes new",
+        YDB_LOG_DEBUG("Handle discover tenant nodes result",
             {"logPrefix", LogPrefix()},
             {"nodesCount", nodesCount},
             {"refreshLeasePeriod", RefreshLeasePeriod});
@@ -99,7 +99,7 @@ public:
         const auto expiredLeasesCount = ev->Get()->ExpiredLeasesCount;
 
         if (!ev->Get()->Success) {
-            YDB_LOG_ERROR("Script execution lease refresh failed because expired leases were found",
+            YDB_LOG_ERROR("Script execution lease refresh failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"leases", expiredLeasesCount},
@@ -114,7 +114,7 @@ public:
 
     void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
         if (!ev->Get()->Success) {
-            YDB_LOG_ERROR("Script executions tables creation failed with",
+            YDB_LOG_ERROR("Script executions tables creation failed",
                 {"logPrefix", LogPrefix()},
                 {"issues", ev->Get()->Issues.ToOneLineString()});
             Schedule(CREATE_TABLES_PERIOD, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CreateTables)));
@@ -149,7 +149,7 @@ private:
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 
         if (!HasNodesInfo) {
-            YDB_LOG_DEBUG("Skip ScheduleRefreshScriptExecutions, node info is not arrived",
+            YDB_LOG_DEBUG("Skip ScheduleRefreshScriptExecutions, nodes info hasn't arrived yet",
                 {"logPrefix", LogPrefix()});
             return;
         }

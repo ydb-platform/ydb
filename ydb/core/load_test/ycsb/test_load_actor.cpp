@@ -470,7 +470,7 @@ public:
             actualDurationMs += test.Report.GetDurationMs();
         }
 
-        size_t rps = oks * 1000 / actualDurationMs ? actualDurationMs : 1;
+        size_t rps = oks * 1000 / (actualDurationMs ? actualDurationMs : 1);
 
         TIntrusivePtr<TEvLoad::TLoadReport> report(new TEvLoad::TLoadReport());
         report->Duration = duration;

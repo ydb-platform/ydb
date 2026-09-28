@@ -5,11 +5,9 @@
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
-
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
-
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
@@ -34,10 +32,10 @@ struct TFormedDirectReadResponse: public TSimpleRefCount<TFormedDirectReadRespon
 
 
 class TDirectReadSessionActor
-    : public TActorBootstrapped<TDirectReadSessionActor>
+    : public NPQ::TBaseActor<TDirectReadSessionActor>
     , private NPQ::TRlHelpers
-    , public NActors::IActorExceptionHandler
 {
+    using TBase = NPQ::TBaseActor<TDirectReadSessionActor>;
     using TClientMessage = Topic::StreamDirectReadMessage::FromClient;
 
     using TServerMessage = Topic::StreamDirectReadMessage::FromServer;
@@ -60,6 +58,13 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FRONT_PQ_READ;
+    }
+
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sessionCookie", Cookie},
+            {"consumer", ClientPath},
+            {"session", Session});
     }
 
 private:

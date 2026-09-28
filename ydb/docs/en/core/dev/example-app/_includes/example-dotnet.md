@@ -1,10 +1,11 @@
-# Example app in C# (.NET)
+# Example app in C# (.NET) {#csharp-app}
 
 This page contains a detailed description of the code of a [test app](https://github.com/ydb-platform/ydb-dotnet-examples) that uses the {{ ydb-short-name }} [C# (.NET) SDK](https://github.com/ydb-platform/ydb-dotnet-sdk).
 
 {% include [steps/01_init.md](steps/01_init.md) %}
 
 App code snippet for connecting to the database:
+
 
 ```c#
 using Ydb.Sdk.Ado;
@@ -13,9 +14,11 @@ await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Databas
 await using var connection = await dataSource.OpenConnectionAsync();
 ```
 
+
 {% include [steps/02_create_table.md](steps/02_create_table.md) %}
 
 To create tables, use `YdbCommand` with a DDL (Data Definition Language) YQL query:
+
 
 ```c#
 await using var command = new YdbCommand(connection)
@@ -50,9 +53,11 @@ await using var command = new YdbCommand(connection)
 await command.ExecuteNonQueryAsync();
 ```
 
+
 {% include [steps/03_write_queries.md](steps/03_write_queries.md) %}
 
 Code snippet for data insert/update:
+
 
 ```c#
 await using var command = new YdbCommand(@"
@@ -65,9 +70,11 @@ command.Parameters.Add(new YdbParameter("$release_date", YdbDbType.Date, DateTim
 await command.ExecuteNonQueryAsync();
 ```
 
+
 {% include [steps/04_query_processing.md](steps/04_query_processing.md) %}
 
 To read data with a YQL query, use the `ExecuteReaderAsync` method. Query parameters are passed through the `Parameters` collection of the `YdbCommand` object:
+
 
 ```c#
 await using var command = new YdbCommand(@"
@@ -82,9 +89,11 @@ command.Parameters.Add(new YdbParameter("$id", YdbDbType.Uint64, id));
 await using var reader = await command.ExecuteReaderAsync();
 ```
 
+
 {% include [steps/05_results_processing.md](steps/05_results_processing.md) %}
 
 The query result is processed via `DbDataReader`. Example of processing the result:
+
 
 ```c#
 while (await reader.ReadAsync())
@@ -96,7 +105,9 @@ while (await reader.ReadAsync())
 }
 ```
 
+
 For sequential row reading from another query:
+
 
 ```c#
 await using var command = new YdbCommand(

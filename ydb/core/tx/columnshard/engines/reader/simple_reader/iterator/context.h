@@ -35,14 +35,12 @@ private:
     TMutex Mutex;
     std::array<std::array<std::array<std::array<std::array<std::array<NCommon::TFetchingScriptOwner, 2>, 2>, 2>, 2>, 2>, 2> CacheFetchingScripts;
 
-    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(
-        const std::shared_ptr<NCommon::IDataSource>& source, const bool isFinalSyncPoint) override;
+    virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const NCommon::IDataSource& source, const bool isFinalSyncPoint) override;
     mutable std::optional<std::shared_ptr<TFetchingScript>> SourcesAggregationScript;
     mutable std::optional<std::shared_ptr<TFetchingScript>> RestoreResultScript;
 
     bool NeedDuplicateFiltering() const {
-        return GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::PREVENT_DUPLICATES &&
-               GetReadMetadata()->TableMetadataAccessor->NeedDuplicateFiltering();
+        return GetReadMetadata()->NeedDuplicateFiltering();
     }
 
 public:
@@ -77,12 +75,11 @@ public:
 
     virtual TString ProfileDebugString() const override;
 
-    void RegisterActors(const NCommon::ISourcesConstructor& sources);
+    void RegisterActors(NCommon::ISourcesConstructor& sources);
     void UnregisterActors();
 
-    NActors::TActorId GetDuplicatesManagerVerified() const {
+    NActors::TActorId GetDuplicatesManager() const {
         TGuard<TSpinLock> g(DuplicatesManagerLock);
-        AFL_VERIFY(DuplicatesManager);
         return DuplicatesManager;
     }
 

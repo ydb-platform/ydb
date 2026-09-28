@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import inspect
 from inspect import isfunction
 from typing import TYPE_CHECKING, Callable
 
+from ._compat import signature
 from .lazy_fixture import LazyFixtureWrapper
 
 if TYPE_CHECKING:
@@ -25,7 +25,7 @@ def _fill_unbound_params(
     """
 
     try:
-        sig = inspect.signature(func)
+        sig = signature(func)
     except (ValueError, TypeError):
         # Cowardly refuse to figure out the missing params
         return {}

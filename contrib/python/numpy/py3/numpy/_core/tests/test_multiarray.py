@@ -30,7 +30,7 @@ from numpy.testing import (
     assert_array_equal, assert_raises_regex, assert_array_almost_equal,
     assert_allclose, IS_PYPY, IS_WASM, IS_PYSTON, HAS_REFCOUNT,
     assert_array_less, runstring, temppath, suppress_warnings, break_cycles,
-    check_support_sve, assert_array_compare,
+    check_support_sve, assert_array_compare, IS_64BIT
     )
 from numpy.testing._private.utils import requires_memory, _no_tracing
 from numpy._core.tests._locales import CommaDecimalPointLocale
@@ -983,7 +983,7 @@ class TestCreation:
         assert_raises(ValueError, np.zeros, shape, dtype=np.int8)
         assert_raises(ValueError, np.ones, shape, dtype=np.int8)
 
-    @pytest.mark.skipif(np.dtype(np.intp).itemsize != 8,
+    @pytest.mark.skipif(not IS_64BIT,
                         reason="malloc may not fail on 32 bit systems")
     def test_malloc_fails(self):
         # This test is guaranteed to fail due to a too large allocation
@@ -1097,14 +1097,14 @@ class TestCreation:
                 return 1
 
             def __getitem__(self, index):
-                raise ValueError()
+                raise ValueError
 
         class Map:
             def __len__(self):
                 return 1
 
             def __getitem__(self, index):
-                raise KeyError()
+                raise KeyError
 
         a = np.array([Map()])
         assert_(a.shape == (1,))
@@ -1121,7 +1121,7 @@ class TestCreation:
                 if ind in [0, 1]:
                     return ind
                 else:
-                    raise IndexError()
+                    raise IndexError
         d = np.array([Point2(), Point2(), Point2()])
         assert_equal(d.dtype, np.dtype(object))
 
@@ -4765,7 +4765,7 @@ class TestArgmax:
             ([np.nan, 0, 1, 2, 3], 0),
             ([np.nan, 0, np.nan, 2, 3], 0),
             # To hit the tail of SIMD multi-level(x4, x1) inner loops
-            # on variant SIMD widthes
+            # on variant SIMD widths
             ([1] * (2*5-1) + [np.nan], 2*5-1),
             ([1] * (4*5-1) + [np.nan], 4*5-1),
             ([1] * (8*5-1) + [np.nan], 8*5-1),
@@ -4908,7 +4908,7 @@ class TestArgmin:
             ([np.nan, 0, 1, 2, 3], 0),
             ([np.nan, 0, np.nan, 2, 3], 0),
             # To hit the tail of SIMD multi-level(x4, x1) inner loops
-            # on variant SIMD widthes
+            # on variant SIMD widths
             ([1] * (2*5-1) + [np.nan], 2*5-1),
             ([1] * (4*5-1) + [np.nan], 4*5-1),
             ([1] * (8*5-1) + [np.nan], 8*5-1),
@@ -5372,6 +5372,13 @@ class TestLexsort:
             u, v = np.array(u, dtype='object'), np.array(v, dtype='object')
             assert_array_equal(idx, np.lexsort((u, v)))
 
+    def test_strings(self):  # gh-27984
+        for dtype in "TU":
+            surnames = np.array(['Hertz',    'Galilei', 'Hertz'], dtype=dtype)
+            first_names = np.array(['Heinrich', 'Galileo', 'Gustav'], dtype=dtype)
+            assert_array_equal(np.lexsort((first_names, surnames)), [1, 2, 0])
+
+
     def test_invalid_axis(self): # gh-7528
         x = np.linspace(0., 1., 42*3).reshape(42, 3)
         assert_raises(AxisError, np.lexsort, x, axis=2)
@@ -5476,7 +5483,7 @@ class TestIO:
 
     def test_roundtrip_repr(self, x):
         x = x.real.ravel()
-        s = "@".join(map(lambda x: repr(x)[11:-1], x))
+        s = "@".join((repr(x)[11:-1] for x in x))
         y = np.fromstring(s, sep="@")
         assert_array_equal(x, y)
 
@@ -8590,7 +8597,7 @@ class TestArrayCreationCopyArgument:
     def test__array__reference_leak(self):
         class NotAnArray:
             def __array__(self, dtype=None, copy=None):
-                raise NotImplementedError()
+                raise NotImplementedError
 
         x = NotAnArray()
 
@@ -8898,7 +8905,8 @@ class TestConversion:
         assert_equal(bool(np.array([False])), False)
         assert_equal(bool(np.array([True])), True)
         assert_equal(bool(np.array([[42]])), True)
-        assert_raises(ValueError, bool, np.array([1, 2]))
+
+    def test_to_bool_scalar_not_convertible(self):
 
         class NotConvertible:
             def __bool__(self):
@@ -8916,6 +8924,16 @@ class TestConversion:
 
         assert_raises(Error, bool, self_containing)  # previously stack overflow
         self_containing[0] = None  # resolve circular reference
+
+    def test_to_bool_scalar_size_errors(self):
+        with pytest.raises(ValueError, match=".*one element is ambiguous"):
+            bool(np.array([1, 2]))
+
+        with pytest.raises(ValueError, match=".*empty array is ambiguous"):
+            bool(np.empty((3, 0)))
+
+        with pytest.raises(ValueError, match=".*empty array is ambiguous"):
+            bool(np.empty((0,)))
 
     def test_to_int_scalar(self):
         # gh-9972 means that these aren't always the same
@@ -9712,7 +9730,8 @@ class TestArrayFinalize:
                 raise Exception(self)
 
         # a plain object can't be weakref'd
-        class Dummy: pass
+        class Dummy:
+            pass
 
         # get a weak reference to an object within an array
         obj_arr = np.array(Dummy())
@@ -9793,7 +9812,7 @@ def test_equal_subclass_no_override(op, dt1, dt2):
 
         def __array_wrap__(self, new, context=None, return_scalar=False):
             type(self).called_wrap += 1
-            return super().__array_wrap__(new)
+            return super().__array_wrap__(new, context, return_scalar)
 
     numpy_arr = np.zeros(5, dtype=dt1)
     my_arr = np.zeros(5, dtype=dt2).view(MyArr)
@@ -9979,7 +9998,7 @@ class TestAlignment:
         elif order is None:
             assert_(x.flags.c_contiguous, err_msg)
         else:
-            raise ValueError()
+            raise ValueError
 
     def test_various_alignments(self):
         for align in [1, 2, 3, 4, 8, 12, 16, 32, 64, None]:
@@ -10337,3 +10356,24 @@ class TestDevice:
             r"The stream argument in to_device\(\) is not supported"
         ):
             arr.to_device("cpu", stream=1)
+
+def test_array_interface_excess_dimensions_raises():
+    """Regression test for gh-27949: ensure too many dims raises ValueError instead of segfault."""
+    
+    # Dummy object to hold a custom __array_interface__
+    class DummyArray:
+        def __init__(self, interface):
+            # Attach the array interface dict to mimic an array
+            self.__array_interface__ = interface
+
+    # Create a base array (scalar) and copy its interface
+    base = np.array(42)  # base can be any scalar or array
+    interface = dict(base.__array_interface__)
+
+    # Modify the shape to exceed NumPy's dimension limit (NPY_MAXDIMS, typically 64)
+    interface['shape'] = tuple([1] * 136)  # match the original bug report 
+
+    dummy = DummyArray(interface)
+    # Now, using np.asanyarray on this dummy should trigger a ValueError (not segfault)
+    with pytest.raises(ValueError, match="dimensions must be within"):
+        np.asanyarray(dummy)

@@ -427,50 +427,6 @@ class ClusterConfigSelectionStateTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIn("final output", output)
 
-    async def test_operations_tab_renders_task_result_panel_after_completion(self):
-        app = Viewer()
-        app._state.selected_cluster_config = SelectedClusterConfig(
-            ConfigCandidate("cluster", "/tmp/cluster.yaml"),
-            ConfigValidation([], {"hosts": ["host1"], "erasure": "none"}),
-        )
-
-        async def act(
-            hosts,
-            config,
-            waiting=None,
-            bin_path=None,
-            do_not_init=None,
-            ignore_failed_stop=None,
-            console=None,
-        ):
-            with progress.MyProgress(console=console) as pbar:
-                task = await pbar.get_hidden_task().add_subtask("Install", total=1)
-                await task.update(advance=1)
-            return progress.TaskResult(
-                level=progress.TaskResultLevel.ERROR,
-                step_title="Install",
-                message="failed step",
-            )
-
-        with mock.patch("ydb.tools.mnc.viewer.main.install_command.act", act):
-            async with app.run_test() as pilot:
-                await app.run_action("open_operation('install')")
-                await pilot.pause()
-
-                pane = app.query_one(OperationsPane)
-                pane.query_one("#operations-run", Button).press()
-                await self._wait_for_operation_status(pilot, app, "FAIL")
-
-                self.assertFalse(pane.query_one("#operations-live").display)
-                self.assertIsNotNone(app._state.operation.result_renderable)
-                console = rich.console.Console(record=True)
-                console.print(pane._operation_output())
-
-        output = console.export_text()
-        self.assertIn("ERROR:", output)
-        self.assertIn("Install", output)
-        self.assertIn("failed step", output)
-
     def test_operation_result_renderable_shows_successful_steps(self):
         app = Viewer()
         result = progress.TaskResult(

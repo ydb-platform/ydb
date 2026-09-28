@@ -356,6 +356,23 @@ bool TryPQGetPartInfo(ui64 expectedStartOffset, ui64 expectedEndOffset, TTestCon
     return false;
 }
 
+ui64 GetLastWriteTimestamp(i32 partitionId, TTestContext& tc) {
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, new TEvPersQueue::TEvStatus(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvStatusResponse>(handle);
+    UNIT_ASSERT(result);
+
+    for (const auto& partition : result->Record.GetPartResult()) {
+        if (partition.GetPartition() == partitionId) {
+            return partition.GetLastWriteTimestampMs();
+        }
+    }
+
+    UNIT_FAIL("Partition " << partitionId << " is missing in status response");
+    return 0;
+}
+
 void WaitRetentionCleanup(TTestContext& tc,
                           ui64 expectedStartOffset,
                           ui64 expectedEndOffset,
@@ -4001,7 +4018,58 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
 
 }
 
+Y_UNIT_TEST(TestWriteTimestampAfterRestart) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
 
+    tc.Runtime->SetScheduledLimit(150);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+
+    PQTabletPrepare({.partitions = 1, .AddDefaultConsumer = false}, {}, tc);
+
+    const TInstant writeTimestamp = TInstant::MilliSeconds(1'000'000);
+    tc.Runtime->UpdateCurrentTime(writeTimestamp);
+
+    TVector<std::pair<ui64, TString>> data{{1, "abacaba"}};
+    CmdWrite(0, "sourceid0", data, tc);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+
+    tc.Runtime->UpdateCurrentTime(TInstant::MilliSeconds(5'000'000));
+    PQTabletRestart(tc);
+
+    PQGetPartInfo(0, 1, tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+}
+
+Y_UNIT_TEST(TestWriteTimestampAfterRestartOfCleanedUpPartition) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    SetEnableTopicRetentionDeleteLastBlob(tc);
+    tc.Runtime->SetScheduledLimit(500);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+
+    constexpr ui32 retentionSeconds = 5;
+    PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .AddDefaultConsumer = false}, {}, tc);
+
+    const TInstant writeTimestamp = TInstant::MilliSeconds(1'000'000);
+    tc.Runtime->UpdateCurrentTime(writeTimestamp);
+
+    TVector<std::pair<ui64, TString>> data{{1, "abacaba"}};
+    CmdWrite(0, "sourceid0", data, tc);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+
+    WaitRetentionCleanup(tc, 1, 1, retentionSeconds);
+    PQTabletRestart(tc);
+
+    PQGetPartInfo(1, 1, tc);
+    UNIT_ASSERT_VALUES_EQUAL(GetLastWriteTimestamp(0, tc), writeTimestamp.MilliSeconds());
+}
 
 Y_UNIT_TEST(TestWriteTimeLag) {
     TTestContext tc;
@@ -4227,8 +4295,13 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
 
         static ui32 pqConfigVersion = 1'000;
 
-        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1, .specVersion=pqConfigVersion++},
-                        {{"user1", true}, {"user2", true}}, tc);
+        TTabletPreparationParameters prepareParams{
+            .maxCountInPartition=100,
+            .deleteTime=TDuration::Days(2).Seconds(),
+            .partitions=1,
+            .specVersion=pqConfigVersion++,
+        };
+        PQTabletPrepare(prepareParams, {{"user1", true}, {"user2", true}}, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, true);
 
         // Reset tablet cache
@@ -4237,8 +4310,6 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse* readResult = nullptr;
         THolder<TEvPersQueue::TEvRequest> readRequest;
-        TEvPersQueue::TEvUpdateConfigResponse* consumerDeleteResult = nullptr;
-        THolder<TEvPersQueue::TEvUpdateConfig> consumerDeleteRequest;
 
         // Read request
         {
@@ -4253,20 +4324,12 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             read->SetTimeoutMs(5000);
         }
 
-        // Consumer delete request
-        {
-            consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
-            consumerDeleteRequest->MutableRecord()->SetTxId(42);
-            auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
-            cfg.SetVersion(pqConfigVersion++);
-            cfg.AddPartitionIds(0);
-            cfg.AddPartitions()->SetPartitionId(0);
-            cfg.SetLocalDC(true);
-            cfg.SetTopic("topic");
-            auto& cons = *cfg.AddConsumers();
-            cons.SetName("user2");
-            cons.SetImportant(true);
-        }
+        TVector<TConsumerPreparationParameters> remainingConsumers{{
+            .Name = "user2",
+            .Important = true,
+        }};
+        auto consumerDeleteConfig = MakePQTabletConfig(
+            prepareParams, remainingConsumers, *tc.Runtime, pqConfigVersion++);
 
         TActorId edge = tc.Runtime->AllocateEdgeActor();
 
@@ -4280,13 +4343,8 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         });
 
         // Delete consumer while read request is still in progress
-        tc.Runtime->SendToPipe(tc.TabletId, edge, consumerDeleteRequest.Release(), 0, GetPipeConfigWithRetries());
-        consumerDeleteResult = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
-        {
-            //Cerr << "Got consumer delete response: " << consumerDeleteResult->Record << Endl;
-            UNIT_ASSERT(consumerDeleteResult->Record.HasStatus());
-            UNIT_ASSERT_VALUES_EQUAL((int)consumerDeleteResult->Record.GetStatus(), (int)NKikimrPQ::EStatus::OK);
-        }
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, edge, consumerDeleteConfig,
+                           tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
 
         // Resend intercepted blob responses and wait for read result
         captureBlobResponsesObserver.Remove();

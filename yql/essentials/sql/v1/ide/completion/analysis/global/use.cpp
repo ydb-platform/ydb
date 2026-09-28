@@ -1,6 +1,6 @@
 #include "use.h"
 
-#include "evaluate.h"
+#include <yql/essentials/sql/v1/ide/analysis/evaluate.h>
 
 #include <yql/essentials/sql/v1/ide/pure_ast/narrowing_visitor.h>
 

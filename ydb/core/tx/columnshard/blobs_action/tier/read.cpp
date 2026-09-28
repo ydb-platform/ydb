@@ -16,7 +16,9 @@ void TReadingAction::DoRetryRead(const TBlobRange& range) {
     auto hRequest = std::make_unique<IEventHandle>(NActors::TActorId(), TActorContext::AsActorContext().SelfID, request.release());
     TAutoPtr<TEventHandle<NWrappers::NExternalStorage::TEvGetObjectRequest>> evPtr(
         (TEventHandle<NWrappers::NExternalStorage::TEvGetObjectRequest>*)hRequest.release());
-    ExternalStorageOperator->Execute(evPtr);
+    auto storageOperator = ExternalStorageOperator->Get();
+    AFL_VERIFY(storageOperator);
+    storageOperator->Execute(evPtr);
 }
 
 }   // namespace NKikimr::NOlap::NBlobOperations::NTier

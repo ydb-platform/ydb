@@ -212,7 +212,7 @@ AWS_COMMON_API
 int aws_array_list_ensure_capacity(struct aws_array_list *AWS_RESTRICT list, size_t index);
 
 /**
- * Copies the the memory pointed to by val into the array at index. If in dynamic mode, the size will grow by a factor
+ * Copies the memory pointed to by val into the array at index. If in dynamic mode, the size will grow by a factor
  * of two when the array is full. In static mode, AWS_ERROR_INVALID_INDEX will be raised if the index is past the bounds
  * of the array.
  */

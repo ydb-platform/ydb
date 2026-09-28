@@ -919,6 +919,41 @@ message TPersistentSnapshot {
     optional uint64 TimeoutMs = 7;
 }
 
+// Info about the state of a writer to a lock.
+message TWriteSeqNumState {
+    optional uint64 WriterIndex = 1;
+    optional uint64 WriteSeqNum = 2;
+    // Opaque serialized NKikimrDataEvents.TEvWriteResult
+    optional bytes SerializedResult = 3;
+}
+
+// Info about a lock being transferred from src to dst during split/merge.
+message TSplitSrcLockInfo {
+    // Info about locks further up the ancestor chain.
+    message TAncestorLock {
+        optional uint64 TabletId        = 1;  // ancestor shard
+        optional uint32 Generation      = 2;
+        optional uint64 Counter         = 3;
+        optional uint64 CreateTimestamp = 4;
+        optional uint64 Flags           = 5;
+        repeated TWriteSeqNumState WriteSeqNumStates = 6;
+    }
+
+    optional uint64 LockId          = 1;
+    optional uint32 LockNodeId      = 2;
+    optional uint32 Generation      = 3;
+    optional uint64 Counter         = 4;
+    optional uint64 CreateTimestamp = 5;
+    optional uint64 Flags           = 6;
+
+    repeated TWriteSeqNumState WriteSeqNumStates = 7;
+    repeated uint64 Conflicts = 8 [packed = true];
+    repeated TAncestorLock AncestorLocks = 9;
+
+    repeated NKikimrProto.TPathID ReadTables = 10;
+    repeated NKikimrProto.TPathID WriteTables = 11;
+}
+
 // Src datashard -> Dst datashard
 message TEvSplitTransferSnapshot {
     optional uint64 OperationCookie = 1;
@@ -945,6 +980,7 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccImmediateWriteEdgeStep = 17;
     optional uint64 MvccImmediateWriteEdgeTxId = 18;
     optional bool MvccPerformedUnprotectedReads = 19;
+    repeated TSplitSrcLockInfo Locks = 20;
 }
 
 message TEvSplitTransferSnapshotAck {
@@ -2143,6 +2179,10 @@ message TEvBuildFulltextDictRequest {
     // [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the dict scan must skip these
     // to locate the token and to group/compact segments per (prefix, token).
     repeated string PrefixColumns = 18;
+    // Statistics table is required for prefixed indexes with relevance
+    optional string StatsTableName = 19;
+    optional bool SkipFirstPrefix = 20;
+    optional bool SkipLastPrefix = 21;
 }
 
 message TEvBuildFulltextDictResponse {
@@ -2164,6 +2204,14 @@ message TEvBuildFulltextDictResponse {
     optional uint64 FirstTokenRows = 10;
     optional string LastToken = 11;
     optional uint64 LastTokenRows = 12;
+
+    // First and last prefix document statistics if skipped in the scan
+    optional string FirstPrefix = 13;
+    optional uint64 FirstPrefixDocCount = 14;
+    optional uint64 FirstPrefixSumDocLength = 15;
+    optional string LastPrefix = 16;
+    optional uint64 LastPrefixDocCount = 17;
+    optional uint64 LastPrefixSumDocLength = 18;
 }
 
 message TEvCdcStreamScanRequest {
@@ -2740,6 +2788,7 @@ message TInMemoryLockInfo {
     optional uint64 VictimQuerySpanId = 10;
     optional uint64 BreakerQuerySpanId = 11;
     optional uint32 BreakerNodeId = 12;
+    repeated TWriteSeqNumState WriteSeqNumStates = 13;
 }
 
 // In-memory ranges associated with the lock

@@ -200,7 +200,7 @@ async def retry_operation_async(  # pylint: disable=W1113
     :param args: A tuple with positional arguments to be passed into the coroutine.
     :param kwargs: A dictionary with keyword arguments to be passed into the coroutine.
 
-    Returns awaitable result of coroutine. If retries are not succussful exception is raised.
+    Returns awaitable result of coroutine. If retries are not successful exception is raised.
     """
     backoff_ms: Optional[int] = None
 

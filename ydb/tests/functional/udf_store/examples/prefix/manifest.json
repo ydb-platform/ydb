@@ -1,0 +1,27 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Prefix",
+  "module_extension": "wasm",
+  "required_libraries": [
+    "sdk"
+  ],
+  "objects": [
+    {
+      "name": "Prefix",
+      "create_export": "prefix_create",
+      "destroy_export": "prefix_destroy",
+      "methods": [
+        {
+          "name": "Apply",
+          "export": "prefix_apply",
+          "yql_binding": "type_config_callable",
+          "argument_types": [
+            "Optional<String>"
+          ],
+          "result_type": "Optional<String>"
+        }
+      ]
+    }
+  ]
+}

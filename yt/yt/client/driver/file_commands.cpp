@@ -1,10 +1,15 @@
 #include "file_commands.h"
 #include "config.h"
+#include "driver.h"
 #include "helpers.h"
 
 #include <yt/yt/client/api/config.h>
+#include <yt/yt/client/api/file_client.h>
 #include <yt/yt/client/api/file_reader.h>
 #include <yt/yt/client/api/file_writer.h>
+
+#include <yt/yt/client/signature/signature.h>
+#include <yt/yt/client/signature/validator.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -122,6 +127,8 @@ void TWriteFileCommand::DoExecute(ICommandContextPtr context)
 
     auto input = context->Request().InputStream;
 
+    i64 maxAttachmentSize = context->GetConfig()->MaxAttachmentSize;
+
     while (true) {
         auto data = WaitFor(input->Read())
             .ValueOrThrow();
@@ -130,8 +137,7 @@ void TWriteFileCommand::DoExecute(ICommandContextPtr context)
             break;
         }
 
-        WaitFor(writer->Write(std::move(data)))
-            .ThrowOnError();
+        WriteInBatches(writer, data, maxAttachmentSize);
     }
 
     WaitFor(writer->Close())
@@ -191,6 +197,74 @@ void TPutFileToCacheCommand::DoExecute(ICommandContextPtr context)
         .ValueOrThrow();
     context->ProduceOutputValue(BuildYsonStringFluently()
         .Value(result.Path));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionFileCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("path", &TThis::Path);
+    registrar.Parameter("ranges", &TThis::Ranges);
+
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "fetch_cookie_node_descriptors",
+        [] (TThis* command) -> auto& {
+            return command->Options.FetchCookieNodeDescriptors;
+        })
+        .Optional(/*init*/ false);
+}
+
+void TPartitionFileCommand::DoExecute(ICommandContextPtr context)
+{
+    PutMethodInfoInTraceContext("partition_file");
+
+    auto partitions = WaitFor(context->GetClient()->PartitionFile(Path, Ranges, Options))
+        .ValueOrThrow();
+
+    context->ProduceOutputValue(NYson::ConvertToYsonString(partitions));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TReadFilePartitionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cookie", &TThis::Cookie);
+
+    registrar.Parameter("file_reader", &TThis::FileReader)
+        .Default(nullptr);
+}
+
+void TReadFilePartitionCommand::DoExecute(ICommandContextPtr context)
+{
+    Options.Config = UpdateYsonStruct(
+        context->GetConfig()->FileReader,
+        FileReader);
+
+    PutMethodInfoInTraceContext("read_file_partition");
+
+    auto cookie = ConvertTo<TFilePartitionCookiePtr>(NYson::TYsonString(Cookie));
+
+    auto valid = WaitFor(context->GetDriver()->GetSignatureValidator()->Validate(cookie.Underlying()))
+        .ValueOrThrow();
+    if (!valid) {
+        THROW_ERROR_EXCEPTION("Signature validation failed");
+    }
+
+    auto reader = WaitFor(context->GetClient()->CreateFilePartitionReader(cookie, Options))
+        .ValueOrThrow();
+
+    auto output = context->Request().OutputStream;
+    while (true) {
+        auto block = WaitFor(reader->Read())
+            .ValueOrThrow();
+
+        if (!block) {
+            break;
+        }
+
+        WaitFor(output->Write(block))
+            .ThrowOnError();
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

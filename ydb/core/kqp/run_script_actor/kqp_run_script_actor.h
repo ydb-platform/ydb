@@ -34,6 +34,7 @@ struct TKqpRunScriptActorSettings {
     TDuration LeaseDuration;
     TDuration ResultsTtl;
     TDuration ProgressStatsPeriod;
+    std::optional<TDuration> CheckpointInterval;
     TIntrusivePtr<TKqpCounters> Counters;
     bool SaveQueryPhysicalGraph = false;
     std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;

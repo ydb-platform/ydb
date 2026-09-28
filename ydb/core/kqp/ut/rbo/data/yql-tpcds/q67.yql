@@ -33,7 +33,7 @@ FROM (
             d_qoy,
             d_moy,
             s_store_id,
-            Sum(Coalesce(ss_sales_price * ss_quantity, 0)) AS sumsales
+            Sum(Coalesce(ss_sales_price * ss_quantity, CAST(0 AS Decimal(7,2)))) AS sumsales
         FROM
             `/Root/test/ds/store_sales`
         ,

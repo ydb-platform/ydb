@@ -357,6 +357,8 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     const TRowDispatcherSettings Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     TActorId CompileServiceActorId;
+    TActorId LocalCoordinatorActorId;
+    TActorId LeaderElectionActorId;
     TMaybe<TActorId> CoordinatorActorId;
     ui64 CoordinatorGeneration = 0;
     TSet<TActorId> CoordinatorChangedSubscribers;
@@ -466,6 +468,7 @@ public:
     );
 
     void Bootstrap();
+    void PassAway() override;
 
     static constexpr char ActorName[] = "FQ_ROW_DISPATCHER";
 
@@ -508,6 +511,7 @@ public:
 
     STRICT_STFUNC(
         StateFunc, {
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
         hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
@@ -571,17 +575,17 @@ TRowDispatcher::TRowDispatcher(
 
 void TRowDispatcher::Bootstrap() {
     Become(&TRowDispatcher::StateFunc);
-    YDB_LOG_DEBUG("Successfully bootstrapped row dispatcher, id tenant",
+    YDB_LOG_DEBUG("Successfully bootstrapped row dispatcher",
         {"logPrefix", LogPrefix},
         {"selfId", SelfId()},
         {"tenant", Tenant});
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
+    LocalCoordinatorActorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
     auto leaderElection = !config.GetCoordinationNodePath().empty()
-        ? NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
-        : NewLocalLeaderElection(SelfId(), coordinatorId, Counters);
-    Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
+        ? NewLeaderElection(SelfId(), LocalCoordinatorActorId, config, CredentialsProviderFactory, Driver, Tenant, Counters)
+        : NewLocalLeaderElection(SelfId(), LocalCoordinatorActorId, Counters);
+    LeaderElectionActorId = Register(leaderElection.release(), TMailboxType::HTSwap, NKikimr::AppData()->SystemPoolId);
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
@@ -600,15 +604,27 @@ void TRowDispatcher::Bootstrap() {
     NodesTracker.Init(SelfId());
 }
 
+void TRowDispatcher::PassAway() {
+    for (const auto& [_, topic] : TopicSessions) {
+        for (const auto& [sessionId, session] : topic.Sessions) {
+            Send(sessionId, new NActors::TEvents::TEvPoisonPill());
+        }
+    }
+    Send(LeaderElectionActorId, new NActors::TEvents::TEvPoison());
+    Send(LocalCoordinatorActorId, new NActors::TEvents::TEvPoison());
+    Send(CompileServiceActorId, new NActors::TEvents::TEvPoison());
+    TActorBootstrapped::PassAway();
+}
+
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
-    LWPROBE(CoordinatorChanged, ev->Sender.ToString(), ev->Get()->Generation, ev->Get()->CoordinatorActorId.ToString(), CoordinatorGeneration, CoordinatorActorId->ToString());
-    YDB_LOG_DEBUG("Coordinator changed, old leader new generation",
+    LWPROBE(CoordinatorChanged, ev->Sender.ToString(), ev->Get()->Generation, ev->Get()->CoordinatorActorId.ToString(), CoordinatorGeneration, CoordinatorActorId ? CoordinatorActorId->ToString() : TString());
+    YDB_LOG_DEBUG("Coordinator changed",
         {"logPrefix", LogPrefix},
         {"coordinatorActorId", CoordinatorActorId},
         {"evCoordinatorActorId", ev->Get()->CoordinatorActorId},
         {"generation", ev->Get()->Generation});
     if (ev->Get()->Generation < CoordinatorGeneration) {
-        YDB_LOG_ERROR("New generation is less previous ignore updates",
+        YDB_LOG_ERROR("New generation is less than previous, ignore updates",
             {"logPrefix", LogPrefix},
             {"generation", ev->Get()->Generation},
             {"coordinatorGeneration", CoordinatorGeneration});
@@ -627,7 +643,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LWPROBE(NodeConnected, ev->Sender.ToString(), ev->Get()->NodeId);
-    YDB_LOG_DEBUG("EvNodeConnected, node id",
+    YDB_LOG_DEBUG("EvNodeConnected",
         {"logPrefix", LogPrefix},
         {"nodeId", ev->Get()->NodeId});
     Metrics.NodesReconnect->Inc();
@@ -639,7 +655,7 @@ void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LWPROBE(NodeDisconnected, ev->Sender.ToString(), ev->Get()->NodeId);
-    YDB_LOG_DEBUG("TEvNodeDisconnected, node id",
+    YDB_LOG_DEBUG("TEvNodeDisconnected",
         {"logPrefix", LogPrefix},
         {"nodeId", ev->Get()->NodeId});
     Metrics.NodesReconnect->Inc();
@@ -649,7 +665,7 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
     }
     TVector<TActorId> toDelete;
     if (isTimeout) {
-        YDB_LOG_DEBUG("Node disconnected, node id is timeout",
+        YDB_LOG_DEBUG("Node disconnected, reached timeout",
             {"logPrefix", LogPrefix},
             {"nodeId", ev->Get()->NodeId});
         for (auto& [actorId, consumer] : Consumers) {
@@ -666,7 +682,7 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LWPROBE(UndeliveredStart, ev->Sender.ToString(), ev->Get()->Reason, ev->Cookie);
-    YDB_LOG_TRACE("TEvUndelivered, from reason",
+    YDB_LOG_TRACE("TEvUndelivered",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"reason", ev->Get()->Reason});
@@ -919,7 +935,7 @@ void TRowDispatcher::UpdateReadActorsInternalState() {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    YDB_LOG_DEBUG("Received TEvStartSession from read group topicPath part id query id cookie",
+    YDB_LOG_DEBUG("Received TEvStartSession from read group",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"Record.GetSource().GetReadGroup", ev->Get()->Record.GetSource().GetReadGroup()},
@@ -943,7 +959,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 {"logPrefix", LogPrefix});
             return;
         }
-        YDB_LOG_WARN("Consumer already exists, new consumer with new generation current remove old consumer, sender topicPath cookie",
+        YDB_LOG_WARN("Consumer already exists, remove old consumer",
             {"logPrefix", LogPrefix},
             {"cookie", ev->Cookie},
             {"generation", it->second->Generation},
@@ -969,7 +985,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
         if (topicSessionInfo.Sessions.empty()) {
-            YDB_LOG_DEBUG("Create new session: read group topic part id",
+            YDB_LOG_DEBUG("Create new session",
                 {"logPrefix", LogPrefix},
                 {"readGroup", source.GetReadGroup()},
                 {"topicPath", source.GetTopicPath()},
@@ -1004,7 +1020,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStartSession>();
         event->Record.CopyFrom(ev->Get()->Record);
-        Send(new IEventHandle(sessionActorId, ev->Sender, event.release(), 0));
+        Send(new IEventHandle(sessionActorId, ev->Sender, event.release(), 0, consumerInfo->Generation));
     }
     consumerInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvStartSessionAck(consumerInfo->Proto), consumerInfo->Generation);
     Metrics.ClientsCount->Set(Consumers.size());
@@ -1013,7 +1029,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        YDB_LOG_WARN("Ignore (no consumer) TEvGetNextBatch from part id",
+        YDB_LOG_WARN("Ignore (no consumer) TEvGetNextBatch",
             {"logPrefix", LogPrefix},
             {"sender", ev->Sender},
             {"partitionId", ev->Get()->Record.GetPartitionId()});
@@ -1021,7 +1037,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     }
     auto& session = it->second;
     LWPROBE(GetNextBatch, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), session->QueryId, ev->Get()->Record.ByteSizeLong());
-    YDB_LOG_TRACE("Received TEvGetNextBatch from part id query id",
+    YDB_LOG_TRACE("Received TEvGetNextBatch",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"partitionId", ev->Get()->Record.GetPartitionId()},
@@ -1046,7 +1062,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        YDB_LOG_WARN("Consumer not found, sender part id sending TEvNoSession",
+        YDB_LOG_WARN("Consumer not found, sending TEvNoSession",
             {"logPrefix", LogPrefix},
             {"sender", ev->Sender},
             {"partitionId", ev->Get()->Record.GetPartitionId()});
@@ -1054,7 +1070,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
         return;
     }
     LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
-    YDB_LOG_TRACE("Received TEvHeartbeat from part id query id",
+    YDB_LOG_TRACE("Received TEvHeartbeat",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"partitionId", ev->Get()->Record.GetPartitionId()},
@@ -1063,7 +1079,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
-    YDB_LOG_DEBUG("Received TEvNoSession from generation",
+    YDB_LOG_DEBUG("Received TEvNoSession",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"cookie", ev->Cookie});
@@ -1081,23 +1097,23 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
 template <class TEventPtr>
 bool TRowDispatcher::CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev) {
     if (ev->Cookie != consumer->Generation) {
-        YDB_LOG_WARN("Wrong message generation sender cookie session generation query id",
+        YDB_LOG_WARN("Wrong message generation",
             {"logPrefix", LogPrefix},
             {"typeName", typeid(TEventPtr).name()},
             {"sender", ev->Sender},
             {"cookie", ev->Cookie},
-            {"Generation", consumer->Generation},
-            {"QueryId", consumer->QueryId});
+            {"generation", consumer->Generation},
+            {"queryId", consumer->QueryId});
         return false;
     }
     if (!consumer->EventsQueue.OnEventReceived(ev)) {
         const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-        YDB_LOG_WARN("Wrong seq num, ignore message seqNo from query id",
+        YDB_LOG_WARN("Wrong seq num, ignore message",
             {"logPrefix", LogPrefix},
             {"typeName", typeid(TEventPtr).name()},
             {"seqNo", meta.GetSeqNo()},
             {"sender", ev->Sender},
-            {"QueryId", consumer->QueryId});
+            {"queryId", consumer->QueryId});
         return false;
     }
     return true;
@@ -1113,7 +1129,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     }
 
     LWPROBE(StopSession, ev->Sender.ToString(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
-    YDB_LOG_DEBUG("Received TEvStopSession from topic query id",
+    YDB_LOG_DEBUG("Received TEvStopSession",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"topicPath", ev->Get()->Record.GetSource().GetTopicPath()},
@@ -1127,18 +1143,18 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
     auto consumerIt = Consumers.find(readActorId);
     if (consumerIt == Consumers.end()) {
-        YDB_LOG_ERROR("Ignore (no consumer) DeleteConsumer, read actor id",
+        YDB_LOG_ERROR("Ignore (no consumer) DeleteConsumer",
             {"logPrefix", LogPrefix},
             {"readActorId", readActorId});
         return;
     }
 
     const auto& consumer = consumerIt->second;
-    YDB_LOG_DEBUG("DeleteConsumer, readActorId query id partitions size",
+    YDB_LOG_DEBUG("DeleteConsumer",
         {"logPrefix", LogPrefix},
         {"readActorId", readActorId},
-        {"QueryId", consumer->QueryId},
-        {"Partitions.size", consumer->Partitions.size()});
+        {"queryId", consumer->QueryId},
+        {"partitionsSize", consumer->Partitions.size()});
     for (auto& [partitionId, partition] : consumer->Partitions) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = consumer->SourceParams;
@@ -1155,7 +1171,7 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
             TTopicSessionInfo& topicSessionInfo = sessionIt->second;
             TSessionInfo& sessionInfo = topicSessionInfo.Sessions[partition.TopicSessionId];
             if (!sessionInfo.Consumers.erase(consumer->ReadActorId)) {
-                YDB_LOG_ERROR("Wrong readActorId no such consumer",
+                YDB_LOG_ERROR("Wrong readActorId, no such consumer",
                     {"logPrefix", LogPrefix},
                     {"ReadActorId", consumer->ReadActorId});
             }
@@ -1190,7 +1206,7 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
 
 void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {
     LWPROBE(TryConnect, ev->Sender.ToString(), ev->Get()->NodeId);
-    YDB_LOG_TRACE("TEvTryConnect to node id",
+    YDB_LOG_TRACE("TEvTryConnect",
         {"logPrefix", LogPrefix},
         {"nodeId", ev->Get()->NodeId});
     NodesTracker.TryConnect(ev->Get()->NodeId);
@@ -1199,7 +1215,7 @@ void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {
 void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
     auto it = ConsumersByEventQueueId.find(ev->Get()->EventQueueId);
     if (it == ConsumersByEventQueueId.end()) {
-        YDB_LOG_TRACE("No consumer with EventQueueId",
+        YDB_LOG_TRACE("No consumer with such EventQueueId",
             {"logPrefix", LogPrefix},
             {"eventQueueId", ev->Get()->EventQueueId});
         return;
@@ -1209,7 +1225,7 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
 
     bool needSend = sessionInfo->EventsQueue.Heartbeat();
     if (needSend) {
-        YDB_LOG_TRACE("Send TEvHeartbeat to query id",
+        YDB_LOG_TRACE("Send TEvHeartbeat to query",
             {"logPrefix", LogPrefix},
             {"readActorId", sessionInfo->ReadActorId},
             {"queryId", sessionInfo->QueryId});
@@ -1221,7 +1237,7 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
-        YDB_LOG_WARN("Ignore (no consumer) TEvNewDataArrived from part id",
+        YDB_LOG_WARN("Ignore (no consumer) TEvNewDataArrived",
             {"logPrefix", LogPrefix},
             {"sender", ev->Sender},
             {"partitionId", ev->Get()->Record.GetPartitionId()});
@@ -1229,14 +1245,16 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) 
     }
     auto consumerInfoPtr = it->second;
     LWPROBE(NewDataArrived, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), consumerInfoPtr->QueryId, consumerInfoPtr->Generation, ev->Get()->Record.ByteSizeLong());
-    YDB_LOG_TRACE("Forward TEvNewDataArrived from to query id",
+    YDB_LOG_TRACE("Forward TEvNewDataArrived",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"readActorId", ev->Get()->ReadActorId},
         {"queryId", consumerInfoPtr->QueryId});
     auto partitionIt = consumerInfoPtr->Partitions.find(ev->Get()->Record.GetPartitionId());
-    if (partitionIt == consumerInfoPtr->Partitions.end()) {
-        // Ignore TEvNewDataArrived because read actor now read others partitions.
+    if (partitionIt == consumerInfoPtr->Partitions.end()
+        || partitionIt->second.TopicSessionId != ev->Sender
+        || consumerInfoPtr->Generation != ev->Cookie) {
+        // A topic session can still have events in flight when its consumer is replaced.
         return;
     }
     partitionIt->second.PendingNewDataArrived = true;
@@ -1255,17 +1273,18 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     }
     auto consumerInfoPtr = it->second;
     LWPROBE(MessageBatch, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), consumerInfoPtr->QueryId, consumerInfoPtr->Generation, ev->Get()->Record.ByteSizeLong());
-    YDB_LOG_TRACE("Forward TEvMessageBatch from to query id",
+    YDB_LOG_TRACE("Forward TEvMessageBatch",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"readActorId", ev->Get()->ReadActorId},
         {"queryId", consumerInfoPtr->QueryId});
-    Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     auto partitionIt = consumerInfoPtr->Partitions.find(ev->Get()->Record.GetPartitionId());
-    if (partitionIt == consumerInfoPtr->Partitions.end()) {
-        // Ignore TEvMessageBatch because read actor now read others partitions.
+    if (partitionIt == consumerInfoPtr->Partitions.end()
+        || partitionIt->second.TopicSessionId != ev->Sender
+        || consumerInfoPtr->Generation != ev->Cookie) {
         return;
     }
+    Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     partitionIt->second.PendingGetNextBatch = false;
     consumerInfoPtr->Counters.MessageBatch++;
     consumerInfoPtr->EventsQueue.Send(ev->Release().Release(), it->second->Generation);
@@ -1280,9 +1299,15 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
             {"readActorId", ev->Get()->ReadActorId});
         return;
     }
+    const auto partitionIt = it->second->Partitions.find(ev->Get()->Record.GetPartitionId());
+    if (partitionIt == it->second->Partitions.end()
+        || partitionIt->second.TopicSessionId != ev->Sender
+        || it->second->Generation != ev->Cookie) {
+        return;
+    }
     LWPROBE(SessionError, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     ++*Metrics.ErrorsCount;
-    YDB_LOG_TRACE("Forward TEvSessionError from to query id",
+    YDB_LOG_TRACE("Forward TEvSessionError",
         {"logPrefix", LogPrefix},
         {"sender", ev->Sender},
         {"readActorId", ev->Get()->ReadActorId},
@@ -1291,7 +1316,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     if (ev->Get()->IsFatalError) {
         auto consumerIt = Consumers.find(ev->Get()->ReadActorId);
         if (consumerIt == Consumers.end()) {
-            YDB_LOG_ERROR("Ignore (no consumer) DeleteConsumer, read actor id",
+            YDB_LOG_ERROR("Ignore (no consumer) DeleteConsumer",
                 {"logPrefix", LogPrefix},
                 {"readActorId", ev->Get()->ReadActorId});
             return;
@@ -1339,7 +1364,7 @@ void TRowDispatcher::PrintStateToLog() {
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
-        YDB_LOG_DEBUG("Dump logPrefix, #_buf.SubString(offset, PrintStateToLogSplitSize)",
+        YDB_LOG_DEBUG("Dump state",
             {"logPrefix", LogPrefix},
             {"state", buf.SubString(offset, PrintStateToLogSplitSize)});
     }
@@ -1441,7 +1466,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev
     sessionInfo.Stat.Add(ev->Get()->Stat.Common);
     for (const auto& clientStat : ev->Get()->Stat.Clients) {
         auto it = sessionInfo.Consumers.find(clientStat.ReadActorId);
-        if (it == sessionInfo.Consumers.end()) {
+        if (it == sessionInfo.Consumers.end() || it->second->Generation != clientStat.Generation) {
             continue;
         }
         auto consumerInfoPtr = it->second;
@@ -1475,7 +1500,7 @@ void TRowDispatcher::UpdateCpuTime() {
     for (auto& [actorId, consumer] : Consumers) {
         consumer->CpuMicrosec += diff;
     }
-    YDB_LOG_TRACE("UpdateCpuTime, currentCpuTime diff",
+    YDB_LOG_TRACE("UpdateCpuTime",
         {"logPrefix", LogPrefix},
         {"currentCpuTime", currentCpuTime},
         {"diff", diff});

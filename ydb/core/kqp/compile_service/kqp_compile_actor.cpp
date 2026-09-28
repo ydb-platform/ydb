@@ -1,5 +1,6 @@
 #include "kqp_compile_service.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -87,13 +88,12 @@ public:
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UserRequestContext(userRequestContext)
-        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
+        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "Compile query")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
         , QueryAst(std::move(queryAst))
-        , EnforcedSqlVersion(tableServiceConfig.GetEnforceSqlVersionV1())
-        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO())
+        , EnableNewRBO(tableServiceConfig.GetEnableNewRBO() && !queryId.Settings.IsAnalyze)
         , EnableFallbackToYqlOptimizer(tableServiceConfig.GetEnableFallbackToYqlOptimizer())
         , UsePessimisticLocks(usePessimisticLocks)
     {
@@ -112,19 +112,8 @@ public:
 
         config->ApplyServiceConfig(tableServiceConfig);
 
-        if (tableServiceConfig.GetSqlVersion() != 0) {
-            EnforcedSqlVersion = false;
-        } else if (EnforcedSqlVersion) {
-            YDB_LOG_DEBUG("Enforced SQL version 1, current sql",
-                {"version", tableServiceConfig.GetSqlVersion()},
-                {"queryText", GetQueryTextForLog(QueryId.Text)});
-
-            config->SetSqlVersion(1);
-        } else {
-            EnforcedSqlVersion = false;
-        }
-
-        // This is either the default setting or the explicit exclusion of a new RBO when compilation fails and recompilation is attempted.
+        // ANALYZE scans use UDAF factories unsupported by new RBO. Select the
+        // YQL optimizer on their first attempt, as well as on fallback retries.
         config->SetEnableNewRBO(EnableNewRBO);
 
         if (QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT || QueryId.Settings.QueryType == NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY) {
@@ -142,6 +131,9 @@ public:
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
             config->_KqpEnableSpilling = false;
+            config->OptValidateStreamingCheckpoints = true;
+        } else {
+            config->OptValidateStreamingCheckpoints = false;
         }
 
         if (UsePessimisticLocks) {
@@ -231,9 +223,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, GetYdbStatus(result));
 
         PassAway();
     }
@@ -373,14 +363,14 @@ private:
     }
 
     IKqpHost::TPrepareSettings PrepareCompilationSettings(const TActorContext &ctx) {
-        // If CurrentSqlVersion differs from the frozen Config, create a new Config with updated SqlVersion
         TKqpRequestCounters::TPtr counters = new TKqpRequestCounters;
         counters->Counters = Counters;
         counters->DbCounters = DbCounters;
         counters->TxProxyMon = Counters->TxProxyMon;
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
+                CompileActorSpan.GetTraceId());
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -397,8 +387,10 @@ private:
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
         prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
         prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
-        // For NEW RBO YqlSelect is force.
-        if (EnableNewRBO) {
+        // Internal ANALYZE scans require legacy translation; new RBO forces YqlSelect.
+        if (QueryId.Settings.IsAnalyze) {
+            prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Disable;
+        } else if (EnableNewRBO) {
             prepareSettings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
         }
         prepareSettings.UsePessimisticLocks = UsePessimisticLocks;
@@ -440,7 +432,8 @@ private:
         }
         replayMessage.InsertValue("query_parameter_types", std::move(queryParameterTypes));
         replayMessage.InsertValue("created_at", ToString(TlsActivationContext->ActorSystem()->Timestamp().Seconds()));
-        replayMessage.InsertValue("query_syntax", ToString(Config->GetSqlVersion()));
+        // Keep the field for compatibility with existing query replay datasets.
+        replayMessage.InsertValue("query_syntax", "1");
         replayMessage.InsertValue("query_database", QueryId.Database);
         replayMessage.InsertValue("query_cluster", QueryId.Cluster);
         replayMessage.InsertValue("query_type", ToString(QueryId.Settings.QueryType));
@@ -497,9 +490,9 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        CompileActorSpan.Attribute("ydb.actor.type", TString("TKqpCompileActor"));
+        CompileActorSpan.Attribute("ydb.cpu_us", static_cast<i64>(CompileCpuTime.MicroSeconds()));
+        EndQueryTraceSpan(CompileActorSpan, KqpCompileResult->Status);
 
         PassAway();
     }
@@ -570,9 +563,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, Ydb::StatusIds::SUCCESS);
 
         PassAway();
     }
@@ -604,7 +595,7 @@ private:
 
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
-                Uid, status, kqpResult.Issues(), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
+                Uid, status, CollectIssues(kqpResult.Issues()), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
             Reply();
             return;
         }
@@ -613,24 +604,17 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
             // Disable compilation with new RBO.
             EnableNewRBO = false;
+            FallbackToYqlOptimizerIssue = NYql::TIssue(TStringBuilder()
+                                                       << "Compilation with the new RBO failed: "
+                                                       << kqpResult.Issues().ToOneLineString());
+            FallbackToYqlOptimizerIssue->SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
             TString logMessage = "Compilation with new RBO failed, retrying with YQL optimizer";
-            RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
+            RebuildConfigAndStartCompilation(ctx, std::move(logMessage), status, kqpResult.Issues());
             return;
         } else if (IsSuitableToReportSuccessOnNewRBO(status)) {
             Counters->ReportCompileNewRBOSuccess(DbCounters);
         } else if (IsSuitableToReportFailOnNewRBO(status)) {
             Counters->ReportCompileNewRBOFailed(DbCounters);
-        }
-
-        // If compilation failed and we tried SqlVersion = 1, retry with SqlVersion = 0
-        if (IsSuitableToFallbackToSqlV0(status)) {
-            Counters->ReportCompileEnforceConfigFailed(DbCounters);
-            EnforcedSqlVersion = false;
-            TString logMessage = "Compilation with SqlVersion = 1 failed, retrying with SqlVersion = 0";
-            RebuildConfigAndStartCompilation(ctx, std::move(logMessage));
-            return;
-        } else if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
-            Counters->ReportCompileEnforceConfigSuccess(DbCounters);
         }
 
         auto database = QueryId.Database;
@@ -646,7 +630,8 @@ private:
 
         auto queryType = QueryId.Settings.QueryType;
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult = TKqpCompileResult::Make(Uid, status, CollectIssues(kqpResult.Issues()), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
+        KqpCompileResult->UsedNewRbo = EnableNewRBO;
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -698,15 +683,36 @@ private:
             }
         }
         meta["parameters"] = parameters;
+        if (UserToken && !UserToken->GetUserSID().empty()) {
+            NJson::TJsonValue groups(NJson::JSON_ARRAY);
+            for (const auto& sid : UserToken->GetGroupSIDs()) {
+                groups.AppendValue(sid);
+            }
+            meta["user_group_sids"] = std::move(groups);
+        }
         return meta;
     }
 
 private:
-    void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
+    NYql::TIssues CollectIssues(const NYql::TIssues& issues) const {
+        if (!FallbackToYqlOptimizerIssue) {
+            return issues;
+        }
+
+        NYql::TIssues result;
+        result.AddIssue(*FallbackToYqlOptimizerIssue);
+        result.AddIssues(issues);
+        return result;
+    }
+
+    void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage,
+                                          Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
         YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
             {"logMessage", logMessage},
             {"self", ctx.SelfID},
             {"database", QueryId.Database},
+            {"status", Ydb::StatusIds_StatusCode_Name(status)},
+            {"issues", issues},
             {"queryText", GetQueryTextForLog(QueryId.Text)});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
@@ -729,14 +735,6 @@ private:
 
     bool IsSuitableToReportFailOnNewRBO(Ydb::StatusIds::StatusCode status) {
         return EnableNewRBO && status != Ydb::StatusIds::SUCCESS;
-    }
-
-    bool IsSuitableToFallbackToSqlV0(Ydb::StatusIds::StatusCode status) {
-        return !EnableNewRBO && EnforcedSqlVersion && status != Ydb::StatusIds::SUCCESS;
-    }
-
-    bool IsSuitableToReportSuccessOnEnforcedSqlVersion(Ydb::StatusIds::StatusCode status) {
-        return !EnableNewRBO && EnforcedSqlVersion && status == Ydb::StatusIds::SUCCESS;
     }
 
     TActorId Owner;
@@ -779,8 +777,8 @@ private:
     bool PerStatementResult;
     ECompileActorAction CompileAction;
     TMaybe<TQueryAst> QueryAst;
-    bool EnforcedSqlVersion;
     bool EnableNewRBO;
+    TMaybe<NYql::TIssue> FallbackToYqlOptimizerIssue;
     bool EnableFallbackToYqlOptimizer;
     bool UsePessimisticLocks;
 };

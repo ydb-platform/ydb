@@ -2,11 +2,13 @@ LIBRARY()
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    udf_meta.cpp
+    udf_module.cpp
     snapshot.cpp
+    wasm_artifact.cpp
+    storage_paths.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(udf_meta.h)
+GENERATE_ENUM_SERIALIZATION(udf_module.h)
 
 PEERDIR(
     ydb/library/actors/core

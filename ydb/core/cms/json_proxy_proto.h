@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/defs.h>
 #include <ydb/core/mon/mon.h>
+#include <ydb/core/protos/config.pb.h>
 
 #include <google/protobuf/util/json_util.h>
 

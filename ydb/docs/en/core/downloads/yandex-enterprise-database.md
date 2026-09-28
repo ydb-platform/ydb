@@ -29,6 +29,18 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
+|| **v26.1** |  |  |  |  ||
+|| v.26.1.1.ent.3 | 03.08.2026 |
+
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/ydbd-enterprise-26.1.1.ent.3-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/ydbd-enterprise-26.1.1.ent.3-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/26.1.1.ent.3/checksums.debug.txt)
+
+| [See list](../changelog-enterprise.md#26-1-1-ent-3) ||
 || **v25.4** |  |  |  |  ||
 || v.25.4.1.ent.2 | 17.06.2026 |
 
@@ -190,6 +202,8 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Changelog** ||
+|| **v26.1** |  |  |  |  ||
+|| v.26.1.1.ent.3 | 03.08.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterprise:26.1.1.ent.3` | [See list](../changelog-enterprise.md#26-1-1-ent-3) ||
 || **v25.4** |  |  |  |  ||
 || v.25.4.1.ent.2 | 17.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.4.1.ent.2` | [See list](../changelog-enterprise.md#25-4-1-ent-2) ||
 || **v25.3** |  |  |  |  ||
@@ -216,3 +230,9 @@ Yandex Enterprise Database distributions are available for download via the link
 || v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [See list](../changelog-server.md#23-3-17) ||
 || v.23.3.13 | 12.10.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.13` | [See list](../changelog-server.md#23-3) ||
 |#
+
+## Certified version {#certified}
+
+Certified versions of Yandex Enterprise Database are not available for public download. Access is provided [upon request](https://ydb.yandex.ru/#form).
+
+The certified version of Yandex Enterprise Database 25.1 has a technical support end date of 30 October 2030.

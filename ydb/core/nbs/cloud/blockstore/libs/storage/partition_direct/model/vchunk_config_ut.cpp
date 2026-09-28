@@ -27,10 +27,27 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
             cfg.GetDesiredPBuffers().Print());
     }
 
+    Y_UNIT_TEST(ShouldUseFreshForHumanReadableState)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TVChunkConfig::EHostHumanReadableState::Primary,
+            cfg.GetHostHumanReadableState(0, false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            TVChunkConfig::EHostHumanReadableState::Fresh,
+            cfg.GetHostHumanReadableState(0, true));
+
+        cfg.DisableHost(0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TVChunkConfig::EHostHumanReadableState::Rotten,
+            cfg.GetHostHumanReadableState(0, true));
+    }
+
     Y_UNIT_TEST(ShouldBeInvalidWhenAllDisabledOnOneSide)
     {
         auto cfg =
-            TVChunkConfig::Make(0, THostRoles(), THostRoles(), THostMask(), {});
+            TVChunkConfig::Make(0, THostRoles(), THostRoles(), THostMask());
         UNIT_ASSERT(!cfg.IsValid());
     }
 
@@ -40,15 +57,14 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
             0,
             THostRoles::MakeRotating(5, 0, 3, EHostRole::HandOff),
             THostRoles::MakeRotating(4, 0, 3, EHostRole::None),
-            THostMask::MakeAll(5),
-            {});
+            THostMask::MakeAll(5));
         UNIT_ASSERT(!cfg.IsValid());
     }
 
     Y_UNIT_TEST(ShouldBeInvalidOnEmptyHostList)
     {
         auto cfg =
-            TVChunkConfig::Make(0, THostRoles(), THostRoles(), THostMask(), {});
+            TVChunkConfig::Make(0, THostRoles(), THostRoles(), THostMask());
         UNIT_ASSERT(!cfg.IsValid());
     }
 
@@ -63,8 +79,6 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
             "[H0,H1,H2]",
             cfg.GetDesiredPBuffers().Print());
         UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", cfg.GetSecondaryPBuffers().Print());
-        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetHealthyDDisks().Print());
-
         cfg.DisableHost(0);
         UNIT_ASSERT(cfg.IsValid());
 
@@ -72,14 +86,11 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
             "[H1,H2,H3]",
             cfg.GetDesiredPBuffers().Print());
         UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", cfg.GetSecondaryPBuffers().Print());
-        UNIT_ASSERT_VALUES_EQUAL("[H1,H2]", cfg.GetHealthyDDisks().Print());
-
         cfg.EnableHost(0);
         UNIT_ASSERT_VALUES_EQUAL(
             "[H0,H1,H2]",
             cfg.GetDesiredPBuffers().Print());
         UNIT_ASSERT_VALUES_EQUAL("[H3,H4]", cfg.GetSecondaryPBuffers().Print());
-        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetHealthyDDisks().Print());
     }
 
     Y_UNIT_TEST(ShouldAppendHandOffWhenDDisksEnoughForQuorum)
@@ -97,7 +108,6 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT(cfg.GetPBufferRole(newIdx) == EHostRole::HandOff);
         UNIT_ASSERT(cfg.GetDDiskRole(newIdx) == EHostRole::None);
         UNIT_ASSERT(!cfg.GetDisabledHosts().Get(newIdx));
-        UNIT_ASSERT(!cfg.GetWatermark(newIdx).has_value());
         UNIT_ASSERT(!cfg.GetDDisks().Get(newIdx));
     }
 
@@ -116,8 +126,44 @@ Y_UNIT_TEST_SUITE(TVChunkConfigTest)
         UNIT_ASSERT(cfg.GetPBufferRole(newIdx) == EHostRole::Primary);
         UNIT_ASSERT(cfg.GetDDiskRole(newIdx) == EHostRole::Primary);
         UNIT_ASSERT(!cfg.GetDisabledHosts().Get(newIdx));
-        UNIT_ASSERT_VALUES_EQUAL(0, *cfg.GetWatermark(newIdx));
         UNIT_ASSERT(cfg.GetDDisks().Get(newIdx));
+    }
+
+    Y_UNIT_TEST(ShouldReturnEnabledDDisks)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+        // Primary DDisks are hosts 0, 1, 2 and all hosts are enabled.
+        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetEnabledDDisks().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetDDisks().Print());
+
+        // Disabling a primary DDisk host removes it from the enabled set but
+        // keeps it in the full DDisk set.
+        cfg.DisableHost(0);
+        UNIT_ASSERT_VALUES_EQUAL("[H1,H2]", cfg.GetEnabledDDisks().Print());
+        UNIT_ASSERT_VALUES_EQUAL("[H0,H1,H2]", cfg.GetDDisks().Print());
+
+        // Disabling a non-DDisk host does not change the enabled DDisk set.
+        cfg.DisableHost(4);
+        UNIT_ASSERT_VALUES_EQUAL("[H1,H2]", cfg.GetEnabledDDisks().Print());
+    }
+
+    Y_UNIT_TEST(ShouldEvacuateHost)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+
+        const TString result = cfg.EvacuateHost(0);
+
+        UNIT_ASSERT_STRING_CONTAINS(result, "H0 demoted, H3 promoted");
+        UNIT_ASSERT(cfg.GetDDiskRole(0) == EHostRole::None);
+        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
+    }
+
+    Y_UNIT_TEST(ShouldPromoteHostRoles)
+    {
+        auto cfg = TVChunkConfig::MakeDefault(0, 5, 3);
+        cfg.PromoteHost(3);
+        UNIT_ASSERT(cfg.GetDDiskRole(3) == EHostRole::Primary);
+        UNIT_ASSERT(cfg.GetPBufferRole(3) == EHostRole::Primary);
     }
 }
 

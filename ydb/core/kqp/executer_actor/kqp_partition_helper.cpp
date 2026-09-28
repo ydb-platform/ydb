@@ -582,8 +582,12 @@ TShardIdToInfoMap PrunePartitions(const NKqpProto::TKqpPhyTableOperation& operat
 
 NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyValue& protoPhyValue,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv,
-    const NUdf::TUnboxedValue& defaultValue)
+    const NUdf::TUnboxedValue& defaultValue, NMiniKQL::TType** valueType)
 {
+    if (valueType) {
+        *valueType = nullptr;
+    }
+
     switch (protoPhyValue.GetKindCase()) {
         case NKqpProto::TKqpPhyValue::kLiteralValue: {
             const auto& literalValue = protoPhyValue.GetLiteralValue();
@@ -592,6 +596,9 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
                 literalValue.type(), literalValue.value(), typeEnv, holderFactory);
 
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data);
+            if (valueType) {
+                *valueType = type;
+            }
             return value;
         }
 
@@ -604,11 +611,40 @@ NUdf::TUnboxedValue ExtractPhyValue(const TStageInfo& stageInfo, const NKqpProto
             auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
             YQL_ENSURE(type->GetKind() == NMiniKQL::TType::EKind::Data ||
                 type->GetKind() == NMiniKQL::TType::EKind::Tagged, "Unexpected PhyValue kind " << (int)type->GetKind());
+            if (valueType) {
+                *valueType = type;
+            }
             return value;
         }
 
-        case NKqpProto::TKqpPhyValue::kParamElementValue:
-            YQL_ENSURE(false, "Unexpected PhyValue kind " << protoPhyValue.DebugString());
+        case NKqpProto::TKqpPhyValue::kParamElementValue: {
+            const auto& paramElement = protoPhyValue.GetParamElementValue();
+            const TString& paramName = paramElement.GetParamName();
+            if (!paramName) {
+                return defaultValue;
+            }
+
+            auto [type, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
+            const ui32 elementIndex = paramElement.GetElementIndex();
+            if (type->GetKind() == NMiniKQL::TType::EKind::Tuple) {
+                auto* tupleType = static_cast<NMiniKQL::TTupleType*>(type);
+                YQL_ENSURE(elementIndex < tupleType->GetElementsCount(),
+                    "Parameter element index is out of range for tuple '" << paramName << "'");
+                type = tupleType->GetElementType(elementIndex);
+            } else if (type->GetKind() == NMiniKQL::TType::EKind::Struct) {
+                auto* structType = static_cast<NMiniKQL::TStructType*>(type);
+                YQL_ENSURE(elementIndex < structType->GetMembersCount(),
+                    "Parameter element index is out of range for struct '" << paramName << "'");
+                type = structType->GetMemberType(elementIndex);
+            } else {
+                YQL_ENSURE(false, "Unexpected parameter element container kind " << static_cast<int>(type->GetKind()));
+            }
+
+            if (valueType) {
+                *valueType = type;
+            }
+            return value.GetElement(elementIndex);
+        }
 
         case NKqpProto::TKqpPhyValue::KIND_NOT_SET:
             return defaultValue;

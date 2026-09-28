@@ -41,7 +41,28 @@ namespace NKikimr::NBlobDepot {
                 EvScanContinue,
                 EvDeleteThrottleWakeup,
                 EvPutThrottleWakeup,
+                EvMoveDataContinue,
+                EvMoveDataBlobCopied,
             };
+        };
+
+        struct TEvMoveDataContinue
+            : TEventLocal<TEvMoveDataContinue, TEvPrivate::EvMoveDataContinue>
+        {};
+
+        struct TEvMoveDataBlobCopied
+            : TEventLocal<TEvMoveDataBlobCopied, TEvPrivate::EvMoveDataBlobCopied>
+        {
+            NKikimrProto::EReplyStatus Status;
+            NKikimrBlobDepot::TBlobLocator NewLocator;
+            TString ErrorReason;
+
+            TEvMoveDataBlobCopied(NKikimrProto::EReplyStatus status,
+                    NKikimrBlobDepot::TBlobLocator newLocator, TString errorReason = {})
+                : Status(status)
+                , NewLocator(std::move(newLocator))
+                , ErrorReason(std::move(errorReason))
+            {}
         };
 
     public:
@@ -61,6 +82,13 @@ namespace NKikimr::NBlobDepot {
 
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
         TControlWrapper MaxLoadedTrashRecords = 1'000'000;
+
+        TControlWrapper S3MaxWritesInFlight = 32;
+        TControlWrapper S3MaxDeletesInFlight = 3;
+        TControlWrapper S3MaxObjectsToDeleteAtOnce = 10;
+
+        // EnableCollectByCompleteDeletionBlock, taken once at tablet start
+        bool CollectByCompleteDeletionBlock = false;
 
         struct TAgent {
             struct TConnection {
@@ -116,12 +144,17 @@ namespace NKikimr::NBlobDepot {
             std::set<ui64> AssimilatedBlobsInFlight;
             std::optional<TBlobSeqId> LastReportedLeastId;
 
-            // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
-            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
-                const auto result = TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
+            // Same as GetLeastExpectedBlobId, but without the monotonicity bookkeeping -- for monitoring only
+            TBlobSeqId PeekLeastExpectedBlobId(ui32 generation) const {
+                return TBlobSeqId::FromSequentalNumber(Index, generation, Min(NextBlobSeqId,
                     GivenIdRanges.IsEmpty() ? Max<ui64>() : GivenIdRanges.GetMinimumValue(),
                     SequenceNumbersInFlight.empty() ? Max<ui64>() : *SequenceNumbersInFlight.begin(),
                     AssimilatedBlobsInFlight.empty() ? Max<ui64>() : *AssimilatedBlobsInFlight.begin()));
+            }
+
+            // Obtain the least BlobSeqId that is not yet committed, but may be written by any agent
+            TBlobSeqId GetLeastExpectedBlobId(ui32 generation) {
+                const auto result = PeekLeastExpectedBlobId(generation);
                 // this value can't decrease, because it may lead to data loss
                 Y_VERIFY_S(!LastReportedLeastId || *LastReportedLeastId <= result,
                     "decreasing LeastExpectedBlobId"
@@ -151,7 +184,10 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
         TAgent& GetAgent(const TActorId& pipeServerId);
         TAgent& GetAgent(ui32 nodeId);
-        void ResetAgent(TAgent& agent);
+        // Same as GetAgent(pipeServerId), but returns nullptr instead of aborting when the pipe server is already
+        // gone or has been superseded by a newer connection of the same agent
+        TAgent *FindAgent(const TActorId& pipeServerId);
+        void ResetAgent(ui32 nodeId, TAgent& agent);
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnSpaceColorChange(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor, float approximateFreeSpaceShare);
 
@@ -174,8 +210,13 @@ namespace NKikimr::NBlobDepot {
                 {"marker", "BDT24"},
                 {"id", GetLogId()});
             if (AppData()->Icb) {
-                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, AppData()->Icb->BlobDepotControls.MaxLoadedTrashRecords);
+                auto& controls = AppData()->Icb->BlobDepotControls;
+                TControlBoard::RegisterSharedControl(MaxLoadedTrashRecords, controls.MaxLoadedTrashRecords);
+                TControlBoard::RegisterSharedControl(S3MaxWritesInFlight, controls.S3MaxWritesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxDeletesInFlight, controls.S3MaxDeletesInFlight);
+                TControlBoard::RegisterSharedControl(S3MaxObjectsToDeleteAtOnce, controls.S3MaxObjectsToDeleteAtOnce);
             }
+            CollectByCompleteDeletionBlock = AppData()->FeatureFlags.GetEnableCollectByCompleteDeletionBlock();
             Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
             TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_MODE_STARTING] = 1;
             ExecuteTxInitSchema();
@@ -256,6 +297,62 @@ namespace NKikimr::NBlobDepot {
         bool ReassignChannelsEnabled() const override {
             return true;
         }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        void MoveDataCompleted(const TActorContext& ctx) override;
+
+        struct TMoveDataState {
+            enum class EPhase {
+                Idle,
+                ScanningIndex,
+                CopyingBlob,
+                UpdatingIndex,
+                CheckingTrash,
+                Vacuum,
+            };
+
+            EPhase Phase = EPhase::Idle;
+            TSet<ui32> Groups;
+            TActorId RequestSender;
+
+            std::optional<TString> Key;
+            ui32 ValueChainIndex = 0;
+            ui32 ValueVersion = 0;
+
+            bool RecordTouched = false;
+            bool NeedsAnotherPass = false;
+
+            TLogoBlobID BlobId;
+            NKikimrBlobDepot::TBlobLocator BlobLocator;
+            NKikimrBlobDepot::TBlobLocator NewBlobLocator;
+            TBlobSeqId NewBlobSeqId;
+            THashMap<TLogoBlobID, NKikimrBlobDepot::TBlobLocator> BlobIdToNewLocator;
+            TSet<TBlobSeqId> ProtectedBlobSeqIds;
+            bool ApplyingIndexUpdate = false;
+
+            bool IsInProgress() const {
+                return Phase != EPhase::Idle;
+            }
+        };
+
+        TMoveDataState MoveData;
+        TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
+
+        void Handle(TEvTablet::TEvMoveData::TPtr ev);
+        void Handle(TEvMoveDataBlobCopied::TPtr ev);
+        bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const;
+        bool NeedMoveBlob(const NKikimrBlobDepot::TBlobLocator& locator) const;
+        void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender);
+        void ContinueMoveData();
+        void StartMoveDataBlobCopy();
+        void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
+        void RestartMoveDataScan();
+        void FinishMoveData(const TActorContext& ctx);
+
+        class TTxMoveDataScan;
+        class TTxMoveDataUpdateIndex;
+        class TMoveDataCopyActor;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

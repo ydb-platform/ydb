@@ -104,6 +104,13 @@ TStatus CreateTopicViaSdk(
     return client.CreateTopic(path, settings).GetValueSync();
 }
 
+TStatus CreateDlqTopicViaSdk(
+    TPersQueueClient& client,
+    const std::string& dlqTopicName)
+{
+    return CreateTopicViaSdk(client, TPqv1SdkTestSetup::MakeTopicPath(dlqTopicName));
+}
+
 TDescribeTopicResult DescribeTopicViaSdk(
     TPersQueueClient& client,
     const std::string& path)

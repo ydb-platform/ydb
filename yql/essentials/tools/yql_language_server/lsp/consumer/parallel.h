@@ -51,7 +51,6 @@ private:
         });
     }
 
-private:
     TRWBinarySemaphore Scheduler_;
     typename IConsumer<T>::TPtr Consumer_;
     P IsPure_;

@@ -371,7 +371,7 @@ void Serialize(T value, NYson::IYsonConsumer* consumer)
 {
     if constexpr (TEnumTraits<T>::IsBitEnum) {
         consumer->OnBeginList();
-        for (auto scalarValue : TEnumTraits<T>::GetDomainValues()) {
+        for (auto scalarValue : TEnumTraits<T>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
             if (Any(value & scalarValue)) {
                 consumer->OnListItem();
                 consumer->OnStringScalar(FormatEnum(scalarValue));
@@ -487,7 +487,7 @@ template <class E, class T, E Min, E Max>
 void Serialize(const TEnumIndexedArray<E, T, Min, Max>& vector, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
-    for (auto key : TEnumTraits<E>::GetDomainValues()) {
+    for (auto key : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (!vector.IsValidIndex(key)) {
             continue;
         }

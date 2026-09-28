@@ -1027,7 +1027,8 @@ static void serializeFunctionBody(OutputStream& sectionStream,
 static void serializeFunctionBody(InputStream& sectionStream,
 								  Module& module,
 								  FunctionDef& functionDef,
-								  const ModuleSerializationState& moduleState)
+								  const ModuleSerializationState& moduleState,
+								  const U8* codeSectionBegin)
 {
 	Uptr numBodyBytes = 0;
 	serializeVarUInt32(sectionStream, numBodyBytes);
@@ -1047,12 +1048,19 @@ static void serializeFunctionBody(InputStream& sectionStream,
 		{ functionDef.nonParameterLocalTypes.push_back(localSet.type); }
 	}
 
+	functionDef.operatorCodeSectionOffsets.clear();
+
 	// Deserialize the function code, validate it, and re-encode it in the IR format.
 	ArrayOutputStream irCodeByteStream;
 	OperatorEncoderStream irEncoderStream(irCodeByteStream);
 	CodeValidationStream codeValidationStream(*moduleState.validationState, functionDef);
 	while(bodyStream.capacity())
 	{
+		// Record Code-section-relative PC of this opcode (WebAssembly DWARF addresses).
+		WAVM_ASSERT(codeSectionBegin);
+		functionDef.operatorCodeSectionOffsets.push_back(
+			U32(bodyStream.peek(1) - codeSectionBegin));
+
 		Opcode opcode;
 		serializeOpcode(bodyStream, opcode);
 		switch(U16(opcode))
@@ -1396,6 +1404,10 @@ static void serializeCodeSection(InputStream& moduleStream,
 {
 	serializeSection(
 		moduleStream, SectionID::code, [&module, &moduleState](InputStream& sectionStream) {
+			// Base of the Code section payload (DWARF code addresses are relative to this).
+			const U8* codeSectionBegin
+				= sectionStream.capacity() ? sectionStream.peek(1) : nullptr;
+
 			Uptr numFunctionBodies = module.functions.defs.size();
 			serializeVarUInt32(sectionStream, numFunctionBodies);
 			if(numFunctionBodies != module.functions.defs.size())
@@ -1404,7 +1416,10 @@ static void serializeCodeSection(InputStream& moduleStream,
 					"function and code sections have mismatched function counts");
 			}
 			for(FunctionDef& functionDef : module.functions.defs)
-			{ serializeFunctionBody(sectionStream, module, functionDef, moduleState); }
+			{
+				serializeFunctionBody(
+					sectionStream, module, functionDef, moduleState, codeSectionBegin);
+			}
 		});
 }
 

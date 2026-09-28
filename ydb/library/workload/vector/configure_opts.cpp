@@ -27,7 +27,7 @@ void ConfigureVectorOpts(NLastGetopt::TOpts& opts, TVectorOpts* vectorOpts) {
     NColorizer::TColors colors = NYdb::NConsoleClient::AutoColors(Cout);
 
     {
-        const TVector<TString> vectorTypes = {"float", "int8", "uint8", "bit"};
+        const TVector<TString> vectorTypes = {"float", "float16", "bfloat16", "int8", "uint8", "bit"};
 
         TStringBuilder builder;
         builder << "Type of vectors. Available options: ";

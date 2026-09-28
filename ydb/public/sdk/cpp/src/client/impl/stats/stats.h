@@ -238,6 +238,17 @@ public:
             )->Inc();
         }
 
+        void IncSessionClosed(std::string_view reason) {
+            if (!ExternalRegistry_) {
+                return;
+            }
+            auto labels = BasePoolLabels();
+            labels["reason"] = std::string(reason);
+            ExternalRegistry_->Counter(MetricName(NObservability::MetricName::kSessionLeafClosed), labels,
+                "Number of closed sessions, split by reason.",
+                std::string(NObservability::MetricUnit::kSession))->Inc();
+        }
+
         void RecordConnectionCreateTime(double seconds) {
             if (!ExternalRegistry_) {
                 return;

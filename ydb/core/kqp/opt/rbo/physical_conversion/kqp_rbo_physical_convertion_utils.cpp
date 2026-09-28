@@ -180,4 +180,66 @@ TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TS
     // clang-format on
 }
 
+TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TInfoUnit>& inputs, const TVector<bool>& unwrapOptionalInputs, TExprContext& ctx) {
+    Y_ENSURE(input->IsLambda());
+
+    TVector<TExprNode::TPtr> lambdaArgs;
+    lambdaArgs.reserve(inputs.size());
+    for (ui32 i = 0; i < inputs.size(); ++i) {
+        lambdaArgs.push_back(ctx.NewArgument(input->Pos(), "param" + ToString(i)));
+    }
+
+    TVector<TExprBase> items;
+    for (ui32 i = 0; i < inputs.size(); ++i) {
+        TExprNode::TPtr value = lambdaArgs[i];
+        if (unwrapOptionalInputs[i]) {
+            value = Build<TCoUnwrap>(ctx, input->Pos())
+                .Optional(value)
+            .Done().Ptr();
+        }
+
+        // clang-format off
+        auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
+            .Name().Build(inputs[i].GetFullName())
+            .Value(value)
+        .Done();
+        // clang-format on
+        items.push_back(tuple);
+    }
+
+    // clang-format off
+    auto asStruct = Build<TCoAsStruct>(ctx, input->Pos())
+        .Add(items)
+    .Done().Ptr();
+    // clang-format on
+
+    auto lambda = TCoLambda(input);
+    auto body = lambda.Body().Ptr();
+    auto arg = lambda.Args().Arg(0);
+    auto newBody = ctx.ReplaceNode(std::move(body), arg.Ref(), asStruct);
+
+    if (!TMaybeNode<TCoVoid>(newBody)) {
+        // Wrap with coalsesce in case of null input.
+        // clang-format off
+        newBody = Build<TCoCoalesce>(ctx, input->Pos())
+            .Predicate(newBody)
+            .Value<TCoBool>()
+                .Literal().Value("false").Build()
+            .Build()
+        .Done().Ptr();
+        // clang-format on
+    }
+
+    return ctx.NewLambda(input->Pos(), ctx.NewArguments(input->Pos(), std::move(lambdaArgs)), std::move(newBody));
+}
+
+TExprNode::TPtr BuildVoidLambda(TExprContext& ctx, TPositionHandle pos) {
+    // clang-format off
+    return Build<TCoLambda>(ctx, pos)
+        .Args({"arg"})
+        .Body<TCoVoid>().Build()
+    .Done().Ptr();
+    // clang-format on
+}
+
 } // namespace NKikimr::NKqp::NPhysicalConvertionUtils

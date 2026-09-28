@@ -51,7 +51,7 @@ IActor* CreatePartitionChooserActor(TActorId parentId,
                                     std::optional<ui32> preferedPartition,
                                     NWilson::TTraceId traceId) {
     if (SplitMergeEnabled(config.GetPQTabletConfig())) {
-        return new NPartitionChooser::TSMPartitionChooserActor<TPipeHelper>(parentId, chooser, graph, fullConverter, sourceId, preferedPartition, std::move(traceId));
+        return new NPartitionChooser::TSMPartitionChooserActor<TPipeHelper>(parentId, config, chooser, graph, fullConverter, sourceId, preferedPartition, std::move(traceId));
     } else {
         return new NPartitionChooser::TPartitionChooserActor<TPipeHelper>(parentId, config, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId));
     }

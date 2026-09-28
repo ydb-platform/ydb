@@ -26,7 +26,4 @@
 #elif (defined(__VEC__) || defined(__ALTIVEC__))
      /* XLC or GCC-compatible compiler, targeting PowerPC with VMX/VSX */
      #include <altivec.h>
-#elif defined(__SPE__)
-     /* GCC-compatible compiler, targeting PowerPC with SPE */
-     #include <spe.h>
 #endif

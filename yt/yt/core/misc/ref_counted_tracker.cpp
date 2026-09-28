@@ -476,13 +476,13 @@ void TRefCountedTracker::LogDebugInfo(const NLogging::TLogger& logger, NLogging:
         return lhs.ObjectsAlive > rhs.ObjectsAlive;
     });
 
-    YT_TLOG_EVENT_FLUENT(logger, level, "Ref-counted tracker dump")
+    YT_TLOG_EVENT(logger, level, "Ref-counted tracker dump")
         .With("LiveTypes", slots.size())
         .With("TotalLiveObjects", statistics.TotalStatistics.ObjectsAlive)
         .With("TotalLiveBytes", statistics.TotalStatistics.BytesAlive);
 
     for (const auto& slot : slots) {
-        YT_TLOG_EVENT_FLUENT(logger, level, "Ref-counted tracker slot")
+        YT_TLOG_EVENT(logger, level, "Ref-counted tracker slot")
             .With("ObjectsAlive", slot.ObjectsAlive)
             .With("ObjectsAllocated", slot.ObjectsAllocated)
             .With("BytesAlive", slot.BytesAlive)

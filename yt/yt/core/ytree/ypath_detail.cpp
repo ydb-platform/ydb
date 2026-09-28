@@ -156,7 +156,7 @@ IMPLEMENT_SUPPORTS_METHOD(Remove)
 IMPLEMENT_SUPPORTS_METHOD_RESOLVE(
     Exists,
     {
-        context->SetRequestInfo();
+        context->AnnotateRequest();
         Reply(context, /*exists*/ false);
     })
 
@@ -166,7 +166,7 @@ void TSupportsExists::ExistsAttribute(
     TRspExists* /*response*/,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     Reply(context, /*exists*/ false);
 }
@@ -176,7 +176,7 @@ void TSupportsExists::ExistsSelf(
     TRspExists* /*response*/,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     Reply(context, /*exists*/ true);
 }
@@ -187,7 +187,7 @@ void TSupportsExists::ExistsRecursive(
     TRspExists* /*response*/,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     Reply(context, /*exists*/ false);
 }
@@ -196,7 +196,8 @@ void TSupportsExists::ExistsRecursive(
 
 DEFINE_RPC_SERVICE_METHOD(TSupportsMultisetAttributes, Multiset)
 {
-    context->SetRequestInfo("KeyCount: %v", request->subrequests_size());
+    context->AnnotateRequest()
+        .With("KeyCount", request->subrequests_size());
 
     auto ctx = New<TCtxMultisetAttributes>(
         context->GetUnderlyingContext(),
@@ -212,7 +213,8 @@ DEFINE_RPC_SERVICE_METHOD(TSupportsMultisetAttributes, Multiset)
 
 DEFINE_RPC_SERVICE_METHOD(TSupportsMultisetAttributes, MultisetAttributes)
 {
-    context->SetRequestInfo("KeyCount: %v", request->subrequests_size());
+    context->AnnotateRequest()
+        .With("KeyCount", request->subrequests_size());
 
     DoSetAttributes(GetRequestTargetYPath(context->RequestHeader()), request, response, context);
 
@@ -479,8 +481,9 @@ TFuture<TYsonString> TSupportsAttributes::DoGetAttribute(
                 std::vector<ISystemAttributeProvider::TAttributeDescriptor> builtinDescriptors;
                 builtinAttributeProvider->ListBuiltinAttributes(&builtinDescriptors);
                 for (const auto& descriptor : builtinDescriptors) {
-                    if (!descriptor.Present)
+                    if (!descriptor.Present) {
                         continue;
+                    }
 
                     auto key = descriptor.InternedKey.Unintern();
                     TAttributeValueConsumer attributeValueConsumer(&writer, key);
@@ -561,7 +564,7 @@ void TSupportsAttributes::GetAttribute(
     TRspGet* response,
     const TCtxGetPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     auto attributeFilter = request->has_attributes()
         ? FromProto<TAttributeFilter>(request->attributes())
@@ -653,7 +656,7 @@ void TSupportsAttributes::ListAttribute(
     TRspList* response,
     const TCtxListPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     DoListAttribute(path).Subscribe(BIND([=] (const TErrorOr<TYsonString>& ysonOrError) {
         OnAttributeRead(context.Get(), response, ysonOrError);
@@ -728,7 +731,7 @@ void TSupportsAttributes::ExistsAttribute(
     TRspExists* response,
     const TCtxExistsPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     DoExistsAttribute(path).Subscribe(BIND([=] (const TErrorOr<bool>& result) {
         if (!result.IsOK()) {
@@ -737,7 +740,8 @@ void TSupportsAttributes::ExistsAttribute(
         }
         bool exists = result.Value();
         response->set_value(exists);
-        context->SetResponseInfo("Result: %v", exists);
+        context->AnnotateResponse()
+            .With("Result", exists);
         context->Reply();
     }));
 }
@@ -908,7 +912,7 @@ void TSupportsAttributes::SetAttribute(
     TRspSet* /*response*/,
     const TCtxSetPtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     // Request instances are pooled, and thus are request->values.
     // Check if this pooled string has a small overhead (<= 25%).
@@ -1049,7 +1053,7 @@ void TSupportsAttributes::RemoveAttribute(
     TRspRemove* /*response*/,
     const TCtxRemovePtr& context)
 {
-    context->SetRequestInfo();
+    context->AnnotateRequest();
 
     bool force = request->force();
     DoRemoveAttribute(path, force);
@@ -1649,19 +1653,19 @@ protected:
 
         delimitedBuilder->AppendFormat("Retry: %v", IsRetry());
 
-        for (const auto& info : RequestInfos_){
-            delimitedBuilder->AppendString(info);
+        if (!RequestLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", RequestLoggingTags_);
         }
 
         auto logMessage = builder.Flush();
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag(RequestInfoAnnotation, logMessage);
+            traceContext->AddTag(RequestAnnotationsTraceTag, logMessage);
         });
         YT_LOG_DEBUG(logMessage);
 
         Timer_.emplace();
 
-        RequestInfoState_ = ERequestInfoState::Flushed;
+        RequestAnnotationState_ = ERequestAnnotationState::Flushed;
     }
 
     void LogResponse() override
@@ -1694,8 +1698,8 @@ protected:
                 usage.ResultSize);
         }
 
-        for (const auto& info : ResponseInfos_) {
-            delimitedBuilder->AppendString(info);
+        if (!ResponseLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", ResponseLoggingTags_);
         }
 
         if (Timer_) {
@@ -1706,7 +1710,7 @@ protected:
 
         auto logMessage = builder.Flush();
         NTracing::AnnotateTraceContext([&] (const auto& traceContext) {
-            traceContext->AddTag(ResponseInfoAnnotation, logMessage);
+            traceContext->AddTag(ResponseAnnotationsTraceTag, logMessage);
         });
         YT_LOG_DEBUG(logMessage);
     }

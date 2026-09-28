@@ -14,8 +14,34 @@ items:
   items:
   - name: Общая схема
     href: general-schema.md
+  - name: Акторная система
+    href: actor-system/index.md
+    items:
+    - name: Жизненный цикл актора
+      href: actor-system/actor-lifecycle.md
+    - name: События и обмен сообщениями
+      href: actor-system/events-and-messaging.md
+    - name: Сбои и завершение работы
+      href: actor-system/failure-and-shutdown.md
+    - name: Акторы на корутинах
+      href: actor-system/coroutine-actors.md
+    - name: Примитивы корутин
+      href: actor-system/coroutine-primitives.md
+    - name: Интеграция корутин
+      href: actor-system/coroutine-integration.md
+    - name: Тестирование акторов
+      href: actor-system/testing.md
   - name: Распределённое хранилище
     href: distributed-storage.md
+    items:
+    - name: NodeWarden
+      href: distributed-storage/node-warden.md
+    - name: Группы прямого блочного доступа
+      href: distributed-storage/direct-block-groups.md
+    - name: DDisk
+      href: distributed-storage/ddisk.md
+    - name: PersistentBuffer
+      href: distributed-storage/persistent-buffer.md
   - name: Подсистемы распространения метаданных
     href: metadata-distribution.md
   - name: LocalDB
@@ -48,6 +74,8 @@ items:
       href: load-actors-key-value.md
     - name: StorageLoad
       href: load-actors-storage.md
+    - name: NbsDbgLikeLoad
+      href: load-actors-nbs-dbg-like.md
     - name: VDiskLoad
       href: load-actors-vdisk.md
     - name: PDiskWriteLoad

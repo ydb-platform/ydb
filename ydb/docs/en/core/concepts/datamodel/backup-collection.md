@@ -150,7 +150,7 @@ All backup and restore operations are performed asynchronously, allowing you to 
 
 ## Restore from backups
 
-Restore returns data to the state of the latest backup in the chain that is in the cluster. To restore to an earlier state, import only the required chain prefix from external storage — see [Import and restore](../../recipes/backup-collections/importing-and-restoring.md).
+Restore returns data to the state of the latest backup in the chain that is in the cluster. To restore to an earlier state, import only the required chain prefix from external storage — see [Import and restore](../../recipes/backup/backup-collections/importing-and-restoring.md).
 
 ### Restore process
 
@@ -175,7 +175,7 @@ During the restore operation, the target tables are unavailable for modification
 
 - [Backup concepts](../backup.md): Overview of all backup approaches in {{ ydb-short-name }}
 - [Backup and restore: backup collections](../../devops/backup-and-recovery/index.md#backup-collections): step-by-step scenarios and CLI commands
-- [Recipes and examples](../../recipes/backup-collections/index.md): Typical scenarios and examples
+- [Recipes and examples](../../recipes/backup/backup-collections/index.md): Typical scenarios and examples
 - YQL reference:
 
   - [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)

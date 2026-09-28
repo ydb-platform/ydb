@@ -16,6 +16,7 @@
 #include <ydb/core/protos/kqp_physical.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/scheme/protos/type_info.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
@@ -66,7 +67,9 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         req->has_alter_partitioning_settings() ||
         req->set_key_bloom_filter() != Ydb::FeatureFlag::STATUS_UNSPECIFIED ||
         req->has_set_read_replicas_settings() ||
-        req->add_statistics_size() || req->drop_statistics_size())
+        req->add_statistics_size() || req->drop_statistics_size() ||
+        req->metrics_settings_action_case() !=
+            Ydb::Table::AlterTableRequest::METRICS_SETTINGS_ACTION_NOT_SET)
     {
         ops.emplace(EAlterOperationKind::Common);
     }
@@ -337,6 +340,10 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
 
     if (flags & NKqpProto::TKqpSchemeOperation::FLAG_IF_NOT_EXISTS) {
         settings->set_if_not_exist(true);
+    }
+
+    if (flags & NKqpProto::TKqpSchemeOperation::FLAG_REBUILD_INDEX) {
+        settings->set_is_rebuild(true);
     }
 
     if (desc.parallel()) {
@@ -755,6 +762,9 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                 switch (type) {
                     case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                         statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                        break;
+                    case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                        statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
                         break;
                     default:
                         code = Ydb::StatusIds::BAD_REQUEST;
@@ -1471,6 +1481,12 @@ bool FillColumnFamily(
 
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error) {
+    if (req->metrics_settings_action_case() != Ydb::Table::AlterTableRequest::METRICS_SETTINGS_ACTION_NOT_SET) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Metrics settings are not supported for column tables";
+        return false;
+    }
+
     const auto ops = GetAlterOperationKinds(req);
 
     if (ops.empty()) {
@@ -1597,6 +1613,9 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 switch (type) {
                     case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                         statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+                        break;
+                    case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                        statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
                         break;
                     default:
                         status = Ydb::StatusIds::BAD_REQUEST;
@@ -2015,7 +2034,6 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
@@ -2031,6 +2049,23 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition)
+            );
+
+            *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_docs_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition - 1)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_stats_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition - 1)
+            );
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
+                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition - 1)
             );
 
             *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
@@ -2140,6 +2175,9 @@ void FillMultiColumnStatisticsDescriptionImpl(TYdbProto& out,
                 case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
                     outMultiColumnStatistics->add_types(Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH);
                     break;
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
+                    outMultiColumnStatistics->add_types(Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM);
+                    break;
                 default:
                     break;
             }
@@ -2168,6 +2206,9 @@ void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescriptio
             case Ydb::Table::TableMultiColumnStatistics::COUNT_MIN_SKETCH:
                 out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
                 break;
+            case Ydb::Table::TableMultiColumnStatistics::EQ_HEIGHT_HISTOGRAM:
+                out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
+                break;
             default:
                 out.AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::MULTI_COLUMN_STATISTICS_UNSPECIFIED);
                 break;
@@ -2176,7 +2217,7 @@ void FillMultiColumnStatistics(NKikimrSchemeOp::TMultiColumnStatisticsDescriptio
 }
 
 bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
-    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error) {
+    const Ydb::Table::CreateTableRequest& in, bool enableCompactFulltext, Ydb::StatusIds::StatusCode& status, TString& error) {
 
     auto returnError = [&status, &error](Ydb::StatusIds::StatusCode code, const TString& msg) -> bool {
         status = code;
@@ -2226,17 +2267,23 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain);
+            indexDesc->SetType(enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact
+                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_plain_index().fulltext_settings();
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
+            indexDesc->SetType(enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance
+                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance);
             *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_relevance_index().fulltext_settings();
             break;
 
         case Ydb::Table::TableIndex::kGlobalJsonIndex:
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson);
+            indexDesc->SetType(enableCompactFulltext
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson);
             break;
 
         case Ydb::Table::TableIndex::kLocalBloomFilterIndex:
@@ -2350,6 +2397,11 @@ bool FillChangefeedDescriptionCommon(NKikimrSchemeOp::TCdcStreamDescription& out
     out.SetTraceIds(in.trace_ids());
 
     if (in.has_resolved_timestamps_interval()) {
+        if (in.resolved_timestamps_interval().seconds() < 1) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = "Resolved timestamps interval must be at least 1 second";
+            return false;
+        }
         out.SetResolvedTimestampsIntervalMs(TDuration::Seconds(in.resolved_timestamps_interval().seconds()).MilliSeconds());
     }
 
@@ -2773,6 +2825,38 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
     const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
+}
+
+template <typename TYdbProto>
+void FillMetricsSettingsImpl(TYdbProto& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    if (!in.HasDetailedMetricsSettings() || !in.GetDetailedMetricsSettings().HasConfigured()) {
+        return;
+    }
+
+    switch (in.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()) {
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled:
+        out.mutable_metrics_settings()->set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE);
+        break;
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable:
+        out.mutable_metrics_settings()->set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE);
+        break;
+    case NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition:
+        out.mutable_metrics_settings()->set_metrics_level(Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION);
+        break;
+    default:
+        break;
+    }
+}
+
+void FillMetricsSettings(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillMetricsSettingsImpl(out, in);
+}
+
+void FillMetricsSettings(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TTableDescription& in) {
+    FillMetricsSettingsImpl(out, in);
 }
 
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,

@@ -84,6 +84,7 @@ abseil_cpp = CMakeNinjaNixProject(
     },
     put_with={
         "absl_base": [
+            "absl_base_cpu_detect",
             "absl_city",
             "absl_civil_time",
             "absl_clock_interface",
@@ -95,7 +96,6 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_cordz_sample_token",
             "absl_crc32c",
             "absl_crc_cord_state",
-            "absl_crc_cpu_detect",
             "absl_crc_internal",
             "absl_debugging_internal",
             "absl_decode_rust_punycode",
@@ -118,6 +118,7 @@ abseil_cpp = CMakeNinjaNixProject(
             "absl_flags_usage_internal",
             "absl_generic_printer_internal",
             "absl_graphcycles_internal",
+            "absl_hardening",
             "absl_hash",
             "absl_hashtable_profiler",
             "absl_hashtablez_sampler",

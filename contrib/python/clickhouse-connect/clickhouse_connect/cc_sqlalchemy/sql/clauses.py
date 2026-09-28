@@ -1,9 +1,120 @@
+from __future__ import annotations
+
+import builtins
+from typing import Any, TypeVar, overload
+from typing import cast as type_cast
+
 from sqlalchemy import and_, true
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.base import Immutable
-from sqlalchemy.sql.elements import ColumnElement, Label
+from sqlalchemy.sql.compiler import SQLCompiler
+from sqlalchemy.sql.elements import ColumnClause, ColumnElement, Label
 from sqlalchemy.sql.selectable import FromClause, Join
+from sqlalchemy.sql.sqltypes import NullType
+from sqlalchemy.sql.type_api import TypeEngine
 from sqlalchemy.sql.visitors import InternalTraversal
+
+from clickhouse_connect.cc_sqlalchemy.sql.preparer import ChIdentifierPreparer
+
+_T = TypeVar("_T")
+
+
+class _JSONSubcolumn(ColumnElement[object]):
+    """A storage-backed ClickHouse JSON subcolumn path."""
+
+    __visit_name__: str = "json_subcolumn"
+
+    _traverse_internals: list[tuple[str, InternalTraversal]] = [
+        ("parent", InternalTraversal.dp_clauseelement),
+        ("segment", InternalTraversal.dp_string),
+        ("type", InternalTraversal.dp_type),
+    ]
+
+    parent: ColumnClause[Any] | _JSONSubcolumn
+    segment: str
+    type: TypeEngine[object]
+
+    def __init__(self, parent: ColumnElement[Any], segment: str) -> None:
+        super().__init__()
+        if not isinstance(parent, (ColumnClause, _JSONSubcolumn)):
+            raise TypeError("JSON subcolumn parent must be a SQLAlchemy column or JSON subcolumn")
+        if not isinstance(segment, str):
+            raise TypeError(f"JSON subcolumn path segment must be a string, got {type(segment).__name__}")
+        if not segment:
+            raise ValueError("JSON subcolumn path segment must not be empty")
+        self.parent = parent
+        self.segment = segment
+        self.type = type_cast(TypeEngine[object], NullType())
+        self._propagate_attrs = parent._propagate_attrs
+
+    @property
+    def _from_objects(self) -> list[FromClause]:
+        return self.parent._from_objects
+
+    def __getitem__(self, segment: str) -> ColumnElement[object]:
+        return self.subcolumn(segment)
+
+    @overload
+    def subcolumn(self, segment: str, type_: None = None) -> ColumnElement[object]: ...
+
+    @overload
+    def subcolumn(self, segment: str, type_: TypeEngine[_T] | builtins.type[TypeEngine[_T]]) -> ColumnElement[_T]: ...
+
+    def subcolumn(
+        self,
+        segment: str,
+        type_: TypeEngine[Any] | builtins.type[TypeEngine[Any]] | None = None,
+    ) -> ColumnElement[Any]:
+        expression = _JSONSubcolumn(self, segment)
+        if type_ is not None:
+            return sa_cast(expression, type_)
+        return expression
+
+
+@overload
+def json_subcolumn(
+    parent: ColumnElement[Any],
+    segment: str,
+    type_: None = None,
+) -> ColumnElement[object]: ...
+
+
+@overload
+def json_subcolumn(
+    parent: ColumnElement[Any],
+    segment: str,
+    type_: TypeEngine[_T] | type[TypeEngine[_T]],
+) -> ColumnElement[_T]: ...
+
+
+def json_subcolumn(
+    parent: ColumnElement[Any],
+    segment: str,
+    type_: TypeEngine[Any] | type[TypeEngine[Any]] | None = None,
+) -> ColumnElement[Any]:
+    expression = _JSONSubcolumn(parent, segment)
+    if type_ is not None:
+        return sa_cast(expression, type_)
+    return expression
+
+
+@compiles(_JSONSubcolumn)
+def _compile_json_subcolumn(element: _JSONSubcolumn, compiler: SQLCompiler, **kw: Any) -> str:
+    """Allow SQLAlchemy's default compiler to inspect statements containing JSON paths."""
+    parent = compiler.process(element.parent, **kw)
+    segment = compiler.preparer.quote_identifier(element.segment)
+    return f"{parent}.{segment}"
+
+
+# The literal must match clickhouse_connect.driver_name. Importing the
+# dialect_name constant from cc_sqlalchemy would create an import cycle.
+@compiles(_JSONSubcolumn, "clickhousedb")
+def _compile_clickhouse_json_subcolumn(element: _JSONSubcolumn, compiler: SQLCompiler, **kw: Any) -> str:
+    parent = compiler.process(element.parent, **kw)
+    preparer = type_cast(ChIdentifierPreparer, compiler.preparer)
+    segment = preparer._quote_raw_identifier(element.segment)
+    return f"{parent}.{segment}"
 
 
 def _normalize_array_columns(array_column, alias):

@@ -7,6 +7,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/yql/dq/comp_nodes/operator_memory_quota
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/common
     ydb/library/yql/dq/proto

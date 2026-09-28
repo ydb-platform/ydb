@@ -463,6 +463,9 @@ struct TShardedTableOptions {
 
     struct TFamily {
         TString Name;
+        TMaybe<ui32> Id;
+        TMaybe<NKikimrSchemeOp::EColumnCodec> ColumnCodec;
+        TMaybe<NKikimrSchemeOp::EColumnCacheMode> ColumnCacheMode;
         TString LogPoolKind;
         TString SysLogPoolKind;
         TString DataPoolKind;
@@ -470,6 +473,7 @@ struct TShardedTableOptions {
         ui64 DataThreshold = 0;
         ui64 ExternalThreshold = 0;
         ui8 ExternalChannelsCount = 1;
+        bool ResetDataPoolKind = false;
     };
 
     using TAttributes = THashMap<TString, TString>;
@@ -669,6 +673,19 @@ ui64 AsyncSetColumnFamily(
         const TString& name,
         const TString& colName,
         TShardedTableOptions::TFamily family);
+
+ui64 AsyncAlterColumnFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        TShardedTableOptions::TFamily family);
+
+ui64 AsyncAlterAddColumnToFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const TString& colName,
+        const TString& familyName);
 
 ui64 AsyncAlterAndDisableShadow(
         Tests::TServer::TPtr server,
@@ -1048,5 +1065,40 @@ ui64 AsyncTruncateTable(
     const TActorId& sender,
     const TString& workingDir,
     const TString& tableName);
+
+// A single upsert operation within an uncommitted write.
+struct TUncommittedWriteOp {
+    ui64 Key;
+    ui64 Value;
+    ui64 WriteSeqNum; // 0 = no WriteSeqNum
+};
+
+// Sends an uncommitted multi-operation upsert. Each element of `ops` becomes one
+// OPERATION_UPSERT with its own WriteSeqNum (0 means none).
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 writerIndex,
+        const TVector<TUncommittedWriteOp>& ops,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Convenience overload for a single-operation uncommitted upsert.
+NKikimrDataEvents::TEvWriteResult UncommittedWrite(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const TTableId& tableId, const TVector<TShardedTableOptions::TColumn>& columns,
+        ui64 lockTxId, ui64 lockNodeId, ui64 key, ui64 value,
+        ui64 writerIndex, ui64 writeSeqNum,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
+
+// Asserts the lock reports exactly one write seq num and returns it
+const NKikimrDataEvents::TWriteSeqNum& WriteSeqNumOf(const NKikimrDataEvents::TLock& lock);
+
+NKikimrDataEvents::TEvWriteResult CommitLock(
+        TTestActorRuntime& runtime, const TActorId& sender, ui64 shard,
+        const NKikimrDataEvents::TLock& lock,
+        NKikimrDataEvents::TEvWriteResult::EStatus expected =
+            NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED);
 
 } // namespace NKikimr

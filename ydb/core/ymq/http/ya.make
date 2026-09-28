@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/ymq/base
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
+    ydb/library/net
 )
 
 END()

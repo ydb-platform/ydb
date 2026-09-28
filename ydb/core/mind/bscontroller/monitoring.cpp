@@ -366,7 +366,7 @@ public:
         , RespondTo(sender)
         , Json(cgi.Has("fmt") && cgi.Get("fmt") == "json")
         , Offset(FromStringWithDefault<ui64>(cgi.Get("RowsOffset"), 0))
-        , NumRows(FromStringWithDefault<ui64>(cgi.Get("RowsCount"), 1000))
+        , NumRows(Max<ui64>(1, FromStringWithDefault<ui64>(cgi.Get("RowsCount"), 1000)))
     {}
 
     TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_MON_EVENT_HEALTH_EVENTS; }

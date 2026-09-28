@@ -3,6 +3,13 @@ import argparse
 from ydb.public.tools.lib import cmds
 
 
+def deploy_local(arguments):
+    cmds.deploy(arguments, actor_system_config={
+        "use_auto_config": True,
+        "cpu_count": cmds.available_cpu_count(),
+    })
+
+
 if __name__ == '__main__':
     help = """
 \033[92mTool to setup local Yandex Database (YDB) cluster in the single-node mode (in most cases)\x1b[0m
@@ -42,7 +49,7 @@ To update cluster (stop + start):
         description="""\033[94mDeploy local YDB cluster\x1b[0m"""
     )
 
-    deploy.set_defaults(command=cmds.deploy)
+    deploy.set_defaults(command=deploy_local)
     cleanup = subparsers.add_parser(
         'cleanup',
         formatter_class=argparse.RawTextHelpFormatter,

@@ -1,6 +1,6 @@
 static PyObject *_current_interp_key(void)
 {
-    PyInterpreterState *interp = PyThreadState_GET()->interp;
+    PyInterpreterState *interp = PyInterpreterState_Get();
     return PyInterpreterState_GetDict(interp);   /* shared reference */
 }
 
@@ -17,13 +17,17 @@ static PyObject *_get_interpstate_dict(void)
     int err;
     PyInterpreterState *interp;
 
-    tstate = PyThreadState_GET();
+#if PY_VERSION_HEX >= 0x030D0000
+    tstate = PyThreadState_GetUnchecked();
+#else
+    tstate = _PyThreadState_UncheckedGet();
+#endif
     if (tstate == NULL) {
         /* no thread state! */
         return NULL;
     }
 
-    interp = tstate->interp;
+    interp = PyThreadState_GetInterpreter(tstate);
     interpdict = PyInterpreterState_GetDict(interp);   /* shared reference */
     if (interpdict == NULL) {
         /* subinterpreter was cleared already, or is being cleared right now,

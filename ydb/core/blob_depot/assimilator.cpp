@@ -552,6 +552,9 @@ namespace NKikimr::NBlobDepot {
                         const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
                         const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
                         const ui64 putId = NextPutId++;
+                        // DataKind is deliberately left at USER: this copies user payload out of the
+                        // group being decommitted, and stalling that while the destination is short
+                        // of space is the wanted behaviour.
                         SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
                             .BlobId = id,
                             .Buffer = TRope(TRcBuf(resp.Buffer)),

@@ -93,7 +93,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
 
         const auto runTest = [&](bool local) {
             const std::string suffix = local ? "_local" : "_nonlocal";
-            const std::string topicName = std::string("tableModeWriteTime") + suffix;
+            const TString topicName = TStringBuilder() << "tableModeWriteTime" << suffix;
             const std::string sourceName = std::string("tableModeWriteTimeSource") + suffix;
 
             ui32 partitionCount = 1;

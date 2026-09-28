@@ -81,7 +81,7 @@ public:
                 }
 
                 // In case then last item is smaller than MinItemSize and item before it + Last item bigger than MaxItemSize
-                // we can not guarantee that all requirements are met if 2 * MinItemSize > MaxItemSize
+                // we cannot guarantee that all requirements are met if 2 * MinItemSize > MaxItemSize
                 if (endSize > MinItemSize) {
                     const auto appendSize = endSize - std::min(endSize - MinItemSize, MinItemSize - lastItem.size());
                     lastItem = Queue.back().substr(appendSize) + lastItem;

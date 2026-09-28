@@ -136,12 +136,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Wraps #TTimer to make GetElapsedTime safe to call concurrently with Start/Stop.
-/*!
- *  Start and Stop are NOT intended to be called concurrently with each other;
- *  the caller must serialize them externally (e.g., by driving the timer from
- *  a single thread). The internal lock exists solely so that a concurrent
- *  GetElapsedTime sees a consistent timer state.
- */
 template <class TTimer>
 class TConcurrentTimer
 {

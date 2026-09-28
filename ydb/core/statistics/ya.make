@@ -9,6 +9,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/query_actor
     yql/essentials/core/minsketch
+    yql/essentials/core/histogram
     ydb/core/protos
     ydb/core/scheme
 )
@@ -27,4 +28,5 @@ RECURSE_FOR_TESTS(
     aggregator/ut
     database/ut
     service/ut
+    ut
 )

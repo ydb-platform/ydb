@@ -972,6 +972,40 @@ Y_UNIT_TEST(JoinStreamLookupStrategyHint) {
     }
 }
 
+Y_UNIT_TEST(UnusedHintProducesWarning) {
+    NYql::TAstParseResult res = SqlToYql(
+        "SELECT * FROM plato.Input AS a LEFT JOIN ANY /*+ merge() */ plato.Input AS b USING(key);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:1:50: Warning: Hint merge will not be used, code: 4534\n");
+}
+
+Y_UNIT_TEST(UnusedHintErrorWithoutFlag) {
+    NYql::TAstParseResult res = SqlToYql(
+        "PRAGMA Warning(\"error\", \"*\"); "
+        "SELECT * FROM plato.Input AS a LEFT JOIN ANY /*+ merge() */ plato.Input AS b USING(key);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:1:80: Error: Hint merge will not be used, code: 4534\n");
+}
+
+Y_UNIT_TEST(UnusedHintErrorWithFlag) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Flags.emplace("RespectWarnPolicyForUnusedSqlHints");
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(
+        "PRAGMA Warning(\"error\", \"*\"); "
+        "SELECT * FROM plato.Input AS a LEFT JOIN ANY /*+ merge() */ plato.Input AS b USING(key);",
+        settings);
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRINGS_EQUAL(
+        Err2Str(res),
+        "<main>:1:80: Error: Hint merge will not be used, code: 4534\n");
+}
+
 Y_UNIT_TEST(JoinConflictingStrategyHint) {
     {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ Merge() */   plato.Input AS b USING(key);");
@@ -1515,6 +1549,44 @@ Y_UNIT_TEST(AlterDatabaseSettings) {
     UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
 }
 
+Y_UNIT_TEST(AlterDatabaseTablesMetricsLevel) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE ydb;   ALTER DATABASE `/Root/test` SET (TABLES_METRICS_LEVEL = "TABLE");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('\"TABLES_METRICS_LEVEL\" (String '\"TABLE\"))");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
+Y_UNIT_TEST(AlterDatabaseTopicsMetricsLevel) {
+    // No proto field backs TOPICS_METRICS_LEVEL yet; this pins the YQL-layer passthrough only.
+    // The key is upper-cased by ParseDatabaseSetting, the value is kept verbatim.
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE ydb;   ALTER DATABASE `/Root/test` SET (topics_metrics_level = "topic");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('\"TOPICS_METRICS_LEVEL\" (String '\"topic\"))");
+        }
+    };
+
+    TWordCountHive elementStat = {{"Write!"}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
 Y_UNIT_TEST(TruncateTableAstYdb) {
     auto executeTruncateRequest = [](const TString& sql, const TString& tableName) {
         TVerifyLineFunc verifyLine = [&tableName](const TString& word, const TString& line) {
@@ -1545,6 +1617,78 @@ Y_UNIT_TEST(TruncateTableAstYdb) {
     executeTruncateRequest("USE ydb;   TRUNCATE TABLE plato.`Input`;", "Input");
     executeTruncateRequest("USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH INFER_SCHEMA;", "/Root/test/table");
     executeTruncateRequest("USE ydb;   TRUNCATE TABLE @tmp;", "@tmp");
+}
+
+Y_UNIT_TEST(TruncateTableSettings) {
+    NYql::TAstParseResult res = SqlToYql("USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe = true);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "(Key '('tablescheme (String '\"/Root/test/table\")))");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('mode 'truncateTable)");
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('\"UNSAFE\" (Bool '\"true\"))");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write!"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
+Y_UNIT_TEST(TruncateTableSettingsFalse) {
+    NYql::TAstParseResult res = SqlToYql("USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe = false);");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "'('\"UNSAFE\" (Bool '\"false\"))");
+        }
+    };
+
+    TWordCountHive elementStat = {{TString("Write!"), 0}};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(elementStat["Write!"], 1);
+}
+
+Y_UNIT_TEST(TruncateTableSettingsDuplicate) {
+    NYql::TAstParseResult res = SqlToYql("USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe = true, unsafe = false);");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Duplicate setting: UNSAFE");
+}
+
+Y_UNIT_TEST(TruncateTableEmptySettingsStillParse) {
+    // WITH () was legal before the settings rule was introduced; keep it that way.
+    NYql::TAstParseResult res = SqlToYql("USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH ();");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+// Canary: simple_table_ref ends with an optional table_hints, which is also spelled WITH (...).
+// A non-bool setting value is therefore swallowed as a table hint instead of reaching
+// with_truncate_table_settings. This pins that behaviour so a grammar change that alters
+// the ALT resolution is noticed here rather than in production.
+Y_UNIT_TEST(TruncateTableHintsAreStillSwallowed) {
+    for (const auto& sql : {
+             "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH INFER_SCHEMA;",
+             "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe = \"true\");",
+             "USE ydb;   TRUNCATE TABLE `/Root/test/table` WITH (unsafe);",
+         }) {
+        NYql::TAstParseResult res = SqlToYql(sql);
+        UNIT_ASSERT_C(res.IsOk(), TStringBuilder() << sql << ": " << Err2Str(res));
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            if (word == "Write!") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "'('mode 'truncateTable)");
+                UNIT_ASSERT_C(line.find("UNSAFE") == TString::npos,
+                              TStringBuilder() << "hint unexpectedly reached truncate settings: " << line);
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("Write!"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+    }
 }
 
 Y_UNIT_TEST(TruncateTableAstNotYdb) {
@@ -2822,6 +2966,15 @@ Y_UNIT_TEST(GroupByHopRtmr) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(DataWatermarksPragmaIsAccepted) {
+    auto res = SqlToYql(R"sql(
+        PRAGMA DataWatermarks = "obsolete";
+        SELECT COUNT(*) AS value FROM plato.Input
+        GROUP BY HOP(Data, "PT10S", "PT30S", "PT20S");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(GroupByHopRtmrSubquery) {
     // 'use plato' intentially avoided
     NYql::TAstParseResult res = SqlToYql(R"(
@@ -3090,7 +3243,7 @@ Y_UNIT_TEST(ForStatementLangVerFailure) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "FOR without EVALUATE is not available before language version 2026.02");
+        "FOR without EVALUATE is not available before language version 2026.03");
 }
 
 Y_UNIT_TEST(ForStatementLangVerSuccess) {
@@ -3114,7 +3267,7 @@ Y_UNIT_TEST(ParallelForStatementLangVer) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "PARALLEL FOR is not available before language version 2026.02");
+        "PARALLEL FOR is not available before language version 2026.03");
 }
 
 Y_UNIT_TEST(FunctionLangVerUnavailable) {
@@ -3247,13 +3400,14 @@ Y_UNIT_TEST(CombineLangverTest) {
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "Error: COMBINE is not available before language version 2026.02");
+        TStringBuilder() << "Error: COMBINE is not available before language version "
+                         << NYql::FormatLangVersion(NYql::NFeature::Combine.MinLangVer));
 }
 
 // TODO: rewrite to boilerplate
-NYql::TAstParseResult SqlToYql202602(const TString& query) {
+NYql::TAstParseResult SqlToYqlWithFeature(const TString& query, const NYql::TFeature& feature) {
     NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::MakeLangVersion(2026, 2);
+    settings.LangVer = feature.MinLangVer;
     return SqlToYqlWithSettings(query, settings);
 }
 
@@ -3263,7 +3417,7 @@ Y_UNIT_TEST(CombineSmokeTest) {
                                ON A.key = B.key AND A.subkey = B.subkey
                                USING Foo::DoBar((A.value), (B.value)))sql";
 
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
@@ -3280,7 +3434,7 @@ Y_UNIT_TEST(CombineAsSubquery) {
                                    ON A.key = B.key
                                    USING Foo::DoBar((A.value), (B.value))
                                ))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
@@ -3295,7 +3449,7 @@ Y_UNIT_TEST(CombineSubselectInputs) {
                                WITH (SELECT key, value, extra FROM plato.Input) as B
                                ON A.key = B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "Read! "};
@@ -3310,7 +3464,7 @@ Y_UNIT_TEST(CombineDiscard) {
                                WITH plato.Input as B
                                ON A.key = B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "discard"};
@@ -3328,7 +3482,7 @@ Y_UNIT_TEST(CombineInSubquery) {
                                    USING Foo::Dobar((A.value), (B.value));
                                END DEFINE;
                                SELECT * FROM $q())sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "UnorderedSubquery "};
@@ -3343,7 +3497,7 @@ Y_UNIT_TEST(CombineTableRowArgs) {
                                WITH plato.Input as B PRESORT B.key, B.subkey
                                ON A.key = B.key AND A.subkey = B.subkey
                                USING Foo::DoBar(TableRow(), TableRow()))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
     TWordCountHive elementStat = {"SqlCombine ", "SqlCombineInput ", "RemoveSystemMembers "};
@@ -3358,7 +3512,7 @@ Y_UNIT_TEST(CombineInvalidArgc) {
                                WITH plato.Input as B PRESORT B.key, B.subkey
                                ON A.key = B.key AND A.subkey = B.subkey
                                USING Foo::DoBar(TableRow()))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3370,7 +3524,7 @@ Y_UNIT_TEST(CombineOnNotEquality) {
                                WITH plato.Input as B
                                ON A.key > B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3382,7 +3536,7 @@ Y_UNIT_TEST(CombineOnNonColumnArg) {
                                WITH plato.Input as B
                                ON A.key = 1
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3394,7 +3548,7 @@ Y_UNIT_TEST(CombineOnColumnWithoutCorrelation) {
                                WITH plato.Input as B
                                ON key = B.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3406,7 +3560,7 @@ Y_UNIT_TEST(CombineOnUnknownCorrelation) {
                                WITH plato.Input as B
                                ON A.key = C.key
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3418,7 +3572,7 @@ Y_UNIT_TEST(CombineOnSameCorrelationBothSides) {
                                WITH plato.Input as B
                                ON A.key = A.subkey
                                USING Foo::DoBar((A.value), (B.value)))sql";
-    const auto res = SqlToYql202602(req);
+    const auto res = SqlToYqlWithFeature(req, NYql::NFeature::Combine);
     UNIT_ASSERT(!res.IsOk());
     UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
@@ -3677,6 +3831,32 @@ Y_UNIT_TEST(TtlTieringParseCorrect) {
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
+void TestTtlTieringObjectKeyPrefix(const TString& ddl) {
+    const auto res = SqlToYql(TString("USE ydb; ") + ddl + R"(
+        Interval("P1D") TO EXTERNAL DATA SOURCE `/Root/eds`.`archive//2026:09/`,
+        Interval("P2D") TO EXTERNAL DATA SOURCE `/Root/eds`.`cold`,
+        Interval("P30D") DELETE ON CreatedAt);)");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+    TWordCountHive stats = {"Write"};
+    VerifyProgram(res, stats, [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "objectKeyPrefix");
+            UNIT_ASSERT_STRING_CONTAINS(line, "archive//2026:09/");
+            UNIT_ASSERT_STRING_CONTAINS(line, "cold");
+            UNIT_ASSERT_STRING_CONTAINS(line, "/Root/eds");
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(stats["Write"], 1);
+}
+
+Y_UNIT_TEST(TtlTieringObjectKeyPrefixCreateTable) {
+    TestTtlTieringObjectKeyPrefix("CREATE TABLE tableName (CreatedAt Timestamp, PRIMARY KEY (CreatedAt)) WITH (TTL = ");
+}
+
+Y_UNIT_TEST(TtlTieringObjectKeyPrefixAlterTable) {
+    TestTtlTieringObjectKeyPrefix("ALTER TABLE tableName SET (TTL = ");
+}
+
 Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
     NYql::TAstParseResult res = SqlToYql(
         R"( USE ydb;
@@ -3691,7 +3871,6 @@ Y_UNIT_TEST(TtlTieringWithOtherActionsParseCorrect) {
                         ALTER FAMILY default SET DATA "ssd"
                     ;)");
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
     TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
         if (word == "Write") {
             UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("addColumnFamilies"));
@@ -3774,6 +3953,123 @@ Y_UNIT_TEST(ExternalDataChannelsCountParseCorrect) {
     VerifyProgram(res, elementStat, verifyLine);
 
     UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(TableMetricsLevelParseCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+        WITH ( METRICS_LEVEL = "TABLE" );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setMetricsLevel");
+            UNIT_ASSERT_STRING_CONTAINS(line, "TABLE");
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(TableMetricsLevelNumericParseCorrect) {
+    // Parse-only: the value is not range-checked at this layer.
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+        WITH ( METRICS_LEVEL = 4 );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setMetricsLevel");
+            UNIT_ASSERT_STRING_CONTAINS(line, "4");
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(TableMetricsLevelNumericSuffixParseCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+        WITH ( METRICS_LEVEL = 3u );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setMetricsLevel");
+            UNIT_ASSERT_C(!line.Contains("3u"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(TableMetricsLevelLowerCaseParseCorrect) {
+    // Case normalisation happens in KQP, not at the parse layer: the identifier is
+    // passed through verbatim here, so this only asserts that lowercase parses.
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+        WITH ( metrics_level = "partition" );
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setMetricsLevel");
+            UNIT_ASSERT_STRING_CONTAINS(line, "partition");
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(TableMetricsLevelBadValueShape) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+        WITH ( METRICS_LEVEL = 1.5 );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "METRICS_LEVEL value should be an integer or a string");
+}
+
+Y_UNIT_TEST(TableMetricsLevelEmptyStringRejected) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+        WITH ( METRICS_LEVEL = "" );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "METRICS_LEVEL value should be an integer or a string");
+}
+
+Y_UNIT_TEST(TableMetricsLevelBareIdentifierRejected) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        CREATE TABLE tableName (Key Uint32, Value String, PRIMARY KEY (Key))
+        WITH ( METRICS_LEVEL = TABLE );
+    )sql");
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "METRICS_LEVEL value should be an integer or a string");
 }
 
 Y_UNIT_TEST(DefaultValueColumn2) {
@@ -4175,6 +4471,66 @@ Y_UNIT_TEST(AlterTableDropChangefeedIsCorrect) {
 
 Y_UNIT_TEST(AlterTableSetPartitioningIsCorrect) {
     UNIT_ASSERT(SqlToYql("USE ydb;   ALTER TABLE table SET (AUTO_PARTITIONING_BY_SIZE = DISABLED)").IsOk());
+}
+
+Y_UNIT_TEST(AlterTableSetMetricsLevelIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table SET (METRICS_LEVEL = "DISABLED");
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setMetricsLevel");
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterTableSetMetricsLevelUncompatIsCorrect) {
+    // alter_table_set_table_setting_uncompat (SQLv1Antlr4.g.in:856): no parentheses, no '='.
+    // Same handler as the parenthesised form, so the emitted AST must match.
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table SET METRICS_LEVEL "TABLE";
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "setMetricsLevel");
+            UNIT_ASSERT_STRING_CONTAINS(line, "TABLE");
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+}
+
+Y_UNIT_TEST(AlterTableResetMetricsLevelIsCorrect) {
+    auto res = SqlToYql(R"sql(
+        USE ydb;
+        ALTER TABLE table RESET (METRICS_LEVEL);
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write") {
+            UNIT_ASSERT_STRING_CONTAINS(line, "resetMetricsLevel");
+        }
+    };
+
+    TWordCountHive elementStat = {"Write"};
+    VerifyProgram(res, elementStat, verifyLine);
+
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
 }
 
 Y_UNIT_TEST(AlterTableAddIndexWithIsSupported) {

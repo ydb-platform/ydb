@@ -10,6 +10,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/db_counters.h>
 #include <ydb/core/sys_view/service/query_interval.h>
+#include <ydb/core/tablet/detailed_metrics/processor_database_metrics_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
@@ -183,6 +184,9 @@ private:
     void AttachInternalCounters();
     void DetachExternalCounters();
     void DetachInternalCounters();
+    void AttachDetailedCounters();
+    void DetachDetailedCounters();
+    TProcessorDatabaseMetricsAggregator* GetDetailedAggregator();
     void SendNavigate();
 
     STFUNC(StateInit) {
@@ -196,8 +200,8 @@ private:
             IgnoreFunc(TEvSysView::TEvSendDbCountersRequest);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                        "TSysViewProcessor StateInit unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateInit unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
                 }
         }
     }
@@ -215,8 +219,8 @@ private:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                        "TSysViewProcessor StateOffline unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateOffline unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
                 }
         }
     }
@@ -248,8 +252,8 @@ private:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    LOG_CRIT(*TlsActivationContext  , NKikimrServices::SYSTEM_VIEWS,
-                        "TSysViewProcessor StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                    YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "TSysViewProcessor StateWork unexpected event",
+                        {"eventType", ev->GetTypeRewrite()});
                 }
         }
     }
@@ -361,10 +365,15 @@ private:
     TString CloudId;
     TString FolderId;
     TString DatabaseId;
+    TString MonitoringProjectId;
 
     ::NMonitoring::TDynamicCounterPtr ExternalGroup;
     ::NMonitoring::TDynamicCounterPtr LabeledGroup;
     std::unordered_map<TString, ::NMonitoring::TDynamicCounterPtr> InternalGroups;
+
+    ::NMonitoring::TDynamicCounterPtr DetailedGroup;
+    ::NMonitoring::TDynamicCounterPtr DetailedRawGroup;
+    TProcessorDatabaseMetricsAggregatorPtr DetailedAggregator;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
         NKikimr::NSysView::TDbServiceCounters>;
@@ -384,4 +393,3 @@ private:
 
 } // NSysView
 } // NKikimr
-

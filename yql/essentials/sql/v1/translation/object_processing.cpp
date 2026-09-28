@@ -104,6 +104,7 @@ TObjectProcessorWithFeatures::TObjectProcessorWithFeatures(TPosition pos, const 
                                                            TNodePtr features)
     : TBase(pos, objectId, typeId, context)
     , Features_(std::move(features))
+    , FakeSource_(BuildFakeSource(pos))
 {
 }
 
@@ -115,12 +116,12 @@ INode::TPtr TObjectProcessorWithFeatures::FillFeatures(INode::TPtr options) cons
     return options;
 }
 
-bool TObjectProcessorWithFeatures::DoInit(TContext& ctx, ISource* src) {
-    if (Features_ && !Features_->Init(ctx, src)) {
+bool TObjectProcessorWithFeatures::DoInit(TContext& ctx, ISource*) {
+    if (Features_ && !Features_->Init(ctx, FakeSource_.Get())) {
         return false;
     }
 
-    return TObjectProcessorImpl::DoInit(ctx, src);
+    return TObjectProcessorImpl::DoInit(ctx, FakeSource_.Get());
 }
 
 INode::TPtr TCreateObject::BuildOptions() const {

@@ -8,5 +8,10 @@
         {
             "uri": "file://test.test_equi_width_histogram_/results.txt"
         }
+    ],
+    "test.test[eq_height_histogram]": [
+        {
+            "uri": "file://test.test_eq_height_histogram_/results.txt"
+        }
     ]
 }

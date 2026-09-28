@@ -52,11 +52,11 @@ namespace NProtoBuf {
         template <typename T>
         inline typename TSelectCppType<T>::T Get(size_t index = 0) const;
 
-        inline TStringBuf GetStringReference(TString* scratch) const {
+        inline TStringBuf GetStringReference(TProtoStringType* scratch) const {
             return GetStringReference(0, scratch);
         }
 
-        inline TStringBuf GetStringReference(size_t index, TString* scratch) const {
+        inline TStringBuf GetStringReference(size_t index, TProtoStringType* scratch) const {
             Y_ASSERT(IsString());
             return IsRepeated() ? Refl().GetRepeatedStringReference(Msg, Fd, index, scratch)
                                 : Refl().GetStringReference(Msg, Fd, scratch);

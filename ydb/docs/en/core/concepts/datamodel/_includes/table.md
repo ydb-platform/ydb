@@ -252,7 +252,9 @@ In most cases, working with columnar tables {{ ydb-short-name }} is similar to w
 
   + Available in both the primary key and other columns: `Date`, `Datetime`, `Timestamp`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`, `Utf8`, `String`;
   + Available only in columns not included in the primary key: `Decimal`, `Double`, `Float`, `Int8`, `Int16`, `JsonDocument`, `Json`, `Yson`.
-* You can configure compression and encoding individually for each column. For details, see [CREATE TABLE request parameters](../../../yql/reference/syntax/create_table/index.md#parametry-zaprosa).
+
+* You can configure compression individually for each column when [creating](../../../yql/reference/syntax/create_table/index.md#compression) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#compression) it later.
+* You can also configure encoding for each column when [creating](../../../yql/reference/syntax/create_table/index.md#encoding) a column-oriented table or [change](../../../yql/reference/syntax/alter_table/columns.md#encoding) it later.
 
 Let's recreate the `article` table, this time in column-oriented format, using the following YQL command:
 

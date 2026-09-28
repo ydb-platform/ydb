@@ -205,6 +205,21 @@ void CheckMergeSymmetric(const TString& a, const TString& b, const std::vector<T
 }  // namespace
 
 Y_UNIT_TEST_SUITE(NJsonIndex) {
+    Y_UNIT_TEST(TokenizeJsonDoesNotEmitEmptyToken) {
+        TString error;
+
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(R"({"a":1})", error), (TVector<TString>{
+            encodeKey("a"), encodeKey("a") + numSuffix(1),
+        }));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[]", error), TVector<TString>{});
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{numSuffix(42)}));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+    }
+
 
     // Every path must have a ContextObject ($)
     Y_UNIT_TEST(CollectPath_EmptyPath) {
@@ -2822,7 +2837,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"invalid json", error), TVector<TString>{});
         UNIT_ASSERT(!error.empty());
 
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), (TVector<TString>{TString(), strSuffix("literal string")}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"literal string\"", error), (TVector<TString>{strSuffix("literal string")}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         TString obj = "{\"id\":42042,\"brand\":\"bricks\",\"part_count\":1401,\"price\":null,\"parts\":"
@@ -2830,7 +2845,6 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
         auto tokens = TokenizeJson(obj, error);
         std::sort(tokens.begin(), tokens.end());
         UNIT_ASSERT_VALUES_EQUAL(tokens, (TVector<TString>{
-            TString(),
             encodeKey("id"),
             encodeKey("id") + numSuffix(42042),
             encodeKey("brand"),
@@ -2857,7 +2871,6 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         TString emptyKeyObj = "{\"\":{\"a\":\"b\"}}";
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(emptyKeyObj, error), (TVector<TString>{
-            TString(),
             encodeKey(""),
             encodePath({"", "a"}),
             encodePath({"", "a"}) + strSuffix("b"),
@@ -2870,67 +2883,65 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             longKey[i] = 'a';
         TString longKeyObj = "{\"" + longKey + "\":{\"short\":\"b\"}}";
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson(longKeyObj, error), (TVector<TString>{
-            TString(),
             encodeKey(longKey),
             encodePath({longKey, "short"}),
             encodePath({longKey, "short"}) + strSuffix("b"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
-        // Empty object: only the root token is emitted
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{}", error), (TVector<TString>{TString()}));
+        // Empty object has no indexable tokens
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{}", error), TVector<TString>{});
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
-        // Empty array: only the root token is emitted
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[]", error), (TVector<TString>{TString()}));
+        // Empty array has no indexable tokens
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[]", error), TVector<TString>{});
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level number literal
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{TString(), numSuffix(42)}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("42", error), (TVector<TString>{numSuffix(42)}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level boolean literals
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("true", error), (TVector<TString>{TString(), boolTrueSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("true", error), (TVector<TString>{boolTrueSuffix}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("false", error), (TVector<TString>{TString(), boolFalseSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("false", error), (TVector<TString>{boolFalseSuffix}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level null literal
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("null", error), (TVector<TString>{TString(), nullSuffix}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("null", error), (TVector<TString>{nullSuffix}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level array: elements are tokenized at the root prefix (no key added for array indices)
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[1, 2, 3]", error), (TVector<TString>{
-            TString(), numSuffix(1), numSuffix(2), numSuffix(3),
+            numSuffix(1), numSuffix(2), numSuffix(3),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Array of arrays: nested arrays are flattened to the same path prefix
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[[1, 2], [3, 4]]", error), (TVector<TString>{
-            TString(), numSuffix(1), numSuffix(2), numSuffix(3), numSuffix(4),
+            numSuffix(1), numSuffix(2), numSuffix(3), numSuffix(4),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Deeply nested arrays
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[[1, [2, 3]], 4]", error), (TVector<TString>{
-            TString(), numSuffix(1), numSuffix(2), numSuffix(3), numSuffix(4),
+            numSuffix(1), numSuffix(2), numSuffix(3), numSuffix(4),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Mixed-type array
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[1, \"hello\", true, false, null]", error), (TVector<TString>{
-            TString(), numSuffix(1), strSuffix("hello"), boolTrueSuffix, boolFalseSuffix, nullSuffix,
+            numSuffix(1), strSuffix("hello"), boolTrueSuffix, boolFalseSuffix, nullSuffix,
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
-        // Array of empty containers: no scalar values, only the root token
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[[], {}, []]", error), (TVector<TString>{TString()}));
+        // Array of empty containers has no indexable tokens
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[[], {}, []]", error), TVector<TString>{});
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Array of objects: each object's keys appear at the same path depth (array adds no prefix)
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[{\"a\":1},{\"a\":2}]", error), (TVector<TString>{
-            TString(),
             encodeKey("a"), encodeKey("a") + numSuffix(1),
             encodeKey("a"), encodeKey("a") + numSuffix(2),
         }));
@@ -2938,7 +2949,7 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         // Simple root-level object
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":1}", error), (TVector<TString>{
-            TString(), encodeKey("a"), encodeKey("a") + numSuffix(1),
+            encodeKey("a"), encodeKey("a") + numSuffix(1),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2948,7 +2959,6 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             std::sort(objAllTypes.begin(), objAllTypes.end());
             UNIT_ASSERT_VALUES_EQUAL(error, "");
             TVector<TString> expected{
-                TString(),
                 encodeKey("b"), encodeKey("b") + boolTrueSuffix,
                 encodeKey("n"), encodeKey("n") + nullSuffix,
                 encodeKey("s"), encodeKey("s") + strSuffix("val"),
@@ -2959,25 +2969,25 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         // Empty key with a scalar value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"\":42}", error), (TVector<TString>{
-            TString(), encodeKey(""), encodeKey("") + numSuffix(42),
+            encodeKey(""), encodeKey("") + numSuffix(42),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Object with an empty string value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":\"\"}", error), (TVector<TString>{
-            TString(), encodeKey("a"), encodeKey("a") + strSuffix(""),
+            encodeKey("a"), encodeKey("a") + strSuffix(""),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Object whose values are empty containers: only path-prefix tokens, no value tokens
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"a\":{},\"b\":[]}", error), (TVector<TString>{
-            TString(), encodeKey("a"), encodeKey("b"),
+            encodeKey("a"), encodeKey("b"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode string value (ASCII key, Unicode value)
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"key\":\"Привет\"}", error), (TVector<TString>{
-            TString(), encodeKey("key"), encodeKey("key") + strSuffix("Привет"),
+            encodeKey("key"), encodeKey("key") + strSuffix("Привет"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
@@ -2987,7 +2997,6 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
             std::sort(unicodeVals.begin(), unicodeVals.end());
             UNIT_ASSERT_VALUES_EQUAL(error, "");
             TVector<TString> expected{
-                TString(),
                 encodeKey("a"), encodeKey("a") + strSuffix("Привет"),
                 encodeKey("b"), encodeKey("b") + strSuffix("Мир"),
             };
@@ -2997,54 +3006,54 @@ Y_UNIT_TEST_SUITE(NJsonIndex) {
 
         // Unicode key (ASCII value)
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":\"val\"}", error), (TVector<TString>{
-            TString(), encodeKey("ключ"), encodeKey("ключ") + strSuffix("val"),
+            encodeKey("ключ"), encodeKey("ключ") + strSuffix("val"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key and unicode value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":\"значение\"}", error), (TVector<TString>{
-            TString(), encodeKey("ключ"), encodeKey("ключ") + strSuffix("значение"),
+            encodeKey("ключ"), encodeKey("ключ") + strSuffix("значение"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Nested unicode key
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":{\"поле\":\"v\"}}", error), (TVector<TString>{
-            TString(), encodeKey("ключ"), encodePath({"ключ", "поле"}), encodePath({"ключ", "поле"}) + strSuffix("v"),
+            encodeKey("ключ"), encodePath({"ключ", "поле"}), encodePath({"ключ", "поле"}) + strSuffix("v"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key with numeric value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":42}", error), (TVector<TString>{
-            TString(), encodeKey("ключ"), encodeKey("ключ") + numSuffix(42),
+            encodeKey("ключ"), encodeKey("ключ") + numSuffix(42),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key with boolean value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":true}", error), (TVector<TString>{
-            TString(), encodeKey("ключ"), encodeKey("ключ") + boolTrueSuffix,
+            encodeKey("ключ"), encodeKey("ключ") + boolTrueSuffix,
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode key with null value
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":null}", error), (TVector<TString>{
-            TString(), encodeKey("ключ"), encodeKey("ключ") + nullSuffix,
+            encodeKey("ключ"), encodeKey("ключ") + nullSuffix,
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Unicode value in array
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("[\"Привет\",\"Мир\"]", error), (TVector<TString>{
-            TString(), strSuffix("Привет"), strSuffix("Мир"),
+            strSuffix("Привет"), strSuffix("Мир"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Array with unicode values under unicode key
         UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("{\"ключ\":[\"а\",\"б\"]}", error), (TVector<TString>{
-            TString(), encodeKey("ключ"), encodeKey("ключ") + strSuffix("а"), encodeKey("ключ") + strSuffix("б"),
+            encodeKey("ключ"), encodeKey("ключ") + strSuffix("а"), encodeKey("ключ") + strSuffix("б"),
         }));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
 
         // Root-level unicode string literal
-        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"Привет\"", error), (TVector<TString>{TString(), strSuffix("Привет")}));
+        UNIT_ASSERT_VALUES_EQUAL(TokenizeJson("\"Привет\"", error), (TVector<TString>{strSuffix("Привет")}));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
     }
 

@@ -99,6 +99,7 @@ public:
         authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        ServerSettings->AppConfig->MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(5);
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableStreamingQueries(true);
@@ -371,6 +372,7 @@ public:
     UNIT_TEST(ShouldGetState);
     UNIT_TEST(ShouldUseGc);
     UNIT_TEST(ShouldTablesHaveAutoPartitioning);
+    UNIT_TEST(ShouldDeleteGraphViaEvent);
     UNIT_TEST_SUITE_END();
 
     void ShouldRegister() {
@@ -559,12 +561,28 @@ public:
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
         RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState("some random state");
-        SaveState(1317, CheckpointId1, state);
+        size_t count = 20;
+        ui64 taskId1 = 1316;
+        ui64 taskId2 = 1317;
 
-        auto actual = GetState(1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, actual);
+        for (size_t seqNo = 0; seqNo < count; ++seqNo) {
+            auto checkpointId = TCheckpointId(Generation, seqNo);
+            CreateCheckpoint(GraphId, Generation, checkpointId, false);
+            auto state1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+            SaveState(taskId1, checkpointId, state1);
+            auto state2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+            SaveState(taskId2, checkpointId, state2);
+        }
+
+        ui64 seqNo = 10;
+        auto checkpointId = TCheckpointId(Generation, seqNo);
+        auto actual1 = GetState(taskId1, GraphId, checkpointId);
+        auto expected1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+        UNIT_ASSERT_VALUES_EQUAL(expected1, actual1);
+
+        auto actual2 = GetState(taskId2, GraphId, checkpointId);
+        auto expected2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+        UNIT_ASSERT_VALUES_EQUAL(expected2, actual2);
     }
 
     void ShouldUseGc() {
@@ -642,6 +660,32 @@ public:
         checkTable("states");
 
         driver.Stop(true);
+    }
+
+    void ShouldDeleteGraphViaEvent() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+
+        // Verify checkpoints exist before deletion
+        auto checkpointsBefore = GetCheckpoints(GraphId);
+        UNIT_ASSERT_C(!checkpointsBefore.empty(), "Expected checkpoints to exist before deletion");
+
+        // Send TEvDeleteGraphRequest event to StorageProxy
+        auto sender = GetRuntime()->AllocateEdgeActor();
+        auto request = std::make_unique<TEvCheckpointStorage::TEvDeleteGraphRequest>(GraphId);
+        GetRuntime()->Send(new IEventHandle(
+            NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+
+        // Wait for the response
+        TAutoPtr<IEventHandle> handle;
+        auto* event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvDeleteGraphResponse>(handle, TestTimeout);
+        UNIT_ASSERT_C(event, "TEvDeleteGraphResponse not received");
+        UNIT_ASSERT_C(event->Issues.Empty(), event->Issues.ToOneLineString());
+
+        // Verify all checkpoints are gone
+        auto checkpointsAfter = GetCheckpoints(GraphId);
+        UNIT_ASSERT_C(checkpointsAfter.empty(), "Expected all checkpoints to be deleted after TEvDeleteGraphRequest");
     }
 
 private:

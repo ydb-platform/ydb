@@ -33,7 +33,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         context->ConnectionId = edgeActor;
         context->DatabasePath = "/Root";
         context->ResourceDatabasePath = "/Root";
-        context->UserToken = new NACLib::TUserToken("root@builtin", {});
+        context->Token.UserToken = new NACLib::TUserToken("root@builtin", {});
 
         auto actorId = runtime->Register(new TKafkaMetadataActor(context, 1, TMessagePtr<TMetadataRequestData>(std::make_shared<TBuffer>(), request),
                                                                  NKafka::MakeKafkaDiscoveryCacheID()));

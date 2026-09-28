@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <utility>
+#include <vector>
 
 namespace NKafka {
 
@@ -681,10 +682,13 @@ TKafkaRecordBatch ReadKafkaRecordBatch(
     TStringBuf data,
     TKafkaVersion version = 2);
 TKafkaRecordBatch ReadRecordBatch(TStringBuf data);
+bool SetKafkaBatchBaseOffset(TString& data, ui64 baseOffset);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
 
 std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header);
 std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo);
+// Reconstruct a record timestamp with Kafka's wrapping 64-bit arithmetic.
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta);
 ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);
 
 } // namespace NKafka

@@ -12,6 +12,8 @@
 
 #include <yt/yt/core/compression/public.h>
 
+#include <yt/yt/core/profiling/timing.h>
+
 #include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/range.h>
@@ -91,6 +93,17 @@ DEFINE_REFCOUNTED_TYPE(TAttachmentsInputStream)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Cumulative timings of an attachments output stream.
+struct TAttachmentsOutputStreamStatistics
+{
+    //! Time writes were blocked because the window was full.
+    TDuration WriteStallTime;
+    //! Time the window was drained, i.e. everything written was already read by the peer.
+    TDuration WindowDrainedTime;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TAttachmentsOutputStream
     : public NConcurrency::IAsyncZeroCopyOutputStream
 {
@@ -110,6 +123,8 @@ public:
     void AbortUnlessClosed(const TError& error, bool fireAborted = true);
     void HandleFeedback(const TStreamingFeedback& feedback);
     std::optional<TStreamingPayload> TryPull();
+
+    TAttachmentsOutputStreamStatistics GetStatistics();
 
     DEFINE_SIGNAL(void(), Aborted);
 
@@ -143,6 +158,8 @@ private:
     TRingQueue<TConfirmationEntry> ConfirmationQueue_;
     TPromise<void> ClosePromise_;
     NConcurrency::TDelayedExecutorCookie CloseTimeoutCookie_;
+    NProfiling::TWallTimer WindowDrainedTimer_;
+    NProfiling::TWallTimer WriteStallTimer_{/*start*/ false};
     bool Closed_ = false;
     ssize_t WritePosition_ = 0;
     ssize_t SentPosition_ = 0;
@@ -288,10 +305,11 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Handles an incoming streaming request that uses the #CreateRpcClientInputStream
-//! function.
+//! function. #finalizer is invoked after the response stream is closed and before the reply is sent.
 void HandleInputStreamingRequest(
     const IServiceContextPtr& context,
-    const std::function<TSharedRef()>& blockGenerator);
+    const std::function<TSharedRef()>& blockGenerator,
+    const std::function<void()>& finalizer = {});
 
 void HandleInputStreamingRequest(
     const IServiceContextPtr& context,

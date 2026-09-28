@@ -26,7 +26,6 @@ struct TSysTables {
 
         struct TDefaultExpressionColumnInfo {
             TString ExprText;
-            TString Context;
             TVector<TString> Dependencies;
             bool Stored = false;
         };
@@ -135,6 +134,10 @@ struct TSysTables {
             };
 
             bool HasWrites = false; // Not exposed as a column
+            ui64 WriterIndex = 0; // Not exposed as a column
+            ui64 WriteSeqNum = 0; // Not exposed as a column
+            // False when restored from TPersistentLock, which cannot carry the write seq num.
+            bool WriteSeqNumKnown = false;
 
             bool IsEmpty() const { return (LockId == 0); }
             bool IsError() const { return IsError(Counter); }

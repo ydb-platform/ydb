@@ -178,7 +178,8 @@ void DoCollectBatch(
                 producer->Counters->Tags.clear();
             }
         } catch (const std::exception& ex) {
-            YT_LOG_ERROR(ex, "Producer read failed");
+            YT_TLOG_ERROR("Producer read failed")
+                .With(ex);
             continue;
         }
     }

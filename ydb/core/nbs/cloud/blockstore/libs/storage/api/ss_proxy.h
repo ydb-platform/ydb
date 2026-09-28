@@ -11,16 +11,18 @@
 
 #include <ydb/library/actors/core/actorid.h>
 
+#include <memory>
+
 namespace NYdb::NBS::NStorage {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-#define BLOCKSTORE_SS_PROXY_REQUESTS(xxx, ...) \
-    xxx(CreateVolume, __VA_ARGS__)             \
-    xxx(ModifyScheme, __VA_ARGS__)             \
-    xxx(DescribeScheme, __VA_ARGS__)           \
-    xxx(WaitSchemeTx, __VA_ARGS__)             \
-    xxx(BackupPathDescriptions, __VA_ARGS__)   \
+#define BLOCKSTORE_SS_PROXY_REQUESTS(xxx, ...)                                 \
+    xxx(CreateVolume, __VA_ARGS__)                                             \
+    xxx(ModifyScheme, __VA_ARGS__)                                             \
+    xxx(DescribeScheme, __VA_ARGS__)                                           \
+    xxx(WaitSchemeTx, __VA_ARGS__)                                             \
+    xxx(BackupPathDescriptions, __VA_ARGS__)                                   \
     xxx(DestroyVolume, __VA_ARGS__)
 
 // BLOCKSTORE_SS_PROXY_REQUESTS
@@ -46,12 +48,15 @@ struct TEvSSProxy
     {
         const NKikimrScheme::EStatus Status;
         const TString Reason;
+        const ui64 TabletId;
 
         TCreateVolumeResponse(
             NKikimrScheme::EStatus status = NKikimrScheme::StatusSuccess,
-            TString reason = {})
+            TString reason = {},
+            ui64 tabletId = 0)
             : Status(status)
             , Reason(std::move(reason))
+            , TabletId(tabletId)
         {}
     };
 
@@ -284,5 +289,16 @@ struct TEvSSProxy
 ////////////////////////////////////////////////////////////////////////////////
 
 NActors::TActorId MakeSSProxyServiceId();
+
+////////////////////////////////////////////////////////////////////////////////
+
+// Builds an AlterBlockStoreVolume ModifyScheme that SSProxy will wait to
+// completion for. `version` is the path version used in ApplyIf.
+std::unique_ptr<TEvSSProxy::TEvModifySchemeRequest>
+CreateModifySchemeRequestForAlterVolume(
+    TString path,
+    ui64 pathId,
+    ui64 version,
+    const NKikimrBlockStore::TVolumeConfig& volumeConfig);
 
 }   // namespace NYdb::NBS::NStorage

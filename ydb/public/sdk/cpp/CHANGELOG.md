@@ -1,3 +1,25 @@
+* Added OIDC/OAuth authentication via `NOidc::CreateOidcProviderFactory`, supporting static access tokens, Client Credentials Grant, and Device Authorization Grant, with token refresh and interfaces for token caching and interactive sign-in.
+
+* Added `Float16` and `BFloat16` vector index types.
+
+## v3.23.0
+
+* Added optional `TRetryOperationSettings::StopToken` for cooperative cancellation between retry attempts.
+
+* Added `EQ_HEIGHT_HISTOGRAM` to `EMultiColumnStatisticsType`.
+
+## v3.22.0
+
+* Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
+
+* Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
+
+* Added the initial process-wide SDK runtime infrastructure. Driver cancellation and callback accounting are now isolated per driver, without changing public APIs or resource-sharing behavior.
+
+## v3.21.1
+
+* Fix read session close deadlock in topic sdk.
+
 ## v3.21.0
 
 * Fixed Query SDK `CreateSession` metrics being recorded when reusing a session from the pool.

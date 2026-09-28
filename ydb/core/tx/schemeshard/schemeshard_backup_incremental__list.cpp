@@ -1,7 +1,7 @@
 #include "schemeshard_backup.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/backup/impl/logging.h>
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
 
 namespace NKikimr::NSchemeShard {
 
@@ -81,7 +81,9 @@ public:
 
         }
 
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG(GetLogPrefix() << "Reply",
+            {"record", Response->Record.ShortDebugString()},
+        );
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -89,7 +91,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("Execute " << record.ShortDebugString());
+        YDB_LOG_DEBUG(GetLogPrefix() << "Execute",
+            {"record", record.ShortDebugString()},
+        );
 
         Response = MakeHolder<TEvBackup::TEvListIncrementalBackupsResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -160,3 +164,5 @@ ITransaction* TSchemeShard::CreateTxList(TEvBackup::TEvListIncrementalBackupsReq
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

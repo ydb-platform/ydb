@@ -1,0 +1,51 @@
+[
+  {
+    "jsonrpc": "2.0",
+    "method": "textDocument/didOpen",
+    "params": {
+      "textDocument": {
+        "uri": "file:///tmp/a.yql",
+        "languageId": "yql",
+        "version": 1,
+        "text": "SELECT\n    1 + 'a'\n;\n"
+      }
+    }
+  },
+  {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "textDocument/diagnostic",
+    "params": {
+      "identifier": "YQL",
+      "textDocument": {
+        "uri": "file:///tmp/a.yql"
+      }
+    }
+  },
+  {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "items": [
+        {
+          "code": "DEFAULT_ERROR",
+          "message": "Cannot add type Int32 and String",
+          "range": {
+            "end": {
+              "character": 7,
+              "line": 1
+            },
+            "start": {
+              "character": 6,
+              "line": 1
+            }
+          },
+          "severity": 1,
+          "source": "typecheck"
+        }
+      ],
+      "kind": "full",
+      "resultId": "1"
+    }
+  }
+]

@@ -43,8 +43,8 @@ enum class ECompletionItemKind {
 };
 
 enum class EMarkupKind {
-    PlainText,
-    Markdown,
+    PlainText /* "plaintext" */,
+    Markdown /* "markdown" */,
 };
 
 struct TMarkupContent {
@@ -62,6 +62,7 @@ struct TCompletionItem {
     ECompletionItemKind Kind;
     TMaybe<TString> Detail;
     TMaybe<TMarkupContent> Documentation;
+    TMaybe<TString> SortText;
     TMaybe<TString> FilterText;
     TMaybe<TString> InsertText;
     TMaybe<EInsertTextFormat> InsertTextFormat;
@@ -77,7 +78,7 @@ struct TCompletionList {
 namespace NYql::NReflection {
 
 YQL_DEFINE_REFLECTING(NLsp::TMarkupContent, (Kind)(Value));
-YQL_DEFINE_REFLECTING(NLsp::TCompletionItem, (Label)(Kind)(Detail)(Documentation)(FilterText)(InsertText)(InsertTextFormat));
+YQL_DEFINE_REFLECTING(NLsp::TCompletionItem, (Label)(Kind)(Detail)(Documentation)(SortText)(FilterText)(InsertText)(InsertTextFormat));
 YQL_DEFINE_REFLECTING(NLsp::TCompletionList, (IsIncomplete)(Items));
 
 } // namespace NYql::NReflection

@@ -133,6 +133,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
         }
     }
 
+    // clang-format off
     auto dedupedAggregate = Build<TCoAggregate>(ctx, self.Pos())
         .Input(self.Input())
         .Keys(self.Keys())
@@ -140,17 +141,21 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
         .Settings(self.Settings())
         .Build()
         .Value();
+    // clang-format on
 
+    // clang-format off
     return ctx.Builder(self.Pos())
         .Callable("Map")
             .Add(0, dedupedAggregate.Ptr())
             .Lambda(1)
                 .Param("row")
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                    // clang-format on
                     auto structObj = parent.Callable("AsStruct");
                     ui32 targetIndex = 0;
                     for (ui32 index = 0; index < self.Keys().Size(); ++index) {
                         auto keyAtom = self.Keys().Item(index).Ptr();
+                        // clang-format off
                         structObj
                             .List(targetIndex++)
                                 .Add(0, keyAtom)
@@ -159,6 +164,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                     .Add(1, keyAtom)
                                 .Seal()
                             .Seal();
+                        // clang-format on
                     }
 
                     for (ui32 index = 0; index < handlersMapping.size(); ++index) {
@@ -167,6 +173,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                             const auto& myColumn = columnNode->Content();
                             const auto& originalColumn = self.Handlers().Item(handlersMapping[index] == Max<ui32>() ?
                                 index : handlersMapping[index]).Ref().Child(0)->Content();
+                            // clang-format off
                             structObj
                                 .List(targetIndex++)
                                     .Atom(0, myColumn)
@@ -175,8 +182,10 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                         .Atom(1, originalColumn)
                                     .Seal()
                                 .Seal();
+                            // clang-format on
                         } else {
                             for (auto childAtom : columnNode->Children()) {
+                                // clang-format off
                                 structObj
                                     .List(targetIndex++)
                                         .Add(0, childAtom)
@@ -185,6 +194,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                             .Add(1, childAtom)
                                         .Seal()
                                     .Seal();
+                                // clang-format on
                             }
                         }
                     }
@@ -192,6 +202,7 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                     auto settings = self.Settings();
                     auto hoppingSetting = GetSetting(settings.Ref(), "hopping");
                     if (hoppingSetting && "HoppingTraits" == hoppingSetting->Child(1)->Content()) { // has legacy hopping window
+                        // clang-format off
                         structObj
                             .List(targetIndex++)
                                 .Atom(0, "_yql_time", TNodeFlags::Default)
@@ -200,13 +211,16 @@ TExprNode::TPtr DeduplicateAggregateSameTraits(const TExprNode::TPtr& node, TExp
                                     .Atom(1, "_yql_time", TNodeFlags::Default)
                                 .Seal()
                             .Seal();
+                        // clang-format on
                     }
 
                     return structObj.Seal();
+                // clang-format off
                 })
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -270,20 +284,24 @@ TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& 
 
         for (auto& tuple : tuples) {
             bodyItems.push_back(
+                // clang-format off
                 ctx.Builder(tuple.Trait().Cast<TCoAggregationTraits>().FinishHandler().Pos())
                     .Apply(tuple.Trait().Cast<TCoAggregationTraits>().FinishHandler().Ref())
                         .With(0, arg)
                     .Seal()
                     .Build()
             );
+                // clang-format on
             columnNames.push_back(tuple.ColumnName().Cast<TCoAtom>().Ptr());
         }
 
         auto newHandler = ctx.NewLambda(arg->Pos(), ctx.NewArguments(arg->Pos(), { arg }), ctx.NewList(arg->Pos(), std::move(bodyItems)));
+        // clang-format off
         auto newTraits = Build<TCoAggregationTraits>(ctx, tuples.front().Pos())
             .InitFrom(tuples.front().Trait().Cast<TCoAggregationTraits>())
             .FinishHandler(newHandler)
             .Done().Ptr();
+        // clang-format on
         auto newTuple = ctx.ChangeChild(tuples.front().Ref(), TCoAggregateTuple::idx_Trait, std::move(newTraits));
         newTuple = ctx.ChangeChild(*newTuple, TCoAggregateTuple::idx_ColumnName, ctx.NewList(tuples.front().Pos(), std::move(columnNames)));
         resultAggTuples.push_back(std::move(newTuple));
@@ -293,11 +311,13 @@ TExprNode::TPtr MergeAggregateTraits(const TExprNode::TPtr& node, TExprContext& 
         return node;
     }
 
+    // clang-format off
     return Build<TCoAggregate>(ctx, node->Pos())
         .InitFrom(self)
         .Handlers(ctx.NewList(self.Pos(), std::move(resultAggTuples)))
         .Done()
         .Ptr();
+    // clang-format on
 }
 
 TExprNode::TPtr SimplifySync(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -443,11 +463,11 @@ TExprNode::TPtr OptimizeXor(const TExprNode::TPtr& node, TExprContext& ctx) {
     TNodeSet set(children.size());
     TNodeMap<TExprNode::TListType::const_iterator> map(children.size());
     for (auto it = children.cbegin(); children.cend() != it;) {
-        if (set.emplace(it->Get()).second)
+        if (set.emplace(it->Get()).second) {
             ++it;
-        else if (const auto ins = map.emplace(it->Get(), it); ins.second)
+        } else if (const auto ins = map.emplace(it->Get(), it); ins.second) {
             ++it;
-        else {
+        } else {
             children.erase(it);
             children.erase(ins.first->second);
             set.clear();
@@ -895,7 +915,7 @@ TExprNode::TPtr ApplyOrDistributive(const TExprNode::TPtr& node, TExprContext& c
 
                 TExprNodeList newGroup;
                 for (auto& idx : group) {
-                    auto childAnd = children[idx];
+                    const auto& childAnd = children[idx];
                     TExprNodeList preds = childAnd->ChildrenList();
                     EraseIf(preds, [&](const TExprNode::TPtr& p) { return commonSet.contains(IsNoPush(*p) ? p->Child(0) : p.Get()); });
                     if (preds.empty()) {
@@ -996,10 +1016,11 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
             YQL_CLOG(DEBUG, Core) << node->Content() << " with identical predicates.";
             auto children = node->ChildrenList();
             for (auto i = 0U; i < children.size() - 1U;) {
-                if (predicates.erase(children[i].Get()))
+                if (predicates.erase(children[i].Get())) {
                     i += 2U;
-                else
+                } else {
                     children.erase(children.cbegin() + i, children.cbegin() + i + 2U);
+                }
             }
             return ctx.ChangeChildren(*node, std::move(children));
         }
@@ -1014,8 +1035,9 @@ TExprNode::TPtr CheckIfWithSame(const TExprNode::TPtr& node, TExprContext& ctx, 
                         auto many = prev->ChildrenList();
                         many.emplace_back(std::move(next));
                         prev = ctx.ChangeChildren(*prev, std::move(many));
-                    } else
+                    } else {
                         prev = ctx.NewCallable(node->Pos(), "Or", {std::move(prev), std::move(next)});
+                    }
                     children.erase(children.cbegin() + i + 1U, children.cbegin() + i + 3U);
                     auto res = ctx.ChangeChildren(*node, std::move(children));
                     res = KeepWorld(res, *node, ctx, *optCtx.Types);

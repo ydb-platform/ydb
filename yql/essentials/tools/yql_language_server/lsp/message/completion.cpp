@@ -16,12 +16,7 @@ JSON_DEFINE_TO(NLsp::ECompletionItemKind, value) {
 }
 
 JSON_DEFINE_TO(NLsp::EMarkupKind, value) {
-    switch (value) {
-        case NLsp::EMarkupKind::PlainText:
-            return TJsonValue("plaintext");
-        case NLsp::EMarkupKind::Markdown:
-            return TJsonValue("markdown");
-    }
+    return ToString(value);
 }
 
 YQL_DERIVE_JSON_TO(NLsp::TMarkupContent);

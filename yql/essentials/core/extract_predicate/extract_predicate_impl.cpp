@@ -1511,11 +1511,13 @@ TMaybe<size_t> CalcMaxRanges(const TExprNode::TPtr& range, const THashMap<TStrin
 TExprNode::TPtr MakePredicateFromPrunedRange(const TExprNode::TPtr& range, const TExprNode::TPtr& row, TExprContext& ctx) {
     TPositionHandle pos = range->Pos();
     if (range->IsCallable("RangeRest")) {
+        // clang-format off
         return ctx.Builder(pos)
             .Apply(range->TailPtr())
             .With(0, row)
             .Seal()
             .Build();
+        // clang-format on
     }
 
     YQL_ENSURE(range->IsCallable({"RangeOr", "RangeAnd"}));
@@ -1803,9 +1805,11 @@ void TryBuildSingleRangeHint(TExprNode::TPtr range, const TStructExprType& rowTy
         hint->Right.Columns.push_back(op->ChildPtr(1));
 
         if (firstKeyType->GetKind() == ETypeAnnotationKind::Optional) {
+            // clang-format off
             auto none = Build<TCoNothing>(ctx, op->Pos())
                             .OptionalType(ExpandType(op->Pos(), *firstKeyType, ctx))
                             .Done();
+            // clang-format on
             hint->Left.Columns.push_back(none.Ptr());
             hint->Left.Inclusive = false;
         } else {
@@ -1823,9 +1827,11 @@ void TryBuildSingleRangeHint(TExprNode::TPtr range, const TStructExprType& rowTy
     } else if (op->IsCallable("Exists")) {
         YQL_ENSURE(rangeLen == 1);
         hint.ConstructInPlace();
+        // clang-format off
         auto none = Build<TCoNothing>(ctx, op->Pos())
                         .OptionalType(ExpandType(op->Pos(), *firstKeyType, ctx))
                         .Done();
+        // clang-format on
         if (negated) {
             hint->Left.Inclusive = hint->Right.Inclusive = true;
             hint->Left.Columns.push_back(none.Ptr());

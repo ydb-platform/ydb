@@ -134,6 +134,11 @@ namespace NKikimr {
             ui64 refPointLsn = 0;
             str.Write(&refPointLsn, sizeof(ui64));
 
+            if (IsStripe) {
+                const ui8 flags = 1;
+                str.Write(&flags, sizeof(ui8));
+            }
+
             return str.Str();
         }
 
@@ -174,15 +179,25 @@ namespace NKikimr {
             cur += TDiskPart::SerializedSize;
 
             // RefPointLsn (for backward compatibility, can be removed)
-            if (size_t(end - cur) != sizeof(ui64))
+            if (size_t(end - cur) < sizeof(ui64))
                 return false;
+            cur += sizeof(ui64);
 
+            IsStripe = false;
+            if (cur == end) {
+                return true;
+            }
+            if (size_t(end - cur) != sizeof(ui8))
+                return false;
+            const ui8 flags = ReadUnaligned<ui8>(cur);
+            IsStripe = flags & 1;
             return true;
         }
 
         TString TPutRecoveryLogRec::ToString() const {
             TStringStream str;
-            str << "{LogoBlobID# " << LogoBlobID.ToString() << " DiskAddr# " << DiskAddr.ToString() << "}";
+            str << "{LogoBlobID# " << LogoBlobID.ToString() << " DiskAddr# " << DiskAddr.ToString()
+                << " IsStripe# " << (IsStripe ? "true" : "false") << "}";
             return str.Str();
         }
 

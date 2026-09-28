@@ -411,7 +411,6 @@ private:
         dst.Append(MakeChunkedBufferAndUntrack(data.buffers[2], mainData, mainSize));
     }
 
-private:
     bool ShouldTrimArray(const arrow::ArrayData& data) const {
         if (!MinFillPercentage_) {
             return false;

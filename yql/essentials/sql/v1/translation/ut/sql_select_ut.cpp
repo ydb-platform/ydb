@@ -591,35 +591,27 @@ Y_UNIT_TEST(ReadsProjectionFromSubquery) {
 
 Y_UNIT_TEST_SUITE(Watermarks) {
 
-Y_UNIT_TEST(InsertAs) {
-    auto res = SqlToYql(R"sql(
+Y_UNIT_TEST(InsertAsDeprecated) {
+    ExpectFailWithError(
+        R"sql(
             USE plato;
 
             INSERT INTO Output
             SELECT * FROM Input
             WITH WATERMARK AS (ts - Interval("PT1S"));
-        )sql");
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
-    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
-    VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
-    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
+        )sql",
+        "<main>:6:12: Error: extraneous input 'WITH' expecting {<EOF>, ';'}\n");
 }
 
-Y_UNIT_TEST(SelectAs) {
-    auto res = SqlToYql(R"sql(
+Y_UNIT_TEST(SelectAsDeprecated) {
+    ExpectFailWithError(
+        R"sql(
             USE plato;
 
             SELECT * FROM Input
             WITH WATERMARK AS (ts - Interval("PT1S"));
-        )sql");
-    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
-
-    TWordCountHive stat = {"watermark", "WatermarkGenerator"};
-    VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["watermark"], 1);
-    UNIT_ASSERT_VALUES_EQUAL(stat["WatermarkGenerator"], 0);
+        )sql",
+        "<main>:5:12: Error: extraneous input 'WITH' expecting {<EOF>, ';'}\n");
 }
 
 Y_UNIT_TEST(InsertEquals) {

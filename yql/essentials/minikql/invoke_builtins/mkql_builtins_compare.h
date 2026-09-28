@@ -4,8 +4,7 @@
 
 #include <array>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 template <typename TLeft, typename TRight, class TImpl>
 struct TCompareArithmeticBinary: public TArithmeticConstraintsBinary<TLeft, TRight, bool> {
@@ -208,6 +207,50 @@ void RegisterAggrCompareCustomOpt(IBuiltinFunctionRegistry& registry, const std:
                          TArgs<TType, TType, true, true, false>,
                          TAggrCompareWrap>(registry, name);
 }
+
+namespace NDecimal {
+
+namespace NPrivate {
+
+template <
+    i8 ScaleFactor,
+    template <i8> class TFunc,
+    template <i8> class TAggrFunc>
+void RegisterCompareScaleFactors(
+    IBuiltinFunctionRegistry& registry,
+    const std::string_view& name,
+    const std::string_view& aggrName) {
+    static_assert(ScaleFactor <= static_cast<i8>(NYql::NDecimal::MaxPrecision), "Scale factor is too large");
+    const TString suffix = ScaleFactor == 0 ? TString() : TString("_") + ::ToString(static_cast<i16>(ScaleFactor));
+    RegisterCompareCustomOpt<
+        NUdf::TDataType<NUdf::TDecimal>,
+        NUdf::TDataType<NUdf::TDecimal>,
+        TFunc<ScaleFactor>,
+        TCompareArgsOpt>(registry, TString::Join(name, suffix));
+    RegisterAggrCompareCustomOpt<
+        NUdf::TDataType<NUdf::TDecimal>,
+        TAggrFunc<ScaleFactor>,
+        TCompareArgsOpt>(registry, TString::Join(aggrName, suffix));
+
+    if constexpr (ScaleFactor < static_cast<i8>(NYql::NDecimal::MaxPrecision)) {
+        RegisterCompareScaleFactors<static_cast<i8>(ScaleFactor + 1), TFunc, TAggrFunc>(
+            registry, name, aggrName);
+    }
+}
+
+} // namespace NPrivate
+
+template <template <i8> class TFunc, template <i8> class TAggrFunc>
+void RegisterCompare(
+    IBuiltinFunctionRegistry& registry,
+    const std::string_view& name,
+    const std::string_view& aggrName) {
+    NPrivate::RegisterCompareScaleFactors<
+        -static_cast<i8>(NYql::NDecimal::MaxPrecision), TFunc, TAggrFunc>(
+        registry, name, aggrName);
+}
+
+} // namespace NDecimal
 
 template <
     typename TInput,
@@ -670,5 +713,4 @@ void RegisterGreater(TKernelFamilyMap& kernelFamilyMap);
 void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry);
 void RegisterGreaterOrEqual(TKernelFamilyMap& kernelFamilyMap);
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -85,7 +85,14 @@ extern "C" {  // portability definitions are in global scope, not a namespace
 #endif  // __restrict__
 #endif  // CROARING_REGULAR_VISUAL_STUDIO
 
-#if defined(__x86_64__) || defined(_M_X64)
+#if defined(__riscv) || defined(_M_RISCV32) || defined(_M_RISCV64)
+#define CROARING_IS_RISCV 1
+
+#if (defined(__riscv_xlen) && (__riscv_xlen == 64)) || defined(_M_RISCV64)
+#define CROARING_IS_RISCV64 1
+#endif
+
+#elif defined(__x86_64__) || defined(_M_X64)
 // we have an x64 processor
 #define CROARING_IS_X64 1
 
@@ -572,6 +579,13 @@ static inline bool croaring_refcount_dec(croaring_refcount_t *val) {
 static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {
     return atomic_load_explicit(val, memory_order_relaxed);
 }
+
+// Returns true if the caller holds the only reference, and may thus take
+// exclusive ownership of the object. The "acquire" operation pairs with the
+// "release" operation from dropping the other references.
+static inline bool croaring_refcount_is_unique(const croaring_refcount_t *val) {
+    return atomic_load_explicit(val, memory_order_acquire) == 1;
+}
 #elif CROARING_ATOMIC_IMPL == CROARING_ATOMIC_IMPL_CPP
 #include <atomic>
 typedef std::atomic<uint32_t> croaring_refcount_t;
@@ -592,10 +606,15 @@ static inline bool croaring_refcount_dec(croaring_refcount_t *val) {
 static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {
     return val->load(std::memory_order_relaxed);
 }
+
+static inline bool croaring_refcount_is_unique(const croaring_refcount_t *val) {
+    return val->load(std::memory_order_acquire) == 1;
+}
 #elif CROARING_ATOMIC_IMPL == CROARING_ATOMIC_IMPL_C_WINDOWS
 #include <intrin.h>
 #pragma intrinsic(_InterlockedIncrement)
 #pragma intrinsic(_InterlockedDecrement)
+#pragma intrinsic(_InterlockedOr)
 
 // _InterlockedIncrement and _InterlockedDecrement take a (signed) long, and
 // overflow is defined to wrap, so we can pretend it is a uint32_t for our case
@@ -617,6 +636,12 @@ static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {
     // > of the variable updated; all bits are updated in an atomic fashion.
     return *val;
 }
+
+static inline bool croaring_refcount_is_unique(const croaring_refcount_t *val) {
+    // A plain read would not provide the acquire semantics: _InterlockedOr
+    // leaves the value alone while acting as a memory barrier.
+    return _InterlockedOr((croaring_refcount_t *)val, 0) == 1;
+}
 #elif CROARING_ATOMIC_IMPL == CROARING_ATOMIC_IMPL_NONE
 #include <assert.h>
 typedef uint32_t croaring_refcount_t;
@@ -628,11 +653,15 @@ static inline void croaring_refcount_inc(croaring_refcount_t *val) {
 static inline bool croaring_refcount_dec(croaring_refcount_t *val) {
     assert(*val > 0);
     *val -= 1;
-    return val == 0;
+    return *val == 0;
 }
 
 static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {
     return *val;
+}
+
+static inline bool croaring_refcount_is_unique(const croaring_refcount_t *val) {
+    return *val == 1;
 }
 #else
 #error "Unknown atomic implementation"

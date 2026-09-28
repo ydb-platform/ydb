@@ -27,7 +27,7 @@ namespace NKqp {
     XX(DB_KQP_REQUEST_BYTES, RequestBytes) \
     XX(DB_KQP_QUERY_BYTES, QueryBytes) \
     XX(DB_KQP_PARAMS_BYTES, ParametersBytes) \
-    XX(DB_KQP_SQL_V0_TRANSLATIONS, SqlV0Translations) \
+    XX(DB_KQP_DEPRECATED2, &DeprecatedCounter) \
     XX(DB_KQP_SQL_V1_TRANSLATIONS, SqlV1Translations) \
     XX(DB_KQP_SQL_UNKNOWN_TRANSLATIONS, SqlUnknownTranslations) \
     XX(DB_KQP_QUERY_TYPE_UNDEFINED, QueryTypes[NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED]) \
@@ -77,8 +77,8 @@ namespace NKqp {
     XX(DB_KQP_COMPILE_REQ_INVALIDATE, CompileRequestsInvalidate) \
     XX(DB_KQP_COMPILE_REQ_REJECTED, CompileRequestsRejected) \
     XX(DB_KQP_COMPILE_REQ_TIMEOUT, CompileRequestsTimeout) \
-    XX(DB_KQP_COMPILE_ENFORCE_CONFIG_SUCCESS, CompileEnforceConfigSuccess) \
-    XX(DB_KQP_COMPILE_ENFORCE_CONFIG_FAILED, CompileEnforceConfigFailed) \
+    XX(DB_KQP_DEPRECATED3, &DeprecatedCounter) \
+    XX(DB_KQP_DEPRECATED4, &DeprecatedCounter) \
     XX(DB_KQP_COMPILE_NEW_RBO_SUCCESS, CompileNewRBOSuccess) \
     XX(DB_KQP_COMPILE_NEW_RBO_FAILED, CompileNewRBOFailed) \
     XX(DB_KQP_COMPILE_TOTAL, CompileTotal) \

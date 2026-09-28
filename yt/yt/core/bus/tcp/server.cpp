@@ -295,7 +295,7 @@ protected:
                 clientSocket = AcceptSocket(ServerSocket_, &clientAddress);
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Error accepting client connection")
-                    .With(TError(ex));
+                    .With(ex);
                 break;
             }
 
@@ -388,7 +388,7 @@ protected:
                 } else {
                     YT_TLOG_WARNING("Error binding socket, starting retry")
                         .With("Attempt", attempt + 1)
-                        .With(TError(ex));
+                        .With(ex);
                     Sleep(Config_->BindRetryBackoff);
                 }
             }
@@ -596,7 +596,7 @@ private:
         } catch (const std::exception& ex) {
             const auto& Logger = BusLogger();
             YT_TLOG_WARNING("Failed to update cert sensors")
-                .With(TError(ex));
+                .With(ex);
         }
     }
 };

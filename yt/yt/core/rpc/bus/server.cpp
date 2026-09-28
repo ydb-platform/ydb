@@ -135,7 +135,8 @@ private:
             .With("Endpoint", replyBus->GetEndpointDescription());
 
         auto replyWithError = [&] (const TError& error) {
-            YT_LOG_DEBUG(error);
+            YT_TLOG_DEBUG("Request failed")
+                .With(error);
             auto response = CreateErrorResponseMessage(requestId, error);
             YT_UNUSED_FUTURE(replyBus->Send(std::move(response)));
         };

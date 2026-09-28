@@ -7,7 +7,8 @@ PEERDIR(
 SRCS(
     ensure.cpp
     function.cpp
-    maybe.h
+    hash.cpp
+    maybe.cpp
     out.cpp
     preprocessor.cpp
     reflection.cpp
@@ -18,5 +19,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

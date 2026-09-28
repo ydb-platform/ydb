@@ -42,7 +42,7 @@ To perform backup to [NFS](https://en.wikipedia.org/wiki/Network_File_System) on
 
 To perform restoration from a backup created in [NFS](https://en.wikipedia.org/wiki/Network_File_System) on hosts where {{ ydb-short-name }} is running, the `{{ ydb-cli }} import nfs` command is used. Follow [the link](../../reference/ydb-cli/export-import/import-nfs.md) to the {{ ydb-short-name }} CLI reference for information about this command.
 
-For more details on configuring NFS for backup and recovery, see the recipe [Backup and recovery via NFS](../../recipes/nfs-backup/nfs-backup.md).
+For more details on configuring NFS for backup and recovery, see the recipe [Backup and recovery via NFS](../../recipes/backup/nfs-backup/nfs-backup.md).
 
 {% note info %}
 
@@ -65,7 +65,7 @@ Backup collections are recommended for production environments with a regular ba
 For step-by-step instructions on configuring and using backup collections, see:
 
 - [Backup collections](../../concepts/datamodel/backup-collection.md) — architecture, concepts, and limitations
-- [Recipes for backup collections](../../recipes/backup-collections/index.md) — typical scenarios and examples
+- [Recipes for backup collections](../../recipes/backup/backup-collections/index.md) — typical scenarios and examples
 
 {% include [_includes/backup_and_recovery/cli_overlay.md](../_includes/backup_and_recovery/cli_overlay.md) %}
 
@@ -77,4 +77,4 @@ The system tablet backup mechanism provides incremental copying of cluster metad
 
 For conceptual information and how it works, see [Backup concepts](../../concepts/backup.md#comparison).
 
-For step-by-step instructions on enabling and restoring, see [Recipes for system tablet backup](../../recipes/system-tablet-backup/index.md).
+For step-by-step instructions on enabling and restoring, see [Recipes for system tablet backup](../../recipes/backup/system-tablet-backup/index.md).

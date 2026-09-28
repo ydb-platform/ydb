@@ -1,10 +1,14 @@
 #pragma once
 
 #include <ydb/core/tx/schemeshard/defs.h>
+#include <ydb/core/scheme/scheme_pathid.h>
 
 #include <ydb/core/protos/index_builder.pb.h>
 
 namespace NKikimr {
+
+class TEqHeightHistogram;
+
 namespace NSchemeShard {
 
 struct TEvIndexBuilder {
@@ -20,6 +24,7 @@ struct TEvIndexBuilder {
         EvListRequest,
         EvListResponse,
         EvUploadSampleKResponse,
+        EvGetIndexStatsResponse,
 
         EvEnd
     };
@@ -123,6 +128,14 @@ struct TEvIndexBuilder {
 
     struct TEvUploadSampleKResponse: public TEventPB<TEvUploadSampleKResponse, NKikimrIndexBuilder::TEvUploadSampleKResponse, EvUploadSampleKResponse> {
     };
+
+    struct TEvGetIndexStatsResponse : public TEventLocal<TEvGetIndexStatsResponse, EvGetIndexStatsResponse> {
+        ui64 BuildId = 0;
+        TPathId PathId;
+        size_t FieldCount = 0;
+        std::shared_ptr<TEqHeightHistogram> Histogram;
+    };
+
 
 }; // TEvIndexBuilder
 

@@ -22,11 +22,6 @@ np.strings.decode(AR_U)  # E: incompatible type
 np.strings.join(AR_U, b"_")  # E: incompatible type
 np.strings.join(AR_S, "_")  # E: incompatible type
 
-np.strings.ljust(AR_U, 5, fillchar=b"a")  # E: incompatible type
-np.strings.ljust(AR_S, 5, fillchar="a")  # E: incompatible type
-np.strings.rjust(AR_U, 5, fillchar=b"a")  # E: incompatible type
-np.strings.rjust(AR_S, 5, fillchar="a")  # E: incompatible type
-
 np.strings.lstrip(AR_U, b"a")  # E: incompatible type
 np.strings.lstrip(AR_S, "a")  # E: incompatible type
 np.strings.strip(AR_U, b"a")  # E: incompatible type
@@ -38,11 +33,6 @@ np.strings.partition(AR_U, b"a")  # E: incompatible type
 np.strings.partition(AR_S, "a")  # E: incompatible type
 np.strings.rpartition(AR_U, b"a")  # E: incompatible type
 np.strings.rpartition(AR_S, "a")  # E: incompatible type
-
-np.strings.split(AR_U, b"_")  # E: incompatible type
-np.strings.split(AR_S, "_")  # E: incompatible type
-np.strings.rsplit(AR_U, b"_")  # E: incompatible type
-np.strings.rsplit(AR_S, "_")  # E: incompatible type
 
 np.strings.count(AR_U, b"a", [1, 2, 3], [1, 2, 3])  # E: incompatible type
 np.strings.count(AR_S, "a", 0, 9)  # E: incompatible type

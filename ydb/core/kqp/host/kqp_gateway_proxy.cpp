@@ -366,7 +366,6 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
         if (cMeta.IsDefaultFromExpression()) {
             auto& generated = *columnDesc.MutableDefaultFromExpression();
             generated.SetExprText(cMeta.DefaultExpression->ExprText);
-            generated.SetContext(cMeta.DefaultExpression->Context);
             generated.SetStored(cMeta.DefaultExpression->Stored);
             for (const auto& dependency : cMeta.DefaultExpression->Dependencies) {
                 generated.AddDependencyColumnNames(dependency);
@@ -408,6 +407,8 @@ bool FillMultiColumnStatisticsDesc(TTableDescProto& tableDesc,
         for (const auto& type : statistics.Types) {
             if (type == "COUNT_MIN_SKETCH") {
                 statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH);
+            } else if (type == "EQ_HEIGHT_HISTOGRAM") {
+                statisticsDesc->AddTypes(NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM);
             } else {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = TStringBuilder() << "Unknown multi-column statistics type: " << type;
@@ -3587,6 +3588,7 @@ public:
 
             NKqpProto::TKqpAnalyzeOperation analyzeTx;
             analyzeTx.SetTablePath(settings.TablePath);
+            analyzeTx.SetSampleRate(settings.SampleRate);
             for (const auto& column: settings.Columns) {
                 *analyzeTx.AddColumns() = column;
             }

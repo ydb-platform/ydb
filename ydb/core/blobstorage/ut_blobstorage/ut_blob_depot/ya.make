@@ -8,6 +8,7 @@ UNITTEST_FOR(ydb/core/blobstorage/ut_blobstorage)
 
     SRCS(
         blob_depot.cpp
+        blob_depot_move_data.cpp
         blob_depot_test_functions.cpp
         blob_depot_event_managers.cpp
     )

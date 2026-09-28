@@ -10,7 +10,6 @@
 #define BOOST_GRAPH_CIRCLE_LAYOUT_HPP
 #include <boost/config/no_tr1/cmath.hpp>
 #include <boost/math/constants/constants.hpp>
-#include <utility>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/iteration_macros.hpp>
 #include <boost/graph/topology.hpp>
@@ -41,14 +40,12 @@ void circle_graph_layout(
     using std::cos;
     using std::sin;
 #endif // BOOST_NO_STDC_NAMESPACE
-
-    typedef typename graph_traits< VertexListGraph >::vertices_size_type
-        vertices_size_type;
-
-    vertices_size_type n = num_vertices(g);
-
+    using vertices_size_type = typename graph_traits< VertexListGraph >::vertices_size_type;
+    
+    const vertices_size_type n = num_vertices(g);
     vertices_size_type i = 0;
-    double two_pi_over_n = 2. * pi / n;
+
+    const auto two_pi_over_n = 2. * pi / n;
     BGL_FORALL_VERTICES_T(v, g, VertexListGraph)
     {
         position[v][0] = radius * cos(i * two_pi_over_n);

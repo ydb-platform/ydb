@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx/columnshard/operations/batch_builder
     ydb/core/tx/columnshard/operations/slice_builder
     ydb/core/tx/columnshard/operations/common
+    library/cpp/lwtrace
 )
 
 END()

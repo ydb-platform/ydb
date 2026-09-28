@@ -17,6 +17,7 @@ SRCS(
     blobstorage_hullgcmap.h
     hull_ds_all.h
     hull_ds_all_snap.h
+    hull_ds_all_snap_events.h
 )
 
 END()

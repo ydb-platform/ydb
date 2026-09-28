@@ -1,13 +1,15 @@
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json_value.h>
 
 #include <ydb/core/security/token_manager/vm_metadata_token_provider_handler.h>
 #include <ydb/core/security/token_manager/token_provider_settings.h>
 #include <ydb/core/security/token_manager/private_events.h>
-#include <ydb/core/security/token_manager/token_manager_log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TOKEN_MANAGER
 
 namespace NKikimr::NTokenManager {
 
@@ -22,7 +24,7 @@ TVmMetadataTokenProviderHandler::TVmMetadataTokenProviderHandler(const NActors::
 {}
 
 void TVmMetadataTokenProviderHandler::Bootstrap() {
-    BLOG_TRACE("Handle send request to vm metaservice");
+    YDB_LOG_TRACE("Handle send request to vm metaservice");
     NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(ProviderInfo.GetEndpoint());
     httpRequest->Set("Metadata-Flavor", "Google");
     std::unique_ptr<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest> outgoingRequest = std::make_unique<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(httpRequest);
@@ -39,8 +41,6 @@ void TVmMetadataTokenProviderHandler::StateWork(TAutoPtr<NActors::IEventHandle>&
 
 void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr& ev) {
     NHttp::THttpOutgoingRequestPtr request(ev->Get()->Request);
-    TStringBuilder requestInfo;
-    requestInfo << "host " << request->Host << ", url: " << request->URL;
     TString token;
     TDuration refreshPeriod = Settings.MaxErrorRefreshPeriod;
     TDuration tokenExpiresIn = Max(Settings.MaxErrorRefreshPeriod, Settings.SuccessRefreshPeriod);
@@ -53,30 +53,44 @@ void TVmMetadataTokenProviderHandler::Handle(NHttp::TEvHttpProxy::TEvHttpIncomin
             if (NJson::ReadJsonTree(response->Body, &JsonConfig, &jsonValue)) {
                 auto jsonValueMap = jsonValue.GetMap();
                 if (auto it = jsonValueMap.find("access_token"); it == jsonValueMap.end()) {
-                    BLOG_ERROR("Result doesn't contain access_token. Request: " << requestInfo);
+                    YDB_LOG_ERROR("Result doesn't contain access_token",
+                        {"host", request->Host},
+                        {"url", request->URL}
+                    );
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Result doesn't contain access_token"};
                 } else if (token = it->second.GetStringSafe(); token.empty()) {
-                    BLOG_ERROR("Got empty token. Request: " << requestInfo);
+                    YDB_LOG_ERROR("Got empty token",
+                        {"host", request->Host},
+                        {"url", request->URL}
+                    );
                     status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Got empty token"};
                 } else {
-                    BLOG_D("Updating vm metadata token");
+                    YDB_LOG_DEBUG("Updating vm metadata token");
                     refreshPeriod = Settings.SuccessRefreshPeriod;
                 }
                 if (auto it = jsonValueMap.find("expires_in"); it == jsonValueMap.end()) {
-                    BLOG_ERROR("Result doesn't contain expires_in. Request: " << requestInfo);
+                    YDB_LOG_ERROR("Result doesn't contain expires_in",
+                        {"host", request->Host},
+                        {"url", request->URL}
+                    );
                 } else {
                     tokenExpiresIn = TDuration::Seconds(it->second.GetUInteger());
                 }
             } else {
-                BLOG_ERROR("Can not read json");
+                YDB_LOG_ERROR("Can not read json");
                 status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = "Can not read json"};
             }
         } else {
-            BLOG_ERROR("Error refreshing metadata token, status: " << response->Status << ", error: " << response->Message);
+            YDB_LOG_ERROR("Error refreshing metadata token",
+                {"status", response->Status},
+                {"error", response->Message}
+            );
             status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = TString(response->Message)};
         }
     } else {
-        BLOG_ERROR("Error refreshing metadata token, error: " << ev->Get()->Error);
+        YDB_LOG_ERROR("Error refreshing metadata token",
+            {"error", ev->Get()->Error}
+        );
         status = {.Code = TEvTokenManager::TStatus::ECode::ERROR, .Message = ev->Get()->Error};
     }
     refreshPeriod = Min(tokenExpiresIn, refreshPeriod);

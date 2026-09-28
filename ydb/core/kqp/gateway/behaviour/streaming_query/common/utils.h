@@ -3,6 +3,7 @@
 #include <yql/essentials/sql/v1/translation/node.h>
 
 #include <util/generic/string.h>
+#include <util/datetime/base.h>
 
 namespace NKikimrSchemeOp {
 
@@ -34,9 +35,11 @@ public:
         static inline constexpr char ResourcePool[] = "resource_pool";
         static inline constexpr char Force[] = "force";
         static inline constexpr char StreamingDisposition[] = "streaming_disposition";
+        static inline constexpr char ReadFrom[] = "read_from";
         static inline constexpr char StreamingDispositionFromTime[] = "from_time";
         static inline constexpr char StreamingDispositionTimeAgo[] = "time_ago";
         static inline constexpr char WatermarkLateEventsPolicy[] = "watermark_late_events_policy";
+        static inline constexpr char CheckpointInterval[] = "checkpoint_interval";
 
         // Internal query info
         static inline constexpr char QueryTextRevision[] = "__query_text_revision";
@@ -59,6 +62,8 @@ public:
     ui64 QueryTextRevision = 0;
     TString WatermarkLateEventsPolicy;
     std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
+    TString CheckpointIntervalString;
+    std::optional<TDuration> CheckpointInterval;
 };
 
 }  // namespace NKikimr::NKqp

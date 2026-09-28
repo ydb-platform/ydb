@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp.h>
@@ -33,6 +35,9 @@ struct TKqpProxyRequest {
     ui32 EventType;
     TString SessionId;
     TKqpDbCountersPtr DbCounters;
+    NWilson::TSpan Span;
+    NWilson::TSpan RedirectSpan;
+    bool QueryDispatched = false;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)
@@ -69,6 +74,10 @@ public:
         return PendingRequests.FindPtr(requestId);
     }
 
+    TKqpProxyRequest* FindPtr(ui64 requestId) {
+        return PendingRequests.FindPtr(requestId);
+    }
+
     void SetSessionId(ui64 requestId, const TString& sessionId, TKqpDbCountersPtr dbCounters) {
         TKqpProxyRequest* ptr = PendingRequests.FindPtr(requestId);
         ptr->SetSessionId(sessionId, dbCounters);
@@ -95,11 +104,12 @@ public:
         State.store(state, std::memory_order_release);
     }
 
-    void SetPoolId(TString poolId) override {
+    void SetPoolContext(TString poolId, TString classifiedBy) override {
         TGuard<TAdaptiveLock> guard(PoolIdLock);
         PoolId = std::move(poolId);
+        ClassifiedBy = std::move(classifiedBy);
     }
-    
+
     EState GetState() const {
         return State.load(std::memory_order_acquire);
     }
@@ -117,12 +127,18 @@ public:
         return PoolId;
     }
 
+    TString GetClassifiedBy() const {
+        TGuard<TAdaptiveLock> guard(PoolIdLock);
+        return ClassifiedBy;
+    }
+
     void Clean() {
         EnterTimeUs.store(0, std::memory_order_release);
         ExitTimeUs.store(0, std::memory_order_release);
         {
             TGuard<TAdaptiveLock> guard(PoolIdLock);
             PoolId.clear();
+            ClassifiedBy.clear();
         }
         State.store(EState::NONE, std::memory_order_release);
     }
@@ -134,6 +150,7 @@ private:
 
     mutable TAdaptiveLock PoolIdLock;
     TString PoolId;
+    TString ClassifiedBy;
 };
 
 template<typename TValue>
@@ -258,6 +275,7 @@ public:
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();
         const_cast<TKqpSessionInfo*>(sessionInfo)->StateChangeAt = curNow;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->WmState->Clean();
     }
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
@@ -438,6 +456,11 @@ public:
         return LocalSessions.FindPtr(sessionId);
     }
 
+    const TKqpSessionInfo* FindPtr(const TActorId& workerId) const {
+        const auto* sessionId = TargetIdIndex.FindPtr(workerId);
+        return sessionId ? FindPtr(*sessionId) : nullptr;
+    }
+
     const THashSet<const TKqpSessionInfo*>& FindSessions(const TNodeId& nodeId) const {
         auto it = AttachedNodesIndex.find(nodeId);
         if (it == AttachedNodesIndex.end()) {
@@ -445,17 +468,6 @@ public:
             return empty;
         }
         return it->second;
-    }
-
-    std::pair<TNodeId, TActorId> Erase(const TActorId& targetId) {
-        auto result = std::make_pair<TNodeId, TActorId>(0, TActorId());
-
-        auto it = TargetIdIndex.find(targetId);
-        if (it != TargetIdIndex.end()){
-            result = Erase(it->second);
-        }
-
-        return result;
     }
 
     template<typename TCb>

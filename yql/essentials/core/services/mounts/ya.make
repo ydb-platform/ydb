@@ -27,6 +27,7 @@ RESOURCE(
     yql/essentials/mount/lib/yql/sqr.yqls /lib/yql/sqr.yqls
     yql/essentials/mount/lib/yql/core.yqls /lib/yql/core.yqls
     yql/essentials/mount/lib/yql/walk_folders.yqls /lib/yql/walk_folders.yqls
+    yql/essentials/mount/lib/yql/spark.yqls /lib/yql/spark.yqls
 )
 
 END()

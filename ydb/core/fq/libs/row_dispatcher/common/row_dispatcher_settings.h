@@ -5,6 +5,14 @@
 
 #include <util/generic/size_literals.h>
 
+#include <memory>
+
+namespace NYql::NDq {
+
+struct IMemoryQuotaManager;
+
+} // namespace NYql::NDq
+
 namespace NKikimrConfig {
 
 class TStreamingQueriesConfig_TExternalStorageConfig;
@@ -76,6 +84,7 @@ private:
     YDB_ACCESSOR(TDuration, TimeoutBeforeStartSession, TDuration::Seconds(10));
     YDB_ACCESSOR(ui64, MaxSessionUsedMemory, 4_MB);
     YDB_ACCESSOR(EConsumerMode, ConsumerMode, EConsumerMode::Auto);
+    YDB_ACCESSOR_DEF(std::shared_ptr<NYql::NDq::IMemoryQuotaManager>, MemoryQuotaManager);
 };
 
 } // namespace NFq

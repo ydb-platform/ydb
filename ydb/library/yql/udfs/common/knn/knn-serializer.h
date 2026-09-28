@@ -69,6 +69,10 @@ public:
         switch (format) {
             case EFormat::FloatVector:
                 return TKnnVectorSerializer<float>::Deserialize(valueBuilder, str);
+            case EFormat::Float16Vector:
+                return TKnnVectorSerializer<TFloat16, float>::Deserialize(valueBuilder, str);
+            case EFormat::BFloat16Vector:
+                return TKnnVectorSerializer<TBFloat16, float>::Deserialize(valueBuilder, str);
             case EFormat::Int8Vector:
                 return TKnnVectorSerializer<i8, float>::Deserialize(valueBuilder, str);
             case EFormat::Uint8Vector:

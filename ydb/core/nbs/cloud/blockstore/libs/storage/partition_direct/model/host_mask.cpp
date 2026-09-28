@@ -45,6 +45,16 @@ THostMask THostMask::MakeFromRoute(const THostRoute& route)
     return result;
 }
 
+// static
+THostMask THostMask::MakeMask(std::initializer_list<THostIndex> hosts)
+{
+    THostMask mask;
+    for (auto host: hosts) {
+        mask.Set(host);
+    }
+    return mask;
+}
+
 void THostMask::Set(THostIndex host)
 {
     Y_ABORT_UNLESS(host < MaxHostCount);
@@ -55,6 +65,16 @@ void THostMask::Reset(THostIndex host)
 {
     Y_ABORT_UNLESS(host < MaxHostCount);
     Bits &= ~(ui32(1) << host);
+}
+
+void THostMask::Update(THostIndex host, bool value)
+{
+    Y_ABORT_UNLESS(host < MaxHostCount);
+    if (value) {
+        Set(host);
+    } else {
+        Reset(host);
+    }
 }
 
 bool THostMask::Get(THostIndex host) const

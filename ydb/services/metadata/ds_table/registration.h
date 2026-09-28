@@ -46,7 +46,7 @@ private:
 public:
     bool Add(TAutoPtr<IEventBase> ev, const TActorId& sender) {
         if (Events.size() > 10000) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "too many events for deferred sending (maybe service cannot start)";
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Too many events for deferred sending (maybe service cannot start)");
             return false;
         }
         Events.emplace_back(ev, sender);
@@ -95,7 +95,7 @@ private:
 public:
     bool Add(TAutoPtr<IEventBase> ev, const TActorId& sender, const TString& tag) {
         if (EventsCount > 10000) {
-            ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "too many events for deferred sending (maybe service cannot start)";
+            YDB_LOG_ERROR_COMP(NKikimrServices::METADATA_PROVIDER, "Too many events for deferred sending (maybe service cannot start)");
             return false;
         }
         TaggedEvents[tag].Add(ev, sender);

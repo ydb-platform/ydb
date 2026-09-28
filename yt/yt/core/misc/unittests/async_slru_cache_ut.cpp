@@ -168,11 +168,13 @@ protected:
 
     void OnAdded(const TSimpleCachedValuePtr& value) override
     {
-        YT_LOG_DEBUG("Item add (Item: %v)", value->GetKey());
+        YT_TLOG_DEBUG("Item add")
+            .With("Item", value->GetKey());
         auto guard = Guard(Lock_);
 
         if (!Keys_.find(value->GetKey()).IsEnd()) {
-            YT_LOG_ALERT("Item already exist (Item: %v)", value->GetKey());
+            YT_TLOG_ALERT("Item already exist")
+                .With("Item", value->GetKey());
         }
 
         EmplaceOrCrash(Keys_, value->GetKey());
@@ -181,11 +183,13 @@ protected:
 
     void OnRemoved(const TSimpleCachedValuePtr& value) override
     {
-        YT_LOG_DEBUG("Item remove (Item: %v)", value->GetKey());
+        YT_TLOG_DEBUG("Item remove")
+            .With("Item", value->GetKey());
         auto guard = Guard(Lock_);
 
         if (Keys_.find(value->GetKey()).IsEnd()) {
-            YT_LOG_ALERT("Item not found (Item: %v)", value->GetKey());
+            YT_TLOG_ALERT("Item not found")
+                .With("Item", value->GetKey());
         }
 
         EraseOrCrash(Keys_, value->GetKey());
@@ -1840,8 +1844,9 @@ TEST_P(TAsyncSlruCacheStressTest, Stress)
                     auto valueFuture = cookie.GetValue();
                     ASSERT_TRUE(static_cast<bool>(valueFuture));
                     if (valueFuture.IsSet()) {
-                        ASSERT_TRUE(WaitForFast(valueFuture).IsOK());
-                        auto value = WaitForFast(valueFuture).Value();
+                        const auto& valueOrError = valueFuture.GetOrCrash();
+                        ASSERT_TRUE(valueOrError.IsOK());
+                        const auto& value = valueOrError.Value();
                         ASSERT_EQ(lastInsertedValues[value->GetKey()].Lock(), value);
                     } else {
                         // The value insertion is in progress, so lastInsertedValues must contain nullptr

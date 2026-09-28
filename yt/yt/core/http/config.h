@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <yt/yt/core/dns/public.h>
+
 #include <yt/yt/core/net/public.h>
 
 #include <yt/yt/core/ytree/yson_struct.h>
@@ -65,6 +67,11 @@ struct TServerConfig
 
     bool EnablePerPathRequestProfiling;
 
+    //! Transparently decodes request bodies per Content-Encoding and
+    //! encodes response bodies per Accept-Encoding for all handlers.
+    bool EnableContentEncoding;
+    int CompressionThreadCount;
+
     REGISTER_YSON_STRUCT(TServerConfig);
 
     static void Register(TRegistrar registrar);
@@ -78,8 +85,10 @@ struct TClientConfig
     : public THttpIOConfig
 {
     int MaxIdleConnections;
-    NNet::TDialerConfigPtr Dialer;
+    //! When set, these options override the ones from the global address resolver config.
+    std::optional<NDns::TDnsResolveOptions> DnsResolveOptions;
     bool OmitQuestionMarkForEmptyQuery;
+    NNet::TDialerConfigPtr Dialer;
 
     REGISTER_YSON_STRUCT(TClientConfig);
 

@@ -742,7 +742,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     directed_graph_helper< Config >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 //=========================================================================
@@ -1094,7 +1094,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     undirected_graph_helper< Config >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 
@@ -1518,7 +1518,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     bidirectional_graph_helper_with_property< Config >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 // O(1)
@@ -2272,7 +2272,7 @@ inline std::pair< typename Config::edge_descriptor, bool > add_edge(
     typename Config::vertex_descriptor u, typename Config::vertex_descriptor v,
     vec_adj_list_impl< Graph, Config, Base >& g_)
 {
-    typename Config::edge_property_type p;
+    typename Config::edge_property_type p {};
     return add_edge(u, v, p, g_);
 }
 

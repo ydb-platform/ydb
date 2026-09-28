@@ -4,7 +4,6 @@ import fnmatch
 import itertools
 import pytest
 import sys
-import os
 import operator
 from fractions import Fraction
 from functools import reduce
@@ -694,11 +693,11 @@ class TestDivision:
         with suppress_warnings() as sup:
             sup.filter(RuntimeWarning, "invalid value encountered in floor_divide")
             div = np.floor_divide(fnan, fone)
-            assert(np.isnan(div)), "dt: %s, div: %s" % (dt, div)
+            assert(np.isnan(div)), "div: %s" % div
             div = np.floor_divide(fone, fnan)
-            assert(np.isnan(div)), "dt: %s, div: %s" % (dt, div)
+            assert(np.isnan(div)), "div: %s" % div
             div = np.floor_divide(fnan, fzer)
-            assert(np.isnan(div)), "dt: %s, div: %s" % (dt, div)
+            assert(np.isnan(div)), "div: %s" % div
         # verify 1.0//0.0 computations return inf
         with np.errstate(divide='ignore'):
             z = np.floor_divide(y, x)
@@ -4018,6 +4017,31 @@ class TestSpecialMethods:
         res = a.__array_ufunc__(np.add, "__call__", a, a)
         assert_array_equal(res, a + a)
 
+    def test_ufunc_docstring(self):
+        original_doc = np.add.__doc__
+        new_doc = "new docs"
+        expected_dict = (
+            {} if IS_PYPY else {"__module__": "numpy", "__qualname__": "add"}
+        )
+
+        np.add.__doc__ = new_doc
+        assert np.add.__doc__ == new_doc
+        assert np.add.__dict__["__doc__"] == new_doc
+
+        del np.add.__doc__
+        assert np.add.__doc__ == original_doc
+        assert np.add.__dict__ == expected_dict
+
+        np.add.__dict__["other"] = 1
+        np.add.__dict__["__doc__"] = new_doc
+        assert np.add.__doc__ == new_doc
+
+        del np.add.__dict__["__doc__"]
+        assert np.add.__doc__ == original_doc
+        del np.add.__dict__["other"]
+        assert np.add.__dict__ == expected_dict
+
+
 class TestChoose:
     def test_mixed(self):
         c = np.array([True, True])
@@ -4141,7 +4165,7 @@ class TestRationalFunctions:
         assert_raises(ValueError, np.gcd, 1, inf)
         assert_raises(ValueError, np.gcd, np.nan, inf)
         assert_raises(TypeError, np.gcd, 4, float(np.inf))
-        
+
 
 
 class TestRoundingFunctions:
@@ -4762,7 +4786,8 @@ def test_signaling_nan_exceptions():
     ])
 def test_outer_subclass_preserve(arr):
     # for gh-8661
-    class foo(np.ndarray): pass
+    class foo(np.ndarray):
+        pass
     actual = np.multiply.outer(arr.view(foo), arr.view(foo))
     assert actual.__class__.__name__ == 'foo'
 
@@ -4863,9 +4888,11 @@ class TestAddDocstring:
 
 
 class TestAdd_newdoc_ufunc:
+    @pytest.mark.filterwarnings("ignore:_add_newdoc_ufunc:DeprecationWarning")
     def test_ufunc_arg(self):
         assert_raises(TypeError, ncu._add_newdoc_ufunc, 2, "blah")
         assert_raises(ValueError, ncu._add_newdoc_ufunc, np.add, "blah")
 
+    @pytest.mark.filterwarnings("ignore:_add_newdoc_ufunc:DeprecationWarning")
     def test_string_arg(self):
         assert_raises(TypeError, ncu._add_newdoc_ufunc, np.add, 3)

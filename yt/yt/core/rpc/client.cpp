@@ -247,11 +247,6 @@ std::string TClientRequest::GetMethod() const
     return FromProto<std::string>(Header_.method());
 }
 
-const std::string& TClientRequest::GetRequestInfo() const
-{
-    return RequestInfo_;
-}
-
 void TClientRequest::DeclareClientFeature(int featureId)
 {
     Header_.add_declared_client_feature_ids(featureId);
@@ -269,6 +264,7 @@ const std::string& TClientRequest::GetUser() const
 
 void TClientRequest::SetUser(const std::string& user)
 {
+    YT_VERIFY(!user.empty());
     User_ = user;
 }
 
@@ -397,9 +393,14 @@ TClientContextPtr TClientRequest::CreateClientContext()
         MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
 }
 
-void TClientRequest::SetRawRequestInfo(std::string requestInfo)
+NLogging::TLoggingTagListBuilderGuard<> TClientRequest::Annotate()
 {
-    RequestInfo_ = std::move(requestInfo);
+    return NLogging::TLoggingTagListBuilderGuard(&LoggingTags_);
+}
+
+const NLogging::TLoggingTagList& TClientRequest::GetLoggingTags() const
+{
+    return LoggingTags_;
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()
@@ -873,6 +874,18 @@ TMethodDescriptor& TMethodDescriptor::SetMultiplexingBand(EMultiplexingBand valu
 TMethodDescriptor& TMethodDescriptor::SetStreamingEnabled(bool value)
 {
     StreamingEnabled = value;
+    return *this;
+}
+
+TMethodDescriptor& TMethodDescriptor::SetRequestHeavy(bool value)
+{
+    RequestHeavy = value;
+    return *this;
+}
+
+TMethodDescriptor& TMethodDescriptor::SetResponseHeavy(bool value)
+{
+    ResponseHeavy = value;
     return *this;
 }
 

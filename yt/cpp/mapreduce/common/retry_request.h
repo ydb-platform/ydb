@@ -35,16 +35,19 @@ TResult RequestWithRetry(
         } catch (const TErrorResponse& e) {
             // NB(achains): Do not log expected error in stderr.
             if (TExpectedErrorGuard::IsErrorExpected(e)) {
-                YT_LOG_INFO("Received expected error, retry failed %v - %v",
-                    e.GetError().GetMessage(),
-                    retryPolicy->GetAttemptDescription());
+                YT_TLOG_INFO("Received expected error; retry failed")
+                    .With("Error", e.GetError().GetMessage())
+                    .With("Attempt", retryPolicy->GetAttemptDescription());
             } else {
-                YT_LOG_ERROR("Retry failed %v - %v",
-                    e.GetError().GetMessage(),
-                    retryPolicy->GetAttemptDescription());
+                YT_TLOG_ERROR("Retry failed")
+                    .With("Error", e.GetError().GetMessage())
+                    .With("Attempt", retryPolicy->GetAttemptDescription());
             }
 
-            useSameMutationId = e.IsTransportError();
+            // NB(achains): Timed out request may have been applied by the server, so the mutation id must be reused.
+            //              HTTP backend wraps timeout errors as transport error.
+            //              RPC backend instead reports NYT::EErrorCode::Timeout.
+            useSameMutationId = e.IsTransportError() || e.IsRequestTimedOut();
 
             if (!IsRetriable(e)) {
                 throw;
@@ -57,9 +60,9 @@ TResult RequestWithRetry(
                 throw;
             }
         } catch (const std::exception& e) {
-            YT_LOG_ERROR("Retry failed %v - %v",
-                e.what(),
-                retryPolicy->GetAttemptDescription());
+            YT_TLOG_ERROR("Retry failed")
+                .With("Error", e.what())
+                .With("Attempt", retryPolicy->GetAttemptDescription());
 
             useSameMutationId = true;
 

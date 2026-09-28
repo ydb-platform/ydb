@@ -1,4 +1,5 @@
-#include <sys/mman.h>
+#pragma once
+
 #include <cstddef>
 
 namespace WAVM { namespace Runtime {

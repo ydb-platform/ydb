@@ -144,7 +144,6 @@ public:
         }
     };
 
-public:
     explicit INode(TPosition pos);
     virtual ~INode();
 
@@ -245,13 +244,9 @@ public:
     TPtr AstNode(TPtr node) const;
     TPtr AstNode(const TString& str) const;
 
-    template <typename TVal, typename... TVals>
-    void Add(TVal val, TVals... vals) {
-        DoAdd(AstNode(val));
-        Add(vals...);
-    }
-
-    void Add() {
+    template <typename... TVals>
+    void Add(TVals... vals) {
+        (DoAdd(AstNode(vals)), ...);
     }
 
     // Y() Q() L()
@@ -379,7 +374,6 @@ protected:
     TUdfNode* GetUdfNode() override;
     const TUdfNode* GetUdfNode() const override;
 
-protected:
     void DoUpdateState() const override;
     void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const override;
     bool InitReference(TContext& ctx) override;
@@ -518,7 +512,6 @@ protected:
 
     void UpdateStateByListNodes(const TVector<TNodePtr>& Nodes) const;
 
-protected:
     TVector<TNodePtr> Nodes_;
     mutable TMaybe<bool> CacheGroupKey_;
 };
@@ -555,7 +548,6 @@ protected:
     TString GetCallExplain() const;
     bool CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
 
-protected:
     TString OpName_;
     i32 MinArgs_;
     i32 MaxArgs_;
@@ -855,8 +847,7 @@ public:
     const TNodePtr OrderExpr;
     const bool Ascending;
     TIntrusivePtr<TSortSpecification> Clone() const;
-    ~TSortSpecification() {
-    }
+    ~TSortSpecification() = default;
 
 private:
     const TNodePtr CleanOrderExpr_;
@@ -888,8 +879,7 @@ struct TFrameBound: public TSimpleRefCount<TFrameBound> {
     EFrameSettings Settings = FrameUndefined;
 
     TIntrusivePtr<TFrameBound> Clone() const;
-    ~TFrameBound() {
-    }
+    ~TFrameBound() = default;
 };
 using TFrameBoundPtr = TIntrusivePtr<TFrameBound>;
 
@@ -900,8 +890,7 @@ struct TFrameSpecification: public TSimpleRefCount<TFrameSpecification> {
     EFrameExclusions FrameExclusion = FrameExclNone;
 
     TIntrusivePtr<TFrameSpecification> Clone() const;
-    ~TFrameSpecification() {
-    }
+    ~TFrameSpecification() = default;
 };
 using TFrameSpecificationPtr = TIntrusivePtr<TFrameSpecification>;
 
@@ -910,11 +899,9 @@ struct TLegacyHoppingWindowSpec: public TSimpleRefCount<TLegacyHoppingWindowSpec
     TNodePtr Hop;
     TNodePtr Interval;
     TNodePtr Delay;
-    bool DataWatermarks;
 
     TIntrusivePtr<TLegacyHoppingWindowSpec> Clone() const;
-    ~TLegacyHoppingWindowSpec() {
-    }
+    ~TLegacyHoppingWindowSpec() = default;
 };
 using TLegacyHoppingWindowSpecPtr = TIntrusivePtr<TLegacyHoppingWindowSpec>;
 
@@ -927,8 +914,7 @@ struct TWindowSpecification: public TSimpleRefCount<TWindowSpecification> {
     TFrameSpecificationPtr Frame;
 
     TIntrusivePtr<TWindowSpecification> Clone() const;
-    ~TWindowSpecification() {
-    }
+    ~TWindowSpecification() = default;
 };
 using TWindowSpecificationPtr = TIntrusivePtr<TWindowSpecification>;
 using TWinSpecs = TMap<TString, TWindowSpecificationPtr>;
@@ -977,7 +963,6 @@ private:
 
     void DoUpdateState() const override;
 
-private:
     static const TString Empty;
     TNodePtr Node_;
     TString ColumnName_;
@@ -1262,8 +1247,10 @@ struct TTtlSettings {
     struct TTierSettings {
         TNodePtr EvictionDelay;
         std::optional<TIdentifier> StorageName;
+        std::optional<TIdentifier> ObjectKeyPrefix;
 
-        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt);
+        explicit TTierSettings(TNodePtr evictionDelay, const std::optional<TIdentifier>& storageName = std::nullopt,
+                               const std::optional<TIdentifier>& objectKeyPrefix = std::nullopt);
     };
 
     TIdentifier ColumnName;
@@ -1291,13 +1278,14 @@ struct TTableSettings {
     TNodePtr PartitionByHashFunction;
     TMaybe<TIdentifier> StoreExternalBlobs;
     TNodePtr ExternalDataChannelsCount;
+    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
 
     TNodePtr DataSourcePath;
     NYql::TResetableSetting<TNodePtr, void> Location;
     TVector<NYql::TResetableSetting<std::pair<TIdentifier, TNodePtr>, TIdentifier>> ExternalSourceParameters;
 
     bool IsSet() const {
-        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount;
+        return CompactionPolicy || AutoPartitioningBySize || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || UniformPartitions || PartitionAtKeys || KeyBloomFilter || ReadReplicasSettings || TtlSettings || Tiering || StoreType || PartitionByHashFunction || StoreExternalBlobs || DataSourcePath || Location || ExternalSourceParameters || ExternalDataChannelsCount || MetricsLevel;
     }
 };
 
@@ -1415,12 +1403,15 @@ struct TAlterDatabaseParameters {
     THashMap<TString, TNodePtr> DatabaseSettings;
 };
 
-struct TTruncateTableParameters {};
+struct TTruncateTableParameters {
+    THashMap<TString, TNodePtr> Settings;
+};
 
 struct TTableRef;
 struct TAnalyzeParams {
     std::shared_ptr<TTableRef> Table;
     TVector<TString> Columns;
+    TNodePtr SampleRate;
 };
 
 struct TCompactEntry {
@@ -1471,25 +1462,6 @@ struct TAlterTableParameters {
     }
 };
 
-struct TRoleParameters {
-protected:
-    TRoleParameters() {
-    }
-
-public:
-    TVector<TDeferredAtom> Roles;
-};
-
-struct TUserParameters: TRoleParameters {
-    TMaybe<TDeferredAtom> Password;
-    bool IsPasswordNull = false;
-    bool IsPasswordEncrypted = false;
-    std::optional<bool> CanLogin;
-    TMaybe<TDeferredAtom> Hash;
-};
-
-struct TCreateGroupParameters: TRoleParameters {};
-
 struct TSequenceParameters {
     bool MissingOk = false;
     TMaybe<TDeferredAtom> StartValue;
@@ -1509,7 +1481,6 @@ public:
 
     TMaybe<TDeferredAtom> InheritPermissions;
 
-public:
     bool ValidateParameters(TContext& ctx, TPosition stmBeginPos, TSecretParameters::EOperationMode mode);
 };
 
@@ -1593,44 +1564,6 @@ struct TDropTopicParameters {
     bool MissingOk;
 };
 
-struct TCreateBackupCollectionParameters {
-    std::map<TString, TDeferredAtom> Settings;
-
-    bool Database;
-    TVector<TDeferredAtom> Tables;
-
-    bool ExistingOk;
-};
-
-struct TAlterBackupCollectionParameters {
-    enum class EDatabase {
-        Unchanged,
-        Add,
-        Drop,
-    };
-
-    std::map<TString, TDeferredAtom> Settings;
-    std::set<TString> SettingsToReset;
-
-    EDatabase Database = EDatabase::Unchanged;
-    TVector<TDeferredAtom> TablesToAdd;
-    TVector<TDeferredAtom> TablesToDrop;
-
-    bool MissingOk;
-};
-
-struct TDropBackupCollectionParameters {
-    bool MissingOk;
-};
-
-struct TBackupParameters {
-    bool Incremental = false;
-};
-
-struct TRestoreParameters {
-    TString At;
-};
-
 struct TStreamingQuerySettings {
     inline static constexpr char RESERVED_FEATURE_PREFIX[] = "__";
     inline static constexpr char QUERY_TEXT_FEATURE[] = "__query_text";
@@ -1680,7 +1613,7 @@ TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TSt
 TNodePtr BuildColumn(TPosition pos, const TNodePtr& column, const TString& source = TString());
 TNodePtr BuildColumn(TPosition pos, const TDeferredAtom& column, const TString& source = TString());
 TNodePtr BuildColumnOrType(TPosition pos, const TString& column = TString());
-TNodePtr BuildYqlColumnRef(TPosition pos);
+TNodePtr BuildYqlColumnRef(TPosition pos, bool maybeType);
 TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
 TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
 TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
@@ -1747,16 +1680,6 @@ TNodeResult BuildBuiltinFunc(
     bool warnOnYqlNameSpace = true);
 
 // Implemented in query.cpp
-TNodePtr BuildCreateGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TMaybe<TCreateGroupParameters>& params, TScopedStatePtr scoped);
-TNodePtr BuildControlUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name,
-                          const TMaybe<TUserParameters>& params, TScopedStatePtr scoped, bool isCreateUser);
-TNodePtr BuildRenameUser(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildAlterGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TVector<TDeferredAtom>& toChange, bool isDrop,
-                         TScopedStatePtr scoped);
-TNodePtr BuildRenameGroup(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TDeferredAtom& newName, TScopedStatePtr scoped);
-TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& toDrop, bool isUser, bool missingOk, TScopedStatePtr scoped);
-TNodePtr BuildGrantPermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
-TNodePtr BuildRevokePermissions(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TVector<TDeferredAtom>& permissions, const TVector<TDeferredAtom>& schemaPaths, const TVector<TDeferredAtom>& roleName, TScopedStatePtr scoped);
 TNodePtr BuildUpsertObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
                                     TObjectFeatureNodePtr features, const TObjectOperatorContext& context);
 TNodePtr BuildCreateObjectOperation(TPosition pos, const TDeferredAtom& objectId, const TString& typeId,
@@ -1797,38 +1720,6 @@ TNodePtr BuildAlterTopic(TPosition pos, const TTopicRef& tr, const TAlterTopicPa
                          TScopedStatePtr scoped);
 TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicParameters& params,
                         TScopedStatePtr scoped);
-
-TNodePtr BuildCreateBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TCreateBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildAlterBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TAlterBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildDropBackupCollection(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TDropBackupCollectionParameters& params,
-    const TObjectOperatorContext& context);
-
-TNodePtr BuildBackup(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TBackupParameters& params,
-    const TObjectOperatorContext& context);
-TNodePtr BuildRestore(
-    TPosition pos,
-    const TString& prefix,
-    const TString& id,
-    const TRestoreParameters& params,
-    const TObjectOperatorContext& context);
 
 TNodePtr BuildCreateSecret(
     TPosition pos,

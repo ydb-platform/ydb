@@ -385,21 +385,23 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         super().__init__(driver, settings)
 
     def _attach(self, first_resp_timeout: int = DEFAULT_INITIAL_RESPONSE_TIMEOUT) -> None:
-        self._stream = self._attach_call()
-        status_stream = _utilities.SyncResponseIterator(
-            self._stream,
-            self._attach_stream_wrapper,
-        )
-
         try:
+            self._stream = self._attach_call()
+            status_stream = _utilities.SyncResponseIterator(
+                self._stream,
+                self._attach_stream_wrapper,
+            )
+
             first_response = _utilities.get_first_message_with_timeout(
                 status_stream,
                 first_resp_timeout,
             )
             issues._process_response(first_response)
-        except Exception as e:
+        except BaseException:
+            # BaseException, not Exception: an interrupted attach must tear the stream
+            # down too, otherwise the half-attached session is orphaned server-side.
             self._close_session(invalidate=True)
-            raise e
+            raise
 
         threading.Thread(
             target=self._check_session_status_loop,

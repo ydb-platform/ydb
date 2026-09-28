@@ -166,7 +166,7 @@ public:
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
 
         ui64 rows = GetRowsCount(batch);
-        if (QuotaManager && !QuotaManager->AllocateQuota(space)) {
+        if (QuotaManager && !QuotaManager->AllocateQuota(space, /* isOptional = */ false)) {
             throw NKikimr::TMemoryLimitExceededException();
         }
         StoredBytes += space;
@@ -267,7 +267,7 @@ public:
 
     [[nodiscard]]
     bool Empty() const override {
-        return Batches.empty() || IsPaused() && BeforeBarrier.BatchesCount == 0;
+        return Batches.empty() || (IsPaused() && BeforeBarrier.BatchesCount == 0);
     }
 
 private:
@@ -293,8 +293,8 @@ public:
     }
 
     void ResumeByCheckpoint() override {
+        // Note: resume may be called on non empty channel after of task finishing
         Y_ENSURE(IsPausedByCheckpoint());
-        Y_ENSURE(Empty());
         BeforeBarrier = PendingBarriers.front();
         PendingBarriers.pop_front();
     }

@@ -240,12 +240,13 @@ container_t *shared_container_extract_copy(shared_container_t *sc,
     assert(sc->typecode != SHARED_CONTAINER_TYPE);
     *typecode = sc->typecode;
     container_t *answer;
-    if (croaring_refcount_dec(&sc->counter)) {
+    if (croaring_refcount_is_unique(&sc->counter)) {
         answer = sc->container;
         sc->container = NULL;  // paranoid
         roaring_free(sc);
     } else {
         answer = container_clone(sc->container, *typecode);
+        shared_container_free(sc);
     }
     assert(*typecode != SHARED_CONTAINER_TYPE);
     return answer;
@@ -299,6 +300,7 @@ extern inline container_t *container_andnot(const container_t *c1,
                                             uint8_t type2,
                                             uint8_t *result_type);
 
+CROARING_ALLOW_UNALIGNED
 roaring_container_iterator_t container_init_iterator(const container_t *c,
                                                      uint8_t typecode,
                                                      uint16_t *value) {
@@ -338,6 +340,7 @@ roaring_container_iterator_t container_init_iterator(const container_t *c,
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 roaring_container_iterator_t container_init_iterator_last(const container_t *c,
                                                           uint8_t typecode,
                                                           uint16_t *value) {
@@ -417,6 +420,7 @@ bool container_iterator_lower_bound(const container_t *c, uint8_t typecode,
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 bool container_iterator_read_into_uint32(const container_t *c, uint8_t typecode,
                                          roaring_container_iterator_t *it,
                                          uint32_t high16, uint32_t *buf,
@@ -460,8 +464,10 @@ bool container_iterator_read_into_uint32(const container_t *c, uint8_t typecode,
             const array_container_t *ac = const_CAST_array(c);
             uint32_t num_values =
                 minimum_uint32(ac->cardinality - it->index, count);
+            // Hoist so GCC can vectorize the uint16->uint32 widen-or.
+            const uint16_t *src = ac->array + it->index;
             for (uint32_t i = 0; i < num_values; i++) {
-                buf[i] = high16 | ac->array[it->index + i];
+                buf[i] = high16 | src[i];
             }
             *consumed += num_values;
             it->index += num_values;
@@ -506,6 +512,7 @@ bool container_iterator_read_into_uint32(const container_t *c, uint8_t typecode,
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 bool container_iterator_read_into_uint64(const container_t *c, uint8_t typecode,
                                          roaring_container_iterator_t *it,
                                          uint64_t high48, uint64_t *buf,
@@ -549,8 +556,10 @@ bool container_iterator_read_into_uint64(const container_t *c, uint8_t typecode,
             const array_container_t *ac = const_CAST_array(c);
             uint32_t num_values =
                 minimum_uint32(ac->cardinality - it->index, count);
+            // Hoist so GCC can vectorize the uint16->uint64 widen-or.
+            const uint16_t *src = ac->array + it->index;
             for (uint32_t i = 0; i < num_values; i++) {
-                buf[i] = high48 | ac->array[it->index + i];
+                buf[i] = high48 | src[i];
             }
             *consumed += num_values;
             it->index += num_values;
@@ -595,6 +604,7 @@ bool container_iterator_read_into_uint64(const container_t *c, uint8_t typecode,
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 bool container_iterator_read_backward_into_uint32(
     const container_t *c, uint8_t typecode, roaring_container_iterator_t *it,
     uint32_t high16, uint32_t *buf, uint32_t count, uint32_t *consumed,
@@ -637,8 +647,10 @@ bool container_iterator_read_backward_into_uint32(
             const array_container_t *ac = const_CAST_array(c);
             uint32_t num_values =
                 minimum_uint32((uint32_t)(it->index + 1), count);
+            // Walk backwards so GCC can vectorize the uint16->uint32 widen-or.
+            const uint16_t *src = ac->array + it->index + 1;
             for (uint32_t i = 0; i < num_values; i++) {
-                buf[i] = high16 | ac->array[it->index - i];
+                buf[i] = high16 | *--src;
             }
             *consumed += num_values;
             it->index -= num_values;
@@ -684,6 +696,7 @@ bool container_iterator_read_backward_into_uint32(
     }
 }
 
+CROARING_ALLOW_UNALIGNED
 bool container_iterator_read_backward_into_uint64(
     const container_t *c, uint8_t typecode, roaring_container_iterator_t *it,
     uint64_t high48, uint64_t *buf, uint32_t count, uint32_t *consumed,
@@ -726,8 +739,10 @@ bool container_iterator_read_backward_into_uint64(
             const array_container_t *ac = const_CAST_array(c);
             uint32_t num_values =
                 minimum_uint32((uint32_t)(it->index + 1), count);
+            // Walk backwards so GCC can vectorize the uint16->uint64 widen-or.
+            const uint16_t *src = ac->array + it->index + 1;
             for (uint32_t i = 0; i < num_values; i++) {
-                buf[i] = high48 | ac->array[it->index - i];
+                buf[i] = high48 | *--src;
             }
             *consumed += num_values;
             it->index -= num_values;

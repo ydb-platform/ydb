@@ -33,7 +33,7 @@ sudo ./b2 install cxxstd=11
 
 Charconv is a collection of parsing functions that are locale-independent, non-allocating, and non-throwing.
 
-````
+````cpp
 namespace boost { namespace charconv {
 
 enum class chars_format : unsigned
@@ -49,15 +49,16 @@ struct from_chars_result
     const char* ptr;
     std::errc ec;
 
-    friend constexpr bool operator==(const from_chars_result& lhs, const from_chars_result& rhs) noexcept
-    friend constexpr bool operator!=(const from_chars_result& lhs, const from_chars_result& rhs) noexcept
-    constexpr explicit operator bool() const noexcept
-}
+    friend constexpr bool operator==(const from_chars_result& lhs, const from_chars_result& rhs) noexcept;
+    friend constexpr bool operator!=(const from_chars_result& lhs, const from_chars_result& rhs) noexcept;
+    constexpr explicit operator bool() const noexcept;
+};
 
 template <typename Integral>
 BOOST_CXX14_CONSTEXPR from_chars_result from_chars(const char* first, const char* last, Integral& value, int base = 10) noexcept;
 
-BOOST_CXX14_CONSTEXPR from_chars_result from_chars<bool>(const char* first, const char* last, bool& value, int base) = delete;
+template <>
+BOOST_CXX14_CONSTEXPR from_chars_result from_chars<bool>(const char* first, const char* last, bool& value, int base) noexcept = delete;
 
 template <typename Real>
 from_chars_result from_chars(const char* first, const char* last, Real& value, chars_format fmt = chars_format::general) noexcept;
@@ -72,14 +73,14 @@ struct to_chars_result
 
     friend constexpr bool operator==(const to_chars_result& lhs, const to_chars_result& rhs) noexcept;
     friend constexpr bool operator!=(const to_chars_result& lhs, const to_chars_result& rhs) noexcept;
-    constexpr explicit operator bool() const noexcept
+    constexpr explicit operator bool() const noexcept;
 };
 
 template <typename Integral>
 BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars(char* first, char* last, Integral value, int base = 10) noexcept;
 
-template <typename Integral>
-BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars<bool>(char* first, char* last, Integral value, int base) noexcept = delete;
+template <>
+BOOST_CHARCONV_CONSTEXPR to_chars_result to_chars<bool>(char* first, char* last, bool value, int base) noexcept = delete;
 
 template <typename Real>
 to_chars_result to_chars(char* first, char* last, Real value, chars_format fmt = chars_format::general, int precision) noexcept;
@@ -98,7 +99,7 @@ to_chars_result to_chars(char* first, char* last, Real value, chars_format fmt =
 
 ## `from_chars`
 
-````
+````cpp
 const char* buffer = "42";
 int v = 0;
 from_chars_result r = boost::charconv::from_chars(buffer, buffer + std::strlen(buffer), v);
@@ -106,7 +107,7 @@ assert(r.ec == std::errc());
 assert(r); // Equivalent to the above
 assert(v == 42);
 
-const char* buffer = "1.2345"
+const char* buffer = "1.2345";
 double v = 0;
 auto r = boost::charconv::from_chars(buffer, buffer + std::strlen(buffer), v);
 assert(r.ec == std::errc());
@@ -126,7 +127,7 @@ assert(v == 8.0427e-18);
 ````
 ## `to_chars`
 
-````
+````cpp
 char buffer[64] {};
 int v = 42;
 to_chars_result r = boost::charconv::to_chars(buffer, buffer + sizeof(buffer), v);

@@ -4,6 +4,12 @@
 
 #include "http.h"
 
+#include <yt/cpp/mapreduce/interface/fwd.h>
+
+#include <yt/yt/core/dns/public.h>
+
+#include <library/cpp/yt/logging/tag.h>
+
 #include <util/generic/fwd.h>
 
 namespace NYT {
@@ -30,11 +36,14 @@ TString GetFullUrlForProxy(const TString& hostName, const TClientContext& contex
 
 TString TruncateForLogs(const TString& text, size_t maxSize);
 
-TString GetLoggedAttributes(const THttpHeader& header, const TString& url, bool includeParameters, size_t sizeLimit);
+NLogging::TLoggingTagList GetLoggedAttributes(const THttpHeader& header, const TString& url, bool includeParameters, size_t sizeLimit);
 
 void LogRequest(const THttpHeader& header, const TString& url, bool includeParameters, const TString& requestId, const TString& hostName);
 
 TString FormatTraceParentHeader(const NTracing::TTraceId& traceId, const NTracing::TSpanId& spanId);
+
+//! Maps ForceIpV4/ForceIpV6 config flags onto DNS resolve options for yt/core HTTP clients.
+NDns::TDnsResolveOptions GetDnsResolveOptions(const TConfigPtr& config);
 
 ////////////////////////////////////////////////////////////////////////////////
 

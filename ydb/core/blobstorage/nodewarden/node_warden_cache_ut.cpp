@@ -35,7 +35,7 @@ namespace {
     }
 
     void UpdateCache(TServiceSet& cache, const TServiceSet& update, bool comprehensive) {
-        auto config = MakeIntrusive<TNodeWardenConfig>(TIntrusivePtr<IPDiskServiceFactory>{});
+        auto config = MakeIntrusive<TNodeWardenConfig>();
         TNodeWarden nodeWarden(config);
         nodeWarden.UpdateServiceSet(update, comprehensive, [] {})(&cache)();
     }

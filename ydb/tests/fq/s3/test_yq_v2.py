@@ -127,3 +127,18 @@ Pear;15;33'''
         assert result_set.columns[0].name == "column0"
         assert len(result_set.rows) == 1
         assert result_set.rows[0].items[0].int64_value == 20
+
+    @yq_v2
+    @pytest.mark.skip(reason="ACL is not checked in test compute database with anonymous-auth")
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_select_sys_view(self, kikimr, client, unique_prefix):
+        kikimr.control_plane.wait_bootstrap(1)
+
+        sql = """
+            SELECT COUNT(*) FROM `.sys/top_queries_by_cpu_time_one_hour` WHERE QueryText = "SELECT COUNT(*) FROM `.sys/top_queries_by_cpu_time_one_hour` WHERE ...";
+            """
+
+        query_id = client.create_query(
+            "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
+        ).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)

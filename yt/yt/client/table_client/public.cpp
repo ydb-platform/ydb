@@ -18,6 +18,8 @@ const std::string TimestampColumnPrefix = SystemColumnNamePrefix + "timestamp:";
 const std::string CumulativeDataWeightColumnName = SystemColumnNamePrefix + "cumulative_data_weight";
 const std::string EmptyValueColumnName = SystemColumnNamePrefix + "empty";
 const std::string SequenceNumberColumnName = SystemColumnNamePrefix + "sequence_number";
+const std::string ShuffleProducerIdColumnName = SystemColumnNamePrefix + "shuffle_producer_id";
+const std::string ShuffleRowIdColumnName = SystemColumnNamePrefix + "shuffle_row_id";
 
 ////////////////////////////////////////////////////////////////////////////////
 

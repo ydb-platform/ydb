@@ -19,6 +19,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 using namespace NConsole;
@@ -40,6 +42,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateResolveDatabase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateResolveDatabase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
@@ -53,22 +57,23 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"entry", entry});
             return Error(NKikimrScheme::StatusSchemeError, "Cannot resolve domain info");
         }
 
         if (!DomainKey) {
             if (!entry.DomainInfo) {
-                LOG_E("Empty domain info"
-                    << ": entry# " << entry.ToString());
+                YDB_LOG_ERROR("Empty domain info",
+                    {"entry", entry});
                 return Error(NKikimrScheme::StatusSchemeError, "Empty domain info");
             }
 
@@ -89,7 +94,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void GetTableProfiles() {
-        LOG_T("Get table profiles");
+        YDB_LOG_TRACE("Get table profiles");
 
         using namespace NKikimrConsole;
         auto ev = MakeHolder<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
@@ -99,6 +104,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateGetTableProfiles) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateGetTableProfiles"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             sFunc(TEvents::TEvUndelivered, DescribeSrcPath);
@@ -108,7 +115,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         TableProfiles.Load(ev->Get()->Config->GetTableProfilesConfig());
         DescribeSrcPath();
     }
@@ -132,6 +140,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateDescribeSrcPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateDescribeSrcPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DescribeSrcPath);
@@ -160,7 +170,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(Kind == TReplication::ETargetKind::Table);
         const auto& result = ev->Get()->Result;
@@ -212,7 +223,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);
             desc = TxBody.MutableCreateIndexedTable()->MutableTableDescription();
-            if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, status, error)) {
+            if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), status, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
         } else {
@@ -243,6 +254,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateAllocateTxId) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateAllocateTxId"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
@@ -251,7 +264,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -271,6 +285,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateCreateDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCreateDst"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
@@ -281,7 +297,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
@@ -307,13 +324,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
-            << ": txId# " << txId);
+        YDB_LOG_DEBUG("Subscribe tx",
+            {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (NeedToCheck) {
             DescribeDstPath();
@@ -328,6 +346,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateDescribeDstPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateDescribeDstPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(TEvents::TEvWakeup, DescribeDstPath);
@@ -337,7 +357,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->GetRecord();
 
         switch (record.GetStatus()) {
@@ -532,6 +553,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateSubscribeDstPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateSubscribeDstPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardEvents::TEvNotifyDelete, Handle);
             hFunc(TSchemeBoardEvents::TEvNotifyUpdate, Handle);
@@ -541,7 +564,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -554,7 +578,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& desc = ev->Get()->DescribeSchemeResult;
         if (desc.GetStatus() != NKikimrScheme::StatusSuccess) {
@@ -571,7 +596,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (SchemeShardId != ev->Get()->TabletId) {
             return;
@@ -581,30 +607,31 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         Retry();
     }
 
     void Success() {
         Y_ABORT_UNLESS(DstPathId);
-        LOG_I("Success"
-            << ": dstPathId# " << DstPathId);
+        YDB_LOG_INFO("Success",
+            {"dstPathId", DstPathId});
 
         Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId));
         PassAway();
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
-        LOG_E("Error"
-            << ": status# " << status
-            << ", reason# " << error);
+        YDB_LOG_ERROR("Error",
+            {"status", status},
+            {"reason", error});
 
         Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, status, error));
         PassAway();
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
     }
 
@@ -643,12 +670,13 @@ public:
         , DstPath(dstPath)
         , Mode(mode)
         , Consistency(consistency)
-        , LogPrefix("DstCreator", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         switch (Kind) {
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
@@ -661,6 +689,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -680,7 +710,7 @@ private:
     const TString DstPath;
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
     TString Database;

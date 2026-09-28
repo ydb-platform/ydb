@@ -60,6 +60,9 @@ struct TUserInfoBase {
     ui32 Generation = 0;
     ui32 Step = 0;
     i64 Offset = 0;
+    // True if the consumer has committed past GetStartOffset() (a real position in the
+    // live data range). False if still at/before the retention boundary. Exposed to
+    // proxies as ClientHasAnyCommits; used for first-commit distributed commits on splits.
     bool AnyCommits = false;
 
     bool Important = false;

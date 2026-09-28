@@ -341,7 +341,6 @@ public:
 private:
     void* AllocSlow(size_t sz, EMemorySubPool pagePool);
 
-private:
     TAlignedPagePool* PagePool_;
     TAllocState::TCurrentPages CurrentPages_ = TAllocState::EmptyCurrentPages;
 };
@@ -502,7 +501,7 @@ inline void MKQLFreeFastWithSizeImpl(const void* mem, size_t sz, TAllocState* st
 inline void MKQLFreeFastWithSize(const void* mem, size_t sz, TAllocState* state, const EMemorySubPool mPool) noexcept {
     mem = NYql::NUdf::UnwrapPointerWithRedZones(mem, sz);
     sz = NYql::NUdf::GetSizeToAlloc(sz);
-    return MKQLFreeFastWithSizeImpl(mem, sz, state, mPool);
+    MKQLFreeFastWithSizeImpl(mem, sz, state, mPool);
 }
 
 inline void* MKQLAllocDeprecated(size_t sz, const EMemorySubPool mPool) {

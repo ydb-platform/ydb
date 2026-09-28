@@ -14,8 +14,7 @@ from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver._backend.models import ClientConfig, ServerInfo
 from clickhouse_connect.driver._backend.operations import CommandOp, Operation, QueryOp, RawQueryOp
 from clickhouse_connect.driver.binding import quote_identifier
-from clickhouse_connect.driver.common import version_at_least
-from clickhouse_connect.driver.constants import CH_VERSION_WITH_PROTOCOL, PROTOCOL_VERSION_WITH_LOW_CARD
+from clickhouse_connect.driver.constants import PROTOCOL_VERSION_WITH_LOW_CARD
 from clickhouse_connect.driver.exceptions import OperationalError, ProgrammingError
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.models import ColumnDef, SettingDef, setting_status
@@ -30,7 +29,6 @@ class InitializationResult:
     server_info: ServerInfo
     client_setting_writes: tuple[ClientSettingWrite, ...]
     protocol_version: int
-    json_serialization_format: int | None
     timezone_dst_safe: bool
     apply_server_timezone: bool
 
@@ -111,12 +109,11 @@ def init_sequence(config: ClientConfig) -> InitializationSequence:
             tzutil.local_tz.tzname(None),
         )
 
-    readonly = "readonly" if version_at_least(server_version, "19.17") else str(common.get_setting("readonly"))
-    settings_result = yield QueryOp(f"SELECT name, value, {readonly} as readonly FROM system.settings LIMIT 10000")
+    settings_result = yield QueryOp("SELECT name, value, readonly FROM system.settings LIMIT 10000")
     server_settings = _setting_definitions(settings_result)
 
     protocol_version = 0
-    if version_at_least(server_version, CH_VERSION_WITH_PROTOCOL) and common.get_setting("use_protocol_version"):
+    if common.get_setting("use_protocol_version"):
         # The response bytes must be validated because a proxy such as CHProxy
         # can strip the client_protocol_version query parameter.
         # Probe failures leave protocol_version at 0, the pre-existing
@@ -139,12 +136,10 @@ def init_sequence(config: ClientConfig) -> InitializationSequence:
         client_settings["date_time_input_format"] = "best_effort"
     if (
         "cast_string_to_dynamic_use_inference" not in config.settings
-        and setting_status(server_settings, "allow_experimental_json_type").is_set
         and setting_status(server_settings, "cast_string_to_dynamic_use_inference").is_writable
     ):
         client_settings["cast_string_to_dynamic_use_inference"] = "1"
 
-    json_serialization_format = 0 if version_at_least(server_version, "24.8") and not version_at_least(server_version, "24.10") else None
     server_info = ServerInfo(
         version=server_version,
         timezone=server_timezone,
@@ -154,7 +149,6 @@ def init_sequence(config: ClientConfig) -> InitializationSequence:
         server_info=server_info,
         client_setting_writes=tuple(client_settings.items()),
         protocol_version=protocol_version,
-        json_serialization_format=json_serialization_format,
         timezone_dst_safe=timezone_dst_safe,
         apply_server_timezone=apply_server_timezone,
     )
@@ -170,6 +164,7 @@ def insert_context_sequence(
     settings: dict[str, Any] | None = None,
     data: Sequence[Sequence[Any]] | None = None,
     transport_settings: dict[str, str] | None = None,
+    server_tz: tzinfo = timezone.utc,
 ) -> Generator[Operation, object, InsertContext]:
     full_table = table
     if "." not in table:
@@ -211,6 +206,7 @@ def insert_context_sequence(
         settings=settings,
         transport_settings=transport_settings,
         data=data,
+        server_tz=server_tz,
     )
 
 

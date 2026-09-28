@@ -10,6 +10,70 @@
 
 namespace NYdb::inline Dev {
 
+namespace {
+
+bool IsTypeComplete(const Ydb::Type& type) {
+    switch (type.type_case()) {
+        case Ydb::Type::TYPE_NOT_SET:
+            return false;
+        case Ydb::Type::kOptionalType:
+            return IsTypeComplete(type.optional_type().item());
+        case Ydb::Type::kListType:
+            return IsTypeComplete(type.list_type().item());
+        case Ydb::Type::kTupleType:
+            for (const auto& element : type.tuple_type().elements()) {
+                if (!IsTypeComplete(element)) {
+                    return false;
+                }
+            }
+            return true;
+        case Ydb::Type::kStructType:
+            for (const auto& member : type.struct_type().members()) {
+                if (!IsTypeComplete(member.type())) {
+                    return false;
+                }
+            }
+            return true;
+        case Ydb::Type::kDictType:
+            return IsTypeComplete(type.dict_type().key()) && IsTypeComplete(type.dict_type().payload());
+        case Ydb::Type::kVariantType: {
+            const auto& variant = type.variant_type();
+            switch (variant.type_case()) {
+                case Ydb::VariantType::TYPE_NOT_SET:
+                    return false;
+                case Ydb::VariantType::kTupleItems:
+                    for (const auto& element : variant.tuple_items().elements()) {
+                        if (!IsTypeComplete(element)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                case Ydb::VariantType::kStructItems:
+                    for (const auto& member : variant.struct_items().members()) {
+                        if (!IsTypeComplete(member.type())) {
+                            return false;
+                        }
+                    }
+                    return true;
+            }
+            return false;
+        }
+        case Ydb::Type::kTaggedType:
+            return IsTypeComplete(type.tagged_type().type());
+        case Ydb::Type::kTypeId:
+        case Ydb::Type::kDecimalType:
+        case Ydb::Type::kVoidType:
+        case Ydb::Type::kNullType:
+        case Ydb::Type::kEmptyListType:
+        case Ydb::Type::kEmptyDictType:
+        case Ydb::Type::kPgType:
+            return true;
+    }
+    return false;
+}
+
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TParams::TParams(::google::protobuf::Map<TStringType, Ydb::TypedValue>&& protoMap)
@@ -92,6 +156,13 @@ public:
             if (!pair.second.Finished()) {
                 FatalError(TStringBuilder() << "Incomplete value for parameter: " << pair.first
                     << ", call Build() on parameter value builder");
+            }
+        }
+
+        for (const auto& [name, param] : ParamsMap_) {
+            if (!IsTypeComplete(param.type())) {
+                FatalError(TStringBuilder() << "Parameter '" << name
+                    << "' has an invalid type: protobuf type is not set; check how the parameter value was built");
             }
         }
 

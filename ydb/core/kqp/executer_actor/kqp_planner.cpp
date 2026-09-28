@@ -1,6 +1,9 @@
-#include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+
+#include "kqp_executer_stats.h"
 #include "kqp_planner_strategy.h"
+
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -108,6 +111,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
+    , Trace(args.Trace)
     , ExecuterRetriesConfig(args.ExecuterRetriesConfig)
     , TasksGraph(args.TasksGraph)
     , MkqlMemoryLimit(args.MkqlMemoryLimit)
@@ -124,6 +128,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , Query(args.Query)
     , CheckpointCoordinatorId(args.CheckpointCoordinator)
     , EnableWatermarks(args.EnableWatermarks)
+    , StreamingQueryNodesManagerId(args.StreamingQueryNodesManager)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -257,7 +262,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
+        auto* serializedTask = SerializeTaskForExecution(task);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -533,11 +538,19 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
     return TasksGraph.GetMeta().Snapshot;
 }
 
+NYql::NDqProto::TDqTask* TKqpPlanner::SerializeTaskForExecution(const TTask& task) {
+    auto* result = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    if (Trace) {
+        Trace->AnnotateTask({task.StageId.TxId, task.StageId.StageId}, *result);
+    }
+    return result;
+}
+
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    auto* taskDesc = SerializeTaskForExecution(task);
 
     if (!TxInfo) {
         double memoryPoolPercent = 100;
@@ -708,21 +721,24 @@ void TKqpPlanner::PrepareCheckpoints() {
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
+        const bool enabledCheckpoints = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED;
+        const bool isIngress = NDq::IsIngress(settings);
         if (enabledCheckpoints && isIngress) {
             hasStreamingIngress = true;
             break;
         }
     }
+
     YDB_LOG_DEBUG("PrepareCheckpoints: checked streaming ingress",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
         {"hasStreamingIngress", hasStreamingIngress});
+
     if (!hasStreamingIngress) {
         CheckpointCoordinatorId = TActorId{};
         return;
     }
+
     TasksGraph.GetMeta().CreateSuspended = hasStreamingIngress;
 }
 
@@ -748,6 +764,7 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
     auto& task = TasksGraph.GetTask(taskId);
     if (!task.ComputeActorId) {
         task.ComputeActorId = computeActor;
+        AllComputeActors.emplace(computeActor);
         PendingComputeTasks.erase(taskId);
         auto [it, success] = PendingComputeActors.try_emplace(computeActor);
         YQL_ENSURE(success);
@@ -755,8 +772,8 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
 
-        if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
-            SendReadyStateToCheckpointCoordinator();
+        if (PendingComputeTasks.empty() && (CheckpointCoordinatorId || StreamingQueryNodesManagerId)) {
+            SendReadyState();
         }
         return true;
     }
@@ -843,11 +860,15 @@ void TKqpPlanner::ShiftConsumption() {
     }
 }
 
-const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() {
+const THashSet<TActorId>& TKqpPlanner::GetAllComputeActors() const {
+    return AllComputeActors;
+}
+
+const THashMap<TActorId, TProgressStat>& TKqpPlanner::GetPendingComputeActors() const {
     return PendingComputeActors;
 }
 
-const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() {
+const THashSet<ui64>& TKqpPlanner::GetPendingComputeTasks() const {
     return PendingComputeTasks;
 }
 
@@ -966,40 +987,48 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
     }
 }
 
-void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
-    if (CheckpointsReadyStateSent) {
+void TKqpPlanner::SendReadyState() {
+    if (ReadyStateSent) {
         return;
     }
 
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
         if (!dqTask.ComputeActorId) {
-            YDB_LOG_WARN("Skip sending TEvReadyState to checkpoint coordinator: task has no compute actor id (node disconnected or task not started)",
+            YDB_LOG_WARN("Skip sending TEvReadyState: task has no compute actor id (node disconnected or task not started)",
                 {"txId", TxId},
                 {"ctx", *UserRequestContext},
                 {"taskId", dqTask.Id});
             return;
         }
+
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
-        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
-        bool isIngress = TasksGraph.IsIngress(dqTask);
         auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
-            dqTask.Id,
-            enabledCheckpoints,
-            isIngress,
-            TasksGraph.IsEgressTask(dqTask),
-            NYql::NDq::HasState(settings),
-            dqTask.ComputeActorId
+            .Id = dqTask.Id,
+            .IsCheckpointingEnabled = NDq::GetTaskCheckpointingMode(settings) != NDqProto::CHECKPOINTING_MODE_DISABLED,
+            .IsIngress = NDq::IsIngress(settings),
+            .IsEgress = NDq::IsEgress(settings),
+            .HasState = NDq::HasState(settings),
+            .ActorId = dqTask.ComputeActorId,
         };
         event->Tasks.emplace_back(std::move(task));
     }
-    YDB_LOG_INFO("Sending TEvReadyState to checkpoint coordinator",
+
+    YDB_LOG_INFO("Sending TEvReadyState",
         {"txId", TxId},
         {"ctx", *UserRequestContext},
-        {"checkpointCoordinatorId", CheckpointCoordinatorId});
-    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
-    CheckpointsReadyStateSent = true;
+        {"checkpointCoordinatorId", CheckpointCoordinatorId},
+        {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId});
+    if (StreamingQueryNodesManagerId) {
+        auto managerEvent = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+        managerEvent->Tasks = event->Tasks;
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(StreamingQueryNodesManagerId, ExecuterId, managerEvent.release()));
+    }
+    if (CheckpointCoordinatorId) {
+        TlsActivationContext->Send(std::make_unique<IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+    }
+    ReadyStateSent = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

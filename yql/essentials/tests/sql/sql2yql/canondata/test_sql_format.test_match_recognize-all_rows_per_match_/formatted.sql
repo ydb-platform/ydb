@@ -1,5 +1,3 @@
-PRAGMA FeatureR010 = 'prototype';
-
 $input = (
     SELECT
         *

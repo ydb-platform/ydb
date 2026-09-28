@@ -16,7 +16,8 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     YDB_LOG_DEBUG("StartErrorProxy",
         {"marker", "NW10"},
         {"groupId", groupId});
-    return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+    return Register(CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon, DormantTimeoutMinutes),
+        TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
 }
 
 #define ADD_CONTROLS_FOR_DEVICE_TYPES(prefix)   \
@@ -64,6 +65,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                                 .EnableVPatch = EnableVPatch,
                                 .LongRequestThresholdMs = LongRequestThresholdMs,
                                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
+                                .DormantTimeoutMinutes = TControlWrapper(0, 0, 1'000'000),
                                 .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                                 .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
                                 .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
@@ -94,6 +96,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .EnableVPatch = EnableVPatch,
                             .LongRequestThresholdMs = LongRequestThresholdMs,
                             .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
+                            .DormantTimeoutMinutes = DormantTimeoutMinutes,
                             .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                             .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
                             .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
@@ -114,6 +117,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 .EnableVPatch = EnableVPatch,
                 .LongRequestThresholdMs = LongRequestThresholdMs,
                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
+                .DormantTimeoutMinutes = DormantTimeoutMinutes,
                 .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                 .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
                 .EnableChecksumCalcAndValidationOnDsProxy = EnableChecksumCalcAndValidationOnDsProxy,
@@ -280,6 +284,7 @@ void TNodeWarden::Handle(TEvInterpilePut::TPtr ev) {
             .Deadline = item.HasDeadline() ? TInstant::FromValue(item.GetDeadline()) : TInstant::Max(),
             .HandleClass = msg.Record.GetHandleClass(),
             .Tactic = static_cast<TEvBlobStorage::TEvPut::ETactic>(msg.Record.GetTactic()),
+            .DataKind = item.GetDataKind(),
             .IssueKeepFlag = item.GetIssueKeepFlag(),
             .IgnoreBlock = item.GetIgnoreBlock(),
             .AlreadyEncrypted = item.GetAlreadyEncrypted(),

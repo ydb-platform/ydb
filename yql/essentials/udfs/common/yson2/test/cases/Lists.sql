@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $x = Yson::Parse("[1;2;[3;4]]");
 $no_strict = Yson::Options(false AS Strict);
 select Yson::ConvertToList($x) is null,

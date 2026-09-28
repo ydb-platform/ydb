@@ -6,17 +6,19 @@
 
 #include <yt/yt/core/net/address.h>
 
+#include <yt/yt/core/yson/public.h>
+
+#include <yt/yt/core/ytree/public.h>
+
 namespace NYT::NDns {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TDnsResolveOptions
-{
-    bool EnableIPv4 = true;
-    bool EnableIPv6 = true;
-};
-
 void FormatValue(TStringBuilderBase* builder, const TDnsResolveOptions options, TStringBuf spec);
+
+void Serialize(const TDnsResolveOptions& options, NYson::IYsonConsumer* consumer);
+void Deserialize(TDnsResolveOptions& options, NYTree::INodePtr node);
+void Deserialize(TDnsResolveOptions& options, NYson::TYsonPullParserCursor* cursor);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -33,4 +35,3 @@ DEFINE_REFCOUNTED_TYPE(IDnsResolver)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDns
-

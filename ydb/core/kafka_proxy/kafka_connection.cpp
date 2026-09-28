@@ -9,13 +9,17 @@
 
 
 #include "actors/actors.h"
+#include "actors/kafka_api_versions_actor.h"
 #include "kafka_connection.h"
+#include "kafka_error_response.h"
 #include "kafka_events.h"
 
 
 #include <ydb/core/kafka_proxy/kafka_log_impl.h>
 
 #include "kafka_metrics.h"
+
+#include <util/generic/guid.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -54,6 +58,7 @@ public:
     };
 
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
+    static constexpr TDuration TokenRecheckRequestTimeout = TDuration::Seconds(30);
     TEvPollerReady* InactivityEvent = nullptr;
 
     const TActorId ListenerActorId;
@@ -78,15 +83,12 @@ public:
     NAddressClassifier::TLabeledAddressClassifier::TConstPtr DatacenterClassifier;
 
     std::shared_ptr<Msg> Request;
-    std::unordered_map<ui64, Msg::TPtr> PendingRequests;
-    std::deque<Msg::TPtr> PendingRequestsQueue;
+    Msg::TPtr PendingRequest;
 
     enum EReadSteps { SIZE_READ, SIZE_PREPARE, INFLIGHT_CHECK, HEADER_READ, HEADER_PROCESS, MESSAGE_READ, MESSAGE_PROCESS };
     EReadSteps Step;
 
     TReadDemand Demand;
-
-    size_t InflightSize;
 
     TActorId ProduceActorId;
     TActorId AuthActorId;
@@ -98,6 +100,8 @@ public:
     enum SslHandshakeErrors {ERROR_NONE = 0, ERROR_WANT_READ = 1, ERROR_WANT_WRITE = 2};
 
     TContext::TPtr Context;
+    bool TokenRecheckInFlight = false;
+    ui64 TokenRecheckCookie = 0;
 
     TKafkaConnection(const TActorId& listenerActorId,
                      TIntrusivePtr<TSocketDescriptor> socket,
@@ -110,7 +114,6 @@ public:
         , BufferedWriter(Socket.Get(), config.GetPacketSize())
         , Step(SIZE_READ)
         , Demand(NoDemand)
-        , InflightSize(0)
         , ServerCreds(serverCreds)
         , Context(std::make_shared<TContext>(config))
     {
@@ -171,8 +174,7 @@ protected:
         YDB_LOG_DEBUG("Shutdown",
             {LogPrefix()});
 
-        PendingRequests.clear();
-        PendingRequestsQueue.clear();
+        PendingRequest.reset();
 
         if (Socket) {
             Socket->Shutdown();
@@ -268,7 +270,7 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TApiVersionsRequestData>& message) {
-        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message));
+        RegisterWithSameMailbox(CreateKafkaApiVersionsActor(Context, header->CorrelationId, message, header->RequestApiVersion));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TProduceRequestData>& message, const TActorContext& ctx) {
@@ -319,7 +321,7 @@ protected:
 
     void EnsureKafkaSaslAuthActor() {
         if (!AuthActorId) {
-            AuthActorId = RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, Address));
+            AuthActorId = RegisterWithSameMailbox(CreateKafkaSaslAuthActor(Context, Address, CreateGuidAsString()));
         }
     }
 
@@ -440,12 +442,43 @@ protected:
 
         Request->Method = apiKeyNameIt->second;
 
-        PendingRequestsQueue.push_back(Request);
-        PendingRequests[Request->Header.CorrelationId] = Request;
+        if (PendingRequest) {
+            YDB_LOG_ERROR("Another request is already in flight",
+                {LogPrefix()},
+                {"pendingCorrelationId", PendingRequest->Header.CorrelationId},
+                {"correlationId", Request->Header.CorrelationId});
+            PassAway();
+            return false;
+        }
+        PendingRequest = Request;
 
         SendRequestMetrics(ctx);
         if (Request->Header.ClientId.has_value() && Request->Header.ClientId != "") {
             Context->KafkaClient = Request->Header.ClientId.value();
+        }
+
+        if (auto error = Context->Token.UnusableError()) {
+            switch (Request->Header.RequestApiKey) {
+                case API_VERSIONS:
+                case SASL_HANDSHAKE:
+                case SASL_AUTHENTICATE:
+                    break;
+                default: {
+                    auto response = BuildErrorResponse(*Request->Message, *error);
+                    if (!response) {
+                        YDB_LOG_ERROR("Unsupported message",
+                            {LogPrefix()},
+                            {"apiKey", Request->Header.RequestApiKey});
+                        PassAway();
+                        return false;
+                    }
+                    Reply(Request->Header.CorrelationId, response, *error, ctx);
+                    Request->Message.reset();
+                    Request->Buffer.reset();
+                    Request.reset();
+                    return true;
+                }
+            }
         }
 
         if (IsTransactionalApiKey(Request->Header.RequestApiKey) && !TransactionsEnabled()) {
@@ -624,7 +657,12 @@ protected:
         }
 
         Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
-        Context->UserToken = event->UserToken;
+        Context->Token.UserToken = event->UserToken;
+        Context->Token.Ticket = event->Ticket;
+        Context->Token.TicketParserEntries = event->TicketParserEntries;
+        Context->Token.AuthDatabasePath = event->AuthDatabasePath;
+        Context->Token.PeerName = event->PeerName;
+        Context->Token.Status = ETokenCheckStatus::Ok;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
         Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath, event->UserToken->GetSerializedToken()};
@@ -637,13 +675,105 @@ protected:
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},
-            {"SID", Context->UserToken->GetUserSID()});
+            {"SID", Context->Token.UserToken->GetUserSID()});
+        ScheduleTokenRecheck(ctx);
         if (Context->SaslMechanism != "MTLS") {
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
         } else {
             MtlsAuthStage = AUTH_SUCCESSFUL;
             HandleConnected(PollerEventSaved, ctx);
         }
+    }
+
+    void ScheduleTokenRecheck(const TActorContext& ctx) {
+        if (!Context->TokenRecheckEnabled() || Context->AuthenticationStep != EAuthSteps::SUCCESS) {
+            return;
+        }
+        ctx.Schedule(Context->TokenRecheckInterval(), new TEvKafka::TEvTokenRecheck(TEvKafka::TEvTokenRecheck::EKind::Periodic));
+    }
+
+    void Handle(TEvKafka::TEvTokenRecheck::TPtr ev, const TActorContext& ctx) {
+        if (!Context->TokenRecheckEnabled() || Context->AuthenticationStep != EAuthSteps::SUCCESS) {
+            return;
+        }
+        if (ev->Get()->Kind == TEvKafka::TEvTokenRecheck::EKind::Timeout) {
+            HandleTokenRecheckTimeout(ev->Get()->Cookie, ctx);
+            return;
+        }
+        if (TokenRecheckInFlight) {
+            return;
+        }
+        StartTokenRecheck(ctx);
+    }
+
+    void HandleTokenRecheckTimeout(ui64 cookie, const TActorContext& ctx) {
+        if (!TokenRecheckInFlight || cookie != TokenRecheckCookie) {
+            return;
+        }
+        TokenRecheckInFlight = false;
+        Context->Token.Status = ETokenCheckStatus::Unavailable;
+        YDB_LOG_WARN("Token recheck timed out",
+            {LogPrefix()},
+            {"cookie", cookie});
+        ScheduleTokenRecheck(ctx);
+    }
+
+    void StartTokenRecheck(const TActorContext& ctx) {
+        TokenRecheckInFlight = true;
+        ++TokenRecheckCookie;
+        Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = Context->Token.Ticket,
+            .Database = Context->Token.AuthDatabasePath ? Context->Token.AuthDatabasePath : Context->DatabasePath,
+            .TraceContext = {Context->Token.PeerName, CreateGuidAsString()},
+            .Entries = Context->Token.TicketParserEntries,
+        }), 0, TokenRecheckCookie);
+        ctx.Schedule(TokenRecheckRequestTimeout, new TEvKafka::TEvTokenRecheck(
+            TEvKafka::TEvTokenRecheck::EKind::Timeout, TokenRecheckCookie));
+    }
+
+    void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr ev, const TActorContext& ctx) {
+        // Accept a matching cookie even after timeout cleared InFlight, so a late
+        // success can recover Token.Status from Unavailable. Ignore cookie 0 (no recheck
+        // has been issued yet) and cookies from a newer in-flight request.
+        if (TokenRecheckCookie == 0 || ev->Cookie != TokenRecheckCookie) {
+            YDB_LOG_DEBUG("Ignoring stale token recheck result",
+                {LogPrefix()},
+                {"cookie", ev->Cookie},
+                {"expectedCookie", TokenRecheckCookie});
+            return;
+        }
+        TokenRecheckInFlight = false;
+        auto* result = ev->Get();
+        if (result->HasError()) {
+            if (result->Error.Retryable) {
+                Context->Token.Status = ETokenCheckStatus::Unavailable;
+                YDB_LOG_WARN("Token recheck unavailable",
+                    {LogPrefix()},
+                    {"error", result->Error.ToString()});
+            } else {
+                Context->Token.Status = ETokenCheckStatus::Invalid;
+                YDB_LOG_ERROR("Token recheck failed",
+                    {LogPrefix()},
+                    {"error", result->Error.ToString()});
+            }
+        } else if (result->Token && !result->Token->GetSerializedToken().empty()) {
+            Context->Token.Status = ETokenCheckStatus::Ok;
+            Context->Token.UserToken = result->Token;
+            const auto& path = Context->RlContext.GetPath();
+            Context->RlContext = NKikimr::NPQ::TRlContext(
+                path.CoordinationNode,
+                path.ResourcePath,
+                Context->DatabasePath,
+                result->Token->GetSerializedToken());
+            YDB_LOG_DEBUG("Token recheck successful",
+                {LogPrefix()},
+                {"SID", Context->Token.UserToken->GetUserSID()});
+        } else {
+            Context->Token.Status = ETokenCheckStatus::Invalid;
+            YDB_LOG_ERROR("Token recheck returned empty token",
+                {LogPrefix()});
+        }
+        ScheduleTokenRecheck(ctx);
     }
 
     void Handle(TEvKafka::TEvHandshakeResult::TPtr ev, const TActorContext& ctx) {
@@ -685,57 +815,49 @@ protected:
     }
 
     void Reply(const ui64 correlationId, TApiMessage::TPtr response, EKafkaErrors errorCode, const TActorContext& ctx) {
-        auto it = PendingRequests.find(correlationId);
-        if (it == PendingRequests.end()) {
+        if (!PendingRequest || PendingRequest->Header.CorrelationId != static_cast<TKafkaInt32>(correlationId)) {
             YDB_LOG_ERROR("Unexpected correlationId",
                 {LogPrefix()},
                 {"correlationId", correlationId});
             return;
         }
 
-        auto& request = it->second;
-        request->Response = response;
-        request->ResponseErrorCode = errorCode;
+        PendingRequest->Response = response;
+        PendingRequest->ResponseErrorCode = errorCode;
 
-        if (!ProcessReplyQueue(ctx)) {
+        if (!TrySendPendingReply(ctx)) {
             return;
         }
         RequestPoller();
     }
 
-    void OnRequestProcessed(const Msg::TPtr& request) {
-        YDB_LOG_TRACE("Request with correlationId processed. Erasing it from PendingRequests and PendingRequestsQueue",
+    void FinishPendingRequest() {
+        if (!PendingRequest) {
+            return;
+        }
+        YDB_LOG_TRACE("Request with correlationId processed",
             {LogPrefix()},
-            {"correlationId", request->Header.CorrelationId});
-        InflightSize -= request->ExpectedSize;
-        PendingRequests.erase(request->Header.CorrelationId);
-        PendingRequestsQueue.pop_front();
+            {"correlationId", PendingRequest->Header.CorrelationId});
+        PendingRequest.reset();
     }
 
-    bool ProcessReplyQueue(const TActorContext& ctx) {
-        while(!PendingRequestsQueue.empty()) {
-            auto& request = PendingRequestsQueue.front();
-            YDB_LOG_TRACE("Processing reply queue for request with correlationId",
-                {LogPrefix()},
-                {"correlationId", request->Header.CorrelationId});
-            if (request->Response.get() == nullptr) {
-                YDB_LOG_TRACE("Response for request with correlationId is empty",
-                    {LogPrefix()},
-                    {"correlationId", request->Header.CorrelationId});
-                break;
-            }
-
-            if (RetryingWriteToSocket || !Reply(&request->Header, request->Response.get(), request->Method, request->StartTime, request->ResponseErrorCode, ctx)) {
-                return false;
-            }
-
-            OnRequestProcessed(request);
-        }
-
+    void TryUnmute(const TActorContext& ctx) {
         if (!CloseConnection && Step == INFLIGHT_CHECK) {
             DoRead(ctx);
         }
+    }
 
+    bool TrySendPendingReply(const TActorContext& ctx) {
+        if (!PendingRequest || PendingRequest->Response.get() == nullptr) {
+            return true;
+        }
+
+        if (RetryingWriteToSocket || !Reply(&PendingRequest->Header, PendingRequest->Response.get(), PendingRequest->Method, PendingRequest->StartTime, PendingRequest->ResponseErrorCode, ctx)) {
+            return false;
+        }
+
+        FinishPendingRequest();
+        TryUnmute(ctx);
         return true;
     }
 
@@ -747,6 +869,9 @@ protected:
             {"code", errorCode});
         TKafkaVersion headerVersion = ResponseHeaderVersion(header->RequestApiKey, header->RequestApiVersion);
         TKafkaVersion version = header->RequestApiVersion;
+        if (header->RequestApiKey == API_VERSIONS) {
+            version = ApiVersionsResponseWriteVersion(version);
+        }
 
         TResponseHeaderData responseHeader;
         responseHeader.CorrelationId = header->CorrelationId;
@@ -882,22 +1007,22 @@ protected:
                         [[fallthrough]];
 
                     case INFLIGHT_CHECK:
-                        if (!Context->Authenticated() && !PendingRequestsQueue.empty()) {
-                            // Allow only one message to be processed at a time for non-authenticated users
-                            YDB_LOG_ERROR("DoRead: failed inflight check: there are pending requests and user is not authnicated. Only one paraller request is allowed for a non-authenticated user",
+                        // Apache Kafka: one in-flight request per connection. Mute until the previous
+                        // request is answered. Clients may still pipeline into the OS socket buffer.
+                        if (PendingRequest) {
+                            YDB_LOG_TRACE("DoRead: connection muted until previous request is answered",
                                 {LogPrefix()},
-                                {"pendingRequestsQueue", PendingRequestsQueue.size()});
+                                {"pendingCorrelationId", PendingRequest->Header.CorrelationId});
                             return true;
                         }
-                        if (InflightSize + Request->ExpectedSize > Context->Config.GetMaxInflightSize()) {
+                        if (static_cast<ui64>(Request->ExpectedSize) > Context->Config.GetMaxInflightSize()) {
                             // We limit the size of processed messages so as not to exceed the size of available memory
-                            YDB_LOG_ERROR("DoRead: failed inflight check: InflightSize + >",
+                            YDB_LOG_ERROR("DoRead: failed inflight check: request is bigger than MaxInflightSize",
                                 {LogPrefix()},
-                                {"expectedSize", InflightSize + Request->ExpectedSize},
+                                {"expectedSize", Request->ExpectedSize},
                                 {"getMaxInflightSize", Context->Config.GetMaxInflightSize()});
                             return true;
                         }
-                        InflightSize += Request->ExpectedSize;
                         Step = MESSAGE_READ;
 
                         [[fallthrough]];
@@ -922,13 +1047,6 @@ protected:
                         NormalizeNumber(Request->ApiVersion);
                         NormalizeNumber(Request->CorrelationId);
 
-                        if (PendingRequests.contains(Request->CorrelationId)) {
-                            YDB_LOG_ERROR("CorrelationId already processing",
-                                {LogPrefix()},
-                                {"correlationId", Request->CorrelationId});
-                            PassAway();
-                            return false;
-                        }
                         if (!Context->Authenticated() && RequireAuthentication(static_cast<EApiKey>(Request->ApiKey))) {
                             YDB_LOG_ERROR("Unauthenticated request",
                                 {LogPrefix()},
@@ -971,12 +1089,22 @@ protected:
 
                         TKafkaReadable readable(*Request->Buffer);
                         readable.SetAllowCompressed(AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
+                        readable.SetMaxArrayBytes(static_cast<size_t>(Context->Config.GetMaxMessageSize()));
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);
 
-                            Request->Header.Read(readable, RequestHeaderVersion(Request->ApiKey, Request->ApiVersion));
-                            Request->Message->Read(readable, Request->ApiVersion);
+                            TKafkaVersion headerVersion = RequestHeaderVersion(Request->ApiKey, Request->ApiVersion);
+                            TKafkaVersion bodyVersion = Request->ApiVersion;
+                            if (Request->ApiKey == API_VERSIONS && !IsApiVersionsRequestVersionSupported(Request->ApiVersion)) {
+                                // KIP-511: the client does not yet know broker versions, so an unknown
+                                // ApiVersions version is parsed as v0 instead of using the requested schema.
+                                headerVersion = ApiVersionsFallbackRequestHeaderVersion;
+                                bodyVersion = ApiVersionsFallbackRequestVersion;
+                            }
+
+                            Request->Header.Read(readable, headerVersion);
+                            Request->Message->Read(readable, bodyVersion);
                         } catch(const yexception& e) {
                             YDB_LOG_ERROR("Error on processing message",
                                 {LogPrefix()},
@@ -1084,19 +1212,16 @@ protected:
                 return;
             } else if (res > 0 && BufferedWriter.Empty()) { // we successfuly retried sending the response
                 RetryingWriteToSocket = false;
-                auto& request = PendingRequestsQueue.front();
-                auto& header = request->Header;
-                YDB_LOG_DEBUG("Sent reply (after retry)",
-                    {LogPrefix()},
-                    {"apiKey", header.RequestApiKey},
-                    {"version", header.RequestApiVersion},
-                    {"correlation", header.CorrelationId});
-                OnRequestProcessed(request);
-                ProcessReplyQueue(ctx);
-
-                if (!CloseConnection && Step == INFLIGHT_CHECK) {
-                    DoRead(ctx);
+                if (PendingRequest) {
+                    auto& header = PendingRequest->Header;
+                    YDB_LOG_DEBUG("Sent reply (after retry)",
+                        {LogPrefix()},
+                        {"apiKey", header.RequestApiKey},
+                        {"version", header.RequestApiVersion},
+                        {"correlation", header.CorrelationId});
+                    FinishPendingRequest();
                 }
+                TryUnmute(ctx);
             }
         }
 
@@ -1124,6 +1249,8 @@ protected:
             hFunc(TEvPollerRegisterResult, HandleConnected);
             HFunc(TEvKafka::TEvResponse, Handle);
             HFunc(TEvKafka::TEvAuthResult, Handle);
+            HFunc(TEvKafka::TEvTokenRecheck, Handle);
+            HFunc(TEvTicketParser::TEvAuthorizeTicketResult, Handle);
             HFunc(TEvKafka::TEvReadSessionInfo, Handle);
             HFunc(TEvKafka::TEvHandshakeResult, Handle);
             sFunc(TEvKafka::TEvKillReadSession, HandleKillReadSession);

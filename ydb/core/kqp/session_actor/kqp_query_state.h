@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
+
 #include "kqp_query_stats.h"
 #include "kqp_worker_common.h"
 
@@ -52,6 +54,9 @@ public:
 
         void SetValue(const TTxId& id);
         TTxId GetValue();
+        bool HasValue() const {
+            return Id.Defined();
+        }
 
         void Reset();
 
@@ -71,7 +76,6 @@ public:
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
         , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
-        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , IsWarmupCompilation_(ev->Get()->GetIsWarmupCompilation())
@@ -108,9 +112,15 @@ public:
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
-            "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
-        if (KqpSessionSpan && AppData()) {
-            KqpSessionSpan.Attribute("database", AppData()->TenantName);
+            QueryTraceSpanName(QueryAction), NWilson::EFlags::AUTO_END);
+        AddQueryTraceAttributes(KqpSessionSpan, QueryType, QueryAction,
+            Database ? Database : AppData()->TenantName, RequestEv->GetQuery());
+        AddQuerySessionTraceAttributes(KqpSessionSpan, sessionId,
+            RequestEv->HasTxControl() ? &RequestEv->GetTxControl() : nullptr);
+        KqpSessionSpan.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
+        if (KqpSessionSpan) {
+            const auto fallback = FallbackQueryTraceName(QueryType, QueryAction);
+            TraceDescription = {fallback, fallback};
         }
         if (IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             if (KqpSessionSpan) {
@@ -166,7 +176,6 @@ public:
     NKikimrKqp::EQueryType QueryType;
     bool SaveQueryPhysicalGraph = false;
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
-    const i64 Generation = 0;
 
     TActorId RequestActorId;
 
@@ -191,6 +200,9 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    NWilson::TSpan AdmissionSpan;
+    NWilson::TSpan AcquireSnapshotSpan;
+    TQueryTraceDescription TraceDescription;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx
@@ -256,6 +268,10 @@ public:
 
     const TString& GetQuery() const {
         return RequestEv->GetQuery();
+    }
+
+    bool UsedNewRbo() const {
+        return CompileResult && CompileResult->UsedNewRbo;
     }
 
     const TString& GetPreparedQuery() const {
@@ -418,7 +434,7 @@ public:
         }
     }
 
-    void FillViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& views);
+    void FiilTablesAndViews(const google::protobuf::RepeatedPtrField< ::NKqpProto::TKqpTableInfo>& infos);
 
     bool NeedCheckTableVersions() const {
         return CompileStats.FromCache;
@@ -658,6 +674,10 @@ public:
         }
 
         return cStats;
+    }
+
+    bool GetCollectAffectedRows() const {
+        return RequestEv->GetCollectAffectedRows();
     }
 
     bool ReportStats() const {

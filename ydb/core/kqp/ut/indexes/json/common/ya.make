@@ -9,6 +9,7 @@ SRCS(
 PEERDIR(
     contrib/libs/fmt
     ydb/core/kqp/ut/common
+    ydb/core/kqp/ut/indexes/common
     ydb/library/json_index
 )
 

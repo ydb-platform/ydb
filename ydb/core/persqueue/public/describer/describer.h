@@ -5,20 +5,24 @@
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 namespace NKikimr::NPQ::NDescriber {
 
-enum EEv : ui32 {
+enum class EEv : ui32 {
     EvDescribeTopicsResponse = InternalEventSpaceBegin(NPQ::NEvents::EServices::DESCRIBER_SERVICE),
     EvEnd
 };
 
 enum class EStatus {
-    SUCCESS,
-    NOT_FOUND,
-    NOT_TOPIC,
-    UNAUTHORIZED,
-    UNAUTHORIZED_WITH_DESCRIBE_ACCESS,
-    UNKNOWN_ERROR
+    Success,
+    NotFound,
+    NotTopic,
+    Unauthorized,
+    UnauthorizedWithDescribeAccess,
+    BadRequest,
+    UnknownError
 };
 
 
@@ -41,7 +45,7 @@ struct TAccessRights {
 };
 
 struct TTopicInfo {
-    EStatus Status = EStatus::NOT_FOUND;
+    EStatus Status = EStatus::NotFound;
 
     // Real topic path. If original topic path is CDC than real path is different.
     TString RealPath;
@@ -54,16 +58,16 @@ struct TTopicInfo {
     TIntrusivePtr<TSecurityObject> SecurityObject;
 };
 
-struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, EEv::EvDescribeTopicsResponse> {
+struct TEvDescribeTopicsResponse : public NActors::TEventLocal<TEvDescribeTopicsResponse, static_cast<ui32>(EEv::EvDescribeTopicsResponse)> {
 
-    TEvDescribeTopicsResponse(std::unordered_map<TString, TTopicInfo>&& topics, bool usedSyncVersion)
+    TEvDescribeTopicsResponse(absl::flat_hash_map<TString, TTopicInfo>&& topics, bool usedSyncVersion)
         : Topics(std::move(topics))
         , UsedSyncVersion(usedSyncVersion)
     {
     }
 
     // The original topic path (from request) -> TopicInfo
-    std::unordered_map<TString, TTopicInfo> Topics;
+    absl::flat_hash_map<TString, TTopicInfo> Topics;
     bool UsedSyncVersion = false;
 };
 
@@ -75,7 +79,7 @@ struct TDescribeSettings {
 
 NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent,
                                       const TString& databasePath,
-                                      const std::unordered_set<TString>&& topicPaths,
+                                      absl::flat_hash_set<TString>&& topicPaths,
                                       const TDescribeSettings& settings = {});
 
 Ydb::StatusIds::StatusCode Convert(const EStatus status);

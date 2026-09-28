@@ -1,0 +1,5 @@
+pragma config.flags("OptimizerFlags", "PushdownStructSubsetFieldsOverAggregate", "PropagateSomeTraitsUnusedColumns");
+
+select a, b from (
+select some(TableRow()) from as_table([<|a:1,b:2,c:3|>])
+) flatten columns;

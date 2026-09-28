@@ -80,6 +80,8 @@ message VectorIndexSettings {
     enum VectorType {
         VECTOR_TYPE_UNSPECIFIED = 0;
         VECTOR_TYPE_FLOAT = 1;
+        VECTOR_TYPE_FLOAT16 = 5;
+        VECTOR_TYPE_BFLOAT16 = 6;
         VECTOR_TYPE_UINT8 = 2;
         VECTOR_TYPE_INT8 = 3;
         VECTOR_TYPE_BIT = 4;
@@ -163,8 +165,8 @@ message FulltextIndexSettings {
         // See Tokenizer enum
         optional Tokenizer tokenizer = 1;
 
-        // Language used for language-sensitive operations like stopword filtering and stemming
-        // Example: language = "english"
+        // Comma-separated languages used for language-sensitive operations like stopword filtering and stemming
+        // Example: language = "english,russian"
         // By default is not specified and no language-specific logic is applied
         optional string language = 2;
 
@@ -220,11 +222,20 @@ message FulltextIndexSettings {
         optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
 
         // Whether to apply snowball stemming to each token
-        // Must be used with language option
-        // Example: language = "english"
+        // Must be used with language option; languages in a list must use distinct scripts so each word can be routed to one stemmer
+        // Example: language = "english,russian"
         //   Tokens: ["cars", "beautifully", "conspired"]
         //   Output: ["car", "beauti", "conspir"]
         optional bool use_filter_snowball = 140;
+
+        // Whether to apply superlemmer suffix replacement to each token
+        // Generalizes lemmas by suffix replacement using a built-in dictionary
+        // Works on UTF-8 text, primarily optimized for Russian
+        // Cannot be used together with use_filter_snowball, use_filter_ngram, or use_filter_edge_ngram
+        // Example:
+        //   Tokens: ["мороженое", "уже"]
+        //   Output: ["мороженый", "узкий"]
+        optional bool use_filter_superlemmer = 141;
     }
 
     // Represents text analyzers settings for a specific column
@@ -445,6 +456,7 @@ message TableMultiColumnStatistics {
     enum MultiColumnStatisticsType {
         STATISTIC_TYPE_UNSPECIFIED = 0;
         COUNT_MIN_SKETCH = 1;
+        EQ_HEIGHT_HISTOGRAM = 2;
     }
     // Name of statistics
     string name = 1;

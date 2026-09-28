@@ -8,6 +8,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
 
+#include <array>
 #include <string_view>
 
 namespace NKikimr::NMiniKQL {
@@ -21,24 +22,24 @@ Y_FORCE_INLINE void WriteBool(TString& out, bool value) {
 }
 
 Y_FORCE_INLINE void WriteUi32(TString& out, ui32 value) {
-    char buf[MAX_PACKED32_SIZE];
-    out.AppendNoAlias(buf, Pack32(value, buf));
+    std::array<char, MAX_PACKED32_SIZE> buf;
+    out.AppendNoAlias(buf.data(), Pack32(value, buf.data()));
 }
 
 Y_FORCE_INLINE void WriteUi64(TString& out, ui64 value) {
-    char buf[MAX_PACKED64_SIZE];
-    out.AppendNoAlias(buf, Pack64(value, buf));
+    std::array<char, MAX_PACKED64_SIZE> buf;
+    out.AppendNoAlias(buf.data(), Pack64(value, buf.data()));
 }
 
 Y_FORCE_INLINE bool ReadBool(TStringBuf& in) {
-    MKQL_ENSURE(in.size(), "Serialized state is corrupted");
+    MKQL_ENSURE(!in.empty(), "Serialized state is corrupted");
     bool result = (bool)*in.data();
     in.Skip(1);
     return result;
 }
 
 Y_FORCE_INLINE ui8 ReadByte(TStringBuf& in) {
-    MKQL_ENSURE(in.size(), "Serialized state is corrupted");
+    MKQL_ENSURE(!in.empty(), "Serialized state is corrupted");
     ui8 result = *in.data();
     in.Skip(1);
     return result;
@@ -63,9 +64,9 @@ Y_FORCE_INLINE ui64 ReadUi64(TStringBuf& in) {
 Y_FORCE_INLINE std::string_view ReadString(TStringBuf& in) {
     const ui32 size = ReadUi32(in);
     MKQL_ENSURE(in.size() >= size, "Serialized state is corrupted");
-    TStringBuf head = in.Head(size);
-    in = in.Tail(size);
-    return head;
+    const std::string_view result(in.data(), size);
+    in.Skip(size);
+    return result;
 }
 
 Y_FORCE_INLINE void WriteString(TString& out, std::string_view str) {
@@ -125,7 +126,6 @@ public:
         return NMiniKQL::MakeString(strRef);
     }
 
-public:
     TOutputSerializer(EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
         : Ctx_(ctx)
     {
@@ -296,7 +296,7 @@ public:
 
     template <class TCallbackUpdate, class TCallbackDelete>
     void ReadItems(TCallbackUpdate updateItem, TCallbackDelete deleteKey) {
-        MKQL_ENSURE(Buf_.size(), "Serialized state is corrupted");
+        MKQL_ENSURE(!Buf_.empty(), "Serialized state is corrupted");
         ui32 itemsCount = ReadUi32(Buf_);
         ui32 deletedCount = 0;
         if (Type_ == EMkqlStateType::INCREMENT) {

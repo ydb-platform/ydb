@@ -1,12 +1,17 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 #include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
 #include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 #include <ydb/public/sdk/cpp/tests/common/fake_metric_registry.h>
 #include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
+
+#define INCLUDE_YDB_INTERNAL_H
+#include <ydb/public/sdk/cpp/src/client/impl/internal/sdk_runtime/runtime.h>
+#undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -19,9 +24,12 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/generic/mapfindptr.h>
 
+#include <array>
 #include <atomic>
 #include <functional>
+#include <future>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #include <google/protobuf/text_format.h>
@@ -58,6 +66,11 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
         {
             BuildInfo = ReadBuildInfo(context);
 
+            const auto& metadata = context->client_metadata();
+            if (const auto it = metadata.find(YDB_AUTH_TICKET_HEADER); it != metadata.end()) {
+                AuthTicket.assign(it->second.data(), it->second.length());
+            }
+
             std::cerr << "ListEndpoints: " << request->ShortDebugString() << std::endl;
 
             const auto* result = MapFindPtr(MockResults, request->database());
@@ -73,6 +86,7 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
         // From database name to result
         std::unordered_map<std::string, Ydb::Discovery::ListEndpointsResult> MockResults;
         std::string BuildInfo;
+        std::string AuthTicket;
     };
 
     class TMockTableService : public Ydb::Table::V1::TableService::Service {
@@ -183,6 +197,157 @@ IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
 
 } // namespace
 
+Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
+    Y_UNIT_TEST(RuntimeIsProcessSingleton) {
+        constexpr size_t ThreadCount = 8;
+        std::array<TSdkRuntime*, ThreadCount> runtimes{};
+        std::array<std::thread, ThreadCount> threads;
+
+        for (size_t i = 0; i < ThreadCount; ++i) {
+            threads[i] = std::thread([&, i] {
+                runtimes[i] = &GetSdkRuntime();
+            });
+        }
+        for (auto& thread : threads) {
+            thread.join();
+        }
+
+        for (auto* runtime : runtimes) {
+            UNIT_ASSERT_VALUES_EQUAL(runtime, &GetSdkRuntime());
+        }
+    }
+
+    Y_UNIT_TEST(DriverScopesCancelIndependently) {
+        NYdbGrpc::TGRpcClientLow client(1);
+        auto scopeA = GetSdkRuntime().CreateDriverScope(client);
+        auto scopeB = GetSdkRuntime().CreateDriverScope(client);
+        auto contextA = scopeA->CreateContext();
+        auto contextB = scopeB->CreateContext();
+
+        UNIT_ASSERT(contextA);
+        UNIT_ASSERT(contextB);
+        UNIT_ASSERT(!contextA->IsCancelled());
+        UNIT_ASSERT(!contextB->IsCancelled());
+
+        scopeA->Cancel();
+
+        UNIT_ASSERT(contextA->IsCancelled());
+        UNIT_ASSERT(!scopeA->CreateContext());
+        auto childContextA = contextA->CreateContext();
+        UNIT_ASSERT(childContextA);
+        UNIT_ASSERT(childContextA->IsCancelled());
+        UNIT_ASSERT(!contextB->IsCancelled());
+        auto secondContextB = scopeB->CreateContext();
+        UNIT_ASSERT(secondContextB);
+
+        childContextA.reset();
+        contextA.reset();
+        contextB.reset();
+        secondContextB.reset();
+        scopeB->Cancel();
+        scopeA->CloseCallbacksAndWait();
+        scopeB->CloseCallbacksAndWait();
+        client.Stop(true);
+    }
+
+    Y_UNIT_TEST(DriverScopeWaitsForCallbacks) {
+        NYdbGrpc::TGRpcClientLow client(1);
+        auto scope = GetSdkRuntime().CreateDriverScope(client);
+        auto guard = scope->GetCallbackGuardFactory()();
+        UNIT_ASSERT(guard->IsEntered());
+
+        std::promise<void> waiterStarted;
+        auto waiterStartedFuture = waiterStarted.get_future();
+        std::atomic_bool waiterFinished = false;
+        std::thread waiter([&] {
+            waiterStarted.set_value();
+            scope->WaitCallbacksDrained();
+            waiterFinished.store(true);
+        });
+
+        waiterStartedFuture.wait();
+        UNIT_ASSERT(!waiterFinished.load());
+        guard.reset();
+        waiter.join();
+        UNIT_ASSERT(waiterFinished.load());
+
+        scope->CloseCallbacksAndWait();
+        auto rejectedGuard = scope->GetCallbackGuardFactory()();
+        UNIT_ASSERT(!rejectedGuard->IsEntered());
+
+        rejectedGuard.reset();
+        scope->Cancel();
+        client.Stop(true);
+    }
+
+    Y_UNIT_TEST(DriverScopeCancelCreateRace) {
+        constexpr size_t Iterations = 32;
+        for (size_t i = 0; i < Iterations; ++i) {
+            NYdbGrpc::TGRpcClientLow client(1);
+            auto scope = GetSdkRuntime().CreateDriverScope(client);
+            NYdbGrpc::IQueueClientContextPtr context;
+            std::promise<void> start;
+            auto startFuture = start.get_future().share();
+
+            std::thread creator([&] {
+                startFuture.wait();
+                context = scope->CreateContext();
+            });
+            std::thread canceller([&] {
+                startFuture.wait();
+                scope->Cancel();
+            });
+
+            start.set_value();
+            creator.join();
+            canceller.join();
+
+            if (context) {
+                UNIT_ASSERT(context->IsCancelled());
+            }
+            UNIT_ASSERT(!scope->CreateContext());
+
+            context.reset();
+            scope->CloseCallbacksAndWait();
+            client.Stop(true);
+        }
+    }
+
+    Y_UNIT_TEST(DriverScopeCancelCreateChildRace) {
+        constexpr size_t Iterations = 32;
+        for (size_t i = 0; i < Iterations; ++i) {
+            NYdbGrpc::TGRpcClientLow client(1);
+            auto scope = GetSdkRuntime().CreateDriverScope(client);
+            auto parentContext = scope->CreateContext();
+            NYdbGrpc::IQueueClientContextPtr childContext;
+            std::promise<void> start;
+            auto startFuture = start.get_future().share();
+
+            std::thread creator([&] {
+                startFuture.wait();
+                childContext = parentContext->CreateContext();
+            });
+            std::thread canceller([&] {
+                startFuture.wait();
+                scope->Cancel();
+            });
+
+            start.set_value();
+            creator.join();
+            canceller.join();
+
+            UNIT_ASSERT(childContext);
+            UNIT_ASSERT(childContext->IsCancelled());
+            UNIT_ASSERT(!scope->CreateContext());
+
+            childContext.reset();
+            parentContext.reset();
+            scope->CloseCallbacksAndWait();
+            client.Stop(true);
+        }
+    }
+}
+
 Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
     Y_UNIT_TEST(RequestWaitsForAuthInfo) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
@@ -223,6 +388,25 @@ Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
 }
 
 Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
+    Y_UNIT_TEST(OidcTokenIsSentAsBearerTicket) {
+        TPortManager pm;
+        TMockDiscoveryService discoveryService;
+        discoveryService.MockResults["/Root/My/DB"] = {};
+        const auto address = TStringBuilder() << "127.0.0.1:" << pm.GetPort();
+        auto server = StartGrpcServer(address, discoveryService);
+
+        NOidc::TOidcConfig oidc;
+        oidc.Issuer = "https://issuer.example";
+        oidc.FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "oidc-access"};
+        auto driver = TDriver(TDriverConfig()
+            .SetEndpoint(address)
+            .SetDatabase("/Root/My/DB")
+            .SetDiscoveryMode(EDiscoveryMode::Sync)
+            .SetCredentialsProviderFactory(NOidc::CreateOidcProviderFactory(oidc)));
+
+        UNIT_ASSERT_VALUES_EQUAL(discoveryService.AuthTicket, "Bearer oidc-access");
+    }
+
     Y_UNIT_TEST(ReusesCredentialsProviderForSameIdentity) {
         std::atomic_int providerCount = 0;
         auto driver = TDriver(

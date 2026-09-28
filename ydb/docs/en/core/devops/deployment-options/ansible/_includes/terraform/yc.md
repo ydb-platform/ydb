@@ -12,7 +12,14 @@ To create infrastructure in Yandex Cloud using Terraform, you need:
      * [Create]({{ yandex_docs }}/cli/quickstart#initialize) profile
 
 3. [Create]({{ yandex_docs }}/tutorials/infrastructure-management/terraform-quickstart#get-credentials) service account using the CLI.
-4. [Generate]({{ yandex_docs }}/cli/operations/authentication/service-account#auth-as-sa) Authorized key in JSON format for connecting Terraform to the cloud using the CLI: `yc iam key create --service-account-name <acc name> --output <file name> --folder-id <cloud folder id>`. Information about the created key will be displayed in the terminal:
+4. [Generate]({{ yandex_docs }}/cli/operations/authentication/service-account#auth-as-sa) Authorized key in JSON format for connecting Terraform to the cloud using the CLI:
+
+```bash
+yc iam key create --service-account-name <acc name> \
+  --output <file name> --folder-id <cloud folder id>
+```
+
+Information about the created key will be displayed in the terminal:
 
      ```text
     id: ajenap572v8e1l...

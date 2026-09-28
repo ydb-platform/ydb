@@ -19,7 +19,6 @@ PY_SRCS(
     TOP_LEVEL
     numpy/conftest.py
     numpy/_core/tests/_locales.py
-    numpy/_core/tests/_natype.py
 )
 
 END()

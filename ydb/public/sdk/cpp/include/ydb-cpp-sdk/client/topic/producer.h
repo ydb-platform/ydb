@@ -2,10 +2,11 @@
 
 #include "write_session.h"
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 struct TProducerSettings : public TWriteSessionSettings {
     using TSelf = TProducerSettings;
@@ -42,6 +43,10 @@ struct TProducerSettings : public TWriteSessionSettings {
     //! Maximum block timeout for write. If set, write will block for up to MaxBlockTimeout when the buffer is overloaded.
     //! If not set, Write will block until the message is written to the buffer.
     FLUENT_SETTING_DEFAULT(TDuration, MaxBlockTimeout, TDuration::Max());
+
+    //! Run client wakeups on an internal SDK thread.
+    //! If disabled, wakeups are executed inline by the calling thread.
+    FLUENT_SETTING_DEFAULT(bool, AsyncExecutionMode, false);
 
 private:
     using TWriteSessionSettings::ProducerId;
@@ -194,4 +199,4 @@ private:
     std::shared_ptr<IProducer> Impl_;
 };
 
-} // namespace NYdb::NTopic
+} // namespace NYdb::inline Dev::NTopic

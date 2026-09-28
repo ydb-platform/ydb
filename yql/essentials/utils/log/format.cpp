@@ -102,7 +102,8 @@ public:
     void WriteData(const TLogRecord& rec) final {
         if (rec.MetaFlags.empty()) {
             // NB. For signal handler.
-            return TForwardingLogBackend::WriteData(rec);
+            TForwardingLogBackend::WriteData(rec);
+            return;
         }
 
         TString message;
@@ -119,7 +120,7 @@ public:
         message.append('\n');
 
         const TLogRecord formatted(rec.Priority, message.data(), message.size());
-        return TForwardingLogBackend::WriteData(formatted);
+        TForwardingLogBackend::WriteData(formatted);
     }
 
 protected:

@@ -144,11 +144,7 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ====================COPYRIGHT====================
     Copyright (c) 2001, Daniel C. Nuffer
     Copyright (c) 2003, Hartmut Kaiser
-    http://spirit.sourceforge.net/
-
-
-====================COPYRIGHT====================
-    Copyright (c) 2001, Daniel C. Nuffer
+    Copyright (c) 2025, Joaquin M Lopez Munoz
     http://spirit.sourceforge.net/
 
 
@@ -392,12 +388,7 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
     Copyright (c) 2003 Giovanni Bajo
     Copyright (c) 2003 Thomas Witt
     Copyright (c) 2003 Hartmut Kaiser
-    http://spirit.sourceforge.net/
-
-
-====================COPYRIGHT====================
-    Copyright (c) 2003 Hartmut Kaiser
-    Copyright (c) 2003 Joel de Guzman
+    Copyright (c) 2025 Joaquin M Lopez Munoz
     http://spirit.sourceforge.net/
 
 
@@ -559,6 +550,11 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 //  Copyright (c) 2001-2011 Hartmut Kaiser
 //  Copyright (c) 2001-2011 Joel de Guzman
 //  Copyright (c) 2011 Thomas Bernard
+
+
+====================COPYRIGHT====================
+//  Copyright (c) 2001-2011 Hartmut Kaiser
+//  Copyright (c) 2025 Joaquin M Lopez Munoz
 
 
 ====================COPYRIGHT====================

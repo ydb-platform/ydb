@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 -->
 # Включение логирования
 
 Ниже приведены примеры кода включения логирования в разных {{ ydb-short-name }} SDK.
@@ -102,8 +103,6 @@
     ```
 
     {% endcut %}
-
-    {% include [overlay](_includes/debug-logs-go-appendix.md) %}
 
     {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 
@@ -262,8 +261,6 @@
     ```
 
     {% endcut %}
-
-    {% include [overlay](_includes/debug-logs-go-sql-appendix.md) %}
 
     {% cut "Подключить собственную имплементацию логгера `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 

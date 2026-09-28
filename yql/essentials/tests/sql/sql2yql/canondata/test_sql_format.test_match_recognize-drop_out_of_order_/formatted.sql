@@ -1,4 +1,3 @@
-PRAGMA FeatureR010 = 'prototype';
 PRAGMA config.flags('TimeOrderRecoverDelay', '-11');
 PRAGMA config.flags('TimeOrderRecoverAhead', '11');
 PRAGMA config.flags('MatchRecognizeStream', 'force');

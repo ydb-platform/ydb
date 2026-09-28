@@ -43,6 +43,7 @@ public:
 
     double GetInstantLoad() const;
     double GetAverageLoad() const;
+    double GetQuotedLoad() const;
     TDuration GetMonitoringRequestDelay() const;
     TInstant GetMonitoringRequestTime() const;
 

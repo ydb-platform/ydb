@@ -35,6 +35,7 @@ namespace NTabletFlatExecutor {
         NTable::NPage::TConf Layout;
         NWriter::TConf Writer;
         NTable::TEpoch Epoch = NTable::TEpoch::Zero();
+        NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
     };
 
     /**
@@ -351,6 +352,7 @@ namespace NTabletFlatExecutor {
                 .HandleClass = NKikimrBlobStorage::AsyncBlob,
                 .Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput,
                 .WriteSource = TWriteSource::FlatCompactionPut,
+                .DataKind = Cfg.DataKind,
                 .ExternalRelevanceWatcher = RelevanceTracker,
             });
 

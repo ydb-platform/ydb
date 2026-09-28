@@ -47,7 +47,6 @@ protected:
         return buffer;
     }
 
-protected:
     arrow::MemoryPool* Pool_;
 };
 
@@ -189,6 +188,7 @@ public:
 
         std::vector<std::shared_ptr<arrow::ArrayData>> trimmedChildren;
         Y_ENSURE(array->child_data.size() == Children_.size());
+        trimmedChildren.reserve(Children_.size());
         for (size_t i = 0; i < Children_.size(); i++) {
             trimmedChildren.push_back(Children_[i]->Trim(array->child_data[i]));
         }
@@ -204,7 +204,6 @@ protected:
     {
     }
 
-protected:
     std::vector<IBlockTrimmer::TPtr> Children_;
 };
 

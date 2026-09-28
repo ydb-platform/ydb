@@ -7,22 +7,16 @@ from typing import (
     Protocol,
     ParamSpec,
     Concatenate,
+    type_check_only,
 )
+
+from typing_extensions import deprecated
 
 import numpy as np
-from numpy import (
-    generic,
-    integer,
-    ufunc,
-    unsignedinteger,
-    signedinteger,
-    floating,
-    complexfloating,
-    object_,
-)
-
+from numpy import _CastingKind, generic, integer, ufunc, unsignedinteger, signedinteger, floating, complexfloating, object_
 from numpy._typing import (
     ArrayLike,
+    DTypeLike,
     NDArray,
     _ShapeLike,
     _ArrayLike,
@@ -34,12 +28,29 @@ from numpy._typing import (
     _ArrayLikeObject_co,
 )
 
-from numpy._core.shape_base import vstack
+__all__ = [
+    "column_stack",
+    "row_stack",
+    "dstack",
+    "array_split",
+    "split",
+    "hsplit",
+    "vsplit",
+    "dsplit",
+    "apply_over_axes",
+    "expand_dims",
+    "apply_along_axis",
+    "kron",
+    "tile",
+    "take_along_axis",
+    "put_along_axis",
+]
 
 _P = ParamSpec("_P")
 _SCT = TypeVar("_SCT", bound=generic)
 
 # Signature of `__array_wrap__`
+@type_check_only
 class _ArrayWrap(Protocol):
     def __call__(
         self,
@@ -49,12 +60,12 @@ class _ArrayWrap(Protocol):
         /,
     ) -> Any: ...
 
+@type_check_only
 class _SupportsArrayWrap(Protocol):
     @property
     def __array_wrap__(self) -> _ArrayWrap: ...
 
-
-__all__: list[str]
+###
 
 def take_along_axis(
     arr: _SCT | NDArray[_SCT],
@@ -79,7 +90,7 @@ def apply_along_axis(
 ) -> NDArray[_SCT]: ...
 @overload
 def apply_along_axis(
-    func1d: Callable[Concatenate[NDArray[Any], _P], ArrayLike],
+    func1d: Callable[Concatenate[NDArray[Any], _P], Any],
     axis: SupportsIndex,
     arr: ArrayLike,
     *args: _P.args,
@@ -103,6 +114,16 @@ def expand_dims(
     axis: _ShapeLike,
 ) -> NDArray[Any]: ...
 
+# Deprecated in NumPy 2.0, 2023-08-18
+@deprecated("`row_stack` alias is deprecated. Use `np.vstack` directly.")
+def row_stack(
+    tup: Sequence[ArrayLike],
+    *,
+    dtype: DTypeLike | None = None,
+    casting: _CastingKind = "same_kind",
+) -> NDArray[Any]: ...
+
+#
 @overload
 def column_stack(tup: Sequence[_ArrayLike[_SCT]]) -> NDArray[_SCT]: ...
 @overload

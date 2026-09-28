@@ -7,6 +7,8 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_tx_infly.h>
+#include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -16,6 +18,178 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
+    Y_UNIT_TEST_FLAG(RestoreProposalRollsBackOnFailure, ControlPlane) {
+        TSchemeShard* ss = nullptr;
+        auto factory = [&ss](const TActorId& tablet, TTabletStorageInfo* info) {
+            ss = new TSchemeShard(tablet, info);
+            return ss;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true), factory);
+        ui64 txId = 100;
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "Collection"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 rejectedId = ++txId;
+        auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(
+            rejectedId, TTestTxConfig::SchemeShard);
+        auto* first = request->Record.AddTransaction();
+        first->SetWorkingDir("/MyRoot");
+        first->SetInternal(true);
+        if (ControlPlane) {
+            first->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLongIncrementalRestoreOp);
+            first->MutableRestoreBackupCollection()->SetName(".backups/collections/Collection");
+        } else {
+            first->SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
+            first->MutableChangePathState()->SetPath("Table1");
+            first->MutableChangePathState()->SetTargetState(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
+        }
+        // Reject a later part after the first part has staged its path and TxState.
+        auto* reject = request->Record.AddTransaction();
+        reject->SetWorkingDir("/MyRoot");
+        reject->SetInternal(true);
+        reject->SetOperationType(NKikimrSchemeOp::ESchemeOpChangePathState);
+        reject->MutableChangePathState()->SetPath("MissingTable");
+        reject->MutableChangePathState()->SetTargetState(NKikimrSchemeOp::EPathStateOutgoingIncrementalRestore);
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+        const auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvModifySchemeTransactionResult>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetStatus(), NKikimrScheme::StatusPathDoesNotExist,
+            response->Get()->Record.ShortDebugString());
+
+        const TString path = ControlPlane ? "/MyRoot/.backups/collections/Collection" : "/MyRoot/Table1";
+        const auto description = DescribePath(runtime, path);
+        TestDescribeResult(description, {NLs::PathExist});
+        UNIT_ASSERT_VALUES_EQUAL(description.GetPathDescription().GetSelf().GetPathState(),
+            NKikimrSchemeOp::EPathStateNoChanges);
+        runtime.RunCall([&] {
+            UNIT_ASSERT_C(!ss->FindTx(TOperationId(TTxId(rejectedId), 0)),
+                "Rejected proposal left an orphan TxState");
+            UNIT_ASSERT(!ss->LongIncrementalRestoreOps.contains(TOperationId(TTxId(rejectedId), 0)));
+            return true;
+        });
+    }
+
+    Y_UNIT_TEST(ChangePathStateInFlightSurvivesRestart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        ui64 txId = 100;
+        TestMkDir(runtime, ++txId, "/MyRoot", ".backups");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups", "collections");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Uint32" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "MyCollection1"
+            ExplicitEntryList { Entries { Type: ETypeTable Path: "/MyRoot/Table1" } }
+            Cluster {}
+            IncrementalBackupConfig {}
+        )");
+        env.TestWaitNotification(runtime, txId);
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        UploadRow(runtime, "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(2u)}, {TCell::Make(2u)});
+        TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table1");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 restoreId = ++txId;
+        TBlockEvents<TEvPrivate::TEvProgressOperation> blockedProgress(runtime, [&](const auto& ev) {
+            return ev->Get()->TxId == restoreId;
+        });
+        TestRestoreBackupCollection(runtime, restoreId, "/MyRoot",
+            R"(Name: ".backups/collections/MyCollection1")");
+        runtime.WaitFor("restore progress is blocked", [&] { return !blockedProgress.empty(); });
+
+        // Verify the reboot actually crosses a persisted TxChangePathState,
+        // rather than relying on a delay or a particular suboperation number.
+        NKikimrMiniKQL::TResult result;
+        TString error;
+        const auto status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, R"(
+            (
+                (let range '('('TxId (Null) (Void)) '('TxPartId (Null) (Void))))
+                (let select '('TxId 'TxPartId 'TxType))
+                (let parts (SelectRange 'TxInFlightV2 range select '()))
+                (return (AsList (SetResult 'Parts parts)))
+            )
+        )", result, error);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, error);
+        auto value = NClient::TValue::Create(result);
+        auto parts = value["Parts"]["List"];
+        bool foundChangePathState = false;
+        for (ui32 i = 0; i < parts.Size(); ++i) {
+            if (static_cast<ui64>(parts[i]["TxId"]) == restoreId
+                && static_cast<ui8>(parts[i]["TxType"]) == TTxState::TxChangePathState) {
+                foundChangePathState = true;
+            }
+        }
+        UNIT_ASSERT_C(foundChangePathState, "Restore must have a TxChangePathState row at reboot");
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        blockedProgress.Stop().Unblock();
+        env.TestWaitNotification(runtime, restoreId);
+
+        const auto deadline = runtime.GetCurrentTime() + TDuration::Seconds(120);
+        bool completed = false;
+        while (runtime.GetCurrentTime() < deadline) {
+            const auto response = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+            const auto& restore = response.GetBackupCollectionRestore();
+            if (restore.GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                UNIT_ASSERT_VALUES_EQUAL(restore.GetStatus(), Ydb::StatusIds::SUCCESS);
+                completed = true;
+                break;
+            }
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+        UNIT_ASSERT_C(completed, "Restore must complete after reboot");
+        const auto table = DescribePath(runtime, "/MyRoot/Table1");
+        TestDescribeResult(table, {NLs::PathExist});
+        UNIT_ASSERT_VALUES_EQUAL(table.GetPathDescription().GetSelf().GetPathState(),
+            NKikimrSchemeOp::EPathStateNoChanges);
+
+        const TString collectionPath = "/MyRoot/.backups/collections/MyCollection1";
+        const auto collection = DescribePath(runtime, collectionPath);
+        ui32 checkedBackupTables = 0;
+        for (const auto& child : collection.GetPathDescription().GetChildren()) {
+            if (child.GetName().EndsWith("_full") || child.GetName().EndsWith("_incremental")) {
+                const TString sourcePath = collectionPath + "/" + child.GetName() + "/Table1";
+                const auto source = DescribePath(runtime, sourcePath);
+                TestDescribeResult(source, {NLs::PathExist});
+                UNIT_ASSERT_VALUES_EQUAL_C(source.GetPathDescription().GetSelf().GetPathState(),
+                    NKikimrSchemeOp::EPathStateNoChanges, sourcePath);
+                ++checkedBackupTables;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(checkedBackupTables, 2);
+    }
+
 
     // Helper structure for capturing TEvRunIncrementalRestore events
     struct TOrphanedOpEventCapture {

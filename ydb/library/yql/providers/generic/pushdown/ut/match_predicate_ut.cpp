@@ -66,6 +66,70 @@ Y_UNIT_TEST_SUITE(MatchPredicate) {
                             )proto")));
     }
 
+    Y_UNIT_TEST(BetweenReversed) {
+        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
+                                    BuildPredicate(
+                                        R"proto(
+                                 between {
+                                     value {
+                                         column: "col1"
+                                     }
+                                     least {
+                                         typed_value {
+                                             type {
+                                                 type_id: TIMESTAMP
+                                             }
+                                             value {
+                                                 int64_value: 1709294401000000 # 2024-03-01T12:00:01.000Z
+                                             }
+                                         }
+                                     }
+                                     greatest {
+                                         typed_value {
+                                             type {
+                                                 type_id: TIMESTAMP
+                                             }
+                                             value {
+                                                 int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
+                                             }
+                                         }
+                                     }
+                                 }
+                             )proto")));
+    }
+
+    Y_UNIT_TEST(BetweenReversedNoStatistics) {
+        UNIT_ASSERT(!MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{},
+                                    BuildPredicate(
+                                        R"proto(
+                                 between {
+                                     value {
+                                         column: "col1"
+                                     }
+                                     least {
+                                         typed_value {
+                                             type {
+                                                 type_id: TIMESTAMP
+                                             }
+                                             value {
+                                                 int64_value: 1709294401000000 # 2024-03-01T12:00:01.000Z
+                                             }
+                                         }
+                                     }
+                                     greatest {
+                                         typed_value {
+                                             type {
+                                                 type_id: TIMESTAMP
+                                             }
+                                             value {
+                                                 int64_value: 1709290801000000 # 2024-03-01T11:00:01.000Z
+                                             }
+                                         }
+                                     }
+                                 }
+                             )proto")));
+    }
+
     Y_UNIT_TEST(Less) {
         UNIT_ASSERT(MatchPredicate(TMap<TString, NYql::NGenericPushDown::TColumnStatistics>{{{"col1", BuildTimestampStats(TInstant::ParseIso8601("2024-03-01T00:00:00Z"), TInstant::ParseIso8601("2024-03-01T23:59:59Z"))}}},
                                    BuildPredicate(

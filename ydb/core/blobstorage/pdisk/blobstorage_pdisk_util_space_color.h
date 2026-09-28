@@ -8,6 +8,37 @@
 
 namespace NKikimr {
 
+// How many more chunks an owner may take while its space color stays strictly
+// better than the named boundary. PDisk reports these along with the current
+// color; a VDisk budgets its level compactions by them.
+//
+// Boundaries better than PRE_ORANGE are not reported: no write is gated below
+// that, so the current color describes them well enough.
+struct TSpaceHeadroom {
+    // A VDisk starts out without an answer from PDisk. All-zero headroom means the
+    // disk is full, which is the opposite of what an unanswered VDisk should assume,
+    // so the two states are kept apart.
+    bool Valid = false;
+    ui64 ToPreOrange = 0;
+    ui64 ToOrange = 0;
+    ui64 ToRed = 0;
+    ui64 ToBlack = 0;
+    // ToBlack without the static group reserve held back, which is what an allocation
+    // marked as housekeeping is judged by. The reserve stops new user data; it must not
+    // stop the compaction that is trying to free some, because on a disk this full the
+    // compaction is the only thing that can.
+    ui64 AllocatableToBlack = 0;
+
+    TString ToString() const {
+        if (!Valid) {
+            return "{unknown}";
+        }
+        return TStringBuilder() << "{ToPreOrange# " << ToPreOrange << " ToOrange# " << ToOrange
+            << " ToRed# " << ToRed << " ToBlack# " << ToBlack
+            << " AllocatableToBlack# " << AllocatableToBlack << "}";
+    }
+};
+
 inline NKikimrBlobStorage::TPDiskSpaceColor::E StatusFlagToSpaceColor(NPDisk::TStatusFlags flags) {
     using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
@@ -17,10 +48,10 @@ inline NKikimrBlobStorage::TPDiskSpaceColor::E StatusFlagToSpaceColor(NPDisk::TS
         return TColor::RED;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceOrange) {
         return TColor::ORANGE;
-    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
-        return TColor::LIGHT_ORANGE;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpacePreOrange) {
         return TColor::PRE_ORANGE;
+    } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightOrange) {
+        return TColor::LIGHT_ORANGE;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceYellowStop) {
         return TColor::YELLOW;
     } else if (flags & NKikimrBlobStorage::StatusDiskSpaceLightYellowMove) {
@@ -80,6 +111,8 @@ inline NKikimrBlobStorage::TPDiskSpaceColor::E ColorByName(const TString name) {
         return TColor::RED;
     } else if (name == "orange") {
         return TColor::ORANGE;
+    } else if (name == "pre_orange") {
+        return TColor::PRE_ORANGE;
     } else if (name == "light_orange") {
         return TColor::LIGHT_ORANGE;
     } else if (name == "yellow") {
@@ -100,6 +133,7 @@ inline TString TPDiskSpaceColor_Name(const NKikimrBlobStorage::TPDiskSpaceColor:
     case TColor::BLACK: return "black";
     case TColor::RED: return "red";
     case TColor::ORANGE: return "orange";
+    case TColor::PRE_ORANGE: return "pre_orange";
     case TColor::LIGHT_ORANGE: return "light_orange";
     case TColor::YELLOW: return "yellow";
     case TColor::LIGHT_YELLOW: return "light_yellow";
@@ -116,6 +150,7 @@ inline TString TPDiskSpaceColor_HtmlCode(const NKikimrBlobStorage::TPDiskSpaceCo
     case TColor::BLACK: return "black";
     case TColor::RED: return "red";
     case TColor::ORANGE: return "orange";
+    case TColor::PRE_ORANGE: return "#FFC500";
     case TColor::LIGHT_ORANGE: return "#FFE500";
     case TColor::YELLOW: return "yellow";
     case TColor::LIGHT_YELLOW: return "#EEFF33";

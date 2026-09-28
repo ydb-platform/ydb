@@ -1,7 +1,10 @@
 #include "schema.h"
 
+#include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <util/generic/algorithm.h>
 #include <util/system/yassert.h>
 
 namespace NKikimr::NSchemeShard {
@@ -69,9 +72,32 @@ bool TOlapMultiColumnStatisticsSchema::ApplyUpsert(const TOlapSchema& currentSch
                 errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "MultiColumnStatistics '" << Name << "' type must be specified");
                 return false;
             case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+            case NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM:
                 break;
+            default:
+                errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder() << "Unknown statistic type: " << static_cast<ui32>(rawType));
+                return false;
         }
         Types.emplace_back(type);
+    }
+
+    if (AnyOf(Types, [](auto t) {
+            return t == NKikimrSchemeOp::EMultiColumnStatisticsType::EQ_HEIGHT_HISTOGRAM;
+        })) {
+        for (const auto& columnName : ColumnNames) {
+            const auto* column = currentSchema.GetColumns().GetByName(columnName);
+            if (!column) {
+                errors.AddError(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Undefined column: " << columnName);
+                return false;
+            }
+            if (!NScheme::NTypeIds::IsPresortEncodable(column->GetType().GetTypeId())) {
+                errors.AddError(NKikimrScheme::StatusInvalidParameter, TStringBuilder()
+                    << "EQ_HEIGHT_HISTOGRAM is not supported for column '" << columnName
+                    << "' of type " << NScheme::TypeName(column->GetType()));
+                return false;
+            }
+        }
     }
 
     return true;

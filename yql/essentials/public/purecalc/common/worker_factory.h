@@ -121,7 +121,6 @@ protected:
 public:
     TWorkerFactory(TWorkerFactoryOptions, EProcessorMode);
 
-public:
     NYT::TNode MakeInputSchema(ui32) const override;
     NYT::TNode MakeInputSchema() const override;
     NYT::TNode MakeOutputSchema() const override;
@@ -158,7 +157,6 @@ public:
     {
     }
 
-public:
     TWorkerHolder<IPullStreamWorker> MakeWorker() override;
 };
 
@@ -169,7 +167,6 @@ public:
     {
     }
 
-public:
     TWorkerHolder<IPullListWorker> MakeWorker() override;
 };
 
@@ -180,7 +177,6 @@ public:
     {
     }
 
-public:
     TWorkerHolder<IPushStreamWorker> MakeWorker() override;
 };
 } // namespace NYql::NPureCalc

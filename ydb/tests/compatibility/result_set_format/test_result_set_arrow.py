@@ -319,15 +319,15 @@ class TestResultSetArrow(RestartToAnotherVersionFixture):
                     value.append('NULL')
             values.append("(" + ", ".join(value) + ")")
 
-        query = ""
+        assert len(values) != 0
+        assert batch_size > 0
+        # Execute batches separately to limit query compilation work under ASAN.
         for batch_start in range(0, rows_count, batch_size):
             batch_rows = values[batch_start:batch_start + batch_size]
             if not batch_rows:
                 continue
-            query += f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
-
-        assert len(query) != 0
-        self._try_execute(query)
+            query = f"UPSERT INTO {table_name} ({", ".join(columns)}) VALUES {", ".join(batch_rows)};\n"
+            self._try_execute(query)
 
     def _read_table(
         self,

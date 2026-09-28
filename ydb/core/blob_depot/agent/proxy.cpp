@@ -5,7 +5,7 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender,
-            TRequestContext::TPtr context) {
+            TRequestContext::TPtr context, NWilson::TTraceId traceId) {
         auto executionRelay = std::make_shared<TEvBlobStorage::TExecutionRelay>();
 
         switch (event->Type()) {
@@ -36,9 +36,9 @@ namespace NKikimr::NBlobDepot {
             {"type", event->Type()},
             {"cookie", id});
         if (groupId != DecommitGroupId) {
-            SendToBSProxy(SelfId(), groupId, event.release(), id);
+            SendToBSProxy(SelfId(), groupId, event.release(), id, std::move(traceId));
         } else if (ProxyId) {
-            Send(ProxyId, event.release(), 0, id);
+            Send(ProxyId, event.release(), 0, id, std::move(traceId));
         } else {
             std::unique_ptr<IEventBase> response;
             switch (const ui32 type = event->Type()) {

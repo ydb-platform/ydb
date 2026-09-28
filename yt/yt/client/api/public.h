@@ -149,6 +149,11 @@ struct TGetFileFromCacheResult;
 struct TPutFileToCacheResult;
 
 struct TGetCurrentUserOptions;
+struct TGetJobStderrOptions;
+struct TGetJobStderrResponse;
+struct TSelectRowsOptions;
+struct TTabletReadOptions;
+struct TOperation;
 
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)

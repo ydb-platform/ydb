@@ -14,10 +14,6 @@
 #include <util/string/hex.h>
 #include <util/system/yassert.h>
 
-#include <ydb/library/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/simple_builder/array.h>
-#include <ydb/library/formats/arrow/simple_builder/batch.h>
-#include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
@@ -33,7 +29,7 @@
 #include <yql/essentials/public/udf/udf_value.h>
 
 using namespace NKikimr::NMiniKQL;
-using namespace NKikimr::NArrow;
+using namespace NYql::NArrow;
 using namespace NYql;
 
 namespace {
@@ -588,14 +584,14 @@ struct TTestContext {
         return values;
     }
 
-    template <typename TDataSlot, typename TScalar, typename TFiller>
-    TBlockColumn::TPtr CreateBlockColumn(std::optional<ui64> numberRows, TFiller& arrayFiller, std::function<TScalar()> scalarFiller) {
+    template <typename TDataSlot, typename TScalar>
+    TBlockColumn::TPtr CreateBlockColumn(std::optional<ui64> numberRows, std::function<std::shared_ptr<arrow::Array>(ui64)> arrayBuilder, std::function<TScalar()> scalarFiller) {
         TBlockColumn result = {
             .Type = TBlockType::Create(TDataType::Create(NUdf::TDataType<TDataSlot>::Id, TypeEnv), numberRows ? TBlockType::EShape::Many : TBlockType::EShape::Scalar, TypeEnv)
         };
 
         if (numberRows) {
-            result.Datum = std::make_shared<NConstruction::TSimpleArrayConstructor<TFiller>>("field", arrayFiller)->BuildArray(*numberRows);
+            result.Datum = arrayBuilder(*numberRows);
             result.BlockReader = MakeBlockReader(TTypeInfoHelper(), result.Type->GetItemType());
             result.Size = result.BlockReader->GetDataWeight(*result.Datum.array());
         } else {
@@ -607,17 +603,41 @@ struct TTestContext {
     }
 
     TBlockColumn::TPtr CreateStringBlockColumn(std::optional<ui64> numberRows) {
-        NConstruction::TStringPoolFiller stringGenerator(8, 512);
-        return CreateBlockColumn<char*, arrow::StringScalar>(numberRows, stringGenerator, [&]() {
-            return arrow::StringScalar(stringGenerator.GetValue(0).to_string());
-        });
+        return CreateBlockColumn<char*, arrow::StringScalar>(numberRows,
+            [](ui64 rows) -> std::shared_ptr<arrow::Array> {
+                constexpr ui32 poolSize = 8;
+                constexpr ui32 strLen = 512;
+                std::vector<TString> pool;
+                pool.reserve(poolSize);
+                for (ui32 i = 0; i < poolSize; ++i) {
+                    pool.emplace_back(NUnitTest::RandomString(strLen, i));
+                }
+                arrow::StringBuilder builder;
+                Y_ABORT_UNLESS(builder.Reserve(rows).ok());
+                for (ui64 i = 0; i < rows; ++i) {
+                    const TString& str = pool[i % poolSize];
+                    Y_ABORT_UNLESS(builder.Append(str.data(), static_cast<arrow::StringBuilder::offset_type>(str.size())).ok());
+                }
+                return *builder.Finish();
+            },
+            [&]() {
+                return arrow::StringScalar(TString(512, 'x'));
+            });
     }
 
     TBlockColumn::TPtr CreateIntBlockColumn(std::optional<ui64> numberRows) {
-        NConstruction::TIntSeqFiller<arrow::Int32Type> intGenerator;
-        return CreateBlockColumn<i32, arrow::Int32Scalar>(numberRows, intGenerator, [&]() {
-            return arrow::Int32Scalar(intGenerator.GetValue(0));
-        });
+        return CreateBlockColumn<i32, arrow::Int32Scalar>(numberRows,
+            [](ui64 rows) -> std::shared_ptr<arrow::Array> {
+                arrow::Int32Builder builder;
+                Y_ABORT_UNLESS(builder.Reserve(rows).ok());
+                for (ui64 i = 0; i < rows; ++i) {
+                    Y_ABORT_UNLESS(builder.Append(static_cast<i32>(i)).ok());
+                }
+                return *builder.Finish();
+            },
+            [&]() {
+                return arrow::Int32Scalar(0);
+            });
     }
 
     TBlockValue ComposeBlockColumns(std::vector<TBlockColumn::TPtr> columns, ui64 numberRows) {

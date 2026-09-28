@@ -30,14 +30,17 @@ void CheckRowIdJsonIndex(TTestActorRuntime& runtime, const TString& indexPath) {
             indexPath << ": UseRowIdAsDocId must be true after persistence through schemeshard reboots");
     }
 
-    TestDescribeResult(DescribePrivatePath(runtime, indexPath + "/" + TString(NTableIndex::ImplTable)), {
-        NLs::PathExist,
-        NLs::CheckColumns(TString(NTableIndex::ImplTable),
-            { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-            {},
-            { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-            /*strictCount=*/ true),
-    });
+    if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+        // implTable doesn't differ for the compact index
+        TestDescribeResult(DescribePrivatePath(runtime, indexPath + "/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+    }
 }
 
 // Common reboot event filter for JSON index build tests.

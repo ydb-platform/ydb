@@ -29,13 +29,13 @@
 #include "init.h"
 #include "global.h"
 #include "utils.h"
-#include "memory.h"
+#include <ydb/library/nmslib/include/memory.h>
 #include "ztimer.h"
 #include "experiments.h"
 #include "experimentconf.h"
 #include "space.h"
 #include "index.h"
-#include "tune.h"
+#include <ydb/library/nmslib/include/tune.h>
 #include "method/vptree.h"
 #include "logging.h"
 #include "spacefactory.h"

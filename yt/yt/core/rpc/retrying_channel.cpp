@@ -284,8 +284,8 @@ private:
         void ReportError(const TError& error)
         {
             auto detailedError = error
-                << UnderlyingChannel_->GetEndpointAttributes()
-                << TErrorAttribute("omitted_inner_error_count", OmittedInnerErrorCount_);
+                .With(UnderlyingChannel_->GetEndpointAttributes())
+                .With("omitted_inner_error_count", OmittedInnerErrorCount_);
             if (FirstError_) {
                 detailedError = detailedError.With(*FirstError_);
             }

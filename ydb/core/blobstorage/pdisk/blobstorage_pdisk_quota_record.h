@@ -113,6 +113,11 @@ public:
         return AtomicSub(Free, count) > AtomicGet(Black);
     }
 
+    // The largest count TryAllocate can satisfy right now
+    i64 GetAllocatableFree() const {
+        return Max<i64>(0, AtomicGet(Free) - AtomicGet(Black) - 1);
+    }
+
     // Called only from the main thread
     bool TryAllocate(i64 count, TString &outErrorReason) {
         Y_VERIFY(count > 0);
@@ -177,6 +182,32 @@ public:
         } else {
             return TColor::BLACK;
         }
+    }
+
+    // Largest allocation that still leaves this record strictly better than `color`.
+    // Mirrors EstimateSpaceColor, which reports a color better than X exactly while
+    // the free space left after the allocation is above the X boundary.
+    i64 GetHeadroomBelow(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        i64 boundary = 0;
+        switch (color) {
+        case TColor::PRE_ORANGE:
+            boundary = AtomicGet(PreOrange);
+            break;
+        case TColor::ORANGE:
+            boundary = AtomicGet(Orange);
+            break;
+        case TColor::RED:
+            boundary = AtomicGet(Red);
+            break;
+        case TColor::BLACK:
+            boundary = AtomicGet(Black);
+            break;
+        default:
+            Y_ABORT("no headroom is reported for color# %d", int(color));
+        }
+        return Max<i64>(0, AtomicGet(Free) - boundary - 1);
     }
 
     ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {

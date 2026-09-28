@@ -52,6 +52,7 @@ struct TAppData::TImpl {
     NKikimrPQ::TPQConfig PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig SqsConfig;
@@ -90,6 +91,7 @@ struct TAppData::TImpl {
     NKikimrConfig::TRecoveryShardConfig RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig LongTxServiceConfig;
+    NKikimrConfig::TUdfStoreConfig UdfStoreConfig;
 };
 
 TAppData::TAppData(
@@ -123,6 +125,7 @@ TAppData::TAppData(
     , PQConfig(Impl->PQConfig)
     , PQClusterDiscoveryConfig(Impl->PQClusterDiscoveryConfig)
     , KafkaProxyConfig(Impl->KafkaProxyConfig)
+    , HttpProxyConfig(Impl->HttpProxyConfig)
     , NetClassifierConfig(Impl->NetClassifierConfig)
     , NetClassifierDistributableConfig(Impl->NetClassifierDistributableConfig)
     , SqsConfig(Impl->SqsConfig)
@@ -161,6 +164,7 @@ TAppData::TAppData(
     , RecoveryShardConfig(Impl->RecoveryShardConfig)
     , ClusterDiagnosticsConfig(Impl->ClusterDiagnosticsConfig)
     , LongTxServiceConfig(Impl->LongTxServiceConfig)
+    , UdfStoreConfig(Impl->UdfStoreConfig)
     , KikimrShouldContinue(kikimrShouldContinue)
     , TracingConfigurator(MakeIntrusive<NJaegerTracing::TSamplingThrottlingConfigurator>(TimeProvider, RandomProvider))
 {}

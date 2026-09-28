@@ -1524,6 +1524,9 @@ enum class EPermission : int
 
     /// Applies to: operations.
     Manage       /* "manage" */,
+
+    /// Applies to: tables.
+    FullRead     /* "full_read" */,
 };
 
 /// Whether permission is granted or denied.

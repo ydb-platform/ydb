@@ -21,6 +21,8 @@ PEERDIR(
     yql/essentials/sql/v1/ide/completion/name/service/column
 )
 
+GENERATE_ENUM_SERIALIZATION(sql_complete.h)
+
 END()
 
 RECURSE(

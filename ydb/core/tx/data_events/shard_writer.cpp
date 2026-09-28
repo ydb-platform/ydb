@@ -1,15 +1,35 @@
 #include "shard_writer.h"
 #include "common/error_codes.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/tablet/tablet_pipe_client_cache.h>
-
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tablet/tablet_pipe_client_cache.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_events.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 
 #include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr::NEvWrite {
+
+namespace {
+
+using NColumnShard::NFlowControl::EWriteOutcome;
+using NColumnShard::NFlowControl::TFlowControlManagerServiceOperator;
+
+// A shard that never answered tells us nothing: reporting that as a clean write would let a shard
+// which has stopped responding complete FCM cohorts and push the drain rate up.
+EWriteOutcome ClassifyWriteOutcome(bool wasEverOverloaded, ui32 lastResultNodeId) {
+    if (wasEverOverloaded) {
+        return EWriteOutcome::Overloaded;
+    }
+    // LastResultNodeId is set on every TEvWriteResult before its status is looked at, so zero here
+    // means no reply ever arrived: a timeout or a broken pipe.
+    return lastResultNodeId ? EWriteOutcome::Ok : EWriteOutcome::Unknown;
+}
+
+}   // namespace
 
     TWritersController::TWritersController(const ui32 writesCount, const NActors::TActorIdentity& longTxActorId, const NLongTxService::TLongTxId& longTxId,
                                           std::shared_ptr<TCSUploadCounters> counters)
@@ -95,8 +115,13 @@ namespace NKikimr::NEvWrite {
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
 
+        ReportTabletLocationToFlowControl(ShardId, ev->Sender.NodeId());
+        LastResultNodeId = ev->Sender.NodeId();
+
         const auto ydbStatus = msg->GetStatus();
         if (ydbStatus == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+            // Sticky, even when a retry later succeeds: FCM must see that the shard pushed back.
+            WasEverOverloaded = true;
             if (RetryBySubscription) {
                 if (msg->Record.HasOverloadSubscribed() && msg->Record.GetOverloadSubscribed() == LastOverloadSeqNo && !IsMaxRetriesReached()) {
                     return;
@@ -147,6 +172,8 @@ namespace NKikimr::NEvWrite {
         NWilson::TProfileSpan pSpan(0, ActorSpan.GetTraceId(), "DeliveryProblem");
         const auto* msg = ev->Get();
         Y_ABORT_UNLESS(msg->TabletId == ShardId);
+
+        ReportTabletLocationInvalidatedToFlowControl(ShardId);
 
         if (RetryWriteRequest(true)) {
             return;
@@ -199,6 +226,10 @@ namespace NKikimr::NEvWrite {
     }
 
     void TShardWriter::PassAway() {
+        // Single terminal point for every path (success, fail, timeout, delivery problem),
+        // so the FCM outcome is reported exactly once per shard write.
+        ReportWriteOutcomeToFlowControl();
+
         if (RetryBySubscription && LastOverloadSeqNo) {
             SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
             LastOverloadSeqNo = 0;
@@ -207,5 +238,31 @@ namespace NKikimr::NEvWrite {
         Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
 
         TBase::PassAway();
+    }
+
+    void TShardWriter::ReportTabletLocationToFlowControl(ui64 tabletId, ui32 nodeId) {
+        if (!TFlowControlManagerServiceOperator::IsEnabled()) {
+            return;
+        }
+        Send(TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+            new NColumnShard::NFlowControl::TEvTabletLocationUpdated(tabletId, nodeId));
+    }
+
+    void TShardWriter::ReportTabletLocationInvalidatedToFlowControl(ui64 tabletId) {
+        if (!TFlowControlManagerServiceOperator::IsEnabled()) {
+            return;
+        }
+        Send(TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+            new NColumnShard::NFlowControl::TEvTabletLocationInvalidated(tabletId));
+    }
+
+    void TShardWriter::ReportWriteOutcomeToFlowControl() {
+        if (!TFlowControlManagerServiceOperator::IsEnabled() || WriteOutcomeReported) {
+            return;
+        }
+        WriteOutcomeReported = true;
+        Send(TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+            new NColumnShard::NFlowControl::TEvWriteOutcome(
+                ShardId, LastResultNodeId, ClassifyWriteOutcome(WasEverOverloaded, LastResultNodeId), NumRetries));
     }
 }

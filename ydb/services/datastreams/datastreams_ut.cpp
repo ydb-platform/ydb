@@ -2500,10 +2500,10 @@ waitForNavCache:
             shardIterator = result.GetResult().shard_iterator();
         }
 
-        const TVector<TString> expectedSequenceNumbers = {"0", "3", "6"};
+        const TVector<ui64> expectedBaseOffsets = {0, 3, 6};
         const TVector<char> expectedFills = {'a', 'b', 'c'};
         size_t readIndex = 0;
-        while (readIndex < expectedSequenceNumbers.size()) {
+        while (readIndex < expectedBaseOffsets.size()) {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
                 NYDS_V1::TGetRecordsSettings().Limit(2)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
@@ -2512,9 +2512,9 @@ waitForNavCache:
 
             for (const auto& record : result.GetResult().records()) {
                 UNIT_ASSERT_C(readIndex < expectedFills.size(), LabeledOutput(readIndex));
-                UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), expectedSequenceNumbers[readIndex]);
+                UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), ToString(expectedBaseOffsets[readIndex]));
                 UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
-                NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, expectedFills[readIndex], dataSize);
+                NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, expectedFills[readIndex], dataSize, expectedBaseOffsets[readIndex]);
                 ++readIndex;
             }
 
@@ -2571,7 +2571,7 @@ waitForNavCache:
             const auto& record = result.GetResult().records(0);
             UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), "0");
             UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
-            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'a', dataSize, 0);
 
             shardIterator = result.GetResult().next_shard_iterator();
         }
@@ -2586,7 +2586,7 @@ waitForNavCache:
             const auto& record = result.GetResult().records(0);
             UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), "3");
             UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
-            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'b', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'b', dataSize, 3);
 
             shardIterator = result.GetResult().next_shard_iterator();
         }
@@ -2618,7 +2618,7 @@ waitForNavCache:
             const auto& record = result.GetResult().records(0);
             UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), "3");
             UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
-            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'b', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'b', dataSize, 3);
         }
     }
 

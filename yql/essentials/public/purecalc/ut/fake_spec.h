@@ -10,7 +10,6 @@ class TFakeInputSpec: public TInputSpecBase {
 public:
     TVector<NYT::TNode> Schemas = {NYT::TNode::CreateList()};
 
-public:
     const TVector<NYT::TNode>& GetSchemas() const override {
         return Schemas;
     }
@@ -22,7 +21,6 @@ class TFakeOutputSpec: public TOutputSpecBase {
 public:
     NYT::TNode Schema = NYT::TNode::CreateList();
 
-public:
     const NYT::TNode& GetSchema() const override {
         return Schema;
     }

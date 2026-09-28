@@ -75,7 +75,6 @@ protected:
             return Next(key);
         }
 
-    private:
         const TPyCastContext::TPtr CastCtx_;
         const NUdf::TType* ItemType_;
         TPyObjectPtr PyIter_;
@@ -131,7 +130,6 @@ protected:
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
-    private:
         const TPyCastContext::TPtr CastCtx_;
         const NUdf::TType* KeyType_;
         const NUdf::TType* PayType_;
@@ -262,7 +260,6 @@ private:
         UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
-private:
     const NUdf::TType* PayType_;
 };
 
@@ -356,7 +353,6 @@ private:
         UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
-private:
     const NUdf::TType* PayType_;
 };
 
@@ -549,7 +545,6 @@ private:
             return true;
         }
 
-    private:
         const Py_ssize_t Size_;
         Py_ssize_t Index_;
     };
@@ -605,7 +600,6 @@ private:
             UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
-    private:
         const TPyCastContext::TPtr CastCtx_;
         const NUdf::TType* ItemType_;
         TPyObjectPtr PySeq_;

@@ -59,8 +59,9 @@ auto RunFutureHandler(F&& functor, As&&... args) noexcept -> decltype(functor(st
 
 inline TError WrapIntoCancelationError(const TError& error)
 {
+    // Cancel may be passed an OK error.
     return TError(NYT::EErrorCode::Canceled, "Operation canceled")
-        .With(error);
+        .WithIf(!error.IsOK(), error);
 }
 
 inline TError TryExtractCancelationError()
@@ -74,7 +75,8 @@ inline TError TryExtractCancelationError()
         // rely on their cancelation error to never be wrapped
         // into anything with a different error code.
         const auto& tokenError = GetCancelationError(currentToken);
-        return TError(tokenError.GetCode(), "Promise abandoned").With(tokenError);
+        return TError(tokenError.GetCode(), "Promise abandoned")
+            .WithIf(!tokenError.IsOK(), tokenError);
     }
 
     return TError(NYT::EErrorCode::Canceled, "Promise abandoned");
@@ -2332,9 +2334,9 @@ private:
 
     void OnFutureSet(int index, const TErrorOr<T>& result) noexcept
     {
+        // NB: Relaxed ordering is sufficient since this flag is only a best-effort fast path;
+        // SpinLock_ synchronizes access to Results_ and ResponseCount_.
         if (ResultObtained_.load(std::memory_order::relaxed)) {
-            // NB: Relaxed ordering is sufficient since this flag is only a best-effort fast path;
-            // ResultsLock_ synchronizes access to Results_ and ResponseCount_.
             return;
         }
 
@@ -2596,7 +2598,7 @@ private:
             N_,
             failedCount,
             totalCount)
-            << Errors_;
+            .With(Errors_);
 
         guard.Release();
 

@@ -1,47 +1,53 @@
 {
-    "test.test[BlockPunycode]": [
+    "test.test[Punycode-Peephole]": [
         {
-            "uri": "file://test.test_BlockPunycode_/results.txt"
+            "checksum": "6fd0181ff8b665306f1764ff24246b21",
+            "size": 2057,
+            "uri": "https://{canondata_backend}/1937367/cba137e43cdd61bb10b82439ad04a7328739f370/resource.tar.gz#test.test_Punycode-Peephole_/opt.yql"
         }
     ],
-    "test.test[BlockTld]": [
+    "test.test[Punycode-Results]": [
         {
-            "uri": "file://test.test_BlockTld_/results.txt"
+            "uri": "file://test.test_Punycode-Results_/results.txt"
         }
     ],
-    "test.test[BlockUrl]": [
+    "test.test[Tld-Peephole]": [
         {
-            "uri": "file://test.test_BlockUrl_/results.txt"
+            "checksum": "73721ff8015004cef2ba8ae071a0d46d",
+            "size": 1256,
+            "uri": "https://{canondata_backend}/1937367/cba137e43cdd61bb10b82439ad04a7328739f370/resource.tar.gz#test.test_Tld-Peephole_/opt.yql"
         }
     ],
-    "test.test[Punycode]": [
+    "test.test[Tld-Results]": [
         {
-            "uri": "file://test.test_Punycode_/results.txt"
+            "uri": "file://test.test_Tld-Results_/results.txt"
         }
     ],
-    "test.test[Tld]": [
+    "test.test[Url-Peephole]": [
         {
-            "uri": "file://test.test_Tld_/results.txt"
+            "checksum": "9e3e42828e56e4e2de580141bbf7cb1d",
+            "size": 6181,
+            "uri": "https://{canondata_backend}/1937367/cba137e43cdd61bb10b82439ad04a7328739f370/resource.tar.gz#test.test_Url-Peephole_/opt.yql"
         }
     ],
-    "test.test[UrlQueryMaxFieldsErr]": [
+    "test.test[Url-Results]": [
         {
-            "uri": "file://test.test_UrlQueryMaxFieldsErr_/extracted"
+            "uri": "file://test.test_Url-Results_/results.txt"
         }
     ],
-    "test.test[UrlQueryStrictErr]": [
+    "test.test[UrlQuery-Results]": [
         {
-            "uri": "file://test.test_UrlQueryStrictErr_/extracted"
+            "uri": "file://test.test_UrlQuery-Results_/results.txt"
         }
     ],
-    "test.test[UrlQuery]": [
+    "test.test[UrlQueryMaxFieldsErr-Results]": [
         {
-            "uri": "file://test.test_UrlQuery_/results.txt"
+            "uri": "file://test.test_UrlQueryMaxFieldsErr-Results_/extracted"
         }
     ],
-    "test.test[Url]": [
+    "test.test[UrlQueryStrictErr-Results]": [
         {
-            "uri": "file://test.test_Url_/results.txt"
+            "uri": "file://test.test_UrlQueryStrictErr-Results_/extracted"
         }
     ]
 }

@@ -50,6 +50,12 @@ Y_UNIT_TEST(TruncateTable) {
 
         {"use plato;truncate table `/Root/test/table` with();",
          "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH ();\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE);\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true,other = false);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE, other = FALSE);\n"},
     };
 
     TSetup setup;
@@ -367,6 +373,24 @@ Y_UNIT_TEST(DropTable) {
     TCases cases = {
         {"drop table user", "DROP TABLE user;\n"},
         {"drop table if exists user", "DROP TABLE IF EXISTS user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(TtlTieringObjectKeyPrefix) {
+    TSetup setup;
+    setup.Run({{"alter table t set ttl interval('P1D') to external data source `eds`.`archive/data` on ts",
+                "ALTER TABLE t\n\tSET ttl interval('P1D') TO EXTERNAL DATA SOURCE `eds`.`archive/data` ON ts\n;\n"}});
+}
+
+Y_UNIT_TEST(SymlinkOperations) {
+    TCases cases = {
+        {"create symlink plato.link to target", "CREATE SYMLINK plato.link TO target;\n"},
+        {"create symlink if not exists link to target", "CREATE SYMLINK IF NOT EXISTS link TO target;\n"},
+        {"drop symlink link", "DROP SYMLINK link;\n"},
+        {"drop symlink if exists plato.link", "DROP SYMLINK IF EXISTS plato.link;\n"},
     };
 
     TSetup setup;
@@ -1258,6 +1282,63 @@ Y_UNIT_TEST(Select) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(GroupingElementLists) {
+    TCases cases = {
+        {R"sql(select 1 from user group by cube (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                CUBE (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by rollup (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                ROLLUP (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets (cube (a, b), rollup (c, d), e))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    CUBE (
+                        a,
+                        b
+                    ),
+                    ROLLUP (
+                        c,
+                        d
+                    ),
+                    e
+                )
+            ;
+
+         )sql")},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(CompositeTypesAndQuestions) {
     TCases cases = {
         {"declare $_x AS list<int32>??;declare $_y AS int32 ? ? ;select 1<>2, 1??2,"
@@ -1807,50 +1888,51 @@ Y_UNIT_TEST(UnaryOp) {
 }
 
 Y_UNIT_TEST(MatchRecognize) {
-    TCases cases = {{R"(
-pragma FeatureR010="prototype";
-USE plato;
-SELECT
-    *
-FROM Input MATCH_RECOGNIZE(
-    PARTITION BY a, b, c
-    ORDER BY ts
-    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
-    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
-    PATTERN ( A B2 + B3 )
-    SUBSET U = (C, D), W = (Q, P)
-    DEFINE A as A, B as B
-);
-)",
-                     R"(PRAGMA FeatureR010 = 'prototype';
+    TCases cases = {
+        {TrimIndent(R"sql(
+                USE plato;
+                SELECT
+                    *
+                FROM Input MATCH_RECOGNIZE(
+                    PARTITION BY a, b, c
+                    ORDER BY ts
+                    MEASURES LAST(B1.ts) AS b1, LAST(B3.ts) AS b3
+                    ONE ROW PER MATCH AFTER MATCH SKIP TO NEXT ROW INITIAL
+                    PATTERN ( A B2 + B3 )
+                    SUBSET U = (C, D), W = (Q, P)
+                    DEFINE A as A, B as B
+                );
+        )sql"),
+         TrimIndent(R"sql(
+                USE plato;
 
-USE plato;
+                SELECT
+                    *
+                FROM
+                    Input MATCH_RECOGNIZE (
+                        PARTITION BY
+                            a,
+                            b,
+                            c
+                        ORDER BY
+                            ts
+                        MEASURES
+                            LAST(B1.ts) AS b1,
+                            LAST(B3.ts) AS b3
+                        ONE ROW PER MATCH
+                        AFTER MATCH SKIP TO NEXT ROW
+                        INITIAL PATTERN (A B2 + B3)
+                        SUBSET
+                            U = (C, D),
+                            W = (Q, P)
+                        DEFINE
+                            A AS A,
+                            B AS B
+                    )
+                ;
 
-SELECT
-    *
-FROM
-    Input MATCH_RECOGNIZE (
-        PARTITION BY
-            a,
-            b,
-            c
-        ORDER BY
-            ts
-        MEASURES
-            LAST(B1.ts) AS b1,
-            LAST(B3.ts) AS b3
-        ONE ROW PER MATCH
-        AFTER MATCH SKIP TO NEXT ROW
-        INITIAL PATTERN (A B2 + B3)
-        SUBSET
-            U = (C, D),
-            W = (Q, P)
-        DEFINE
-            A AS A,
-            B AS B
-    )
-;
-)"}};
+        )sql")},
+    };
     TSetup setup;
     setup.Run(cases);
 }
@@ -2231,7 +2313,15 @@ Y_UNIT_TEST(Analyze) {
         {"analyze table (col1, col2, col3)",
          "ANALYZE table (col1, col2, col3);\n"},
         {"analyze table",
-         "ANALYZE table;\n"}};
+         "ANALYZE table;\n"},
+        {"analyze table (col1,col2) sample 0.05",
+         "ANALYZE table (col1, col2) SAMPLE 0.05;\n"},
+        {"analyze table sample 1",
+         "ANALYZE table SAMPLE 1;\n"},
+        {"analyze table sample (0.1/2)",
+         "ANALYZE table SAMPLE (0.1 / 2);\n"},
+        {"analyze table sample $rate",
+         "ANALYZE table SAMPLE $rate;\n"}};
 
     TSetup setup;
     setup.Run(cases);
@@ -2305,9 +2395,45 @@ Y_UNIT_TEST(CreateStreamingQuery) {
                     {"creAte sTReaMing qUErY If Not ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "CREATE STREAMING QUERY IF NOT EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"creAte oR ReplAce sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "CREATE OR REPLACE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"creAte sTReaMing qUErY TheQuery wiTh (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "CREATE STREAMING QUERY TheQuery WITH (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                     "CREATE OR REPLACE STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(CreateStreamingQuerySettingExpressions) {
+    TCases cases = {
+        {TrimIndent(R"sql(
+            use plato;
+            $pool="my_"||"pool";
+            create streaming query MyQuery with (RUN=not true,RESOURCE_POOL=$pool,READ_FROM=CurrentUtcTimestamp( ))
+            as do begin
+                use plato;
+                insert into Output select * from Input;
+            end do;
+        )sql"),
+         TrimIndent(R"sql(
+            USE plato;
+
+            $pool = 'my_' || 'pool';
+
+            CREATE STREAMING QUERY MyQuery WITH (
+                RUN = NOT TRUE,
+                RESOURCE_POOL = $pool,
+                READ_FROM = CurrentUtcTimestamp()
+            ) AS DO BEGIN
+            USE plato;
+
+            INSERT INTO Output
+            SELECT
+                *
+            FROM
+                Input
+            ;
+            END DO;
+
+        )sql")},
+    };
 
     TSetup setup;
     setup.Run(cases);
@@ -2317,11 +2443,59 @@ Y_UNIT_TEST(AlterStreamingQuery) {
     TCases cases = {{"aLTer sTReaMing qUErY TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
                      "ALTER STREAMING QUERY TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
                     {"aLTer sTReaMing qUErY If ExIsTs TheQuery As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "ALTER STREAMING QUERY IF EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe))",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n);\n"},
-                    {"aLTer sTReaMing qUErY TheQuery sEt (option = tRuE,nested_setting= (x=TrUe), other =(a = b, c=TrUe)) As dO BeGin ;;\n\nInSeRT iNTo TheTable SELect 1;; eNd Do",
-                     "ALTER STREAMING QUERY TheQuery SET (\n\toption = TRUE,\n\tnested_setting = (\n\t\tx = TRUE\n\t),\n\tother = (\n\t\ta = b,\n\t\tc = TRUE\n\t)\n) AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+                     "ALTER STREAMING QUERY IF EXISTS TheQuery AS DO BEGIN\nINSERT INTO TheTable\nSELECT\n\t1\n;\nEND DO;\n"}};
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(AlterStreamingQuerySettingExpressions) {
+    TCases cases = {
+        {TrimIndent(R"sql(
+            alter streaming query MyQuery set (
+                RUN=not true,RESOURCE_POOL="my_"||"pool",
+                READ_FROM=Unwrap(CurrentUtcTimestamp( )+Interval("PT1S"))
+            );
+        )sql"),
+         TrimIndent(R"sql(
+            ALTER STREAMING QUERY MyQuery SET (
+                RUN = NOT TRUE,
+                RESOURCE_POOL = 'my_' || 'pool',
+                READ_FROM = Unwrap(CurrentUtcTimestamp() + Interval('PT1S'))
+            );
+
+        )sql")},
+        {TrimIndent(R"sql(
+            use plato;
+            $pool="my_"||"pool";
+            alter streaming query MyQuery set (RUN=not true,RESOURCE_POOL=$pool,READ_FROM=CurrentUtcTimestamp( ))
+            as do begin
+                use plato;
+                insert into Output select * from Input;
+            end do;
+        )sql"),
+         TrimIndent(R"sql(
+            USE plato;
+
+            $pool = 'my_' || 'pool';
+
+            ALTER STREAMING QUERY MyQuery SET (
+                RUN = NOT TRUE,
+                RESOURCE_POOL = $pool,
+                READ_FROM = CurrentUtcTimestamp()
+            ) AS DO BEGIN
+            USE plato;
+
+            INSERT INTO Output
+            SELECT
+                *
+            FROM
+                Input
+            ;
+            END DO;
+
+        )sql")},
+    };
 
     TSetup setup;
     setup.Run(cases);

@@ -6,12 +6,14 @@ import zoneinfo
 from abc import abstractmethod
 from collections.abc import Callable, MutableSequence, Sequence
 from datetime import date, datetime, time, timedelta, tzinfo
+from math import floor
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 if TYPE_CHECKING:
     import numpy
 
-from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef
+from clickhouse_connect import common
+from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, _TypeArgs
 from clickhouse_connect.driver import ctypes as driver_ctypes
 from clickhouse_connect.driver import options, tzutil
 from clickhouse_connect.driver.common import first_value, int_size, np_date_types, write_array
@@ -23,6 +25,12 @@ from clickhouse_connect.driver.types import ByteSource
 
 epoch_start_date = date(1970, 1, 1)
 epoch_start_datetime = datetime(1970, 1, 1)
+
+
+def _localized_timestamp(value: datetime, target_tz: tzinfo) -> float:
+    if value.utcoffset() is None:
+        value = value.replace(tzinfo=target_tz)
+    return value.timestamp()
 
 
 class Date(ClickHouseType):
@@ -164,6 +172,7 @@ class DateTime(DateTimeBase):
     np_type = "datetime64[s]"
     nano_divisor = 1000000000
     byte_size = 4
+    _type_args = _TypeArgs(0, 1)
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
@@ -193,6 +202,12 @@ class DateTime(DateTimeBase):
         if isinstance(first, int) or self.write_format(ctx) == "int":
             if self.nullable:
                 column = [x if x else 0 for x in column]
+        elif common.get_setting("naive_datetime_insert") == "server":
+            active_tz = self.tzinfo or ctx.server_tz
+            if self.nullable:
+                column = [int(_localized_timestamp(x, active_tz)) if x else 0 for x in column]
+            else:
+                column = [int(_localized_timestamp(x, active_tz)) for x in column]
         else:
             if self.nullable:
                 column = [int(x.timestamp()) if x else 0 for x in column]
@@ -204,6 +219,7 @@ class DateTime(DateTimeBase):
 class DateTime64(DateTimeBase):
     __slots__ = "scale", "prec", "unit"
     byte_size = 8
+    _type_args = _TypeArgs(1, 2, integer_bounds=((0, 0, 9),))
 
     def __init__(self, type_def: TypeDef):
         super().__init__(type_def)
@@ -260,29 +276,35 @@ class DateTime64(DateTimeBase):
     def _read_binary_naive(self, column: Sequence):
         return data_conv.read_datetime64_naive_col(column, self.prec)
 
+    def _datetime64_ticks(self, value: datetime, active_tz: tzinfo | None = None) -> int:
+        timestamp = _localized_timestamp(value, active_tz) if active_tz is not None else value.timestamp()
+        seconds = floor(timestamp)
+        return ((seconds * 1000000 + value.microsecond) * self.prec) // 1000000
+
     def _write_column_binary(self, column: Sequence | MutableSequence, dest: bytearray, ctx: InsertContext):
         first = first_value(column, self.nullable)
         if isinstance(first, int) or self.write_format(ctx) == "int":
             if self.nullable:
                 column = [x if x else 0 for x in column]
-        elif isinstance(first, str):
-            original_column = column
-            column = []
-
-            for x in original_column:
-                if not x and self.nullable:
-                    v = 0
-                else:
-                    dt = datetime.fromisoformat(x)
-                    v = ((int(dt.timestamp()) * 1000000 + dt.microsecond) * self.prec) // 1000000
-
-                column.append(v)
         else:
-            prec = self.prec
-            if self.nullable:
-                column = [((int(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 if x else 0 for x in column]
+            server_mode = common.get_setting("naive_datetime_insert") == "server"
+            active_tz = (self.tzinfo or ctx.server_tz) if server_mode else None
+            if isinstance(first, str):
+                original_column = column
+                column = []
+
+                for x in original_column:
+                    if not x and self.nullable:
+                        v = 0
+                    else:
+                        dt = datetime.fromisoformat(x)
+                        v = self._datetime64_ticks(dt, active_tz)
+
+                    column.append(v)
+            elif self.nullable:
+                column = [self._datetime64_ticks(x, active_tz) if x else 0 for x in column]
             else:
-                column = [((int(x.timestamp()) * 1000000 + x.microsecond) * prec) // 1000000 for x in column]
+                column = [self._datetime64_ticks(x, active_tz) for x in column]
         write_array("q", column, dest, ctx.column_name)
 
 
@@ -329,6 +351,19 @@ class TimeBase(ClickHouseType, registered=False):
     _MICROS_PER_SECOND = 1_000_000
     _NANOS_PER_SECOND = 1_000_000_000
     _SECONDS_PER_DAY = 86_400
+    _NUMPY_TIME_UNITS = {
+        "W": (604_800, 1),
+        "D": (86_400, 1),
+        "h": (3_600, 1),
+        "m": (60, 1),
+        "s": (1, 1),
+        "ms": (1, 1_000),
+        "us": (1, 1_000_000),
+        "ns": (1, 1_000_000_000),
+        "ps": (1, 1_000_000_000_000),
+        "fs": (1, 1_000_000_000_000_000),
+        "as": (1, 1_000_000_000_000_000_000),
+    }
 
     _array_type: str
     byte_size: int
@@ -416,6 +451,12 @@ class TimeBase(ClickHouseType, registered=False):
             converter_map[options.np.timedelta64] = self._timedelta_to_ticks
             converter_map[options.np.int64] = self._numerical_to_ticks
         converter = converter_map.get(expected_type, None)
+        if converter is None:
+            # Subclasses such as pandas Timedelta miss the exact type lookup
+            for base, base_converter in converter_map.items():
+                if isinstance(first, base):
+                    converter = base_converter
+                    break
 
         if converter is None:
             raise TypeError(
@@ -443,6 +484,45 @@ class TimeBase(ClickHouseType, registered=False):
         value = int(value)
         self._validate_standard_range(value, value)
         return value
+
+    @classmethod
+    def _numpy_timedelta_to_ticks(cls, td: numpy.timedelta64, precision: int) -> int:
+        """Rescale a NumPy duration with exact integer math and no intermediate overflow."""
+        unit, multiplier = options.np.datetime_data(td.dtype)
+        try:
+            numerator, denominator = cls._NUMPY_TIME_UNITS[unit]
+        except KeyError as ex:
+            raise ValueError(f"Unsupported NumPy timedelta64 unit {unit!r}; only fixed-duration time units are supported") from ex
+        raw = int(td.astype("int64"))
+        scaled = raw * int(multiplier) * numerator * precision
+        ticks = abs(scaled) // denominator
+        return -ticks if scaled < 0 else ticks
+
+    @staticmethod
+    def _normalize_timedelta_value(value: Any) -> Any:
+        if options.np is not None and isinstance(value, options.np.timedelta64):
+            return None if options.np.isnat(value) else value
+        if options.pd is not None:
+            if value is options.pd.NaT:
+                return None
+            if isinstance(value, options.pd.Timedelta):
+                return value.to_timedelta64()
+        return value
+
+    def write_column_data(self, column: Sequence, dest: bytearray, ctx: InsertContext):
+        if self.nullable:
+            # Treat NumPy/pandas NaT like None before the base implementation
+            # writes the Native null map. This also composes inside Array and
+            # LowCardinality because their writers delegate back here. A python
+            # timedelta sample can still precede NaT values, so it triggers the
+            # same pass.
+            sample = first_value(column, True)
+            is_timedelta = isinstance(sample, timedelta)
+            is_numpy_time = options.np is not None and isinstance(sample, options.np.timedelta64)
+            is_pandas_nat = options.pd is not None and sample is options.pd.NaT
+            if is_timedelta or is_numpy_time or is_pandas_nat:
+                column = [self._normalize_timedelta_value(value) for value in column]
+        super().write_column_data(column, dest, ctx)
 
     def _active_null(self, ctx: QueryContext):
         """Return appropriate null value based on context."""
@@ -584,11 +664,11 @@ class Time(TimeBase):
         return f"{sign}{h:03d}:{m:02d}:{s:02d}"
 
     def _timedelta_to_ticks(self, td: timedelta | numpy.timedelta64) -> int:
-        """Convert timedelta to ticks (seconds), flooring fractional seconds."""
+        """Convert timedelta to ticks (seconds), truncating fractional seconds toward zero."""
         if isinstance(td, timedelta):
             total = int(td.total_seconds())
         else:
-            total = td.astype("timedelta64[s]").astype(int)
+            total = self._numpy_timedelta_to_ticks(td, 1)
         self._validate_standard_range(total, td)
 
         return total
@@ -620,20 +700,25 @@ class Time64(TimeBase):
     __slots__ = ("scale", "precision", "unit")
     _array_type = "q"
     byte_size = 8
+    scale: int
+    precision: int
+    unit: str | None
+    _type_args = _TypeArgs(1, 1, integer_bounds=((0, 0, 9),))
 
     def __init__(self, type_def):
         super().__init__(type_def)
         self._name_suffix = type_def.arg_str
-        self.scale = type_def.values[0]
-        if self.scale not in (3, 6, 9):
-            raise ProgrammingError(f"Unsupported Time64 scale {self.scale}; only 3, 6, or 9 are allowed for NumPy.")
-        self.precision = 10**self.scale
-        self.unit = np_date_types.get(self.scale)
+        scale = type_def.values[0]
+        if not isinstance(scale, int) or scale < 0 or scale > 9:
+            raise ProgrammingError(f"Unsupported Time64 scale {scale}; expected a value from 0 through 9.")
+        self.scale = scale
+        self.precision = 10**scale
+        self.unit = np_date_types.get(scale)
 
     @property
     def pandas_dtype(self):
         """Sets dtype for pandas timedelta objects"""
-        return f"timedelta64{self.unit}"
+        return self.np_type
 
     @property
     def max_time_ticks(self) -> int:
@@ -641,7 +726,12 @@ class Time64(TimeBase):
 
     @property
     def np_type(self):
-        return f"timedelta64{self.unit}"
+        if self.unit:
+            return f"timedelta64{self.unit}"
+        raise ProgrammingError(
+            f"Cannot use {self.name} as a numpy or Pandas datatype. Only seconds(0), milliseconds(3), "
+            "microseconds(6), or nanoseconds(9) are supported for numpy based queries."
+        )
 
     @property
     def max_ticks(self) -> int:
@@ -654,7 +744,7 @@ class Time64(TimeBase):
     def _string_to_ticks(self, time_str: str) -> int:
         """Parse string format 'HHH:MM:SS[.fff]' to ticks with sub-second precision."""
         parts = self._parse_core(time_str)
-        frac_ticks = int((parts.frac or "").ljust(self.scale, "0")[: self.scale])
+        frac_ticks = int((parts.frac or "").ljust(self.scale, "0")[: self.scale]) if self.scale else 0
         ticks = (parts.hours * 3600 + parts.minutes * 60 + parts.seconds) * self.precision + frac_ticks
         if parts.is_negative:
             ticks = -ticks
@@ -676,10 +766,13 @@ class Time64(TimeBase):
     def _timedelta_to_ticks(self, td: timedelta | numpy.timedelta64) -> int:
         """Convert timedelta to ticks with sub-second precision."""
         if isinstance(td, timedelta):
-            total_us = int(td.total_seconds()) * self._MICROS_PER_SECOND + td.microseconds
-            ticks = (total_us * self.precision) // self._MICROS_PER_SECOND
+            total_us = (td.days * self._SECONDS_PER_DAY + td.seconds) * self._MICROS_PER_SECOND + td.microseconds
+            scaled = total_us * self.precision
+            ticks = abs(scaled) // self._MICROS_PER_SECOND
+            if scaled < 0:
+                ticks = -ticks
         else:
-            ticks = td.astype("timedelta64[s]").astype(int)
+            ticks = self._numpy_timedelta_to_ticks(td, self.precision)
         self._validate_standard_range(ticks, td)
 
         return ticks
@@ -697,9 +790,12 @@ class Time64(TimeBase):
 
     def _ticks_to_np_timedelta(self, ticks: int) -> numpy.timedelta64:
         """Convert ticks to numpy timedelta64 with nanosecond precision."""
-        res_map = {3: "ms", 6: "us", 9: "ns"}
+        res_map = {0: "s", 3: "ms", 6: "us", 9: "ns"}
+        unit = res_map.get(self.scale)
+        if unit is None:
+            raise ProgrammingError(f"Cannot use {self.name} as a numpy or Pandas datatype. Only scales 0, 3, 6, and 9 are supported.")
 
-        return options.np.timedelta64(ticks, res_map.get(self.scale))
+        return options.np.timedelta64(ticks, unit)
 
     def _time_to_ticks(self, t: time) -> int:
         """Convert time to ticks with sub-second precision."""

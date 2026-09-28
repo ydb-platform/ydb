@@ -42,9 +42,12 @@ class TPhysicalAggregationBuilder: public TPhysicalUnaryOpBuilderWithMemLimit {
     };
 
 public:
-    TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos)
+    TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos, bool pruneUnusedOutputs = false,
+                                bool useBlocks = false)
         : TPhysicalUnaryOpBuilderWithMemLimit(ctx, pos)
-        , Aggregate(aggregate) {
+        , Aggregate(aggregate)
+        , PruneUnusedOutputs(pruneUnusedOutputs)
+        , UseBlocks(useBlocks) {
     }
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input, std::optional<i64> memLimit) override;
@@ -81,6 +84,7 @@ private:
     TExprNode::TPtr BuildCountAggregationUpdateState(TExprNode::TPtr lambdaArgState);
     TExprNode::TPtr BuildCountAggregationUpdateStateForOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField);
     TExprNode::TPtr BuildSumAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* itemType);
+    TExprNode::TPtr BuildSomeAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, bool isOptional);
     TExprNode::TPtr BuildVarianceAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField, const TTypeAnnotationNode* itemType);
     TExprNode::TPtr BuildVarianceAggregationUpdateStateOptionalType(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
                                                                     const TTypeAnnotationNode* itemType);
@@ -128,6 +132,8 @@ private:
 
     // Holds an aggregate operator.
     TIntrusivePtr<TOpAggregate> Aggregate;
+    const bool PruneUnusedOutputs;
+    const bool UseBlocks;
     // This Map represents a simple physical aggregation functions.
     const THashMap<TString, TString> AggregationFunctionToAggregationCallable{{"sum", "AggrAdd"}, {"min", "AggrMin"}, {"max", "AggrMax"}};
     // The name of the physical aggregation.

@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/ddisk/ddisk_checksums.h>
 #include <ydb/core/util/circular_sparse_queue.h>
 
 #include <ydb/public/lib/base/msgbus.h>
@@ -49,7 +50,7 @@ constexpr TDuration kErrorBackoffDuration = TDuration::MilliSeconds(10);
 constexpr ui32 kPipeRetryLimit = 3;
 constexpr ui32 kMaxInflightPerActor = 512;
 
-// Latency histogram bounds (spec §15.1). Up to ~134s, microsecond precision.
+// Latency histogram bounds: up to ~134s, microsecond precision.
 constexpr i64 kLatencyHistMaxUs = 134'000'000;
 constexpr i32 kLatencyHistPrecision = 4;
 
@@ -317,6 +318,9 @@ private:
 
         InitCounters();
         WritePayload = BuildWritePayload(IoSizeBytes, Rng);
+        if (Config.GetTabletConfig().GetEnableChecksums()) {
+            WriteChecksums = NDDisk::CalculatePayloadChecksums(WritePayload);
+        }
         TestStartTime = MonotonicNow();
         MeasurementStartTime = TestStartTime
             + TDuration::Seconds(Config.GetDelayBeforeMeasurementsSeconds());
@@ -496,6 +500,9 @@ private:
         const ui64 cookie = res->first;
         NWilson::TTraceId traceId = res->second->Span.GetTraceId();
         auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(addr, size);
+        for (const ui64 checksum : WriteChecksums) {
+            ev->Record.AddChecksums(checksum);
+        }
         ev->Payload = TRope(WritePayload);
         NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie, std::move(traceId));
         ++WriteInFlight;
@@ -900,6 +907,7 @@ private:
 
     TFastRng64 Rng;
     TRope WritePayload;
+    std::vector<ui64> WriteChecksums;
 
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Root;

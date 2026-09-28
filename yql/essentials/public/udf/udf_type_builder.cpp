@@ -2,8 +2,6 @@
 
 namespace NYql::NUdf {
 
-IFunctionTypeInfoBuilder::IFunctionTypeInfoBuilder()
-{
-}
+IFunctionTypeInfoBuilder::IFunctionTypeInfoBuilder() = default;
 
 } // namespace NYql::NUdf

@@ -20,6 +20,8 @@
 
 namespace NKikimr::NKqp {
 
+class TExecutionTrace;
+
 class TKqpPlanner {
 
     struct TRequestData {
@@ -51,6 +53,7 @@ public:
         const bool WithProgressStats;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
+        const TExecutionTrace* Trace = nullptr;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
         const ui64 MkqlMemoryLimit;
@@ -68,6 +71,7 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
         const TActorId& CheckpointCoordinator;
         const bool EnableWatermarks;
+        TActorId StreamingQueryNodesManager;
     };
 
     TKqpPlanner(TKqpPlanner::TArgs&& args);
@@ -83,8 +87,9 @@ public:
     ui32 GetCurrentRetryDelay(ui32 requestId);
     void Unsubscribe();
 
-    const THashMap<TActorId, TProgressStat>& GetPendingComputeActors();
-    const THashSet<ui64>& GetPendingComputeTasks();
+    const THashSet<TActorId>& GetAllComputeActors() const;
+    const THashMap<TActorId, TProgressStat>& GetPendingComputeActors() const;
+    const THashSet<ui64>& GetPendingComputeTasks() const;
     TMaybe<ui64> GetActualNodeIdForTask(ui64 taskId) const;
 
     void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates);
@@ -101,12 +106,13 @@ private:
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
+    NYql::NDqProto::TDqTask* SerializeTaskForExecution(const TTask& task);
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
     void LogMemoryStatistics(const TLogFunc& logFunc);
     void PrepareCheckpoints();
-    void SendReadyStateToCheckpointCoordinator();
+    void SendReadyState();
 
 private:
     const ui64 TxId;
@@ -122,6 +128,7 @@ private:
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
+    const TExecutionTrace* Trace;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst = 0;
     TVector<TTaskResourceEstimation> ResourceEstimations;
@@ -130,6 +137,7 @@ private:
     ui64 MkqlMemoryLimit;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
+    THashSet<TActorId> AllComputeActors; // All compute actors which was acknowledged
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
 
@@ -148,7 +156,8 @@ private:
     NScheduler::NHdrf::NDynamic::TQueryPtr Query;
     TActorId CheckpointCoordinatorId;
     const bool EnableWatermarks;
-    bool CheckpointsReadyStateSent = false;
+    const TActorId StreamingQueryNodesManagerId;
+    bool ReadyStateSent = false;
 public:
     static bool UseMockEmptyPlanner;  // for tests: if true then use TKqpMockEmptyPlanner that leads to the error
     THashMap<ui32, TActorId> ResultChannels;

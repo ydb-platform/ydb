@@ -164,3 +164,7 @@ NMiniKQL::IEngineFlat::TValidationInfo& TKeyValidator::GetInfo() {
 const NMiniKQL::IEngineFlat::TValidationInfo& TKeyValidator::GetInfo() const {
     return Info;
 }
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

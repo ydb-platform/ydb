@@ -2,9 +2,11 @@
 
 #include "actors/schema_actors.h"
 #include "actors/read_session_actor.h"
+#include "actors/reset_offset_actor.h"
 
 #include <ydb/services/persqueue_v1/actors/schema/pqv1/actors.h>
 #include <ydb/services/persqueue_v1/actors/schema/topic/actors.h>
+#include <ydb/core/grpc_services/rpc_calls_topic.h>
 
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 
@@ -58,7 +60,7 @@ void DoDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::N
     Y_VERIFY_DEBUG(dynamic_cast<const Ydb::Topic::DescribeTopicRequest*>(p->GetRequest()));
 
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Describe topic request");
-    f.RegisterActor(new NGRpcProxy::V1::TDescribeTopicActor(p));
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::NTopic::CreateDescribeTopicActor(p));
 }
 
 void DoDescribeConsumerRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -87,6 +89,15 @@ void DoCommitOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NG
 
     YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Commit Offset request");
     TActivationContext::Send(NKikimr::NGRpcProxy::V1::GetPQReadServiceActorID(), std::move(p));
+}
+
+void DoResetOffsetRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
+    auto p = dynamic_cast<TEvResetOffsetRequest*>(ctx.release());
+
+    EnsureReq(p);
+
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "New Reset Offset request");
+    f.RegisterActor(NKikimr::NGRpcProxy::V1::CreateResetOffsetActor(p));
 }
 
 void DoPQDropTopicRequest(std::unique_ptr<IRequestOpCtx> ctx, const NKikimr::NGRpcService::IFacilityProvider& f) {
@@ -145,17 +156,10 @@ void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacili
     f.RegisterActor(NGRpcProxy::V1::NPQv1::CreateRemoveConsumerActor(p));
 }
 
-#ifdef DECLARE_RPC
-#error DECLARE_RPC macro already defined
-#endif
-
-#define DECLARE_RPC(name) template<> IActor* TEv##name##Request::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { \
-    return new NKikimr::NGRpcProxy::V1::T##name##Actor(msg);\
-    }
-
-DECLARE_RPC(DescribeTopic);
-
-#undef DECLARE_RPC
+template<>
+IActor* TEvDescribeTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return NGRpcProxy::V1::NTopic::CreateDescribeTopicActor(msg);
+}
 
 template<>
 IActor* TEvDescribeConsumerRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

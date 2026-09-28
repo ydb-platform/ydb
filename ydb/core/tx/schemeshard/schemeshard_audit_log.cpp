@@ -14,9 +14,12 @@
 #include <ydb/core/protos/import.pb.h>
 #include <ydb/core/util/address_classifier.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/http/http.h>
 
 #include <util/string/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -219,7 +222,7 @@ void AuditLogModifySchemeTransactionDeprecated(const NKikimrScheme::TEvModifySch
             entry << ", remove access: " << i;
         }
 
-        LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD, "AUDIT: " <<  entry);
+        YDB_LOG_NOTICE("AUDIT: " << entry);
     }
 }
 
@@ -458,3 +461,5 @@ void AuditLogImportEnd(const TImportInfo& info, TSchemeShard* SS) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

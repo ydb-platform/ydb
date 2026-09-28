@@ -48,7 +48,7 @@ THashSet<TStringBuf> SubqueryExpandFuncs = {
     TStringBuf("SubqueryOrderBy"),
     TStringBuf("SubqueryAssumeOrderBy")};
 
-using TEvaluateExpressionCache = THashMap<TString, TExprNode::TPtr>;
+using TEvaluateExpressionCache = THashMap<TString, NYT::TNode>;
 
 IGraphTransformer::TStatus SyncTransformWithDuration(
     IGraphTransformer& transformer,
@@ -101,11 +101,11 @@ bool CheckPendingArgs(const TExprNode& root, TNodeSet& visited, TNodeMap<const T
         return true;
     }
 
-    if (root.IsCallable({"TypeOf", "SqlColumnOrType", "SqlPlainColumnOrType"})) {
+    if (root.IsCallable({"TypeOf", "SqlColumnOrType", "SqlPlainColumnOrType", "YqlColumnOrType"})) {
         underTypeOf = true;
     }
 
-    if (root.IsCallable({"YqlColumnRef", "PgColumnRef"})) {
+    if (root.IsCallable({"YqlColumnRef", "YqlColumnRefOrType", "PgColumnRef"})) {
         hasUnresolvedTypes = true;
     }
 
@@ -150,7 +150,6 @@ public:
     TNodeMap<bool> Visited;
     bool ForceConfigure = false;
 
-public:
     void Scan(const TExprNode& node) {
         VisitExpr(node, [this](const TExprNode& n) {
             if (n.IsCallable(ConfigureName)) {
@@ -265,7 +264,6 @@ private:
         it->second = hasConfigPending;
     }
 
-private:
     THashSet<TStringBuf> PendingFileAliases_;
     THashSet<TStringBuf> PendingFolderPrefixes_;
 };
@@ -1101,10 +1099,18 @@ IGraphTransformer::TStatus TEvaluateExpressionTransformer::DoTransform(TExprNode
         }
 
         const TString key = MakeCacheKey(*clonedArg);
+        ++Types_.EvaluationStats.Count;
+        NYT::TNode ysonNode;
+        if (Types_.EnableEvaluateExprCache) {
+            if (const auto* cached = EvalCache_->FindPtr(key)) {
+                ++Types_.EvaluationStats.CacheHits;
+                ysonNode = *cached;
+            }
+        }
+        const bool hasCachedResult = !ysonNode.IsUndefined();
         auto calculate = [&]() -> TExprNode::TPtr {
             TString yson;
-            NYT::TNode ysonNode;
-            if (Types_.QContext && Types_.QContext.CanRead() && Types_.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
+            if (!hasCachedResult && Types_.QContext && Types_.QContext.CanRead() && Types_.QContext.CaptureMode() != EQPlayerCaptureMode::Full) {
                 auto item = Types_.QContext.GetReader()->Get({.Component = EvaluationComponent, .Label = key}).GetValueSync();
                 if (!item) {
                     throw yexception() << "Missing replay data";
@@ -1131,6 +1137,10 @@ IGraphTransformer::TStatus TEvaluateExpressionTransformer::DoTransform(TExprNode
                     ctx.Step = prevSteps;
                     if (status.Level == IGraphTransformer::TStatus::Error) {
                         return nullptr;
+                    }
+
+                    if (hasCachedResult) {
+                        break;
                     }
 
                     // execute calcWorldRoot
@@ -1267,33 +1277,21 @@ IGraphTransformer::TStatus TEvaluateExpressionTransformer::DoTransform(TExprNode
                 });
 
                 result = ctx.ReplaceNodes(std::move(result), replaces);
-                ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
-                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
                 return result;
             }
 
             return NCommon::ValueToExprLiteral(clonedArg->GetTypeAnn(), *value, ctx, node->Pos());
         };
 
-        auto calculateWithCache = [&]() -> TExprNode::TPtr {
-            ++Types_.EvaluationStats.Count;
-            if (!Types_.EnableEvaluateExprCache) {
-                return calculate();
-            }
-
-            if (const auto* cached = EvalCache_->FindPtr(key)) {
-                ++Types_.EvaluationStats.CacheHits;
-                return *cached;
-            }
-
-            auto result = calculate();
-            if (result) {
-                (*EvalCache_)[key] = result;
-            }
-            return result;
-        };
-
-        return calculateWithCache();
+        auto result = calculate();
+        if (result && Types_.EnableEvaluateExprCache && !hasCachedResult) {
+            EvalCache_->try_emplace(key, std::move(ysonNode));
+        }
+        if (result && isCodePipeline) {
+            ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
+            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
+        }
+        return result;
     }, ctx, settings);
 
     if (status.Level == IGraphTransformer::TStatus::Error) {

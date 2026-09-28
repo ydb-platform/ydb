@@ -28,6 +28,7 @@ NActors::IActor* CreateS3FileQueueActor(
         TString pattern,
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
-        bool allowLocalFiles);
+        bool allowLocalFiles,
+        IDqSchedulableWorkFactoryPtr workFactory = nullptr);
 
 } // namespace NYql::NDq

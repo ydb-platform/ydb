@@ -75,6 +75,7 @@ struct TDqSettings {
         static constexpr ui64 EnableSpillingNodes = 0;
         static constexpr bool EnableSpillingInChannels = false;
         static constexpr EValuePackerVersion ValuePackerVersion = EValuePackerVersion::V0;
+        static constexpr bool EnableSortConstraintProcessing = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -165,6 +166,7 @@ public:
     NCommon::TConfSetting<TString, Static> Scheduler;
     // Target DQ clique for remote graph execution (pragma dq.Clique).
     NCommon::TConfSetting<TString, Static> Clique;
+    NCommon::TConfSetting<bool, Static> _EnableSortConstraintProcessing;
 
     // This options will be passed to executor_actor and worker_actor
     template <typename TProtoConfig>

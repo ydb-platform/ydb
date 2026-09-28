@@ -31,6 +31,7 @@ struct TGRpcClientConfig {
     std::string LoadBalancingPolicy = { };
     std::string SslTargetNameOverride = { };
     bool UseXds = false;
+    std::string UserAgentPrefix = { };
 
     TGRpcClientConfig() = default;
     TGRpcClientConfig(const TGRpcClientConfig&) = default;
@@ -61,6 +62,7 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     args.SetMaxReceiveMessageSize(config.MaxInboundMessageSize ? config.MaxInboundMessageSize : config.MaxMessageSize);
     args.SetMaxSendMessageSize(config.MaxOutboundMessageSize ? config.MaxOutboundMessageSize : config.MaxMessageSize);
     args.SetCompressionAlgorithm(config.CompressionAlgorithm);
+    args.SetUserAgentPrefix(NYdb::TStringType{config.UserAgentPrefix});
 
     for (const auto& kvp: config.StringChannelParams) {
         args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});

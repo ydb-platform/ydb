@@ -430,6 +430,17 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                     << "</a>";}
                         TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                     }
+                    tabletId = NKikimr::MakeDbsControllerID();
+                    TABLER() {
+                        TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">DBS_CONTROLLER</a>";}
+                        TABLED() {str << tabletId;}
+                        TABLED() {str << " <a href=\"tablets?SsId="
+                                    << tabletId << "\">"
+                                    << "<span class=\"glyphicon glyphicon-tasks\""
+                                    << " title=\"State Storage\" />"
+                                    << "</a>";}
+                        TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
+                    }
                     for (auto tabletId : domain->Coordinators) {
                         TABLER() {
                             TABLED() {str << "<a href=\"tablets?TabletID=" << tabletId << "\">TX_COORDINATOR</a>";}

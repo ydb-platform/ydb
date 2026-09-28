@@ -250,7 +250,8 @@ protected:
     }
 
     TMaybeNode<TExprBase> BuildExtendStage(TExprBase node, TExprContext& ctx) {
-        return DqBuildExtendStage(node, ctx);
+        const auto enableSortConstraintProcessing = Config->_EnableSortConstraintProcessing.Get().GetOrElse(TDqSettings::TDefault::EnableSortConstraintProcessing);
+        return DqBuildExtendStage(node, ctx, /*enableParallelUnionAllConnections*/ false, /*keepMerge*/ enableSortConstraintProcessing);
     }
 
     TMaybeNode<TExprBase> RewriteRightJoinToLeft(TExprBase node, TExprContext& ctx) {

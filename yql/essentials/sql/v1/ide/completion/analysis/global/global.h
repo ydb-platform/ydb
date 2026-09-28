@@ -1,8 +1,9 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/ide/completion/core/environment.h>
+#include <yql/essentials/sql/v1/ide/core/environment.h>
 #include <yql/essentials/sql/v1/ide/completion/core/input.h>
 #include <yql/essentials/sql/v1/ide/completion/core/name.h>
+#include <yql/essentials/utils/meta/reflection.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/maybe.h>
@@ -12,6 +13,8 @@
 #include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
+
+using NSQLPureAST::TEnvironment;
 
 struct TClusterContext {
     TString Provider;
@@ -64,3 +67,11 @@ public:
 IGlobalAnalysis::TPtr MakeGlobalAnalysis();
 
 } // namespace NSQLComplete
+
+namespace NYql::NReflection {
+
+YQL_DEFINE_REFLECTING(NSQLComplete::TClusterContext, (Provider)(Name));
+YQL_DEFINE_REFLECTING(NSQLComplete::TFunctionContext, (Name)(ArgumentNumber)(Arg0)(Arg1)(Cluster));
+YQL_DEFINE_REFLECTING(NSQLComplete::TColumnContext, (Tables)(Columns)(WithoutByTableAlias));
+
+} // namespace NYql::NReflection

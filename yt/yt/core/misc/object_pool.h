@@ -18,6 +18,8 @@ namespace NYT {
 /*!
  * |Clean| method is called before an object is put into the pool.
  *
+ * |IsReusable| method is called before an object is returned from the pool.
+ *
  * |GetMaxPoolSize| method is called to determine the maximum number of
  * objects allowed to be pooled.
  */
@@ -37,6 +39,11 @@ struct TPooledObjectTraitsBase
     static void Clean(TObject*)
     { }
 
+    static bool IsReusable(const TObject*)
+    {
+        return true;
+    }
+
     static int GetMaxPoolSize()
     {
         return 256;
@@ -47,8 +54,9 @@ struct TPooledObjectTraitsBase
 
 //! A pool for reusable objects.
 /*
- * Instances are tracked via shared pointers with a special deleter
- * that returns spare instances back to the pool.
+ * Instances can be held through shared or unique handles; both return spare
+ * instances back to the pool. Prefer #TObjectUniquePtr unless the instance
+ * needs shared ownership.
  *
  * Both the pool and the references are thread-safe.
  *
@@ -58,12 +66,38 @@ template <class TObject, class TTraits = TPooledObjectTraits<TObject>>
 class TObjectPool
 {
 public:
-    using TObjectPtr = std::shared_ptr<TObject>;
+    using TSharedObjectPtr = std::shared_ptr<TObject>;
+
+    //! Returns the instance to the pool, or destroys it if it must not be pooled.
+    struct TDeleter
+    {
+        TDeleter() = default;
+
+        explicit TDeleter(bool pooled) noexcept;
+
+        //! Instances created outside of the pool are destroyed, not pooled; this makes
+        //! #TObjectUniquePtr accept a plain unique pointer.
+        TDeleter(std::default_delete<TObject>) noexcept; // NOLINT(google-explicit-constructor)
+
+        void operator()(TObject* obj) const;
+
+    private:
+        bool Pooled_ = false;
+    };
+
+    //! Unlike #TSharedObjectPtr needs no control block.
+    using TObjectUniquePtr = std::unique_ptr<TObject, TDeleter>;
 
     ~TObjectPool();
 
     //! Either creates a fresh instance or returns a pooled one.
-    TObjectPtr Allocate();
+    TSharedObjectPtr AllocateShared();
+
+    //! Same as #AllocateShared but the instance is held by a unique pointer.
+    TObjectUniquePtr AllocateUnique();
+
+    //! Same as #AllocateUnique but the instance never enters the pool.
+    static TObjectUniquePtr AllocateUniqueUnpooled();
 
     int GetSize() const;
 
@@ -73,8 +107,12 @@ private:
     TLockFreeStack<TObject*> PooledObjects_;
     std::atomic<int> PoolSize_ = 0;
 
+    TObject* DoAllocate();
+
     //! Calls #TPooledObjectTraits::Clean and returns the instance back into the pool.
     void Reclaim(TObject* obj);
+
+    static bool IsReusable(const TObject* obj);
 
     void FreeInstance(TObject* obj);
 

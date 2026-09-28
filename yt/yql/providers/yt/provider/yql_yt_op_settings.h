@@ -22,6 +22,10 @@ enum class EYtWriteMode: ui32 {
     Append                  /* "append" */,
     Drop                    /* "drop" */,
     DropIfExists            /* "drop_if_exists" */,
+    CreateSymlink           /* "create_symlink" */,
+    CreateSymlinkIfNotExists /* "create_symlink_if_not_exists" */,
+    DropSymlink             /* "drop_symlink" */,
+    DropSymlinkIfExists     /* "drop_symlink_if_exists" */,
     Flush                   /* "flush" */,
     Create                  /* "create" */,
     CreateIfNotExists       /* "create_if_not_exists" */,
@@ -32,6 +36,16 @@ enum class EYtWriteMode: ui32 {
     DropObject              /* "dropObject" "drop_object" */,
     DropObjectIfExists      /* "dropObjectIfExists" "drop_object_if_exists" */,
 };
+
+constexpr bool IsCreateSymlinkMode(EYtWriteMode mode) {
+    return mode == EYtWriteMode::CreateSymlink
+        || mode == EYtWriteMode::CreateSymlinkIfNotExists;
+}
+
+constexpr bool IsDropSymlinkMode(EYtWriteMode mode) {
+    return mode == EYtWriteMode::DropSymlink
+        || mode == EYtWriteMode::DropSymlinkIfExists;
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -115,6 +129,7 @@ enum class EYtSettingType: ui64 {
     NoDq                     /* "noDq" */,
     Transparent              /* "transparent" */,
     PruneUnusedColumns       /* "prune_unused_columns" "pruneunusedcolumns" */,
+    ForceApplyMaxJobCount    /* "forceApplyMaxJobCount" */,    // hybrid supported
     // Out tables
     UniqueBy                 /* "uniqueBy" */,
     OpHash                   /* "opHash" */,
@@ -185,8 +200,10 @@ EYtSettingTypes operator|(EYtSettingType left, EYtSettingType right);
 const auto DqReadSupportedSettings = EYtSettingType::SysColumns | EYtSettingType::Sample | EYtSettingType::Unordered | EYtSettingType::NonUnique | EYtSettingType::KeyFilter2;
 const auto DqOpSupportedSettings = EYtSettingType::Ordered | EYtSettingType::Limit | EYtSettingType::SortLimitBy | EYtSettingType::SortBy |
                                        EYtSettingType::ReduceBy | EYtSettingType::ForceTransform | EYtSettingType::JobCount | EYtSettingType::JoinReduce |
-                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied | EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
-                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType | EYtSettingType::Sharded | EYtSettingType::SoftTransform;
+                                       EYtSettingType::FirstAsPrimary | EYtSettingType::Flow | EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied |
+                                       EYtSettingType::BlockOutputReady | EYtSettingType::BlockOutputApplied |
+                                       EYtSettingType::KeepSorted | EYtSettingType::KeySwitch | EYtSettingType::ReduceInputType | EYtSettingType::MapOutputType |
+                                       EYtSettingType::Sharded | EYtSettingType::SoftTransform | EYtSettingType::ForceApplyMaxJobCount;
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 

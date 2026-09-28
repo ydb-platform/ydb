@@ -461,8 +461,7 @@ void TGetQueryDeclaredParametersInfoCommand::Register(TRegistrar registrar)
         "engine",
         [] (TThis* command) -> auto& {
             return command->Options.Engine;
-        })
-        .Optional(/*init*/ false);
+        });
 
     registrar.ParameterWithUniversalAccessor<TYsonString>(
         "settings",

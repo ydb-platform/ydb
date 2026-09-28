@@ -2,7 +2,7 @@
 
 #include "global.h"
 #include "input.h"
-#include "named_node_resolution.h"
+#include <yql/essentials/sql/v1/ide/analysis/named_node_resolution.h>
 
 namespace NSQLComplete {
 

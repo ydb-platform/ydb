@@ -7,7 +7,7 @@ Reader parameters:
 
 {% if feature_topic_codecs %}
 
-* `supported_codecs` — list of [codecs](../../../../concepts/datamodel/topic#message-codec) supported by the reader.
+* `supported_codecs` — a list of [codecs](../../../../concepts/datamodel/topic.md#message-codec) supported by the reader.
 
 {% endif %}
 

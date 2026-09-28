@@ -55,7 +55,7 @@ void TSrcIdMetaInitializer::DoPrepare(NInitializer::IInitializerInput::TPtr cont
             auto* ttlSettings = request.mutable_ttl_settings();
             auto* columnTtl = ttlSettings->mutable_value_since_unix_epoch();
             columnTtl->set_column_name("AccessTime");
-            columnTtl->set_expire_after_seconds(1382400);
+            columnTtl->set_expire_after_seconds(1382400); // 16 days
             columnTtl->set_column_unit(Ydb::Table::ValueSinceUnixEpochModeSettings::UNIT_MILLISECONDS);
         }
 

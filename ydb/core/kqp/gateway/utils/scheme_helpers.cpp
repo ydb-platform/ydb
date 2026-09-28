@@ -51,16 +51,6 @@ bool SplitTablePath(const TString& tableName, const TString& database, std::pair
     }
 }
 
-TVector<TString> CreateIndexTablePath(const TString& tableName, const NYql::TIndexDescription& index) {
-    const auto implTables = index.GetImplTables();
-    TVector<TString> paths;
-    paths.reserve(implTables.size());
-    for (const auto& implTable : implTables) {
-        paths.emplace_back(TStringBuilder() << tableName << "/" << index.Name << "/" << implTable);
-    }
-    return paths;
-}
-
 TString GetDomainDatabase(const TAppData* appData) {
     if (appData->DomainsInfo && appData->DomainsInfo->Domain) {
         if (const auto& name = appData->DomainsInfo->GetDomain()->Name) {

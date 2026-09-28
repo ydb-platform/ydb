@@ -161,7 +161,7 @@ static void s_alloc_tracer_track(struct alloc_tracer *tracer, void *ptr, size_t 
              * With optimizations on we cannot trust the stack trace too much.
              * Memtracer makes an assumption that stack trace will be available in all cases if stack trace api
              * works. So in the pathological case of stack_depth <= FRAMES_TO_SKIP lets record all the frames we
-             * have, to at least have an anchor for where allocation is comming from, however inaccurate it is.
+             * have, to at least have an anchor for where allocation is coming from, however inaccurate it is.
              */
             if (stack_depth <= FRAMES_TO_SKIP) {
                 memcpy((void **)&stack->frames[0], &stack_frames[0], (stack_depth) * sizeof(void *));

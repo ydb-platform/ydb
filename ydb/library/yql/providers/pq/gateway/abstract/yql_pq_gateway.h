@@ -1,11 +1,13 @@
 #pragma once
 
+#include "yql_pq_deferred_publish_client.h"
 #include "yql_pq_federated_topic_client.h"
 #include "yql_pq_topic_client.h"
 
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
@@ -24,6 +26,8 @@ public:
     virtual ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) = 0;
 
     virtual IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) = 0;
+
+    virtual IDeferredPublishClient::TPtr GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) = 0;
 
     virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
 
@@ -50,6 +54,7 @@ public:
     struct TClusterInfo {
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
         ui32 PartitionsCount = 0;
+        THashSet<TString> Consumers;
         std::unordered_map<ui64, TInstant> MaxWriteTime;
     };
     using TDescribeFederatedTopicResult = std::vector<TClusterInfo>;

@@ -18,6 +18,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/prof/tag.h>
 #include <util/generic/cast.h>
 
 namespace NKikimr {
@@ -55,6 +56,7 @@ namespace NOps {
             , Args(args)
             , Snapshot(std::move(snapshot))
             , MaxCyclesPerIteration(/* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100)
+            , ScanMemoryTag(NProfiling::MakeTag(TypeName(*Scan).c_str()))
         {
         }
 
@@ -391,7 +393,9 @@ namespace NOps {
             {
                 TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
 
+                NProfiling::TMemoryTagScope scope(ScanMemoryTag);
                 auto hello = Scan->Prepare(this, Subset.Scheme);
+                scope.Release();
 
                 Conf = hello.Conf;
 
@@ -475,7 +479,9 @@ namespace NOps {
                     processed = 0;
                 }
 
+                NProfiling::TMemoryTagScope scope(ScanMemoryTag);
                 const auto ready = Process();
+                scope.Release();
 
                 processed += stat.UpdateRows(Seen, Skipped);
 
@@ -664,9 +670,11 @@ namespace NOps {
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
             IScan* scan = DetachScan();
+            NProfiling::TMemoryTagScope scope(ScanMemoryTag);
             auto prod = exc
                 ? scan->Finish(*exc)
                 : scan->Finish(status);
+            scope.Release();
 
             if (status != EStatus::Lost) {
                 auto ev = new TEvResult(Serial, status, std::move(Snapshot), prod);
@@ -752,6 +760,7 @@ namespace NOps {
         const NHPTimer::STime MaxCyclesPerIteration;
         static constexpr ui64 MinRowsPerCheck = 1000;
         ui64 TotalCpuTimeUs = 0;
+        ui32 ScanMemoryTag = 0;
     };
 
 }

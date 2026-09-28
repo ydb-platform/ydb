@@ -33,6 +33,19 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     BSL-1.0              1bc23f67ca27c295e38b46190cdce22f
+BELONGS ya.make
+    License text:
+        // Distributed under the Boost Software License, Version 1.0. (See accompanying
+        // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+    Scancode info:
+        Original SPDX id: BSL-1.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
+    Files with this license:
+        include/boost/conversion/detail/config.hpp [4:5]
+
 KEEP     BSL-1.0              3dc626ff78bf44fdf3a99b804f677fe6
 BELONGS ya.make
     License text:
@@ -46,7 +59,7 @@ BELONGS ya.make
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
         include/boost/polymorphic_cast.hpp [5:7]
-        include/boost/polymorphic_pointer_cast.hpp [4:6]
+        include/boost/polymorphic_pointer_cast.hpp [5:7]
 
 KEEP     BSL-1.0              47a0454637d4fa45d78eb2557ccd70c4
 BELONGS ya.make
@@ -60,7 +73,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.boost.org/LICENSE_1_0.txt, http://www.boost.org/users/license.html, https://spdx.org/licenses/BSL-1.0
     Files with this license:
-        include/boost/implicit_cast.hpp [2:4]
+        include/boost/implicit_cast.hpp [5:7]
 
 KEEP     BSL-1.0              946bc271e5e8c30479a080d5b8ef3415
 BELONGS ya.make

@@ -69,6 +69,16 @@
 // http://www.boost.org/LICENSE_1_0.txt)
 
 
+====================BSL-1.0====================
+Boost Software License 1.0](
+
+====================BSL-1.0====================
+[![License: BSL-1.0](https://img.shields.io/badge/License-BSL_1.0-blue.svg)](https://www.boost.org/LICENSE_1_0.txt)
+
+
+====================BSL-1.0====================
+https://www.boost.org/LICENSE_1_0.txt).
+
 ====================COPYRIGHT====================
  * Copyright (c) 1994
  * Hewlett-Packard Company
@@ -216,6 +226,10 @@
 // Copyright (C) 2012 Flavio De Lorenzi (fdlorenzi@gmail.com)
 // Copyright (C) 2013 Jakob Lykke Andersen, University of Southern Denmark
 // (jlandersen@imada.sdu.dk)
+
+
+====================COPYRIGHT====================
+// Copyright (C) 2026 Arnaud Becheler
 
 
 ====================COPYRIGHT====================
@@ -423,6 +437,11 @@
 
 ====================COPYRIGHT====================
 // Copyright 2018 Peter Dimov
+
+
+====================COPYRIGHT====================
+// Copyright 2026 Becheler Code Labs for C++ Alliance
+// Authors: Arnaud Becheler
 
 
 ====================COPYRIGHT====================

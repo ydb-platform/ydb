@@ -7,7 +7,7 @@
 #include <string_view>
 #include <utility>
 
-namespace NKikimr::NMiniKQL::GraceJoin {
+namespace NKikimr::NMiniKQL::NGraceJoin {
 
 TTable::EAddTupleResult TTable::AddTuple(ui64* intColumns, char** stringColumns, ui32* stringsSizes, NYql::NUdf::TUnboxedValue* iColumns, const TTable& other) {
     if ((intColumns[0] & 1)) {
@@ -341,7 +341,7 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable& t1, TTable& t2, EJoinKind /* 
         return true;
     }
 
-    for (ui64 bucket = 0; bucket < GraceJoin::NumberOfBuckets; bucket++) {
+    for (ui64 bucket = 0; bucket < NGraceJoin::NumberOfBuckets; bucket++) {
         ui64 tuplesNum1 = t1.TableBucketsStats_[bucket].TuplesNum;
         ui64 tuplesNum2 = t2.TableBucketsStats_[bucket].TuplesNum;
 
@@ -1384,4 +1384,4 @@ void TTableBucketSpiller::ProcessBucketRestoration() {
     }
 }
 
-} // namespace NKikimr::NMiniKQL::GraceJoin
+} // namespace NKikimr::NMiniKQL::NGraceJoin

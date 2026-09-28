@@ -2618,18 +2618,20 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
 
     bool flatJoinPayload = state->Configuration->JoinCommonUseFlatPayload.Get().GetOrElse(DEFAULT_JOIN_COMMON_USE_FLAT_PAYLOAD);
 
-    const auto leftNotFat = leftUnique
+    const bool leftNotFat = leftUnique
         || op.LinkSettings.LeftHints.contains("unique")
-        || op.LinkSettings.LeftHints.contains("small")
-        || joinCommonAnySideFirst && op.LinkSettings.LeftHints.contains("any");
-    const auto rightNotFat = rightUnique
+        || op.LinkSettings.LeftHints.contains("small");
+    const bool rightNotFat = rightUnique
         || op.LinkSettings.RightHints.contains("unique")
-        || op.LinkSettings.RightHints.contains("small")
+        || op.LinkSettings.RightHints.contains("small");
+    const bool leftPreferredFirst = leftNotFat
+        || joinCommonAnySideFirst && op.LinkSettings.LeftHints.contains("any");
+    const bool rightPreferredFirst = rightNotFat
         || joinCommonAnySideFirst && op.LinkSettings.RightHints.contains("any");
     bool leftFirst = false;
-    if (leftNotFat != rightNotFat) {
-        // non-fat will be first
-        leftFirst = leftNotFat;
+    if (leftPreferredFirst != rightPreferredFirst) {
+        // preferred side will be first
+        leftFirst = leftPreferredFirst;
     } else {
         // small table will be first
         leftFirst = leftSize < rightSize;

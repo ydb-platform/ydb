@@ -131,7 +131,7 @@ public:
         return TUnboxedValuePod(new TReservoirSamplingResource(ResourceTag_, std::forward<Args>(args)...));
     }
 
-    virtual ~TReservoirSamplingBase() {};
+    virtual ~TReservoirSamplingBase() = default;
 
 private:
     TIntrusivePtr<IRandomProvider> RandomPovider_;

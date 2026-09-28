@@ -83,12 +83,14 @@ class Arrayterator:
 
     """
 
+    __module__ = "numpy.lib"
+
     def __init__(self, var, buf_size=None):
         self.var = var
         self.buf_size = buf_size
 
         self.start = [0 for dim in var.shape]
-        self.stop = [dim for dim in var.shape]
+        self.stop = list(var.shape)
         self.step = [1 for dim in var.shape]
 
     def __getattr__(self, attr):
@@ -141,7 +143,7 @@ class Arrayterator:
         A 1-D flat iterator for Arrayterator objects.
 
         This iterator returns elements of the array to be iterated over in
-        `~lib.Arrayterator` one by one. 
+        `~lib.Arrayterator` one by one.
         It is similar to `flatiter`.
 
         See Also

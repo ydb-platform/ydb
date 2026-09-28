@@ -500,6 +500,11 @@
             " "
           ]
         },
+        "diagnosticProvider": {
+          "identifier": "YQL",
+          "interFileDependencies": false,
+          "workspaceDiagnostics": false
+        },
         "textDocumentSync": {
           "change": 1,
           "openClose": true

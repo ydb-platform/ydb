@@ -3,6 +3,7 @@
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_actor_metrics.h"
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_compute_actor_watermarks.h>
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -60,6 +61,10 @@ public:
                 << ", read from async input: " << space << " bytes, "
                 << batch.RowCount() << " rows, finished: " << finished);
 
+            if (space >= freeSpace) {
+                CA_LOG_D("Poll async input " << Index << ", stop input by back pressure (initial free space: " << freeSpace << ", read from async input: " << space << " bytes)");
+            }
+
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
 
             const bool emptyBatch = batch.empty();
@@ -83,9 +88,8 @@ public:
     }
 };
 
-//Used for inputs in Sync ComputeActor and for a base for input transform in both sync and async ComputeActors
-struct TComputeActorAsyncInputHelperSync: public TComputeActorAsyncInputHelper
-{
+// Used for inputs in Sync ComputeActor and for a base for input transform in both sync and async ComputeActors
+struct TComputeActorAsyncInputHelperSync : public TComputeActorAsyncInputHelper {
 public:
     using TComputeActorAsyncInputHelper::TComputeActorAsyncInputHelper;
 
@@ -99,6 +103,7 @@ public:
             Finished = true;
         }
     }
+
     i64 GetFreeSpace() const override{
         return Buffer->GetFreeSpace();
     }

@@ -281,7 +281,7 @@ class Connection:
         """
         Closes the underlying gRPC channel
         :param: grace: If a grace period is specified, this method wait until all active
-        RPCs are finshed, once the grace period is reached the ones that haven't
+        RPCs are finished, once the grace period is reached the ones that haven't
         been terminated are cancelled. If grace is None, this method will wait until all tasks are finished.
         :return: None
         """

@@ -34,6 +34,12 @@ struct TTaskInfo {
     }
 };
 
+struct TCmsDDiskInfo {
+    ui64 Revision = 0;
+    TInstant LastChangedAt;
+    TString State;
+};
+
 struct TCmsState : public TAtomicRefCount<TCmsState> {
     // Main state.
     THashMap<TString, TPermissionInfo> Permissions;
@@ -53,6 +59,9 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
 
     THashMap<TString, TTaskInfo> MaintenanceTasks;
     THashMap<TString, TString> MaintenanceRequests;
+
+    // Last successfully fetched Direct Block Group state, keyed by tablet id.
+    THashMap<ui64, TCmsDDiskInfo> DDiskInfo;
 
     // CMS config.
     TCmsConfig Config;

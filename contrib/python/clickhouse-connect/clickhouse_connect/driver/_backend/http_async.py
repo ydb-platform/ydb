@@ -36,7 +36,7 @@ from clickhouse_connect.driver._backend.httpcommon import (
     summary_from_headers,
 )
 from clickhouse_connect.driver._backend.models import Capabilities, CommandExecution, QueryExecution, QueryRuntime
-from clickhouse_connect.driver.common import dict_copy
+from clickhouse_connect.driver.common import ShowClickHouseErrors, dict_copy
 from clickhouse_connect.driver.exceptions import OperationalError, ProgrammingError
 from clickhouse_connect.driver.streaming import start_streaming_response
 
@@ -163,6 +163,7 @@ class HttpAsyncBackend:
         form_encode_query_params: bool = False,
     ):
         self.url = url
+        self._base_url = url if "/" in url.split("://", 1)[-1] else f"{url}/"
         self.headers = headers
         self.client_settings = client_settings
         self.timeout = timeout
@@ -174,7 +175,7 @@ class HttpAsyncBackend:
         self.autogenerate_query_id = autogenerate_query_id
         self.read_format = read_format
         self.form_encode_query_params = form_encode_query_params
-        self.show_clickhouse_errors = True
+        self.show_clickhouse_errors: ShowClickHouseErrors = True
         self.compression: str | None = None
         self.send_comp_setting = False
         self.send_progress: bool | None = None
@@ -257,6 +258,7 @@ class HttpAsyncBackend:
     async def execute_query(self, context: QueryContext, runtime: QueryRuntime, prepped_query: str | bytes) -> QueryExecution:
         """Execute a query context, returning either a started streaming byte
         source or the column metadata from a columns-only probe."""
+        context.show_clickhouse_errors = self.show_clickhouse_errors
         plan = plan_query_request(
             context,
             runtime,
@@ -473,7 +475,7 @@ class HttpAsyncBackend:
             lease_released = False
             try:
                 # Construct full URL (aiohttp doesn't have base_url)
-                url = f"{self.url}/"
+                url = self._base_url
                 request_kwargs = {"method": method, "url": url, "params": final_params, "headers": req_headers}
                 if self.server_host_name and self.ssl_context is not None:
                     request_kwargs["ssl"] = self.ssl_context
@@ -550,10 +552,16 @@ class HttpAsyncBackend:
                             await asyncio.sleep(0.1 * attempts)
                             continue
                 logger.debug("Non-retryable aiohttp connection error type=%s", type(e).__name__)
-                raise OperationalError(f"Network Error: {msg}") from e
+                if self.show_clickhouse_errors is True:
+                    raise OperationalError(f"Network Error: {msg}") from e
+                logger.warning("Unexpected aiohttp connection error", exc_info=True)
+                raise OperationalError("Network Error") from e
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:
-                raise OperationalError(f"Network Error: {str(e)}") from e
+                if self.show_clickhouse_errors is True:
+                    raise OperationalError(f"Network Error: {str(e)}") from e
+                logger.warning("Unexpected aiohttp transport error", exc_info=True)
+                raise OperationalError("Network Error") from e
 
             finally:
                 if not lease_released:

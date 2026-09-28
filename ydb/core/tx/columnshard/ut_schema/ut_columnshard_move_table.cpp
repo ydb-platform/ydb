@@ -262,7 +262,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        Y_UNUSED(PrepareTablet(runtime, srcPathId, testTable.Schema));
+        Y_UNUSED(PrepareTablet(runtime, srcPathId, testTable.Schema, 1, testTable.Standalone));
 
         ui64 txId = 10;
         int writeId = 10;
@@ -290,7 +290,8 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         {
             constexpr ui64 auxPathId = 99;
             NKikimrTxColumnShard::TSchemaTxBody auxTx;
-            Y_ABORT_UNLESS(auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Schema, testTable.Pk)));
+            Y_ABORT_UNLESS(
+                auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Standalone, testTable.Schema, testTable.Pk)));
             auxTx.MutableSeqNo()->SetRound(2);
             TString auxTxBody;
             Y_PROTOBUF_SUPPRESS_NODISCARD auxTx.SerializeToString(&auxTxBody);
@@ -316,6 +317,53 @@ Y_UNIT_TEST_SUITE(MoveTable) {
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
         }
+    }
+
+    // Verifies that MoveTable uses independent per-path seq_no tracking on the destination path.
+    // Analogous to CopyAndDropIndependentSeqNo but for MoveTable.
+    Y_UNIT_TEST(MoveTableIndependentSeqNo) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit data to srcPathId so that move has something to work with
+        std::vector<ui64> writeIds;
+        {
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+        }
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        // MoveTable: src=1 -> dst=2, round=5 (high round for path 2)
+        const ui64 moveDstPathId = 2;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, moveDstPathId, 5), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        // Verify data is readable from the moved table
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, moveDstPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+
+        // DropTable: path=2, round=1 (lower round than the MoveTable's round=5 for same path — should fail)
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::DropTableTxBody(moveDstPathId, 1), ++txId);
+
+        // DropTable on path 2 with round=6 should succeed (higher round than MoveTable's round=5)
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(moveDstPathId, 6), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
     }
 }
 }   // namespace NKikimr

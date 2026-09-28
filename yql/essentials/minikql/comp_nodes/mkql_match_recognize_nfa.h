@@ -8,6 +8,7 @@
 #include <util/generic/hash_table.h>
 #include <util/generic/string.h>
 
+#include <array>
 #include <utility>
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
@@ -47,7 +48,7 @@ struct TVariantHelper {
 
     static std::variant<Ts...> GetVariantByIndex(size_t i) {
         MKQL_ENSURE(i < sizeof...(Ts), "Wrong variant index");
-        static std::variant<Ts...> Table[] = {Ts{}...};
+        static std::array<std::variant<Ts...>, sizeof...(Ts)> Table = {Ts{}...};
         return Table[i];
     }
 };
@@ -596,7 +597,7 @@ public:
 
 private:
     // TODO (zverevgeny): Consider to change to std::vector for the sake of perf
-    using TStateSet = std::set<TState, std::less<TState>, TMKQLAllocator<TState>>;
+    using TStateSet = std::set<TState, std::less<>, TMKQLAllocator<TState>>;
 
     bool MakeEpsilonTransitionsImpl() {
         TStateSet newStates;
@@ -648,8 +649,8 @@ private:
     }
 
     void MakeEpsilonTransitions() {
-        while (MakeEpsilonTransitionsImpl())
-            ;
+        while (MakeEpsilonTransitionsImpl()) {
+        }
     }
 
     static void Add(THashMap<size_t, i64>& counters, size_t index, i64 value) {

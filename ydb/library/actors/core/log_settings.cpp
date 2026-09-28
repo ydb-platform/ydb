@@ -219,6 +219,10 @@ namespace NActors {
             UseLocalTimestamps = value;
         }
 
+        void TSettings::SetEnableStructuredLogInJson(bool value) {
+            EnableStructuredLogInJson = value;
+        }
+
         EComponent TSettings::FindComponent(const TStringBuf& componentName) const {
             if (componentName.empty())
                 return InvalidComponent;

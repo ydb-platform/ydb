@@ -420,7 +420,6 @@ private:
         return Original_.IsSortedDict();
     }
 
-private:
     const TUnboxedValue Original_;
     const TConverter Converter_;
 };

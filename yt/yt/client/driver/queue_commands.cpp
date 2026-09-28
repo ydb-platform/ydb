@@ -440,13 +440,13 @@ void TPushQueueProducerCommand::DoExecute(ICommandContextPtr context)
     struct TPushQueueProducerBufferTag
     { };
 
-    auto insertRowsFormatConfig = ConvertTo<TInsertRowsFormatConfigPtr>(context->GetInputFormat().Attributes());
+    auto formatConfig = ConvertTo<TPushQueueProducerFormatConfigPtr>(context->GetInputFormat().Attributes());
     auto typeConversionConfig = ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes());
     // Parse input data.
     TBuildingValueConsumer valueConsumer(
         queueTableInfo->Schemas[ETableSchemaKind::WriteViaQueueProducer],
         WithCommandTag(Logger, context),
-        insertRowsFormatConfig->EnableNullToYsonEntityConversion,
+        formatConfig->EnableNullToYsonEntityConversion,
         typeConversionConfig);
     valueConsumer.SetTreatMissingAsNull(true);
 

@@ -11,6 +11,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
 #include <ydb/core/protos/resource_broker.pb.h>
@@ -59,6 +60,8 @@ constexpr TStringBuf NODE_KIND_YDB = "ydb";
 constexpr TStringBuf NODE_KIND_YQ = "yq";
 constexpr const char *CONFIG_NAME = "config.yaml";
 constexpr const char *STORAGE_CONFIG_NAME = "storage.yaml";
+constexpr const char *AUTH_FILE = "auth-file";
+constexpr const char *AUTH_TOKEN_FILE = "auth-token-file";
 
 constexpr static ui32 DefaultLogLevel = NActors::NLog::PRI_WARN; // log settings
 constexpr static ui32 DefaultLogSamplingLevel = NActors::NLog::PRI_DEBUG; // log settings
@@ -116,6 +119,7 @@ struct TYamlConfigs {
     TString MainSource;
     std::optional<TString> StorageSource;
     bool LoadedFromStore = false;
+    bool AllowUnknownFields = false;
 };
 
 inline TString DescribeFetchConfigFailure(TStringBuf context, const IStorageConfigResult& result) {
@@ -1195,6 +1199,7 @@ class TInitialConfiguratorImpl
 
     NKikimrConfig::TAppConfig BaseConfig;
     NKikimrConfig::TAppConfig AppConfig;
+    bool HasStaticConfig = false;
 
     NConfig::TCommonAppOptions CommonAppOptions;
     NConfig::TMbusAppOptions MbusAppOptions;
@@ -1215,7 +1220,7 @@ public:
 
         NConfig::TConfigRefs refs{ConfigUpdateTracer, ErrorCollector, ProtoConfigFileProvider};
 
-        Option("auth-file", TCfg::TAuthConfigFieldTag{});
+        Option(AUTH_FILE, TCfg::TAuthConfigFieldTag{});
         LoadBootstrapConfig(ProtoConfigFileProvider, ErrorCollector, freeArgs, BaseConfig);
 
         TYamlConfigs yamlConfigs;
@@ -1240,6 +1245,7 @@ public:
                     csk->VerifyMainConfig(*yamlConfigs.Main);
                 }
                 yamlConfigs.LoadedFromStore = true;
+                yamlConfigs.AllowUnknownFields = true;
             } else {
                 yamlConfigs.Storage.reset();
                 yamlConfigs.StorageSource.reset();
@@ -1263,6 +1269,7 @@ public:
                 InitConfigFromSeedNodes(yamlConfigs.Main.emplace(), yamlConfigs.Storage);
                 Y_ABORT_UNLESS(yamlConfigs.Main);
                 yamlConfigs.MainSource = "main YAML config fetched from seed nodes";
+                yamlConfigs.AllowUnknownFields = true;
                 if (yamlConfigs.Storage) {
                     yamlConfigs.StorageSource = "storage YAML config fetched from seed nodes";
                 }
@@ -1271,11 +1278,13 @@ public:
             }
         }
 
+        HasStaticConfig = !freeArgs.empty() || yamlConfigs.Main.has_value();
+
         if (yamlConfigs.Main) {
             ApplyMainYamlConfig(refs, yamlConfigs, AppConfig);
         }
 
-        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
+        OptionMerge(AUTH_TOKEN_FILE, TCfg::TAuthConfigFieldTag{});
 
         // start memorylog as soon as possible
         Option("memorylog-file", TCfg::TMemoryLogConfigFieldTag{}, &TInitialConfiguratorImpl::InitMemLog);
@@ -1327,8 +1336,8 @@ public:
         Option("pq-file", TCfg::TPQConfigFieldTag{});
         Option("pqcd-file", TCfg::TPQClusterDiscoveryConfigFieldTag{});
         Option("netclassifier-file", TCfg::TNetClassifierConfigFieldTag{});
-        Option("auth-file", TCfg::TAuthConfigFieldTag{});
-        OptionMerge("auth-token-file", TCfg::TAuthConfigFieldTag{});
+        Option(AUTH_FILE, TCfg::TAuthConfigFieldTag{});
+        OptionMerge(AUTH_TOKEN_FILE, TCfg::TAuthConfigFieldTag{});
         Option("key-file", TCfg::TKeyConfigFieldTag{});
         Option("pdisk-key-file", TCfg::TPDiskKeyConfigFieldTag{});
         Option("sqs-file", TCfg::TSqsConfigFieldTag{});
@@ -1493,6 +1502,8 @@ public:
             cf.NodeResolveHost = cf.NodeHost;
         }
 
+        const auto& authConfig = AppConfig.GetAuthConfig();
+        const bool useToken = HasStaticConfig || ProtoConfigFileProvider.Has(AUTH_FILE) || ProtoConfigFileProvider.Has(AUTH_TOKEN_FILE);
         const TNodeRegistrationSettings settings {
             domainName,
             cf.NodeHost,
@@ -1502,7 +1513,7 @@ public:
             cf.FixedNodeID,
             cf.InterconnectPort,
             cf.CreateNodeLocation(),
-            AppConfig.GetAuthConfig().GetNodeRegistrationToken(),
+            useToken ? authConfig.GetNodeRegistrationToken() : TString{},
         };
 
         auto result = NodeBrokerClient.RegisterDynamicNode(cf.GrpcSslSettings, addrs, settings, Env, Logger);

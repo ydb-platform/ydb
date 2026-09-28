@@ -80,6 +80,19 @@ inline TOverestimationRatioResult ComputeOverestimationRatio(ui64 estimatedNs, u
     return result;
 }
 
+// Selects which of the two computed results (legacy PDisk-only vs. merged
+// cross-source) should be published via the user-facing
+// DeviceOverestimationRatio/DeviceNonperformanceMs sensors, based on the
+// UseDeviceOverestimationRatioMerged ICB control (enabled by default).
+// Extracted as a pure function so the decision itself is unit-testable
+// without needing a running PDisk/block device/actor system.
+inline const TOverestimationRatioResult& SelectPublishedOverestimationResult(
+        bool useMerged,
+        const TOverestimationRatioResult& legacyResult,
+        const TOverestimationRatioResult& mergedResult) {
+    return useMerged ? mergedResult : legacyResult;
+}
+
 // Aggregates raw TDeviceIoSample-s produced by multiple sources that all issue
 // I/O to the same physical device (PDisk's own block device thread, DDisk's
 // io_uring completion poller, PersistentBuffer's io_uring completion poller),

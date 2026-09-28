@@ -5,7 +5,6 @@ from devtools.yamaker.project import NixSourceProject
 def post_install(self):
     proto.make_proto_library(
         self,
-        "go.opentelemetry.io/proto/otlp",
         ts_proto_dirs=["opentelemetry/proto/collector/trace/v1"],
         ts_proto_package_name="@yandex-proto/contrib-proto-opentelemetry",
     )

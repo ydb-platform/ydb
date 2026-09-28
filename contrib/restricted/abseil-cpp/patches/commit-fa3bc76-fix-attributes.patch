@@ -1,0 +1,26 @@
+From fa3bc7685075af0b98106b61026f3fb231976e88 Mon Sep 17 00:00:00 2001
+From: Derek Mauro <dmauro@google.com>
+Date: Wed, 19 Aug 2026 12:03:15 -0700
+Subject: [PATCH] Disable ABSL_REFACTOR_INLINE under NVCC
+
+This addresses a report that several uses in Abseil break under NVCC.
+
+PiperOrigin-RevId: 967335276
+Change-Id: Ie3aa797d384ba4907519513b30b1fe5ab9440e4f
+---
+ absl/base/macros.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/absl/base/macros.h b/absl/base/macros.h
+index 69463f323b1..66c026e6088 100644
+--- a/absl/base/macros.h
++++ b/absl/base/macros.h
+@@ -245,7 +245,7 @@ ABSL_NAMESPACE_END
+ // Note: go/cpp-inliner is Google-internal service for automated refactoring.
+ // While open-source users do not have access to this service, the macro is
+ // provided for compatibility.
+-#if ABSL_HAVE_CPP_ATTRIBUTE(clang::annotate)
++#if ABSL_HAVE_CPP_ATTRIBUTE(clang::annotate) && !defined(__NVCC__)
+ #define ABSL_REFACTOR_INLINE                                                \
+   _Pragma("clang diagnostic push") /* Avoid errors on using-declarations */ \
+       _Pragma("clang diagnostic ignored \"-Wcxx-attribute-extension\"")     \

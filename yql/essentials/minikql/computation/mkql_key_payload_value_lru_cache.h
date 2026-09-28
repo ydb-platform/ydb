@@ -113,7 +113,6 @@ private:
         UsageList_.pop_front();
     }
 
-private:
     const size_t MaxSize_;
     TUsageList UsageList_;
     const TKeyTypeContanerHelper<true, true, false> KeyTypeHelper_;

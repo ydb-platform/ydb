@@ -8,6 +8,15 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator, generate_certificates
 from ydb.tests.functional.security.lib.security_test_helpers import mon_base_url as get_mon_base_url
 from ydb.tests.functional.security.lib.security_test_helpers import grant_describe_schema_provided
+from ydb.tests.functional.security.lib.security_test_helpers import get_foreign_node_id_for_database
+from ydb.tests.functional.security.lib.security_test_helpers import get_nodelist_ids
+from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_path_id
+from ydb.tests.functional.security.lib.security_test_helpers import get_tenant_schemeshard_id
+from ydb.tests.functional.security.lib.security_test_helpers import get_storage_ids
+from ydb.tests.functional.security.lib.security_test_helpers import get_unknown_node_id
+from ydb.tests.functional.security.lib.security_test_helpers import run_viewer_query
+from ydb.tests.functional.security.lib.security_test_helpers import wait_for_storage_ids
+from ydb.tests.functional.security.lib.security_test_helpers import wait_for_viewer_ready
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
@@ -183,6 +192,74 @@ def ydb_cluster_with_extra_sids_controls(certificates):
     cluster.start()
     yield cluster
     cluster.stop()
+
+
+TENANT_DATABASE = '/Root/Tenant'
+
+
+@pytest.fixture(scope='module')
+def tenant_database(ydb_cluster_with_extra_sids_controls):
+    cluster = ydb_cluster_with_extra_sids_controls
+    cluster.create_database(
+        TENANT_DATABASE,
+        storage_pool_units_count={'hdd': 1},
+        token='root@builtin',
+    )
+    slots = cluster.register_and_start_slots(TENANT_DATABASE, count=1)
+    cluster.wait_tenant_up(TENANT_DATABASE, token='root@builtin')
+    tenant_node = slots[0]
+    wait_for_viewer_ready(
+        f'https://{tenant_node.host}:{tenant_node.mon_port}',
+        database=TENANT_DATABASE,
+    )
+    run_viewer_query(
+        f'https://{tenant_node.host}:{tenant_node.mon_port}',
+        f"GRANT 'ydb.granular.describe_schema' ON `{TENANT_DATABASE}` "
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`, `root@builtin`;",
+        database=TENANT_DATABASE,
+    )
+    return TENANT_DATABASE
+
+
+@pytest.fixture(scope='module')
+def tenant_describe_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
+    cluster = ydb_cluster_with_extra_sids_controls
+    return {
+        'path_id': get_tenant_path_id(cluster, tenant_database, tenant_database, use_tls=True, token='root@builtin'),
+        'schemeshard_id': get_tenant_schemeshard_id(cluster, tenant_database, tenant_database, use_tls=True, token='root@builtin'),
+    }
+
+
+@pytest.fixture(scope='module')
+def tenant_nodelist_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_nodelist_ids(base_url, database=tenant_database)
+
+
+@pytest.fixture(scope='module')
+def foreign_node_id(ydb_cluster_with_extra_sids_controls, tenant_database):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_foreign_node_id_for_database(base_url, tenant_database)
+
+
+# Storage groups of the tenant database and the nodes/pdisks they live on.
+@pytest.fixture(scope='module')
+def tenant_storage_ids(ydb_cluster_with_extra_sids_controls, tenant_database):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return wait_for_storage_ids(base_url, tenant_database)
+
+
+# The same for the whole cluster, so that a test can pick an id outside the tenant database.
+@pytest.fixture(scope='module')
+def cluster_storage_ids(ydb_cluster_with_extra_sids_controls, tenant_storage_ids):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_storage_ids(base_url)
+
+
+@pytest.fixture(scope='module')
+def unknown_node_id(ydb_cluster_with_extra_sids_controls):
+    base_url = get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+    return get_unknown_node_id(base_url)
 
 
 @pytest.fixture

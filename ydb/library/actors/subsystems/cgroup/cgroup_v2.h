@@ -9,8 +9,6 @@
 #include <util/datetime/base.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
-#include <util/system/mutex.h>
-
 #include <memory>
 #include <optional>
 
@@ -120,28 +118,14 @@ namespace NActors {
         : public ICGroupMemoryStatsProvider
     {
     public:
-        explicit TCGroupV2StatsSubSystem(TCGroupV2StatsConfig config);
+        virtual ~TCGroupV2StatsSubSystem() = default;
 
         // The actor system must be running. Sends TEvCGroupV2Stats to the
         // local recipient actor and preserves cookie in IEventHandle::Cookie.
         // File IO is performed by the reader actor in Config.ExecutorPoolId. A
         // null Stats pointer means the process does not belong to a cgroup v2
         // hierarchy or the read failed.
-        void ReadStats(const TActorId& recipient, ui64 cookie = 0) const;
-
-        void ReadMemoryStats(const TActorId& recipient, ui64 cookie = 0) const override;
-
-        void OnAfterStart(TActorSystem& actorSystem) override;
-        void OnBeforeStop(TActorSystem& actorSystem) override;
-        void OnAfterStop(TActorSystem& actorSystem) override;
-
-    private:
-        const TCGroupV2StatsConfig Config;
-
-        mutable TMutex Mutex;
-        TActorSystem* ActorSystem = nullptr;
-        TActorId ReaderActorId;
-        bool Stopping = false;
+        virtual void ReadStats(const TActorId& recipient, ui64 cookie = 0) const = 0;
     };
 
     std::unique_ptr<TCGroupV2StatsSubSystem> MakeCGroupV2StatsSubSystem(TCGroupV2StatsConfig config);

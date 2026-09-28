@@ -49,6 +49,36 @@ TCoAtomList GetWatermarkMetadataColumns(TPositionHandle pos, const TPqState& sta
     return result.Done();
 }
 
+TMaybeNode<TPqReadTopic> FindPqReadTopic(TExprBase input) {
+    for (;;) {
+        if (const auto parsingWrap = input.Maybe<TPqParsingWrap>()) {
+            input = parsingWrap.Cast().Input();
+            continue;
+        }
+        if (const auto parsingWrap = input.Maybe<TDqPqPhyParsingWrap>()) {
+            input = parsingWrap.Cast().Input();
+            continue;
+        }
+        if (const auto right = input.Maybe<TCoRight>()) {
+            return right.Cast().Input().Maybe<TPqReadTopic>();
+        }
+        return {};
+    }
+}
+
+TDqPqPhyParsingWrap BuildPhysicalParsingWrap(const TPqParsingWrap& parsingWrap, TExprContext& ctx) {
+    TExprBase input = parsingWrap.Input();
+    if (const auto innerParsingWrap = input.Maybe<TPqParsingWrap>()) {
+        input = BuildPhysicalParsingWrap(innerParsingWrap.Cast(), ctx);
+    }
+
+    return Build<TDqPqPhyParsingWrap>(ctx, parsingWrap.Pos())
+        .Input(input)
+        .Lambda(parsingWrap.Lambda())
+        .MetadataColumns(parsingWrap.MetadataColumns())
+        .Done();
+}
+
 TMaybeNode<TExprBase> ParseISO8601(TCoAtom input, TExprContext& ctx) {
     const auto buf = input.Value();
 
@@ -59,8 +89,15 @@ TMaybeNode<TExprBase> ParseISO8601(TCoAtom input, TExprContext& ctx) {
         return {};
     }
 
+    const i64 signedInterval = out.Get<i64>();
+    if (signedInterval < 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
+            << "Expected non-negative interval in ISO 8601 format, got " << TString(buf).Quote()));
+        return {};
+    }
+
     return Build<TCoAtom>(ctx, input.Pos())
-        .Value(ToString(out.Get<ui64>()))
+        .Value(ToString(signedInterval))
         .Done();
 }
 
@@ -187,8 +224,8 @@ public:
     TMaybeNode<TExprBase> RewriteWatermarkGenerator(TExprBase node, TExprContext& ctx) const {
         const auto watermarkGenerator = node.Cast<TCoWatermarkGenerator>();
 
-        const auto maybeParsingWrap = watermarkGenerator.Input().Maybe<TPqParsingWrap>();
-        if (!maybeParsingWrap) {
+        TExprBase parsingWrap = watermarkGenerator.Input();
+        if (!parsingWrap.Maybe<TPqParsingWrap>() && !parsingWrap.Maybe<TDqPqPhyParsingWrap>()) {
             const auto metadataColumns = GetWatermarkMetadataColumns(watermarkGenerator.Pos(), *State_, ctx);
 
             return Build<TCoRemovePrefixMembers>(ctx, watermarkGenerator.Pos())
@@ -205,18 +242,10 @@ public:
                     .Build()
                 .Done();
         }
-        const auto parsingWrap = maybeParsingWrap.Cast();
 
-        const auto maybeRight = parsingWrap.Input().Maybe<TCoRight>();
-        if (!maybeRight) {
-            return node;
-        }
-        const auto right = maybeRight.Cast();
-
-        const auto maybePqReadTopic = right.Input().Maybe<TPqReadTopic>();
+        const auto maybePqReadTopic = FindPqReadTopic(parsingWrap);
         if (!maybePqReadTopic) {
-            ctx.AddError(TIssue(ctx.GetPosition(maybeRight.Cast().Input().Pos()), "Unsupported source category: expected PQ topic"));
-            return {};
+            return node;
         }
         const auto pqReadTopic = maybePqReadTopic.Cast();
 
@@ -238,12 +267,12 @@ public:
         }
         const auto watermarkSettings = maybeWatermarkSettings.Cast();
 
+        if (const auto logicalParsingWrap = parsingWrap.Maybe<TPqParsingWrap>()) {
+            parsingWrap = BuildPhysicalParsingWrap(logicalParsingWrap.Cast(), ctx);
+        }
+
         return Build<TDqPhyWatermarkGenerator>(ctx, watermarkGenerator.Pos())
-            .Input<TDqPqPhyParsingWrap>()
-                .Input(parsingWrap.Input())
-                .Lambda(parsingWrap.Lambda())
-                .MetadataColumns(parsingWrap.MetadataColumns())
-                .Build()
+            .Input(parsingWrap)
             .WatermarkExtractor(eventTimeExtractor)
             .PartitionKeyExtractor<TCoLambda>()
                 .Args({"arg"})
@@ -276,7 +305,12 @@ public:
             .Done();
     }
 
-    TMaybeNode<TExprBase> RewriteParsingWrap(TExprBase node, TExprContext& ctx) const {
+    TMaybeNode<TExprBase> RewriteParsingWrap(
+        TExprBase node,
+        TExprContext& ctx,
+        IOptimizationContext& optCtx,
+        const TGetParents& getParents
+    ) const {
         const auto parsingWrap = node.Cast<TPqParsingWrap>();
         const auto input = parsingWrap.Input();
 
@@ -286,7 +320,7 @@ public:
                 return {};
             }
 
-            return node;
+            return BuildPhysicalParsingWrap(parsingWrap, ctx);
         }
 
         if (input.Ref().IsCallable({
@@ -305,6 +339,45 @@ public:
                 .Body(ctx.ChangeChild(input.Ref(), 0, arg.Ptr()))
                 .Done();
 
+            if (!IsSingleConsumer(input, *getParents())) {
+                auto innerParsingWrap = Build<TPqParsingWrap>(ctx, input.Pos())
+                    .Input(input.Ref().HeadPtr())
+                    .Lambda(innerLambda)
+                    .MetadataColumns(parsingWrap.MetadataColumns())
+                    .Done();
+
+                const auto inputWithoutWatermarkMetadata = Build<TCoRemovePrefixMembers>(ctx, input.Pos())
+                    .Input(innerParsingWrap)
+                    .Prefixes<TCoAtomList>()
+                        .Add<TCoAtom>().Build("__ydb_watermark_")
+                        .Build()
+                    .Done();
+
+                const auto& parents = *getParents();
+                const auto parentsIt = parents.find(input.Raw());
+                YQL_ENSURE(parentsIt != parents.end());
+                for (const auto* parent : parentsIt->second) {
+                    if (parent == parsingWrap.Raw()) {
+                        continue;
+                    }
+
+                    TExprNode::TListType newChildren;
+                    newChildren.reserve(parent->ChildrenSize());
+                    for (const auto& child : parent->Children()) {
+                        newChildren.emplace_back(child.Get() == input.Raw()
+                            ? inputWithoutWatermarkMetadata.Ptr()
+                            : child);
+                    }
+
+                    optCtx.RemapNode(*parent, ctx.ChangeChildren(*parent, std::move(newChildren)));
+                }
+
+                return Build<TPqParsingWrap>(ctx, parsingWrap.Pos())
+                    .InitFrom(parsingWrap)
+                    .Input(innerParsingWrap)
+                    .Done();
+            }
+
             return Build<TPqParsingWrap>(ctx, parsingWrap.Pos())
                 .InitFrom(parsingWrap)
                 .Input(input.Ref().HeadPtr())
@@ -312,7 +385,7 @@ public:
                 .Done();
         }
 
-        if (input.Ref().Content().starts_with("Dq")) {
+        if (input.Maybe<TPqParsingWrap>() || input.Ref().Content().starts_with("Dq")) {
             return node;
         }
 
@@ -359,7 +432,7 @@ public:
         return result.Cast();
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
+    TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, const std::optional<TCoNameValueTupleList>& settings, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
         auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
@@ -374,6 +447,25 @@ public:
 
         if (clusterConfiguration->AddBearerToToken) {
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
+        }
+
+        if (settings) {
+            for (const auto& setting : *settings) {
+                const auto pos = setting.Ref().Pos();
+                const TStringBuf name = setting.Name();
+                const TStringBuf value = setting.Value().Cast<TCoAtom>();
+                if (name == NDeliveryGuaranteeSetting::Name && value == NDeliveryGuaranteeSetting::ExactlyOnceValue && !State_->DeferredPublicationExtIdPrefix) {
+                    TIssue issue(ctx.GetPosition(setting.Pos()), TStringBuilder()
+                        << "`" << NDeliveryGuaranteeSetting::PrettyName << "` = '" << NDeliveryGuaranteeSetting::ExactlyOnceValue
+                        << "' cannot be used in current query context, falling back to default '" << NDeliveryGuaranteeSetting::AtLeastOnceValue << "'"
+                    );
+                    issue.Severity = TSeverityIds::S_WARNING;
+                    ctx.AddWarning(issue);
+                    continue;
+                }
+
+                Add(props, name, value, pos, ctx);
+            }
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)
@@ -407,7 +499,7 @@ public:
 
         auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, write.Pos());
         dqPqTopicSinkSettingsBuilder.Topic(topicNode);
-        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), ctx));
+        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), std::nullopt, ctx));
         dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
         auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
 
@@ -448,11 +540,23 @@ public:
             return nullptr;
         }
 
+        const auto input = insert.Input();
+        const auto isPureDqExpr = IsDqPureExpr(input);
+        if (!isPureDqExpr) {
+            if (!TDqCnUnionAll::Match(input.Raw())) {
+                return node;
+            }
+
+            if (!NDq::IsSingleConsumerConnection(input.Cast<TDqCnUnionAll>(), *getParents())) {
+                return node;
+            }
+        }
+
         auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
                 .Topic(topicNode)
-                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx))
+                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), insert.Settings(), ctx))
                 .Token<TCoSecureParam>()
                     .Name()
                         .Value(TStringBuilder() << "cluster:default_" << cluster)
@@ -460,8 +564,7 @@ public:
                     .Build()
                 .Build();
 
-        const auto input = insert.Input();
-        if (IsDqPureExpr(input)) {
+        if (isPureDqExpr) {
             YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, build pure stage with sink";
 
             const auto dqSink = dqSinkBuilder
@@ -483,18 +586,9 @@ public:
                 .Done();
         }
 
-        if (!TDqCnUnionAll::Match(input.Raw())) {
-            return node;
-        }
-
-        const auto dqUnion = input.Cast<TDqCnUnionAll>();
-        if (!NDq::IsSingleConsumerConnection(dqUnion, *getParents())) {
-            return node;
-        }
-
         YQL_CLOG(INFO, ProviderPq) << "Optimize PqInsert `" << cluster << "`.`" << topicNode.Path().StringValue() << "`, push into existing stage";
 
-        const auto dqUnionOutput = dqUnion.Output();
+        const auto dqUnionOutput = input.Cast<TDqCnUnionAll>().Output();
         const auto dqSink = dqSinkBuilder
             .Index(dqUnionOutput.Index())
             .Done();
@@ -504,7 +598,7 @@ public:
         auto outputsBuilder = Build<TDqStageOutputsList>(ctx, topicNode.Pos());
         if (const auto outputs = inputStage.Outputs()) {
             outputsBuilder.InitFrom(outputs.Cast());
-            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Can not push multiple async outputs into stage without TDqReplicate");
+            YQL_ENSURE(inputStage.Program().Body().Maybe<TDqReplicate>(), "Cannot push multiple async outputs into stage without TDqReplicate");
         }
         outputsBuilder.Add(dqSink);
 

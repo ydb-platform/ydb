@@ -66,6 +66,8 @@ struct TExecutionOptions {
     std::vector<TString> PoolIds;
     std::vector<TString> UserSIDs;
     std::vector<TDuration> Timeouts;
+    std::vector<Ydb::Table::QueryStatsCollection_Mode> StatsCollectionModes;
+
     std::vector<std::optional<TVector<NACLib::TSID>>> GroupSIDs;
     std::vector<TString> StreamingQueriesNames;
     ui64 ResultsRowsLimit = 0;
@@ -136,7 +138,8 @@ struct TExecutionOptions {
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .QueryId = queryId,
             .Params = Params,
-            .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt)
+            .GroupSIDs = GetValue<std::optional<TVector<NACLib::TSID>>>(index, GroupSIDs, std::nullopt),
+            .StatsCollectionMode = GetValue(index, StatsCollectionModes, Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE),
         };
     }
 
@@ -176,6 +179,7 @@ private:
         checker(UserSIDs.size(), "user SIDs");
         checker(Timeouts.size(), "timeouts");
         checker(GroupSIDs.size(), "group SIDs");
+        checker(StatsCollectionModes.size(), "stats modes");
         checker(runnerOptions.ScriptQueryAstOutputs.size(), "ast output files");
         checker(runnerOptions.ScriptQueryPlanOutputs.size(), "plan output files");
         checker(runnerOptions.ScriptQueryTimelineFiles.size(), "timeline files");
@@ -187,57 +191,57 @@ private:
             return;
         }
         if (runnerOptions.SchemeQueryAstOutput) {
-            ythrow yexception() << "Scheme query AST output can not be used without scheme query";
+            ythrow yexception() << "Scheme query AST output cannot be used without scheme query";
         }
     }
 
     void ValidateScriptExecutionOptions(const TRunnerOptions& runnerOptions) const {
         if (runnerOptions.YdbSettings.SameSession && HasExecutionCase(EExecutionCase::AsyncQuery)) {
-            ythrow yexception() << "Same session can not be used with async quries";
+            ythrow yexception() << "Same session cannot be used with async quries";
         }
 
         const bool hasScript = HasExecutionCase(EExecutionCase::GenericScript);
         const bool hasStreaming = HasExecutionCase(EExecutionCase::StreamingQuery);
         if (!hasScript && !hasStreaming) {
             if (ForgetExecution) {
-                ythrow yexception() << "Forget execution can not be used without script queries";
+                ythrow yexception() << "Forget execution cannot be used without script queries";
             }
             if (runnerOptions.ScriptCancelAfter) {
-                ythrow yexception() << "Cancel after can not be used without script queries";
+                ythrow yexception() << "Cancel after cannot be used without script queries";
             }
         }
 
         const bool hasSimpleQuery = hasScript || HasExecutionCase(EExecutionCase::GenericQuery);
         if (!hasSimpleQuery) {
             if (ResultsRowsLimit) {
-                ythrow yexception() << "Result rows limit can not be used without generic/script queries";
+                ythrow yexception() << "Result rows limit cannot be used without generic/script queries";
             }
             if (!hasStreaming && !runnerOptions.InProgressStatisticsOutputFiles.empty()) {
-                ythrow yexception() << "Script statistics can not be used without generic/script/streaming queries";
+                ythrow yexception() << "Script statistics cannot be used without generic/script/streaming queries";
             }
         }
 
         const bool hasYqlQuery = hasSimpleQuery || HasExecutionCase(EExecutionCase::YqlScript);
         if (!hasYqlQuery) {
             if (runnerOptions.YdbSettings.SameSession) {
-                ythrow yexception() << "Same session can not be used without generic/script/yql queries";
+                ythrow yexception() << "Same session cannot be used without generic/script/yql queries";
             }
         }
 
         const bool hasAnyQuery = hasStreaming || hasYqlQuery;
         if (!hasAnyQuery) {
             if (!runnerOptions.ScriptQueryAstOutputs.empty()) {
-                ythrow yexception() << "Script query AST output can not be used without generic/script/yql/streaming queries";
+                ythrow yexception() << "Script query AST output cannot be used without generic/script/yql/streaming queries";
             }
             if (!runnerOptions.ScriptQueryPlanOutputs.empty()) {
-                ythrow yexception() << "Script query plan output can not be used without generic/script/yql/streaming queries";
+                ythrow yexception() << "Script query plan output cannot be used without generic/script/yql/streaming queries";
             }
         }
     }
 
     void ValidateAsyncOptions(const TAsyncQueriesSettings& asyncQueriesSettings) const {
         if (asyncQueriesSettings.InFlightLimit && !HasExecutionCase(EExecutionCase::AsyncQuery)) {
-            ythrow yexception() << "In flight limit can not be used without async queries";
+            ythrow yexception() << "In flight limit cannot be used without async queries";
         }
 
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -516,6 +520,24 @@ protected:
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
 
+        options.AddLongOption("stats-mode", "Statistics collection mode (none, basic, debug, profile)")
+            .RequiredArgument("mode")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const auto& value = option->CurValOrDef();
+                auto &statsMode = ExecutionOptions.StatsCollectionModes.emplace_back();
+                if (value == "none") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+                } else if (value == "basic") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                } else if (value == "full") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+                } else if (value == "profile") {
+                    statsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
+                } else {
+                    throw yexception() << "Unknown stattistics collection mode" << value;
+                }
+            });
+
         options.AddLongOption("sql", "Script query SQL text to execute (typically DML query)")
             .RequiredArgument("str")
             .AppendTo(&ExecutionOptions.ScriptQueries);
@@ -544,7 +566,7 @@ protected:
                 } else {
                     value = GetEnv(TString(variable));
                     if (!value) {
-                        ythrow yexception() << "Invalid env template, can not find value for variable '" << variable << "'";
+                        ythrow yexception() << "Invalid env template, cannot find value for variable '" << variable << "'";
                     }
                 }
 

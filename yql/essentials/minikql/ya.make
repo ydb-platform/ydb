@@ -6,9 +6,15 @@ SRCS(
     compact_hash.cpp
     compact_hash.h
     defs.h
+    fake_mmap.cpp
+    fake_mmap.h
+    global_page_pool.h
+    global_pools.h
     mkql_alloc.cpp
     mkql_block_map_join_utils.cpp
     mkql_block_map_join_utils.h
+    mkql_bridge_mode.cpp
+    mkql_bridge_mode.h
     mkql_buffer.cpp
     mkql_buffer.h
     mkql_date_scaler.cpp
@@ -53,8 +59,11 @@ SRCS(
     mkql_unboxed_value_stream.h
     pack_num.cpp
     pack_num.h
+    page_pool_constants.h
     primes.cpp
     primes.h
+    system_mmap.cpp
+    system_mmap.h
     watermark_tracker.cpp
     watermark_tracker.h
 )

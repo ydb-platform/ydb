@@ -73,6 +73,10 @@ TFuture<IYtGateway::TCommitResult> TYtForwardingGatewayBase::Commit(TCommitOptio
     return Slave_->Commit(std::move(options));
 }
 
+TFuture<IYtGateway::TUnlockTablesResult> TYtForwardingGatewayBase::UnlockTables(TUnlockTablesOptions&& options) {
+    return Slave_->UnlockTables(std::move(options));
+}
+
 TFuture<IYtGateway::TDropTrackablesResult> TYtForwardingGatewayBase::DropTrackables(TDropTrackablesOptions&& options) {
     return Slave_->DropTrackables(std::move(options));
 }
@@ -95,6 +99,10 @@ TString TYtForwardingGatewayBase::GetDefaultClusterName() const {
 
 TString TYtForwardingGatewayBase::GetClusterServer(const TString& cluster) const {
     return Slave_->GetClusterServer(cluster);
+}
+
+TString TYtForwardingGatewayBase::GetClusterYtName(const TString& cluster) const {
+    return Slave_->GetClusterYtName(cluster);
 }
 
 NYT::TRichYPath TYtForwardingGatewayBase::GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const {

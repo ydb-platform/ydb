@@ -31,7 +31,7 @@ std::optional<std::any> TPropagatingStorageImpl::RemoveRaw(const std::type_info&
     if (iter == Data_.end()) {
         return std::nullopt;
     }
-    auto result = std::make_optional<std::any>(iter->second);
+    auto result = std::make_optional<std::any>(std::move(iter->second));
     Data_.erase(iter);
     return result;
 }
@@ -152,10 +152,7 @@ TPropagatingStorage TPropagatingStorageManager::SwitchPropagatingStorage(TPropag
         if (newStorage.IsNull()) {
             return TPropagatingStorage();
         }
-        {
-            static const TPropagatingStorage Empty;
-            RunSwitchHandlers(Empty, newStorage, SwitchHandlerCount_.load(std::memory_order::acquire));
-        }
+        RunSwitchHandlers(EmptyPropagatingStorage(), newStorage, SwitchHandlerCount_.load(std::memory_order::acquire));
         // Lazily allocates the slot via GetOrCreate (does its own TLS lookup).
         // This branch is only taken once per fiber, so the extra lookup is
         // negligible.

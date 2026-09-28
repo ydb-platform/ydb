@@ -1433,10 +1433,14 @@ AVX512F_log_DOUBLE(npy_double * op,
             _mm512_mask_storeu_pd(op, load_mask, res);
         }
 
-        /* call glibc's log func when x around 1.0f */
+        /* call glibc's log func when x around 1.0f. */
         if (glibc_mask != 0) {
             double NPY_DECL_ALIGNED(64) ip_fback[8];
-            _mm512_store_pd(ip_fback, x_in);
+            /* Using a mask_store_pd instead of store_pd to prevent a fatal
+             * compiler optimization bug. See
+             * https://github.com/numpy/numpy/issues/27745#issuecomment-2498684564
+             * for details.*/
+            _mm512_mask_store_pd(ip_fback, avx512_get_full_load_mask_pd(), x_in);
 
             for (int ii = 0; ii < 8; ++ii, glibc_mask >>= 1) {
                 if (glibc_mask & 0x01) {
@@ -1463,7 +1467,7 @@ AVX512F_log_DOUBLE(npy_double * op,
 #endif // NPY_CAN_LINK_SVML
 
 #ifdef SIMD_AVX512_SKX
-#line 1125
+#line 1129
 static inline void
 AVX512_SKX_ldexp_FLOAT(char **args, npy_intp const *dimensions, npy_intp const *steps)
 {
@@ -1610,7 +1614,7 @@ AVX512_SKX_frexp_FLOAT(char **args, npy_intp const *dimensions, npy_intp const *
     }
 }
 
-#line 1125
+#line 1129
 static inline void
 AVX512_SKX_ldexp_DOUBLE(char **args, npy_intp const *dimensions, npy_intp const *steps)
 {
@@ -1763,7 +1767,7 @@ AVX512_SKX_frexp_DOUBLE(char **args, npy_intp const *dimensions, npy_intp const 
 /********************************************************************************
  ** Defining ufunc inner functions
  ********************************************************************************/
-#line 1281
+#line 1285
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1792,7 +1796,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_exp)
 #endif
 }
 
-#line 1281
+#line 1285
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1822,7 +1826,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_log)
 }
 
 
-#line 1314
+#line 1318
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1855,7 +1859,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_exp)
 }
 
 
-#line 1314
+#line 1318
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(data))
 {
@@ -1889,7 +1893,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_log)
 
 
 
-#line 1355
+#line 1359
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_frexp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -1929,7 +1933,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_ldexp)
     }
 }
 
-#line 1355
+#line 1359
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_frexp)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {

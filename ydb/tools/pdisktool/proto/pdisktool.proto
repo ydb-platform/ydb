@@ -1,0 +1,326 @@
+syntax = "proto2";
+package NKikimr.NPdiskTool;
+
+message TIssue {
+    optional string Severity = 1; // info, warning, error
+    optional string Location = 2;
+    optional string Message = 3;
+    optional bool Guessed = 4;
+}
+
+message TFormatReplica {
+    optional uint32 Index = 1;
+    optional uint64 Nonce = 2;
+    optional bool HashOk = 3;
+    optional bool Decrypted = 4;
+    optional string Error = 5;
+}
+
+message TFormatInfo {
+    optional uint64 Version = 1;
+    optional uint64 DiskSize = 2;
+    optional uint64 Guid = 3;
+    optional uint32 ChunkSize = 4;
+    optional uint32 SectorSize = 5;
+    optional uint32 SysLogSectorCount = 6;
+    optional uint32 SystemChunkCount = 7;
+    optional string FormatText = 8;
+    optional uint64 DiskFormatSize = 9;
+    optional uint64 TimestampUs = 10;
+    optional string Timestamp = 11;
+    optional uint64 FormatFlagsRaw = 12;
+    optional string FormatFlags = 13;
+    optional uint64 MagicNextLogChunkReference = 14;
+    optional uint64 MagicLogChunk = 15;
+    optional uint64 MagicDataChunk = 16;
+    optional uint64 MagicSysLogChunk = 17;
+    optional uint64 MagicFormatChunk = 18;
+    optional uint32 UserAccessibleChunkSize = 19;
+    optional uint64 SysLogKey = 20;
+    optional uint64 LogKey = 21;
+    optional uint64 ChunkKey = 22;
+}
+
+message TFormatResult {
+    optional TFormatInfo Format = 1;
+    repeated TFormatReplica Replicas = 2;
+    repeated TIssue Issues = 3;
+}
+
+message TStartingPoint {
+    optional uint32 Signature = 1;
+    optional string SignatureName = 2;
+    optional uint64 Lsn = 3;
+    optional uint32 PayloadSize = 4;
+}
+
+message TChunkRef {
+    optional uint32 ChunkIdx = 1;
+    optional uint32 OwnerId = 2;
+    optional string CommitState = 3;
+    optional uint64 Nonce = 4;
+}
+
+message TOwnerInfo {
+    optional uint32 OwnerId = 1;
+    optional string VDiskId = 2;
+    optional uint32 GroupId = 3;
+    optional uint32 GroupGeneration = 4;
+    optional uint32 FailRealm = 5;
+    optional uint32 FailDomain = 6;
+    optional uint32 VDisk = 7;
+    optional uint32 GroupSizeInUnits = 8;
+    optional uint32 ChunksOwned = 9;
+    optional uint64 CurrentFirstLsnToKeep = 10;
+    optional uint64 FirstNonceToKeep = 11;
+    optional uint64 LastWrittenCommitLsn = 12;
+    repeated TStartingPoint StartingPoints = 13;
+    repeated TChunkRef Chunks = 14;
+}
+
+message TOwnersResult {
+    repeated TOwnerInfo Owners = 1;
+    repeated TIssue Issues = 2;
+}
+
+message TChunksResult {
+    repeated TChunkRef Chunks = 1;
+    repeated TIssue Issues = 2;
+}
+
+message TOwnerLsnRange {
+    optional uint32 OwnerId = 1;
+    optional uint64 FirstLsn = 2;
+    optional uint64 LastLsn = 3;
+}
+
+message TLogChunkInfo {
+    optional uint32 ChunkIdx = 1;
+    optional bool IsCommitted = 2;
+    optional uint64 FirstNonce = 3;
+    optional uint64 LastNonce = 4;
+    optional uint32 CurrentUserCount = 5;
+    repeated TOwnerLsnRange OwnerRanges = 6;
+}
+
+message TLogChunksResult {
+    repeated TLogChunkInfo Chunks = 1;
+    repeated TIssue Issues = 2;
+}
+
+message TSysLogInfo {
+    optional uint64 Version = 1;
+    optional uint64 NonceSysLog = 2;
+    optional uint64 NonceLog = 3;
+    optional uint64 NonceData = 4;
+    optional uint32 LogHeadChunkIdx = 5;
+    optional uint64 LogHeadChunkPreviousNonce = 6;
+    optional uint64 Lsn = 7;
+    optional uint32 FirstLogChunkToParseCommits = 8;
+    repeated TOwnerInfo Owners = 9;
+}
+
+message TSysLogSectorSet {
+    optional uint32 SetIdx = 1;
+    optional uint64 Nonce = 2;
+    optional uint32 GoodSectorFlags = 3;
+    optional bool HasStart = 4;
+    optional bool HasEnd = 5;
+    optional bool IsConsistent = 6;
+    optional bool IsNonceReversal = 7;
+}
+
+message TSysLogResult {
+    optional TSysLogInfo Record = 1;
+    repeated TSysLogSectorSet SectorSets = 2;
+    optional uint32 LoopOffset = 3;
+    optional uint64 BestNonce = 4;
+    repeated TIssue Issues = 5;
+}
+
+message TExportResult {
+    optional string Path = 1;
+    optional uint64 BytesWritten = 2;
+    optional uint32 ChunkIdx = 3;
+    optional uint32 Gaps = 4;
+    repeated TIssue Issues = 5;
+}
+
+message TExportBlobResult {
+    optional string Path = 1;
+    optional uint32 Blobs = 2;
+    optional uint32 Parts = 3;
+    optional uint32 PartsWithSeveralCopies = 4;
+    optional uint32 PartsWithDifferingCopies = 5;
+    repeated TIssue Issues = 6;
+}
+
+message TLogRecord {
+    optional uint32 OwnerId = 1;
+    optional uint32 Signature = 2;
+    optional string SignatureName = 3;
+    optional uint64 Lsn = 4;
+    optional uint64 Nonce = 5;
+    optional uint32 ChunkIdx = 6;
+    optional uint32 PayloadSize = 7;
+    optional bool HasCommitRecord = 8;
+    optional uint64 FirstLsnToKeep = 9;
+    repeated uint32 CommitChunks = 10;
+    repeated uint32 DeleteChunks = 11;
+    optional bool IsStartingPoint = 12;
+}
+
+message TParseLogResult {
+    repeated TLogRecord Records = 1;
+    optional uint64 RecordCount = 2;
+    repeated TIssue Issues = 3;
+}
+
+message TBlobPart {
+    optional uint32 PartId = 1;
+    optional uint32 Size = 2;
+    optional uint32 ChunkIdx = 3;
+    optional uint32 Offset = 4;
+    optional string BlobType = 5;
+    // How many copies of this part the VDisk holds; one TBlobPart is emitted per copy.
+    optional uint32 Copies = 6;
+    // The range holds a multi-part DiskBlob that could not be split into individual parts.
+    optional bool Packed = 7;
+}
+
+message TBlobInfo {
+    optional string LogoBlobId = 1;
+    optional uint64 Ingress = 8;
+    repeated TBlobPart Parts = 9;
+
+    reserved 2, 3, 4, 5, 6, 7; // TabletId..BlobSize; all of it is already in LogoBlobId
+}
+
+message TBlobsResult {
+    repeated TBlobInfo Blobs = 1;
+    optional string ContinueToken = 2;
+    optional uint64 TotalListed = 3;
+    repeated TIssue Issues = 4;
+    // Index records without local data, skipped unless --all was given.
+    optional uint64 SkippedWithoutData = 5;
+}
+
+message TBarrierInfo {
+    optional uint64 TabletId = 1;
+    optional uint32 Channel = 2;
+    optional bool Hard = 3;
+    optional uint32 Gen = 4;
+    optional uint32 GenCounter = 5;
+    optional uint32 CollectGen = 6;
+    optional uint32 CollectStep = 7;
+}
+
+message TBarriersResult {
+    repeated TBarrierInfo Barriers = 1;
+    optional string ContinueToken = 2;
+    repeated TIssue Issues = 3;
+}
+
+message TBlockInfo {
+    optional uint64 TabletId = 1;
+    optional uint32 BlockedGeneration = 2;
+}
+
+message TBlocksResult {
+    repeated TBlockInfo Blocks = 1;
+    optional string ContinueToken = 2;
+    repeated TIssue Issues = 3;
+}
+
+message TStartingPointsResult {
+    repeated TOwnerInfo Owners = 1;
+    repeated TIssue Issues = 2;
+}
+
+message TVerifyResult {
+    repeated TIssue Issues = 1;
+    optional uint64 FormatReplicasOk = 2;
+    optional uint64 SysLogSetsOk = 3;
+    optional uint64 LogRecords = 4;
+    // Whole-chunk scan of committed user chunks. Unwritten sectors are expected here (huge slot
+    // reservations, SST tails), so they are counted but not reported as issues.
+    optional uint64 DataSectorsScanned = 5;
+    optional uint64 DataSectorsUnwritten = 6;
+    // Sectors the reconstructed Hull actually references; a bad hash here is real damage.
+    optional uint64 ReferencedSectorsChecked = 7;
+    optional uint64 ReferencedSectorsBad = 8;
+}
+
+message TDumpSectorResult {
+    optional uint64 Offset = 1;
+    optional uint32 Size = 2;
+    optional string Hex = 3;
+    optional uint64 Nonce = 4;
+    optional uint64 Hash = 5;
+    optional bool Encrypted = 6;
+    repeated TIssue Issues = 7;
+}
+
+message TRestoredTable {
+    optional uint32 TableId = 1;
+    optional string Name = 2;
+    optional string File = 3;
+    optional uint64 Rows = 4;
+    optional uint64 ErasedRows = 5;
+    optional uint64 Bytes = 6;
+    // False when a page of some part is not in the input, so the file stops short of the whole table.
+    optional bool Complete = 7;
+}
+
+message TRestoreTabletResult {
+    optional uint64 TabletId = 1;
+    optional string Output = 2;
+    optional string Description = 3;
+
+    // What the log replay settled on.
+    optional string KeyEntry = 10;
+    optional uint32 SnapshotGeneration = 11;
+    optional uint32 SnapshotStep = 12;
+    optional uint32 ConfirmedGeneration = 13;
+    optional uint32 ConfirmedStep = 14;
+    optional uint32 LatestGeneration = 15;
+    optional uint32 LatestStep = 16;
+    optional uint32 KeyEntryCandidatesTried = 17;
+    optional bool GapsTolerated = 18;
+
+    // Input.
+    optional uint64 BlobsFound = 20;
+    optional uint64 BlobsRestored = 21;
+    optional uint64 BlobsUnrecoverable = 22;
+    optional uint64 PartsWithDifferingCopies = 23;
+    repeated string UnrecoverableBlobs = 24; // truncated
+
+    // Boot.
+    optional bool HasSnapshot = 30;
+    optional uint64 LogEntriesApplied = 31;
+    optional uint64 LogEntriesSkipped = 32;
+    optional uint64 SchemeEntriesApplied = 33;
+    optional uint64 SchemeEntriesSkipped = 34;
+    optional uint64 PartsLoaded = 35;
+    optional uint64 PartsDropped = 36;
+    optional uint64 TxStatusLoaded = 37;
+    optional uint64 TxStatusDropped = 38;
+    optional uint64 PagesRead = 39;
+    optional uint64 PagesMissing = 40;
+    optional uint64 PagesCorrupt = 41;
+
+    // Output.
+    repeated TRestoredTable Tables = 50;
+    optional uint64 TotalRows = 51;
+    optional uint64 IncompleteTables = 52;
+
+    repeated TIssue Issues = 100;
+}
+
+message TMetadataResult {
+    optional bool Present = 1;
+    optional uint64 SequenceNumber = 2;
+    optional uint32 Length = 3;
+    optional bytes Data = 4;
+    repeated TIssue Issues = 5;
+}

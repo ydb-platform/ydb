@@ -57,6 +57,18 @@ TInfoUnit MakeGeneratedIgnoreIU(TPlanProps& props) {
     return TInfoUnit(TString(name));
 }
 
+bool ReferencesUnresolvedSubplan(const TExpression& expr, const TPlanProps& props) {
+    if (props.Subplans.Empty()) {
+        return false;
+    }
+    for (const auto& iu : expr.GetRawInputIUs()) {
+        if (props.Subplans.Find(iu)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
     if (!op) {
         return {};
@@ -64,7 +76,7 @@ TVector<TInfoUnit> GetSubplanResultIUs(const TIntrusivePtr<IOperator>& op) {
 
     if (op->Kind == EOperator::Map) {
         TVector<TInfoUnit> result;
-        for (const auto& mapElement : CastOperator<TOpMap>(op)->MapElements) {
+        for (const auto& mapElement : CastOperator<TOpMap>(op)->GetMapElements()) {
             const auto element = mapElement.GetElementName();
             if (!IsGeneratedIgnoreIU(element)) {
                 result.push_back(element);
@@ -100,6 +112,54 @@ TString GetValidJoinKind(const TString& joinKind) {
         return "Cross";
     }
     return joinKind;
+}
+
+TVector<TInfoUnit> GetAggregatePreservedShuffling(const TOpAggregate& aggregate, const TRBOContext& ctx) {
+    if (aggregate.KeyColumns.empty()) {
+        return {};
+    }
+
+    const bool enableShuffleElimination = ctx.KqpCtx.Config->OptShuffleElimination.Get()
+        .GetOrElse(ctx.KqpCtx.Config->GetDefaultEnableShuffleElimination());
+    if (!enableShuffleElimination) {
+        return {};
+    }
+
+    const auto& input = aggregate.GetInput();
+    if (!input->Props.Metadata || input->Props.Metadata->ShuffledByColumns.empty()) {
+        return {};
+    }
+
+    // Example: input partitioned by {id} needs no reshuffle for GROUP BY {id, date},
+    // because every group has a single id and is already colocated.
+    const auto& shuffledBy = input->Props.Metadata->ShuffledByColumns;
+    if (!IUIsSubset(shuffledBy, aggregate.KeyColumns)) {
+        return {};
+    }
+
+    if (!aggregate.IsDistinctAll()) {
+        return shuffledBy;
+    }
+
+    // DISTINCT returns the trait results, not the grouping keys. Preserve the
+    // hash key order while translating through the intermediate/final aliases.
+    TVector<TInfoUnit> result;
+    result.reserve(shuffledBy.size());
+    const auto& traits = aggregate.AggregationTraitsList;
+    for (const auto& key : shuffledBy) {
+        const auto it = std::find_if(traits.begin(), traits.end(), [&](const auto& trait) {
+            return trait.OriginalColName == key && trait.AggFunction == "distinct";
+        });
+        if (it == traits.end()) {
+            return {};
+        }
+        result.push_back(it->ResultColName);
+    }
+    return result;
+}
+
+bool CanEliminateAggregateShuffle(const TOpAggregate& aggregate, const TRBOContext& ctx) {
+    return !GetAggregatePreservedShuffling(aggregate, ctx).empty();
 }
 
 TVector<TInfoUnit> IUSetDiff(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {

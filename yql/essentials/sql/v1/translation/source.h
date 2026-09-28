@@ -33,6 +33,7 @@ class ISource: public INode {
 public:
     ~ISource() override;
 
+    ISource* GetSource() override;
     virtual bool IsFake() const;
     virtual void AllColumns();
     virtual const TColumns* GetColumns() const;
@@ -154,6 +155,14 @@ protected:
     TMatchRecognizeBuilderPtr MatchRecognizeBuilder_;
 };
 
+using TSourceResult = TSQLResult<TNonNull<TSourcePtr>>;
+
+TSourceResult Wrap(TSourcePtr source);
+
+TSourcePtr Unwrap(TSourceResult result);
+
+TNodeResult ToNode(TSourceResult x);
+
 template <>
 inline TVector<TSourcePtr> CloneContainer<TSourcePtr>(const TVector<TSourcePtr>& args) {
     TVector<TSourcePtr> cloneArgs;
@@ -246,7 +255,6 @@ private:
     TString GetOpName() const override;
     TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
-private:
     TVector<TNodePtr> Args_;
     TSourcePtr FakeSource_;
     TNodePtr TimeExtractor_;
@@ -356,7 +364,9 @@ TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAto
 TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& func, const TVector<TTableArg>& args);
 TNodePtr BuildTopicKey(TPosition pos, const TDeferredAtom& cluster, const TDeferredAtom& name);
 TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints);
-TNodePtr BuildInputTables(TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped);
+TNodePtr BuildInputTables(
+    TPosition pos, const TTableList& tables, bool inSubquery, TScopedStatePtr scoped,
+    bool emitToCurrentBlock = false);
 TNodePtr BuildCreateTable(TPosition pos, const TTableRef& tr, bool existingOk, bool replaceIfExists, const TCreateTableParameters& params, TSourcePtr source, TScopedStatePtr scoped);
 
 TNodePtr BuildDropTable(TPosition pos, const TTableRef& table, bool missingOk, ETableType tableType, TScopedStatePtr scoped);
@@ -368,6 +378,7 @@ TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferr
 TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
                                        TNodePtr node, const TString& view = {});
 void MakeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
+void MakeRuntimeTableFromExpression(TPosition pos, TContext& ctx, TNodePtr node, TDeferredAtom& table, const TString& prefix = {});
 TDeferredAtom MakeAtomFromExpression(TPosition pos, TContext& ctx, TNodePtr node, const TString& prefix = {});
 TString NormalizeTypeString(const TString& str);
 } // namespace NSQLTranslationV1

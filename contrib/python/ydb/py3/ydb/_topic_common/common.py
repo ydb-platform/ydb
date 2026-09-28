@@ -100,7 +100,7 @@ class CallFromSyncToAsync:
 
     def safe_call_with_result(self, coro: typing.Coroutine, timeout: TimeoutType):
         """
-        no lost returned value from coro, but may be slower especially timeout latency - it wait coroutine cancelation.
+        no lost returned value from coro, but may be slower especially timeout latency - it wait coroutine cancellation.
         """
 
         if timeout is not None and timeout <= 0:
@@ -125,7 +125,7 @@ class CallFromSyncToAsync:
 
     def _safe_call_fast(self, coro: typing.Coroutine) -> typing.Any:
         """
-        no lost returned value from coro, but may be slower especially timeout latency - it wait coroutine cancelation.
+        no lost returned value from coro, but may be slower especially timeout latency - it wait coroutine cancellation.
         Wait coroutine result only one loop.
         """
         res: concurrent.futures.Future[typing.Any] = concurrent.futures.Future()

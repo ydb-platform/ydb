@@ -8,6 +8,7 @@ RECURSE(
     csv
     validation
     hash    
+    minikql
     modifier
     scalar
     simple_builder

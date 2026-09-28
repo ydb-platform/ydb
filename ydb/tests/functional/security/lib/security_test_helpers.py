@@ -89,6 +89,108 @@ def mon_base_url(cluster, node_index=1):
     return f'https://{node.host}:{node.mon_port}'
 
 
+def describe_path_self(cluster, root_path, database_path, use_tls=False, token=None):
+    node = cluster.nodes[1]
+    scheme = 'https' if use_tls else 'http'
+    response = requests.get(
+        f'{scheme}://{node.host}:{node.mon_port}/viewer/json/describe',
+        params={'database': root_path, 'path': database_path},
+        headers={'Authorization': token} if token is not None else {},
+        verify=False,
+        timeout=5,
+    )
+    response.raise_for_status()
+    return response.json()['PathDescription']['Self']
+
+
+def get_tenant_schemeshard_id(cluster, root_path, database_path, use_tls=False, token=None):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls, token)['SchemeshardId'])
+
+
+def get_tenant_path_id(cluster, root_path, database_path, use_tls=False, token=None):
+    return int(describe_path_self(cluster, root_path, database_path, use_tls, token)['PathId'])
+
+
+def get_nodelist_ids(base_url, database=None, token='root@builtin'):
+    params = {}
+    if database is not None:
+        params['database'] = database
+    response = requests.get(
+        base_url + '/viewer/json/nodelist',
+        params=params,
+        headers={'Authorization': token},
+        verify=False,
+        timeout=5,
+    )
+    response.raise_for_status()
+    return [node['Id'] for node in response.json()]
+
+
+def get_foreign_node_id_for_database(base_url, database, token='root@builtin'):
+    database_nodes = set(get_nodelist_ids(base_url, database=database, token=token))
+    foreign_nodes = set(get_nodelist_ids(base_url, token=token)) - database_nodes
+    assert foreign_nodes, f'no foreign nodes found for database={database}'
+    return min(foreign_nodes)
+
+
+def get_storage_groups(base_url, database=None, token='root@builtin', timeout=30, **params):
+    if database is not None:
+        params = {'database': database, **params}
+    response = requests.get(
+        base_url + '/storage/groups',
+        params=params,
+        headers={'Authorization': token},
+        verify=False,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def get_storage_ids(base_url, database=None, token='root@builtin', timeout=60):
+    """Ids covered by the storage groups of the given database, or of the whole cluster
+    when database is None: the groups themselves and the nodes/pdisks holding their vdisks."""
+    data = get_storage_groups(
+        base_url,
+        database,
+        token,
+        fields_required='GroupId,VDisk,PDisk,NodeId,PDiskId',
+        timeout=timeout,
+    )
+    ids = {'group_ids': set(), 'node_ids': set(), 'pdisk_ids': set()}
+    for group in data.get('StorageGroups') or []:
+        ids['group_ids'].add(int(group['GroupId']))
+        for vdisk in group.get('VDisks') or []:
+            # PDiskId is reported as "<node_id>-<pdisk_id>"
+            pdisk_id_str = str((vdisk.get('PDisk') or {}).get('PDiskId') or '')
+            if '-' in pdisk_id_str:
+                node_id_str, _, local_pdisk_id_str = pdisk_id_str.partition('-')
+                ids['node_ids'].add(int(node_id_str))
+                ids['pdisk_ids'].add(int(local_pdisk_id_str))
+    return ids
+
+
+def wait_for_storage_ids(base_url, database, token='root@builtin', timeout_seconds=60):
+    """Same as get_storage_ids, but waits until the database gets its storage groups."""
+    last = {}
+
+    def ready():
+        last['ids'] = get_storage_ids(base_url, database, token)
+        return bool(last['ids']['node_ids'])
+
+    if not wait_for(ready, timeout_seconds=timeout_seconds, step_seconds=1):
+        raise AssertionError(
+            f'no storage groups with disks for database={database} after {timeout_seconds}s; '
+            f'last={last.get("ids")}'
+        )
+    return last['ids']
+
+
+def get_unknown_node_id(base_url, token='root@builtin'):
+    """Returns a node id that does not exist in the cluster at all."""
+    return max(get_nodelist_ids(base_url, token=token)) + 100
+
+
 def wait_for_viewer_ready(
     base_url,
     database=DATABASE,

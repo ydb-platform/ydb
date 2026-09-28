@@ -71,7 +71,9 @@ TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
     TVector<TInfoUnit> leftJoinKeys;
     TVector<TInfoUnit> rightJoinKeys;
 
-    for (const auto & [l, r] : join->JoinKeys) {
+    for (const auto& joinKey : join->JoinKeys) {
+        const auto& l = joinKey.Left;
+        const auto& r = joinKey.Right;
         leftJoinKeys.push_back(l);
         rightJoinKeys.push_back(r);
     }
@@ -161,7 +163,7 @@ void TOpEmptySource::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     Props.Metadata = TRBOMetadata();
-    Props.Metadata->LogicalCard = ELogicalCardinality::One;
+    Props.Metadata->LogicalCard = Input ? ELogicalCardinality::ZeroOrMore : ELogicalCardinality::One;
 }
 
 /***
@@ -348,6 +350,10 @@ void TOpFilter::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Statistics = GetInput()->Props.Statistics;
     Props.Cost = GetInput()->Props.Cost;
 
+    if (PartiallyPushedDown) {
+        return;
+    }
+
     auto inputStats = std::make_shared<TOptimizerStatistics>(BuildOptimizerStatistics(GetInput()->Props, true, ctx.TypeCtx));
     auto lambda = TCoLambda(FilterExpr.Node);
     double selectivity = TPredicateSelectivityComputer(inputStats, &Props.Metadata->ColumnLineage).Compute(lambda.Body());
@@ -373,7 +379,13 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     const auto outputIUs = GetOutputIUs();
-    Y_ENSURE(MakeInfoUnitSet(outputIUs).size() == outputIUs.size(), "Map output must not contain duplicate columns");
+    if (MakeInfoUnitSet(outputIUs).size() != outputIUs.size()) {
+        TStringBuilder columns;
+        for (const auto& iu : outputIUs) {
+            columns << (columns.empty() ? "" : ", ") << iu.GetFullName();
+        }
+        Y_ENSURE(false, "Map output must not contain duplicate columns: " << columns);
+    }
     Props.Metadata->ColumnsCount = outputIUs.size();
 
     auto propertyPreservingMappings = GetPropertyPreservingMappings(planProps);
@@ -465,7 +477,6 @@ void TOpMap::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
  * Compute metadata for aggregare operator
  */
 void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
-    Y_UNUSED(ctx);
     Y_UNUSED(planProps);
     if (!GetInput()->Props.Metadata.has_value()) {
         return;
@@ -493,7 +504,7 @@ void TOpAggregate::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     }
     Props.Metadata->ColumnsCount = outputIUs.size();
 
-    Props.Metadata->ShuffledByColumns = {};
+    Props.Metadata->ShuffledByColumns = GetAggregatePreservedShuffling(*this, ctx);
 
     // Aggregate acts like a source in terms of lineage.
     // FIXME: We currently delete all lineage of columns before Aggregate,
@@ -548,7 +559,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
         rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }
@@ -612,7 +625,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
         // the equal columns is dropped by a projection later.
 
         bool rightSided = (JoinKind == "Right" || JoinKind == "RightSemi" || JoinKind == "RightOnly");
-        for (const auto& [leftKey, rightKey] : JoinKeys) {
+        for (const auto& joinKey : JoinKeys) {
+            const auto& leftKey = joinKey.Left;
+            const auto& rightKey = joinKey.Right;
             Props.Metadata->ShuffledByColumns.push_back(rightSided ? rightKey : leftKey);
         }
     }
@@ -635,7 +650,9 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     TVector<TJoinColumn> leftJoinKeys;
     TVector<TJoinColumn> rightJoinKeys;
 
-    for (const auto& [leftKey, rightKey] : JoinKeys) {
+    for (const auto& joinKey : JoinKeys) {
+        const auto& leftKey = joinKey.Left;
+        const auto& rightKey = joinKey.Right;
         leftJoinKeys.push_back(TJoinColumn(leftKey.GetAlias(), leftKey.GetColumnName()));
         rightJoinKeys.push_back(TJoinColumn(rightKey.GetAlias(), rightKey.GetColumnName()));
     }
@@ -673,6 +690,33 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     } else {
         Props.Cost = std::nullopt;
     }
+}
+
+// It does not have runtime support, it could be eliminated or we will rewrite it into cross join.
+void TOpDependentJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    if (!GetDomain()->Props.Metadata.has_value() || !GetInput()->Props.Metadata.has_value()) {
+        return;
+    }
+
+    Props.Metadata = TRBOMetadata();
+    Props.Metadata->LogicalCard = ELogicalCardinality::ZeroOrMore;
+    Props.Metadata->ColumnsCount = GetOutputIUs().size();
+}
+
+void TOpDependentJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(planProps);
+    if (!GetDomain()->Props.Statistics.has_value() || !GetInput()->Props.Statistics.has_value()) {
+        return;
+    }
+
+    Props.Statistics = TRBOStatistics();
+    // Just a workaround, we do not have runtime support anyway.
+    Props.Statistics->ERows = GetDomain()->Props.Statistics->ERows * GetInput()->Props.Statistics->ERows;
+    Props.Statistics->EBytes = GetDomain()->Props.Statistics->EBytes + GetInput()->Props.Statistics->EBytes;
+    Props.Cost = std::nullopt;
 }
 
 void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {

@@ -11,8 +11,8 @@ public:
         return Consumption;
     }
 
-    void SetConsumption(ui64 value) override {
-        Consumption = value;
+    void SetReport(TConsumerReport report) override {
+        Consumption = report.Used;
     }
 
 private:

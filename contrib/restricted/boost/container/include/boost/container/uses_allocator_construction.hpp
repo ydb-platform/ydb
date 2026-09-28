@@ -95,4 +95,6 @@ BOOST_MOVE_ITERATE_0TO9(BOOST_CONTAINER_USES_ALLOCATOR_CONSTRUCTION_CODE)
 
 }} //namespace boost::container
 
+#include <boost/container/detail/config_end.hpp>
+
 #endif   //BOOST_CONTAINER_USES_ALLOCATOR_CONSTRUCTION_HPP

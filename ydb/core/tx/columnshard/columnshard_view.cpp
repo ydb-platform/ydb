@@ -777,6 +777,13 @@ TString TTxMonitoring::RenderMainPage() {
          << "</h3>";
     {
         const ui32 nodeId = Self->SelfId().NodeId();
+        const TString traceId = LwTraceAdHocId("YDB_CS", "StartWrite");
+        const TString createUrl = RenderLwTraceCreateUrl(nodeId);
+        const TString logUrl = RenderLwTraceShardLogUrl("YDB_CS", "StartWrite", Self->TabletID(), nodeId);
+        html << "<h3>" << RenderLwTraceStartLink(createUrl, traceId, logUrl, "Traces for all writes on shard") << "</h3>";
+    }
+    {
+        const ui32 nodeId = Self->SelfId().NodeId();
         const TString traceId = LwTraceAdHocId("YDB_CS_DATA_SOURCE", "StartSourceProcessing");
         const TString createUrl = RenderLwTraceCreateUrl(nodeId);
         const TString logUrl = RenderLwTraceShardLogUrl("YDB_CS_DATA_SOURCE", "StartSourceProcessing", Self->TabletID(), nodeId);

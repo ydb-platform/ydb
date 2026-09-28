@@ -8,6 +8,8 @@
 
 #include <util/generic/xrange.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -274,7 +276,11 @@ void TSchemeShard::PersistNewImportItem(NIceDb::TNiceDb& db, const TImportInfo& 
     );
 }
 
-void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo) {
+void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo& importInfo, ui32 itemsSizeBefore) {
+    for (ui32 itemIdx = importInfo.Items.size(); itemIdx < itemsSizeBefore; ++itemIdx) {
+        db.Table<Schema::ImportItems>().Key(importInfo.Id, itemIdx).Delete();
+    }
+
     // There can be new items, so do at least the same as for creation
     for (ui32 itemIdx : xrange(importInfo.Items.size())) {
         const auto& item = importInfo.Items.at(itemIdx);
@@ -453,18 +459,19 @@ void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& 
 }
 
 void TSchemeShard::WaitForTableProfiles(ui64 importId, ui32 itemIdx) {
-    LOG_N("Wait for table profiles"
-        << ": id# " << importId
-        << ", itemIdx# " << itemIdx);
+    YDB_LOG_NOTICE("Wait for table profiles",
+        {"id", importId},
+        {"itemIdx", itemIdx},
+    );
     TableProfilesWaiters.insert(std::make_pair(importId, itemIdx));
 }
 
 void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx) {
     if (config) {
-        LOG_N("Load table profiles");
+        YDB_LOG_NOTICE("Load table profiles");
         TableProfiles.Load(*config);
     } else {
-        LOG_W("Table profiles were not loaded");
+        YDB_LOG_WARN("Table profiles were not loaded");
     }
 
     TableProfilesLoaded = true;
@@ -492,3 +499,5 @@ bool NeedToBuildIndexes(const TImportInfo& importInfo, ui32 itemIdx) {
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

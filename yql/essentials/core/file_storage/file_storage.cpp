@@ -121,8 +121,7 @@ public:
         Downloaders_.insert(Downloaders_.begin(), downloaders.begin(), downloaders.end());
     }
 
-    ~TFileStorageImpl() override {
-    }
+    ~TFileStorageImpl() override = default;
 
     TFileLinkPtr PutFile(const TString& file, const TString& outFileName = {}) final {
         YQL_LOG(INFO) << "PutFile to cache: " << file;
@@ -351,7 +350,6 @@ private:
         return urlChecksum + ".url";
     }
 
-private:
     TStorage Storage_;
     const TFileStorageConfig Config_;
     std::vector<NFS::IDownloaderPtr> Downloaders_;
@@ -406,7 +404,6 @@ private:
         }, *MtpQueue_);
     }
 
-private:
     TAtomic QueueStarted_;
     THolder<IThreadPool> MtpQueue_;
 };

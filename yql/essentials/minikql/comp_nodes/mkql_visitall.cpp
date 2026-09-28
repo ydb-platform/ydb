@@ -334,7 +334,7 @@ IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactor
         TComputationWideFlowNodePtrVector wideNodes;
         wideNodes.reserve(newNodes.size());
         std::transform(newNodes.cbegin(), newNodes.cend(), std::back_inserter(wideNodes), [](IComputationNode* node) { return dynamic_cast<IComputationWideFlowNode*>(node); });
-        wideNodes.erase(std::remove_if(wideNodes.begin(), wideNodes.end(), std::logical_not<IComputationWideFlowNode*>()), wideNodes.cend());
+        wideNodes.erase(std::remove_if(wideNodes.begin(), wideNodes.end(), std::logical_not<>()), wideNodes.cend());
         if (wideNodes.empty()) {
             return new TFlowVisitAllWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), variant, std::move(args), std::move(newNodes));
         } else if (wideNodes.size() == newNodes.size()) {

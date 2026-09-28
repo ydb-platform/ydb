@@ -909,9 +909,28 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvGetTableStatsResult : public TEventPB<TEvGetTableStatsResult,
+    // Arena avoids a per-submessage heap alloc/free (histogram buckets, part-owner entries,
+    // TabletMetrics' repeated fields).
+    // That is important for the schemeshard (receiver) side.
+    //
+    // In-memory footprint after parsing (not wire size): ~1-2KB base (scalar counters,
+    // part-owner lists, TabletMetrics), plus two independently-sized pieces:
+    //  - RowCountHistogram (always) and DataSizeHistogram (unless dropHistogram is on):
+    //    bucket count follows the request, 10 typical, capped at 500 (MaxBuckets in
+    //    datashard__stats.cpp), ~40B/bucket each.
+    //  - KeyAccessSample (unless dropHistogram is on): a FIXED-size reservoir sample, 100
+    //    entries by default (TKeyAccessSample::SampleCount in flat_stat_table.h) -- not
+    //    affected by the histogram bucket count above; entry size depends on the table's key
+    //    columns.
+    // ~4096 typical covers 10-bucket histograms plus a 100-entry key sample on a narrow key.
+    // A 500-bucket request just overflows into extra 32KB blocks, not a hard cap. (Once
+    // dropHistogram defaults on, DataSizeHistogram/KeyAccessSample are replaced by
+    // SplitBySizeSuggestedKey/SplitByLoadSuggestedKey -- serialized key prefixes, sized by the
+    // key, not by bucket/sample count.)
+    struct TEvGetTableStatsResult : public TEventPBWithArena<TEvGetTableStatsResult,
                                                         NKikimrTxDataShard::TEvGetTableStatsResult,
-                                                        TEvDataShard::EvGetTableStatsResult> {
+                                                        TEvDataShard::EvGetTableStatsResult,
+                                                        4096, 32*1024> {
         TEvGetTableStatsResult() = default;
         TEvGetTableStatsResult(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
             Record.SetDatashardId(datashardId);
@@ -920,9 +939,17 @@ namespace TEvDataShard {
         }
     };
 
-    struct TEvPeriodicTableStats : public TEventPB<TEvPeriodicTableStats,
+    // Arena avoids a per-submessage heap alloc/free (per-channel TChannelStats, TabletMetrics'
+    // per-channel throughput/iops lists, part-owner entries).
+    // That is important for the schemeshard (receiver) side.
+    //
+    // Histograms never set here (that's TEvGetTableStatsResult); size scales with channel
+    // count instead -- ~1-2KB typical at 3 channels. A 256-channel report just overflows into
+    // extra 8KB blocks, not a hard cap.
+    struct TEvPeriodicTableStats : public TEventPBWithArena<TEvPeriodicTableStats,
                                                         NKikimrTxDataShard::TEvPeriodicTableStats,
-                                                        TEvDataShard::EvPeriodicTableStats> {
+                                                        TEvDataShard::EvPeriodicTableStats,
+                                                        2048, 8192> {
         TEvPeriodicTableStats() = default;
         TEvPeriodicTableStats(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
             Record.SetDatashardId(datashardId);

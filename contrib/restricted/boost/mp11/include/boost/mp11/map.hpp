@@ -38,11 +38,17 @@ template<template<class...> class M, class... U, class T> struct mp_map_replace_
 {
     using K = mp_first<T>;
 
-    // mp_replace_if is inlined here using a struct _f because of msvc-14.0
+#if BOOST_MP11_WORKAROUND( BOOST_MP11_MSVC, < 1920 )
 
     template<class V> struct _f { using type = mp_if< std::is_same<mp_first<V>, K>, T, V >; };
 
     using type = mp_if< mp_map_contains<M<U...>, K>, M<typename _f<U>::type...>, M<U..., T> >;
+
+#else
+
+    using type = mp_if< mp_map_contains<M<U...>, K>, M<mp_if< std::is_same<mp_first<U>, K>, T, U >...>, M<U..., T> >;
+
+#endif
 };
 
 } // namespace detail
@@ -53,14 +59,20 @@ template<class M, class T> using mp_map_replace = typename detail::mp_map_replac
 namespace detail
 {
 
+template<class T> struct mp_map_update_impl_f
+{
+    template<class U> using fn = std::is_same<mp_first<T>, mp_first<U>>;
+};
+
+template<template<class...> class F> struct mp_map_update_impl_f3
+{
+    // fn<L<X, Y...>> -> L<X, F<X, Y...>>
+    template<class L> using fn = mp_assign<L, mp_list<mp_first<L>, mp_rename<L, F> > >;
+};
+
 template<class M, class T, template<class...> class F> struct mp_map_update_impl
 {
-    template<class U> using _f = std::is_same<mp_first<T>, mp_first<U>>;
-
-    // _f3<L<X, Y...>> -> L<X, F<X, Y...>>
-    template<class L> using _f3 = mp_assign<L, mp_list<mp_first<L>, mp_rename<L, F> > >;
-
-    using type = mp_if< mp_map_contains<M, mp_first<T>>, mp_transform_if<_f, _f3, M>, mp_push_back<M, T> >;
+    using type = mp_if< mp_map_contains<M, mp_first<T>>, mp_transform_if_q<mp_map_update_impl_f<T>, mp_map_update_impl_f3<F>, M>, mp_push_back<M, T> >;
 };
 
 } // namespace detail
@@ -72,15 +84,14 @@ template<class M, class T, class Q> using mp_map_update_q = mp_map_update<M, T, 
 namespace detail
 {
 
-template<class M, class K> struct mp_map_erase_impl
+template<class K> struct mp_map_erase_impl_f
 {
-    template<class T> using _f = std::is_same<mp_first<T>, K>;
-    using type = mp_remove_if<M, _f>;
+    template<class T> using fn = std::is_same<mp_first<T>, K>;
 };
 
 } // namespace detail
 
-template<class M, class K> using mp_map_erase = typename detail::mp_map_erase_impl<M, K>::type;
+template<class M, class K> using mp_map_erase = mp_remove_if_q< M, detail::mp_map_erase_impl_f<K> >;
 
 // mp_map_keys<M>
 template<class M> using mp_map_keys = mp_transform<mp_first, M>;

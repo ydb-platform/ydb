@@ -5,7 +5,7 @@ from .io import debug
 from .packages import _shlex
 
 
-def split_line(line, point=None):
+def split_line(line: str, point: int | None = None) -> tuple[str, str, str, list[str], int | None]:
     if point is None:
         point = len(line)
     line = line[:point]
@@ -14,7 +14,7 @@ def split_line(line, point=None):
     lexer.wordbreaks = os.environ.get("_ARGCOMPLETE_COMP_WORDBREAKS", "")
     words = []
 
-    def split_word(word):
+    def split_word(word: str) -> tuple[str, str, str, list[str], int | None]:
         # TODO: make this less ugly
         point_in_word = len(word) + point - lexer.instream.tell()
         if isinstance(lexer.state, (str, bytes)) and lexer.state in lexer.whitespace:

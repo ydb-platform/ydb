@@ -643,11 +643,11 @@ class flat_tree
       :  m_data(boost::move(x.m_data))
    { }
 
-   inline flat_tree(const flat_tree& x, const allocator_type &a)
+   inline flat_tree(const flat_tree& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       :  m_data(x.m_data, a)
    { }
 
-   inline flat_tree(BOOST_RV_REF(flat_tree) x, const allocator_type &a)
+   inline flat_tree(BOOST_RV_REF(flat_tree) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       :  m_data(boost::move(x.m_data), a)
    { }
 

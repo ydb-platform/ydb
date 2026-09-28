@@ -116,7 +116,7 @@ void swap(TPromise<T>& lhs, TPromise<T>& rhs);
 // A bunch of widely-used preset futures.
 
 //! A pre-set successful |void| future.
-extern const TFuture<void> OKFuture;
+extern const TFuture<void>& OKFuture;
 
 ////////////////////////////////////////////////////////////////////////////////
 

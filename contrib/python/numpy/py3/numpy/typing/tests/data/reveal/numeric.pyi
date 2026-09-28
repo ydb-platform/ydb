@@ -5,16 +5,12 @@ Does not include tests which fall under ``array_constructors``.
 
 """
 
-import sys
 from typing import Any
 
 import numpy as np
 import numpy.typing as npt
 
-if sys.version_info >= (3, 11):
-    from typing import assert_type
-else:
-    from typing_extensions import assert_type
+from typing_extensions import assert_type
 
 class SubClass(npt.NDArray[np.int64]):
     ...
@@ -35,7 +31,7 @@ C: SubClass
 assert_type(np.count_nonzero(i8), int)
 assert_type(np.count_nonzero(AR_i8), int)
 assert_type(np.count_nonzero(B), int)
-assert_type(np.count_nonzero(AR_i8, keepdims=True), Any)
+assert_type(np.count_nonzero(AR_i8, keepdims=True), npt.NDArray[np.intp])
 assert_type(np.count_nonzero(AR_i8, axis=0), Any)
 
 assert_type(np.isfortran(i8), bool)

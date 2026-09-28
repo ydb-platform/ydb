@@ -77,9 +77,6 @@ public:
                     items:
                         type: string
                     description: User groups
-                OriginalUserToken:
-                    type: string
-                    description: User's token used to authenticate
                 AuthType:
                     type: string
                     description: Authentication type

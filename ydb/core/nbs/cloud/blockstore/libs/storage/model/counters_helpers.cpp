@@ -2,12 +2,15 @@
 
 #include <ydb/core/base/counters.h>
 
+#include <util/generic/string.h>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 NMonitoring::TDynamicCounterPtr MakeCountersChain(
     NMonitoring::TDynamicCounterPtr counters,
     const TString& ddiskPool,
-    const TDiskDescription& diskDescription)
+    const TDiskDescription& diskDescription,
+    TStringBuf subsystem)
 {
     if (!counters) {
         return nullptr;
@@ -19,7 +22,7 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     result =
         result->GetSubgroup("tabletId", ToString(diskDescription.TabletId));
     result = result->GetSubgroup("diskId", diskDescription.DiskId);
-    result = result->GetSubgroup("subsystem", "interface");
+    result = result->GetSubgroup("subsystem", TString{subsystem});
     return result;
 }
 

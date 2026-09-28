@@ -318,6 +318,12 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_DEFAULT(std::vector<TReadRuleSettings>, ReadRules, {});
     FLUENT_SETTING_OPTIONAL(TRemoteMirrorRuleSettings, RemoteMirrorRule);
 
+    FLUENT_SETTING_OPTIONAL(uint64_t, MaxPartitionsCount);
+    FLUENT_SETTING_OPTIONAL(TDuration, StabilizationWindow);
+    FLUENT_SETTING_OPTIONAL(uint64_t, UpUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL(uint64_t, DownUtilizationPercent);
+    FLUENT_SETTING_OPTIONAL(Ydb::PersQueue::V1::AutoPartitioningStrategy, AutoPartitioningStrategy);
+
     TSelf& SetSettings(const TDescribeTopicResult::TTopicSettings& settings) {
 
         PartitionsCount_ = settings.PartitionsCount();
@@ -356,13 +362,6 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
 
         return static_cast<TDerived&>(*this);
     }
-
-private:
-    std::optional<uint64_t> MaxPartitionsCount_;
-    std::optional<TDuration> StabilizationWindow_;
-    std::optional<uint64_t> UpUtilizationPercent_;
-    std::optional<uint64_t> DownUtilizationPercent_;
-    std::optional<Ydb::PersQueue::V1::AutoPartitioningStrategy> AutoPartitioningStrategy_;
 };
 
 

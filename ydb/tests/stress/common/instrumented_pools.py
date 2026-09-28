@@ -77,67 +77,48 @@ class InstrumentedQuerySessionPool(ydb.QuerySessionPool):
         finally:
             del caller_frame
 
-    def execute_with_retries(self, query: str, *args, parameters=None,
-                             retry_settings=None, settings=None,
-                             operation_name: Optional[str] = None,
-                             **kwargs):
+    def execute_with_retries(self, query: str, parameters=None, retry_settings=None, *args,
+                             settings=None, operation_name: Optional[str] = None, **kwargs):
         """
         Executes query with automatic metrics collection.
 
-        Args:
-            query: SQL query
-            parameters: Query parameters
-            retry_settings: Retry settings
-            settings: Additional settings
-            operation_name: Operation name for metrics (optional)
-
-        Returns:
-            Query execution result
+        Signature matches ydb.QuerySessionPool.execute_with_retries so that
+        RetrySettings never lands in the parameters slot (which expects a dict).
         """
         retry_settings = maybe_extended_retry_settings(retry_settings)
         if operation_name is None:
             operation_name = 'query_pool_execute'
         if not self.enable_metrics:
-            return super(InstrumentedQuerySessionPool, self).execute_with_retries(query,
-                                                                                  parameters=parameters,
-                                                                                  retry_settings=retry_settings,
-                                                                                  settings=settings,
-                                                                                  *args,
-                                                                                  **kwargs)
+            return super(InstrumentedQuerySessionPool, self).execute_with_retries(
+                query, parameters, retry_settings, *args, settings=settings, **kwargs
+            )
 
         return self.metrics_collector.wrap_call(
             lambda: super(InstrumentedQuerySessionPool, self).execute_with_retries(
-                query, parameters=parameters, retry_settings=retry_settings, settings=settings,
-                *args,
-                **kwargs
+                query, parameters, retry_settings, *args, settings=settings, **kwargs
             ),
             operation_name, self.full_name
         )
 
-    def explain_with_retries(self, query: str, *args, retry_settings=None,
-                             operation_name: str = 'explain_query',
+    def explain_with_retries(self, query: str, parameters=None, *,
+                             retry_settings=None, operation_name: str = 'explain_query',
                              **kwargs):
         """
         Executes EXPLAIN query with automatic metrics collection.
 
-        Args:
-            query: SQL query
-            retry_settings: Retry settings
-            operation_name: Operation name for metrics
-
-        Returns:
-            EXPLAIN result
+        Signature matches ydb.QuerySessionPool.explain_with_retries: parameters
+        is the second positional, retry_settings is keyword-only.
         """
         retry_settings = maybe_extended_retry_settings(retry_settings)
         if not self.enable_metrics:
-            return super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings,
-                                                                                  *args,
-                                                                                  **kwargs)
+            return super(InstrumentedQuerySessionPool, self).explain_with_retries(
+                query, parameters, retry_settings=retry_settings, **kwargs
+            )
 
         return self.metrics_collector.wrap_call(
-            lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(query, retry_settings,
-                                                                                   *args,
-                                                                                   **kwargs),
+            lambda: super(InstrumentedQuerySessionPool, self).explain_with_retries(
+                query, parameters, retry_settings=retry_settings, **kwargs
+            ),
             operation_name, self.full_name
         )
 

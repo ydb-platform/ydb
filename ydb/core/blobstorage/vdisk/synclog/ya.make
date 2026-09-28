@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/hulldb/generic
     ydb/core/blobstorage/vdisk/ingress
     ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage
+    ydb/core/protos
     ydb/core/util
 )
 

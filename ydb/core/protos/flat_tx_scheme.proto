@@ -382,6 +382,7 @@ message TEvSyncTenantSchemeShard {
     optional uint64 TenantStatisticsAggregator = 11;
     optional fixed64 TenantGraphShard = 12;
     optional uint64 TenantBackupController = 13;
+    optional fixed64 TenantWasmCompileController = 14;
 
     optional string TenantRootACL = 10;
 }
@@ -405,6 +406,7 @@ message TEvUpdateTenantSchemeShard {
     optional uint64 TenantStatisticsAggregator = 16;
     optional fixed64 TenantGraphShard = 18;
     optional uint64 TenantBackupController = 19;
+    optional fixed64 TenantWasmCompileController = 22;
 
     optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
     optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;

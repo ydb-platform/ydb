@@ -12,7 +12,7 @@
  * Apache License Version 2.0 http://www.apache.org/licenses/.
  *
  */
-#include "memory.h"
+#include <ydb/library/nmslib/include/memory.h>
 #include "logging.h"
 
 

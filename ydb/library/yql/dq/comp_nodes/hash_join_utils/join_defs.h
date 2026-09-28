@@ -16,6 +16,10 @@ enum class ESide { Probe, Build };
 
 const char* AsString(ESide side);
 
+constexpr ESide OtherSide(ESide side) {
+    return side == ESide::Build ? ESide::Probe : ESide::Build;
+}
+
 template <typename T> struct TSides {
     T Build;
     T Probe;
@@ -128,6 +132,8 @@ TMKQLVector<TPackResult> InMemoryPages_;
 using TBuckets = TMKQLVector<TBucket>;
 using TPairOfBuckets = TMKQLVector<TSides<TBucket>>;
 bool IsBucketSpilled(const TSides<TBucket>& bucket);
+
+constexpr ui32 Log2Buckets = 6;
 
 enum class PageSpillingAlready {
     InMemoryYet,

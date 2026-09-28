@@ -17,6 +17,9 @@ namespace NActors {
 }
 
 namespace NKikimr {
+    namespace NPathAliasing {
+        class TPathNormalizer;
+    }
     namespace NGRpcService {
         class TInFlightLimiterRegistry;
     }
@@ -54,10 +57,12 @@ namespace NKikimrStream {
 
 namespace NKikimrConfig {
     class TAppConfig;
+    class TStateStorageConfig;
     class TStreamingConfig;
     class TMeteringConfig;
     class TSqsConfig;
     class TKafkaProxyConfig;
+    class THttpProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
@@ -88,6 +93,7 @@ namespace NKikimrConfig {
     class TRecoveryShardConfig;
     class TClusterDiagnosticsConfig;
     class TLongTxServiceConfig;
+    class TUdfStoreConfig;
 }
 
 namespace NKikimrReplication {
@@ -209,6 +215,9 @@ struct TAppData {
     const NSchemeShard::IOperationFactory *SchemeOperationFactory = nullptr;
     const NYamlConfig::IConfigSwissKnife *ConfigSwissKnife = nullptr;
 
+    // Compiled once before actors start; configuration changes require a restart.
+    std::shared_ptr<const NPathAliasing::TPathNormalizer> PathNormalizer;
+
     NSQS::IAuthFactory* SqsAuthFactory = nullptr;
 
     NHttpProxy::IAuthFactory* DataStreamsAuthFactory = nullptr;
@@ -249,6 +258,7 @@ struct TAppData {
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig& HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;
@@ -287,6 +297,7 @@ struct TAppData {
     NKikimrConfig::TRecoveryShardConfig& RecoveryShardConfig;
     NKikimrConfig::TClusterDiagnosticsConfig& ClusterDiagnosticsConfig;
     NKikimrConfig::TLongTxServiceConfig& LongTxServiceConfig;
+    NKikimrConfig::TUdfStoreConfig& UdfStoreConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AlwaysSetSystemOwner = false;

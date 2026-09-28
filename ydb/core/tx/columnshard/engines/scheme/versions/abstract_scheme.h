@@ -10,6 +10,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/column_ids.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
 
+#include <util/datetime/base.h>
+
 #include <string>
 
 namespace NKikimr::NOlap {
@@ -100,10 +102,18 @@ public:
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
+
+    struct TWriteBlobPrepareStats {
+        TDuration DataDuration = TDuration::Zero();
+        TDuration IndexDuration = TDuration::Zero();
+        ui64 DataBytes = 0;
+        ui64 IndexBytes = 0;
+    };
+
     [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr,
         const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
-        const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;
+        const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters,
+        TWriteBlobPrepareStats* prepareStats = nullptr) const;
     void AdaptBatchToSchema(NArrow::TGeneralContainer& batch, const ISnapshotSchema::TPtr& targetSchema) const;
     std::set<ui32> GetColumnIdsToDelete(const ISnapshotSchema::TPtr& targetSchema) const;
     std::vector<ui32> ConvertColumnIdsToIndexes(const std::set<ui32>& idxs) const;

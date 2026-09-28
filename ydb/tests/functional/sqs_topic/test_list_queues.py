@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import uuid
+from urllib.parse import urlsplit
 
-from hamcrest import assert_that, has_item, not_none
+from hamcrest import assert_that, equal_to, has_item, is_not, not_none
 
 from ydb.tests.library.sqs_topic.test_base import KikimrSqsTopicTestBase
 
@@ -93,3 +94,19 @@ class TestSqsTopicListQueues(KikimrSqsTopicTestBase):
         assert_that(queue_urls, has_item(queue_url_2))
 
         self._boto_client.delete_queue(QueueUrl=queue_url_1)
+
+    def test_list_queues_uses_request_endpoint(self):
+        queue_name = self._make_queue_name('list_queues_uses_request_endpoint')
+        created_url = self._boto_client.create_queue(QueueName=queue_name)['QueueUrl']
+        self._queue_url = created_url
+
+        created_path = urlsplit(created_url).path
+        request_host = 'sqs-list-queues.test'
+
+        with self._boto_client_with_request_host(request_host) as (origin, client):
+            response = client.list_queues()
+            expected_queue_url = origin + created_path
+
+        queue_urls = response.get('QueueUrls', [])
+        assert_that(expected_queue_url, is_not(equal_to(created_url)))
+        assert_that(queue_urls, has_item(expected_queue_url))

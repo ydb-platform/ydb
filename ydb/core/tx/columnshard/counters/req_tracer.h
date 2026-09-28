@@ -25,8 +25,8 @@ public:
     {
     }
 
-    void OnDefaultMinSnapshotInstant(const TInstant instant) const {
-        DefaultMinSnapshotAge->Set((TInstant::Now() - instant).Seconds());
+    void OnMaxNewScanAgeSeconds(const ui64 age) const {
+        DefaultMinSnapshotAge->Set(age);
     }
 
     void OnSnapshotsInfo(const ui32 count, const std::optional<NOlap::TSnapshot> snapshotPlanStep) const {

@@ -7,7 +7,7 @@
 // https://github.com/python/pythoncapi_compat
 //
 // Latest version:
-// https://raw.githubusercontent.com/python/pythoncapi_compat/master/pythoncapi_compat.h
+// https://raw.githubusercontent.com/python/pythoncapi-compat/main/pythoncapi_compat.h
 //
 // SPDX-License-Identifier: 0BSD
 
@@ -43,6 +43,13 @@ extern "C" {
 // Cast argument to PyObject* type.
 #ifndef _PyObject_CAST
 #  define _PyObject_CAST(op) _Py_CAST(PyObject*, op)
+#endif
+
+#ifndef Py_BUILD_ASSERT
+#  define Py_BUILD_ASSERT(cond) \
+        do { \
+            (void)sizeof(char [1 - 2 * !(cond)]); \
+        } while(0)
 #endif
 
 
@@ -280,7 +287,7 @@ PyFrame_GetVarString(PyFrameObject *frame, const char *name)
 
 
 // bpo-39947 added PyThreadState_GetInterpreter() to Python 3.9.0a5
-#if PY_VERSION_HEX < 0x030900A5 || defined(PYPY_VERSION)
+#if PY_VERSION_HEX < 0x030900A5 || (defined(PYPY_VERSION) && PY_VERSION_HEX < 0x030B0000)
 static inline PyInterpreterState *
 PyThreadState_GetInterpreter(PyThreadState *tstate)
 {
@@ -911,7 +918,7 @@ static inline int
 PyObject_VisitManagedDict(PyObject *obj, visitproc visit, void *arg)
 {
     PyObject **dict = _PyObject_GetDictPtr(obj);
-    if (*dict == NULL) {
+    if (dict == NULL || *dict == NULL) {
         return -1;
     }
     Py_VISIT(*dict);
@@ -922,7 +929,7 @@ static inline void
 PyObject_ClearManagedDict(PyObject *obj)
 {
     PyObject **dict = _PyObject_GetDictPtr(obj);
-    if (*dict == NULL) {
+    if (dict == NULL || *dict == NULL) {
         return;
     }
     Py_CLEAR(*dict);
@@ -1197,11 +1204,11 @@ static inline int PyTime_PerfCounter(PyTime_t *result)
 #endif
 
 // gh-111389 added hash constants to Python 3.13.0a5. These constants were
-// added first as private macros to Python 3.4.0b1 and PyPy 7.3.9.
+// added first as private macros to Python 3.4.0b1 and PyPy 7.3.8.
 #if (!defined(PyHASH_BITS) \
      && ((!defined(PYPY_VERSION) && PY_VERSION_HEX >= 0x030400B1) \
          || (defined(PYPY_VERSION) && PY_VERSION_HEX >= 0x03070000 \
-             && PYPY_VERSION_NUM >= 0x07090000)))
+             && PYPY_VERSION_NUM >= 0x07030800)))
 #  define PyHASH_BITS _PyHASH_BITS
 #  define PyHASH_MODULUS _PyHASH_MODULUS
 #  define PyHASH_INF _PyHASH_INF
@@ -1509,6 +1516,205 @@ static inline int PyLong_GetSign(PyObject *obj, int *sign)
     }
 
     *sign = _PyLong_Sign(obj);
+    return 0;
+}
+#endif
+
+// gh-126061 added PyLong_IsPositive/Negative/Zero() to Python in 3.14.0a2
+#if PY_VERSION_HEX < 0x030E00A2
+static inline int PyLong_IsPositive(PyObject *obj)
+{
+    if (!PyLong_Check(obj)) {
+        PyErr_Format(PyExc_TypeError, "expected int, got %s", Py_TYPE(obj)->tp_name);
+        return -1;
+    }
+    return _PyLong_Sign(obj) == 1;
+}
+
+static inline int PyLong_IsNegative(PyObject *obj)
+{
+    if (!PyLong_Check(obj)) {
+        PyErr_Format(PyExc_TypeError, "expected int, got %s", Py_TYPE(obj)->tp_name);
+        return -1;
+    }
+    return _PyLong_Sign(obj) == -1;
+}
+
+static inline int PyLong_IsZero(PyObject *obj)
+{
+    if (!PyLong_Check(obj)) {
+        PyErr_Format(PyExc_TypeError, "expected int, got %s", Py_TYPE(obj)->tp_name);
+        return -1;
+    }
+    return _PyLong_Sign(obj) == 0;
+}
+#endif
+
+
+// gh-124502 added PyUnicode_Equal() to Python 3.14.0a0
+#if PY_VERSION_HEX < 0x030E00A0
+static inline int PyUnicode_Equal(PyObject *str1, PyObject *str2)
+{
+    if (!PyUnicode_Check(str1)) {
+        PyErr_Format(PyExc_TypeError, "first argument must be str, not %s",
+                     Py_TYPE(str1)->tp_name);
+        return -1;
+    }
+    if (!PyUnicode_Check(str2)) {
+        PyErr_Format(PyExc_TypeError, "second argument must be str, not %s",
+                     Py_TYPE(str2)->tp_name);
+        return -1;
+    }
+
+#if PY_VERSION_HEX >= 0x030d0000 && !defined(PYPY_VERSION)
+    PyAPI_FUNC(int) _PyUnicode_Equal(PyObject *str1, PyObject *str2);
+
+    return _PyUnicode_Equal(str1, str2);
+#elif PY_VERSION_HEX >= 0x03060000 && !defined(PYPY_VERSION)
+    return _PyUnicode_EQ(str1, str2);
+#elif PY_VERSION_HEX >= 0x03090000 && defined(PYPY_VERSION)
+    return _PyUnicode_EQ(str1, str2);
+#else
+    return (PyUnicode_Compare(str1, str2) == 0);
+#endif
+}
+#endif
+
+
+// gh-121645 added PyBytes_Join() to Python 3.14.0a0
+#if PY_VERSION_HEX < 0x030E00A0
+static inline PyObject* PyBytes_Join(PyObject *sep, PyObject *iterable)
+{
+    return _PyBytes_Join(sep, iterable);
+}
+#endif
+
+
+#if PY_VERSION_HEX < 0x030E00A0
+static inline Py_hash_t Py_HashBuffer(const void *ptr, Py_ssize_t len)
+{
+#if PY_VERSION_HEX >= 0x03000000 && !defined(PYPY_VERSION)
+    PyAPI_FUNC(Py_hash_t) _Py_HashBytes(const void *src, Py_ssize_t len);
+
+    return _Py_HashBytes(ptr, len);
+#else
+    Py_hash_t hash;
+    PyObject *bytes = PyBytes_FromStringAndSize((const char*)ptr, len);
+    if (bytes == NULL) {
+        return -1;
+    }
+    hash = PyObject_Hash(bytes);
+    Py_DECREF(bytes);
+    return hash;
+#endif
+}
+#endif
+
+
+#if PY_VERSION_HEX < 0x030E00A0
+static inline int PyIter_NextItem(PyObject *iter, PyObject **item)
+{
+    iternextfunc tp_iternext;
+
+    assert(iter != NULL);
+    assert(item != NULL);
+
+    tp_iternext = Py_TYPE(iter)->tp_iternext;
+    if (tp_iternext == NULL) {
+        *item = NULL;
+        PyErr_Format(PyExc_TypeError, "expected an iterator, got '%s'",
+                     Py_TYPE(iter)->tp_name);
+        return -1;
+    }
+
+    if ((*item = tp_iternext(iter))) {
+        return 1;
+    }
+    if (!PyErr_Occurred()) {
+        return 0;
+    }
+    if (PyErr_ExceptionMatches(PyExc_StopIteration)) {
+        PyErr_Clear();
+        return 0;
+    }
+    return -1;
+}
+#endif
+
+
+#if PY_VERSION_HEX < 0x030E00A0
+static inline PyObject* PyLong_FromInt32(int32_t value)
+{
+    Py_BUILD_ASSERT(sizeof(long) >= 4);
+    return PyLong_FromLong(value);
+}
+
+static inline PyObject* PyLong_FromInt64(int64_t value)
+{
+    Py_BUILD_ASSERT(sizeof(long long) >= 8);
+    return PyLong_FromLongLong(value);
+}
+
+static inline PyObject* PyLong_FromUInt32(uint32_t value)
+{
+    Py_BUILD_ASSERT(sizeof(unsigned long) >= 4);
+    return PyLong_FromUnsignedLong(value);
+}
+
+static inline PyObject* PyLong_FromUInt64(uint64_t value)
+{
+    Py_BUILD_ASSERT(sizeof(unsigned long long) >= 8);
+    return PyLong_FromUnsignedLongLong(value);
+}
+
+static inline int PyLong_AsInt32(PyObject *obj, int32_t *pvalue)
+{
+    Py_BUILD_ASSERT(sizeof(int) == 4);
+    int value = PyLong_AsInt(obj);
+    if (value == -1 && PyErr_Occurred()) {
+        return -1;
+    }
+    *pvalue = (int32_t)value;
+    return 0;
+}
+
+static inline int PyLong_AsInt64(PyObject *obj, int64_t *pvalue)
+{
+    Py_BUILD_ASSERT(sizeof(long long) == 8);
+    long long value = PyLong_AsLongLong(obj);
+    if (value == -1 && PyErr_Occurred()) {
+        return -1;
+    }
+    *pvalue = (int64_t)value;
+    return 0;
+}
+
+static inline int PyLong_AsUInt32(PyObject *obj, uint32_t *pvalue)
+{
+    Py_BUILD_ASSERT(sizeof(long) >= 4);
+    unsigned long value = PyLong_AsUnsignedLong(obj);
+    if (value == (unsigned long)-1 && PyErr_Occurred()) {
+        return -1;
+    }
+#if SIZEOF_LONG > 4
+    if ((unsigned long)UINT32_MAX < value) {
+        PyErr_SetString(PyExc_OverflowError,
+                        "Python int too large to convert to C uint32_t");
+        return -1;
+    }
+#endif
+    *pvalue = (uint32_t)value;
+    return 0;
+}
+
+static inline int PyLong_AsUInt64(PyObject *obj, uint64_t *pvalue)
+{
+    Py_BUILD_ASSERT(sizeof(long long) == 8);
+    unsigned long long value = PyLong_AsUnsignedLongLong(obj);
+    if (value == (unsigned long long)-1 && PyErr_Occurred()) {
+        return -1;
+    }
+    *pvalue = (uint64_t)value;
     return 0;
 }
 #endif

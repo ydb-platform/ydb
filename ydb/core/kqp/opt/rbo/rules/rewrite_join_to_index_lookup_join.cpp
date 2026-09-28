@@ -18,8 +18,9 @@ bool IsValidIndex(const TIndexDescription& index) {
         && index.State == TIndexDescription::EIndexState::Ready;
 }
 
-bool IsCoveringIndex(const TVector<TString>& readColumns, const TVector<TString>& indexColumns) {
-    THashSet<TString> indexColumnSet(indexColumns.begin(), indexColumns.end());
+bool IsCoveringIndex(const TVector<TString>& readColumns, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns) {
+    THashSet<TString> indexColumnSet(keyColumns.begin(), keyColumns.end());
+    indexColumnSet.insert(dataColumns.begin(), dataColumns.end());
     for (const auto& column : readColumns) {
         if (!indexColumnSet.contains(column)) {
             return false;
@@ -35,7 +36,7 @@ TIntrusivePtr<TKikimrTableMetadata> TryToFindBestIndexForRightSide(const TKikimr
     ui32 bestPrefix = 0;
 
     for (const auto& index : meta.Indexes) {
-        if (!IsValidIndex(index) || !IsCoveringIndex(readColumns, index.KeyColumns)) {
+        if (!IsValidIndex(index) || !IsCoveringIndex(readColumns, index.KeyColumns, index.DataColumns)) {
             continue;
         }
 
@@ -72,7 +73,7 @@ std::optional<TExpression> BuildFetchedRowFilter(const TOpRead& read, const TInt
         conjuncts.insert(conjuncts.end(), original.begin(), original.end());
     }
     if (filter) {
-        const auto filters = filter->FilterExpr.SplitConjunct();
+        const auto filters = filter->GetFilterExpression().SplitConjunct();
         conjuncts.insert(conjuncts.end(), filters.begin(), filters.end());
     }
 
@@ -123,7 +124,9 @@ std::optional<TKeyMatch> MatchKeyPrefix(const TOpJoin& join, const TOpRead& read
     }
 
     THashMap<TString, TLookupKey> keyByColumn;
-    for (const auto& [leftIU, rightIU] : join.JoinKeys) {
+    for (const auto& joinKey : join.JoinKeys) {
+        const auto& leftIU = joinKey.Left;
+        const auto& rightIU = joinKey.Right;
         const auto it = readColumnByIU.find(rightIU);
         Y_ENSURE(it != readColumnByIU.end(), "Cannot find a join key in input columns.");
         const auto column = it->second;
@@ -226,11 +229,18 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         return input;
     }
 
-    // TODO: Add check for join algo specified by CBO.
     auto join = CastOperator<TOpJoin>(input);
+
+    if (join->Props.JoinAlgo.has_value() && *join->Props.JoinAlgo != EJoinAlgoType::LookupJoin){
+        return input;
+    }
 
     const auto joinKind = GetValidJoinKind(join->JoinKind);
     if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly") {
+        return input;
+    }
+
+    if (HasEqualNullsKey(join->JoinKeys)) {
         return input;
     }
 
@@ -266,8 +276,8 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
             const auto table = TKqpTable(read->GetTable());
             const auto& mainTableDesc = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, table.Path().Value());
             THashSet<TString> rightJoinKeys;
-            for (const auto& [leftKey, rightKey] : join->JoinKeys) {
-                rightJoinKeys.insert(rightKey.GetColumnName());
+            for (const auto& joinKey : join->JoinKeys) {
+                rightJoinKeys.insert(joinKey.Right.GetColumnName());
             }
 
             if (auto index = TryToFindBestIndexForRightSide(mainTableDesc, read->Columns, rightJoinKeys)) {
@@ -328,8 +338,14 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         keys = MatchKeyPrefix(*join, *read, tableMeta->KeyColumnNames, 0);
     }
 
+    if (!keys) {
+        return input;
+    }
+
     // Different types for keys are not supported.
-    if (!keys || !KeyTypesMatch(*join->GetLeftInput(), *read, *keys)) {
+    if (!KeyTypesMatch(*join->GetLeftInput(), *read, *keys)) {
+        // This check is missing in CBO, so we need to change join implementation in this case
+        join->Props.JoinAlgo = EJoinAlgoType::MapJoin;
         return input;
     }
 
@@ -355,7 +371,7 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         prefix = std::move(keyPrefix);
     }
 
-    TVector<std::pair<TInfoUnit, TInfoUnit>> residualJoinKeys;
+    TVector<TJoinKey> residualJoinKeys;
     residualJoinKeys.reserve(keys->ResidualKeys.size());
     for (const auto& key : keys->ResidualKeys) {
         residualJoinKeys.emplace_back(key.LeftIU, key.RightIU);

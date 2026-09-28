@@ -10,6 +10,7 @@ PEERDIR(
 
 SRCS(
     decorator_ut.cpp
+    subsystem_ut.cpp
 )
 
 END()

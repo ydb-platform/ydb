@@ -8,7 +8,6 @@ PEERDIR(
     ydb/library/yql/dq/opt/core
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/type_ann
-    ydb/library/yql/providers/dq/expr_nodes
     yql/essentials/ast
     yql/essentials/core
     yql/essentials/core/dq_integration

@@ -94,6 +94,9 @@ private:
             case ELogicalMetatype::Decimal:
                 ValidateDecimalType(type->UncheckedAsDecimalTypeRef(), fieldId);
                 return;
+            case ELogicalMetatype::AggregateState:
+                ValidateLogicalType(type->UncheckedAsAggregateStateTypeRef().GetElement(), fieldId);
+                return;
         }
         YT_ABORT();
     }
@@ -556,6 +559,9 @@ private:
                         break;
                     case ELogicalMetatype::Tagged:
                         descriptor = descriptor.TaggedElement();
+                        continue;
+                    case ELogicalMetatype::AggregateState:
+                        descriptor = descriptor.AggregateStateElement();
                         continue;
                 }
                 YT_ABORT();

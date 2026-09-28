@@ -66,6 +66,63 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         }
     }
 
+    void TestMaxGenerationBlock(bool collectByCompleteDeletionBlock) {
+        ui32 seed;
+        LoadSeed(seed);
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableCollectByCompleteDeletionBlock(collectByCompleteDeletionBlock);
+        TBlobDepotTestEnvironment tenv(seed, 1, 8, TBlobStorageGroupType::ErasureMirror3of4, featureFlags);
+
+        auto& env = *tenv.Env;
+        const ui32 nodeId = 1;
+        const ui32 groupId = tenv.BlobDepot;
+        const ui64 tabletId = 100;
+        auto sender = env.Runtime->AllocateEdgeActor(nodeId);
+
+        const TString data = tenv.DataGen(100);
+        const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+
+        auto checkBlob = [&](NKikimrProto::EReplyStatus expected) {
+            SendTEvGet(env, sender, groupId, id);
+            auto getResult = CaptureTEvGetResult(env, sender, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Status, NKikimrProto::OK, getResult->Get()->ToString());
+            UNIT_ASSERT_VALUES_EQUAL(getResult->Get()->ResponseSz, 1);
+            UNIT_ASSERT_VALUES_EQUAL_C(getResult->Get()->Responses[0].Status, expected, getResult->Get()->ToString());
+        };
+
+        SendTEvPut(env, sender, groupId, id, data);
+        auto putResult = CaptureTEvPutResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(putResult->Get()->Status, NKikimrProto::OK, putResult->Get()->ToString());
+
+        checkBlob(NKikimrProto::OK);
+
+        // Hive deletes the tablet for good: with EnableCollectByCompleteDeletionBlock the Max generation
+        // block alone has to collect its data, because the hard barrier that normally follows may never be
+        // observed -- a VDisk that has seen this block is free to drop the barrier records of this tablet;
+        // without it the data stays until that hard barrier
+        SendTEvBlock(env, sender, groupId, tabletId, Max<ui32>());
+        auto blockResult = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL_C(blockResult->Get()->Status, NKikimrProto::OK, blockResult->Get()->ToString());
+
+        env.Sim(TDuration::Seconds(1));
+
+        checkBlob(collectByCompleteDeletionBlock ? NKikimrProto::NODATA : NKikimrProto::OK);
+
+        // With the flag, the hard barrier Hive sends after the block is redundant by now and must not be
+        // recorded: Hive retries it, and each retry would otherwise bring back a barrier row we have purged.
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            SendTEvCollectGarbage(env, sender, groupId, tabletId, Max<ui32>(), Max<ui32>(), id.Channel(),
+                true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
+            auto collectResult = CaptureTEvCollectGarbageResult(env, sender, false);
+            UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK,
+                collectResult->Get()->ToString());
+        }
+
+        env.Sim(TDuration::Seconds(1));
+
+        checkBlob(NKikimrProto::NODATA);
+    }
+
     Y_UNIT_TEST(BasicPutAndGet) {
         ui32 seed;
         LoadSeed(seed);
@@ -152,6 +209,72 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         TestBasicBlock(tenv, 100, tenv.BlobDepot);
     }
 
+    Y_UNIT_TEST(StorageInfoVersion) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+
+        auto& env = *tenv.Env;
+        const TActorId sender = env.Runtime->AllocateEdgeActor(1);
+        const ui64 tabletId = 100;
+        const ui64 issuerGuid = 1;
+
+        auto block = [&](ui32 generation, ui32 version) {
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(tabletId, generation,
+                    TInstant::Max(), issuerGuid, TWriteSource::Unknown, version));
+            });
+            return CaptureTEvBlockResult(env, sender, false);
+        };
+
+        auto result = block(10, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(20, 0);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        result = block(11, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(10, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(!result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        // The rejected version bump must not mutate either value.
+        result = block(12, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(13, 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(~tabletId, 4, TInstant::Max(),
+                TWriteSource::SyncerMergeBlock));
+        });
+        result = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        const std::optional<ui64> blobDepotTabletId = TryGetBlobDepotTabletId(env, tenv.BlobDepot);
+        UNIT_ASSERT(blobDepotTabletId);
+        RebootBlobDepotTablet(env, *blobDepotTabletId);
+
+        result = block(14, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvBlock(tabletId, 16,
+                TInstant::Max(), issuerGuid));
+        });
+        result = CaptureTEvBlockResult(env, sender, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
+
+        result = block(17, 3);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::ERROR);
+        UNIT_ASSERT(result->Get()->IsTabletStorageInfoVersionObsolete);
+    }
+
     Y_UNIT_TEST(BasicCollectGarbage) {
         ui32 seed;
         LoadSeed(seed);
@@ -181,6 +304,14 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             true, Max<ui32>(), Max<ui32>(), nullptr, nullptr, false, true);
         auto collectResult = CaptureTEvCollectGarbageResult(env, sender);
         UNIT_ASSERT_VALUES_EQUAL_C(collectResult->Get()->Status, NKikimrProto::OK, collectResult->Get()->ToString());
+    }
+
+    Y_UNIT_TEST(MaxGenerationBlockCollectsBlobs) {
+        TestMaxGenerationBlock(true);
+    }
+
+    Y_UNIT_TEST(MaxGenerationBlockWaitsForBarrierWhenDisabled) {
+        TestMaxGenerationBlock(false);
     }
 
     Y_UNIT_TEST(TrashBatchReloadAfterRestartWithTinyLimit) {
@@ -315,5 +446,113 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
 
         TestBasicCheckIntegrity(tenv, 1, tenv.RegularGroups[0]);
         TestBasicCheckIntegrity(tenv, 1, tenv.BlobDepot);
+    }
+
+    // The agent does not forward the write, it re-originates it under a blob id of its own, so
+    // every field the underlying group needs has to be copied across by hand. Without that a system
+    // tablet writing through a virtual group reaches the disks as user data.
+    Y_UNIT_TEST(DataKindSurvivesTheAgent) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+        auto& env = *tenv.Env;
+
+        ui64 tabletId = 100500;
+        for (const auto dataKind : {NKikimrBlobStorage::TDataKind::USER, NKikimrBlobStorage::TDataKind::SYSTEM}) {
+            const TString data = TStringBuilder() << "data_" << static_cast<int>(dataKind);
+
+            // Both the original write into the virtual group and the one the agent relays into a
+            // real group carry this exact buffer, so matching on it picks up both hops.
+            std::vector<NKikimrBlobStorage::TDataKind::E> seen;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobStorage::EvPut) {
+                    auto *put = ev->Get<TEvBlobStorage::TEvPut>();
+                    if (put->Buffer.ConvertToString() == data) {
+                        seen.push_back(put->DataKind);
+                    }
+                }
+                return true;
+            };
+
+            const TLogoBlobID id(tabletId++, 1, 1, 0, data.size(), 0);
+            const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                    .BlobId = id,
+                    .Buffer = TRope(data),
+                    .Deadline = TInstant::Max(),
+                    .DataKind = dataKind,
+                }));
+            });
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+
+            env.Runtime->FilterFunction = nullptr;
+
+            UNIT_ASSERT_C(seen.size() >= 2, "the agent did not relay the write, nothing was proven");
+            for (const auto kind : seen) {
+                UNIT_ASSERT_EQUAL(kind, dataKind);
+            }
+        }
+    }
+
+    // A read that asks for MustRestoreFirst turns into a resolve, and in decommission mode the
+    // tablet answers it by copying the blob into its own storage. The kind of the read is the only
+    // thing that can tell that copy whether it is allowed to happen in a group short of space, so
+    // it has to travel with the resolve.
+    Y_UNIT_TEST(DataKindReachesTheResolve) {
+        ui32 seed;
+        LoadSeed(seed);
+        TBlobDepotTestEnvironment tenv(seed);
+        auto& env = *tenv.Env;
+
+        ui64 tabletId = 100600;
+        for (const auto dataKind : {NKikimrBlobStorage::TDataKind::USER, NKikimrBlobStorage::TDataKind::SYSTEM}) {
+            const TString data = "hello";
+            const TLogoBlobID id(tabletId, 1, 1, 0, data.size(), 0);
+            const TActorId sender = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                SendToBSProxy(sender, tenv.BlobDepot, new TEvBlobStorage::TEvPut(id, data, TInstant::Max()));
+            });
+            auto putRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(putRes->Get()->Status, NKikimrProto::OK);
+
+            // A range resolve names the tablet it scans, which keeps unrelated resolves -- the agent
+            // issues them for its own housekeeping too -- out of the measurement.
+            std::vector<NKikimrBlobStorage::TDataKind::E> seen;
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvBlobDepot::EvResolve) {
+                    const auto& record = ev->Get<TEvBlobDepot::TEvResolve>()->Record;
+                    for (const auto& item : record.GetItems()) {
+                        if (item.GetTabletId() == tabletId) {
+                            seen.push_back(record.GetDataKind());
+                        }
+                    }
+                }
+                return true;
+            };
+
+            const TLogoBlobID from(tabletId, 0, 0, 0, 0, 0);
+            const TLogoBlobID to(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
+                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie);
+            env.Runtime->WrapInActorContext(sender, [&] {
+                auto range = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to,
+                    true /*mustRestoreFirst*/, TInstant::Max(), false /*isIndexOnly*/);
+                range->DataKind = dataKind;
+                SendToBSProxy(sender, tenv.BlobDepot, range.release());
+            });
+            auto rangeRes = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender, false);
+            UNIT_ASSERT_VALUES_EQUAL(rangeRes->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(rangeRes->Get()->Responses.size(), 1);
+
+            env.Runtime->FilterFunction = nullptr;
+
+            UNIT_ASSERT_C(!seen.empty(), "the read did not resolve anything, so it proves nothing");
+            for (const auto kind : seen) {
+                UNIT_ASSERT_EQUAL(kind, dataKind);
+            }
+
+            ++tabletId;
+        }
     }
 }

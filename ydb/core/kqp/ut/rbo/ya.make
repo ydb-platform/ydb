@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
+SPLIT_FACTOR(16)
 
 SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
@@ -23,6 +24,7 @@ PEERDIR(
     ydb/core/statistics/ut_common
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/hyperloglog
+    yql/essentials/udfs/common/url_base
 )
 
 ADDINCL(

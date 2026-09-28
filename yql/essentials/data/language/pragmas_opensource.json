@@ -3,6 +3,9 @@
     "name": "yt.Annotations"
   },
   {
+    "name": "yt.ApplyMaxJobCountToAll"
+  },
+  {
     "name": "yt.ApplyStoredConstraints"
   },
   {
@@ -441,6 +444,9 @@
     "name": "yt.PartitionByConstantKeysViaMap"
   },
   {
+    "name": "yt.PassOptLLVMToDqCodecs"
+  },
+  {
     "name": "yt.Pool"
   },
   {
@@ -474,6 +480,9 @@
     "name": "yt.PythonCpu"
   },
   {
+    "name": "yt.QLFilterDepthLimit"
+  },
+  {
     "name": "yt.QueryCacheChunkLimit"
   },
   {
@@ -502,6 +511,9 @@
   },
   {
     "name": "yt.ReduceLocalityTimeout"
+  },
+  {
+    "name": "yt.ReleaseSnapshotLocks"
   },
   {
     "name": "yt.ReleaseTempData"
@@ -709,6 +721,9 @@
   },
   {
     "name": "dq.ChunkSizeLimit"
+  },
+  {
+    "name": "dq.Clique"
   },
   {
     "name": "dq.CollectCoreDumps"
@@ -1047,7 +1062,13 @@
     "name": "DisableRegexUseRe2"
   },
   {
+    "name": "DisableRespectWarnPolicyForUnusedSqlHints"
+  },
+  {
     "name": "DisableRotateJoinTree"
+  },
+  {
+    "name": "DisableRuntimeUserAttrs"
   },
   {
     "name": "DisableSeqMode"
@@ -1209,6 +1230,9 @@
     "name": "RegexUseRe2"
   },
   {
+    "name": "RespectWarnPolicyForUnusedSqlHints"
+  },
+  {
     "name": "ResultRowsLimit"
   },
   {
@@ -1219,6 +1243,9 @@
   },
   {
     "name": "RuntimeLogLevel"
+  },
+  {
+    "name": "RuntimeUserAttrs"
   },
   {
     "name": "SampleSelect"
@@ -1240,6 +1267,9 @@
   },
   {
     "name": "Udf"
+  },
+  {
+    "name": "UdfBridge"
   },
   {
     "name": "UnicodeLiterals"

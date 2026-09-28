@@ -204,6 +204,7 @@ namespace NKikimr::NBlobDepot {
 
             auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, TInstant::Max(), context->ReadArg.GetHandleClass);
             event->ReaderTabletData = context->ReadArg.ReaderTabletData;
+            event->DataKind = context->ReadArg.DataKind;
             YDB_LOG_DEBUG("Issuing TEvGet",
                 {"marker", "BDA39"},
                 {"agentId", Agent.LogId},
@@ -277,6 +278,7 @@ namespace NKikimr::NBlobDepot {
                 auto *item = resolve.AddItems();
                 item->SetExactKey(readContext.ReadArg.Key);
                 item->SetMustRestoreFirst(readContext.ReadArg.MustRestoreFirst);
+                resolve.SetDataKind(readContext.ReadArg.DataKind);
                 YDB_LOG_DEBUG("Issuing extra resolve",
                     {"marker", "BDA48"},
                     {"agent", Agent.LogId},

@@ -113,7 +113,7 @@ TMaybe<TString> BuildS3FilePattern(
 
     if (partitionedBy.empty()) {
         if (path.empty()) {
-            return "Can not read from empty path";
+            return "Cannot read from empty path";
         }
 
         if (path.EndsWith('/')) {

@@ -1,5 +1,5 @@
 diff --git a/src/filesystem/posix_compat.h b/src/filesystem/posix_compat.h
-index ddd99d8aaf20..5e4cbbdd3943 100644
+index ddd99d8..5e4cbbd 100644
 --- a/src/filesystem/posix_compat.h
 +++ b/src/filesystem/posix_compat.h
 @@ -75,6 +75,12 @@ struct LIBCPP_REPARSE_DATA_BUFFER {

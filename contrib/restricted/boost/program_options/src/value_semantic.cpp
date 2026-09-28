@@ -84,12 +84,14 @@ namespace boost { namespace program_options {
     }
 #endif
 
-    BOOST_PROGRAM_OPTIONS_DECL std::string arg("arg");
+    namespace detail {
+        BOOST_PROGRAM_OPTIONS_DECL std::string arg("arg");
+    }
 
     std::string
     untyped_value::name() const
     {
-        return arg;
+        return detail::arg;
     }
     
     unsigned 

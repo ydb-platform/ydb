@@ -1,0 +1,3 @@
+Currently, simultaneous use of {% if backend_name == 'YDB' %} [columnar](../../../concepts/glossary.md#column-oriented-table){% else %}columnar{% endif %} and {% if backend_name == 'YDB' %}[row-based](../../../concepts/glossary.md#row-oriented-table){% else %}row-based{% endif %} tables is supported in transactions that only read data but do not modify it. Support for transactions that can modify data while using both row-based and columnar tables is under development.
+
+If you attempt to perform a write operation in a transaction that involves both columnar and row-based tables, the transaction will fail with an error: `Write transactions that use both row-oriented and column-oriented tables are disabled at current time`.

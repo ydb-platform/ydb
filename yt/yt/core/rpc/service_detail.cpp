@@ -410,7 +410,7 @@ public:
         Service_->IncrementActiveRequestCount();
         ActiveRequestCountIncremented_ = true;
 
-        BuildGlobalRequestInfo();
+        BuildGlobalRequestAnnotations();
 
         Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
 
@@ -423,7 +423,7 @@ public:
     {
         if (!Replied_) {
             // Prevent alerting.
-            SuppressMissingRequestInfoCheck();
+            SuppressMissingRequestAnnotationCheck();
 
             TCurrentTraceContextGuard guard(TraceContext_);
             if (CanceledList_.IsFired()) {
@@ -549,8 +549,11 @@ public:
 
     TError GetCanceledError() const
     {
-        return TError(NYT::EErrorCode::Canceled, "RPC request is canceled")
-            << ThrottledError_;
+        auto error = TError(NYT::EErrorCode::Canceled, "RPC request is canceled");
+        if (ThrottledError_ && !ThrottledError_->IsOK()) {
+            error.Add(*ThrottledError_);
+        }
+        return error;
     }
 
     void Cancel() override
@@ -582,11 +585,18 @@ public:
             return;
         }
 
+        // Guards from race with DoGuardedRun. If request timed out then there
+        // is no need to attempt to execute it. Thus, early exchange here.
+        auto wasRun = RunLatch_.exchange(true);
+
         YT_TLOG_DEBUG("Request timed out, canceling")
             .With("RequestId", RequestId_)
             .With("Stage", stage);
 
-        auto error = TError(NYT::EErrorCode::Timeout, "Request timed out");
+        auto error = TError(
+            NYT::EErrorCode::Timeout,
+            "Request timed out%v",
+            stage == ERequestProcessingStage::Waiting ? " before being run" : "");
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
             AbortStreamsUnlessClosed(error);
@@ -596,10 +606,10 @@ public:
 
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 
-        // Guards from race with DoGuardedRun.
         // We can only mark as complete those requests that will not be run
-        // as there's no guarantee that, if started,  the method handler will respond promptly to cancelation.
-        if (!RunLatch_.exchange(true)) {
+        // as there's no guarantee that, if started, the method handler will
+        // respond promptly to cancelation.
+        if (!wasRun) {
             SetComplete();
         }
     }
@@ -677,6 +687,20 @@ public:
         return ResponseAttachmentsStream_;
     }
 
+    std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() override
+    {
+        TAttachmentsOutputStreamPtr stream;
+        {
+            auto guard = Guard(StreamsLock_);
+            stream = ResponseAttachmentsStream_;
+        }
+
+        if (!stream) {
+            return std::nullopt;
+        }
+        return stream->GetStatistics();
+    }
+
     void HandleStreamingPayload(const TStreamingPayload& payload)
     {
         if (!RuntimeInfo_->Descriptor.StreamingEnabled) {
@@ -691,7 +715,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming payload")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             RequestAttachmentsStream_->Abort(ex);
         }
     }
@@ -716,7 +740,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming feedback")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             stream->Abort(ex);
         }
     }
@@ -800,69 +824,66 @@ private:
         return false;
     }
 
-    void BuildGlobalRequestInfo()
+    void BuildGlobalRequestAnnotations()
     {
-        TStringBuilder builder;
-        TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
-
         if (RequestHeader_->has_request_id()) {
-            delimitedBuilder->AppendFormat("RequestId: %v", FromProto<TRequestId>(RequestHeader_->request_id()));
+            RequestLoggingTags_.Add("RequestId", FromProto<TRequestId>(RequestHeader_->request_id()));
         }
 
         if (RequestHeader_->has_realm_id()) {
-            delimitedBuilder->AppendFormat("RealmId: %v", FromProto<TRealmId>(RequestHeader_->realm_id()));
+            RequestLoggingTags_.Add("RealmId", FromProto<TRealmId>(RequestHeader_->realm_id()));
         }
 
         if (RequestHeader_->has_user()) {
-            delimitedBuilder->AppendFormat("User: %v", RequestHeader_->user());
+            RequestLoggingTags_.Add("User", RequestHeader_->user());
         }
 
         if (RequestHeader_->has_user_tag() && RequestHeader_->user_tag() != RequestHeader_->user()) {
-            delimitedBuilder->AppendFormat("UserTag: %v", RequestHeader_->user_tag());
+            RequestLoggingTags_.Add("UserTag", RequestHeader_->user_tag());
         }
 
         if (RequestHeader_->has_mutation_id()) {
-            delimitedBuilder->AppendFormat("MutationId: %v", FromProto<TMutationId>(RequestHeader_->mutation_id()));
+            RequestLoggingTags_.Add("MutationId", FromProto<TMutationId>(RequestHeader_->mutation_id()));
         }
 
         if (RequestHeader_->has_start_time()) {
-            delimitedBuilder->AppendFormat("StartTime: %v", FromProto<TInstant>(RequestHeader_->start_time()));
+            RequestLoggingTags_.Add("StartTime", FromProto<TInstant>(RequestHeader_->start_time()));
         }
 
-        delimitedBuilder->AppendFormat("Retry: %v", RequestHeader_->retry());
+        RequestLoggingTags_.Add("Retry", RequestHeader_->retry());
 
         if (RequestHeader_->has_user_agent()) {
-            delimitedBuilder->AppendFormat("UserAgent: %v", RequestHeader_->user_agent());
+            RequestLoggingTags_.Add("UserAgent", RequestHeader_->user_agent());
         }
 
         if (RequestHeader_->has_timeout()) {
-            delimitedBuilder->AppendFormat("Timeout: %v", FromProto<TDuration>(RequestHeader_->timeout()));
+            RequestLoggingTags_.Add("Timeout", FromProto<TDuration>(RequestHeader_->timeout()));
         }
 
         if (RequestHeader_->tos_level() != NBus::DefaultTosLevel) {
-            delimitedBuilder->AppendFormat("TosLevel: %x", RequestHeader_->tos_level());
+            RequestLoggingTags_.AddFormat("TosLevel", "%x", RequestHeader_->tos_level());
         }
 
         if (RequestHeader_->HasExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext)) {
             const auto& multiproxyTargetExt = RequestHeader_->GetExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext);
-            delimitedBuilder->AppendFormat("MultiproxyTargetCluster: %v", multiproxyTargetExt.cluster());
+            RequestLoggingTags_.Add("MultiproxyTargetCluster", multiproxyTargetExt.cluster());
         }
 
-        delimitedBuilder->AppendFormat("Endpoint: %v", ReplyBus_->GetEndpointDescription());
-
-        delimitedBuilder->AppendFormat("BodySize: %v, AttachmentsSize: %v/%v",
-            GetMessageBodySize(RequestMessage_),
-            GetTotalMessageAttachmentSize(RequestMessage_),
-            GetMessageAttachmentCount(RequestMessage_));
+        RequestLoggingTags_
+            .Add("Endpoint", ReplyBus_->GetEndpointDescription())
+            .Add("BodySize", GetMessageBodySize(RequestMessage_))
+            .AddFormat(
+                "AttachmentsSize",
+                "%v/%v",
+                GetTotalMessageAttachmentSize(RequestMessage_),
+                GetMessageAttachmentCount(RequestMessage_));
 
         // COMPAT(danilalexeev): legacy RPC codecs
         if (RequestHeader_->has_request_codec() && RequestHeader_->has_response_codec()) {
-            delimitedBuilder->AppendFormat("RequestCodec: %v, ResponseCodec: %v",
-                RequestCodec_,
-                ResponseCodec_);
+            RequestLoggingTags_
+                .Add("RequestCodec", RequestCodec_)
+                .Add("ResponseCodec", ResponseCodec_);
         }
-
-        RequestInfos_.push_back(builder.Flush());
     }
 
     void Finish()
@@ -1160,8 +1181,8 @@ private:
 
         TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
 
-        for (const auto& info : RequestInfos_) {
-            delimitedBuilder->AppendString(info);
+        if (!RequestLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", RequestLoggingTags_);
         }
 
         if (RuntimeInfo_->Descriptor.Cancelable && !Cancelable_) {
@@ -1170,7 +1191,7 @@ private:
 
         auto logMessage = builder.Flush();
         if (TraceContext_ && TraceContext_->IsRecorded()) {
-            TraceContext_->AddTag(RequestInfoAnnotation, logMessage);
+            TraceContext_->AddTag(RequestAnnotationsTraceTag, logMessage);
             const auto& authenticationIdentity = GetAuthenticationIdentity();
             if (!authenticationIdentity.User.empty()) {
                 TStringBuilder builder;
@@ -1184,7 +1205,7 @@ private:
         }
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
 
-        RequestInfoState_ = ERequestInfoState::Flushed;
+        RequestAnnotationState_ = ERequestAnnotationState::Flushed;
     }
 
     void LogResponse() override
@@ -1215,8 +1236,8 @@ private:
             GetTotalMessageAttachmentSize(responseMessage),
             GetMessageAttachmentCount(responseMessage));
 
-        for (const auto& info : ResponseInfos_) {
-            delimitedBuilder->AppendString(info);
+        if (!ResponseLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", ResponseLoggingTags_);
         }
 
         delimitedBuilder->AppendFormat("ExecutionTime: %v, TotalTime: %v",
@@ -1229,7 +1250,7 @@ private:
 
         auto logMessage = builder.Flush();
         if (TraceContext_ && TraceContext_->IsRecorded()) {
-            TraceContext_->AddTag(ResponseInfoAnnotation, logMessage);
+            TraceContext_->AddTag(ResponseAnnotationsTraceTag, logMessage);
         }
         auto logLevel = Error_.IsOK() ? LogLevel_ : ErrorLogLevel_;
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, logLevel, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
@@ -1667,7 +1688,7 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 
 void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
-    ++QueueSize_;
+    QueueSize_.fetch_add(1, std::memory_order::relaxed);
     QueueByteSize_.fetch_add(requestTotalSize);
 
     RuntimeInfo_->QueueSize.fetch_add(1, std::memory_order::relaxed);
@@ -1676,16 +1697,16 @@ void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 
 void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
-    auto newQueueSize = --QueueSize_;
+    auto oldQueueSize = QueueSize_.fetch_sub(1, std::memory_order::relaxed);
     auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 
-    newQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
+    oldQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
     oldQueueByteSize = RuntimeInfo_->QueueByteSize.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 }
 
@@ -1910,25 +1931,27 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
 
     if (incomingRequest.RequestQueue->IsQueueSizeLimitExceeded()) {
         incomingRequest.RuntimeInfo->RequestQueueSizeLimitErrorCounter.Increment();
-        ReplyError(
-            TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue size limit exceeded")
-                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
-                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
-                << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
-                << incomingRequest.ThrottledError,
-            std::move(incomingRequest));
+        auto error = TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue size limit exceeded")
+            .With("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
+            .With("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
+            .With("queue", incomingRequest.RequestQueue->GetName());
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
+            error.Add(*incomingRequest.ThrottledError);
+        }
+        ReplyError(std::move(error), std::move(incomingRequest));
         return;
     }
 
     if (incomingRequest.RequestQueue->IsQueueByteSizeLimitExceeded()) {
         incomingRequest.RuntimeInfo->RequestQueueByteSizeLimitErrorCounter.Increment();
-        ReplyError(
-            TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue bytes size limit exceeded")
-                << TErrorAttribute("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
-                << TErrorAttribute("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
-                << TErrorAttribute("queue", incomingRequest.RequestQueue->GetName())
-                << incomingRequest.ThrottledError,
-            std::move(incomingRequest));
+        auto error = TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Request queue bytes size limit exceeded")
+            .With("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
+            .With("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
+            .With("queue", incomingRequest.RequestQueue->GetName());
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
+            error.Add(*incomingRequest.ThrottledError);
+        }
+        ReplyError(std::move(error), std::move(incomingRequest));
         return;
     }
 
@@ -2047,7 +2070,8 @@ void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)
         logLevel = NLogging::ELogLevel::Warning;
     }
 
-    YT_LOG_EVENT(Logger, logLevel, richError);
+    YT_TLOG_EVENT(Logger, logLevel, "Request failed")
+        .With(richError);
 
     auto errorMessage = CreateErrorResponseMessage(incomingRequest.RequestId, richError);
     YT_UNUSED_FUTURE(incomingRequest.ReplyBus->Send(errorMessage));
@@ -2065,8 +2089,11 @@ void TServiceBase::OnRequestAuthenticated(
     --AuthenticationQueueSize_;
 
     if (!authResultOrError.IsOK()) {
+        auto error = authResultOrError.FindMatching(NRpc::EErrorCode::TransientFailure)
+            ? TError(NRpc::EErrorCode::TransientFailure, "Transient failure while authenticating request")
+            : TError(NRpc::EErrorCode::AuthenticationError, "Request authentication failed");
         ReplyError(
-            TError(NRpc::EErrorCode::AuthenticationError, "Request authentication failed")
+            std::move(error)
                 .With(authResultOrError),
             std::move(incomingRequest));
         return;
@@ -2724,9 +2751,9 @@ void TServiceBase::ReplyDiscoverRequest(const TCtxDiscoverPtr& context, bool isU
     response.set_up(isUp);
     ToProto(response.mutable_suggested_addresses(), SuggestAddresses());
 
-    context->SetResponseInfo("Up: %v, SuggestedAddresses: %v",
-        response.up(),
-        response.suggested_addresses());
+    context->AnnotateResponse()
+        .With("Up", response.up())
+        .With("SuggestedAddresses", response.suggested_addresses());
 
     context->Reply();
 }
@@ -2816,6 +2843,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
         {RootUserName, runtimeInfo->DefaultRequestQueue.Get()});
 
     runtimeInfo->Heavy.store(descriptor.Options.Heavy);
+    runtimeInfo->Pooled.store(descriptor.Pooled);
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
     runtimeInfo->QueueByteSizeLimit.store(descriptor.QueueByteSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
@@ -2943,7 +2971,7 @@ void TServiceBase::DoConfigure(
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error configuring RPC service %v",
             ServiceId_.ServiceName)
-            .With(TError(ex));
+            .With(ex);
     }
 }
 
@@ -2963,7 +2991,7 @@ void TServiceBase::Configure(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error parsing RPC service %v config",
                 ServiceId_.ServiceName)
-                .With(TError(ex));
+                .With(ex);
         }
     } else {
         config = New<TServiceConfig>();
@@ -3032,8 +3060,8 @@ DEFINE_RPC_SERVICE_METHOD(TServiceBase, Discover)
 {
     auto replyDelay = FromProto<TDuration>(request->reply_delay());
 
-    context->SetRequestInfo("ReplyDelay: %v",
-        replyDelay);
+    context->AnnotateRequest()
+        .With("ReplyDelay", replyDelay);
 
     auto isUp = IsUp(context);
     EnrichDiscoverResponse(response);

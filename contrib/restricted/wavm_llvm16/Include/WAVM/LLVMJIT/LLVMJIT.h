@@ -132,6 +132,8 @@ namespace WAVM { namespace LLVMJIT {
 	{
 		Runtime::Function* function;
 		Uptr instructionIndex;
+		//! Source path from JIT DWARF line info when available (empty / "unknown" otherwise).
+		std::string fileName;
 	};
 
 	// Finds the JIT function and instruction index at the given address. If no JIT function

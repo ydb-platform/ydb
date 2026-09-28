@@ -7,6 +7,8 @@
 #include <atomic>
 #include <cassert>
 #include <map>
+#include <memory>
+#include <vector>
 #include "WAVM/IR/Types.h"
 #include "WAVM/IR/Value.h"
 #include "WAVM/Inline/BasicTypes.h"
@@ -24,6 +26,7 @@ namespace WAVM { namespace Runtime {
 	struct Object;
 	struct Table;
 	struct Memory;
+	struct ModuleDebugInfo;
 
 	// Runtime object types. This must be a superset of IR::ExternKind, with IR::ExternKind
 	// values having the same representation in Runtime::ObjectKind.
@@ -193,6 +196,10 @@ namespace WAVM { namespace Runtime {
 		std::atomic<InvokeThunkPointer> invokeThunk{nullptr};
 		void* userData{nullptr};
 		void (*finalizeUserData)(void*);
+		//! Original wasm DWARF context (shared with Runtime::Module); may be null.
+		std::shared_ptr<ModuleDebugInfo> moduleDebugInfo;
+		//! Code-section-relative PCs parallel to JIT op indices; empty if unavailable.
+		std::vector<U32> operatorCodeSectionOffsets;
 
 		FunctionMutableData(std::string&& inDebugName)
 		: debugName(inDebugName), userData(nullptr), finalizeUserData(nullptr)

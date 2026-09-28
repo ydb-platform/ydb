@@ -165,7 +165,6 @@ private:
         UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
     }
 
-private:
     TUniquePtr<TFsm> Fsm_;
     bool MultiMode_;
     size_t RegexpsCount_;

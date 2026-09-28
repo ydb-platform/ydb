@@ -145,7 +145,6 @@ public:
     void OnEndVariant() override;
     void OnPg(TMaybe<TStringBuf> value, bool isUtf8) override;
 
-public:
     virtual void Do() = 0;
 };
 
@@ -237,7 +236,6 @@ private:
     void Push(NYT::TNode* value);
     void Pop();
 
-private:
     NYT::TNode Root_;
     TVector<NYT::TNode*> Stack_;
 };

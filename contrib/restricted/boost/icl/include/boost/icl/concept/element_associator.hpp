@@ -13,6 +13,7 @@ Copyright (c) 2010-2010: Joachim Faulhaber
 #include <boost/icl/type_traits/is_key_container_of.hpp>
 #include <boost/icl/type_traits/is_combinable.hpp>
 #include <boost/icl/detail/subset_comparer.hpp>
+#include <boost/icl/detail/associated_value.hpp>
 #include <boost/icl/concept/element_set.hpp>
 #include <boost/icl/concept/element_map.hpp>
 
@@ -142,7 +143,7 @@ is_element_equal(const Type& left, const Type& right)
 { return left == right; }
 
 
-/* Strict weak less ordering which is given by the Compare order */
+/* Strict partial less ordering which is given by the Compare order */
 template<class Type>
 inline typename enable_if<is_associative_element_container<Type>, bool>::type
 operator < (const Type& left, const Type& right)

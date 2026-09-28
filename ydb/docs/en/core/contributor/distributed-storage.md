@@ -1,8 +1,35 @@
-# {{ ydb-short-name }} distributed storage
+# {{ ydb-short-name }} Distributed Storage
 
 {{ ydb-short-name }} distributed storage is a subsystem of {{ ydb-short-name }} that ensures reliable data storage.
 
-It allows you to store *blobs* (binary fragments ranging from 1 byte to 10 megabytes in size) with a unique identifier.
+The blob interface stores *blobs* (binary fragments ranging from 1 byte to 10 megabytes in size) with a unique identifier. The subsystem also supplies the DDisk and PersistentBuffer primitives used by direct block storage. These paths share device management and placement infrastructure, but expose different data and replication contracts.
+
+## Components and Boundaries
+
+| Component | Responsibility | Starting Point |
+|---|---|---|
+| DS proxy | Executes blob-group requests, including erasure coding and group-level redundancy. | [DS proxy sources](https://github.com/ydb-platform/ydb/tree/main/ydb/core/blobstorage/dsproxy) |
+| VDisk | Stores a group's blob parts and maintains their indexes, synchronization, garbage collection, and recovery state. | [VDisk sources](https://github.com/ydb-platform/ydb/tree/main/ydb/core/blobstorage/vdisk) |
+| PDisk | Owns a physical device, allocates chunks to owners, and supplies logging and device I/O services. | [PDisk sources](https://github.com/ydb-platform/ydb/tree/main/ydb/core/blobstorage/pdisk) |
+| DDisk and PersistentBuffer | Supply addressable block storage and persistent staging records for direct block clients. | [{#T}](distributed-storage/ddisk.md), [{#T}](distributed-storage/persistent-buffer.md) |
+| NodeWarden | Applies node-local storage configuration and manages local PDisk, VDisk/DDisk, and proxy actors. | [{#T}](distributed-storage/node-warden.md) |
+| BlobStorage Controller (BSC) | Maintains storage pools, placement, group configuration, and direct block group claims. | [Controller sources](https://github.com/ydb-platform/ydb/tree/main/ydb/core/mind/bscontroller) |
+
+The conventional blob path is `tablet → DS proxy → VDisk → PDisk`. In the direct block path, a client such as an NBS partition sends requests directly to DDisk and PersistentBuffer services. That client chooses replication, quorum, retry, and flush policy. A DDisk does not implement the VDisk blob protocol or its group recovery algorithm.
+
+[{#T}](distributed-storage/direct-block-groups.md) describes direct block placement and allocation. The rest of this page describes the conventional blob interface and VDisk groups.
+
+### Shared Contracts
+
+- Service actor IDs identify a location or service. The actor serving that ID can be replaced during recovery; an ID alone does not establish that a request belongs to the current incarnation.
+- Tablet generation, blob group generation, PDisk owner round, and DDisk connection token have different owners and purposes. Preserve the appropriate fencing value across each interface instead of substituting one for another.
+- Pool capacity claims, local chunk allocation, and completed data writes are separate states. A successful controller allocation does not acknowledge a data write.
+- Request success has the scope of the receiving component. A local device write or one successful replica is not automatically a group-level durability acknowledgment.
+- [Actor lifecycle and messaging](actor-system/index.md) rules apply to tablets, storage services, request actors, and their asynchronous I/O completions.
+
+### Source Layout
+
+Start in `ydb/core/blobstorage` for `dsproxy/`, `vdisk/`, `pdisk/`, `ddisk/`, and `nodewarden/`. Cross-component event and format definitions also live in `ydb/core/base` and `ydb/core/protos`; placement transactions live in `ydb/core/mind/bscontroller`. The low-level `TUringRouter` implementation is in `ydb/library/pdisk_io`, while NBS partition policy is in `ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct`.
 
 ## Description of the distributed storage Interface
 
@@ -29,19 +56,19 @@ When performing reads, the blob ID is specified, which can be arbitrary but is p
 
 ### Groups
 
-Blobs are written to a logical entity called a *group*. A special actor called *DS proxy* is created on every node for each group that is written to. This actor is responsible for performing all operations related to the group. The actor is created automatically by the NodeWarden service, which will be described below.
+Blobs are written to a logical entity called a *group*. A special actor called *DS proxy* is created on every node for each group that is written to. This actor is responsible for performing all operations related to the group. The actor is created automatically by the [NodeWarden service](distributed-storage/node-warden.md).
 
 Physically, a group is a set of multiple physical devices (OS block devices) located on different nodes, so that the failure of one device correlates as little as possible with the failure of another device. These devices are usually located in different racks or datacenters. On each of these devices, some space is allocated for the group, which is managed by a special service called *VDisk*. Each VDisk runs on top of a block storage device, from which it is separated by another service called *PDisk*. Blobs are broken into fragments based on [erasure coding](https://en.wikipedia.org/wiki/Erasure_code), with these fragments written to VDisks. Before splitting into fragments, optional encryption of the data in the group can be performed.
 
 This scheme is shown in the figure below.
 
-![PDisk, VDisk, and a group](_assets/Slide3_group_layout.svg)
+![PDisk, VDisk, and a group](_assets/Slide3_group_layout.svg){inline=false}
 
 VDisks from different groups are shown as multicolored squares; one color stands for one group.
 
 A group can be treated as a set of VDisks:
 
-![Group](_assets/Slide_group_content.svg)
+![Group](_assets/Slide_group_content.svg){inline=false}
 
 Each VDisk within a group has a sequence number, and disks are numbered 0 to N-1, where N is the number of disks in the group.
 

@@ -6,35 +6,28 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 namespace NKikimr::NBsQueue {
 
-// Special timer for debug purposes, which works with virtual time of TTestActorSystem
-struct TActivationContextTimer {
-    TActivationContextTimer()
-        : CreationTimestamp(NActors::TActivationContext::Monotonic())
-    {}
-
-    double Passed() const {
-        return (NActors::TActivationContext::Monotonic() - CreationTimestamp).SecondsFloat();
-    }
-
-    TMonotonic CreationTimestamp;
-};
-
 struct TBSQueueTimer {
+    const bool UseActorSystemTime;
+    ui64 Timestamp;
+
     TBSQueueTimer(bool useActorSystemTime)
+        : UseActorSystemTime(useActorSystemTime)
     {
         if (useActorSystemTime) {
-            Timer.emplace<TActivationContextTimer>();
+            Timestamp = NActors::TActivationContext::Monotonic().GetValue();
         } else {
-            Timer.emplace<THPTimer>();
+            NHPTimer::STime start;
+            NHPTimer::GetTime(&start);
+            Timestamp = static_cast<ui64>(start);
         }
     }
 
-    std::variant<THPTimer, TActivationContextTimer> Timer;
-
     double Passed() const {
-        return std::visit([](const auto& timer) -> double {
-            return timer.Passed();
-        }, Timer);
+        if (UseActorSystemTime) {
+            return (NActors::TActivationContext::Monotonic() - TMonotonic::FromValue(Timestamp)).SecondsFloat();
+        }
+        NHPTimer::STime start = static_cast<NHPTimer::STime>(Timestamp);
+        return NHPTimer::GetTimePassed(&start);
     }
 };
 

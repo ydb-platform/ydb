@@ -7,6 +7,7 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/sparsed
     ydb/core/formats/arrow/accessor/dictionary
     ydb/core/formats/arrow/accessor/composite_serial
+    ydb/core/formats/arrow/serializer
     ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/save_load
     ydb/core/formats/arrow/container/filterable
@@ -26,6 +27,8 @@ SRCS(
     json_extractors.cpp
     json_value_path.cpp
     accessor.cpp
+    dense_encoding/encoding.cpp
+    dense_encoding/constructors.cpp
     direct_builder.cpp
     types.cpp
     settings.cpp
@@ -46,8 +49,10 @@ END()
 
 RECURSE(
     tools
+    ut_common
 )
 
 RECURSE_FOR_TESTS(
     ut
+    dense_encoding/ut
 )

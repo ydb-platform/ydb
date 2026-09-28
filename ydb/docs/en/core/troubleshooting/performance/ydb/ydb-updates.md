@@ -16,7 +16,7 @@ Diagnostics of {{ ydb-short-name }} rolling restarts and updates relies only on 
 
 To check if the {{ ydb-short-name }} cluster is currently being updated:
 
-1. Open [Embedded UI](../../../reference/embedded-ui/index.md).
+1. Open [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
 
 1. On the **Nodes** tab, see if {{ ydb-short-name }} versions of the nodes differ.
 

@@ -6,6 +6,8 @@ namespace NSQLTranslationV1 {
 
 using namespace NSQLv1Generated;
 
+bool IsCompactGroupBy(TContext& ctx, const TRule_group_by_clause& node);
+
 class TGroupByClause: public TSqlTranslation {
     enum class EGroupByFeatures {
         Begin,

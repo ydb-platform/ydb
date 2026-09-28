@@ -1,6 +1,7 @@
 #include "kqp_rbo_physical_source_builder.h"
 
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -84,7 +85,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                     .Args({programArg})
                     .Body(renameMap)
                 .Build()
-                .Settings().Build()
+                .Settings(NYql::NDq::TDqStageSettings::New(StageGUID).BuildNode(Ctx, Pos))
             .Done().Ptr();
             // clang-format on
             break;

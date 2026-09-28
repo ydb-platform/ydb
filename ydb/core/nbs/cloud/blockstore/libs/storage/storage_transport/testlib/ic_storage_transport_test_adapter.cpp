@@ -16,30 +16,44 @@ using namespace NKikimr;
 ////////////////////////////////////////////////////////////////////////////////
 
 TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
-    TTestActorRuntime* runtime)
+    TTestActorRuntime* runtime,
+    bool enableChecksums)
     : TICStorageTransportTestAdapter(
           runtime,
-          // Register the real transport actor inside the runtime and address
-          // it directly from the TICStorageTransport base.
-          runtime->Register(
-              std::make_unique<TICStorageTransportActor>(
-                  TDiskDescription{
-                      .DiskId = "disk-id",
-                      .TabletId = 100,
-                      .Generation = 1},
-                  0)
-                  .release(),
-              0))
+          [&]
+          {
+              TBootstrap bootstrap;
+              bootstrap.Registry = std::make_shared<TDirectSessionRegistry>();
+              bootstrap.ActorId = runtime->Register(
+                  std::make_unique<TICStorageTransportActor>(
+                      TDiskDescription{
+                          .DiskId = "disk-id",
+                          .TabletId = 100,
+                          .Generation = 1},
+                      0,
+                      enableChecksums,
+                      bootstrap.Registry)
+                      .release(),
+                  0);
+              return bootstrap;
+          }(),
+          enableChecksums)
 {}
 
 TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
     TTestActorRuntime* runtime,
-    TActorId transportActorId)
-    : TICStorageTransport(runtime->GetActorSystem(0), transportActorId)
+    TBootstrap bootstrap,
+    bool enableChecksums)
+    : TICDirectStorageTransport(
+          runtime->GetActorSystem(0),
+          bootstrap.ActorId,
+          bootstrap.Registry,
+          enableChecksums)
     , Runtime(runtime)
     , NodeId(runtime->GetNodeId(0))
     , EdgeActor(runtime->AllocateEdgeActor(0))
-    , TransportActorId(transportActorId)
+    , TransportActorId(bootstrap.ActorId)
+    , Registry(std::move(bootstrap.Registry))
 {
     DDiskIds.reserve(DirectBlockGroupHostCount);
     PBufferIds.reserve(DirectBlockGroupHostCount);
@@ -99,6 +113,13 @@ void TICStorageTransportTestAdapter::RegisterStub(
                 ddiskId.NodeId,
                 ddiskId.PDiskId,
                 ddiskId.DDiskSlotId);
+            Runtime->RegisterService(
+                MakeBlobStorageDDiskId(
+                    ddiskId.NodeId,
+                    ddiskId.PDiskId,
+                    ddiskId.DDiskSlotId),
+                actorId,
+                0);
             break;
     }
 
@@ -107,6 +128,42 @@ void TICStorageTransportTestAdapter::RegisterStub(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void TICStorageTransportTestAdapter::EnableFakeDirectSession()
+{
+    FakeDirectSession =
+        std::make_shared<TFakeDirectSession>(Runtime->GetActorSystem(0));
+    Registry->Set(
+        NodeId,
+        MakeSessionEntry(Runtime->GetActorSystem(0), FakeDirectSession));
+}
+
+void TICStorageTransportTestAdapter::ShutdownFakeDirectSession()
+{
+    if (FakeDirectSession) {
+        FakeDirectSession->Shutdown();
+    }
+    Registry->Reset(NodeId);
+    FakeDirectSession.reset();
+}
+
+void TICStorageTransportTestAdapter::SetDirectSession(
+    std::shared_ptr<IDirectSession> session)
+{
+    FakeDirectSession.reset();
+    if (session) {
+        Registry->Set(
+            NodeId,
+            MakeSessionEntry(Runtime->GetActorSystem(0), std::move(session)));
+    } else {
+        Registry->Reset(NodeId);
+    }
+}
+
+ui64 TICStorageTransportTestAdapter::GetFakeDirectSessionSentEventCount() const
+{
+    return FakeDirectSession ? FakeDirectSession->GetSentEventCount() : 0;
+}
 
 void TICStorageTransportTestAdapter::SetPendingConnect(
     EConnectionType type,
@@ -135,6 +192,112 @@ void TICStorageTransportTestAdapter::SetPendingWriteToDDisk(
     state->PendingWrite = true;
 }
 
+void TICStorageTransportTestAdapter::SetPendingWriteToPBuffer(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    state->PendingWritePBuffer = true;
+}
+
+void TICStorageTransportTestAdapter::SetPendingErase(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    state->PendingErase = true;
+}
+
+void TICStorageTransportTestAdapter::SetPendingSync(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    state->PendingSync = true;
+}
+
+void TICStorageTransportTestAdapter::SetSplitWriteToManyReplies(
+    EConnectionType type,
+    const TDDiskId& ddiskId,
+    bool split)
+{
+    auto state = FindState(type, ddiskId);
+    auto guard = Guard(state->Lock);
+    state->SplitWriteToManyReplies = split;
+}
+
+void TICStorageTransportTestAdapter::ReleasePendingReads(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    ReleaseHeldRequests(
+        state,
+        Runtime->GetActorSystem(0),
+        TDDiskStubState::EHeldKind::Read);
+    ReleaseHeldRequests(
+        state,
+        Runtime->GetActorSystem(0),
+        TDDiskStubState::EHeldKind::ReadPBuffer);
+}
+
+void TICStorageTransportTestAdapter::ReleasePendingWrites(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    ReleaseHeldRequests(
+        FindState(type, ddiskId),
+        Runtime->GetActorSystem(0),
+        TDDiskStubState::EHeldKind::Write);
+}
+
+void TICStorageTransportTestAdapter::ReleasePendingWritePBuffers(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto state = FindState(type, ddiskId);
+    ReleaseHeldRequests(
+        state,
+        Runtime->GetActorSystem(0),
+        TDDiskStubState::EHeldKind::WritePBuffer);
+    ReleaseHeldRequests(
+        state,
+        Runtime->GetActorSystem(0),
+        TDDiskStubState::EHeldKind::WritePBuffers);
+}
+
+void TICStorageTransportTestAdapter::ReleasePendingWritePBuffersFirstHalf(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    ReleaseHeldWritePBuffersFirstHalf(
+        FindState(type, ddiskId),
+        Runtime->GetActorSystem(0));
+}
+
+void TICStorageTransportTestAdapter::ReleasePendingErases(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    ReleaseHeldRequests(
+        FindState(type, ddiskId),
+        Runtime->GetActorSystem(0),
+        TDDiskStubState::EHeldKind::Erase);
+}
+
+void TICStorageTransportTestAdapter::ReleasePendingSyncs(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    ReleaseHeldRequests(
+        FindState(type, ddiskId),
+        Runtime->GetActorSystem(0),
+        TDDiskStubState::EHeldKind::Sync);
+}
+
 TVector<NKikimr::NDDisk::TQueryCredentials>
 TICStorageTransportTestAdapter::GetConnectCredentials(
     EConnectionType type,
@@ -152,6 +315,8 @@ void TICStorageTransportTestAdapter::FireDisconnect(
 {
     Y_UNUSED(type);
     Y_UNUSED(ddiskId);
+
+    ShutdownFakeDirectSession();
 
     auto request = std::make_unique<IEventHandle>(
         TransportActorId,

@@ -79,6 +79,18 @@ public:
         return UseConnectionPool_;
     }
 
+    /// Fail with THttpTruncatedBodyException when a response body ends before its
+    /// Content-Length instead of silently yielding a short body. Off by default.
+    /// HEAD is handled for you; see THttpInput::TOptions for the raw-stream caveats.
+    TSelf& StrictContentLength(bool strictContentLength) {
+        StrictContentLength_ = strictContentLength;
+        return *this;
+    }
+
+    bool StrictContentLength() const noexcept {
+        return StrictContentLength_;
+    }
+
 private:
     TString Host_;
     ui16 Port_;
@@ -87,4 +99,5 @@ private:
     int MaxRedirectCount_ = INT_MAX;
     bool UseKeepAlive_ = true;
     bool UseConnectionPool_ = false;
+    bool StrictContentLength_ = false;
 };

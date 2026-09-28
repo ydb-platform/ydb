@@ -15,6 +15,7 @@ SRCS(
     kqp_query_event_log_ut.cpp
     kqp_stats_ut.cpp
     kqp_types_ut.cpp
+    kqp_write_affinity_ut.cpp
 )
 
 PEERDIR(

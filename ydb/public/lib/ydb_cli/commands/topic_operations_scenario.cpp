@@ -340,6 +340,7 @@ void TTopicOperationsScenario::StartProducerThreads(std::vector<std::future<void
             .BatchFlushInterval = BatchFlushInterval,
             .BatchFlushSizeBytes = BatchFlushSizeBytes,
             .BatchFlushMessageCount = BatchFlushMessageCount,
+            .SdkProducerAsyncExecutionMode = SdkProducerAsyncExecutionMode,
         };
 
         if (KeyedWrites) {

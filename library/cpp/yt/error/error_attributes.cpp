@@ -137,7 +137,7 @@ void DoFormatAttributeKey(TStringBuilderBase* builder, TStringBuf value)
     THROW_ERROR_EXCEPTION(
         "Error parsing attribute %Qv",
         key)
-        << ex;
+        .With(ex);
 }
 
 [[noreturn]] void TErrorAttributes::ThrowNoSuchAttributeException(TStringBuf key)

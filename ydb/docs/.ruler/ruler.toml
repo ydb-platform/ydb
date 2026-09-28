@@ -1,12 +1,31 @@
 # Ruler Configuration for YDB
 # See https://ai.intellectronica.net/ruler for documentation.
 
+default_agents = [
+  "claude",
+  "codex",
+  "cursor",
+  "copilot",
+  "jetbrains-ai",
+  "cline",
+  "windsurf",
+  "aider",
+]
+
 # --- Agent Specific Configurations ---
 # All agents will receive instructions from concatenated .ruler/*.md files
+
+[skills]
+enabled = true
 
 [agents.claude]
 enabled = true
 output_path = "AGENTS.md"
+
+[agents.codex]
+enabled = true
+output_path = "AGENTS.md"
+output_path_config = ".codex/config.toml"
 
 [agents.cursor]
 enabled = true

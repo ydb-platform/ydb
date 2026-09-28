@@ -198,17 +198,17 @@ Access level lists are configured in the `security_config` section. For detailed
 || Parameter | Description ||
 || `database_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the database access level.
 
-This level is less privileged than viewer. Subjects can only operate within a database scope — backend calls without a specified database are forbidden. Cluster-level requests (e.g., listing cluster nodes) return 403. Database-scoped requests (e.g., database pages in [Embedded UI](../embedded-ui/ydb-monitoring.md)) work normally.
+This level is less privileged than viewer. Subjects can only operate within a database scope — backend calls without a specified database are forbidden. Cluster-level requests (e.g., listing cluster nodes) return 403. Database-scoped requests (e.g., database pages in [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md)) work normally.
 
 Intended for applications or users restricted to a single database.
     ||
 || `viewer_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the viewer access level.
 
-This level allows viewing the cluster state, which is not publicly accessible (including most pages in the [Embedded UI](../embedded-ui/ydb-monitoring.md)). No changes are allowed.
+This level allows viewing the cluster state, which is not publicly accessible (including most pages in the [{{ ydb-ui-name }}](../ydb-ui/ydb-monitoring.md)). No changes are allowed.
     ||
 || `monitoring_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the monitoring access level.
 
-This level grants additional privileges to monitor and modify the cluster state. For example, it allows performing a backup, restoring a database, or executing YQL statements in the Embedded UI.
+This level grants additional privileges to monitor and modify the cluster state. For example, it allows performing a backup, restoring a database, or executing YQL statements in the {{ ydb-ui-name }}.
     ||
 || `administration_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) with the administration access level.
 
@@ -234,7 +234,7 @@ For technical reasons, this list must include `root@builtin`.
 
 The access level lists are empty by default.
 
-An **empty** list means "allow any user" — any SID is acceptable (or no SID at all if anonymous access is allowed). Empty `administration_allowed_sids` grants any user administrator privileges; empty `viewer_allowed_sids` (with other UI lists empty) allows any user viewer-level access to Embedded UI. If all four hierarchical lists are empty, any user has full administrative access.
+An **empty** list means "allow any user" — any SID is acceptable (or no SID at all if anonymous access is allowed). Empty `administration_allowed_sids` grants any user administrator privileges; empty `viewer_allowed_sids` (with other UI lists empty) allows any user viewer-level access to {{ ydb-ui-name }}. If all four hierarchical lists are empty, any user has full administrative access.
 
 For a secure {{ ydb-short-name }} deployment, plan the access model beforehand and define the group lists before starting the cluster for the first time.
 
@@ -247,7 +247,7 @@ It is recommended to add user groups and separate service accounts to the `*_all
 **Where the lists are used:**
 
 - **`database_allowed_sids`**, **`viewer_allowed_sids`**, **`monitoring_allowed_sids`**, **`administration_allowed_sids`**
-    To access Embedded UI and viewer HTTP endpoints.
+    To access {{ ydb-ui-name }} and viewer HTTP endpoints.
 
 - **`administration_allowed_sids`**
     For all administrative checks.
@@ -262,7 +262,7 @@ It is recommended to add user groups and separate service accounts to the `*_all
 
 Access level lists represent layers of additional privileges:
 
-- An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../embedded-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../embedded-ui/ydb-monitoring.md#node_list_page)).
+- An access subject that is not included in any access level list can view only publicly available information about the cluster (for example, [a list of databases on the cluster](../ydb-ui/ydb-monitoring.md#tenant_list_page) or [a list of cluster nodes](../ydb-ui/ydb-monitoring.md#node_list_page)).
 - The `database_allowed_sids` list defines the "database" role: these users are less privileged than viewers and cannot issue any backend call without specifying a database; cluster-wide requests are not allowed.
 - The `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids` lists form a hierarchy: administration implies monitoring and viewer; monitoring implies viewer. A subject only needs to be in the one list that matches their role — inclusion in a higher list automatically grants all lower privileges.
 

@@ -119,6 +119,7 @@ namespace NKikimr {
         ui32 MaxLogoBlobDataSize;
         ui32 HullSstSizeInChunksFresh;
         ui32 HullSstSizeInChunksLevel;
+        ui32 HeapAllocatorMaxSstInBytes;
         ui32 HugeBlobsFreeChunkReservation;
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
@@ -128,6 +129,9 @@ namespace NKikimr {
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
         TControlWrapper HullCompFreeSpaceThresholdPerMille;
+        TControlWrapper HullCompEmergencyMaxSsts;
+        TControlWrapper HullCompEmergencyChunkReserve;
+        TControlWrapper HullCompEmergencyEnableAtColor;
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
@@ -231,6 +235,7 @@ namespace NKikimr {
         TDuration StatsUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
+        TControlWrapper SpaceReportPeriodSeconds = TControlWrapper(0, 0, 86400);
         bool UseActorSystemTimeInBSQueue = false;
         ui32 GroupSizeInUnits = 0;
 

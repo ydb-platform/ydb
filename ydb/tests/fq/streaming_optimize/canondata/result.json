@@ -304,6 +304,14 @@
             "uri": "file://test_sql_streaming.test_watermarks-watermarks_after_parsing_metadata-default.txt_/plan.json"
         }
     },
+    "test_sql_streaming.test[watermarks-watermarks_after_parsing_replicate-default.txt]": {
+        "Ast": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_after_parsing_replicate-default.txt_/ast.txt"
+        },
+        "Plan": {
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_after_parsing_replicate-default.txt_/plan.json"
+        }
+    },
     "test_sql_streaming.test[watermarks-watermarks_conditional-default.txt]": {
         "Ast": {
             "uri": "file://test_sql_streaming.test_watermarks-watermarks_conditional-default.txt_/ast.txt"

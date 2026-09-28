@@ -231,12 +231,11 @@ std::vector<std::string> TSolomonProxy::CollectEndpoints(const TCgiParameters& p
     auto componentMatcher = GetComponentMatcher(parameters);
     auto instanceFilter = GetInstanceFilter(parameters);
 
-    YT_LOG_DEBUG(
-        "Selecting endpoints (PublicComponentNames: %v, RequestedComponents: %v, RequestedInstances: %v, InstanceLabelFilter: %v)",
-        Config_->PublicComponentNames,
-        componentMatcher.Components,
-        instanceFilter.Instances,
-        instanceFilter.LabelFilter);
+    YT_TLOG_DEBUG("Selecting endpoints")
+        .With("PublicComponentNames", Config_->PublicComponentNames)
+        .With("RequestedComponents", componentMatcher.Components)
+        .With("RequestedInstances", instanceFilter.Instances)
+        .With("InstanceLabelFilter", instanceFilter.LabelFilter);
 
     int selectedComponents = 0;
     int skippedByInternalFilter = 0;
@@ -249,13 +248,15 @@ std::vector<std::string> TSolomonProxy::CollectEndpoints(const TCgiParameters& p
 
         if (Config_->PublicComponentNames && !Config_->PublicComponentNames->contains(componentName)) {
             ++skippedByInternalFilter;
-            YT_LOG_DEBUG("Skipping non-public component (ComponentName: %v)", componentName);
+            YT_TLOG_DEBUG("Skipping non-public component")
+                .With("ComponentName", componentName);
             continue;
         }
 
         if (!MatchComponent(componentMatcher, endpointProvider)) {
             ++skippedByUserFilter;
-            YT_LOG_DEBUG("Skipping non-requested component (ComponentName: %v)", componentName);
+            YT_TLOG_DEBUG("Skipping non-requested component")
+                .With("ComponentName", componentName);
             continue;
         }
 
@@ -278,21 +279,19 @@ std::vector<std::string> TSolomonProxy::CollectEndpoints(const TCgiParameters& p
             }
         }
 
-        YT_LOG_DEBUG(
-            "Selected component endpoints for pull (ComponentName: %v, SelectedEndpointCount: %v, TotalEndpointCount: %v, InstanceFilterMatchCount: %v, ShardEndpointCount: %v)",
-            componentName,
-            allEndpoints.size() - selectedEndpointCountBefore,
-            componentEndpoints.size(),
-            filteredInstances.size(),
-            shardEndpointCount);
+        YT_TLOG_DEBUG("Selected component endpoints for pull")
+            .With("ComponentName", componentName)
+            .With("SelectedEndpointCount", allEndpoints.size() - selectedEndpointCountBefore)
+            .With("TotalEndpointCount", componentEndpoints.size())
+            .With("InstanceFilterMatchCount", filteredInstances.size())
+            .With("ShardEndpointCount", shardEndpointCount);
     }
 
-    YT_LOG_DEBUG(
-        "Collected endpoints from components (EndpointCount: %v, ComponentCount: %v, ComponentSkippedByInternalFilterCount: %v, ComponentSkippedByUserFilterCount: %v)",
-        allEndpoints.size(),
-        selectedComponents,
-        skippedByInternalFilter,
-        skippedByUserFilter);
+    YT_TLOG_DEBUG("Collected endpoints from components")
+        .With("EndpointCount", allEndpoints.size())
+        .With("ComponentCount", selectedComponents)
+        .With("ComponentSkippedByInternalFilterCount", skippedByInternalFilter)
+        .With("ComponentSkippedByUserFilterCount", skippedByUserFilter);
 
     return allEndpoints;
 }
@@ -302,7 +301,8 @@ void TSolomonProxy::HandleSensors(const IRequestPtr& req, const IResponseWriterP
     try {
         GuardedHandleSensors(req, rsp);
     } catch(const std::exception& ex) {
-        YT_LOG_DEBUG(ex, "Failed to pull sensors from endpoints");
+        YT_TLOG_DEBUG("Failed to pull sensors from endpoints")
+            .With(ex);
 
         if (!rsp->AreHeadersFlushed()) {
             try {
@@ -312,7 +312,8 @@ void TSolomonProxy::HandleSensors(const IRequestPtr& req, const IResponseWriterP
 
                 ReplyError(rsp, ex);
             } catch (const std::exception& ex) {
-                YT_LOG_DEBUG(ex, "Failed to send sensor pull error");
+                YT_TLOG_DEBUG("Failed to send sensor pull error")
+                    .With(ex);
             }
         }
     }
@@ -326,11 +327,10 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
     auto shardIndex = ParseIntegerParameter(parameters, ShardIndexParameterName, /*defaultValue*/ 0);
     auto shardCount = ParseIntegerParameter(parameters, ShardCountParameterName, /*defaultValue*/ 1);
 
-    YT_LOG_DEBUG(
-        "Performing solomon proxy fetch (ShardIndex: %v, ShardCount: %v, Query: %v)",
-        shardIndex,
-        shardCount,
-        reqUrlRef.RawQuery);
+    YT_TLOG_DEBUG("Performing solomon proxy fetch")
+        .With("ShardIndex", shardIndex)
+        .With("ShardCount", shardCount)
+        .With("Query", reqUrlRef.RawQuery);
 
     ValidateShardingParameters(shardIndex, shardCount);
 
@@ -350,12 +350,11 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
     auto pullHeaders = PreparePullHeaders(req->GetHeaders(), outputEncodingContext);
     auto pullParameters = PreparePullParameters(parameters);
 
-    YT_LOG_DEBUG(
-        "Proxying pull requests to hosts (EndpointCount: %v, Parameters: %v, Headers: %v)",
-        filteredEndpoints.size(),
+    YT_TLOG_DEBUG("Proxying pull requests to hosts")
+        .With("EndpointCount", filteredEndpoints.size())
         // This is easier to read than the escaped string.
-        std::vector<std::pair<TString, TString>>(pullParameters.begin(), pullParameters.end()),
-        pullHeaders->Dump());
+        .With("Parameters", std::vector<std::pair<TString, TString>>(pullParameters.begin(), pullParameters.end()))
+        .With("Headers", pullHeaders->Dump());
 
     for (auto pullUrl : filteredEndpoints) {
         if (!pullParameters.empty()) {
@@ -372,7 +371,8 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
 
     for (const auto& pullResponseOrError : pullResponseOrErrors) {
         if (!pullResponseOrError.IsOK()) {
-            YT_LOG_DEBUG(pullResponseOrError, "Error while pulling sensors from endpoint");
+            YT_TLOG_DEBUG("Error while pulling sensors from endpoint")
+                .With(pullResponseOrError);
             pullErrors.push_back(pullResponseOrError);
             continue;
         }
@@ -381,7 +381,9 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
         auto body = pullResponse->ReadAll();
 
         if (pullResponse->GetStatusCode() != EStatusCode::OK) {
-            YT_LOG_DEBUG("Sensor pull failed (StatusCode: %v, Response: %v)", pullResponse->GetStatusCode(), body);
+            YT_TLOG_DEBUG("Sensor pull failed")
+                .With("StatusCode", pullResponse->GetStatusCode())
+                .With("Response", body);
             pullErrors.push_back(
                 TError("Sensor pull failed with status code %v", pullResponse->GetStatusCode())
                     .With("response_body", ToString(body))
@@ -393,11 +395,10 @@ void TSolomonProxy::GuardedHandleSensors(const IRequestPtr& req, const IResponse
         ::NMonitoring::DecodeSpackV1(&stream, outputEncodingContext.Encoder.Get());
     }
 
-    YT_LOG_DEBUG(
-        "Pulled sensors from endpoints (RequestCount: %v, SuccessCount: %v, FailureCount: %v)",
-        asyncPullResponses.size(),
-        asyncPullResponses.size() - pullErrors.size(),
-        pullErrors.size());
+    YT_TLOG_DEBUG("Pulled sensors from endpoints")
+        .With("RequestCount", asyncPullResponses.size())
+        .With("SuccessCount", asyncPullResponses.size() - pullErrors.size())
+        .With("FailureCount", pullErrors.size());
 
     // TODO(achulkov2): Think about more introspection of pull failures for other cases.
     if (!pullErrors.empty() && pullErrors.size() == asyncPullResponses.size()) {

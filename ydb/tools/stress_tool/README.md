@@ -6,7 +6,71 @@ The utility is designed for testing and evaluating the performance of storage de
 
 **WARNING! During testing, data on the tested storage device will be overwritten with a test pattern.**
 
-The series of experiments is described in a configuration file (default cfg.txt). It supports working with rotary hard drives (ROT), solid-state drives (SSD), and NVMe. Test results can be output in wiki markup format, human-readable format, or as a JSON document.
+The series of experiments can be described in a configuration file (default cfg.txt for the legacy invocation). DDisk tests also support a config-free `ddisk` command. The tool supports rotary hard drives (ROT), solid-state drives (SSD), and NVMe. Test results can be output in wiki markup format, human-readable format, or as a JSON document.
+
+## DDisk command
+
+Run a random write workload, or select measured reads with `--read-only`:
+
+```bash
+ydb_stress_tool ddisk --path /dev/nvme0n1 --type NVME --output-format human
+ydb_stress_tool ddisk --path /dev/nvme0n1 --type NVME --read-only --inflight 128
+```
+
+Without `--cfg`, the defaults are 32 equally weighted areas per device, 128 MiB per
+area, 10 seconds of load, 128 requests in flight, random access, and 4096-byte I/O.
+Initialization takes additional time; there is no measurement warm-up delay.
+The command formats local and server PDisks with exactly 128 MiB physical chunks,
+without the extra space used by legacy PDisk sector-metadata sizing.
+
+| Workload option | Default | Meaning |
+| --- | --- | --- |
+| `--areas N` | 32 | Number of 128 MiB areas per device |
+| `--duration SECONDS` | 10 | Load duration, excluding initialization |
+| `--read-only` | Off | Measure reads instead of writes |
+| `--io-size BYTES` | 4096 | Request size; power of two from 4096 through 134217728 |
+| `--sequential` | Off | Sequential access within each area |
+| `--background-write-ratio R` | 0 | Unmeasured writes per measured read, from 0 to 1; nonzero requires `--read-only` |
+| `--background-write-size-kib N` | 4 | Background-write size; power of two from 4 through 131072 KiB |
+
+`--read-only` describes the measured workload: initialization still writes every
+I/O slot, and an explicit `--background-write-ratio` enables unmeasured writes.
+Area size and measurement delay have no CLI options.
+
+Use common `--inflight N` for one queue depth, or both `--inflight-from N` and
+`--inflight-to N` for a doubling sweep. These forms are mutually exclusive.
+The `ddisk` command requires positive values and an ordered, complete range.
+
+```bash
+ydb_stress_tool ddisk --path /dev/nvme0n1 --read-only --areas 16 --duration 20 \
+    --inflight-from 1 --inflight-to 128 --run-count 3 --output-format human
+```
+
+Repeat `--path` for multiple local devices. Existing checksum, PDisk fallback,
+encryption, output, and monitoring options remain available. `ddisk --help`
+groups workload, DDisk runtime, and client/server flags separately from common options.
+
+For a remote DDisk test, start the server and then the client:
+
+```bash
+# Server host (node 1; expects client node 2)
+ydb_stress_tool ddisk --server 1 --client 2 --ic-port 19001 --path /dev/nvme0n1
+# Client host
+ydb_stress_tool ddisk --client 2 --endpoint server-host:19001 --read-only
+```
+
+Repeat `--endpoint` for multiple servers; endpoints receive node IDs starting at 1.
+Use `--num-server-devices N` on the client when each server has multiple devices.
+The client's node ID must differ from every server's node ID.
+
+`ddisk --cfg FILE` uses DDisk workloads from a config file. It cannot be combined
+with the workload options in the table; common inflight overrides and existing
+runtime/network options remain available. Config values, including measurement
+delay, are preserved unless overridden by the common inflight controls.
+
+The legacy invocation, `ydb_stress_tool --cfg FILE <options>`, remains supported,
+including implicit `cfg.txt` loading, its existing inflight-range parsing, and its
+disk formatting behavior. The new `ddisk` command never implicitly reads `cfg.txt`.
 
 ## Configuration File
 
@@ -67,18 +131,33 @@ These describe the load applied through the YDB storage layer code (DDisk).
 
 Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
 
+DDisk and Persistent Buffer checksums are enabled by default. Pass
+`--disable-ddisk-checksums` to disable both checksum generation in the load
+actors and checksum handling in DDisk. For client/server DDisk tests, pass the
+option to both processes so the client and server use the same mode.
+
+Pass `--ddisk-checksums-cache-size N` to set the checksum array cache size per
+DDisk in MiB (1 MiB = 1024 * 1024 bytes; default: 64). Set it to `0` to disable
+caching while keeping checksums enabled; necessary in-flight state is retained.
+For client/server DDisk tests, pass this option to the server process.
+
+Pass `--force-ddisk-pdisk-fallback` to route DDisk direct I/O through the PDisk
+actor instead of io_uring.
+
 #### Parameters for `DDiskLoad`
 - `Tag` - a unique numeric identifier for the load source.
 - `DDiskId` - the DDisk address `{ NodeId, PDiskId, DDiskSlotId }`.
 - `DurationSeconds` - the duration of the load application in seconds.
-- `InFlight` - the number of concurrently sent requests.
+- `InFlight` - the number of concurrently sent requests. Background writes share this queue-depth budget with measured reads.
 - `InitInFlight` - the maximum number of concurrent initialization requests (defaults to `InFlight` if omitted).
 - `IntervalMsMin` and `IntervalMsMax` - interval mode settings; `0/0` means continuous load.
 - `ExpectedChunkSize` - expected chunk size in bytes; must be divisible by `IoSizeBytes`.
 - `IoSizeBytes` - request size for DDisk read/write I/O in bytes (default `4096`).
 - `Areas` - the set of DDisk areas used by the load source; each `AreaSize` must be divisible by `IoSizeBytes`.
+  Per-area `InitType` defaults to `INIT_ZEROES_FULL` (every slot is written before the measured load). Use `INIT_ZEROES_FIRST_BLOCK` only to preallocate chunks; with checksums enabled, unread blocks are then served from RAM as zeros and do not hit the device. `INIT_NONE` is rejected for read load.
 - `IsReadLoad` - if `true`, run read load; if `false`, run write load.
-- `SQPoll` / `IOPoll` - enable io_uring SQPOLL / IOPOLL for direct I/O.
+- `BackgroundWriteRatio` - unmeasured background writes per measured read during read load; `0` disables them and `1.0` issues one write per read. Background writes share `InFlight` and interval pacing with measured reads.
+- `BackgroundWriteSizeKiB` - background write size in KiB (default `4`); must be a power of two and at least 4. When background writes are enabled, `ExpectedChunkSize` and each `AreaSize` must be divisible by this size.
 
 ### Parameters for `InterconnectTestList`
 These describe network load generated through the actors library interconnect
@@ -142,4 +221,3 @@ level; the tool's own result table only prints a short summary row per test.
   next send interval.
 - `UseProtobufWithPayload` - if `true`, stores the payload in a separate rope
   buffer instead of inline in the protobuf message.
-

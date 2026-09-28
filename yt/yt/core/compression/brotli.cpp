@@ -35,7 +35,7 @@ void BrotliCompress(int level, TSource* source, TBlob* output)
         }
     } catch (const std::exception& ex) {
         YT_TLOG_FATAL("Brotli compression failed")
-            .With(TError(ex));
+            .With(ex);
     }
 }
 

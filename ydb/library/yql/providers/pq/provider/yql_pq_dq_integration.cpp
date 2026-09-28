@@ -1,7 +1,7 @@
 #include "yql_pq_dq_integration.h"
-#include "yql_pq_settings.h"
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
+#include "yql_pq_settings.h"
 #include "yql_pq_topic_key_parser.h"
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -11,8 +11,10 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
+#include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/common/pq_partitions.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
@@ -59,6 +61,7 @@ public:
             }
         }
         YQL_ENSURE(topicPartitionsCount > 0);
+        const bool groupPartitions = !maxPartitions;
         if (!streamingTopicRead && !maxPartitions) {
             maxPartitions = 1;      // Reading in table mode - 1 task by default.
         }
@@ -67,7 +70,8 @@ public:
         }
 
         if (predicatePartitions.empty()) {      // read all partitions
-            const size_t tasks = Min(maxPartitions, topicPartitionsCount);
+            const size_t tasks = NDq::GetExpectedTopicReadTasks(
+                topicPartitionsCount, maxPartitions, groupPartitions);
             partitions.reserve(tasks);
             for (size_t i = 0; i < tasks; ++i) {
                 NPq::NProto::TDqReadTaskParams params;
@@ -82,7 +86,8 @@ public:
                 partitions.emplace_back(std::move(serializedParams));
             }
         } else {    // read only predicate partitions
-            const size_t tasks = Min(maxPartitions, predicatePartitions.size());
+            const size_t tasks = NDq::GetExpectedTopicReadTasks(
+                predicatePartitions.size(), maxPartitions, groupPartitions);
             auto predicatePartitionIt = predicatePartitions.begin();
             partitions.reserve(tasks);
             size_t allocatedPartitions = 0;
@@ -370,6 +375,7 @@ public:
             .DataSink(write.DataSink())
             .Topic(write.Topic())
             .Input(write.Input())
+            .Settings(write.Settings())
             .Done().Ptr();
     }
 
@@ -471,6 +477,7 @@ public:
                 bool sharedReading = false;
                 bool skipErrors = false;
                 bool streamingTopicRead = State_->StreamingTopicsReadByDefault;
+                bool usedPartitionPredicate = false;
                 TString format;
                 const TExprNode* userSchemaColumnsSetting = nullptr;
                 size_t const settingsCount = topicSource.Settings().Size();
@@ -513,6 +520,8 @@ public:
                         if (TMaybeNode<TExprBase> maybeList = setting.Value()) {
                             userSchemaColumnsSetting = maybeList.Cast().Raw();
                         }
+                    } else if (name == UsedPartitionPredicateSetting) {
+                        usedPartitionPredicate = FromString<bool>(Value(setting));
                     }
                 }
 
@@ -605,8 +614,15 @@ public:
                     srcDesc.SetSharedReading(true);
                 }
                 srcDesc.SetSkipJsonErrors(skipErrors);
+                if (usedPartitionPredicate) {
+                    srcDesc.SetUsedPartitionPredicate(true);
+                }
 
-                if (!streamingTopicRead) {
+                const bool allowConsumerRewindForDisposition = State_->EnableConsumerRewindForDisposition
+                    && State_->Disposition.GetDispositionCase() != NPq::NProto::StreamingDisposition::DISPOSITION_NOT_SET;
+                srcDesc.SetAllowConsumerRewindForDisposition(allowConsumerRewindForDisposition);
+
+                if (!streamingTopicRead && !allowConsumerRewindForDisposition) {
                     srcDesc.MutableDisposition()->mutable_oldest();
                 } else {
                     *srcDesc.MutableDisposition() = State_->Disposition;
@@ -630,6 +646,15 @@ public:
                         watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
                         srcDesc.SetWatermarkExpr(watermarkExprSql);
                     }
+                }
+
+                if (allowConsumerRewindForDisposition && !srcDesc.GetConsumerName().empty()) {
+                    if (!commonSettings) {
+                        commonSettings.emplace();
+                    }
+                    NDqProto::TDqControlPlaneActorSettings controlPlaneSettings;
+                    controlPlaneSettings.SetType(NDq::PqControlPlaneActorType);
+                    YQL_ENSURE(commonSettings->MutableStageControlPlaneActors()->emplace(NDq::PqControlPlaneActorIdParam, controlPlaneSettings).second);
                 }
 
                 if (commonSettings) {
@@ -679,6 +704,11 @@ public:
 
                 sinkDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 
+                const auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get();
+                if (maybeEnableDeduplication) {
+                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
+                }
+
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {
                     TCoNameValueTuple setting = topicSink.Settings().Item(i);
@@ -689,15 +719,17 @@ public:
                         sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
+                    } else if (name == NDeliveryGuaranteeSetting::Name) {
+                        if (Value(setting) == NDeliveryGuaranteeSetting::ExactlyOnceValue) {
+                            YQL_ENSURE(State_->EnableExactlyOnceDeliveryGuaranty && State_->DeferredPublicationExtIdPrefix, "Deferred publication is not enabled");
+                            YQL_ENSURE(!maybeEnableDeduplication.GetOrElse(false), "Deferred publication cannot be used with enabled deduplication");
+                            sinkDesc.SetDeferredPublicationExtIdPrefix(State_->DeferredPublicationExtIdPrefix);
+                        }
                     }
                 }
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSink.Token().Raw())) {
                     sinkDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
-                }
-
-                if (auto maybeEnableDeduplication = State_->Configuration->EnableDeduplication.Get()) {
-                    sinkDesc.SetEnableDeduplication(*maybeEnableDeduplication);
                 }
 
                 protoSettings.PackFrom(sinkDesc);
@@ -795,10 +827,12 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_GRANULARITY = value"));
                     return {};
                 }
+
                 const auto settingValue = setting->Child(1);
                 if (!EnsureAtom(*settingValue, ctx)) {
                     return {};
                 }
+
                 const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
                 if (!out) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
@@ -806,16 +840,25 @@ public:
                     return {};
                 }
 
-                watermarksGranularityUs = out.Get<ui64>();
+                const i64 signedGranularity = out.Get<i64>();
+                if (signedGranularity < 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_GRANULARITY, expected non-negative value"));
+                    return {};
+                }
+
+                watermarksGranularityUs = signedGranularity;
             } else if ("watermarkidletimeout" == settingName) {
                 if (setting->ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_IDLE_TIMEOUT = value"));
                     return {};
                 }
+
                 const auto settingValue = setting->Child(1);
                 if (!EnsureAtom(*settingValue, ctx)) {
                     return {};
                 }
+
                 const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
                 if (!out) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
@@ -823,7 +866,14 @@ public:
                     return {};
                 }
 
-                watermarksIdleTimeoutUs = out.Get<ui64>();
+                const i64 signedIdleTimeout = out.Get<i64>();
+                if (signedIdleTimeout < 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_IDLE_TIMEOUT, expected non-negative value"));
+                    return {};
+                }
+
+                watermarksIdleTimeoutUs = signedIdleTimeout;
             } else if ("streaming" == settingName) {
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
                     bool withStreamingValue = *parseResult;

@@ -48,7 +48,11 @@ TRuntimeNode WrapSharedReading(const TDqSourceWrapBase &wrapper, NCommon::TMkqlB
     });
 }
 
-TRuntimeNode BuildWatermarkMetadataMapping(TCoAtomList metadataColumns, NCommon::TMkqlBuildContext& ctx) {
+TRuntimeNode BuildWatermarkMetadataMapping(
+    TCoAtomList metadataColumns,
+    const TStructExprType& inputStructType,
+    NCommon::TMkqlBuildContext& ctx
+) {
     TRuntimeNode::TList items;
     items.reserve(metadataColumns.Size() * 2);
     for (const auto& metadataColumn : metadataColumns) {
@@ -57,8 +61,17 @@ TRuntimeNode BuildWatermarkMetadataMapping(TCoAtomList metadataColumns, NCommon:
             true);
         YQL_ENSURE(descriptor, "Unexpected pq metadata column: " << metadataColumn.StringValue());
 
-        items.push_back(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(descriptor->SysColumn));
-        items.push_back(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(TStringBuilder() << "__ydb_watermark_" << descriptor->Key));
+        const TString watermarkColumnName = TStringBuilder() << "__ydb_watermark_" << descriptor->Key;
+        const TString& sourceColumnName = inputStructType.FindItem(watermarkColumnName)
+            ? watermarkColumnName
+            : descriptor->SysColumn;
+
+        YQL_ENSURE(inputStructType.FindItem(sourceColumnName),
+            "Missing PQ watermark metadata column: " << descriptor->SysColumn
+            << " or " << watermarkColumnName);
+
+        items.push_back(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(sourceColumnName));
+        items.push_back(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(watermarkColumnName));
     }
 
     return ctx.ProgramBuilder.NewList(ctx.ProgramBuilder.NewDataType(NUdf::EDataSlot::String), items);
@@ -82,7 +95,12 @@ void RegisterDqPqMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 ctx.BuildType(lambdaArg, *lambdaArg.GetTypeAnn())
             );
 
-            const auto metadataMapping = BuildWatermarkMetadataMapping(metadataColumns, ctx);
+            const auto& inputItemType = GetSeqItemType(*pw.Input().Ref().GetTypeAnn());
+            const auto metadataMapping = BuildWatermarkMetadataMapping(
+                metadataColumns,
+                *inputItemType.Cast<TStructExprType>(),
+                ctx
+            );
 
             TCallableBuilder callableBuilder(
                 ctx.ProgramBuilder.GetTypeEnvironment(),

@@ -199,8 +199,7 @@ struct TAstNode {
         return NewList(position, pool, &QuoteAtom, node);
     }
 
-    inline ~TAstNode() {
-    }
+    inline ~TAstNode() = default;
 
     void Destroy() {
         TString().swap(Position_.File);

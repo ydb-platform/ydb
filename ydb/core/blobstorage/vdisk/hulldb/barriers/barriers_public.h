@@ -64,11 +64,19 @@ namespace NKikimr {
             void PutToFresh(ui64 lsn, const TKeyBarrier &key, const TMemRecBarrier &memRec);
             void PutToFresh(std::shared_ptr<TBase::TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn);
             void LoadCompleted() override;
+            // Both are no-op while EnableCollectByCompleteDeletionBlock is off: no tablet is ever considered
+            // deleted then, so its barriers keep working as usual and its data waits for the hard barrier.
+            void MarkTabletDeleted(ui64 tabletId);
+            void MarkTabletsDeleted(const THashSet<ui64> &tabletIds);
+            // Apply the records of an SST that was inserted into the level index directly (bulk/full
+            // sync) -- those do not go through PutToFresh and would otherwise miss the mem view.
+            void UpdateMemView(const TBarriersSst &sst);
             TBarriersDsSnapshot GetSnapshot(TActorSystem *as);
             TBarriersDsSnapshot GetIndexSnapshot();
 
         private:
             TString VDiskLogPrefix;
+            const bool CollectByCompleteDeletionBlock;
             std::unique_ptr<TMemView> MemView;
 
             void BuildMemView();

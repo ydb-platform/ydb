@@ -10,6 +10,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
 #include <yql/essentials/providers/common/activation/yql_activation.h>
+#include <yql/essentials/providers/common/config/yql_activation_policy.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <yt/yql/providers/yt/gateway/qplayer/yql_yt_qplayer_gateway.h>
 
@@ -70,6 +71,8 @@ void TYtTableDescription::ToYson(NYson::TYsonWriter& writer, const TString& clus
         writer.OnBooleanScalar(RowSpec && RowSpec->IsSorted());
         writer.OnKeyedItem("IsDynamic");
         writer.OnBooleanScalar(Meta->IsDynamic);
+        writer.OnKeyedItem("IsLink");
+        writer.OnBooleanScalar(Meta->IsLink);
         writer.OnKeyedItem("HasRLS");
         writer.OnBooleanScalar(Meta->HasRLS);
         writer.OnKeyedItem("UniqueKeys");
@@ -377,7 +380,10 @@ std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway
             return RecordActivationStat(attrName, *ytState);
         };
 
-        ytState->Configuration->Init(*ytGatewayConfig, NConfig::MakeActivationFilter<TAttr>(userName, typeCtx->Credentials, onActivated), *typeCtx);
+        auto activationPolicy = NCommon::TActivationSelectionPolicy(
+            NConfig::MakeActivationFilter<TAttr>(userName, typeCtx->Credentials),
+            std::move(onActivated));
+        ytState->Configuration->Init(*ytGatewayConfig, activationPolicy, *typeCtx);
     }
 
     TYtState::TWeakPtr weakState = ytState;
@@ -443,7 +449,12 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
         info.Sink = CreateYtDataSink(ytState);
         info.SupportFullResultDataSink = true;
         info.OpenSession = [
-            gateway, statWriter, qContext, fullCapture, useSecureTmp = ytState->UseSecureTmp
+            gateway,
+            statWriter,
+            qContext,
+            fullCapture,
+            useSecureTmp = ytState->UseSecureTmp,
+            credentials = typeCtx->Credentials
         ](
             const TString& sessionId, const TString& username,
             const TOperationProgressWriter& progressWriter, const TYqlOperationOptions& operationOptions,
@@ -454,6 +465,7 @@ TDataProviderInitializer GetYtNativeDataProviderInitializer(IYtGateway::TPtr gat
                     .UserName(username)
                     .ProgressWriter(progressWriter)
                     .OperationOptions(operationOptions)
+                    .Credentials(credentials)
                     .RandomProvider(randomProvider)
                     .TimeProvider(timeProvider)
                     .StatWriter(statWriter)
@@ -540,7 +552,9 @@ struct TYtDataSinkFunctions {
         Names.insert(TYtFill::CallableName());
         Names.insert(TYtTouch::CallableName());
         Names.insert(TYtCreateTable::CallableName());
+        Names.insert(TYtCreateSymlink::CallableName());
         Names.insert(TYtDropTable::CallableName());
+        Names.insert(TYtDropSymlink::CallableName());
         Names.insert(TYtCreateView::CallableName());
         Names.insert(TYtDropView::CallableName());
         Names.insert(TCoCommit::CallableName());
@@ -596,7 +610,11 @@ TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
         }
 
         if (auto ytTokenResolver = Gateway->GetYtTokenResolver()) {
-            return ytTokenResolver->ResolveClusterToken(cluster);
+            auto ytName = Gateway->GetClusterYtName(cluster);
+            if (!ytName) {
+                ythrow yexception() << "Unknown cluster name: " << cluster;
+            }
+            return ytTokenResolver->ResolveClusterToken(ytName, *Types->Credentials);
         }
     }
 

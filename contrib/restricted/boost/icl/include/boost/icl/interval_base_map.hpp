@@ -19,6 +19,7 @@ Copyright (c) 1999-2006: Cortex Software GmbH, Kantstrasse 57, Berlin
 #include <boost/icl/detail/on_absorbtion.hpp>
 #include <boost/icl/detail/interval_map_algo.hpp>
 #include <boost/icl/detail/exclusive_less_than.hpp>
+#include <boost/icl/detail/map_adaptor.hpp>
 
 #include <boost/icl/associative_interval_container.hpp>
 
@@ -145,8 +146,7 @@ public:
         allocator_type;
 
     /// Container type for the implementation 
-    typedef ICL_IMPL_SPACE::map<interval_type,codomain_type,
-                                key_compare,allocator_type> ImplMapT;
+    typedef detail::map_adaptor<interval_type,codomain_type,key_compare,allocator_type> ImplMapT;
 
     /// key type of the implementing container
     typedef typename ImplMapT::key_type   key_type;

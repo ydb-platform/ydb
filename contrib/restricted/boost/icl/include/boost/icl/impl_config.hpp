@@ -32,14 +32,19 @@ Copyright (c) 2009-2011: Joachim Faulhaber
 |                                                                              |
 | NOTE: ICL_USE_BOOST_INTERPROCESS_IMPLEMENTATION: This define has been        |
 |     available until boost version 1.48.0 and is no longer supported.         |
+|                                                                              |
+| NOTE: With libc++ v22 or higher in C++11, boost::container is used           |
+|     regardless of user indications. See assoc_container_adaptor.hpp for      |
+|     the rationale.                                                           |
 +-----------------------------------------------------------------------------*/
 
-#if defined(ICL_USE_BOOST_MOVE_IMPLEMENTATION)
+#if defined(ICL_USE_BOOST_MOVE_IMPLEMENTATION) ||\
+    (BOOST_CXX_VERSION < 201402L && defined(_LIBCPP_VERSION) && _LIBCPP_VERSION > 220000)
 #   define ICL_IMPL_SPACE boost::container
-#elif defined(ICL_USE_STD_IMPLEMENTATION)
-#   define ICL_IMPL_SPACE std
+#   define ICL_IMPL_PATH(header) <boost/container/header.hpp>
 #else
 #   define ICL_IMPL_SPACE std
+#   define ICL_IMPL_PATH(header) <header>
 #endif
 
 /*-----------------------------------------------------------------------------+

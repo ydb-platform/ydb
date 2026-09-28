@@ -94,9 +94,6 @@ CREATE TABLE `my_table` (
     `Value1` Utf8,
     `Value2` Int16,
     `Value3` String,
-    FAMILY `default` (COMPRESSION = 'zstd'),
-    FAMILY `Family1` (COMPRESSION = 'off'),
-    FAMILY `Family2` (COMPRESSION = 'lz4'),
     PRIMARY KEY (`Key1`, `Key2`, `Key3`)
 )
 PARTITION BY HASH (`Key1`, `Key2`)

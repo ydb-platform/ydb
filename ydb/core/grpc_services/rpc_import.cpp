@@ -19,6 +19,8 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -98,12 +100,25 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         auto& createImport = *ev->Record.MutableRequest();
         createImport.MutableOperationParams()->CopyFrom(request.operation_params());
         if constexpr (IsS3Import) {
-            createImport.MutableImportFromS3Settings()->CopyFrom(request.settings());
+            auto* s3Settings = createImport.MutableImportFromS3Settings();
+            s3Settings->CopyFrom(request.settings());
+            s3Settings->set_destination_path(
+                this->Request->NormalizePath(s3Settings->destination_path()));
+            for (auto& item : *s3Settings->mutable_items()) {
+                item.set_destination_path(
+                    this->Request->NormalizePath(item.destination_path()));
+            }
         }
         if constexpr (IsFsImport) {
             auto* fsSettings = createImport.MutableImportFromFsSettings();
             fsSettings->CopyFrom(request.settings());
             fsSettings->set_base_path(StripTrailingSlashes(fsSettings->base_path()));
+            fsSettings->set_destination_path(
+                this->Request->NormalizePath(fsSettings->destination_path()));
+            for (auto& item : *fsSettings->mutable_items()) {
+                item.set_destination_path(
+                    this->Request->NormalizePath(item.destination_path()));
+            }
         }
 
         return ev.Release();
@@ -112,8 +127,11 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvImport::TEvCreateImportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvCreateImportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvImport::TEvCreateImportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         this->Reply(TImportConv::ToOperation(record.GetEntry()));
     }

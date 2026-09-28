@@ -1,0 +1,10 @@
+PRAGMA YqlSelect = 'force';
+
+USE plato;
+
+INSERT INTO @x (a, b)
+VALUES (1, 2);
+
+COMMIT;
+
+SELECT * FROM @x;

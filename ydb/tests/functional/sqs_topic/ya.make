@@ -15,6 +15,7 @@ TEST_SRCS(
     test_delete_message.py
     test_delete_message_batch.py
     test_list_queues.py
+    test_request_endpoint.py
     test_purge_queue.py
     test_add_permission.py
     test_remove_permission.py

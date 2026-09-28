@@ -652,6 +652,32 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
+NThreading::TFuture<bool> TWriteSessionImpl::Flush() {
+    std::lock_guard guard(Lock);
+    if (Aborting.load()) {
+        return NThreading::MakeFuture(false);
+    }
+
+    if (!CurrentBatch.Empty()) {
+        WriteBatchImpl();
+    }
+
+    TOriginalMessage* message = nullptr;
+    if (!OriginalMessagesToSend.empty()) {
+        message = &OriginalMessagesToSend.back();
+    } else if (!SentOriginalMessages.empty()) {
+        message = &SentOriginalMessages.back();
+    } else {
+        return NThreading::MakeFuture(true);
+    }
+
+    if (!message->FlushPromise.Initialized()) {
+        message->InitFlushPromise(Connections);
+    }
+
+    return message->FlushPromise.GetFuture();
+}
+
 void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
 {
     if (!tx) {
@@ -880,14 +906,16 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
 
         ++ConnectionGeneration;
 
-        if (!ClientContext) {
-            ClientContext = Client->CreateContext();
-            if (!ClientContext) {
-                AbortImpl();
-                // Grpc and WriteSession is closing right now.
-                return;
-            }
+        // Always probe the root, like persqueue DoConnect. Reusing a live
+        // ClientContext and checking only IsCancelled() races with
+        // TDriverScope::Cancel(): RootContext_ is already gone (CreateContext
+        // is null) while this session's context is not cancelled yet.
+        auto clientContext = Client->CreateContext();
+        if (!clientContext) {
+            AbortImpl();
+            return;
         }
+        auto prevClientContext = std::exchange(ClientContext, clientContext);
 
         ServerMessage = std::make_shared<TServerMessage>();
 
@@ -899,14 +927,26 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             connectDelayContext = ClientContext->CreateContext();
         connectTimeoutContext = ClientContext->CreateContext();
 
+        const bool missingDelayContext = delay && !connectDelayContext;
+        if (!connectContext || !connectTimeoutContext || missingDelayContext) {
+            // Drop children before AbortImpl resets ClientContext; otherwise a
+            // live child keeps CQ Contexts_ non-empty and driver.Stop(true) hangs.
+            Cancel(connectContext);
+            Cancel(connectDelayContext);
+            Cancel(connectTimeoutContext);
+            connectContext.reset();
+            connectDelayContext.reset();
+            connectTimeoutContext.reset();
+            AbortImpl();
+            return;
+        }
+
         // Previous operations contexts.
 
         // Set new context
         prevConnectContext = std::exchange(ConnectContext, connectContext);
         prevConnectTimeoutContext = std::exchange(ConnectTimeoutContext, connectTimeoutContext);
         prevConnectDelayContext = std::exchange(ConnectDelayContext, connectDelayContext);
-        Y_ASSERT(ConnectContext);
-        Y_ASSERT(ConnectTimeoutContext);
 
         // Cancel previous operations.
         Cancel(prevConnectContext);
@@ -914,6 +954,7 @@ void TWriteSessionImpl::Connect(const TDuration& delay) {
             Cancel(prevConnectDelayContext);
         }
         Cancel(prevConnectTimeoutContext);
+        Cancel(prevClientContext);
 
         if (Processor) {
             Processor->Cancel();
@@ -1442,6 +1483,23 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     (*Counters->BytesInflightTotal) = MemoryUsage;
 
     return result;
+}
+
+void TWriteSessionImpl::AbortFlushPromisesImpl() {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    for (auto& message : OriginalMessagesToSend) {
+        message.CompleteFlush(false);
+    }
+
+    std::queue<TOriginalMessage> sentMessages;
+    SentOriginalMessages.swap(sentMessages);
+    while (!sentMessages.empty()) {
+        auto message = std::move(sentMessages.front());
+        sentMessages.pop();
+        message.CompleteFlush(false);
+        SentOriginalMessages.push(std::move(message));
+    }
 }
 
 TMemoryUsageChange TWriteSessionImpl::OnMemoryUsageChangedImpl(i64 diff) {
@@ -2118,10 +2176,17 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ConnectDelayContext);
         if (Processor)
             Processor->Cancel();
+        // Drop children before ClientContext: ~TContextImpl aborts if children
+        // remain, and leftover child ptrs keep CQ alive so driver.Stop(true) hangs.
+        DescribePartitionContext.reset();
+        ConnectContext.reset();
+        ConnectTimeoutContext.reset();
+        ConnectDelayContext.reset();
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
 
         CancelPendingWriteAcks();
+        AbortFlushPromisesImpl();
     }
 }
 

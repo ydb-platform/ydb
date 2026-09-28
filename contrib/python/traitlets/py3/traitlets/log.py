@@ -5,27 +5,22 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
-_logger: logging.Logger | logging.LoggerAdapter[Any] | None = None
+# Add a NullHandler to silence warnings about not being
+# initialized, per best practice for libraries.
+_fallback = logging.getLogger("traitlets")
+_fallback.addHandler(logging.NullHandler())
 
 
 def get_logger() -> logging.Logger | logging.LoggerAdapter[Any]:
     """Grab the global logger instance.
 
     If a global Application is instantiated, grab its logger.
-    Otherwise, grab the root logger.
+    Otherwise, grab the 'traitlets' library logger.
     """
-    global _logger  # noqa: PLW0603
+    from .config import Application
 
-    if _logger is None:
-        from .config import Application
-
-        if Application.initialized():
-            _logger = Application.instance().log
-        else:
-            _logger = logging.getLogger("traitlets")
-            # Add a NullHandler to silence warnings about not being
-            # initialized, per best practice for libraries.
-            _logger.addHandler(logging.NullHandler())
-    return _logger
+    if Application.initialized():
+        return cast("logging.Logger | logging.LoggerAdapter[Any]", Application.instance().log)
+    return _fallback

@@ -1558,6 +1558,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
                 [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
                 [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/.sys/udf_modules"];["metadata@system"]];
                 [["/Root/Dir1"];["user1"]];
                 [["/Root/Dir1/SubDir1"];["user1"]];
                 [["/Root/Table0"];["root@builtin"]];
@@ -1606,6 +1607,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
                 [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/Tenant1/.sys/udf_modules"];["metadata@system"]];
                 [["/Root/Tenant1/Dir2"];["user2"]];[["/Root/Tenant1/Dir2/SubDir2"];["user2"]];
                 [["/Root/Tenant1/Table1"];["root@builtin"]];
             ])";
@@ -1653,6 +1655,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant2/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
                 [["/Root/Tenant2/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/Tenant2/.sys/udf_modules"];["metadata@system"]];
                 [["/Root/Tenant2/Dir3"];["user3"]];
                 [["/Root/Tenant2/Dir3/SubDir33"];["group1"]];
                 [["/Root/Tenant2/Dir3/SubDir34"];["root@builtin"]];
@@ -1914,6 +1917,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["metadata@system"]];
                 [["/Root/.sys/top_queries_by_request_units_one_hour"];["metadata@system"]];
                 [["/Root/.sys/top_queries_by_request_units_one_minute"];["metadata@system"]];
+                [["/Root/.sys/udf_modules"];["metadata@system"]];
                 [["/Root/Dir0"];["root@builtin"]];
                 [["/Root/Dir0/SubDir0"];["root@builtin"]];
                 [["/Root/Dir0/SubDir1"];["root@builtin"]];
@@ -2570,6 +2574,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
                 [["/Root/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/.sys/udf_modules"];["ydb.generic.use"];["user1"]];
                 [["/Root/Dir1"];["ydb.generic.use"];["user1"]];
                 [["/Root/Table0"];["ydb.generic.use"];["user1"]];
             ])";
@@ -2621,6 +2626,7 @@ Y_UNIT_TEST_SUITE(AuthSystemView) {
                 [["/Root/Tenant1/.sys/top_queries_by_read_bytes_one_minute"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/top_queries_by_request_units_one_hour"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/.sys/top_queries_by_request_units_one_minute"];["ydb.generic.use"];["user1"]];
+                [["/Root/Tenant1/.sys/udf_modules"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/Dir2"];["ydb.generic.use"];["user1"]];
                 [["/Root/Tenant1/Dir2"];["ydb.granular.select_row"];["user2"]];
                 [["/Root/Tenant1/Table1"];["ydb.generic.use"];["user1"]];

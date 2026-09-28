@@ -1,5 +1,6 @@
 #include "interconnect_tcp_proxy.h"
 #include "interconnect_handshake.h"
+#include "packet.h"
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_session_v2.h"
 #include <ydb/library/actors/core/log.h>
@@ -10,6 +11,16 @@
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 
 namespace NActors {
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept {
+        const int rdmaReceiveBufSize = TTcpPacketBuf::FullPacketSize;
+        return {
+            -1,
+            maxWr,
+            enableSendReceive ? maxWr : 0,
+            enableSendReceive ? rdmaReceiveBufSize : 0,
+        };
+    }
+
     static constexpr TDuration GetNodeRequestTimeout = TDuration::Seconds(5);
     static constexpr TDuration BaseRdmaRetryDelay = TDuration::Seconds(5);
     static constexpr ui32 MaxSafeRdmaRetryBackoffLevel = 30;
@@ -278,7 +289,7 @@ namespace NActors {
                 {"sender", ev->Sender},
                 {"self", msg->Self},
                 {"peer", msg->Peer});
-        } else if (Session->HasRdmaState()) {
+        } else if (Session->GetRdmaState() != IInterconnectSession::ERdmaState::None) {
             YDB_LOG_NOTICE("(actor rejecting graceful reconnect for RDMA session",
                 {"marker", "ICRDMA"},
                 {"sender", ev->Sender},
@@ -853,7 +864,7 @@ namespace NActors {
         if (CurrentStateFunc() == &TThis::StateWork) {
             SetRdmaRetryWatchdogPending(false);
             // There is a chance that session was promouted to use RDMA without us.
-            if (!InvokeSession(&IInterconnectSession::IsRdmaInUse)) {
+            if (InvokeSession(&IInterconnectSession::GetRdmaState) != IInterconnectSession::ERdmaState::Active) {
                 InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
             }
         } else {

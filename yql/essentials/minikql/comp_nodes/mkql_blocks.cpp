@@ -56,7 +56,6 @@ private:
         FlowDependsOn(Flow_);
     }
 
-private:
     IComputationNode* const Flow_;
     TType* ItemType_;
 };
@@ -352,7 +351,6 @@ private:
                 return true;
             }
 
-        private:
             const THolderFactory& HolderFactory_;
             const NUdf::TUnboxedValue BlockState_;
             const NUdf::TUnboxedValue Iter_;
@@ -385,7 +383,6 @@ private:
             return *HasItems_;
         }
 
-    private:
         TComputationContext& CompCtx_;
 
         const TVector<TType*>& Types_;
@@ -400,7 +397,6 @@ private:
         this->DependsOn(List_);
     }
 
-private:
     TVector<TType*> Types_;
     size_t BlockLengthIndex_ = 0;
 
@@ -426,8 +422,8 @@ public:
                 return item;
             }
 
-            if (const auto input = Flow_->GetValue(ctx); input.IsSpecial()) {
-                return input;
+            if (auto input = Flow_->GetValue(ctx); input.IsSpecial()) {
+                return NUdf::TUnboxedValuePod(input);
             } else {
                 s.Reset(input);
             }
@@ -532,7 +528,6 @@ private:
         size_t Index_ = 0;
     };
 
-private:
     void RegisterDependencies() const final {
         FlowDependsOn(Flow_);
     }
@@ -548,7 +543,6 @@ private:
         return *static_cast<TState*>(state.AsBoxed().Get());
     }
 
-private:
     IComputationNode* const Flow_;
     TType* ItemType_;
 };
@@ -805,7 +799,6 @@ private:
                 return true;
             }
 
-        private:
             const NUdf::TUnboxedValue BlockState_;
             const NUdf::TUnboxedValue Iter_;
         };
@@ -848,7 +841,6 @@ private:
             return *Length_;
         }
 
-    private:
         TComputationContext& CompCtx_;
 
         const TVector<TType*>& Types_;
@@ -861,7 +853,6 @@ private:
         this->DependsOn(List_);
     }
 
-private:
     TVector<TType*> Types_;
     size_t BlockLengthIndex_ = 0;
 

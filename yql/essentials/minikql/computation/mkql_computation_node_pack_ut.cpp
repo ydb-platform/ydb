@@ -665,6 +665,88 @@ protected:
         }
     }
 
+    static TString MakePackedFrame(TStringBuf payload) {
+        if constexpr (Fast) {
+            return TString(payload);
+        } else {
+            MKQL_ENSURE(payload.size() + sizeof(ui32) > 8, "Long form header requires at least 5 bytes of payload");
+            TString result;
+            const ui32 length = payload.size();
+            result.AppendNoAlias(reinterpret_cast<const char*>(&length), sizeof(length));
+            result.AppendNoAlias(payload.data(), payload.size());
+            return result;
+        }
+    }
+
+    static TString EncodeUi64(ui64 value) {
+        if constexpr (Fast) {
+            return TString(reinterpret_cast<const char*>(&value), sizeof(value));
+        } else {
+            std::array<char, MAX_PACKED64_SIZE> buf;
+            const size_t size = Pack64(value, buf.data());
+            return TString(buf.data(), size);
+        }
+    }
+
+    NUdf::TUnboxedValue UnpackRaw(TType* type, TStringBuf buf) {
+        auto packer = MakeValuePacker(/* stable */ false, type, EValuePackerVersion::V0);
+        if constexpr (Transport) {
+            return packer.Unpack(TChunkedBuffer(buf, {}), HolderFactory_);
+        } else {
+            return packer.Unpack(buf, HolderFactory_);
+        }
+    }
+
+    void ExpectUnpackFailure(TType* type, TStringBuf payload, TStringBuf expectedError, const TString& info) {
+        const TString frame = MakePackedFrame(payload);
+        UNIT_ASSERT_EXCEPTION_CONTAINS_C(UnpackRaw(type, frame), yexception, expectedError, info);
+    }
+
+    void TestCorruptedData() {
+        TType* const ui32Type = PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id);
+        TType* const strType = PgmBuilder_.NewDataType(NUdf::TDataType<char*>::Id);
+        TType* const listOfStrType = PgmBuilder_.NewListType(strType);
+
+        ExpectUnpackFailure(PgmBuilder_.NewDecimalType(10, 0), TString(30, '\x6f'),
+                            "Bad decimal packed data", "Malformed decimal marker");
+
+        if constexpr (Fast) {
+            return;
+        }
+
+        ExpectUnpackFailure(PgmBuilder_.NewListType(ui32Type), TString(30, '\xff'),
+                            "Bad uint64 packed data", "List length with a malformed ui64 marker");
+
+        ExpectUnpackFailure(listOfStrType, EncodeUi64(1) + TString(30, '\x0f'),
+                            "Bad uint32 packed data", "String size with a malformed ui32 marker");
+
+        ExpectUnpackFailure(PgmBuilder_.NewListType(PgmBuilder_.NewOptionalType(ui32Type)),
+                            EncodeUi64(1ULL << 61) + TString(21, '\xff'),
+                            "Optional mask size 2305843009213693952 exceeds max size 2305843009213693951",
+                            "Optional mask size overflowing on shift");
+    }
+
+    void TestCorruptedBatchData() {
+        if constexpr (Transport && !Fast) {
+            auto packer = MakeValuePacker(/* stable */ false, PgmBuilder_.NewDataType(NUdf::TDataType<ui32>::Id), EValuePackerVersion::V0);
+            const TString frame = MakePackedFrame(TString(30, '\xff'));
+            TUnboxedValueBatch batch;
+            UNIT_ASSERT_EXCEPTION_CONTAINS_C(
+                packer.UnpackBatch(TChunkedBuffer(TStringBuf(frame), {}), HolderFactory_, batch),
+                yexception, "Bad uint64 packed data", "Batch item count with a malformed ui64 marker");
+        }
+    }
+
+    void TestCorruptedZeroSizedItemCount() {
+        const TString payload = EncodeUi64(1ULL << 16) + TString(27, '\xff');
+        TType* const voidType = Env_.GetTypeOfVoidLazy();
+
+        ExpectUnpackFailure(PgmBuilder_.NewListType(voidType), payload,
+                            "partial data read", "List<Void> length");
+        ExpectUnpackFailure(TDictType::Create(voidType, voidType, Env_), payload,
+                            "partial data read", "Dict<Void, Void> length");
+    }
+
     struct TBlockTestArgs {
         ui64 Offset = 0;
         ui64 Len = 0;
@@ -1410,6 +1492,8 @@ class TMiniKQLComputationNodeGenericPackTest: public TMiniKQLComputationNodePack
     UNIT_TEST(TestDictType);
     UNIT_TEST(TestVariantTypeOverStruct);
     UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestCorruptedData);
+    UNIT_TEST(TestCorruptedZeroSizedItemCount);
     UNIT_TEST(TestIntegerPackPerformance);
     UNIT_TEST(TestShortStringPackPerformance);
     UNIT_TEST(TestPairPackPerformance);
@@ -1432,6 +1516,8 @@ class TMiniKQLComputationNodeGenericFastPackTest: public TMiniKQLComputationNode
     UNIT_TEST(TestDictType);
     UNIT_TEST(TestVariantTypeOverStruct);
     UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestCorruptedData);
+    UNIT_TEST(TestCorruptedZeroSizedItemCount);
     UNIT_TEST(TestIntegerPackPerformance);
     UNIT_TEST(TestShortStringPackPerformance);
     UNIT_TEST(TestPairPackPerformance);
@@ -1454,6 +1540,9 @@ class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePa
     UNIT_TEST(TestDictType);
     UNIT_TEST(TestVariantTypeOverStruct);
     UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestCorruptedData);
+    UNIT_TEST(TestCorruptedZeroSizedItemCount);
+    UNIT_TEST(TestCorruptedBatchData);
     UNIT_TEST(TestIntegerPackPerformance);
     UNIT_TEST(TestShortStringPackPerformance);
     UNIT_TEST(TestPairPackPerformance);
@@ -1492,6 +1581,9 @@ class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNo
     UNIT_TEST(TestDictType);
     UNIT_TEST(TestVariantTypeOverStruct);
     UNIT_TEST(TestVariantTypeOverTuple);
+    UNIT_TEST(TestCorruptedData);
+    UNIT_TEST(TestCorruptedZeroSizedItemCount);
+    UNIT_TEST(TestCorruptedBatchData);
     UNIT_TEST(TestIntegerPackPerformance);
     UNIT_TEST(TestShortStringPackPerformance);
     UNIT_TEST(TestPairPackPerformance);

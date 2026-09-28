@@ -284,3 +284,7 @@ IEraseRowsCondition* CreateEraseRowsCondition(const NKikimrTxDataShard::TEvCondi
 
 } // NDataShard
 } // NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

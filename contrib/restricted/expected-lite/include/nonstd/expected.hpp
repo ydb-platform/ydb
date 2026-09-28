@@ -244,7 +244,7 @@ inline in_place_t in_place_index( detail::in_place_index_tag<K> = detail::in_pla
 
 #if nsel_USES_STD_EXPECTED
 
-#error #include <expected>
+#include <expected>
 
 namespace nonstd {
 

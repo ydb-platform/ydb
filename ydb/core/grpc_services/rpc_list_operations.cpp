@@ -24,6 +24,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -104,8 +106,11 @@ class TListOperationsRPC
     void Handle(TEvExport::TEvListExportsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvListExportsResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvExport::TEvListExportsResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
         response.set_status(record.GetStatus());
@@ -122,8 +127,11 @@ class TListOperationsRPC
     void Handle(TEvImport::TEvListImportsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvImport::TEvListImportsResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvImport::TEvListImportsResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
         response.set_status(record.GetStatus());
@@ -140,8 +148,11 @@ class TListOperationsRPC
     void Handle(TEvIndexBuilder::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvIndexBuilder::TEvListResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvListResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
 
@@ -160,8 +171,11 @@ class TListOperationsRPC
     void Handle(TEvForcedCompaction::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvForcedCompaction::TEvListResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvListResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
 
@@ -180,7 +194,11 @@ class TListOperationsRPC
     void Handle(NSchemeShard::NBackground::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSchemeShard::TEvBGTasksListResponse: record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvSchemeShard::TEvBGTasksListResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
 
@@ -284,7 +302,11 @@ class TListOperationsRPC
     void Handle(NStat::TEvStatistics::TEvAnalyzeOpListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvAnalyzeOpListResponse: record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvAnalyzeOpListResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
         response.set_status(record.GetStatus());
@@ -322,8 +344,11 @@ class TListOperationsRPC
     void Handle(TEvBackup::TEvListIncrementalBackupsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvListIncrementalBackupsResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvListIncrementalBackupsResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
         response.set_status(record.GetStatus());
@@ -340,8 +365,11 @@ class TListOperationsRPC
     void Handle(TEvBackup::TEvListBackupCollectionRestoresResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvListBackupCollectionRestoresResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvListBackupCollectionRestoresResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
         response.set_status(record.GetStatus());
@@ -358,8 +386,11 @@ class TListOperationsRPC
     void Handle(TEvBackup::TEvListFullBackupsResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvBackup::TEvListFullBackupsResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvBackup::TEvListFullBackupsResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
         response.set_status(record.GetStatus());
@@ -376,8 +407,11 @@ class TListOperationsRPC
     void Handle(TEvSetColumnConstraint::TEvListResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_D("Handle TEvSetColumnConstraint::TEvListResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvListResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         TResponse response;
 

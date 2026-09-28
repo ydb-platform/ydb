@@ -2,7 +2,7 @@ PY3_LIBRARY()
 
 PROVIDES(numpy)
 
-VERSION(2.1.3)
+VERSION(2.2.6)
 
 LICENSE(BSD-3-Clause)
 
@@ -76,7 +76,7 @@ SRCS(
     numpy/_core/src/common/npy_argparse.c
     numpy/_core/src/common/npy_cpu_dispatch.c
     numpy/_core/src/common/npy_cpu_features.c
-    numpy/_core/src/common/npy_hashtable.c
+    numpy/_core/src/common/npy_hashtable.cpp
     numpy/_core/src/common/npy_import.c
     numpy/_core/src/common/npy_longdouble.c
     numpy/_core/src/common/numpyos.c
@@ -177,7 +177,7 @@ SRCS(
     numpy/_core/src/umath/_umath_tests.c
     numpy/_core/src/umath/_umath_tests.dispatch.c
     numpy/_core/src/umath/clip.cpp
-    numpy/_core/src/umath/dispatching.c
+    numpy/_core/src/umath/dispatching.cpp
     numpy/_core/src/umath/extobj.c
     numpy/_core/src/umath/legacy_array_method.c
     numpy/_core/src/umath/loops.c
@@ -302,25 +302,36 @@ PY_REGISTER(
 PY_SRCS(
     TOP_LEVEL
     numpy/__config__.py
+    numpy/__config__.pyi
     numpy/__init__.py
     numpy/__init__.pyi
     numpy/_array_api_info.py
     numpy/_array_api_info.pyi
     numpy/_configtool.py
+    numpy/_configtool.pyi
     numpy/_core/__init__.py
     numpy/_core/__init__.pyi
     numpy/_core/_add_newdocs.py
+    numpy/_core/_add_newdocs.pyi
     numpy/_core/_add_newdocs_scalars.py
+    numpy/_core/_add_newdocs_scalars.pyi
     numpy/_core/_asarray.py
     numpy/_core/_asarray.pyi
     numpy/_core/_dtype.py
+    numpy/_core/_dtype.pyi
     numpy/_core/_dtype_ctypes.py
+    numpy/_core/_dtype_ctypes.pyi
     numpy/_core/_exceptions.py
+    numpy/_core/_exceptions.pyi
     numpy/_core/_internal.py
     numpy/_core/_internal.pyi
     numpy/_core/_machar.py
+    numpy/_core/_machar.pyi
     numpy/_core/_methods.py
+    numpy/_core/_methods.pyi
+    numpy/_core/_simd.pyi
     numpy/_core/_string_helpers.py
+    numpy/_core/_string_helpers.pyi
     numpy/_core/_type_aliases.py
     numpy/_core/_type_aliases.pyi
     numpy/_core/_ufunc_config.py
@@ -347,19 +358,28 @@ PY_SRCS(
     numpy/_core/numerictypes.py
     numpy/_core/numerictypes.pyi
     numpy/_core/overrides.py
+    numpy/_core/overrides.pyi
     numpy/_core/printoptions.py
+    numpy/_core/printoptions.pyi
     numpy/_core/records.py
     numpy/_core/records.pyi
     numpy/_core/shape_base.py
     numpy/_core/shape_base.pyi
     numpy/_core/strings.py
     numpy/_core/strings.pyi
+    numpy/_core/tests/_natype.py
     numpy/_core/umath.py
+    numpy/_core/umath.pyi
     numpy/_distributor_init.py
+    numpy/_distributor_init.pyi
     numpy/_expired_attrs_2_0.py
+    numpy/_expired_attrs_2_0.pyi
     numpy/_globals.py
+    numpy/_globals.pyi
     numpy/_pyinstaller/__init__.py
+    numpy/_pyinstaller/__init__.pyi
     numpy/_pyinstaller/hook-numpy.py
+    numpy/_pyinstaller/hook-numpy.pyi
     numpy/_pytesttester.py
     numpy/_pytesttester.pyi
     numpy/_typing/__init__.py
@@ -370,14 +390,20 @@ PY_SRCS(
     numpy/_typing/_dtype_like.py
     numpy/_typing/_extended_precision.py
     numpy/_typing/_nbit.py
+    numpy/_typing/_nbit_base.py
     numpy/_typing/_nested_sequence.py
     numpy/_typing/_scalars.py
     numpy/_typing/_shape.py
+    numpy/_typing/_ufunc.py
     numpy/_typing/_ufunc.pyi
     numpy/_utils/__init__.py
+    numpy/_utils/__init__.pyi
     numpy/_utils/_convertions.py
+    numpy/_utils/_convertions.pyi
     numpy/_utils/_inspect.py
+    numpy/_utils/_inspect.pyi
     numpy/_utils/_pep440.py
+    numpy/_utils/_pep440.pyi
     numpy/char/__init__.py
     numpy/char/__init__.pyi
     numpy/compat/__init__.py
@@ -385,7 +411,9 @@ PY_SRCS(
     numpy/core/__init__.py
     numpy/core/__init__.pyi
     numpy/core/_dtype.py
+    numpy/core/_dtype.pyi
     numpy/core/_dtype_ctypes.py
+    numpy/core/_dtype_ctypes.pyi
     numpy/core/_internal.py
     numpy/core/_multiarray_umath.py
     numpy/core/_utils.py
@@ -399,6 +427,7 @@ PY_SRCS(
     numpy/core/numeric.py
     numpy/core/numerictypes.py
     numpy/core/overrides.py
+    numpy/core/overrides.pyi
     numpy/core/records.py
     numpy/core/shape_base.py
     numpy/core/umath.py
@@ -504,6 +533,7 @@ PY_SRCS(
     numpy/fft/_pocketfft.py
     numpy/fft/_pocketfft.pyi
     numpy/fft/helper.py
+    numpy/fft/helper.pyi
     numpy/lib/__init__.py
     numpy/lib/__init__.pyi
     numpy/lib/_array_utils_impl.py
@@ -515,6 +545,7 @@ PY_SRCS(
     numpy/lib/_arrayterator_impl.py
     numpy/lib/_arrayterator_impl.pyi
     numpy/lib/_datasource.py
+    numpy/lib/_datasource.pyi
     numpy/lib/_function_base_impl.py
     numpy/lib/_function_base_impl.pyi
     numpy/lib/_histograms_impl.py
@@ -522,6 +553,7 @@ PY_SRCS(
     numpy/lib/_index_tricks_impl.py
     numpy/lib/_index_tricks_impl.pyi
     numpy/lib/_iotools.py
+    numpy/lib/_iotools.pyi
     numpy/lib/_nanfunctions_impl.py
     numpy/lib/_nanfunctions_impl.pyi
     numpy/lib/_npyio_impl.py
@@ -541,6 +573,7 @@ PY_SRCS(
     numpy/lib/_ufunclike_impl.py
     numpy/lib/_ufunclike_impl.pyi
     numpy/lib/_user_array_impl.py
+    numpy/lib/_user_array_impl.pyi
     numpy/lib/_utils_impl.py
     numpy/lib/_utils_impl.pyi
     numpy/lib/_version.py
@@ -550,21 +583,27 @@ PY_SRCS(
     numpy/lib/format.py
     numpy/lib/format.pyi
     numpy/lib/introspect.py
+    numpy/lib/introspect.pyi
     numpy/lib/mixins.py
     numpy/lib/mixins.pyi
     numpy/lib/npyio.py
     numpy/lib/npyio.pyi
     numpy/lib/recfunctions.py
+    numpy/lib/recfunctions.pyi
     numpy/lib/scimath.py
     numpy/lib/scimath.pyi
     numpy/lib/stride_tricks.py
     numpy/lib/stride_tricks.pyi
     numpy/lib/user_array.py
+    numpy/lib/user_array.pyi
     numpy/linalg/__init__.py
     numpy/linalg/__init__.pyi
     numpy/linalg/_linalg.py
     numpy/linalg/_linalg.pyi
+    numpy/linalg/_umath_linalg.pyi
+    numpy/linalg/lapack_lite.pyi
     numpy/linalg/linalg.py
+    numpy/linalg/linalg.pyi
     numpy/ma/__init__.py
     numpy/ma/__init__.pyi
     numpy/ma/core.py
@@ -576,6 +615,7 @@ PY_SRCS(
     numpy/ma/testutils.py
     numpy/ma/timer_comparison.py
     numpy/matlib.py
+    numpy/matlib.pyi
     numpy/matrixlib/__init__.py
     numpy/matrixlib/__init__.pyi
     numpy/matrixlib/defmatrix.py
@@ -606,6 +646,7 @@ PY_SRCS(
     numpy/random/_pcg64.pyi
     numpy/random/_philox.pyi
     numpy/random/_pickle.py
+    numpy/random/_pickle.pyi
     numpy/random/_sfc64.pyi
     numpy/random/bit_generator.pyi
     numpy/random/mtrand.pyi
@@ -616,11 +657,15 @@ PY_SRCS(
     numpy/testing/__init__.py
     numpy/testing/__init__.pyi
     numpy/testing/_private/__init__.py
+    numpy/testing/_private/__init__.pyi
     numpy/testing/_private/extbuild.py
+    numpy/testing/_private/extbuild.pyi
     numpy/testing/_private/utils.py
     numpy/testing/_private/utils.pyi
     numpy/testing/overrides.py
+    numpy/testing/overrides.pyi
     numpy/testing/print_coercion_tables.py
+    numpy/testing/print_coercion_tables.pyi
     numpy/typing/__init__.py
     numpy/typing/mypy_plugin.py
     numpy/version.py

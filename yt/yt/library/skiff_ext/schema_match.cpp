@@ -209,12 +209,11 @@ static constexpr char ReferencePrefix = '$';
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TSkiffSchemaRepresentation)
+DECLARE_REFCOUNTED_STRUCT(TSkiffSchemaRepresentation)
 
-class TSkiffSchemaRepresentation
+struct TSkiffSchemaRepresentation
     : public TYsonStruct
 {
-public:
     TString Name;
     EWireType WireType;
     std::optional<std::vector<INodePtr>> Children;
@@ -299,7 +298,9 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
                 case EWireType::Tuple:
                     return CreateTupleSchema(childSchemaList)->SetName(schemaRepresentation->Name);
                 default:
-                    YT_ABORT();
+                    THROW_ERROR_EXCEPTION(
+                        "Wire type %Qlv is not yet supported in Skiff schema",
+                        schemaRepresentation->WireType);
             }
         }
     } else {

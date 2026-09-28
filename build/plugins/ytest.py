@@ -171,8 +171,7 @@ def validate_test(unit, kw):
     is_fuzzing = valid_kw.get("FUZZING", False)
     is_kvm = 'kvm' in requirements_orig
     requirements = {}
-    secret_requirements = ('sb_vault', 'yav')
-    list_requirements = secret_requirements
+    secret_requirements = reqs.SECRET_REQUIREMENT_NAMES
     for req in requirements_orig:
         if req in ('kvm',):
             requirements[req] = str(True)
@@ -180,8 +179,11 @@ def validate_test(unit, kw):
 
         if ":" in req:
             req_name, req_value = req.split(":", 1)
-            if req_name in list_requirements:
-                requirements[req_name] = ",".join(filter(None, [requirements.get(req_name), req_value]))
+            if req_name in secret_requirements:
+                if req_name in requirements:
+                    requirements[req_name] += reqs.SECRET_REQUIREMENT_SEPARATOR + req_value
+                else:
+                    requirements[req_name] = req_value
             else:
                 if req_name in requirements:
                     if req_value in ["0"]:
@@ -221,6 +223,13 @@ def validate_test(unit, kw):
                 error_msg = str(e)
             if error_msg:
                 errors += [error_msg]
+
+    if not errors:
+        error_msg = reqs.validate_secret_requirement_conflicts(requirements)
+        if error_msg:
+            errors.append(error_msg)
+        else:
+            reqs.deduplicate_secret_requirements(requirements)
 
     invalid_requirements_for_distbuild = [
         requirement for requirement in requirements.keys() if requirement not in ('ram', 'ram_disk', 'cpu', 'network')
@@ -999,6 +1008,42 @@ def SETUP_PYTEST_BIN(unit: ymake.Unit, *args: str):
 
 @ymake.macro
 def RUN(unit: ymake.Unit, *args: str):
+    """
+    @usage: RUN(command [args...] [options...])
+
+    Run a command as a separate EXECTEST test. Exit code zero means success.
+    Declare executable dependencies with DEPENDS. Commands run directly, without a shell.
+
+    Options may appear before or after the command and its arguments.
+    Their names are reserved tokens, removed from the command before execution.
+
+    Option | Meaning
+    --- | ---
+    `NAME name` | Test name; defaults to the executable basename, or the script argument for `${PYTHON_BIN}`. Duplicate names receive numeric suffixes.
+    `ENV key=value` | Set a variable in the command's inherited environment. Repeat for multiple variables.
+    `STDIN path` | Read the command's standard input from a file.
+    `STDOUT path`, `STDERR path` | Write the corresponding output stream to a file.
+    `CWD dir` | Working directory of this command. Relative stream and canonical file paths are resolved against it; otherwise the test working directory is used.
+    `CANONIZE path`, `CANONIZE_LOCALLY path` | Compare a file with canonical data, stored in Sandbox or the repository respectively. Repeat to compare several files.
+    `CANONIZE_DIR path`, `CANONIZE_DIR_LOCALLY path` | Same for a directory.
+    `DIFF_TOOL path` | Comparison executable: repository-relative binary path from a DEPENDS dependency. Applies to canonical outputs of this RUN.
+    `DIFF_TOOL_TIMEOUT seconds` | Integer timeout for the comparison executable.
+
+    The following variables are substituted at test runtime:
+
+    Variable | Meaning
+    --- | ---
+    `${ARCADIA_BUILD_ROOT}` | Build root containing the binaries from DEPENDS; append the repository-relative binary path.
+    `${ARCADIA_ROOT}` | Repository source root.
+    `${TEST_SOURCE_ROOT}` | Source directory containing the current test module's ya.make.
+    `${TEST_WORK_ROOT}` | Test suite working directory.
+    `${TEST_OUT_ROOT}` | Test suite output directory.
+    `${TEST_CASE_ROOT}` | Current test case's output directory inside the suite output directory.
+    `${PYTHON_BIN}` | Python interpreter executable provided by the test environment.
+
+    For multiple commands or output comparison, read
+    https://docs.yandex-team.ru/ya-make/manual/tests/exectest.
+    """
     exectest_cmd = unit.get(["EXECTEST_COMMAND_VALUE"]) or ''
     exectest_cmd += "\n" + subprocess.list2cmdline(args)
     unit.set(["EXECTEST_COMMAND_VALUE", exectest_cmd])

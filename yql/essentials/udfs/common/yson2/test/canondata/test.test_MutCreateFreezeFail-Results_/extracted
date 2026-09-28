@@ -1,0 +1,3 @@
+<tmp_path>/program.sql:<main>:7:22: Error: Invalid or deleted node is not allowed
+	        return Yson::MutFreeze($m);
+	                     ^

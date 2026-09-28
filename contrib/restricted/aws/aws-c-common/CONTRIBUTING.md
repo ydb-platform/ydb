@@ -50,6 +50,13 @@ For more information see the [Code of Conduct FAQ](https://aws.github.io/code-of
 opensource-codeofconduct@amazon.com with any additional questions or comments.
 
 
+## Versioning
+
+This project follows a three-part `Major.Minor.Patch` version scheme. Before
+contributing, please review [VERSIONING.md](VERSIONING.md) to understand how
+changes map to version bumps and our API/ABI stability policy.
+
+
 ## Licensing
 
 See the [LICENSE](https://github.com/awslabs/aws-c-common/blob/main/LICENSE) file for our project's licensing. We will ask you confirm the licensing of your contribution.

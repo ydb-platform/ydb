@@ -4,8 +4,6 @@
 
 This article provides examples of working with [topics](../../concepts/datamodel/topic.md) using the SQS API with the [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/cli-chap-welcome.html).
 
-{% include [x](_includes/limitations.md) %}
-
 {% include [x](_includes/examples_prerequisites.md) %}
 
 ## Forming the endpoint for connection

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/load_test)
+UNITTEST_FOR(ydb/core/load_test/ycsb)
 
 FORK_SUBTESTS()
 
@@ -16,7 +16,6 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/kqp/ut/common
-    ydb/core/load_test
     ydb/core/testlib/default
     ydb/core/tx
     yql/essentials/public/udf/service/exception_policy

@@ -16,6 +16,10 @@ using namespace NYql::NNodes;
 
 namespace {
 
+bool IsVirtualGeneratedColumn(const TKikimrColumnMetadata* column) {
+    return column && column->IsDefaultFromExpression() && !column->DefaultExpression->Stored;
+}
+
 TVector<TString> GetMissingStoredGeneratedDeps(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
     const THashSet<TStringBuf>& inputColumnsSet)
 {
@@ -360,10 +364,8 @@ TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrC
     result.Members.reserve(generatedColumns.size());
 
     for (const auto* colMeta : generatedColumns) {
-        YQL_ENSURE(colMeta->DefaultExpression.Defined(), "STORED generated column " << colMeta->Name
-            << " has no expression metadata");
-        YQL_ENSURE(colMeta->DefaultExpression->Expr, "STORED generated column " << colMeta->Name
-            << " has no compiled expression");
+        YQL_ENSURE(colMeta->DefaultExpression.Defined(), "Generated column " << colMeta->Name << " has no expression metadata");
+        YQL_ENSURE(colMeta->DefaultExpression->Expr, "Generated column " << colMeta->Name << " has no compiled expression");
 
         auto value = Build<TExprApplier>(ctx, pos)
             .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
@@ -380,6 +382,136 @@ TGeneratedColumnMembers BuildGeneratedColumnMembers(const TVector<const TKikimrC
     }
 
     return result;
+}
+
+TCoAtomList BuildPhysicalColumnsForVirtualGeneratedColumns(
+    const TCoAtomList& logicalColumns,
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx)
+{
+    TVector<const TKikimrColumnMetadata*> virtualColumns;
+    THashSet<TStringBuf> virtualNames;
+
+    for (const auto& column : logicalColumns) {
+        const auto* metadata = table.Metadata->Columns.FindPtr(column.Value());
+        if (IsVirtualGeneratedColumn(metadata)) {
+            virtualColumns.push_back(metadata);
+            virtualNames.insert(metadata->Name);
+        }
+    }
+
+    if (virtualColumns.empty()) {
+        return logicalColumns;
+    }
+
+    TVector<TCoAtom> physicalColumns;
+    THashSet<TStringBuf> physicalNames;
+
+    for (const auto& column : logicalColumns) {
+        if (!virtualNames.contains(column.Value())) {
+            physicalColumns.push_back(column);
+            physicalNames.insert(column.Value());
+        }
+    }
+
+    for (const auto* column : virtualColumns) {
+        for (const auto& dependency : column->DefaultExpression->Dependencies) {
+            if (physicalNames.insert(dependency).second) {
+                physicalColumns.push_back(TCoAtom(ctx.NewAtom(pos, dependency)));
+            }
+        }
+    }
+
+    if (physicalColumns.empty()) {
+        YQL_ENSURE(!table.Metadata->KeyColumnNames.empty());
+        physicalColumns.push_back(TCoAtom(ctx.NewAtom(pos, table.Metadata->KeyColumnNames.front())));
+    }
+
+    return Build<TCoAtomList>(ctx, pos)
+        .Add(physicalColumns)
+        .Done();
+}
+
+TExprBase BuildVirtualGeneratedColumnProjection(
+    const TExprBase& physicalRows,
+    const TCoAtomList& logicalColumns,
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx)
+{
+    TVector<const TKikimrColumnMetadata*> virtualColumns;
+    THashSet<TStringBuf> virtualNames;
+
+    for (const auto& column : logicalColumns) {
+        const auto* metadata = table.Metadata->Columns.FindPtr(column.Value());
+        if (IsVirtualGeneratedColumn(metadata)) {
+            virtualColumns.push_back(metadata);
+            virtualNames.insert(metadata->Name);
+        }
+    }
+
+    if (virtualColumns.empty()) {
+        return physicalRows;
+    }
+
+    auto row = Build<TCoArgument>(ctx, pos)
+        .Name("row")
+        .Done();
+    auto generated = BuildGeneratedColumnMembers(virtualColumns, row, pos, ctx);
+
+    TVector<TExprBase> members;
+    members.reserve(logicalColumns.Size());
+    size_t generatedIndex = 0;
+
+    for (const auto& column : logicalColumns) {
+        if (virtualNames.contains(column.Value())) {
+            const auto* columnType = table.GetColumnType(virtualColumns.at(generatedIndex)->Name);
+            YQL_ENSURE(columnType, "Unknown virtual generated column " << column.Value());
+
+            const auto generatedMember = generated.Members.at(generatedIndex++).Cast<TCoNameValueTuple>();
+            members.push_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name(column)
+                    .Value<TCoStrictCast>()
+                        .Value(generatedMember.Value().Cast())
+                        .Type(NCommon::BuildTypeExpr(pos, *columnType, ctx))
+                        .Build()
+                    .Done());
+        } else {
+            members.push_back(
+                Build<TCoNameValueTuple>(ctx, pos)
+                    .Name(column)
+                    .Value<TCoMember>()
+                        .Struct(row)
+                        .Name(column)
+                        .Build()
+                    .Done());
+        }
+    }
+
+    YQL_ENSURE(generatedIndex == generated.Members.size());
+
+    return Build<TCoMap>(ctx, pos)
+        .Input(physicalRows)
+        .Lambda()
+            .Args({row})
+            .Body<TCoAsStruct>()
+                .Add(members)
+                .Build()
+            .Build()
+        .Done();
+}
+
+TExprBase BuildReadWithVirtualGeneratedColumns(
+    const TCoAtomList& logicalColumns,
+    const TKikimrTableDescription& table,
+    TPositionHandle pos,
+    TExprContext& ctx,
+    const std::function<TExprBase(const TCoAtomList&)>& buildRead)
+{
+    const auto physicalColumns = BuildPhysicalColumnsForVirtualGeneratedColumns(logicalColumns, table, pos, ctx);
+    return BuildVirtualGeneratedColumnProjection(buildRead(physicalColumns), logicalColumns, table, pos, ctx);
 }
 
 TExprBase BuildGeneratedDependencyRow(const TVector<const TKikimrColumnMetadata*>& generatedColumns,

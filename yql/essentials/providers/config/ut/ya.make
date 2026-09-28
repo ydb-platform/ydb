@@ -2,6 +2,7 @@ UNITTEST_FOR(yql/essentials/providers/config)
 
 SRCS(
     yql_config_provider_statistics_ut.cpp
+    yql_config_provider_ut.cpp
 )
 
 PEERDIR(

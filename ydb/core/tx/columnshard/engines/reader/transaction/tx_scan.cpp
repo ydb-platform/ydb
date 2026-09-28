@@ -10,8 +10,6 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
 
 namespace NKikimr::NOlap::NReader {
@@ -247,10 +245,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         {"tablet", Self->TabletID()},
         {"timeout", TDuration::MilliSeconds(request.GetTimeoutMs())},
         {"cpuLimits", cpuLimits.DebugString()});
-    YDB_LOG_DEBUG("TTxScan prepare at tablet",
-        {"txId", request.GetTxId()},
-        {"scanId", request.GetScanId()},
-        {"#_Self->TabletID", Self->TabletID()});
+    LOG_S_DEBUG("TTxScan prepare txId: " << request.GetTxId() << " scanId: " << request.GetScanId() << " at tablet " << Self->TabletID());
 
     auto accessorConclusion = MakeTableAccessor(ssPathId, snapshot);
     if (accessorConclusion.IsFail()) {

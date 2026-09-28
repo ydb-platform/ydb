@@ -1,5 +1,7 @@
 #include "columnshard_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {

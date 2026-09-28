@@ -25,8 +25,6 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr {
@@ -232,13 +230,9 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
 
     if (clientId == StatsReportPipe) {
         if (ev->Get()->Status == NKikimrProto::OK) {
-            YDB_LOG_DEBUG("Connected to at tablet",
-                {"tabletId", tabletId},
-                {"tabletID", TabletID()});
+            LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
         } else {
-            YDB_LOG_INFO("Failed to connect to at tablet",
-                {"tabletId", tabletId},
-                {"tabletID", TabletID()});
+            LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
             LastStats = {};
             StatsReportPipe = {};
         }
@@ -248,24 +242,18 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
     }
 
     if (PipeClientCache->OnConnect(ev)) {
-        YDB_LOG_DEBUG("Connected to at tablet",
-            {"tabletId", tabletId},
-            {"tabletID", TabletID()});
+        LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
         return;
     }
 
-    YDB_LOG_INFO("Failed to connect to at tablet",
-        {"tabletId", tabletId},
-        {"tabletID", TabletID()});
+    LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
     auto tabletId = ev->Get()->TabletId;
     auto clientId = ev->Get()->ClientId;
 
-    YDB_LOG_DEBUG("Client pipe reset to at tablet",
-        {"tabletId", tabletId},
-        {"tabletID", TabletID()});
+    LOG_S_DEBUG("Client pipe reset to " << tabletId << " at tablet " << TabletID());
 
     if (clientId == StatsReportPipe) {
         StatsReportPipe = {};
@@ -278,8 +266,7 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
     PipeServersInterconnectSessions.emplace(ev->Get()->ServerId, ev->Get()->InterconnectSession);
-    YDB_LOG_DEBUG("Server pipe connected at tablet",
-        {"tabletID", TabletID()});
+    LOG_S_DEBUG("Server pipe connected at tablet " << TabletID());
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
@@ -288,8 +275,7 @@ void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const 
         std::make_unique<NOverload::TEvOverloadPipeServerDisconnected>(
             NOverload::TColumnShardInfo{ .ColumnShardId = SelfId(), .TabletId = TabletID() },
             NOverload::TPipeServerInfo{ .PipeServerId = ev->Get()->ServerId, .InterconnectSessionId = {} }));
-    YDB_LOG_DEBUG("Server pipe reset at tablet",
-        {"tabletID", TabletID()});
+    LOG_S_DEBUG("Server pipe reset at tablet " << TabletID());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext& ctx) {
@@ -302,9 +288,7 @@ void TColumnShard::Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContex
 void TColumnShard::Handle(TEvPrivate::TEvReadFinished::TPtr& ev, const TActorContext& ctx) {
     Y_UNUSED(ctx);
     ui64 readCookie = ev->Get()->RequestCookie;
-    YDB_LOG_DEBUG("Finished read at tablet",
-        {"cookie", readCookie},
-        {"tabletID", TabletID()});
+    LOG_S_DEBUG("Finished read cookie: " << readCookie << " at tablet " << TabletID());
     const NOlap::TVersionedIndex* index = nullptr;
     if (HasIndex()) {
         index = &GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex();
@@ -370,8 +354,7 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev
     Y_ABORT_UNLESS(msg->TabletId == TabletID());
     MediatorTimeCastEntry = msg->Entry;
     Y_ABORT_UNLESS(MediatorTimeCastEntry);
-    YDB_LOG_DEBUG("Registered with mediator time cast at tablet",
-        {"tabletID", TabletID()});
+    LOG_S_DEBUG("Registered with mediator time cast at tablet " << TabletID());
 
     RescheduleWaitingReads();
 }
@@ -382,9 +365,7 @@ void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, cons
 
     Y_ABORT_UNLESS(MediatorTimeCastEntry);
     ui64 step = MediatorTimeCastEntry->Get(TabletID());
-    YDB_LOG_DEBUG("Notified by mediator time cast with at tablet",
-        {"planStep", step},
-        {"tabletID", TabletID()});
+    LOG_S_DEBUG("Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID());
 
     for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end();) {
         if (step < *it) {
@@ -449,14 +430,10 @@ void TColumnShard::UpdateIndexCounters() {
     counters->SetCounter(COUNTER_EVICTED_BYTES, evictedStats.GetBlobBytes());
     counters->SetCounter(COUNTER_EVICTED_RAW_BYTES, evictedStats.GetRawBytes());
 
-    YDB_LOG_DEBUG("Index: tables inserted compacted s-compacted inactive evicted at tablet",
-        {"#_Counters.GetPortionIndexCounters()->GetTablesCount", Counters.GetPortionIndexCounters()->GetTablesCount()},
-        {"#_insertedStats.DebugString", insertedStats.DebugString()},
-        {"#_compactedStats.DebugString", compactedStats.DebugString()},
-        {"#_splitCompactedStats.DebugString", splitCompactedStats.DebugString()},
-        {"#_inactiveStats.DebugString", inactiveStats.DebugString()},
-        {"#_evictedStats.DebugString", evictedStats.DebugString()},
-        {"tabletID", TabletID()});
+    LOG_S_DEBUG("Index: tables " << Counters.GetPortionIndexCounters()->GetTablesCount() << " inserted " << insertedStats.DebugString()
+                                 << " compacted " << compactedStats.DebugString() << " s-compacted " << splitCompactedStats.DebugString()
+                                 << " inactive " << inactiveStats.DebugString() << " evicted " << evictedStats.DebugString() << " at tablet "
+                                 << TabletID());
 }
 
 ui64 TColumnShard::MemoryUsage() const {

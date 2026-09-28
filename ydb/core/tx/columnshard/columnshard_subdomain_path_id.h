@@ -50,9 +50,7 @@ public:
             HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
             HFunc(NActors::TEvents::TEvPoison, Handle);
             default:
-                YDB_LOG_WARN("TSpaceWatcher.StateWork at unhandled event",
-                    {"type", ev->GetTypeName()},
-                    {"event", ev->ToString()});
+                LOG_S_WARN("TSpaceWatcher.StateWork at " << " unhandled event type: " << ev->GetTypeName() << " event: " << ev->ToString());
                 break;
         }
     }

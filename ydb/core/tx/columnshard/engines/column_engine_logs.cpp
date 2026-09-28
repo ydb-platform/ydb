@@ -20,6 +20,7 @@
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/conclusion/status.h>
 

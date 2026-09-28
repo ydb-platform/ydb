@@ -447,10 +447,8 @@ protected:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
             default:
-                YDB_LOG_WARN("TColumnShard.StateBroken at unhandled event",
-                    {"tabletID", TabletID()},
-                    {"type", ev->GetTypeName()},
-                    {"event", ev->ToString()});
+                LOG_S_WARN("TColumnShard.StateBroken at " << TabletID() << " unhandled event type: " << ev->GetTypeName()
+                                                          << " event: " << ev->ToString());
                 Send(IEventHandle::ForwardOnNondelivery(std::move(ev), NActors::TEvents::TEvUndelivered::ReasonActorUnknown));
                 break;
         }

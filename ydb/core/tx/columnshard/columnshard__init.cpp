@@ -20,8 +20,6 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {
@@ -81,8 +79,7 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"event", "initialize_shard"});
-    YDB_LOG_DEBUG("TTxInit.Execute at tablet",
-        {"#_Self->TabletID", Self->TabletID()});
+    LOG_S_DEBUG("TTxInit.Execute at tablet " << Self->TabletID());
 
     try {
         if (!StartReader) {
@@ -294,8 +291,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
         {"tabletId", Self->TabletID()},
         {"process", "TTxInitSchema::Execute"});
-    YDB_LOG_DEBUG("TxInitSchema.Execute at tablet",
-        {"#_Self->TabletID", Self->TabletID()});
+    LOG_S_DEBUG("TxInitSchema.Execute at tablet " << Self->TabletID());
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
@@ -345,8 +341,7 @@ void TTxInitSchema::Complete(const TActorContext& ctx) {
         {"tabletId", Self->TabletID()},
         {"process", "TTxInitSchema::Complete"});
     Self->Counters.GetCSCounters().Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
-    YDB_LOG_DEBUG("TxInitSchema.Complete at tablet",
-        {"#_Self->TabletID();", Self->TabletID();});
+    LOG_S_DEBUG("TxInitSchema.Complete at tablet " << Self->TabletID(););
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }
 

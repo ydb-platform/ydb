@@ -2,6 +2,8 @@
 #include "columnshard_private_events.h"
 #include "columnshard_schema.h"
 
+#include <ydb/library/actors/core/log.h>
+
 #include <util/string/vector.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD

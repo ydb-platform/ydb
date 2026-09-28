@@ -9,6 +9,8 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/kqp.pb.h>
 
+#include <ydb/library/actors/core/log.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
 namespace NKikimr::NColumnShard {

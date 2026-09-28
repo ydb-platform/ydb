@@ -63,8 +63,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT TX_COLUMNSHARD
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
-
 namespace NKikimr::NColumnShard {
 
 LWTRACE_USING(YDB_CS);

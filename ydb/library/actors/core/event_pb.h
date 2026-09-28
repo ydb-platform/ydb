@@ -25,6 +25,11 @@ namespace NInterconnect::NRdma {
     class TMemRegion;
 }
 
+namespace google::protobuf {
+    class Message;
+    class MessageLite;
+}
+
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr);
 
@@ -204,12 +209,85 @@ namespace NActors {
     ui32 CalculateSerializedSizeImpl(const TVector<TRope> &payload, ssize_t recordSize);
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel, const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment = 0, size_t payloadHeaderSize = 0);
 
-    template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
-    class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
+    // Type-independent state of TEventPBBase: payload ropes attached to the record and the cached serialized size.
+    class TEventPBPayloadBase {
+    public:
+        TEventPBPayloadBase() = default;
+        TEventPBPayloadBase(const TEventPBPayloadBase&) = default;
+        TEventPBPayloadBase(TEventPBPayloadBase&&) = default;
+        TEventPBPayloadBase& operator=(const TEventPBPayloadBase&) = default;
+        TEventPBPayloadBase& operator=(TEventPBPayloadBase&&) = default;
+        ~TEventPBPayloadBase();
+
+        ui32 AddPayload(TRope&& rope) {
+            const ui32 id = Payload.size();
+            TotalPayloadSize += rope.size();
+            Payload.push_back(std::move(rope));
+            InvalidateCachedByteSize();
+            return id;
+        }
+
+        const TRope& GetPayload(ui32 id) const {
+            Y_ENSURE(id < Payload.size());
+            return Payload[id];
+        }
+
+        const TVector<TRope>& GetPayload() const {
+            return Payload;
+        }
+
+        ui32 GetPayloadCount() const {
+            return Payload.size();
+        }
+
+        void StripPayload() {
+            Payload.clear();
+            TotalPayloadSize = 0;
+            InvalidateCachedByteSize();
+        }
+
+        void InvalidateCachedByteSize() {
+            CachedByteSize = 0;
+        }
+
+        bool AllowExternalDataChannel() const {
+            return TotalPayloadSize >= 4096;
+        }
+
+    protected:
+        TRope& MutablePayload(ui32 id) {
+            Y_ENSURE(id < Payload.size());
+            return Payload[id];
+        }
+
+    private:
+        friend void LoadEventPB(const TEventSerializedData* input, google::protobuf::MessageLite& record,
+            TEventPBPayloadBase& payload, ui32 eventType);
+
         // a vector of data buffers referenced by record; if filled, then extended serialization mechanism applies
         TVector<TRope> Payload;
         size_t TotalPayloadSize = 0;
 
+    protected:
+        mutable size_t CachedByteSize = 0;
+    };
+
+    // Non-template implementations of the TEventPBBase / TEventPreSerializedPB methods.
+    void LoadEventPB(const TEventSerializedData* input, google::protobuf::MessageLite& record,
+        TEventPBPayloadBase& payload, ui32 eventType);
+    bool SerializeEventPB(TChunkSerializer* chunker, const google::protobuf::MessageLite& record,
+        const TVector<TRope>& payload, const TString* preSerializedData = nullptr);
+    ui32 CalculateEventPBSize(const google::protobuf::MessageLite& record, const TVector<TRope>& payload);
+    TEventSerializationInfo CreateEventPBSerializationInfo(size_t preserializedSize, bool allowExternalDataChannel,
+        const google::protobuf::MessageLite& record, const TVector<TRope>& payload,
+        size_t payloadAlignment, size_t payloadHeaderSize);
+    // header is event.ToStringHeader()
+    TString EventPBToString(const IEventBase& event, const google::protobuf::Message& record);
+    // header is record.GetTypeName()
+    TString EventPBToString(const google::protobuf::Message& record);
+
+    template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
+    class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder, public TEventPBPayloadBase {
     public:
         using TRecHolder::Record;
 
@@ -235,7 +313,7 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            return EventPBBaseToString(ToStringHeader(), Record.ShortDebugString());
+            return EventPBToString(*this, Record);
         }
 
         bool IsSerializable() const override {
@@ -243,47 +321,21 @@ namespace NActors {
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            if (!SerializeToArcadiaStreamImpl(chunker, Payload)) {
-                return false;
-            }
-            if (auto *stream = chunker->GetCodedOutputStream()) {
-                Record.SerializeWithCachedSizes(stream);
-                stream->Trim();
-                return !stream->HadError();
-            } else {
-                return Record.SerializeToZeroCopyStream(chunker);
-            }
+            return SerializeEventPB(chunker, Record, GetPayload());
         }
 
         ui32 CalculateSerializedSize() const override {
-            return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
+            return CalculateEventPBSize(Record, GetPayload());
         }
 
         std::optional<TRope> SerializeToRope(IRcBufAllocator* allocator) const override {
-            return NActors::SerializeToRopeImpl(Record, Payload, allocator);
+            return NActors::SerializeToRopeImpl(Record, GetPayload(), allocator);
         }
 
         static TEv* Load(const TEventSerializedData *input) {
             THolder<TEv> holder(new TEv());
             TEventPBBase* ev = holder.Get();
-            if (!input->GetSize()) {
-                Y_ENSURE(ev->Record.ParseFromString(TString()),
-                    "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
-            } else {
-                TRope::TConstIterator iter = input->GetBeginIter();
-                ui64 size = input->GetSize();
-
-                if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
-                    ParseExtendedFormatPayload(iter, size, ev->Payload, ev->TotalPayloadSize);
-                }
-
-                // parse the protobuf
-                TRopeStream stream(iter, size);
-                if (!ev->Record.ParseFromZeroCopyStream(&stream)) {
-                    Y_ENSURE(false, "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record) <<
-                            " size# " << size << " hexDump# " << HexEncode(input->GetString()));
-                }
-            }
+            LoadEventPB(input, ev->Record, *ev, TEventType);
             return holder.Release();
         }
 
@@ -298,10 +350,6 @@ namespace NActors {
             return GetCachedByteSize();
         }
 
-        void InvalidateCachedByteSize() {
-            CachedByteSize = 0;
-        }
-
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
             constexpr size_t payloadAlignment = TEv::GetPayloadAlignment();
             constexpr size_t payloadHeaderSize = TEv::GetPayloadHeaderSize();
@@ -310,13 +358,8 @@ namespace NActors {
             static_assert(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0,
                 "GetPayloadHeaderSize() must be a multiple of GetPayloadAlignment()");
             allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
-            return CreateSerializationInfoImpl(0, allowExternalDataChannel, GetPayload(),
-                allowExternalDataChannel ? Record.ByteSize() : 0,
+            return CreateEventPBSerializationInfo(0, allowExternalDataChannel, Record, GetPayload(),
                 payloadAlignment, payloadHeaderSize);
-        }
-
-        bool AllowExternalDataChannel() const {
-            return TotalPayloadSize >= 4096;
         }
 
         static constexpr size_t GetPayloadAlignment() {
@@ -330,19 +373,6 @@ namespace NActors {
         }
 
     public:
-        ui32 AddPayload(TRope&& rope) {
-            const ui32 id = Payload.size();
-            TotalPayloadSize += rope.size();
-            Payload.push_back(std::move(rope));
-            InvalidateCachedByteSize();
-            return id;
-        }
-
-        const TRope& GetPayload(ui32 id) const {
-            Y_ENSURE(id < Payload.size());
-            return Payload[id];
-        }
-
         // Returns an owning TRcBuf covering [header | payload] in contiguous memory, where the leading
         // GetPayloadHeaderSize() bytes are reserved (uninitialized) header space, immediately followed by the
         // payload bytes. When alignment is requested, the header start is aligned to GetPayloadAlignment().
@@ -359,10 +389,9 @@ namespace NActors {
         // UnsafeGetContiguousSpanMut()/UnsafeGetDataMut() (these bypass copy-on-write; the header region lies
         // outside every payload's bytes, so this is safe even when the backend is shared).
         TRcBuf GetPayloadWithHeader(ui32 id) {
-            Y_ENSURE(id < Payload.size());
+            TRope& rope = MutablePayload(id);
             constexpr size_t headerSize = TEv::GetPayloadHeaderSize();
             constexpr size_t alignment = TEv::GetPayloadAlignment();
-            TRope& rope = Payload[id];
             const size_t payloadSize = rope.GetSize();
 
             if (payloadSize && rope.IsContiguous()) {
@@ -383,23 +412,6 @@ namespace NActors {
             }
             return buffer;
         }
-
-        const TVector<TRope>& GetPayload() const {
-            return Payload;
-        }
-
-        ui32 GetPayloadCount() const {
-            return Payload.size();
-        }
-
-        void StripPayload() {
-            Payload.clear();
-            TotalPayloadSize = 0;
-            InvalidateCachedByteSize();
-        }
-
-    protected:
-        mutable size_t CachedByteSize = 0;
     };
 
     // Protobuf record not using arena
@@ -525,25 +537,11 @@ namespace NActors {
         }
 
         TString ToString() const override {
-            return EventPBBaseToString(TBase::ToStringHeader(),  GetRecord().ShortDebugString());
+            return EventPBToString(GetRecord());
         }
 
         bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            if (!SerializeToArcadiaStreamImpl(chunker, TBase::GetPayload())) {
-                return false;
-            }
-            
-            if (PreSerializedData && !chunker->WriteString(&PreSerializedData)) {
-                return false;
-            }
-
-            if (auto *stream = chunker->GetCodedOutputStream()) {
-                Record.SerializeWithCachedSizes(stream);
-                stream->Trim();
-                return !stream->HadError();
-            } else {
-                return Record.SerializeToZeroCopyStream(chunker);
-            }
+            return SerializeEventPB(chunker, Record, TBase::GetPayload(), &PreSerializedData);
         }
 
         ui32 CalculateSerializedSize() const override {
@@ -558,8 +556,7 @@ namespace NActors {
             static_assert(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0,
                 "GetPayloadHeaderSize() must be a multiple of GetPayloadAlignment()");
             allowExternalDataChannel = allowExternalDataChannel && static_cast<const TEv&>(*this).AllowExternalDataChannel();
-            return CreateSerializationInfoImpl(PreSerializedData.size(), allowExternalDataChannel, TBase::GetPayload(),
-                allowExternalDataChannel ? Record.ByteSize() : 0,
+            return CreateEventPBSerializationInfo(PreSerializedData.size(), allowExternalDataChannel, Record, TBase::GetPayload(),
                 payloadAlignment, payloadHeaderSize);
         }
     };

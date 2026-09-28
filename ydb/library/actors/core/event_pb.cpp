@@ -3,6 +3,8 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
+#include <google/protobuf/message.h>
+
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr) {
         TString res;
@@ -11,6 +13,69 @@ namespace NActors {
         res.append(' ');
         res.append(dbgStr);
         return res;
+    }
+
+    TEventPBPayloadBase::~TEventPBPayloadBase() = default;
+
+    void LoadEventPB(const TEventSerializedData* input, google::protobuf::MessageLite& record,
+            TEventPBPayloadBase& payload, ui32 eventType) {
+        if (!input->GetSize()) {
+            Y_ENSURE(record.ParseFromString(TString()),
+                "Failed to parse protobuf event type " << eventType << " class " << TypeName(record));
+        } else {
+            TRope::TConstIterator iter = input->GetBeginIter();
+            ui64 size = input->GetSize();
+
+            if (const auto& info = input->GetSerializationInfo(); info.IsExtendedFormat) {
+                ParseExtendedFormatPayload(iter, size, payload.Payload, payload.TotalPayloadSize);
+            }
+
+            // parse the protobuf
+            TRopeStream stream(iter, size);
+            if (!record.ParseFromZeroCopyStream(&stream)) {
+                Y_ENSURE(false, "Failed to parse protobuf event type " << eventType << " class " << TypeName(record) <<
+                        " size# " << size << " hexDump# " << HexEncode(input->GetString()));
+            }
+        }
+    }
+
+    bool SerializeEventPB(TChunkSerializer* chunker, const google::protobuf::MessageLite& record,
+            const TVector<TRope>& payload, const TString* preSerializedData) {
+        if (!SerializeToArcadiaStreamImpl(chunker, payload)) {
+            return false;
+        }
+
+        if (preSerializedData && *preSerializedData && !chunker->WriteString(preSerializedData)) {
+            return false;
+        }
+
+        if (auto *stream = chunker->GetCodedOutputStream()) {
+            record.SerializeWithCachedSizes(stream);
+            stream->Trim();
+            return !stream->HadError();
+        } else {
+            return record.SerializeToZeroCopyStream(chunker);
+        }
+    }
+
+    ui32 CalculateEventPBSize(const google::protobuf::MessageLite& record, const TVector<TRope>& payload) {
+        return CalculateSerializedSizeImpl(payload, record.ByteSize());
+    }
+
+    TEventSerializationInfo CreateEventPBSerializationInfo(size_t preserializedSize, bool allowExternalDataChannel,
+            const google::protobuf::MessageLite& record, const TVector<TRope>& payload,
+            size_t payloadAlignment, size_t payloadHeaderSize) {
+        return CreateSerializationInfoImpl(preserializedSize, allowExternalDataChannel, payload,
+            allowExternalDataChannel ? record.ByteSize() : 0,
+            payloadAlignment, payloadHeaderSize);
+    }
+
+    TString EventPBToString(const IEventBase& event, const google::protobuf::Message& record) {
+        return EventPBBaseToString(event.ToStringHeader(), record.ShortDebugString());
+    }
+
+    TString EventPBToString(const google::protobuf::Message& record) {
+        return EventPBBaseToString(record.GetTypeName(), record.ShortDebugString());
     }
 
     bool TRopeStream::Next(const void** data, int* size) {

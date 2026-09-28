@@ -3,10 +3,11 @@
 
 Same nodes `ya analyze-make timeline --evlog` draws.
 Local compile and link are Compile/Link nodes and Run nodes whose path is an
-object or archive (.o, .a, .obj, .so). ya_build is that work before the first
-test. ya_rebuild is the same work after tests have started. ya_tests is every
-other Run, with those build intervals cut out. Cache fetch and cache put are
-not build.
+object or archive (.o, .a, .obj, .so, .dylib). Run of a source, header, plugin
+or *.context is build as well, not a test. All of that work is ya_build.
+ya_tests is every other Run, with those build intervals cut out.
+FromDistCache is ya_cache_download and PutInDistCache is ya_cache_upload.
+Cache intervals stay beside build and tests, so a parallel fetch is visible.
 """
 
 from __future__ import annotations
@@ -44,23 +45,32 @@ def _span(value: Dict[str, Any]) -> Optional[Tuple[float, float]]:
 
 
 _BUILD_SUFFIXES = (".o", ".a", ".obj", ".so", ".dylib")
+_CODEGEN_SUFFIXES = (".cpp", ".cc", ".cxx", ".c", ".h", ".hpp", ".hxx", ".pyplugin", ".context")
 
 
-def _build_path(name: str) -> bool:
-    path = name
+def _path(name: str) -> str:
+    path = name.split("(", 1)[1] if "(" in name else name
     if "$(BUILD_ROOT)" in path:
         path = path.split("$(BUILD_ROOT)", 1)[1]
-    path = path.rstrip(")").lower()
-    return path.endswith(_BUILD_SUFFIXES)
+    return path.rstrip(")").lower()
 
 
 def _kind(name: str) -> Optional[str]:
+    if name.startswith("FromDistCache("):
+        return "download"
+    if name.startswith("PutInDistCache("):
+        return "upload"
     for prefix in BUILD_KINDS:
         if name == prefix or name.startswith(prefix + " ") or name.startswith(prefix + "("):
             return "build"
-    if name.startswith("Run("):
-        return "build" if _build_path(name) else "test"
-    return None
+    if not name.startswith("Run("):
+        return None
+    path = _path(name)
+    if path.endswith(_BUILD_SUFFIXES):
+        return "build"
+    if path.endswith(_CODEGEN_SUFFIXES) and "test-results" not in path:
+        return "build"
+    return "test"
 
 
 def _merge(spans: Sequence[Tuple[float, float]], gap: float) -> List[Tuple[float, float]]:
@@ -108,6 +118,8 @@ def _subtract(
 def phases_from_events(events: Iterable[Dict[str, Any]], *, gap: float = GAP_SEC) -> List[Phase]:
     builds: List[Tuple[float, float]] = []
     tests: List[Tuple[float, float]] = []
+    downloads: List[Tuple[float, float]] = []
+    uploads: List[Tuple[float, float]] = []
     for ev in events:
         if not isinstance(ev, dict):
             continue
@@ -122,24 +134,17 @@ def phases_from_events(events: Iterable[Dict[str, Any]], *, gap: float = GAP_SEC
             tests.append(span)
         elif kind == "build":
             builds.append(span)
-    first_test = min((start for start, _end in tests), default=None)
-    early: List[Tuple[float, float]] = []
-    late: List[Tuple[float, float]] = []
-    for start, end in builds:
-        if first_test is None or end <= first_test:
-            early.append((start, end))
-        elif start >= first_test:
-            late.append((start, end))
-        else:
-            early.append((start, first_test))
-            late.append((first_test, end))
-    build_spans = _merge(early, gap)
-    rebuild_spans = _merge(late, gap)
-    test_spans = _subtract(_merge(tests, gap), build_spans + rebuild_spans)
+        elif kind == "download":
+            downloads.append(span)
+        elif kind == "upload":
+            uploads.append(span)
+    build_spans = _merge(builds, gap)
+    test_spans = _subtract(_merge(tests, gap), build_spans)
     found: List[Phase] = []
     found.extend(("ya_build", start, end) for start, end in build_spans)
-    found.extend(("ya_rebuild", start, end) for start, end in rebuild_spans)
     found.extend(("ya_tests", start, end) for start, end in test_spans)
+    found.extend(("ya_cache_download", start, end) for start, end in _merge(downloads, gap))
+    found.extend(("ya_cache_upload", start, end) for start, end in _merge(uploads, gap))
     found.sort(key=lambda item: item[1])
     return found
 
@@ -205,7 +210,7 @@ def record(path: str, parent_name: str, ya_attempt: str, found: Sequence[Phase])
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Record ya_build, ya_rebuild, and ya_tests inside a try")
+    parser = argparse.ArgumentParser(description="Record ya_build, ya_tests and dist-cache phases inside a try")
     parser.add_argument("--evlog", required=True)
     parser.add_argument("--parent", required=True, help="ya_make_try span name")
     parser.add_argument("--ya-attempt", default="")

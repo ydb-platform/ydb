@@ -41,6 +41,7 @@ RECURSE_FOR_TESTS(
 RECURSE(
     certificate_check
     external_idp
+    iam_delegation
     ldap_auth_provider
     sasl
     util

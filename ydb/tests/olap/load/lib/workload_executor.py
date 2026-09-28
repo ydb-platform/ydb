@@ -988,8 +988,11 @@ class WorkloadTestBase(LoadSuiteBase):
             # Для timeout используем более конкретное сообщение
             iteration.error_message = "Workload execution timed out"
         elif error_found:
-            # Устанавливаем ошибку в iteration для consistency
-            iteration.error_message = str(result.get_integrated_error())
+            # Устанавливаем ошибку в iteration для consistency.
+            # Только ERROR: warning не должен помечать итерацию как упавшую
+            integrated_error = result.get_integrated_error(ErrorPriority.ERROR)
+            if integrated_error is not None:
+                iteration.error_message = str(integrated_error)
 
         result.iterations[iteration_number] = iteration
 
@@ -1019,7 +1022,7 @@ class WorkloadTestBase(LoadSuiteBase):
         logging.info(
             f"Workload result created - final success: {
                 result.success}, error_message: {
-                result.get_integrated_error()}"
+                result.get_integrated_error() or ''}"
         )
 
         return result

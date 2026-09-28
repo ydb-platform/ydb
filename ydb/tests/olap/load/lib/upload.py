@@ -71,7 +71,9 @@ class UploadSuiteBase(LoadSuiteBase):
                 cls.wait_compaction()
                 cls.after_compaction()
         except WorkloadError as e:
+            logging.error(f'Error: {e}')
             result.add_custom_error(e)
+            raise e
         except BaseException as e:
             logging.error(f'Error: {e}')
             result.add_custom_error(WorkloadError(str(e), tb=e.__traceback__))

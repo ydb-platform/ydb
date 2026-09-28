@@ -42,7 +42,7 @@ class ErrorPriority(IntEnum):
     ERROR = 2
 
 
-class ErrorArea(Enum):
+class ErrorArea(IntEnum):
     OTHER = 0
     YDB_INFRA = 1
     TEST_INFRA = 2
@@ -54,10 +54,10 @@ class ErrorArea(Enum):
 
 
 class WorkloadError(RuntimeError):
-    def __init__(self, message: str, priority: ErrorPriority = ErrorPriority.ERROR, area: ErrorArea = ErrorArea.OTHER, tb: Optional[TracebackType] = None):
+    def __init__(self, message: str, priority: ErrorPriority = ErrorPriority.ERROR, area: Optional[ErrorArea] = ErrorArea.OTHER, tb: Optional[TracebackType] = None):
         super().__init__(message)
         self.__priority = priority
-        self.__area = area
+        self.__area = area if area is not None else ErrorArea.OTHER
         self.__traceback__ = tb
 
     @property
@@ -182,7 +182,7 @@ class YdbCliHelper:
             result = {}
             for iter in self.iterations.values():
                 cl = iter.get_error_class()
-                if cl:
+                if cl is not None:
                     result[cl.name.lower()] = True
             for e in self.__errors:
                 if e.priority >= ErrorPriority.ERROR:

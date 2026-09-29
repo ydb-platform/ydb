@@ -896,6 +896,7 @@ class TJsonNodes : public TViewerPipeClient {
     TString FilterGroup;
     bool NeedFilter = false;
     bool NeedGroup = false;
+    bool NeedFilterGroupBy = false;
     bool NeedSort = false;
     bool NeedLimit = false;
     ui64 TotalNodes = 0;
@@ -1015,6 +1016,19 @@ class TJsonNodes : public TViewerPipeClient {
         }
     }
 
+    void ResetSortParams() {
+        NeedSort = false;
+        SortBy = ENodeFields::NodeId;
+        ReverseSort = false;
+    }
+
+    static void AddGroupByFieldToRequired(TFieldsType& fieldsRequired, const ENodeFields groupByField) {
+        fieldsRequired.set(+groupByField);
+        if (groupByField == ENodeFields::Uptime) {
+            fieldsRequired.set(+ENodeFields::DisconnectTime);
+        }
+    }
+
 public:
     TJsonNodes(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev, "/viewer/nodes")
@@ -1037,12 +1051,11 @@ public:
         if (FilterPath == Database) {
             FilterPath.clear();
         }
-        if (Params.Has("filter_group") && Params.Has("filter_group_by")) {
-            FilterGroup = Params.Get("filter_group");
-            FilterGroupBy = ParseENodeFields(Params.Get("filter_group_by"));
-            FieldsRequired.set(+FilterGroupBy);
-            if (FilterGroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::DisconnectTime);
+        if (TStringBuf filterGroupByParam = Params.Get("filter_group_by"); filterGroupByParam) {
+            NeedFilterGroupBy = true;
+            FilterGroupBy = ParseENodeFields(filterGroupByParam);
+            if (TStringBuf filterGroupParam = Params.Get("filter_group"); filterGroupParam) {
+                FilterGroup = filterGroupParam;
             }
         }
 
@@ -1124,7 +1137,12 @@ public:
                 sort.Skip(1);
             }
             SortBy = ParseENodeFields(sort);
-            FieldsRequired.set(+SortBy);
+        }
+        TStringBuf group = Params.Get("group");
+        if (group) {
+            NeedGroup = true;
+            GroupBy = ParseENodeFields(group);
+            ResetSortParams();
         }
         TString fieldsRequired = Params.Get("fields_required");
         if (!fieldsRequired.empty()) {
@@ -1142,16 +1160,14 @@ public:
         } else {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
-        TStringBuf group = Params.Get("group");
-        if (group) {
-            NeedGroup = true;
-            GroupBy = ParseENodeFields(group);
-            FieldsRequired.set(+GroupBy);
-            if (GroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::DisconnectTime);
-            }
-            NeedSort = false;
+        if (NeedGroup) {
+            AddGroupByFieldToRequired(FieldsRequired, GroupBy);
             NeedLimit = false;
+        } else if (NeedSort) {
+            FieldsRequired.set(+SortBy);
+        }
+        if (!FilterGroup.empty()) {
+            AddGroupByFieldToRequired(FieldsRequired, FilterGroupBy);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +ENodeFields::NodeId; field != +ENodeFields::COUNT; ++field) {
@@ -3608,6 +3624,8 @@ public:
                           * `MaxVDiskSlotUsage`
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
+                        When `group` is set, sorting is disabled and `sort` is ignored (including
+                        fields that would otherwise be pulled in only for sorting).
                     required: false
                     type: string
                   - name: group
@@ -3652,6 +3670,8 @@ public:
                           * `ClockSkew`
                           * `PingTime`
                           * `CapacityAlert`
+                        The filter is applied only when `filter_group` is also set; `filter_group_by`
+                        alone is parsed but does not filter nodes or extend `fields_required`.
                     required: false
                     type: string
                   - name: filter_group

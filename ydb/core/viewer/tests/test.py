@@ -852,6 +852,38 @@ class TestViewer(object):
         ]
 
     @classmethod
+    def test_viewer_nodes_query_param_parsing(cls):
+        """Constructor parsing: filter_group_by alone; group= overrides sort= side effects."""
+        base = cls.get_viewer_normalized("/viewer/nodes", {
+            'fields_required': 'NodeId',
+        })
+        assert 'status_code' not in base, base
+        base_found = int(base.get('FoundNodes', 0))
+
+        filter_by_only = cls.get_viewer_normalized("/viewer/nodes", {
+            'fields_required': 'NodeId',
+            'filter_group_by': 'DC',
+        })
+        assert 'status_code' not in filter_by_only, filter_by_only
+        assert int(filter_by_only.get('FoundNodes', 0)) == base_found, (base_found, filter_by_only)
+
+        group_only = cls.get_viewer_normalized("/viewer/nodes", {
+            'fields_required': 'NodeId',
+            'group': 'DC',
+        })
+        assert 'status_code' not in group_only, group_only
+        group_and_sort = cls.get_viewer_normalized("/viewer/nodes", {
+            'fields_required': 'NodeId',
+            'group': 'DC',
+            'sort': 'Missing',
+        })
+        assert 'status_code' not in group_and_sort, group_and_sort
+        assert group_and_sort.get('FieldsAvailable') == group_only.get('FieldsAvailable'), (
+            group_only.get('FieldsAvailable'), group_and_sort.get('FieldsAvailable'))
+        for node in group_and_sort.get('Nodes', []):
+            assert 'Missing' not in node, group_and_sort
+
+    @classmethod
     def test_storage_groups(cls):
         result = cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'

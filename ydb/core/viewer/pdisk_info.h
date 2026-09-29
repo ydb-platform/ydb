@@ -4,6 +4,8 @@
 #include "ddisk_info.h"
 #include <ydb/core/viewer/yaml/yaml.h>
 
+#include <algorithm>
+
 namespace NKikimr::NViewer {
 
 using namespace NActors;
@@ -270,6 +272,12 @@ public:
         for (auto& [slotId, ddisk] : ddisks) {
             FillDDiskIdentity(ddisk, NodeId);
             proto.MutableWhiteboard()->AddDDisks()->Swap(&ddisk);
+        }
+        if (IncludeDDisks) {
+            auto* resultDDisks = proto.MutableWhiteboard()->MutableDDisks();
+            std::sort(resultDDisks->begin(), resultDDisks->end(), [](const auto& a, const auto& b) {
+                return a.GetDDiskSlotId() < b.GetDDiskSlotId();
+            });
         }
         TBase::ReplyAndPassAway(GetHTTPOKJSON(proto));
     }

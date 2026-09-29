@@ -1249,12 +1249,14 @@ Y_UNIT_TEST_SUITE(Viewer) {
             if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetVSlotsResponse) {
                 auto& record = ev->Get<NSysView::TEvSysView::TEvGetVSlotsResponse>()->Record;
                 record.ClearEntries();
-                auto* entry = record.AddEntries();
-                entry->MutableKey()->SetNodeId(runtime.GetNodeId(0));
-                entry->MutableKey()->SetPDiskId(1);
-                entry->MutableKey()->SetVSlotId(1010);
-                entry->MutableInfo()->SetGroupId(42);
-                entry->MutableInfo()->SetDDisk(true);
+                for (ui32 slot : {1012, 1010, 1011}) {
+                    auto* entry = record.AddEntries();
+                    entry->MutableKey()->SetNodeId(runtime.GetNodeId(0));
+                    entry->MutableKey()->SetPDiskId(1);
+                    entry->MutableKey()->SetVSlotId(slot);
+                    entry->MutableInfo()->SetGroupId(42);
+                    entry->MutableInfo()->SetDDisk(true);
+                }
                 auto* ordinary = record.AddEntries();
                 ordinary->MutableKey()->SetNodeId(runtime.GetNodeId(0));
                 ordinary->MutableKey()->SetPDiskId(1);
@@ -1266,12 +1268,17 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 auto& record = ev->Get<TEvWhiteboard::TEvPDiskStateResponse>()->Record;
                 record.ClearDDiskStateInfo();
                 if (withSample) {
-                    auto* sample = record.AddDDiskStateInfo();
-                    sample->SetPDiskId(1);
-                    sample->SetDDiskSlotId(1010);
-                    sample->SetDDiskOccupancy(0.25);
-                    sample->SetPersistentBufferOccupancy(0.5);
-                    sample->SetAllocatedSize(1024);
+                    for (auto [pdisk, slot] : {std::make_pair(2u, 1009u), {1u, 1012u}, {1u, 1010u}, {1u, 1011u}}) {
+                        auto* sample = record.AddDDiskStateInfo();
+                        sample->SetPDiskId(pdisk);
+                        sample->SetDDiskSlotId(slot);
+                        sample->SetDDiskOccupancy(0.25);
+                        sample->SetPersistentBufferOccupancy(0.5);
+                        sample->SetAllocatedSize(1024);
+                        if (slot == 1010) {
+                            sample->SetPersistentBufferId("whiteboard-buffer-id");
+                        }
+                    }
                 }
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvVDiskStateResponse) {
                 ev->Get<TEvWhiteboard::TEvVDiskStateResponse>()->Record.ClearVDiskStateInfo();
@@ -1280,7 +1287,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
         auto checkDisks = [&](const NJson::TJsonValue& disks, bool sample, bool fallback) {
             const auto& vdisks = disks["VDisks"].GetArray();
-            UNIT_ASSERT_VALUES_EQUAL(vdisks.size(), fallback ? (includeDDisks ? 1 : 2) : 0);
+            UNIT_ASSERT_VALUES_EQUAL(vdisks.size(), fallback ? (includeDDisks ? 1 : 4) : 0);
             THashSet<ui32> groups;
             for (const auto& disk : vdisks) {
                 groups.insert(disk["VDiskId"]["GroupID"].GetUInteger());
@@ -1291,14 +1298,28 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 UNIT_ASSERT(!disks.Has("DDisks"));
                 return;
             }
-            UNIT_ASSERT_VALUES_EQUAL(disks["DDisks"].GetArray().size(), 1);
+            const auto& ddisks = disks["DDisks"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(ddisks.size(), 3 + (!fallback && sample ? 1 : 0));
+            for (ui32 i = 0; i < 3; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(ddisks[i]["PDiskId"].GetUInteger(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(ddisks[i]["DDiskSlotId"].GetUInteger(), 1010 + i);
+                UNIT_ASSERT_VALUES_EQUAL(ddisks[i]["GroupId"].GetUInteger(), 42);
+            }
+            if (!fallback && sample) {
+                // A whiteboard-only disk has no controller group identity.
+                UNIT_ASSERT_VALUES_EQUAL(ddisks[3]["PDiskId"].GetUInteger(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(ddisks[3]["DDiskSlotId"].GetUInteger(), 1009);
+                UNIT_ASSERT(!ddisks[3].Has("GroupId"));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ddisks[1]["PersistentBufferId"].GetString(),
+                MakeBlobStoragePersistentBufferId(runtime.GetNodeId(0), 1, 1011).ToString());
             const auto& disk = disks["DDisks"][0];
             UNIT_ASSERT_VALUES_EQUAL(disk["HasWhiteboardData"].GetBoolean(), sample);
             UNIT_ASSERT_VALUES_EQUAL(disk["NodeId"].GetUInteger(), runtime.GetNodeId(0));
             UNIT_ASSERT_VALUES_EQUAL(disk["DDiskSlotId"].GetUInteger(), 1010);
             UNIT_ASSERT_VALUES_EQUAL(disk["DDiskPath"].GetString(), "actors/ddisks/ddisk_p000000001_s000001010");
             UNIT_ASSERT_VALUES_EQUAL(disk["PersistentBufferId"].GetString(),
-                MakeBlobStoragePersistentBufferId(runtime.GetNodeId(0), 1, 1010).ToString());
+                sample ? TString("whiteboard-buffer-id") : MakeBlobStoragePersistentBufferId(runtime.GetNodeId(0), 1, 1010).ToString());
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("DDiskOccupancy"), sample);
             UNIT_ASSERT_VALUES_EQUAL(disk.Has("AllocatedSize"), sample);
         };

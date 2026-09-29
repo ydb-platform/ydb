@@ -3520,6 +3520,11 @@ public:
                             FillDDiskIdentity(ddisk, node->GetNodeId());
                             jsonNode.AddDDisks()->Swap(&ddisk);
                         }
+                        auto* resultDDisks = jsonNode.MutableDDisks();
+                        std::sort(resultDDisks->begin(), resultDDisks->end(), [](const auto& a, const auto& b) {
+                            return std::make_pair(a.GetPDiskId(), a.GetDDiskSlotId())
+                                < std::make_pair(b.GetPDiskId(), b.GetDDiskSlotId());
+                        });
                     }
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());

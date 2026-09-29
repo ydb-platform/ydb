@@ -8,8 +8,10 @@ namespace NKikimr::NViewer {
 
 inline void FillDDiskIdentity(NKikimrWhiteboard::TDDiskStateInfo& info, ui32 nodeId) {
     info.SetNodeId(nodeId);
-    info.SetPersistentBufferId(MakeBlobStoragePersistentBufferId(
-        nodeId, info.GetPDiskId(), info.GetDDiskSlotId()).ToString());
+    if (!info.HasPersistentBufferId()) {
+        info.SetPersistentBufferId(MakeBlobStoragePersistentBufferId(
+            nodeId, info.GetPDiskId(), info.GetDDiskSlotId()).ToString());
+    }
     info.SetDDiskPath(Sprintf("actors/ddisks/ddisk_p%09" PRIu32 "_s%09" PRIu32,
         info.GetPDiskId(), info.GetDDiskSlotId()));
 }

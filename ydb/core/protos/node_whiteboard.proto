@@ -173,8 +173,9 @@ message TDDiskStateInfo {
     optional uint64 AvailableSize = 8; // bytes available within owner and PDisk limits
     optional uint64 TotalSize = 9; // PDisk owner hard limit in bytes
     optional string PersistentBufferId = 10; // stable service actor ID
+    // False means controller identity only; size and occupancy samples are unavailable.
     optional bool HasWhiteboardData = 11; // filled by viewer
-    optional uint32 GroupId = 12; // filled by viewer from the controller
+    optional uint32 GroupId = 12; // absent when controller information is unavailable
     optional string DDiskPath = 13; // actor monitoring path on the owning node
 }
 

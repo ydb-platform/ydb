@@ -16,7 +16,7 @@ JSONL-буфер и заливка в YDB. Про GitHub, `ya` и CI ничег�
 ```bash
 export PYTHONPATH=/opt/analytics          # здесь лежит пакет collector/
 export ANALYTICS_FILE=/tmp/analytics.jsonl
-export ANALYTICS_RUN_ID=42               # все span этого запуска получат run_id=42
+export ANALYTICS_RUN_ID=42               # все события этого запуска получат run_id=42
 export ANALYTICS_YDB_CREDENTIALS=/path/to/sa.json
 
 python3 -m collector start compile --source my_pipeline --label cache=hit
@@ -39,7 +39,10 @@ flush_file()
 
 ## Что окажется в таблице
 
-По умолчанию `analytics/events`. Одна закрытая span — одна строка:
+Таблица по умолчанию — `analytics/events`. `start compile` запоминает время,
+`end compile` считает длительность, `flush` пишет **одну строку**. Пока нет
+`end`, в таблицу ничего не едет. `track` — сразу готовое число, без пары
+start/end.
 
 | Колонка | В примере | Кто заполняет |
 | --- | --- | --- |
@@ -49,7 +52,7 @@ flush_file()
 | `name` | `compile` | первый аргумент |
 | `kind` | `duration` | `--kind`, по умолчанию duration |
 | `source` | `my_pipeline` | `--source`, без него строка не пишется |
-| `span_id` | случайный hex | collector |
+| `span_id` | случайный hex | id этой строки, чтобы два `compile` в одном запуске не слились |
 | `value` | `15000` | длительность в мс; для gauge/count — `--value` |
 | `unit` | `ms` | из `kind`, либо `--unit` |
 | `conclusion` | `success` | `--conclusion` на `end` / `send` |
@@ -73,12 +76,12 @@ WHERE run_id = 42 AND name = "compile";
 
 | Команда | Что делает |
 | --- | --- |
-| `start NAME --source S` | открыть span, запомнить время |
-| `end NAME --conclusion …` | закрыть, посчитать `value` |
-| `track NAME --source S --value N` | записать готовое событие, span не открывается |
+| `start NAME --source S` | запомнить время старта |
+| `end NAME --conclusion …` | посчитать `value` и закрыть |
+| `track NAME --source S --value N` | записать готовое число, без `start` |
 | `enrich NAME --label k=v` | дописать labels в последнюю незалитую строку с этим именем. Длительность, `event_ts`, `conclusion` не трогает |
 | `flush` | залить только закрытые строки |
-| `send` | закрыть оставшиеся span и залить всё |
+| `send` | закрыть незакрытые `start` и залить всё |
 
 `flush` и `send` идемпотентны: повторно уже залитое не едет.
 
@@ -92,7 +95,7 @@ WHERE run_id = 42 AND name = "compile";
 | --- | --- |
 | `$ANALYTICS_FILE` | буфер, по строке на событие |
 | `.offset` | сколько байт уже залито |
-| `.pending` | открытые span; поэтому `flush` не трогает незакрытые |
+| `.pending` | незакрытые `start`; поэтому `flush` их не заливает |
 | `.skipped` | отвергнутые строки + `reason` |
 | `.lock` | flock на `enrich` / append |
 

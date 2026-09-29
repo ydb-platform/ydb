@@ -15,7 +15,7 @@ step из GitHub API.
 
 Буфер не кладите в `PUBLIC_DIR`: JSONL не должен уехать на публичный S3.
 
-### Свой span в workflow
+### Своё измерение в workflow
 
 ```bash
 export CI_METRICS_FILE="$TMP_DIR/ci_metrics.jsonl"
@@ -70,7 +70,7 @@ WHERE run_id = 123 AND name = "compile";
 | `pr_number` | `$PR_NUMBER` или event | `54142` |
 | `build_preset` | `$BUILD_PRESET` | `relwithdebinfo` |
 | `run_url` | репозиторий + `run_id` | `https://github.com/…/actions/runs/123` |
-| `span_id` | collector | случайный hex |
+| `span_id` | collector | id этой строки (случайный hex) |
 | `labels.parent_span_id` | обёртка | `job-456` (у самой строки job не ставится) |
 | `labels.cache_mode` | `--label` / `$CI_CACHE_MODE` | `dist_cache` |
 

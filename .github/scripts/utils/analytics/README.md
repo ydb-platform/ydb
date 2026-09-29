@@ -9,7 +9,7 @@
 | Задача | Куда |
 | --- | --- |
 | Скопировать буфер в другой проект | [`collector/`](collector/README.md) |
-| Добавить span / фазу / колонку в YDB CI | [`github_actions/`](github_actions/README.md#добавить-измерение) |
+| Добавить измерение / фазу / колонку в YDB CI | [`github_actions/`](github_actions/README.md#добавить-измерение) |
 | Что уже лежит в таблице | [`github_actions/`](github_actions/README.md#что-уже-пишется) |
 
 ## Как это работает
@@ -38,8 +38,9 @@ flowchart LR
 2. **После run.** Отдельный job раз в 30 минут выгружает длительности job и
    step. Watermark / open / failed держит в `analytics/ci_metrics_state`.
 
-Сшивка: у фазы `labels.parent_span_id = job-{github_job_id}`, у строки job
-`span_id = job-{github_job_id}`.
+Фазу джойнят с job по одному ключу: у фазы
+`labels.parent_span_id = job-{github_job_id}`, у строки job то же значение в
+`span_id`.
 
 `collector/` про GitHub не знает. `github_actions/` добавляет колонки Actions и
 выгрузку.

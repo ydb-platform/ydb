@@ -83,11 +83,6 @@ Y_UNIT_TEST_SUITE(KqpOverload) {
                     }
                 } else if (!blockResults && ev->GetTypeRewrite() == NEvents::TDataEvents::TEvWrite::EventType && ev->GetRecipientRewrite() == overloadedShardActor) {
                     ++requests;
-                    // The resent write is deduplicated by the shard, which re-answers
-                    // it with the resent message's cookie. Emulate this re-answer by
-                    // rewriting the held original result's cookie accordingly; the
-                    // duplicate write itself must not reach the shard, which already
-                    // registered this txId.
                     for (auto& resp : responses) {
                         const auto sender = resp->Sender;
                         auto result = resp->Release<NEvents::TDataEvents::TEvWriteResult>();

@@ -296,15 +296,6 @@ struct TShardedWriteControllerSettings {
     ui64 WriterIndex = 0;
 };
 
-// The stale-response filter for TEvWriteResult: only the result echoing the cookie
-// of the shard's last sent message (see AllocateMessageCookie) is meaningful; results
-// of superseded messages are dropped. Dropping is safe because a resend is triggered
-// only by a delivery failure or an error result, never while a valid answer is merely
-// in flight, and every resent message is guaranteed its own answer with the resent
-// message's cookie: a deduped replay (write seq num dedup) re-sends the result with
-// the new message's cookie, and an overload-rejected write is re-sent after the
-// TEvOverloadReady wakeup. Every reply (including gate rejections) echoes the
-// cookie of the request it answers, so a zero cookie is a protocol violation.
 bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
 
 bool IsIgnorableSupersededStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);

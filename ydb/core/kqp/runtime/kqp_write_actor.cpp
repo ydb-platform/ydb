@@ -1009,13 +1009,6 @@ public:
         AFL_ENSURE(ev->Cookie != 0);
 
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
-            // A late TEvWriteResult for a shard removed by a reroute: its pending
-            // batches were re-sent to the covering shards, so a result from the dead
-            // tablet is expected and harmless and is dropped in every mode. The guard
-            // is strict, because only shards with a controller record can legitimately
-            // reply to this actor: commit completions come from its own write-set
-            // shards, while completions of lock-only participants are handled by the
-            // buffer write actor and never arrive here.
             // TODO: in future don't ignore non-retryable errors and fail immediately
             YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
                 {"logPrefix", this->LogPrefix},
@@ -1024,22 +1017,7 @@ public:
             return;
         }
 
-        // Each outbound message carries its own cookie (see SendDataToShard), so only the
-        // answer echoing the cookie of the shard's last sent message is meaningful:
-        // results of superseded messages are ignored (see IsSupersededWriteResult for
-        // the safety rationale). Two kinds of results must pass the filter:
-        //  - COMMIT-mode completions: they echo the cookie of the shard's last
-        //    PREPARE message (the datashard stores the request cookie in the write
-        //    operation and reuses it on send), but their batches were already
-        //    popped at prepare-ack time, so the shard has no message metadata and
-        //    the cookie never matches. Hence the whole rule does not apply in
-        //    COMMIT mode: without the exemption every commit completion would be
-        //    dropped as superseded and the commit acknowledgement would be lost.
-        // Superseded results are ignored only when their status is positive or
-        // retryable (see IsIgnorableSupersededStatus): a fatal status (ABORTED,
-        // LOCKS_BROKEN, ...) indicates a shard-side problem the latest attempt
-        // would hit as well, so it fails the transaction immediately instead of
-        // waiting for the answer of the resent message.
+        // Only results of the last sent message are processed (see IsSupersededWriteResult).
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
 
@@ -1487,8 +1465,6 @@ public:
     bool SendDataToShard(const ui64 shardId) {
         YQL_ENSURE(Mode != EMode::COMMIT);
 
-        // The send-path lookup: builds the shard's pending batches into flight so
-        // IsFinal/OperationsCount reflect the message about to be sent.
         const auto metadata = ShardedWriteController->PrepareMessageMetadata(shardId);
         // A resend is safe when the shard deduplicates by uncommitted write seq num
         // (AttachWriteSeqNum) or when the write is inconsistent: for a consistent tx
@@ -1605,9 +1581,6 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");
 
-        // Each outbound message, a first attempt or a resend, gets its own fresh cookie:
-        // only the result echoing the cookie of the shard's last sent message is
-        // processed (see IsSupersededWriteResult).
         const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
 
         TStringBuilder locks;

@@ -1814,7 +1814,6 @@ public:
         return insertIt->second;
     }
 
-    // A read-only lookup: unlike GetShard it never creates an entry for unknown shards.
     TShardInfo* FindShard(const ui64 shard) {
         auto it = ShardsInfo.find(shard);
         return it != std::end(ShardsInfo) ? &it->second : nullptr;
@@ -2206,11 +2205,6 @@ public:
     }
 
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
-        // A read-only lookup for shards known to the controller. FindShard never
-        // creates entries (only GetShard does), so the lookup cannot leak empty
-        // entries into GetShardsIds(). An unknown shard is a protocol violation
-        // caught by the assert below; an empty shard (all batches acknowledged,
-        // nothing in flight) has no message metadata to describe.
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);
         if (shardInfo->IsEmpty()) {
@@ -2233,8 +2227,6 @@ public:
     TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
         TSerializationResult result;
 
-        // A send-path lookup: the shard is always known and non-empty, since
-        // SerializeMessageToPayload follows a successful metadata lookup.
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
 
@@ -2272,17 +2264,8 @@ public:
     }
 
     std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
-        // A read-only lookup for shards known to the controller: results for shards
-        // removed by a reroute are dropped by the HasShard filter in the write actor
-        // before the acknowledgement path, so an unknown shard here would be an
-        // unexpected protocol violation caught by the assert below. FindShard never
-        // creates entries (only GetShard does).
         auto* const shardInfo = ShardsInfo.FindShard(shardId);
         AFL_ENSURE(shardInfo);
-        // Controller cookies are always non-zero (see AllocateMessageCookie), so a
-        // zero cookie must never reach the acknowledgement path: COMMIT-mode
-        // completions carry the prepare-stage cookie and are handled by the actor's
-        // COMMIT branch, which early-returns before calling this method.
         AFL_ENSURE(cookie != 0);
         const auto result = shardInfo->PopBatches(cookie);
         if (result) {

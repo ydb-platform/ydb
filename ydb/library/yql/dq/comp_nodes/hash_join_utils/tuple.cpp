@@ -1706,15 +1706,19 @@ void TTupleLayout::CalculateColumnSizes(
     // handle variable size columns
     for (; count--; res += TotalRowSize) {
         for (const auto& col: VariableColumns) {
-            ui32 size = ReadUnaligned<ui8>(res + col.Offset);
-            if (size == 255) { // overflow buffer used
-                const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
-                const auto overflowSize = ReadUnaligned<ui32>(res + col.Offset + 1 + 1 * sizeof(ui32));
-                size = prefixSize + overflowSize;
-            }
-            bytes[col.OriginalColumnIndex] += size;
+            bytes[col.OriginalColumnIndex] += VariablePayloadSize(res, col);
         }
     }
+}
+
+const TColumnDesc& TTupleLayout::ColumnByOriginalIndex(ui32 originalColumnIndex) const {
+    for (const auto& column : Columns) {
+        if (column.OriginalColumnIndex == originalColumnIndex) {
+            return column;
+        }
+    }
+    MKQL_ENSURE(false, "packed column index is out of range");
+    Y_UNREACHABLE();
 }
 
 void TTupleLayout::TupleDeepCopy(

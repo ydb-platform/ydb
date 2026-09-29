@@ -1266,10 +1266,38 @@ TJoinTestData HighFanoutInnerJoinTestData() {
     return td;
 }
 
-// The next two share the same shape - one probe row matching every build row - and differ only in
-// how wide a row is, so the byte budget is the only thing deciding how many rows a block holds.
 constexpr int NarrowRowsFanout = 40000;
 
+// A fat column that renames drop must not shrink the output. Counting it (or the
+// whole packed row) flushes after a few hundred rows; the ui64 columns that stay
+// should still fill up to the 240KB cap.
+constexpr int DroppedColumnFanout = 35000;
+constexpr int DroppedColumnStringSize = 512;
+
+TJoinTestData DroppedColumnHighFanoutTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1};
+    TVector<ui64> leftValues = {7};
+    TVector<ui64> rightKeys(DroppedColumnFanout, 1);
+    TVector<ui64> rightValues(DroppedColumnFanout);
+    TVector<TString> rightFat(DroppedColumnFanout);
+    for (int i = 0; i < DroppedColumnFanout; ++i) {
+        rightValues[i] = i;
+        rightFat[i] = TString(DroppedColumnStringSize, 'a' + (i % 26));
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues, rightFat);
+    td.Kind = EJoinKind::Inner;
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    return td;
+}
+
+// These two share the same shape - one probe row matching every build row - and differ only in
+// how wide a row is, so the byte budget is the only thing deciding how many rows a block holds.
 TJoinTestData NarrowRowsHighFanoutTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1916,7 +1944,8 @@ TJoinTestData TrueCrossJoinTestDataLeftIsBuild() {
     return td;
 }
 
-constexpr int CrossJoinOutputBufferBoundedRows = 30000;
+// More than two full blocks once a column, not the whole row, is capped at 240KB.
+constexpr int CrossJoinOutputBufferBoundedRows = 70000;
 
 TJoinTestData CrossJoinOutputBufferBoundedTestData() {
     TJoinTestData td;
@@ -2316,20 +2345,22 @@ void AssertSpilled(IComputationGraph& graph) {
 struct TOutputBlockStats {
     i64 TotalRows = 0;
     i64 MaxBlockRows = 0;
-    i64 MaxBlockBytes = 0;
+    i64 MaxColumnBytes = 0;
     int BlockCount = 0;
 };
 
-i64 ArrayDataBytes(const arrow::ArrayData& data) {
+// Largest single buffer of a column. Mkql's 240KB cap applies to one column buffer
+// (values, string data, or offsets), not to the sum of every column in the block.
+i64 MaxBufferBytes(const arrow::ArrayData& data) {
     i64 bytes = 0;
     for (const auto& buffer : data.buffers) {
         if (buffer) {
-            bytes += buffer->size();
+            bytes = std::max<i64>(bytes, buffer->size());
         }
     }
     for (const auto& child : data.child_data) {
         if (child) {
-            bytes += ArrayDataBytes(*child);
+            bytes = std::max(bytes, MaxBufferBytes(*child));
         }
     }
     return bytes;
@@ -2361,14 +2392,14 @@ TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
         stats.TotalRows += rows;
         stats.MaxBlockRows = std::max(stats.MaxBlockRows, rows);
 
-        i64 blockBytes = 0;
+        i64 columnBytes = 0;
         for (size_t column = 0; column + 1 < tupleWidth; ++column) {
             const arrow::Datum& datum = TArrowBlock::From(buff[column]).GetDatum();
             if (datum.is_array()) {
-                blockBytes += ArrayDataBytes(*datum.array());
+                columnBytes = std::max(columnBytes, MaxBufferBytes(*datum.array()));
             }
         }
-        stats.MaxBlockBytes = std::max(stats.MaxBlockBytes, blockBytes);
+        stats.MaxColumnBytes = std::max(stats.MaxColumnBytes, columnBytes);
         ++stats.BlockCount;
     }
     if (td.ExpectsSpilling) {
@@ -2382,13 +2413,17 @@ void AssertOutputBufferBounded(const TOutputBlockStats& stats, i64 expectedTotal
     UNIT_ASSERT_C(stats.BlockCount > 1,
         TStringBuilder() << "Expected multiple output blocks but got " << stats.BlockCount
                          << " (all " << stats.TotalRows << " rows in one block)");
-    // The join checks the budget after appending a row, so a block may overshoot it by one row.
-    // Rows are uniform in these tests, so the block average stands in for that last row.
-    const i64 rowBytes = stats.MaxBlockBytes / std::max<i64>(stats.MaxBlockRows, 1);
-    const i64 maxBlockBytes = MaxBlockSizeInBytes + rowBytes;
-    UNIT_ASSERT_C(stats.MaxBlockBytes <= maxBlockBytes,
-        TStringBuilder() << "Max block size " << stats.MaxBlockBytes << " bytes ("
-                         << stats.MaxBlockRows << " rows) should be at most " << maxBlockBytes);
+    // The join checks the budget after appending a row, so a column may overshoot it by one row.
+    // Rows are uniform in these tests, so the column average stands in for that last row.
+    const i64 rowBytes = stats.MaxColumnBytes / std::max<i64>(stats.MaxBlockRows, 1);
+    const i64 maxColumnBytes = static_cast<i64>(MaxBlockSizeInBytes) + rowBytes;
+    UNIT_ASSERT_C(stats.MaxColumnBytes <= maxColumnBytes,
+        TStringBuilder() << "Max column size " << stats.MaxColumnBytes << " bytes ("
+                         << stats.MaxBlockRows << " rows) should be at most " << maxColumnBytes);
+    // Flushing on the sum of the block leaves the largest column well under 240KB.
+    UNIT_ASSERT_C(stats.MaxColumnBytes + rowBytes >= static_cast<i64>(MaxBlockSizeInBytes),
+        TStringBuilder() << "Max column size " << stats.MaxColumnBytes << " bytes ("
+                         << stats.MaxBlockRows << " rows) should reach " << MaxBlockSizeInBytes);
 }
 
 void PoisonNullUi64Slots(const NUdf::TUnboxedValue& blockList, ui32 column, ui64 leftover) {
@@ -3003,6 +3038,13 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         auto td = NarrowRowsHighFanoutTestData();
         const auto stats = MeasureOutputBlocks(td);
         AssertOutputBufferBounded(stats, NarrowRowsFanout);
+        UNIT_ASSERT_GT(stats.MaxBlockRows, 2000);
+    }
+
+    Y_UNIT_TEST(TestOutputBufferBoundedIgnoresDroppedColumns) {
+        auto td = DroppedColumnHighFanoutTestData();
+        const auto stats = MeasureOutputBlocks(td);
+        AssertOutputBufferBounded(stats, DroppedColumnFanout);
         UNIT_ASSERT_GT(stats.MaxBlockRows, 2000);
     }
 

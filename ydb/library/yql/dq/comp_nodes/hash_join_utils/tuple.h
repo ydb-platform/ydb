@@ -221,6 +221,20 @@ struct TTupleLayout {
     void CalculateColumnSizes(
         const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const;
 
+    // Payload bytes of one variable-size value. Inline strings use the size byte;
+    // overflow strings add the prefix kept in the row to the overflow tail.
+    static ui32 VariablePayloadSize(const ui8* row, const TColumnDesc& col) {
+        ui32 size = ReadUnaligned<ui8>(row + col.Offset);
+        if (size == 255) { // overflow buffer used
+            const ui32 prefixSize = col.DataSize - 1 - 2 * sizeof(ui32);
+            const ui32 overflowSize = ReadUnaligned<ui32>(row + col.Offset + 1 + sizeof(ui32));
+            size = prefixSize + overflowSize;
+        }
+        return size;
+    }
+
+    const TColumnDesc& ColumnByOriginalIndex(ui32 originalColumnIndex) const;
+
     void TupleDeepCopy(
         const ui8* inTuple, const ui8* inOverflow,
         ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;

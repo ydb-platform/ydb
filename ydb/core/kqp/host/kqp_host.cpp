@@ -1235,7 +1235,7 @@ public:
 
         TypesCtx->LangVer = config->GetDefaultLangVer();
         TypesCtx->BackportMode = config->GetYqlBackportMode();
-        TypesCtx->RuntimeSettings = WithKqpDefaultRuntimeSettings(TypesCtx->RuntimeSettings);
+        TypesCtx->RuntimeSettings = MakeKqpDefaultRuntimeSettings();
         SessionCtx->SetDatabase(database);
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);

@@ -1361,6 +1361,12 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
         return Output_.Build.AllocatedBytes() + Output_.Probe.AllocatedBytes();
     }
 
+    // Scalar batches are not arrow columns, so the whole packed batch is the budget.
+    // Block output overrides this and caps each column that survives renames.
+    bool IsBatchFull() const {
+        return SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes);
+    }
+
     auto MakeConsumeFn() {
         struct ConsumeFn {
             TPackedTupleOutputBase& Self;
@@ -1410,8 +1416,10 @@ protected:
 template <typename JoinType, typename OutputType, typename FlushSink>
 EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush,
                                     TPackedTuplePairFilter* filter = nullptr) {
-    // Bound the batch in bytes, not rows: rows say nothing about memory once overflow columns are fat
-    auto outputIsFull = [&]() { return output.SizeBytes() >= static_cast<i64>(MaxBlockSizeInBytes); };
+    // Mkql caps a block at MaxBlockSizeInBytes per column, not for the whole batch.
+    // Block output applies that to columns that remain after renames; scalar output
+    // still budgets the packed batch as a whole.
+    auto outputIsFull = [&]() { return output.IsBatchFull(); };
     while (!outputIsFull()) {
         switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, filter)) {
         case EFetchResult::Finish:

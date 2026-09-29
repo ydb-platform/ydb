@@ -162,6 +162,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
             }
             this->Converters_.SelectSide(Join.NullSupplying())->Pack(nulls, this->Nulls_);
         }
+        InitColumnBudget();
     }
 
     struct TFlushResult {
@@ -173,7 +174,21 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
         TFlushResult res;
         res.Rows = this->SizeTuples();
         res.Columns = FlushAndApplyRenames();
+        ResetColumnBudget();
         return res;
+    }
+
+    // Largest output column, measured the way mkql sizes a block: fixed values and
+    // string payloads against MaxBlockSizeInBytes, and a row cap from the widest
+    // fixed buffer (string offsets count as 4 bytes, same as CalcMaxBlockItemSize).
+    // Columns that renames drop are not part of the output and do not count.
+    bool IsBatchFull() {
+        const i64 rows = this->SizeTuples();
+        if (rows != RowsAccounted_) {
+            AccountRows(RowsAccounted_, rows);
+            RowsAccounted_ = rows;
+        }
+        return MaxColumnBytes_ >= static_cast<i64>(MaxBlockSizeInBytes);
     }
 
     TVector<arrow::Datum> FlushAndApplyRenames() {
@@ -200,6 +215,77 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConv
             return renamed;
         }
     }
+
+private:
+    struct TVariableColumn {
+        ESide Side = ESide::Probe;
+        ui32 RowWidth = 0;
+        NPackedTuple::TColumnDesc Desc;
+        i64 Bytes = 0;
+    };
+
+    void InitColumnBudget() {
+        ui32 fixedBytesPerRow = 0;
+        for (const auto& rename : *this->Renames_) {
+            const auto* converter = this->Converters_.SelectSide(rename.Side);
+            const auto* layout = converter->GetTupleLayout();
+            for (ui32 packedIndex : converter->PackedColumnIndexes(rename.Index)) {
+                const auto& column = layout->ColumnByOriginalIndex(packedIndex);
+                if (column.SizeType == NPackedTuple::EColumnSizeType::Fixed) {
+                    fixedBytesPerRow = std::max(fixedBytesPerRow, column.DataSize);
+                    continue;
+                }
+                if (VariableColumnTracked(rename.Side, packedIndex)) {
+                    continue;
+                }
+                VariableColumns_.push_back(TVariableColumn{
+                    .Side = rename.Side,
+                    .RowWidth = layout->TotalRowSize,
+                    .Desc = column,
+                });
+                // Offset buffer grows with the row count. CalcMaxBlockItemSize uses the
+                // offset width, so a string column is also full when that buffer hits 240KB.
+                fixedBytesPerRow = std::max(fixedBytesPerRow, static_cast<ui32>(sizeof(ui32)));
+            }
+        }
+        // No payload at all: still cap the batch. CalcBlockLen floors the item size at 1.
+        FixedBytesPerRow_ = std::max<ui32>(fixedBytesPerRow, 1);
+    }
+
+    bool VariableColumnTracked(ESide side, ui32 originalIndex) const {
+        for (const auto& column : VariableColumns_) {
+            if (column.Side == side && column.Desc.OriginalColumnIndex == originalIndex) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void AccountRows(i64 begin, i64 end) {
+        MaxColumnBytes_ = std::max(MaxColumnBytes_, static_cast<i64>(FixedBytesPerRow_) * end);
+        for (auto& column : VariableColumns_) {
+            const auto& pack = this->Output_.SelectSide(column.Side);
+            MKQL_ENSURE(pack.NTuples >= end, "output side is shorter than the preserved side");
+            const ui8* row = pack.PackedTuples.data() + static_cast<size_t>(begin) * column.RowWidth;
+            for (i64 i = begin; i < end; ++i, row += column.RowWidth) {
+                column.Bytes += NPackedTuple::TTupleLayout::VariablePayloadSize(row, column.Desc);
+            }
+            MaxColumnBytes_ = std::max(MaxColumnBytes_, column.Bytes);
+        }
+    }
+
+    void ResetColumnBudget() {
+        RowsAccounted_ = 0;
+        MaxColumnBytes_ = 0;
+        for (auto& column : VariableColumns_) {
+            column.Bytes = 0;
+        }
+    }
+
+    ui32 FixedBytesPerRow_ = 1;
+    i64 RowsAccounted_ = 0;
+    i64 MaxColumnBytes_ = 0;
+    TVector<TVariableColumn> VariableColumns_;
 };
 
 template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Join>> {

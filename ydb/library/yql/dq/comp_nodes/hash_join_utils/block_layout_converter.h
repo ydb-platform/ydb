@@ -25,6 +25,9 @@ public:
     virtual void Unpack(const TPackResult& packed, TVector<arrow::Datum>& columns) = 0;
     // virtual void UnpackApply(const TPackResult& packed, std::function<void(const char*)>);
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;
+    // Packed-layout columns (OriginalColumnIndex) that make up this user column.
+    // Composite values occupy several packed columns; scalars occupy one.
+    virtual const TVector<ui32>& PackedColumnIndexes(size_t userColumn) const = 0;
     virtual void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) = 0;
 };
 

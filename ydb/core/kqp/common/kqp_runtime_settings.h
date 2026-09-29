@@ -36,23 +36,13 @@ inline void EnsureKqpDefaultRuntimeSettings(NYql::NProto::TRuntimeSettings& prot
     setting->SetValue(TString(WriteOffsetWithColonAvailableSinceValue));
 }
 
-inline NYql::TRuntimeSettings::TConstPtr WithKqpDefaultRuntimeSettings(const NYql::TRuntimeSettings::TConstPtr& settings) {
-    if (settings && !settings->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting).empty()) {
-        return settings;
-    }
-    auto updated = NYql::MakeRuntimeSettingsMutable();
-    if (settings) {
-        for (const auto& [module, moduleSettings] : settings->GetUdfSettings()) {
-            for (const auto& [name, value] : moduleSettings) {
-                updated->SetUdfSetting(module, name, value);
-            }
-        }
-    }
-    updated->SetUdfSetting(
+inline NYql::TRuntimeSettings::TConstPtr MakeKqpDefaultRuntimeSettings() {
+    auto settings = NYql::MakeRuntimeSettingsMutable();
+    settings->SetUdfSetting(
         TString(DateTime2ModuleName),
         TString(WriteOffsetWithColonAvailableSinceSetting),
         TString(WriteOffsetWithColonAvailableSinceValue));
-    return updated;
+    return settings;
 }
 
 } // namespace NKikimr::NKqp

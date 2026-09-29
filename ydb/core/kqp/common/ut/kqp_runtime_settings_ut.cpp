@@ -8,7 +8,7 @@ using namespace NKikimr::NKqp;
 
 Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
     Y_UNIT_TEST(DefaultPinsWriteOffsetWithColon) {
-        auto settings = WithKqpDefaultRuntimeSettings(NYql::MakeRuntimeSettings());
+        auto settings = MakeKqpDefaultRuntimeSettings();
         UNIT_ASSERT_VALUES_EQUAL(
             settings->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting),
             WriteOffsetWithColonAvailableSinceValue);
@@ -19,15 +19,6 @@ Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
         UNIT_ASSERT_VALUES_EQUAL(
             restored->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting),
             WriteOffsetWithColonAvailableSinceValue);
-    }
-
-    Y_UNIT_TEST(DoesNotOverrideExplicitValue) {
-        auto custom = NYql::MakeRuntimeSettingsMutable();
-        custom->SetUdfSetting(TString(DateTime2ModuleName), TString(WriteOffsetWithColonAvailableSinceSetting), "2025.05");
-        auto settings = WithKqpDefaultRuntimeSettings(custom);
-        UNIT_ASSERT_VALUES_EQUAL(
-            settings->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting),
-            "2025.05");
     }
 
     Y_UNIT_TEST(EnsureFillsEmptyProtoOnce) {
@@ -53,5 +44,18 @@ Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
         UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).GetModule(), "Other");
         UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(1).GetModule(), DateTime2ModuleName);
+    }
+
+    Y_UNIT_TEST(EnsureKeepsExplicitValue) {
+        NYql::NProto::TRuntimeSettings proto;
+        auto* udf = proto.AddUdfSettings();
+        udf->SetModule(TString(DateTime2ModuleName));
+        auto* setting = udf->AddRuntimeSettings();
+        setting->SetName(TString(WriteOffsetWithColonAvailableSinceSetting));
+        setting->SetValue("2025.05");
+
+        EnsureKqpDefaultRuntimeSettings(proto);
+        UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).GetRuntimeSettings(0).GetValue(), "2025.05");
     }
 }

@@ -1,0 +1,34 @@
+name: CI analytics script tests
+
+# Pure-stdlib unit tests, so this runs on a GitHub-hosted runner with no
+# credentials: fork code never touches the self-hosted fleet or any secret.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/scripts/utils/analytics/**'
+      - '.github/scripts/utils/tests/analytics/**'
+      - '.github/scripts/analytics/resolve_github_job_id.py'
+      - '.github/workflows/analytics_scripts_tests.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Collector tests
+        run: python3 -m unittest discover -s .github/scripts/utils/tests/analytics/collector -p 'test_*.py' -v
+
+      - name: GitHub Actions wrapper tests
+        run: python3 -m unittest discover -s .github/scripts/utils/tests/analytics/ci -p 'test_*.py' -v

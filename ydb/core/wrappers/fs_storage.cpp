@@ -11,11 +11,8 @@
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/system/fs.h>
-#include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
 
-#include <cerrno>
-#include <memory>
 #include <optional>
 #include <type_traits>
 
@@ -435,87 +432,49 @@ public:
 
     static constexpr int DefaultMaxListKeys = 1000;
 
-    class TListObjectsPage {
-    public:
-        TListObjectsPage(const TString& marker, size_t maxKeys)
-            : Marker(marker)
-            , MaxKeys(maxKeys)
-        {
-            Keys.reserve(MaxKeys + 1);
+    bool ListFilesRecursive(const TFsPath& dir, const TString& marker, int maxKeys,
+        Aws::S3::Model::ListObjectsResult& result)
+    {
+        TVector<TString> children;
+        dir.ListNames(children);
+
+        THashSet<TString> directories;
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
+            if (child.IsDirectory()) {
+                directories.insert(name);
+            }
         }
 
-        void Add(const TString& key) {
-            if (!Marker.empty() && key <= Marker) {
-                return;
-            }
+        Sort(children.begin(), children.end(), [&directories](const TString& a, const TString& b) {
+            TString keyA = directories.contains(a) ? (a + "/") : a;
+            TString keyB = directories.contains(b) ? (b + "/") : b;
+            return keyA < keyB;
+        });
 
-            // Keep the smallest MaxKeys + 1 keys; the largest candidate is at the heap root.
-            if (Keys.size() == MaxKeys + 1) {
-                if (key >= Keys.front()) {
-                    return;
-                }
-                PopHeap(Keys.begin(), Keys.end());
-                Keys.back() = key;
-            } else {
-                Keys.push_back(key);
-            }
-            PushHeap(Keys.begin(), Keys.end());
-        }
-
-        Aws::S3::Model::ListObjectsResult Finish() {
-            const bool truncated = Keys.size() > MaxKeys;
-            Sort(Keys);
-            if (truncated) {
-                Keys.pop_back();
-            }
-
-            Aws::S3::Model::ListObjectsResult result;
-            result.SetIsTruncated(truncated);
-            for (const auto& key : Keys) {
-                Aws::S3::Model::Object obj;
-                obj.SetKey(Aws::String(key.data(), key.size()));
-                result.AddContents(std::move(obj));
-            }
-            return result;
-        }
-
-    private:
-        const TString Marker;
-        const size_t MaxKeys;
-        TVector<TString> Keys;
-    };
-
-    void ListFiles(const TFsPath& dir, TListObjectsPage& page, TStringBuf namePrefix = {}) {
-        std::unique_ptr<DIR, decltype(&closedir)> entries(opendir(dir.c_str()), &closedir);
-        if (!entries) {
-            ythrow TSystemError(errno) << "Failed to open directory " << dir;
-        }
-
-        for (;;) {
-            errno = 0;
-            const auto* entry = readdir(entries.get());
-            if (!entry) {
-                if (errno) {
-                    ythrow TSystemError(errno) << "Failed to read directory " << dir;
-                }
-                return;
-            }
-
-            const TStringBuf name(entry->d_name);
-            if (name == "." || name == ".." || !name.StartsWith(namePrefix)) {
-                continue;
-            }
-
-            const TFsPath child = dir / name;
+        for (const auto& name : children) {
+            TFsPath child = dir / name;
             if (child.IsSymlink()) {
                 continue;
             }
             if (child.IsFile()) {
-                page.Add(child.GetPath());
-            } else if (child.IsDirectory()) {
-                ListFiles(child, page);
+                const TString& path = child.GetPath();
+                if (!marker.empty() && path <= marker) {
+                    continue;
+                }
+                if (static_cast<int>(result.GetContents().size()) >= maxKeys) {
+                    return true;
+                }
+                Aws::S3::Model::Object obj;
+                obj.SetKey(Aws::String(path.data(), path.size()));
+                result.AddContents(std::move(obj));
+            } else if (directories.contains(name)) {
+                if (ListFilesRecursive(child, marker, maxKeys, result)) {
+                    return true;
+                }
             }
         }
+        return false;
     }
 
     void Handle(TEvListObjectsRequest::TPtr& ev) {
@@ -533,12 +492,11 @@ public:
             {"maxKeys", maxKeys});
 
         try {
-            TFsPath prefixPath(prefix);
+            TFsPath dirPath(prefix);
             TFsPath basePath(BasePath);
-            const bool listByPrefix = !prefixPath.IsDirectory() && !prefix.EndsWith('/') && prefixPath != basePath;
-            TFsPath dirPath = listByPrefix ? prefixPath.Parent() : prefixPath;
 
-            TListObjectsPage page(marker, maxKeys);
+            Aws::S3::Model::ListObjectsResult awsResult;
+            bool truncated = false;
 
             if (dirPath.Exists()) {
                 TFsPath realDirPath = dirPath.RealPath();
@@ -558,12 +516,17 @@ public:
                 }
 
                 if (dirPath.IsDirectory()) {
-                    const TString namePrefix = listByPrefix ? prefixPath.GetName() : TString();
-                    ListFiles(dirPath, page, namePrefix);
+                    truncated = ListFilesRecursive(dirPath, marker, maxKeys, awsResult);
+                } else if (!dirPath.IsSymlink() && dirPath.IsFile() && (marker.empty() || prefix > marker)) {
+                    Aws::S3::Model::Object obj;
+                    obj.SetKey(Aws::String(prefix.data(), prefix.size()));
+                    awsResult.AddContents(std::move(obj));
                 }
             }
 
-            Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(page.Finish());
+            awsResult.SetIsTruncated(truncated);
+
+            Aws::Utils::Outcome<Aws::S3::Model::ListObjectsResult, Aws::S3::S3Error> outcome(std::move(awsResult));
             auto response = std::make_unique<TEvListObjectsResponse>(std::move(outcome));
             Send(ev->Sender, response.release());
         } catch (const TSystemError& ex) {

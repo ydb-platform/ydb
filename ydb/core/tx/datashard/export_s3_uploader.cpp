@@ -655,6 +655,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"error", error});
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
             CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
+            // ListObjects orders prefix matches lexicographically, so the exact key, if present, is first.
             auto request = Aws::S3::Model::ListObjectsRequest()
                 .WithPrefix(GetObjectKeyForListing())
                 .WithMaxKeys(1);

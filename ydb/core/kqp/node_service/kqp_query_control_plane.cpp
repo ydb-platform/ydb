@@ -467,8 +467,9 @@ public:
                 }
             }
 
-            // the tasks of this request never start: the request ends with the aborted ones, and this actor, the
-            // owner of the query quota manager that returns what the earlier requests took, is poisoned
+            // the tasks of this request never start, drop them: the request ends once the aborted tasks of the earlier
+            // requests terminate (at once without them), then TNodeState::OnTaskFinished poisons this actor, the owner
+            // of the query quota manager that returns what the earlier requests took
             for (const auto taskId : tasks) {
                 State_->OnTaskFinished(txId, executerId, taskId, /* success */ false);
             }

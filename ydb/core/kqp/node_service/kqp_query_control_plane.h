@@ -20,8 +20,9 @@ NActors::IActor* CreateKqpQueryManager(TIntrusivePtr<TKqpCounters>& counters, st
 // query's tx and the resource manager. It holds the execution units and the external memory of the started tasks, see
 // AllocateTasks(); the task and channel quota managers keep it alive and take Memory from it through AllocateQuota()
 // and FreeQuota(). GetCurrentQuota() is what the query holds from the resource manager: Memory + ExternalMemory.
-// Called from compute actors and from the channel service (under its locks), must stay lock-free and must not call
-// actors.
+// Called from compute actors and from the channel service (under its locks), so it must never wait for an actor: its
+// own state is atomics, and the resource manager calls it makes take short mutexes (resource manager, resource broker)
+// and at most post events.
 class IQueryQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 public:
     // The execution units and the external memory of the tasks of a start request. The task and channel quota managers

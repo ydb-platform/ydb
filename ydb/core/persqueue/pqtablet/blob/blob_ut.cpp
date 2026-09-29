@@ -1279,8 +1279,8 @@ Y_UNIT_TEST_SUITE(Head) {
             head.MutableLastBatch().Pack();
         }
 
-        // An internal batch may end with an intermediate part, but the head must
-        // end with a complete message before its offset delta is used.
+        // An internal batch may end with an intermediate part; offset delta still
+        // includes that message once the head ends on its last part.
         head.AddBatch(TBatch(100, 1));
         head.AddBlob(TClientBlob(
             TString("src"), 1, TString(512_KB, 'x'), TPartData{1, 2, 1_MB},
@@ -1300,6 +1300,25 @@ Y_UNIT_TEST_SUITE(Head) {
 
     Y_UNIT_TEST(OffsetDeltaWithoutBatchingLastPartSurvivesPack) {
         CheckOrdinaryMultipartOffsetDelta(false);
+    }
+
+    Y_UNIT_TEST(GetOffsetDeltaIncludesIncompleteTrailingPart) {
+        THead head;
+        head.Offset = 100;
+        head.AddBatch(TBatch(100, 0));
+        const auto ts = TInstant::Seconds(1);
+        head.AddBlob(TClientBlob(
+            TString("src"), 1, TString(512_KB, 'x'), TPartData{0, 2, 1_MB},
+            ts, ts, 1_MB, "", ""));
+
+        UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
+
+        head.AddBlob(TClientBlob(
+            TString("src"), 1, TString(512_KB, 'y'), TPartData{1, 2, 1_MB},
+            ts, ts, 1_MB, "", ""));
+        UNIT_ASSERT_VALUES_EQUAL(head.GetCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(head.GetOffsetDelta(), 1u);
     }
 
     Y_UNIT_TEST(GetOffsetDeltaWithLMC) {

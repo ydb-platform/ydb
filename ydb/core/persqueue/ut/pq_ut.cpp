@@ -2128,6 +2128,7 @@ void CheckPersistedMixedHeadCompaction(bool enableAfterFirstWrite, bool multipar
     CompactOrdinaryMessages(tc);
     PQGetPartInfo(100, 102, tc);
     const auto mergedKey = FindOrdinaryHeadKey(tc, 100, 2);
+    // Mixed head keys: Compact clears OffsetDelta (cannot sum Count as delta).
     UNIT_ASSERT(!mergedKey.HasOffsetDelta());
     UNIT_ASSERT_VALUES_EQUAL(mergedKey.GetPartNo(), firstKey.GetPartNo());
     const TString mergedBlob = ReadOrdinaryStoredBlob(tc, mergedKey);

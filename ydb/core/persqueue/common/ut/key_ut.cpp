@@ -236,6 +236,46 @@ Y_UNIT_TEST(OffsetDelta) {
     UNIT_ASSERT_VALUES_EQUAL(*restoredFast.GetOffsetDelta(), 3u);
 }
 
+Y_UNIT_TEST(OffsetDeltaSerializationBoundary) {
+    const TMaybe<ui64> maxDelta = ui64{Max<ui32>()};
+    const TString raw = "d0000000009_00000000000000000008_00007_0000000006_00005_4294967295";
+    const auto body = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, maxDelta);
+    const auto head = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, maxDelta);
+    const auto fast = TKey::ForFastWrite(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, maxDelta);
+    UNIT_ASSERT_VALUES_EQUAL(body.ToString(), raw);
+    UNIT_ASSERT_VALUES_EQUAL(head.ToString(), raw + "|");
+    UNIT_ASSERT_VALUES_EQUAL(fast.ToString(), raw + "?");
+
+    for (const auto& key : {body, head, fast}) {
+        auto restored = TKey::FromString(key.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(*restored.GetOffsetDelta(), *maxDelta);
+        UNIT_ASSERT_VALUES_EQUAL(restored.ToString(), key.ToString());
+        restored.SetOffsetDelta(ui64{0});
+        UNIT_ASSERT(restored.HasOffsetDelta());
+        UNIT_ASSERT_VALUES_EQUAL(*restored.GetOffsetDelta(), 0u);
+        restored.SetOffsetDelta(*maxDelta);
+        UNIT_ASSERT_VALUES_EQUAL(restored.ToString(), key.ToString());
+    }
+}
+
+Y_UNIT_TEST(OffsetDeltaSerializationRejectsOverflow) {
+    auto key = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, 42);
+    const TString original = key.ToString();
+    for (const ui64 delta : {ui64{Max<ui32>()} + 1, Max<ui64>()}) {
+        UNIT_ASSERT_EXCEPTION(key.SetOffsetDelta(delta), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(key.ToString(), original);
+        UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 42u);
+
+        const TMaybe<ui64> optionalDelta = delta;
+        UNIT_ASSERT_EXCEPTION(key.SetOffsetDelta(optionalDelta), yexception);
+        UNIT_ASSERT_VALUES_EQUAL(key.ToString(), original);
+        UNIT_ASSERT_VALUES_EQUAL(*key.GetOffsetDelta(), 42u);
+        UNIT_ASSERT_EXCEPTION(TKey::ForBody(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, optionalDelta), yexception);
+        UNIT_ASSERT_EXCEPTION(TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, optionalDelta), yexception);
+        UNIT_ASSERT_EXCEPTION(TKey::ForFastWrite(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, optionalDelta), yexception);
+    }
+}
+
 Y_UNIT_TEST(FromKeyPreservesFields) {
     auto src = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId{9}, 8, 7, 6, 5, 11);
     auto dst = TKey::FromKey(src, TKeyPrefix::TypeInfo, TPartitionId{10}, 12);

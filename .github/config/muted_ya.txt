@@ -24,12 +24,11 @@ ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsR
 ydb/core/load_test/ut_ycsb ReadLoad.ShouldReadIterate
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterEnableAutopartitioningAndServiceConsumerGuards
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterIfExistsMissingIsSuccess
-ydb/core/persqueue/public/schema/ut SchemaOps.AlterMissingWithoutIfExistsIsSchemeError
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
+ydb/core/persqueue/ut TPQTest.TestCompactifiedWithRetention
 ydb/core/persqueue/ut TPQTest.TestWritePQ
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
-ydb/core/tx/conveyor_composite/ut TCompositeConveyorRuntimeUpdate.LatestTopologySupersedesPrepare
-ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.CreateIndexedTableAndForceDropSimultaneously[PipeResets]
+ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/providers/common/http_gateway/ut_large unittest.sole chunk
@@ -37,7 +36,6 @@ ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedClusterTableFailsGetClustersList
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestDroppedVersionsTableIsRecreated
-ydb/tests/compatibility/common test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_setup_in_blob_storage_config[restart_stable-26-3-1_to_prestable-26-4-1]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-lax]
 ydb/tests/compatibility/indexes test_json_index.py.TestJsonIndex.test_json_index[rolling_stable-26-3-1_to_prestable-26-4-1-strict]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_prestable-26-4-1_to_prestable-26-4-1-codec2-ROW]
@@ -65,7 +63,6 @@ ydb/tests/functional/config test_pdisk_metadata_cli.py.TestPDiskMetadata.test_ap
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk
-ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_stress
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

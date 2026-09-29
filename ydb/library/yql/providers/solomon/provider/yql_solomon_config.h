@@ -36,7 +36,7 @@ struct TSolomonConfiguration
 {
     using TPtr = TIntrusivePtr<TSolomonConfiguration>;
 
-    TSolomonConfiguration();
+    explicit TSolomonConfiguration(bool strictConfigValidation = false);
     TSolomonConfiguration(const TSolomonConfiguration&) = delete;
 
     template <typename TProtoConfig>

@@ -1,6 +1,7 @@
 #include "tablet_counters_aggregator.h"
 #include "tablet_counters_app.h"
 #include "labeled_counters_merger.h"
+#include "detailed_metrics/memory_tags.h"
 #include "detailed_metrics/node_database_metrics_aggregator.h"
 #include "detailed_metrics/ydb_metrics_mapper.h"
 #include "private/aggregated_counters.h"
@@ -139,6 +140,7 @@ bool IsOlderThan(const TDetailedMetricsTableInfo& lhs, const TDetailedMetricsTab
 ::NMonitoring::TDynamicCounterPtr GetDetailedMetricsRawGroup(
     ::NMonitoring::TDynamicCounterPtr countersRoot, const TActorContext& ctx)
 {
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
     static TMutex lock;
     TGuard<TMutex> guard(lock);
 
@@ -182,6 +184,8 @@ public:
         if (!DetailedMetricsEnabled) {
             return;
         }
+
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
 
         // Register a watch the first time this database is seen, so the detailed
         // metrics of its tables are reclaimed on database removal even when the
@@ -268,6 +272,8 @@ public:
             return;
         }
 
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
+
         if (!tenantPathId || !executorCounters || !appCounters) {
             // Logged on every round of the counters of every tablet, hence TRACE
             YDB_LOG_TRACE_CTX(ctx, "Skipping the detailed metrics of the tablet",
@@ -349,6 +355,7 @@ public:
     }
 
     void ResolveDatabasePath(NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext& ctx) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         for (const auto& entry : navigate->ResultSet) {
             const auto pathId = entry.TableId.PathId;
 
@@ -1253,6 +1260,7 @@ private:
 
     void SendDetailedMetricsRegistration(const TString& databasePath,
         TIntrusivePtr<NSysView::IDbDetailedCounters> aggregator, const TActorContext& ctx) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
         ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()),
             new NSysView::TEvSysView::TEvRegisterDbDetailedCounters(
                 databasePath,
@@ -1277,6 +1285,8 @@ private:
         if (!db.Aggregator) {
             return;
         }
+
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
 
         // Unregister from the SysView Service before dropping the aggregator
         ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()),
@@ -1341,6 +1351,8 @@ private:
         if (itFollower == itTablet->second.end()) {
             return;
         }
+
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
 
         // Captured before erasing: DropUnreportedPath needs it once the contribution
         // itself is gone

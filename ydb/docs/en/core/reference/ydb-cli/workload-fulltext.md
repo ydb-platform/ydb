@@ -113,7 +113,7 @@ Generate random text data using a Markov chain model and load it into the table.
 
 We use parameters `--min-sentence-len` and `--max-sentence-len` to generate target text length with uniform distribution.
 
-See also the [common import parameters](#load-files) listed above.
+{% include [load_options](./_includes/workload/load_options.md) %}
 
 ## Running the workload {#run}
 
@@ -159,7 +159,7 @@ Continuously inserts new documents into the table using a Markov chain model to 
 | `--min-sentence-len <value>` | Minimum number of words in a generated document. | `100` |
 | `--max-sentence-len <value>` | Maximum number of words in a generated document. | `1000` |
 
-See also the [common run parameters](#run-select) listed above.
+{% include [run_options](./_includes/workload/run_options.md) %}
 
 ## Building a Markov chain model {#model}
 

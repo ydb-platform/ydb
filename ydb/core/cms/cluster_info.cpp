@@ -464,6 +464,7 @@ void TClusterInfo::SetNodeState(ui32 nodeId, NKikimrCms::EState state, const NKi
 
 void TClusterInfo::ClearNode(ui32 nodeId)
 {
+    DDiskStateInfo.erase(nodeId);
     if (!HasNode(nodeId))
         return;
 

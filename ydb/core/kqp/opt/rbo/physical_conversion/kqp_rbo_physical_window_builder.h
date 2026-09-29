@@ -19,6 +19,7 @@ public:
     static bool CanBuildWindow(const TOpWindow& window);
     static bool UsesWholePartition(const TOpWindow& window);
     static bool UsesRangeCarry(const TOpWindow& window);
+    static bool UsesRangePeerGroups(const TOpWindow& window);
 
 private:
     void Prepare(const TVector<TInfoUnit>& inputs);
@@ -36,6 +37,8 @@ private:
     TExprNode::TPtr BuildWholePartition(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildFoldLambda(bool update) const;
     TExprNode::TPtr BuildRangeCarry(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildRangePeerGroups(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildPartitionHandler(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildExpandFromStructs(TExprNode::TPtr list) const;
     TExprNode::TPtr BuildExpandFromChain(TExprNode::TPtr chained) const;
 
@@ -60,4 +63,5 @@ private:
     bool NeedsPeerKey = false;
     bool WholePartition = false;
     bool RangeCarry = false;
+    bool RangePeerGroups = false;
 };

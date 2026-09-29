@@ -1404,7 +1404,7 @@ public:
         return TOpTraversal(Iterate(order).begin());
     }
 
-    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
+    NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, ui32& operatorIdx, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
     NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
 
     TPlanProps PlanProps;

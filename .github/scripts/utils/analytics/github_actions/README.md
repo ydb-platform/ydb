@@ -1,20 +1,38 @@
 # github_actions
 
-Обёртка над [`collector/`](../collector/README.md) для GitHub Actions: колонки
-workflow / job / PR / commit, cpu/ram/disk раннера, выгрузка длительностей
-job и step из GitHub API.
+Обёртка над [`collector/`](../collector/README.md) для GitHub Actions. Пишет
+в ту же схему плюс колонки workflow / job / PR / commit и умеет выгрузить из
+GitHub API, сколько шли job и step.
 
-Измерения — таблица `analytics/ci_metrics`. Где выгрузка остановилась в
-прошлый раз — отдельная таблица `analytics/ci_metrics_state`, туда дашборд
-не смотрит.
+Две таблицы:
+
+- `analytics/ci_metrics` — то, что рисует дашборд: длительности фаз, job, step.
+- `analytics/ci_metrics_state` — записная книжка крона: «я уже выгрузил всё
+  до 15:00, эти run ещё идут, те надо повторить». Дашборд её не читает.
+  Отдельная таблица, чтобы это не лежало рядом с измерениями и не попало
+  на график.
 
 ## Добавить измерение
 
-Нужны `GITHUB_NUMERIC_JOB_ID` и `GITHUB_RUN_ATTEMPT`. Без них строка уйдёт в
-`.skipped`, сборка не упадёт. В `test_ya` id выставляет
-[`resolve_github_job_id.py`](../../analytics/resolve_github_job_id.py).
+Чтобы на дашборде связать вашу фазу с job, в строке должны быть два числа.
 
-Буфер не кладите в `PUBLIC_DIR`: JSONL не должен уехать на публичный S3.
+**Номер job в GitHub** (колонка `github_job_id`, например `456`). GitHub сам
+его в env не кладёт — только строковое имя в `$GITHUB_JOB` (`build`). Число
+нужно, чтобы потом сджойнить фазу с строкой job, которую выгрузка пишет как
+`span_id = job-456`. В `test_ya` его находит
+[`resolve_github_job_id.py`](../../analytics/resolve_github_job_id.py) и кладёт
+в `$GITHUB_NUMERIC_JOB_ID`. В своём workflow выставьте то же сами или
+вызовите этот скрипт.
+
+**Номер попытки workflow** (колонка `run_attempt`). GitHub кладёт его сам в
+`$GITHUB_RUN_ATTEMPT`: `1` с первого раза, `2` после Re-run. Нужен, чтобы
+повторный прогон не затёр первый: оба числа входят в первичный ключ.
+
+Нет любого из двух — строка не попадёт в таблицу, уйдёт в файл
+`$CI_METRICS_FILE.skipped` рядом с JSONL. Сборка не упадёт.
+
+JSONL не кладите в каталог, который `test_ya` выкладывает на публичный S3
+(`PUBLIC_DIR`) — иначе файл с метриками уедет в интернет.
 
 ### Своё измерение в workflow
 
@@ -35,8 +53,8 @@ python3 "$PY" flush
 
 Дополнительно к collector:
 
-- `--runner` — один раз снять cpu/ram/disk машины, положить в labels
-- `--usage` — то же, но свежий замер в конце
+- `--runner` — один раз записать в labels, какая машина: cpu, ram, диск
+- `--usage` — то же в конце: сколько из этого реально занято
 - `--report <ya report.json>` на `enrich` — `labels.tests` (`passed`, `failed`,
   `errors`, `skipped`, `muted`, `not_launched`, `other`, `total`)
 - `--rc N` — `success`, если 0, иначе `failure`
@@ -92,9 +110,10 @@ ci start my_new_phase
 ci end my_new_phase --rc "$RC"
 ```
 
-`$CI_YA_ATTEMPT`, `$CI_BUILD_TARGET`, `$CI_CACHE_MODE` подмешаются сами. Если
-имя совпало с `$CI_BUILD_SPAN` (обычно фаза сборки), на start снимок железа,
-на end — загрузка.
+`$CI_YA_ATTEMPT`, `$CI_BUILD_TARGET`, `$CI_CACHE_MODE` подмешаются сами.
+`$CI_BUILD_SPAN` — имя фазы, на которой снимать машину (обычно сборка): на
+её `start` добавится `--runner`, на `end` — `--usage`. На остальные фазы
+не тратим время.
 
 В `test_ya` bash только обёртка и trap (Python не видит `set -e`):
 

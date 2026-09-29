@@ -219,12 +219,6 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
 В `analytics/ci_metrics_state` три поля: `export_watermark` (до какого
 момента выгрузили), `open_runs` (ещё идут), `failed_runs` (надо повторить).
 
-## Миграция живой таблицы
-
-Разовый ремонт уже записанных строк: `migrate_ci_metrics.py`. Без `--apply`
-ничего не пишет. Список команд — `python3 …/migrate_ci_metrics.py --help`.
-Живую таблицу этот PR не переписывает.
-
 ## Тесты
 
 ```bash

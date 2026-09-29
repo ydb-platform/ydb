@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
@@ -24,6 +25,13 @@ using TEvAskColumnData = NColumnShard::TEvPrivate::TEvAskColumnData;
 using TEvReadFinished = NColumnShard::TEvPrivate::TEvReadFinished;
 // KQP stops a scan actor with this event and does not wait for anything.
 using TEvAbortExecution = NKqp::TEvKqp::TEvAbortExecution;
+
+// The SDK of this branch has no DeleteSession; the request goes straight to the KQP proxy.
+void CloseSession(TTestActorRuntime& runtime, const std::string& sessionId) {
+    auto request = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
+    request->Record.MutableRequest()->SetSessionId(TString(sessionId));
+    runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId(0)), TActorId(), request.release()), 0, /*viaActorSystem*/ true);
+}
 
 void SleepUntil(TTestActorRuntime& runtime, const TInstant deadline) {
     const auto now = runtime.GetCurrentTime();
@@ -457,8 +465,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         // 5. The client goes away while the request is held: closing the session cancels the query, and the cancellation
         // reaches the scan actor on the tablet, which finishes and releases its snapshot.
         {
-            const auto deleteResult = kikimr.RunCall([&] { return queryClient.DeleteSession(scanSession.GetId()).GetValueSync(); });
-            UNIT_ASSERT_C(deleteResult.IsSuccess(), deleteResult.GetIssues().ToString());
+            CloseSession(runtime, scanSession.GetId());
             runtime.WaitFor("scan finishes", [&] { return readsFinished > 0; }, TDuration::Seconds(30));
             const auto selectResult = runtime.WaitFuture(selectFuture);
             UNIT_ASSERT_C(!selectResult.IsSuccess(), "select must have been cancelled");
@@ -593,8 +600,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         NActors::TBlockEvents<TEvAbortExecution> droppedAborts(
             runtime, [scanActorId](const auto& ev) { return ev->GetRecipientRewrite() == scanActorId; });
         {
-            const auto deleteResult = kikimr.RunCall([&] { return queryClient.DeleteSession(scanSession.GetId()).GetValueSync(); });
-            UNIT_ASSERT_C(deleteResult.IsSuccess(), deleteResult.GetIssues().ToString());
+            CloseSession(runtime, scanSession.GetId());
             const auto selectResult = runtime.WaitFuture(selectFuture);
             UNIT_ASSERT_C(!selectResult.IsSuccess(), "select must have failed");
             UNIT_ASSERT(!scanFinished);

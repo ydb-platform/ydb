@@ -615,34 +615,21 @@ void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish s
         Send(ScanDiagnosticsActorId,
             std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }
-<<<<<<< HEAD
-    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan finished for tablet",
-        {"scanActorId", ScanActorId},
-=======
     const TString iteratorDebugString = ScanIterator ? ScanIterator->DebugString(false) : "NO";
     ScanIterator.reset();
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan finished for tablet",
         {"scanActorId", ScanActorId},
->>>>>>> 9e7e52a8a33 (Fix deleting portions under scans (again) (#53938))
         {"tabletId", TabletId});
     Send(ColumnShardActorId, new NColumnShard::TEvPrivate::TEvReadFinished(RequestCookie, TxId));
     AFL_VERIFY(StartInstant);
     FinishInstant = TMonotonic::Now();
     ScanCountersPool.OnScanFinished(status, *FinishInstant - *StartInstant);
     ReportStats();
-<<<<<<< HEAD
-    YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
-        {"event", "scan_finish"},
-        {"computeActorId", ScanComputeActorId},
-        {"stats", Stats->ToJson()},
-        {"iterator", (ScanIterator ? ScanIterator->DebugString(false) : "NO")});
-=======
     YDB_LOG_INFO_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "scan_finish"},
         {"computeActorId", ScanComputeActorId},
         {"stats", Stats->ToJson()},
         {"iterator", iteratorDebugString});
->>>>>>> 9e7e52a8a33 (Fix deleting portions under scans (again) (#53938))
     PassAway();
 }
 

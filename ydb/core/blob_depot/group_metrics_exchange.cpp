@@ -130,8 +130,6 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::UpdateThroughputs(bool reschedule) {
         static constexpr TDuration Window = TDuration::Seconds(3);
 
-        UpdateAgentsBlockingGC();
-
         if (Config.HasVirtualGroupId() && !MetricsQ.empty()) {
             const TMonotonic now = TActivationContext::Monotonic();
             const TMonotonic left = now - Window;
@@ -160,6 +158,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         if (reschedule) {
+            UpdateAgentsBlockingGC();
             TActivationContext::Schedule(Window, new IEventHandle(TEvPrivate::EvUpdateThroughputs, 0,
                 SelfId(), {}, nullptr, 0));
         }
@@ -172,14 +171,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::UpdateAgentsBlockingGC() {
         ui64 count = 0;
         for (const auto& [nodeId, agent] : Agents) {
-            if (agent.Connection) {
-                continue;
-            }
-            for (const auto& [channel, range] : agent.GivenIdRanges) {
-                if (!range.IsEmpty()) {
-                    ++count;
-                    break;
-                }
+            if (!agent.Connection && agent.HasGivenIdRanges()) {
+                ++count;
             }
         }
         TabletCounters->Simple()[NKikimrBlobDepot::COUNTER_AGENTS_BLOCKING_GC] = count;

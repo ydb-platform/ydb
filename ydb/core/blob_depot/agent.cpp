@@ -341,14 +341,7 @@ namespace NKikimr::NBlobDepot {
                 continue; // we have no way to make this agent drop the ids, so we must keep them reserved
             }
 
-            bool holdsRanges = false;
-            for (const auto& [channel, range] : agent.GivenIdRanges) {
-                if (!range.IsEmpty()) {
-                    holdsRanges = true;
-                    break;
-                }
-            }
-            if (!holdsRanges) {
+            if (!agent.HasGivenIdRanges()) {
                 continue;
             }
 
@@ -387,14 +380,7 @@ namespace NKikimr::NBlobDepot {
             ui32& step = agent.ExpiredSteps[channelIndex];
             step = Max(step, TBlobSeqId::FromSequentalNumber(channelIndex, generation, channel.NextBlobSeqId - 1).Step);
 
-            // Ids issued from now on have to survive that trim, exactly as TData::HandleTrash arranges when it
-            // invalidates a step; otherwise a freshly allocated id could share the step we just told them to drop.
-            auto next = TBlobSeqId::FromSequentalNumber(channelIndex, generation, channel.NextBlobSeqId);
-            if (next.Step <= step) {
-                next.Step = step + 1;
-                next.Index = 0;
-                channel.NextBlobSeqId = next.ToSequentialNumber();
-            }
+            channel.AdvanceNextBlobSeqId(generation, step);
 
             YDB_LOG_WARN("reclaiming blob sequence range of an expired agent",
                 {"marker", "BDT96"},

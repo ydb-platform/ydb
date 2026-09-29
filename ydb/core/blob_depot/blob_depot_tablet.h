@@ -126,6 +126,15 @@ namespace NKikimr::NBlobDepot {
             float LastPushedApproximateFreeSpaceShare = 0.0f;
 
             THashSet<TS3Locator> S3WritesInFlight;
+
+            bool HasGivenIdRanges() const {
+                for (const auto& [channel, range] : GivenIdRanges) {
+                    if (!range.IsEmpty()) {
+                        return true;
+                    }
+                }
+                return false;
+            }
         };
 
         struct TPipeServerContext {
@@ -156,6 +165,16 @@ namespace NKikimr::NBlobDepot {
             std::set<ui64> SequenceNumbersInFlight; // of blobs being committed
             std::set<ui64> AssimilatedBlobsInFlight;
             std::optional<TBlobSeqId> LastReportedLeastId;
+
+            // Ensure future allocations are strictly above the invalidated step.
+            void AdvanceNextBlobSeqId(ui32 generation, ui32 invalidatedStep) {
+                auto next = TBlobSeqId::FromSequentalNumber(Index, generation, NextBlobSeqId);
+                if (next.Step <= invalidatedStep) {
+                    next.Step = invalidatedStep + 1;
+                    next.Index = 0;
+                    NextBlobSeqId = next.ToSequentialNumber();
+                }
+            }
 
             // Same as GetLeastExpectedBlobId, but without the monotonicity bookkeeping -- for monitoring only
             TBlobSeqId PeekLeastExpectedBlobId(ui32 generation) const {

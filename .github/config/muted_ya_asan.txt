@@ -121,6 +121,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.StoredNullableResultWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.StreamWriteModesMaterializeStoredColumn+EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedStored.StreamWriteModesMaterializeStoredColumn-EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedStored.TtlOnIndependentColumnWorks
+ydb/core/kqp/ut/scheme GeneratedStored.UniqueIndexOnNullableGeneratedColumnTracksNullTransitions
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnDependencyToNull
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnIndependentDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMissingAndExistingRows
@@ -129,6 +130,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnNonDependency
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningBothGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnReturningGenerated
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnSharedDependency
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnViaSelect
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningNoGeneratedColumns
@@ -139,6 +141,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpdateWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningAllColumns
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningGeneratedWithDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningIndependentColumn
+ydb/core/kqp/ut/scheme GeneratedStored.UpsertReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.DependenciesSurviveSchemeShardRestart
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.Update
 ydb/core/kqp/ut/scheme GeneratedStoredStreamLookup.UpdateOn
@@ -186,6 +189,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTim
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultUnsupportedValue
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexCoverColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn+EnableCompileTimeDefaults
@@ -211,7 +215,9 @@ ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace-I
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpScheme.AlterSequence
 ydb/core/kqp/ut/scheme KqpScheme.AlterSequenceRestartWith
 ydb/core/kqp/ut/scheme KqpScheme.CreateAndAlterTopicYqlSettings+UseQueryService
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableViaApiMultipleTime

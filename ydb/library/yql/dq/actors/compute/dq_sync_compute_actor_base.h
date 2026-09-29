@@ -429,6 +429,9 @@ protected:
                 channel.Channel->Bind(this->SelfId(), channel.PeerId);
             }
         }
+        this->AllOutputsFinishEpochBound = useFinishEpoch && AllOf(this->OutputChannelsMap, [](const auto& entry) {
+            return entry.second.FinishEpochBound;
+        });
 
         for (auto& [outputIndex, transform] : this->OutputTransformsMap) {
             std::tie(transform.Buffer, transform.OutputBuffer) = TaskRunner->GetOutputTransform(outputIndex);

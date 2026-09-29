@@ -3,7 +3,17 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_schedulable_read.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/common.h>
 
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
+#include <ydb/library/wilson_ids/wilson.h>
+
 namespace NKikimr {
+
+namespace NDataShard {
+    // Defined in datashard__read_iterator.cpp (exposed out of the anonymous namespace
+    // for this test). Emits the "Datashard.ReadThrottled" retro-span for a throttled read.
+    void EmitReadThrottleSpan(const NWilson::TSpan& readSpan, TInstant now, TDuration delay, TStringBuf path);
+}
 
 using namespace Tests;
 
@@ -182,6 +192,39 @@ struct TSchedulerTestHelper {
     }
 };
 
+// Runs EmitReadThrottleSpan inside a real actor context (so ConstructTerminated's
+// Send() reaches the uploader) and reports completion to `doneTo`. It builds a live
+// "Datashard.Read" parent span, emits one throttle span under it, then emits another
+// against an inactive span (which must produce nothing).
+class TThrottleSpanEmitter : public NActors::TActorBootstrapped<TThrottleSpanEmitter> {
+public:
+    TThrottleSpanEmitter(NWilson::TTraceId traceId, TDuration delay, TActorId doneTo)
+        : TraceId(std::move(traceId))
+        , Delay(delay)
+        , DoneTo(doneTo)
+    {}
+
+    void Bootstrap() {
+        {
+            NWilson::TSpan readSpan(TWilsonTablet::TabletTopLevel, NWilson::TTraceId(TraceId),
+                                    "Datashard.Read", NWilson::EFlags::AUTO_END);
+            NDataShard::EmitReadThrottleSpan(readSpan, TInstant::Now(), Delay, "continue");
+            readSpan.EndOk();
+
+            // Inactive span → nothing must be emitted.
+            NWilson::TSpan inactive;
+            NDataShard::EmitReadThrottleSpan(inactive, TInstant::Now(), TDuration::Seconds(1), "continue");
+        }
+        Send(DoneTo, new NActors::TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    NWilson::TTraceId TraceId;
+    TDuration Delay;
+    TActorId DoneTo;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
@@ -330,6 +373,75 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler) {
         auto cells = result->GetCells(0);
         UNIT_ASSERT_VALUES_EQUAL(cells.size(), 4u);
         UNIT_ASSERT_VALUES_EQUAL(cells[3].AsValue<ui32>(), 100u);
+    }
+
+    // Locks the throttle instrumentation contract: EmitReadThrottleSpan produces a
+    // well-formed "Datashard.ReadThrottled" retro-span as a CHILD of the read span
+    // (never a self-parent — the case the TopLevel verbosity choice guards against),
+    // carrying the scheduled delay and path; and emits nothing for an inactive span.
+    //
+    // The emit is exercised directly rather than end-to-end because throttling cannot
+    // be triggered deterministically in the simulated runtime: fast reads refund the
+    // quota in full (no deficit), and the default fair-share admits sequential reads.
+    Y_UNIT_TEST(ShouldEmitWellFormedThrottleSpan) {
+        TSchedulerTestHelper helper;  // brings up a runtime / actor system
+        auto& runtime = *helper.Server->GetRuntime();
+
+        auto* uploader = new NWilson::TFakeWilsonUploader();
+        auto uploaderId = runtime.Register(uploader, 0);
+        runtime.RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId, 0);
+
+        constexpr auto kDelay = TDuration::Seconds(37);
+        auto traceId = NWilson::TTraceId::NewTraceId(15, 4095);
+        runtime.Register(new TThrottleSpanEmitter(std::move(traceId), kDelay, helper.Sender));
+
+        runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(helper.Sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));  // flush TEvWilson to the uploader
+
+        TString readSpanId;
+        const NWilson::TFakeWilsonUploader::TOtelSpan* throttle = nullptr;
+        size_t throttleCount = 0;
+        for (const auto& s : uploader->Spans) {
+            if (s.name() == "Datashard.Read") {
+                readSpanId = s.span_id();
+            } else if (s.name() == "Datashard.ReadThrottled") {
+                throttle = &s;
+                ++throttleCount;
+            }
+        }
+        UNIT_ASSERT_C(!readSpanId.empty(), "read span was not emitted");
+        UNIT_ASSERT_VALUES_EQUAL_C(throttleCount, 1u,
+            "expected exactly one throttle span (inactive span must emit nothing), trace: "
+                << uploader->PrintTraces());
+
+        // Proper child of the read span — not a self-parent (regression guard).
+        UNIT_ASSERT_VALUES_EQUAL_C(throttle->parent_span_id(), readSpanId,
+            "throttle span must be a child of Datashard.Read");
+        UNIT_ASSERT_C(throttle->span_id() != throttle->parent_span_id(),
+            "throttle span id must differ from its parent id");
+
+        // Retro-span duration equals the scheduled delay.
+        UNIT_ASSERT_VALUES_EQUAL(throttle->end_time_unix_nano() - throttle->start_time_unix_nano(),
+            kDelay.NanoSeconds());
+
+        // Attributes: delay_ms (int), path (string), predicted (bool).
+        std::optional<i64> delayMs;
+        std::optional<TString> path;
+        std::optional<bool> predicted;
+        for (const auto& attr : throttle->attributes()) {
+            if (attr.key() == "delay_ms") {
+                delayMs = attr.value().int_value();
+            } else if (attr.key() == "path") {
+                path = TString(attr.value().string_value());
+            } else if (attr.key() == "predicted") {
+                predicted = attr.value().bool_value();
+            }
+        }
+        UNIT_ASSERT_C(delayMs.has_value(), "throttle span must carry delay_ms");
+        UNIT_ASSERT_VALUES_EQUAL(*delayMs, static_cast<i64>(kDelay.MilliSeconds()));
+        UNIT_ASSERT_C(path.has_value(), "throttle span must carry path");
+        UNIT_ASSERT_VALUES_EQUAL(*path, "continue");
+        UNIT_ASSERT_C(predicted.has_value() && *predicted, "throttle span must be marked predicted");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadIteratorScheduler)

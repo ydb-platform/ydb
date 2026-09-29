@@ -76,27 +76,17 @@ private:
             Icb->RestoreDefaults();
             Dcb->RestoreDefaults();
             HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
-            *HasChanged = 0;
-            *ChangedCount = 0;
         }
         for (const auto& [paramName, paramValue] : cgi) {
             TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
             TAtomicBase prevValue = newValue;
-            bool isDefault = false;
             if (auto control = Icb->GetControlByName(paramName)) {
                 prevValue = control->SetFromHtmlRequest(newValue);
-                isDefault = control->IsDefault();
             } else {
-                isDefault = Dcb->SetValue(paramName, newValue, prevValue);
+                Dcb->SetValue(paramName, newValue, prevValue);
             }
             if (prevValue != newValue) {
                 HistoryLog.emplace_back(TInstant::Now(), paramName, prevValue, newValue);
-                if (isDefault) {
-                    ChangedCount->Dec();
-                } else {
-                    ChangedCount->Inc();
-                }
-                *HasChanged = (ui64)ChangedCount->Val() > 0;
             }
         }
     }
@@ -113,6 +103,10 @@ private:
         Icb->RenderAsHtml(renderer);
         renderer.AddNewTable("Dynamic Controls");
         Dcb->RenderAsHtml(renderer);
+
+        const ui64 count = renderer.GetChangedCount();
+        *ChangedCount = count;
+        *HasChanged = count > 0;
 
         str << renderer.GetHtml();
         HTML(str) {

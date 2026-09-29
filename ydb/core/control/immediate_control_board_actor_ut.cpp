@@ -435,6 +435,77 @@ public:
     {}
 };
 
+// Actor test for changed-control gauges across repeated POST assignments.
+// The class owns one registered control and its HTTP request for the test lifetime.
+class TTestRepeatedOverridesCount : public TBaseTest {
+public:
+    // Create the test actor with a POST request and a default-valued control.
+    TTestRepeatedOverridesCount(TTestConfig* cfg);
+
+private:
+    // Control counted once while its value differs from the default of 200.
+    TControlWrapper Control{200};
+
+    // Request data reused after each response from the monitoring actor.
+    TAutoPtr<THttpRequest> HttpRequest;
+
+    // Monitoring request view over HttpRequest for this actor's lifetime.
+    NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
+
+    // Apply two changed values and the default, checking the gauges after each POST.
+    void TestFSM(const TActorContext& ctx) override;
+};
+
+TTestRepeatedOverridesCount::TTestRepeatedOverridesCount(TTestConfig* cfg)
+    : TBaseTest(cfg)
+    , HttpRequest(new THttpRequest(HTTP_METHOD_POST))
+    , MonService2HttpRequest(nullptr, HttpRequest.Get(), nullptr, nullptr, "", nullptr)
+{}
+
+// Check that every completed POST reports the number of changed controls.
+// Reuse one control so a second non-default value must not increment the count.
+void TTestRepeatedOverridesCount::TestFSM(const TActorContext& ctx) {
+    auto counters = GetServiceCounters(Counters, "utils");
+    switch (TestStep) {
+        case 0:
+            // Register one control and submit its first non-default value.
+            Dcb->RegisterSharedControl(Control, "countedControl");
+            HttpRequest->CgiParameters.emplace("countedControl", "500");
+            ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+            break;
+        case 10:
+            // Verify the first change and submit another non-default value.
+            ASSERT_YTHROW(static_cast<i64>(Control) == 500, "First POST did not change the control");
+            ASSERT_YTHROW(counters->GetCounter("Icb/ChangedControlsCount")->Val() == 1,
+                    "First override was not counted");
+            HttpRequest->CgiParameters.clear();
+            HttpRequest->CgiParameters.emplace("countedControl", "600");
+            ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+            break;
+        case 20:
+            // Verify that the second value does not count the same control twice.
+            ASSERT_YTHROW(static_cast<i64>(Control) == 600, "Second POST did not change the control");
+            ASSERT_YTHROW(counters->GetCounter("Icb/ChangedControlsCount")->Val() == 1,
+                    "Repeated override increased the changed-control count");
+            HttpRequest->CgiParameters.clear();
+            HttpRequest->CgiParameters.emplace("countedControl", "200");
+            ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+            break;
+        case 30:
+            // Verify that returning to default clears both gauges.
+            ASSERT_YTHROW(static_cast<i64>(Control) == 200, "Third POST did not restore the default value");
+            ASSERT_YTHROW(counters->GetCounter("Icb/ChangedControlsCount")->Val() == 0,
+                    "Returning to default did not clear the changed-control count");
+            ASSERT_YTHROW(counters->GetCounter("Icb/HasChangedContol")->Val() == 0,
+                    "Returning to default did not clear the changed-control indicator");
+            SignalDoneEvent();
+            break;
+        default:
+            ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+    }
+    TestStep += 10;
+}
+
 Y_UNIT_TEST_SUITE(IcbAsActorTests) {
     Y_UNIT_TEST(TestHttpGetResponse) {
         Run<TTestHttpGetResponse>();
@@ -442,6 +513,11 @@ Y_UNIT_TEST_SUITE(IcbAsActorTests) {
 
     Y_UNIT_TEST(TestHttpPostReaction) {
         Run<TTestHttpPostReaction>();
+    }
+
+    // Verify that repeated overrides count one control and returning to default clears both gauges.
+    Y_UNIT_TEST(TestRepeatedOverridesCount) {
+        Run<TTestRepeatedOverridesCount>();
     }
 };
 

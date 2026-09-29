@@ -4,7 +4,6 @@
 #include <atomic>
 #include <chrono>
 #include <future>
-#include <thread>
 
 namespace NKikimr {
 namespace {
@@ -13,6 +12,20 @@ using namespace NActors;
 using namespace NHullComp;
 
 using namespace NSelectorTest;
+
+class TManualScheduler : public TMockSchedulerThread {
+    volatile ui64* CurrentMonotonic = nullptr;
+
+public:
+    void Prepare(TActorSystem* system, volatile ui64* timestamp, volatile ui64* monotonic) override {
+        TMockSchedulerThread::Prepare(system, timestamp, monotonic);
+        CurrentMonotonic = monotonic;
+    }
+
+    void Advance(TDuration duration) {
+        AtomicStore(CurrentMonotonic, RelaxedLoad(CurrentMonotonic) + duration.MicroSeconds());
+    }
+};
 
 class TResumeCounter : public TDecorator {
     std::atomic<ui32>& Resumes;
@@ -196,8 +209,10 @@ void AssertTasksEqual(const TTask<TKey, TMemRec>& lhs, const TTask<TKey, TMemRec
 template<class TKey = TKeyLogoBlob, class TMemRec = TMemRecLogoBlob, class TSetup>
 TSelectionResult<TKey, TMemRec> CheckEquivalent(TSetup setup, EAction action,
         ESelectStrategy strategy,
-        std::function<void(TInput<TKey, TMemRec>&)> whileSuspended = {}) {
-    TEnvironment env(1, TDuration::MilliSeconds(1));
+        std::function<void(TInput<TKey, TMemRec>&)> whileSuspended = {},
+        THolder<ISchedulerThread> scheduler = {},
+        TDuration timePerMailbox = TDuration::MilliSeconds(1)) {
+    TEnvironment env(1, timePerMailbox, std::move(scheduler));
     // Separate SSTs are essential: selection updates the shared StorageRatio cache.
     TInput<TKey, TMemRec> syncInput(env.System.get());
     TInput<TKey, TMemRec> coroInput(env.System.get());
@@ -387,47 +402,53 @@ Y_UNIT_TEST_SUITE(SelectorEquivalence) {
     }
 
     Y_UNIT_TEST(StorageRatioSuspensionDoesNotConsumeBudget) {
+        auto scheduler = MakeHolder<TManualScheduler>();
+        auto* clock = scheduler.Get();
         const auto setup = [](auto& input) {
             input.HullCtx->VCfg->HullCompEmergencyMaxSsts = 0;
             for (ui32 i = 0; i < 3; ++i) {
-                auto sst = input.AddSst(LastLevel, i * 300'000 + 1, (i + 1) * 300'000, i + 1);
+                auto sst = input.AddSst(LastLevel, i * 256 + 1, (i + 1) * 256, i + 1);
                 sst->StorageRatio.Get()->Time = TInstant::Zero();
                 sst->StorageRatio.SetCalculationTime(TInstant::Zero());
             }
         };
+        // Frozen time and a zero quantum make suspension deterministic.
         auto result = CheckEquivalent<TKeyLogoBlob, TMemRecLogoBlob>(setup, ActNothing, ESelectStrategy::None,
-            [](auto& input) {
+            [&](auto& input) {
                 // The resume event is held outside the mailbox; no executor worker is blocked.
-                std::this_thread::sleep_for(std::chrono::microseconds(
-                    (input.HullCtx->HullCompStorageRatioMaxCalcDuration + TDuration::MilliSeconds(200)).MicroSeconds()));
-            });
+                clock->Advance(input.HullCtx->HullCompStorageRatioMaxCalcDuration + TDuration::MilliSeconds(200));
+            }, std::move(scheduler), TDuration::Zero());
         for (const auto& ratio : result.Ratios) {
             UNIT_ASSERT(ratio->Time != TInstant::Zero());
-            UNIT_ASSERT_VALUES_EQUAL(ratio->IndexItemsTotal, 300'000);
+            UNIT_ASSERT_VALUES_EQUAL(ratio->IndexItemsTotal, 256);
         }
     }
 
     Y_UNIT_TEST(StorageRatioComputationConsumesBudget) {
-        TEnvironment env;
-        TInput<TKeyLogoBlob, TMemRecLogoBlob> input(env.System.get());
-        const auto& c = *input.HullCtx;
-        input.HullCtx = MakeIntrusive<THullCtx>(c.VCtx, c.VCfg, c.ChunkSize, c.CompWorthReadSize,
-            c.FreshCompaction, c.GCOnlySynced, c.AllowKeepFlags, c.BarrierValidation,
-            c.HullSstSizeInChunksFresh, c.HullSstSizeInChunksLevel, c.HullCompReadBatchEfficiencyThreshold,
-            c.HullCompStorageRatioCalcPeriod, TDuration::MicroSeconds(1), c.HullCompLevel0MaxSstsAtOnce,
-            c.HullCompSortedPartsNum);
-        for (ui32 i = 0; i < 3; ++i) {
-            auto sst = input.AddSst(LastLevel, i * 300'000 + 1, (i + 1) * 300'000, i + 1);
-            sst->StorageRatio.Get()->Time = TInstant::Zero();
-            sst->StorageRatio.SetCalculationTime(TInstant::Zero());
-        }
-        auto result = RunSelector<TKeyLogoBlob, TMemRecLogoBlob, TSelectorActorCoro>(env, input);
-        UNIT_ASSERT(result.Resumes > 0);
-        ui32 recalculated = 0;
-        for (const auto& ratio : result.Ratios) {
-            recalculated += ratio->Time != TInstant::Zero();
-        }
-        UNIT_ASSERT_VALUES_EQUAL(recalculated, 1);
+        const auto check = []<template<class, class> class TSelector>() {
+            TEnvironment env(1, TDuration::MilliSeconds(1));
+            // Even with no budget, finish the current SST before stopping. The long scan
+            // lets the real scheduler clock advance within a single activation.
+            TInput<TKeyLogoBlob, TMemRecLogoBlob> input(env.System.get(), TDuration::Zero());
+            constexpr ui32 records = 500'000;
+            for (ui32 i = 0; i < 3; ++i) {
+                auto sst = input.AddSst(LastLevel, i * records + 1, (i + 1) * records, i + 1);
+                sst->StorageRatio.Get()->Time = TInstant::Zero();
+                sst->StorageRatio.SetCalculationTime(TInstant::Zero());
+            }
+            auto result = RunSelector<TKeyLogoBlob, TMemRecLogoBlob, TSelector>(env, input);
+            ui32 recalculated = 0;
+            for (const auto& ratio : result.Ratios) {
+                recalculated += ratio->Time != TInstant::Zero();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(recalculated, 1);
+            if constexpr (std::is_same_v<TSelector<TKeyLogoBlob, TMemRecLogoBlob>,
+                    TSelectorActorCoro<TKeyLogoBlob, TMemRecLogoBlob>>) {
+                UNIT_ASSERT(result.Resumes > 0);
+            }
+        };
+        check.template operator()<TSelectorActor>();
+        check.template operator()<TSelectorActorCoro>();
     }
 
     Y_UNIT_TEST(SnapshotChangesWhileSuspended) {

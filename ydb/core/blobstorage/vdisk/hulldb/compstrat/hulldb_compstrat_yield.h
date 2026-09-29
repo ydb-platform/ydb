@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/time_provider/monotonic.h>
+#include <ydb/library/actors/core/actor.h>
 
 #include <functional>
 
@@ -12,7 +12,7 @@ namespace NKikimr::NHullComp {
 
         const std::function<void()> Yield;
         const TDuration Quantum;
-        TMonotonic Deadline = TMonotonic::Now() + Quantum;
+        TMonotonic Deadline = NActors::TActivationContext::Monotonic() + Quantum;
         TDuration SuspendedTime = TDuration::Zero();
         ui32 Steps = 0;
 
@@ -27,10 +27,10 @@ namespace NKikimr::NHullComp {
             if (++Steps % 64) {
                 return;
             }
-            const TMonotonic now = TMonotonic::Now();
+            const TMonotonic now = NActors::TActivationContext::Monotonic();
             if (now >= Deadline) {
                 Yield();
-                const TMonotonic resumed = TMonotonic::Now();
+                const TMonotonic resumed = NActors::TActivationContext::Monotonic();
                 SuspendedTime += resumed - now;
                 Deadline = resumed + Quantum;
             }

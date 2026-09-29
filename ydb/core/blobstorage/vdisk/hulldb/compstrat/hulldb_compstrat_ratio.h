@@ -146,6 +146,7 @@ namespace NKikimr {
             }
 
             void UpdateStorageRatioForDb(TInstant startTime, TStat &stat) {
+                const auto calcStart = TActivationContext::Monotonic();
                 const TDuration suspendedBefore = Yield ? Yield->GetSuspendedTime() : TDuration::Zero();
                 const TDuration &calcPeriod = HullCtx->HullCompStorageRatioCalcPeriod;
                 const TDuration &calcDuration = HullCtx->HullCompStorageRatioMaxCalcDuration;
@@ -168,10 +169,10 @@ namespace NKikimr {
                     }
 
                     // avoid spending too much time on storage ratio calculation
-                    TInstant now = TAppData::TimeProvider->Now();
+                    const auto now = TActivationContext::Monotonic();
                     const TDuration suspended = Yield ? Yield->GetSuspendedTime() - suspendedBefore : TDuration::Zero();
                     // Queueing between coroutine turns must not consume the calculation budget.
-                    if (now - suspended > startTime + calcDuration) {
+                    if (now - suspended > calcStart + calcDuration) {
                         stat.BreakedTimeout = true;
                         break;
                     }

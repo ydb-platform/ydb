@@ -24,13 +24,14 @@ struct TEnvironment {
     std::unique_ptr<TActorSystem> System;
 
     explicit TEnvironment(ui32 threads = 1,
-            TDuration timePerMailbox = TBasicExecutorPool::DEFAULT_TIME_PER_MAILBOX) {
+            TDuration timePerMailbox = TBasicExecutorPool::DEFAULT_TIME_PER_MAILBOX,
+            THolder<ISchedulerThread> scheduler = {}) {
         auto setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 1;
         setup->ExecutorsCount = 1;
         setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
         setup->Executors[0].Reset(new TBasicExecutorPool(0, threads, 0, "Batch", nullptr, nullptr, timePerMailbox));
-        setup->Scheduler.Reset(new TBasicSchedulerThread);
+        setup->Scheduler.Reset(scheduler ? scheduler.Release() : new TBasicSchedulerThread);
 
         auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         auto logs = MakeIntrusive<NLog::TSettings>(TActorId(1, "logger"),
@@ -66,7 +67,9 @@ struct TInput {
         1.0, TInstant::Zero(), {}};
     bool AllowGarbageCollection = true;
 
-    explicit TInput(TActorSystem* system) {
+    explicit TInput(TActorSystem* system, TDuration ratioCalcBudget = TDuration::Seconds(1))
+        : Ctx(ChunkSize, 2u << 20, ratioCalcBudget)
+    {
         Ctx.GetVCtx()->ActorSystem = system;
         Ds->LogoBlobs = MakeIntrusive<TLogoBlobsDs>(Ctx.GetLevelIndexSettings(), Arena);
         Ds->Blocks = MakeIntrusive<TBlocksDs>(Ctx.GetLevelIndexSettings(), Arena);

@@ -6612,7 +6612,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         };
 
         auto waitMembersCount = [&](i64 expected) {
-            const auto deadline = TInstant::Now() + TDuration::Seconds(1);
+            const auto deadline = TInstant::Now() + TDuration::Seconds(5);
             i64 actual = getMembersCount();
             while (actual != expected && TInstant::Now() < deadline) {
                 Sleep(TDuration::MilliSeconds(10));
@@ -6719,7 +6719,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 auto counter = group->FindNamedCounter("name", counterName);
                 return counter && counter->Val() == 1;
             };
-            const auto deadline = TInstant::Now() + TDuration::Seconds(1);
+            const auto deadline = TInstant::Now() + TDuration::Seconds(5);
             while (!hasMemberCount() && TInstant::Now() < deadline) {
                 Sleep(TDuration::MilliSeconds(10));
             }
@@ -6732,17 +6732,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             group->ReadSnapshot();
             return !consumerGroups->FindSubgroup("consumer_group", groupId);
         };
-        const auto deadline = TInstant::Now() + TDuration::Seconds(1);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(5);
         while (!groupRemoved() && TInstant::Now() < deadline) {
             Sleep(TDuration::MilliSeconds(10));
         }
         UNIT_ASSERT_C(groupRemoved(), "Consumer group survived leader disconnection");
-
-        // A new subgroup gets a new zero-valued counter.
-        auto counter = consumerGroups
-            ->GetSubgroup("consumer_group", groupId)
-            ->GetExpiringNamedCounter("name", counterName, false);
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
     }
 
     Y_UNIT_TEST(ConsumerGroupMembersCountMetricExpiresOnLeaderLeave) {

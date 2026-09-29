@@ -95,6 +95,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.DeleteAllByGeneratedPredicate
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedColumnIn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedWithIndex
+ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningDependenciesAndGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteWithIndexOnGenerated

@@ -8,11 +8,16 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
+TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId,
+                                              ui32 partitionId,
+                                              const TString& consumerName,
+                                              std::deque<TReadResult>&& replies,
+                                              const NActors::TActorId& parentActorId)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_ENRICHER)
     , TabletId(tabletId)
     , PartitionId(partitionId)
     , ConsumerName(consumerName)
+    , ParentActorId(parentActorId)
     , Replies(std::move(replies))
 {
     size_t messagesCount = 0;
@@ -38,30 +43,41 @@ TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, co
 
 void TMessageEnricherActor::Bootstrap() {
     Become(&TThis::StateWork);
+    Schedule(MessageEnricherDeadline, new TEvents::TEvWakeup(MessageEnricherDeadlineWakeupTag));
 
     for (size_t i = 0; i < PendingResponses.size(); ++i) {
-        TrySendReplyImpl(i, true, true); // send empty results now
+        TrySendReplyImpl(i, true); // send empty results now
     }
 
     ProcessQueue();
 }
 
-void TMessageEnricherActor::PassAway() {
-    LOG_D("PassAway");
+void TMessageEnricherActor::Complete(Ydb::StatusIds::StatusCode status, const TString& message) {
+    if (Completed) {
+        return;
+    }
+    Completed = true;
+
+    LOG_D("Complete", {"status", static_cast<int>(status)}, {"message", message});
 
     for (size_t i = 0; i < PendingResponses.size(); ++i) {
         if (!PendingResponses[i].Sent) {
             const TReadResult& reply = Replies[i];
-            Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
+            Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, status, TString(message)), 0, reply.Cookie);
             PendingResponses[i].Sent = true;
             ++RepliesSent;
         }
     }
+    Send(ParentActorId, new TEvPQ::TEvMLPEnricherFinished());
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
     TBase::PassAway();
 }
 
-void TMessageEnricherActor::TrySendReplyImpl(size_t replyIndex, bool waitForCompletion, bool allowEmpty) {
+void TMessageEnricherActor::PassAway() {
+    Complete(Ydb::StatusIds::SCHEME_ERROR, "Shutdown");
+}
+
+void TMessageEnricherActor::TrySendReplyImpl(size_t replyIndex, bool waitForCompletion) {
     auto& pr = PendingResponses[replyIndex];
     if (pr.Sent) {
         return;
@@ -70,21 +86,27 @@ void TMessageEnricherActor::TrySendReplyImpl(size_t replyIndex, bool waitForComp
         return;
     }
     const TReadResult& reply = Replies[replyIndex];
-    if (pr.EnrichedCount > 0 || allowEmpty) {
-        Send(reply.Sender, pr.Response.release(), 0, reply.Cookie);
-    } else {
-        Send(reply.Sender, std::make_unique<TEvPQ::TEvMLPErrorResponse>(PartitionId, Ydb::StatusIds::INTERNAL_ERROR, "Messages were not found").release(), 0, reply.Cookie);
-    }
+    // A missing body is an empty read. INTERNAL_ERROR here becomes HTTP 500 in SQS.
+    Send(reply.Sender, pr.Response.release(), 0, reply.Cookie);
     pr.Sent = true;
     ++RepliesSent;
 }
 
 void TMessageEnricherActor::TrySendReplyIfComplete(size_t replyIndex) {
-    return TrySendReplyImpl(replyIndex, true, false);
+    return TrySendReplyImpl(replyIndex, true);
 }
 
 void TMessageEnricherActor::SendPartialReply(size_t replyIndex) {
-    return TrySendReplyImpl(replyIndex, false, false);
+    return TrySendReplyImpl(replyIndex, false);
+}
+
+void TMessageEnricherActor::MarkEntryMissing(TOffsetEntry& entry) {
+    if (entry.Processed) {
+        return;
+    }
+    entry.Processed = true;
+    --PendingResponses[entry.ReplyIndex].TotalMessages;
+    TrySendReplyIfComplete(entry.ReplyIndex);
 }
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -101,12 +123,16 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto& response = ev->Get()->Record;
     size_t& entryIndex = NextEntryIdx;
 
-    // Empty / missing read result: advance past the current requested offset and continue.
+    // Empty read: every reply waiting for this offset is missing it.
     // Do not re-issue the same fetch — that would loop forever.
     if (!response.GetPartitionResponse().HasCmdReadResult()
             || response.GetPartitionResponse().GetCmdReadResult().GetResult().empty()) {
         if (entryIndex < SortedEntries.size()) {
-            ++entryIndex;
+            const ui64 missingOffset = SortedEntries[entryIndex].Offset;
+            while (entryIndex < SortedEntries.size() && SortedEntries[entryIndex].Offset == missingOffset) {
+                MarkEntryMissing(SortedEntries[entryIndex]);
+                ++entryIndex;
+            }
         }
         if (RepliesSent == PendingResponses.size()) {
             return PassAway();
@@ -131,9 +157,7 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
         auto resultOffset = results[resultIndex].GetOffset();
 
         if (entry.Offset < resultOffset) {
-            entry.Processed = true;
-            --PendingResponses[entry.ReplyIndex].TotalMessages;
-            TrySendReplyIfComplete(entry.ReplyIndex);
+            MarkEntryMissing(entry);
             ++entryIndex;
         } else if (entry.Offset > resultOffset) {
             // unneeded Offset — advance result pointer
@@ -172,11 +196,7 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     // Mark remaining entries whose offsets are <= maxReturnedOffset as missing
     while (entryIndex < SortedEntries.size() && SortedEntries[entryIndex].Offset <= maxReturnedOffset) {
         auto& entry = SortedEntries[entryIndex];
-        if (!entry.Processed) {
-            entry.Processed = true;
-            --PendingResponses[entry.ReplyIndex].TotalMessages;
-            TrySendReplyIfComplete(entry.ReplyIndex);
-        }
+        MarkEntryMissing(entry);
         ++entryIndex;
     }
 
@@ -192,10 +212,22 @@ void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
     PassAway();
 }
 
+void TMessageEnricherActor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
+    LOG_W("Handle TEvents::TEvUndelivered", {"reason", static_cast<int>(ev->Get()->Reason)});
+    PassAway();
+}
+
+void TMessageEnricherActor::Handle(TEvents::TEvWakeup::TPtr&) {
+    LOG_W("Enricher deadline exceeded");
+    Complete(Ydb::StatusIds::TIMEOUT, "Enricher deadline exceeded");
+}
+
 STFUNC(TMessageEnricherActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
         hFunc(TEvPersQueue::TEvResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
+        hFunc(TEvents::TEvWakeup, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
             LOG_E(
@@ -229,8 +261,9 @@ void TMessageEnricherActor::SendToPQTablet(std::unique_ptr<IEventBase> ev) {
 NActors::IActor* CreateMessageEnricher(ui64 tabletId,
                                        const ui32 partitionId,
                                        const TString& consumerName,
-                                       std::deque<TReadResult>&& replies) {
-    return new TMessageEnricherActor(tabletId, partitionId, consumerName, std::move(replies));
+                                       std::deque<TReadResult>&& replies,
+                                       const NActors::TActorId& parentActorId) {
+    return new TMessageEnricherActor(tabletId, partitionId, consumerName, std::move(replies), parentActorId);
 }
 
 } // namespace NKikimr::NPQ::NMLP

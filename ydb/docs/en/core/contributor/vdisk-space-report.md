@@ -177,7 +177,7 @@ The collection worker runs in the VDisk batch pool and releases Hull snapshots b
 
 1. It requests allocated chunk counts from PDisk, allocator and stripe-chunk statistics from HugeKeeper, and compact statistics from SyncLog and ChunkKeeper.
 2. It waits up to 10 seconds for the sources. PDisk statistics are mandatory. Missing auxiliary statistics produce an `ERROR` result with a partial report.
-3. It scans the `LogoBlobs`, `Blocks`, and `Barriers` metabases sequentially. A new Hull snapshot is acquired before every quantum.
+3. It scans the Hull indexes for `LogoBlobs`, `Blocks`, and `Barriers` sequentially. A new Hull snapshot is acquired before every quantum.
 4. For each key, it visits every physical record, merges the logical value, and applies garbage collection barriers. The selected physical representation is useful, removable records are classified as `GcDead*`, and remaining versions are `MergeRedundant*`.
 5. At the end of a quantum, it saves the traversal position, destroys the snapshot, and continues after a delay when necessary.
 6. It combines Hull estimates with dedicated Huge slots, shared stripe chunks, SyncLog, ChunkKeeper, and the PDisk allocation.
@@ -185,4 +185,4 @@ The collection worker runs in the VDisk batch pool and releases Hull snapshots b
 
 The target scan quantum is 5 milliseconds, followed by a scheduled 10 millisecond delay. Time is checked after processing a complete key, so one large key can extend a quantum. The manager aborts an attempt that exceeds the 30-minute watchdog.
 
-The scanner traverses metabases in descending key order and resumes below the last processed key between quanta. Keys inserted above the saved boundary do not extend the current scan, but they are omitted from the report. Keys inserted below the boundary may still be observed. The report is therefore not consistent: values and totals from different sections can describe different VDisk states and are not required to match.
+The scanner traverses the Hull indexes in descending key order and resumes below the last processed key between quanta. Keys inserted above the saved boundary do not extend the current scan, but they are omitted from the report. Keys inserted below the boundary may still be observed. The report is therefore not consistent: values and totals from different sections can describe different VDisk states and are not required to match.

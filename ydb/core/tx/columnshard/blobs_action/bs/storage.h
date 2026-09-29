@@ -22,6 +22,10 @@ protected:
     virtual void DoStartGCAction(const std::shared_ptr<IBlobsGCAction>& action) const override;
     virtual std::shared_ptr<IBlobsGCAction> DoCreateGCAction(const std::shared_ptr<TRemoveGCCounters>& counters) const override;
 
+    virtual void UpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare) override {
+        Manager->UpdateChannelApproximateFreeSpace(channel, approximateFreeSpaceShare);
+    }
+
     virtual bool DoLoad(IBlobManagerDb& dbBlobs) override {
         return Manager->LoadState(dbBlobs, GetSelfTabletId());
     }

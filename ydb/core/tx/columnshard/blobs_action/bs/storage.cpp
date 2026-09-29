@@ -17,7 +17,7 @@ std::shared_ptr<NKikimr::NOlap::IBlobsDeclareRemovingAction> TOperator::DoStartD
 }
 
 std::shared_ptr<NKikimr::NOlap::IBlobsWritingAction> TOperator::DoStartWritingAction() {
-    return std::make_shared<TWriteAction>(GetStorageId(), Manager);
+    return std::make_shared<TWriteAction>(GetStorageId(), Manager, TabletActorId);
 }
 
 std::shared_ptr<NKikimr::NOlap::IBlobsReadingAction> TOperator::DoStartReadingAction() {

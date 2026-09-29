@@ -130,6 +130,10 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
     }
 }
 
+void TColumnShard::Handle(TEvPrivate::TEvUpdateChannelApproximateFreeSpace::TPtr& ev, const TActorContext& /*ctx*/) {
+    StoragesManager->GetDefaultOperator()->UpdateChannelApproximateFreeSpace(ev->Get()->Channel, ev->Get()->ApproximateFreeSpaceShare);
+}
+
 void TColumnShard::Handle(TEvPrivate::TEvWriteBlobsResult::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_WRITE,
         {"tabletId", TabletID()},

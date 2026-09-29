@@ -39,8 +39,6 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .StoreTrue(&Recall);
         opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index")
             .StoreTrue(&NonIndexedSearch);
-        opts.AddLongOption("hnsw-full-range", "Search all posting partitions for unprefixed, non-overlapping distributed_hnsw indexes (requires --stale-ro)")
-            .StoreTrue(&HnswFullRange);
         opts.AddLongOption("stale-ro", "Read with StaleRO mode")
             .StoreTrue(&StaleRO);
     };
@@ -190,7 +188,6 @@ void TVectorWorkloadParams::Init() {
 
             // Extract the distance metric from index settings
             const auto& indexSettings = std::get<NYdb::NTable::TKMeansTreeSettings>(index.GetIndexSettings());
-            HasOverlappingPostings = indexSettings.OverlapClusters > 1;
             Metric = indexSettings.Settings.Metric;
             VectorOpts.VectorDimension = indexSettings.Settings.VectorDimension;
 
@@ -235,27 +232,7 @@ void TVectorWorkloadParams::Init() {
     }
 }
 
-void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
-    switch (commandType) {
-        case TWorkloadParams::ECommandType::Init:
-            break;
-        case TWorkloadParams::ECommandType::Run:
-            switch (static_cast<EWorkloadRunType>(workloadType)) {
-                case EWorkloadRunType::Upsert:
-                    break;
-                case EWorkloadRunType::Select:
-                    Y_ENSURE(!HnswFullRange || StaleRO,
-                        "--hnsw-full-range reads index implementation tables; specify --stale-ro");
-                    break;
-            }
-            break;
-        case TWorkloadParams::ECommandType::Clean:
-            break;
-        case TWorkloadParams::ECommandType::Root:
-            break;
-        case TWorkloadParams::ECommandType::Import:
-            break;
-    }
+void TVectorWorkloadParams::Validate(const ECommandType /*commandType*/, int /*workloadType*/) {
 }
 
 THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {

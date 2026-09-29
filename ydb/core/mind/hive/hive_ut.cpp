@@ -10830,9 +10830,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
                 const auto checkTablet = [&]() {
                     const auto info = GetHiveTabletInfo(runtime, hiveTablet, tabletId, sender);
-                    UNIT_ASSERT_EQUAL(info.GetVolatileState(), lockedTabletsSendMetrics
-                        ? NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN
-                        : NKikimrHive::TABLET_VOLATILE_STATE_STOPPED);
+                    if (lockedTabletsSendMetrics) {
+                        UNIT_ASSERT_VALUES_EQUAL((ui32)info.GetVolatileState(), (ui32)NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL((ui32)info.GetVolatileState(), (ui32)NKikimrHive::TABLET_VOLATILE_STATE_STOPPED);
+                    }
                     UNIT_ASSERT_VALUES_EQUAL(info.GetNodeID(), 0);
                     UNIT_ASSERT(info.HasLockedToActor());
                     UNIT_ASSERT_VALUES_EQUAL(ActorIdFromProto(info.GetLockedToActor()), owner);

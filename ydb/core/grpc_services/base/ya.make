@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    base.cpp
     path_aliasing.cpp
     base_service.h
     base.h

@@ -1175,62 +1175,6 @@ private:
     TAuditLogHook AuditLogHook;
 };
 
-template <typename TDerived>
-class TGrpcResponseSenderImpl : public IRequestOpCtx {
-public:
-    // IRequestOpCtx
-    //
-    void SendOperation(const Ydb::Operations::Operation& operation) override {
-        auto self = Derived();
-        if (operation.ready()) {
-            self->FinishRequest();
-        }
-        auto resp = self->CreateResponseMessage();
-        resp->mutable_operation()->CopyFrom(operation);
-        self->Reply(resp, operation.status());
-    }
-
-    void SendResult(const google::protobuf::Message& result,
-        Ydb::StatusIds::StatusCode status,
-        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override
-    {
-        auto self = Derived();
-        self->FinishRequest();
-        auto resp = self->CreateResponseMessage();
-        auto deferred = resp->mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        deferred->mutable_issues()->MergeFrom(message);
-        if (self->CostInfo) {
-            deferred->mutable_cost_info()->Swap(self->CostInfo);
-        }
-        auto data = deferred->mutable_result();
-        data->PackFrom(result);
-        self->Reply(resp, status);
-    }
-
-    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override {
-        auto self = Derived();
-        self->FinishRequest();
-        auto resp = self->CreateResponseMessage();
-        auto deferred = resp->mutable_operation();
-        deferred->set_ready(true);
-        deferred->set_status(status);
-        if (self->CostInfo) {
-            deferred->mutable_cost_info()->Swap(self->CostInfo);
-        }
-        NYql::IssuesToMessage(self->IssueManager.GetIssues(), deferred->mutable_issues());
-        auto data = deferred->mutable_result();
-        data->PackFrom(result);
-        self->Reply(resp, status);
-    }
-
-private:
-    TDerived* Derived() noexcept {
-        return static_cast<TDerived*>(this);
-    }
-};
-
 class TEvProxyRuntimeEvent
     : public IRequestProxyCtx
     , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
@@ -1272,386 +1216,111 @@ public:
     }
 };
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
-class TGRpcRequestWrapperImpl
-    : public std::conditional_t<IsOperation,
-        TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
-        IRequestNoOpCtx>
-    , public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
-        TEvProxyRuntimeEventWithType<RuntimeEventType>,
-        TEvProxyLegacyEvent<TRpcId, TDerived>>
+// Type-independent part of TGRpcRequestWrapperImpl: request state and all the
+// overrides that do not depend on the request/response types.
+// TCtxIface is IRequestOpCtx or IRequestNoOpCtx, TEventBase is the proxy event base.
+// The runtime-event combinations are explicitly instantiated in base.cpp.
+template <typename TCtxIface, typename TEventBase>
+class TGRpcRequestWrapperBase
+    : public TCtxIface
+    , public TEventBase
 {
     friend class TProtoResponseHelper;
-    friend class TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>;
 
 public:
-    using TRequest = TReq;
-    using TResponse = TResp;
-
     using TFinishWrapper = std::function<void(const NYdbGrpc::IRequestContextBase::TAsyncFinishResult&)>;
 
-    TGRpcRequestWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
-        : Ctx_(ctx)
-        , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
-    {
-        this->EnablePathNormalization();
-        if (!TraceId || TraceId->empty()) {
-            TraceId = UlidGen.Next().ToString();
-        }
-    }
+    explicit TGRpcRequestWrapperBase(NYdbGrpc::IRequestContextBase* ctx);
 
-    const TMaybe<TString> GetYdbToken() const override {
-        return TMethodAccessorTraits::GetYdbToken(*GetProtoRequest(), Ctx_.Get());
-    }
-
-    bool HasClientCapability(const TString& capability) const override {
-        return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
-    }
-
-    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
-        return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
-    }
-
-    TString GetRpcMethodName() const override {
-        return Ctx_->GetRpcMethodName();
-    }
-
-    void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
-        auto& s = Ctx_->GetAuthState();
-        s.State = state;
-    }
-
-    const NYdbGrpc::TAuthState& GetAuthState() const override {
-        return Ctx_->GetAuthState();
-    }
-
-    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason, const TString& details) override {
-        FinishSpan();
-        Ctx_->ReplyError(code, reason, details);
-    }
-
-    void ReplyUnauthenticated(const TString& in) override {
-        FinishSpan(Ydb::StatusIds::UNAUTHORIZED);
-        Ctx_->ReplyUnauthenticated(MakeAuthError(in, IssueManager));
-    }
-
-    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& token) override {
-        InternalToken_ = token;
-    }
-
-    void AddServerHint(const TString& hint) override {
-        Ctx_->AddTrailingMetadata(NYdb::YDB_SERVER_HINTS, hint);
-    }
-
-    void SetRuHeader(ui64 ru) override {
-        Ru = ru;
-        Ctx_->AddTrailingMetadata(NYdb::YDB_CONSUMED_UNITS_HEADER, IntToString<10>(ru));
-    }
-
-    const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
-        return InternalToken_;
-    }
-
-    const TString& GetSerializedToken() const override {
-        if (InternalToken_) {
-            return InternalToken_->GetSerializedToken();
-        }
-
-        return EmptySerializedTokenMessage_;
-    }
-
-    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override {
-        return ToMaybe(Ctx_->GetPeerMetaValues(key));
-    }
-
-    TVector<TStringBuf> FindClientCert() const override {
-        return Ctx_->FindClientCert();
-    }
-
-    TVector<TStringBuf> FindClientCertPropertyValues() const override {
-        return Ctx_->FindClientCert();
-    }
-
-    void SetDiskQuotaExceeded(bool disk) override {
-        if (!QuotaExceeded) {
-            QuotaExceeded = google::protobuf::Arena::CreateMessage<Ydb::QuotaExceeded>(GetArena());
-        }
-        QuotaExceeded->set_disk(disk);
-    }
-
-    bool GetDiskQuotaExceeded() const override {
-        return QuotaExceeded ? QuotaExceeded->disk() : false;
-    }
-
-    bool Validate(TString&) override {
-        return true;
-    }
-
-    void SetCounters(IGRpcProxyCounters::TPtr counters) override {
-        Counters = counters;
-    }
-
-    IGRpcProxyCounters::TPtr GetCounters() const override {
-        return Counters;
-    }
-
-    void UseDatabase(const TString& database) override {
-        Ctx_->UseDatabase(database);
-    }
-
-    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
-        TResponse* resp = CreateResponseMessage();
-        TMethodAccessorTraits::FillResponse(*resp, IssueManager.GetIssues(), CostInfo, status);
-        FinishRequest();
-        Reply(resp, status);
-        if (Ctx_->IsStreamCall()) {
-            Ctx_->FinishStreamingOk();
-        }
-    }
-
-    TString GetPeerName() const override {
-        return Ctx_->GetPeer();
-    }
-
-    TString GetAuthority() const override {
-        return Ctx_->GetAuthority();
-    }
-
-    bool SslServer() const {
-        return Ctx_->SslServer();
-    }
-
-    template <typename T>
-    static const TRequest* GetProtoRequest(const T& req) {
-        auto request = dynamic_cast<const TRequest*>(req->GetRequest());
-        Y_ABORT_UNLESS(request != nullptr, "Wrong using of TGRpcRequestWrapper");
-        return request;
-    }
-
-    const TRequest* GetProtoRequest() const {
-        return GetProtoRequest(this);
-    }
-
-    TMaybe<TString> GetTraceId() const override {
-        return TraceId;
-    }
-
-    NWilson::TTraceId GetWilsonTraceId() const override {
-        return Span_.GetTraceId();
-    }
-
-    const TMaybe<TString> GetSdkBuildInfo() const {
-        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-    }
-
-    TInstant GetDeadline() const override {
-        return Ctx_->Deadline();
-    }
-
-    const TMaybe<TString> GetRequestType() const override {
-        return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
-    }
-
-    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
-        auto data = MakeByteBufferFromSerializedResult(std::move(in));
-        if (flag == IRequestCtx::EStreamCtrl::FINISH) {
-            AuditLogRequestEnd(status);
-        }
-        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
-            FinishSpan(status);
-        }
-        Ctx_->Reply(&data, status, flag);
-    }
-
-    void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override {
-        auto data = MakeByteBufferFromSerializedResult(std::move(in));
-        if (flag == IRequestCtx::EStreamCtrl::FINISH) {
-            AuditLogRequestEnd(status);
-        }
-        if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
-            FinishSpan(status);
-        }
-        Ctx_->Reply(&data, status, flag);
-    }
-
-    void SetCostInfo(float consumed_units) override {
-        CostInfo = google::protobuf::Arena::CreateMessage<Ydb::CostInfo>(GetArena());
-        CostInfo->set_consumed_units(consumed_units);
-    }
-
-    const TString& GetRequestName() const override {
-        return TRequest::descriptor()->name();
-    }
-
-    google::protobuf::Arena* GetArena() override {
-        return Ctx_->GetArena();
-    }
-
-    //! Allocate Result message using protobuf arena allocator
-    //! The memory will be freed automaticaly after destroying
-    //! corresponding request.
-    //! Do not call delete for objects allocated here!
-    template <typename TResult, typename T>
-    static TResult* AllocateResult(T& ctx) {
-        return google::protobuf::Arena::CreateMessage<TResult>(ctx->GetArena());
-    }
-
-    void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&& cb) override {
-        Ctx_->SetNextReplyCallback(std::move(cb));
-    }
-
-    void SetFinishAction(std::function<void()>&& cb) override {
-        auto shutdown = FinishWrapper(std::move(cb));
-        Ctx_->GetFinishFuture().Subscribe(std::move(shutdown));
-    }
-
-    void SetCustomFinishWrapper(std::function<TFinishWrapper(std::function<void()>&&)> wrapper) {
-        FinishWrapper = wrapper;
-    }
-
-    bool IsClientLost() const override {
-        return Ctx_->IsClientLost();
-    }
-
-    void FinishStream(ui32 status) override {
-        // End Of Request for streaming requests
-        const auto ydbStatus = Ydb::StatusIds::StatusCode(status);
-        AuditLogRequestEnd(ydbStatus);
-        FinishSpan(ydbStatus);
-        Ctx_->FinishStreamingOk();
-    }
-
-    void RaiseIssue(const NYql::TIssue& issue) override {
-        IssueManager.RaiseIssue(issue);
-    }
-
-    void RaiseIssues(const NYql::TIssues& issues) override {
-        IssueManager.RaiseIssues(issues);
-    }
-
-    const google::protobuf::Message* GetRequest() const override {
-        return Ctx_->GetRequest();
-    }
-
-    void SetRespHook(TRespHook&& hook) override {
-        RespHook = std::move(hook);
-    }
-
-    void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) override {
-        RlPath = std::move(path);
-    }
-
-    TMaybe<NRpcService::TRlPath> GetRlPath() const override {
-        return RlPath;
-    }
-
-    void Pass(const IFacilityProvider&) override {
-        Y_ABORT("unimplemented");
-    }
-
-    void SetAuditLogHook(TAuditLogHook&& hook) override {
-        AuditLogHook = std::move(hook);
-    }
+    bool HasClientCapability(const TString& capability) const override;
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override;
+    TString GetRpcMethodName() const override;
+    void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override;
+    const NYdbGrpc::TAuthState& GetAuthState() const override;
+    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason, const TString& details) override;
+    void ReplyUnauthenticated(const TString& in) override;
+    void SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& token) override;
+    void AddServerHint(const TString& hint) override;
+    void SetRuHeader(ui64 ru) override;
+    const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override;
+    const TString& GetSerializedToken() const override;
+    const TMaybe<TString> GetPeerMetaValues(const TString& key) const override;
+    TVector<TStringBuf> FindClientCert() const override;
+    TVector<TStringBuf> FindClientCertPropertyValues() const override;
+    void SetDiskQuotaExceeded(bool disk) override;
+    bool GetDiskQuotaExceeded() const override;
+    bool Validate(TString&) override;
+    void SetCounters(IGRpcProxyCounters::TPtr counters) override;
+    IGRpcProxyCounters::TPtr GetCounters() const override;
+    void UseDatabase(const TString& database) override;
+    TString GetPeerName() const override;
+    TString GetAuthority() const override;
+    bool SslServer() const;
+    TMaybe<TString> GetTraceId() const override;
+    NWilson::TTraceId GetWilsonTraceId() const override;
+    const TMaybe<TString> GetSdkBuildInfo() const;
+    TInstant GetDeadline() const override;
+    const TMaybe<TString> GetRequestType() const override;
+    void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override;
+    void SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag = IRequestCtx::EStreamCtrl::CONT) override;
+    void SetCostInfo(float consumed_units) override;
+    google::protobuf::Arena* GetArena() override;
+    void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&& cb) override;
+    void SetFinishAction(std::function<void()>&& cb) override;
+    void SetCustomFinishWrapper(std::function<TFinishWrapper(std::function<void()>&&)> wrapper);
+    bool IsClientLost() const override;
+    void FinishStream(ui32 status) override;
+    void RaiseIssue(const NYql::TIssue& issue) override;
+    void RaiseIssues(const NYql::TIssues& issues) override;
+    const google::protobuf::Message* GetRequest() const override;
+    void SetRespHook(TRespHook&& hook) override;
+    void SetRlPath(TMaybe<NRpcService::TRlPath>&& path) override;
+    TMaybe<NRpcService::TRlPath> GetRlPath() const override;
+    void Pass(const IFacilityProvider&) override;
+    void SetAuditLogHook(TAuditLogHook&& hook) override;
 
     // IRequestCtx
     //
-    void FinishRequest() override {
-        RequestFinished = true;
-    }
+    void FinishRequest() override;
 
     // IRequestCtxBase
     //
-    void AddAuditLogPart(const TStringBuf& name, const TString& value) override {
-        AuditLogParts.emplace_back(name, value);
-    }
-    const TAuditLogParts& GetAuditLogParts() const override {
-        return AuditLogParts;
-    }
+    void AddAuditLogPart(const TStringBuf& name, const TString& value) override;
+    const TAuditLogParts& GetAuditLogParts() const override;
 
-    void StartTracing(NWilson::TSpan&& span) override {
-        Span_ = std::move(span);
-    }
+    void StartTracing(NWilson::TSpan&& span) override;
+    void FinishSpan() override;
+    void FinishSpan(Ydb::StatusIds::StatusCode status);
+    bool* IsTracingDecided() override;
 
-    void FinishSpan() override {
-        if (Span_) {
-            Span_.End();
-        }
-    }
-
-    void FinishSpan(Ydb::StatusIds::StatusCode status) {
-        EndGrpcRequestSpanWithStatus(Span_, status);
-    }
-
-    bool* IsTracingDecided() override {
-        return &IsTracingDecided_;
-    }
-
-    void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
-        FinishSpan();
-        Ctx_->ReplyError(code, msg, details);
-    }
-
-    TString GetEndpointId() const {
-        return Ctx_->GetEndpointId();
-    }
-
-private:
-    void Reply(NProtoBuf::Message* resp, ui32 status) override {
-        // End Of Request for non streaming requests
-        const bool finishRequest = RequestFinished || !Ctx_->IsStreamCall();
-        if (finishRequest) {
-            AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
-        }
-        if (RespHook) {
-            TRespHook hook = std::move(RespHook);
-            NWilson::TSpan span;
-            if (finishRequest) {
-                span = std::move(Span_);
-            }
-            return hook(MakeIntrusive<TRespHookCtx>(
-                Ctx_,
-                resp,
-                GetRequestName(),
-                Ru,
-                status,
-                std::move(span)));
-        }
-        if (finishRequest) {
-            FinishSpan(Ydb::StatusIds::StatusCode(status));
-        }
-        return Ctx_->Reply(resp, status);
-    }
-
-    void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status) {
-        if (AuditLogHook) {
-            AuditLogHook(status, GetAuditLogParts());
-            // Drop hook to avoid double logging in case when operation implemention
-            // invokes both FinishRequest() (indirectly) and FinishStream()
-            AuditLogHook = nullptr;
-        }
-    }
-
-    TResponse* CreateResponseMessage() {
-        return google::protobuf::Arena::CreateMessage<TResponse>(Ctx_->GetArena());
-    }
-
-    static TFinishWrapper GetStdFinishWrapper(std::function<void()>&& cb) {
-        return [cb = std::move(cb)](const NYdbGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
-            Y_ASSERT(future.HasValue());
-            if (future.GetValue() == NYdbGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
-                cb();
-            }
-        };
-    }
+    void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "");
+    TString GetEndpointId() const;
 
 protected:
+    // Creates the typed response message on the request arena and, for
+    // operation responses, returns its operation (called once per reply)
+    virtual NProtoBuf::Message* CreateResponse(Ydb::Operations::Operation** operation) = 0;
+
+    // Common tail of ReplyWithYdbStatus once the typed response is filled
+    void ReplyWithYdbStatusResponse(NProtoBuf::Message* resp, Ydb::StatusIds::StatusCode status);
+
+    void Reply(NProtoBuf::Message* resp, ui32 status) override;
+
+    NYdbGrpc::IRequestContextBase* GetRequestContext() const {
+        return Ctx_.Get();
+    }
+
     NWilson::TSpan Span_;
+    NYql::TIssueManager IssueManager;
+    Ydb::CostInfo* CostInfo = nullptr;
+
 private:
+    void AuditLogRequestEnd(Ydb::StatusIds::StatusCode status);
+    static TFinishWrapper GetStdFinishWrapper(std::function<void()>&& cb);
+
     TIntrusivePtr<NYdbGrpc::IRequestContextBase> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
     inline static const TString EmptySerializedTokenMessage_;
-    NYql::TIssueManager IssueManager;
-    Ydb::CostInfo* CostInfo = nullptr;
     Ydb::QuotaExceeded* QuotaExceeded = nullptr;
     ui64 Ru = 0;
     TRespHook RespHook;
@@ -1665,6 +1334,547 @@ private:
     bool IsTracingDecided_ = false;
     TULIDGenerator UlidGen;
     TMaybe<TString> TraceId;
+};
+
+#define GRPC_WRAPPER_BASE_TEMPLATE template <typename TCtxIface, typename TEventBase>
+#define GRPC_WRAPPER_BASE TGRpcRequestWrapperBase<TCtxIface, TEventBase>
+
+GRPC_WRAPPER_BASE_TEMPLATE
+GRPC_WRAPPER_BASE::TGRpcRequestWrapperBase(NYdbGrpc::IRequestContextBase* ctx)
+    : Ctx_(ctx)
+    , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
+{
+    this->EnablePathNormalization();
+    if (!TraceId || TraceId->empty()) {
+        TraceId = UlidGen.Next().ToString();
+    }
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+bool GRPC_WRAPPER_BASE::HasClientCapability(const TString& capability) const {
+    return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const TMaybe<TString> GRPC_WRAPPER_BASE::GetDatabaseNameFromRequest() const {
+    return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TString GRPC_WRAPPER_BASE::GetRpcMethodName() const {
+    return Ctx_->GetRpcMethodName();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) {
+    auto& s = Ctx_->GetAuthState();
+    s.State = state;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const NYdbGrpc::TAuthState& GRPC_WRAPPER_BASE::GetAuthState() const {
+    return Ctx_->GetAuthState();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason, const TString& details) {
+    FinishSpan();
+    Ctx_->ReplyError(code, reason, details);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::ReplyUnauthenticated(const TString& in) {
+    FinishSpan(Ydb::StatusIds::UNAUTHORIZED);
+    Ctx_->ReplyUnauthenticated(MakeAuthError(in, IssueManager));
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetInternalToken(const TIntrusiveConstPtr<NACLib::TUserToken>& token) {
+    InternalToken_ = token;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::AddServerHint(const TString& hint) {
+    Ctx_->AddTrailingMetadata(NYdb::YDB_SERVER_HINTS, hint);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetRuHeader(ui64 ru) {
+    Ru = ru;
+    Ctx_->AddTrailingMetadata(NYdb::YDB_CONSUMED_UNITS_HEADER, IntToString<10>(ru));
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const TIntrusiveConstPtr<NACLib::TUserToken>& GRPC_WRAPPER_BASE::GetInternalToken() const {
+    return InternalToken_;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const TString& GRPC_WRAPPER_BASE::GetSerializedToken() const {
+    if (InternalToken_) {
+        return InternalToken_->GetSerializedToken();
+    }
+
+    return EmptySerializedTokenMessage_;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const TMaybe<TString> GRPC_WRAPPER_BASE::GetPeerMetaValues(const TString& key) const {
+    return ToMaybe(Ctx_->GetPeerMetaValues(key));
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TVector<TStringBuf> GRPC_WRAPPER_BASE::FindClientCert() const {
+    return Ctx_->FindClientCert();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TVector<TStringBuf> GRPC_WRAPPER_BASE::FindClientCertPropertyValues() const {
+    return Ctx_->FindClientCert();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetDiskQuotaExceeded(bool disk) {
+    if (!QuotaExceeded) {
+        QuotaExceeded = google::protobuf::Arena::CreateMessage<Ydb::QuotaExceeded>(GetArena());
+    }
+    QuotaExceeded->set_disk(disk);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+bool GRPC_WRAPPER_BASE::GetDiskQuotaExceeded() const {
+    return QuotaExceeded ? QuotaExceeded->disk() : false;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+bool GRPC_WRAPPER_BASE::Validate(TString&) {
+    return true;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetCounters(IGRpcProxyCounters::TPtr counters) {
+    Counters = counters;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+IGRpcProxyCounters::TPtr GRPC_WRAPPER_BASE::GetCounters() const {
+    return Counters;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::UseDatabase(const TString& database) {
+    Ctx_->UseDatabase(database);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TString GRPC_WRAPPER_BASE::GetPeerName() const {
+    return Ctx_->GetPeer();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TString GRPC_WRAPPER_BASE::GetAuthority() const {
+    return Ctx_->GetAuthority();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+bool GRPC_WRAPPER_BASE::SslServer() const {
+    return Ctx_->SslServer();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TMaybe<TString> GRPC_WRAPPER_BASE::GetTraceId() const {
+    return TraceId;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+NWilson::TTraceId GRPC_WRAPPER_BASE::GetWilsonTraceId() const {
+    return Span_.GetTraceId();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const TMaybe<TString> GRPC_WRAPPER_BASE::GetSdkBuildInfo() const {
+    return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TInstant GRPC_WRAPPER_BASE::GetDeadline() const {
+    return Ctx_->Deadline();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const TMaybe<TString> GRPC_WRAPPER_BASE::GetRequestType() const {
+    return GetPeerMetaValues(NYdb::YDB_REQUEST_TYPE_HEADER);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag) {
+    auto data = MakeByteBufferFromSerializedResult(std::move(in));
+    if (flag == IRequestCtx::EStreamCtrl::FINISH) {
+        AuditLogRequestEnd(status);
+    }
+    if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
+        FinishSpan(status);
+    }
+    Ctx_->Reply(&data, status, flag);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SendSerializedResult(TRope&& in, Ydb::StatusIds::StatusCode status, IRequestCtx::EStreamCtrl flag) {
+    auto data = MakeByteBufferFromSerializedResult(std::move(in));
+    if (flag == IRequestCtx::EStreamCtrl::FINISH) {
+        AuditLogRequestEnd(status);
+    }
+    if (flag == IRequestCtx::EStreamCtrl::FINISH || !Ctx_->IsStreamCall()) {
+        FinishSpan(status);
+    }
+    Ctx_->Reply(&data, status, flag);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetCostInfo(float consumed_units) {
+    CostInfo = google::protobuf::Arena::CreateMessage<Ydb::CostInfo>(GetArena());
+    CostInfo->set_consumed_units(consumed_units);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+google::protobuf::Arena* GRPC_WRAPPER_BASE::GetArena() {
+    return Ctx_->GetArena();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&& cb) {
+    Ctx_->SetNextReplyCallback(std::move(cb));
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetFinishAction(std::function<void()>&& cb) {
+    auto shutdown = FinishWrapper(std::move(cb));
+    Ctx_->GetFinishFuture().Subscribe(std::move(shutdown));
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetCustomFinishWrapper(std::function<TFinishWrapper(std::function<void()>&&)> wrapper) {
+    FinishWrapper = wrapper;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+bool GRPC_WRAPPER_BASE::IsClientLost() const {
+    return Ctx_->IsClientLost();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::FinishStream(ui32 status) {
+    // End Of Request for streaming requests
+    const auto ydbStatus = Ydb::StatusIds::StatusCode(status);
+    AuditLogRequestEnd(ydbStatus);
+    FinishSpan(ydbStatus);
+    Ctx_->FinishStreamingOk();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::RaiseIssue(const NYql::TIssue& issue) {
+    IssueManager.RaiseIssue(issue);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::RaiseIssues(const NYql::TIssues& issues) {
+    IssueManager.RaiseIssues(issues);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const google::protobuf::Message* GRPC_WRAPPER_BASE::GetRequest() const {
+    return Ctx_->GetRequest();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetRespHook(TRespHook&& hook) {
+    RespHook = std::move(hook);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetRlPath(TMaybe<NRpcService::TRlPath>&& path) {
+    RlPath = std::move(path);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TMaybe<NRpcService::TRlPath> GRPC_WRAPPER_BASE::GetRlPath() const {
+    return RlPath;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::Pass(const IFacilityProvider&) {
+    Y_ABORT("unimplemented");
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::SetAuditLogHook(TAuditLogHook&& hook) {
+    AuditLogHook = std::move(hook);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::FinishRequest() {
+    RequestFinished = true;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::AddAuditLogPart(const TStringBuf& name, const TString& value) {
+    AuditLogParts.emplace_back(name, value);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+const TAuditLogParts& GRPC_WRAPPER_BASE::GetAuditLogParts() const {
+    return AuditLogParts;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::StartTracing(NWilson::TSpan&& span) {
+    Span_ = std::move(span);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::FinishSpan() {
+    if (Span_) {
+        Span_.End();
+    }
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::FinishSpan(Ydb::StatusIds::StatusCode status) {
+    EndGrpcRequestSpanWithStatus(Span_, status);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+bool* GRPC_WRAPPER_BASE::IsTracingDecided() {
+    return &IsTracingDecided_;
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details) {
+    FinishSpan();
+    Ctx_->ReplyError(code, msg, details);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+TString GRPC_WRAPPER_BASE::GetEndpointId() const {
+    return Ctx_->GetEndpointId();
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::ReplyWithYdbStatusResponse(NProtoBuf::Message* resp, Ydb::StatusIds::StatusCode status) {
+    FinishRequest();
+    Reply(resp, status);
+    if (Ctx_->IsStreamCall()) {
+        Ctx_->FinishStreamingOk();
+    }
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::Reply(NProtoBuf::Message* resp, ui32 status) {
+    // End Of Request for non streaming requests
+    const bool finishRequest = RequestFinished || !Ctx_->IsStreamCall();
+    if (finishRequest) {
+        AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
+    }
+    if (RespHook) {
+        TRespHook hook = std::move(RespHook);
+        NWilson::TSpan span;
+        if (finishRequest) {
+            span = std::move(Span_);
+        }
+        return hook(MakeIntrusive<TRespHookCtx>(
+            Ctx_,
+            resp,
+            this->GetRequestName(),
+            Ru,
+            status,
+            std::move(span)));
+    }
+    if (finishRequest) {
+        FinishSpan(Ydb::StatusIds::StatusCode(status));
+    }
+    return Ctx_->Reply(resp, status);
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+void GRPC_WRAPPER_BASE::AuditLogRequestEnd(Ydb::StatusIds::StatusCode status) {
+    if (AuditLogHook) {
+        AuditLogHook(status, GetAuditLogParts());
+        // Drop hook to avoid double logging in case when operation implemention
+        // invokes both FinishRequest() (indirectly) and FinishStream()
+        AuditLogHook = nullptr;
+    }
+}
+
+GRPC_WRAPPER_BASE_TEMPLATE
+typename GRPC_WRAPPER_BASE::TFinishWrapper GRPC_WRAPPER_BASE::GetStdFinishWrapper(std::function<void()>&& cb) {
+    return [cb = std::move(cb)](const NYdbGrpc::IRequestContextBase::TAsyncFinishResult& future) mutable {
+        Y_ASSERT(future.HasValue());
+        if (future.GetValue() == NYdbGrpc::IRequestContextBase::EFinishStatus::CANCEL) {
+            cb();
+        }
+    };
+}
+
+// Operation response sender: fills the operation of the typed response
+// created by the CreateResponse hook.
+template <typename TEventBase>
+class TGrpcResponseSenderImpl : public TGRpcRequestWrapperBase<IRequestOpCtx, TEventBase> {
+    using TBase = TGRpcRequestWrapperBase<IRequestOpCtx, TEventBase>;
+
+public:
+    using TBase::TBase;
+
+    // IRequestOpCtx
+    //
+    void SendOperation(const Ydb::Operations::Operation& operation) override;
+
+    void SendResult(const google::protobuf::Message& result,
+        Ydb::StatusIds::StatusCode status,
+        const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) override;
+
+    void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) override;
+};
+
+template <typename TEventBase>
+void TGrpcResponseSenderImpl<TEventBase>::SendOperation(const Ydb::Operations::Operation& operation) {
+    if (operation.ready()) {
+        this->FinishRequest();
+    }
+    Ydb::Operations::Operation* deferred = nullptr;
+    auto resp = this->CreateResponse(&deferred);
+    deferred->CopyFrom(operation);
+    this->Reply(resp, operation.status());
+}
+
+template <typename TEventBase>
+void TGrpcResponseSenderImpl<TEventBase>::SendResult(const google::protobuf::Message& result,
+    Ydb::StatusIds::StatusCode status,
+    const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message)
+{
+    this->FinishRequest();
+    Ydb::Operations::Operation* deferred = nullptr;
+    auto resp = this->CreateResponse(&deferred);
+    deferred->set_ready(true);
+    deferred->set_status(status);
+    deferred->mutable_issues()->MergeFrom(message);
+    if (this->CostInfo) {
+        deferred->mutable_cost_info()->Swap(this->CostInfo);
+    }
+    auto data = deferred->mutable_result();
+    data->PackFrom(result);
+    this->Reply(resp, status);
+}
+
+template <typename TEventBase>
+void TGrpcResponseSenderImpl<TEventBase>::SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status) {
+    this->FinishRequest();
+    Ydb::Operations::Operation* deferred = nullptr;
+    auto resp = this->CreateResponse(&deferred);
+    deferred->set_ready(true);
+    deferred->set_status(status);
+    if (this->CostInfo) {
+        deferred->mutable_cost_info()->Swap(this->CostInfo);
+    }
+    NYql::IssuesToMessage(this->IssueManager.GetIssues(), deferred->mutable_issues());
+    auto data = deferred->mutable_result();
+    data->PackFrom(result);
+    this->Reply(resp, status);
+}
+
+#undef GRPC_WRAPPER_BASE_TEMPLATE
+#undef GRPC_WRAPPER_BASE
+
+extern template class TGRpcRequestWrapperBase<IRequestOpCtx, TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::COMMON>>;
+extern template class TGRpcRequestWrapperBase<IRequestOpCtx, TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>;
+extern template class TGRpcRequestWrapperBase<IRequestNoOpCtx, TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::COMMON>>;
+extern template class TGRpcRequestWrapperBase<IRequestNoOpCtx, TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>;
+extern template class TGrpcResponseSenderImpl<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::COMMON>>;
+extern template class TGrpcResponseSenderImpl<TEvProxyRuntimeEventWithType<NRuntimeEvents::EType::BOOTSTRAP_CLUSTER>>;
+
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
+class TGRpcRequestWrapperImpl
+    : public std::conditional_t<IsOperation,
+        TGrpcResponseSenderImpl<
+            std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
+                TEvProxyRuntimeEventWithType<RuntimeEventType>,
+                TEvProxyLegacyEvent<TRpcId, TDerived>>>,
+        TGRpcRequestWrapperBase<
+            IRequestNoOpCtx,
+            std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
+                TEvProxyRuntimeEventWithType<RuntimeEventType>,
+                TEvProxyLegacyEvent<TRpcId, TDerived>>>>
+{
+    friend class TProtoResponseHelper;
+
+    using TEventBase = std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
+        TEvProxyRuntimeEventWithType<RuntimeEventType>,
+        TEvProxyLegacyEvent<TRpcId, TDerived>>;
+    using TBase = std::conditional_t<IsOperation,
+        TGrpcResponseSenderImpl<TEventBase>,
+        TGRpcRequestWrapperBase<IRequestNoOpCtx, TEventBase>>;
+
+public:
+    using TRequest = TReq;
+    using TResponse = TResp;
+
+    using typename TBase::TFinishWrapper;
+
+    TGRpcRequestWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
+        : TBase(ctx)
+    {
+    }
+
+    const TMaybe<TString> GetYdbToken() const override {
+        return TMethodAccessorTraits::GetYdbToken(*GetProtoRequest(), this->GetRequestContext());
+    }
+
+    void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
+        TResponse* resp = CreateResponseMessage();
+        TMethodAccessorTraits::FillResponse(*resp, this->IssueManager.GetIssues(), this->CostInfo, status);
+        this->ReplyWithYdbStatusResponse(resp, status);
+    }
+
+    template <typename T>
+    static const TRequest* GetProtoRequest(const T& req) {
+        auto request = dynamic_cast<const TRequest*>(req->GetRequest());
+        Y_ABORT_UNLESS(request != nullptr, "Wrong using of TGRpcRequestWrapper");
+        return request;
+    }
+
+    const TRequest* GetProtoRequest() const {
+        return GetProtoRequest(this);
+    }
+
+    const TString& GetRequestName() const override {
+        return TRequest::descriptor()->name();
+    }
+
+    //! Allocate Result message using protobuf arena allocator
+    //! The memory will be freed automaticaly after destroying
+    //! corresponding request.
+    //! Do not call delete for objects allocated here!
+    template <typename TResult, typename T>
+    static TResult* AllocateResult(T& ctx) {
+        return google::protobuf::Arena::CreateMessage<TResult>(ctx->GetArena());
+    }
+
+protected:
+    NProtoBuf::Message* CreateResponse(Ydb::Operations::Operation** operation) override {
+        TResponse* resp = CreateResponseMessage();
+        if constexpr (IsOperation) {
+            if (operation) {
+                *operation = resp->mutable_operation();
+            }
+        } else {
+            Y_UNUSED(operation);
+        }
+        return resp;
+    }
+
+private:
+    TResponse* CreateResponseMessage() {
+        return google::protobuf::Arena::CreateMessage<TResponse>(this->GetRequestContext()->GetArena());
+    }
 };
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>

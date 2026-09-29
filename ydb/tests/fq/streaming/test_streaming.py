@@ -2016,6 +2016,7 @@ FROM `{table_name}`"""
                   AND (str1??"pat" LIKE "%p%")
                   AND (str1??"xyp" LIKE "x%p")
                   AND (str1??"xtp" LIKE "%x%p")
+                  AND (CAST(str1 AS Datetime) >= CAST(str2 AS Datetime) OR ev != "foobar") -- YQ-5747
                   AND (Unwrap(COALESCE(str1, Just(ev), str2)) IS DISTINCT FROM "DONE"
                     OR ToBytes(COALESCE(CAST(str1 AS Utf8), CAST(ev AS Utf8))) IS NOT DISTINCT FROM "DONE")
                 ;

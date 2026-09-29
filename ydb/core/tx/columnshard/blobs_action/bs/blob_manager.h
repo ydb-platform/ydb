@@ -17,10 +17,6 @@
 
 #include <map>
 
-namespace NKikimrConfig {
-class TColumnShardConfig;
-}
-
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGCTask;
 }
@@ -146,7 +142,7 @@ private:
     class TGCContext;
     const TTabletId SelfTabletId;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
-    const NKikimrConfig::TColumnShardConfig* ColumnShardConfig = nullptr;
+    const bool WeightedDataChannelSelection = false;
     NUtil::TChannelsShares ChannelsShares;
     // Data channel ids (tablet channels with index >= 2), filled once in the constructor.
     TVector<ui8> DataChannels;
@@ -185,12 +181,11 @@ private:
     [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 
 public:
-    TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId,
-        const NKikimrConfig::TColumnShardConfig* columnShardConfig = nullptr);
+    TBlobManager(
+        TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId, bool weightedDataChannelSelection = false);
 
-    // Raw ApproximateFreeSpaceShare from TEvPutResult. 0 means unknown. Recorded even while weighted
-    // selection is off, so turning the flag on does not start from an empty map.
-    void NoteApproximateFreeSpace(ui32 channel, float share);
+    // Raw ApproximateFreeSpaceShare from TEvPutResult. 0 means unknown.
+    void UpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare);
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
@@ -263,7 +258,6 @@ private:
         return CollectGenStepInFlight ? *CollectGenStepInFlight : std::max(GCBarrierPreparation, LastCollectedGenStep);
     }
 
-    bool WeightedDataChannelSelection() const;
     ui32 PickDataChannel() const;
 };
 

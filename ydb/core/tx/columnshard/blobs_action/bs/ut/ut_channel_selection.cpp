@@ -1,6 +1,5 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 
 #include <library/cpp/random_provider/random_provider.h>
@@ -71,9 +70,7 @@ ui32 ChannelOfNextBatch(NKikimr::NOlap::TBlobManager& manager) {
 
 Y_UNIT_TEST_SUITE(TBlobManagerDataChannel) {
     Y_UNIT_TEST(RoundRobinWhenFlagOff) {
-        NKikimrConfig::TColumnShardConfig config;
-        config.SetEnableWeightedDataChannelSelection(false);
-        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, &config);
+        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, false);
 
         // CurrentStep starts at 0 and is incremented before the pick: (step % 3) + 2.
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 3u);
@@ -82,8 +79,8 @@ Y_UNIT_TEST_SUITE(TBlobManagerDataChannel) {
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 3u);
     }
 
-    Y_UNIT_TEST(NullConfigKeepsRoundRobin) {
-        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, nullptr);
+    Y_UNIT_TEST(DefaultFlagKeepsRoundRobin) {
+        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 });
 
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 3u);
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 4u);
@@ -91,9 +88,7 @@ Y_UNIT_TEST_SUITE(TBlobManagerDataChannel) {
     }
 
     Y_UNIT_TEST(WeightedStaysOnDataChannels) {
-        NKikimrConfig::TColumnShardConfig config;
-        config.SetEnableWeightedDataChannelSelection(true);
-        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, &config);
+        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, true);
 
         {
             TRandomGuard guard(0);
@@ -110,12 +105,10 @@ Y_UNIT_TEST_SUITE(TBlobManagerDataChannel) {
     }
 
     Y_UNIT_TEST(WeightedPrefersFreerChannel) {
-        NKikimrConfig::TColumnShardConfig config;
-        config.SetEnableWeightedDataChannelSelection(true);
-        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, &config);
-        manager.NoteApproximateFreeSpace(2, 0.01f);
-        manager.NoteApproximateFreeSpace(3, 0.01f);
-        manager.NoteApproximateFreeSpace(4, 1.0f);
+        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, true);
+        manager.UpdateChannelApproximateFreeSpace(2, 0.01f);
+        manager.UpdateChannelApproximateFreeSpace(3, 0.01f);
+        manager.UpdateChannelApproximateFreeSpace(4, 1.0f);
 
         TRandomGuard guard(HalfReal1Rand());
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 4u);
@@ -123,29 +116,22 @@ Y_UNIT_TEST_SUITE(TBlobManagerDataChannel) {
     }
 
     Y_UNIT_TEST(SingleDataChannelIgnoresRandom) {
-        NKikimrConfig::TColumnShardConfig config;
-        config.SetEnableWeightedDataChannelSelection(true);
-        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(3), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, &config);
+        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(3), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, true);
 
         TRandomGuard guard(HalfReal1Rand());
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 2u);
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 2u);
     }
 
-    Y_UNIT_TEST(SharesRecordedWhileFlagOffApplyWhenEnabled) {
-        NKikimrConfig::TColumnShardConfig config;
-        config.SetEnableWeightedDataChannelSelection(false);
-        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, &config);
+    Y_UNIT_TEST(RecordedSharesDoNotChangeRoundRobin) {
+        NKikimr::NOlap::TBlobManager manager(MakeTabletInfo(5), /*gen*/ 1, NKikimr::NOlap::TTabletId{ 1 }, false);
 
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 3u);
-        manager.NoteApproximateFreeSpace(2, 1.0f);
-        manager.NoteApproximateFreeSpace(3, 0.01f);
-        manager.NoteApproximateFreeSpace(4, 0.01f);
-        // Flag still off: the next step is 2, so round-robin stays on channel 4.
+        manager.UpdateChannelApproximateFreeSpace(2, 1.0f);
+        manager.UpdateChannelApproximateFreeSpace(3, 0.01f);
+        manager.UpdateChannelApproximateFreeSpace(4, 0.01f);
+        // Flag was off at construction. The next step is 2, so round-robin stays on channel 4.
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 4u);
-
-        config.SetEnableWeightedDataChannelSelection(true);
-        TRandomGuard guard(HalfReal1Rand());
         UNIT_ASSERT_VALUES_EQUAL(ChannelOfNextBatch(manager), 2u);
     }
 }

@@ -15,14 +15,12 @@ private:
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
-    virtual void DoOnBlobWriteResult(
-        const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status, float approximateFreeSpaceShare) override {
+    virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) override {
         BlobBatch.OnBlobWriteResult(blobId.GetLogoBlobId(), status);
-        Manager->NoteApproximateFreeSpace(blobId.Channel(), approximateFreeSpaceShare);
     }
 
-    virtual void DoNoteApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) override {
-        Manager->NoteApproximateFreeSpace(blobId.Channel(), approximateFreeSpaceShare);
+    virtual void DoUpdateChannelApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) override {
+        Manager->UpdateChannelApproximateFreeSpace(blobId.Channel(), approximateFreeSpaceShare);
     }
 
     virtual void DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& /*dbBlobs*/) override {

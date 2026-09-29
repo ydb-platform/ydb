@@ -21,8 +21,7 @@ private:
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
 
-    virtual void DoOnBlobWriteResult(
-        const TUnifiedBlobId& /*blobId*/, const NKikimrProto::EReplyStatus status, float /*approximateFreeSpaceShare*/) override {
+    virtual void DoOnBlobWriteResult(const TUnifiedBlobId& /*blobId*/, const NKikimrProto::EReplyStatus status) override {
         Y_ABORT_UNLESS(status == NKikimrProto::EReplyStatus::OK);
     }
 

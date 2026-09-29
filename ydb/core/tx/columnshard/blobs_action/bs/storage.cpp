@@ -46,10 +46,9 @@ std::shared_ptr<IBlobsGCAction> TOperator::DoCreateGCAction(const std::shared_pt
 }
 
 TOperator::TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
-    const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
-    const NKikimrConfig::TColumnShardConfig* columnShardConfig)
+    const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs, bool weightedDataChannelSelection)
     : TBase(storageId, sharedBlobs)
-    , Manager(std::make_shared<TBlobManager>(tabletInfo, generation, sharedBlobs->GetSelfTabletId(), columnShardConfig))
+    , Manager(std::make_shared<TBlobManager>(tabletInfo, generation, sharedBlobs->GetSelfTabletId(), weightedDataChannelSelection))
     , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
     , TabletActorId(tabletActorId)
 {

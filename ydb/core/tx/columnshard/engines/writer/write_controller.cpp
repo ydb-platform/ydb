@@ -4,20 +4,20 @@
 
 namespace NKikimr::NColumnShard {
 
-void IWriteController::NoteApproximateFreeSpace(const TEvBlobStorage::TEvPutResult& result) {
+void IWriteController::UpdateChannelApproximateFreeSpace(const TEvBlobStorage::TEvPutResult& result) {
     NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
     auto it = WaitingActions.find(result.StorageId ? result.StorageId : NOlap::IStoragesManager::DefaultStorageId);
     if (it == WaitingActions.end()) {
         return;
     }
-    it->second->NoteApproximateFreeSpace(blobId, result.ApproximateFreeSpaceShare);
+    it->second->UpdateChannelApproximateFreeSpace(blobId, result.ApproximateFreeSpaceShare);
 }
 
 void IWriteController::OnBlobWriteResult(const TEvBlobStorage::TEvPutResult& result) {
     NOlap::TUnifiedBlobId blobId(result.GroupId, result.Id);
     auto it = WaitingActions.find(result.StorageId ? result.StorageId : NOlap::IStoragesManager::DefaultStorageId);
     AFL_VERIFY(it != WaitingActions.end());
-    it->second->OnBlobWriteResult(blobId, result.Status, result.ApproximateFreeSpaceShare);
+    it->second->OnBlobWriteResult(blobId, result.Status);
     if (it->second->IsReady()) {
         WaitingActions.erase(it);
     }

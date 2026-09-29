@@ -106,7 +106,7 @@ namespace NKikimr::NOlap {
 std::shared_ptr<NKikimr::NOlap::IBlobsStorageOperator> TTestStoragesManager::DoBuildOperator(const TString& storageId) {
     if (storageId == TBase::DefaultStorageId) {
         return std::make_shared<NOlap::NBlobOperations::NBlobStorage::TOperator>(storageId, NActors::TActorId(), TabletInfo, GetGeneration(),
-            SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId), nullptr);
+            SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));
     } else if (storageId == TBase::LocalMetadataStorageId) {
         return std::make_shared<NOlap::NBlobOperations::NLocal::TOperator>(
             storageId, SharedBlobsManager->GetStorageManagerGuarantee(TBase::DefaultStorageId));

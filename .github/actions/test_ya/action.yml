@@ -118,19 +118,17 @@ runs:
         WORKFLOW_NAME: ${{ github.workflow }}
         BUILD_PRESET: ${{ inputs.build_preset }}
         EVENT_NAME: ${{ github.event_name }}
+        GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
       run: |
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
-        resolved=$(GITHUB_TOKEN="${{ github.token }}" python3 .github/scripts/analytics/resolve_github_job_id.py || true)
-        job_id="${resolved%%$'\t'*}"
-        job_title="${resolved#*$'\t'}"
-        if [ -z "$job_id" ] || [ "$job_id" = "$resolved" ]; then
-          echo "failed to resolve GITHUB_NUMERIC_JOB_ID for runner ${RUNNER_NAME}; metrics will be dropped" >&2
+        echo "CI_JOB_TITLE=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
+          echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
         else
-          echo "GITHUB_NUMERIC_JOB_ID=$job_id" >> "$GITHUB_ENV"
+          echo "job.check_run_id is empty; analytics rows of this job will be dropped" >&2
         fi
-        echo "CI_JOB_TITLE=${job_title:-$ANALYTICS_JOB_NAME}" >> "$GITHUB_ENV"
 
     - name: Init
       id: init
@@ -405,14 +403,6 @@ runs:
             $YA_MAKE_TARGET
         fi
 
-        if [ -z "${CI_CACHE_MODE:-}" ]; then
-          if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-            CI_CACHE_MODE=dist_cache
-          else
-            CI_CACHE_MODE=none
-          fi
-        fi
-        echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
         export CI_YA_ATTEMPT=1
         analytics start prepare_ya_make
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"

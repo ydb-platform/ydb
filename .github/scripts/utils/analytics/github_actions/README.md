@@ -16,13 +16,11 @@ GitHub API, сколько шли job и step.
 
 Чтобы на дашборде связать вашу фазу с job, в строке должны быть два числа.
 
-**Номер job в GitHub** (колонка `github_job_id`, например `456`). GitHub сам
-его в env не кладёт — только строковое имя в `$GITHUB_JOB` (`build`). Число
-нужно, чтобы потом сджойнить фазу с строкой job, которую выгрузка пишет как
-`span_id = job-456`. В `test_ya` его находит
-[`resolve_github_job_id.py`](../../analytics/resolve_github_job_id.py) и кладёт
-в `$GITHUB_NUMERIC_JOB_ID`. В своём workflow выставьте то же сами или
-вызовите этот скрипт.
+**Номер job в GitHub** (колонка `github_job_id`, например `456`). Это
+`${{ job.check_run_id }}` — GitHub отдаёт его в самом job. Нужен, чтобы
+сджойнить фазу со строкой job, которую выгрузка пишет как `span_id = job-456`.
+В `test_ya` это число копируется в `$GITHUB_NUMERIC_JOB_ID`. В своём workflow
+выставьте то же: `GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}`.
 
 **Номер попытки workflow** (колонка `run_attempt`). GitHub кладёт его сам в
 `$GITHUB_RUN_ATTEMPT`: `1` с первого раза, `2` после Re-run. Нужен, чтобы
@@ -40,7 +38,7 @@ JSONL не кладите в каталог, который `test_ya` выкла
 export ANALYTICS_FILE="$TMP_DIR/analytics.jsonl"
 PY=.github/scripts/utils/analytics/github_actions/ci_metrics.py
 
-python3 "$PY" start compile --source my_workflow --label cache_mode=dist_cache
+python3 "$PY" start compile --source my_workflow --label ya_attempt=1
 # … работа …
 compile
 RC=$?
@@ -103,7 +101,6 @@ WHERE run_id = 123 AND name = "compile";
 | `run_url` | репозиторий + `run_id` | `https://github.com/…/actions/runs/123` |
 | `span_id` | collector | id этой строки (случайный hex) |
 | `labels.parent_span_id` | обёртка | `job-456` (у самой строки job не ставится) |
-| `labels.cache_mode` | `--label` / `$CI_CACHE_MODE` | `dist_cache` |
 
 Первичный ключ:
 `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`.
@@ -126,8 +123,8 @@ analytics end my_new_phase --rc "$RC"
 глотает его ошибку (`|| true`), чтобы сломанная аналитика не валила сборку.
 
 В labels сами допишутся, если переменные заданы: номер попытки `ya make`
-(`$CI_YA_ATTEMPT`), цель сборки (`$CI_BUILD_TARGET`), режим кэша
-(`$CI_CACHE_MODE`). Их не нужно передавать в каждую команду.
+(`$CI_YA_ATTEMPT`) и цель сборки (`$CI_BUILD_TARGET`). Их не нужно
+передавать в каждую команду.
 
 `$CI_BUILD_SPAN` — имя строки, которая измеряет **сам вызов** `./ya make`
 (от запуска команды до её exit code). По умолчанию это `ya_make_try_1`,
@@ -169,7 +166,7 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 
 | `name` | Что измеряет |
 | --- | --- |
-| `init` | шаг Init: каталоги, креды, S3, `GITHUB_NUMERIC_JOB_ID` |
+| `init` | шаг Init: каталоги, креды, S3 |
 | `clean_ya_cache` | чистка локального кэша `ya` |
 | `setup_cache` | подключение dist-кэша / bazel-remote |
 | `graph_compare` | сравнение графа сборки с базовым коммитом |

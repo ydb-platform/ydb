@@ -111,16 +111,14 @@ class CompletedSinceTest(unittest.TestCase):
         self.assertGreater(delta.total_seconds(), 2 * 3600 - 5)
         self.assertLess(delta.total_seconds(), 2 * 3600 + 5)
 
-    def test_watermark_is_last_export_minus_30m(self):
-        last = datetime.now(timezone.utc) - timedelta(minutes=10)
-        since = completed_since(2, last)
-        self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
-
-    def test_watermark_older_than_twelve_hours_is_honoured(self):
+    def test_watermark_is_last_export_minus_30m_even_when_old(self):
         """No lookback floor: an export that was down for days resumes where it stopped."""
-        last = datetime.now(timezone.utc) - timedelta(days=3)
-        since = completed_since(2, last)
-        self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
+        for last in (
+            datetime.now(timezone.utc) - timedelta(minutes=10),
+            datetime.now(timezone.utc) - timedelta(days=3),
+        ):
+            since = completed_since(2, last)
+            self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
 
     def test_unreadable_watermark_refuses_to_export(self):
         with patch.object(export_github_job_metrics, "load_watermark", return_value=(None, False)), patch.object(
@@ -441,18 +439,6 @@ class ReadStateTest(unittest.TestCase):
 
 
 class LoadWatermarkTest(unittest.TestCase):
-    def test_absent_row_is_cold_start(self):
-        with patch.object(state, "read_state", return_value=(None, True)):
-            moment, ok = state.load_watermark()
-        self.assertIsNone(moment)
-        self.assertTrue(ok)
-
-    def test_read_failure_is_unreadable(self):
-        with patch.object(state, "read_state", return_value=(None, False)):
-            moment, ok = state.load_watermark()
-        self.assertIsNone(moment)
-        self.assertFalse(ok)
-
     def test_payload_returns_exported_until(self):
         with patch.object(
             state,

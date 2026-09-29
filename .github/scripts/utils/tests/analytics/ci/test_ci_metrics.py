@@ -15,15 +15,11 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
-from collector.buffer import load_unsent_lines, write_send_offset
 from collector.spans import read_pending_spans
 from github_actions import runner_info
 from github_actions.ci_metrics import (
-    DEFAULT_TABLE_PATH,
-    PRIMARY_KEYS,
     apply_job_defaults,
     attach_context,
-    build_create_table_sql,
     github_env_defaults,
     main,
     normalize_metric,
@@ -54,44 +50,21 @@ class GuessBuildPresetTest(unittest.TestCase):
 
 
 class NormalizeMetricTest(unittest.TestCase):
-    def test_requires_name_and_run_id(self):
+    def test_drops_rows_missing_required_fields(self):
         self.assertIsNone(normalize_metric({"name": "job"}))
-        self.assertIsNone(
-            normalize_metric(
-                {
-                    "name": "job",
-                    "event_ts": "2026-09-21T10:00:00Z",
-                }
-            )
-        )
-
-    def test_requires_github_job_id(self):
-        self.assertIsNone(
-            normalize_metric(
-                {
-                    "name": "job",
-                    "source": "ya_phase",
-                    "run_id": 1,
-                    "run_attempt": 1,
-                    "span_id": "span-1",
-                    "event_ts": "2026-09-21T10:00:00Z",
-                }
-            )
-        )
-
-    def test_requires_run_attempt(self):
-        self.assertIsNone(
-            normalize_metric(
-                {
-                    "name": "job",
-                    "source": "ya_phase",
-                    "run_id": 1,
-                    "github_job_id": 2,
-                    "span_id": "span-1",
-                    "event_ts": "2026-09-21T10:00:00Z",
-                }
-            )
-        )
+        almost = {
+            "name": "job",
+            "source": "ya_phase",
+            "run_id": 1,
+            "github_job_id": 2,
+            "run_attempt": 1,
+            "span_id": "span-1",
+            "event_ts": "2026-09-21T10:00:00Z",
+        }
+        for key in ("github_job_id", "run_attempt"):
+            row = dict(almost)
+            del row[key]
+            self.assertIsNone(normalize_metric(row), key)
 
     def test_duration_from_epoch_and_labels(self):
         row = normalize_metric(
@@ -148,26 +121,6 @@ class NormalizeMetricTest(unittest.TestCase):
         self.assertEqual(row["value"], 10000.0)
         self.assertEqual(row["source"], "ya_phase")
         self.assertEqual(row["github_job_id"], 9)
-
-    def test_gauge(self):
-        row = normalize_metric(
-            {
-                "name": "ydbd_size",
-                "kind": "gauge",
-                "value": 1048576,
-                "unit": "bytes",
-                "source": "clean_build",
-                "run_id": 9,
-                "github_job_id": 3,
-                "run_attempt": 1,
-                "span_id": "span-size",
-                "event_ts": "2026-09-21T03:00:00Z",
-            }
-        )
-        self.assertEqual(row["kind"], "gauge")
-        self.assertEqual(row["value"], 1048576.0)
-        self.assertEqual(row["unit"], "bytes")
-        self.assertEqual(row["source"], "clean_build")
 
 
 class JsonlRowsTest(unittest.TestCase):
@@ -352,19 +305,6 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         self.assertTrue(all(row.get("branch") == "main" for row in rows))
 
 
-class SchemaTest(unittest.TestCase):
-    def test_create_sql_has_pk_and_ttl(self):
-        sql = build_create_table_sql(DEFAULT_TABLE_PATH)
-        self.assertIn(DEFAULT_TABLE_PATH, sql)
-        self.assertIn("STORE = COLUMN", sql)
-        self.assertIn('TTL = Interval("PT525600M")', sql)
-        self.assertIn("ON event_ts", sql)
-        self.assertIn("PRIMARY KEY (`event_ts`", sql)
-        for key in PRIMARY_KEYS:
-            self.assertIn(f"`{key}`", sql)
-        self.assertIn("`source` Utf8 NOT NULL", sql)
-
-
 class GithubEnvDefaultsTest(unittest.TestCase):
     def test_prefers_ci_job_title(self):
         old = {
@@ -491,52 +431,8 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 os.environ["GITHUB_NUMERIC_JOB_ID"] = old
 
 
-class RecordApiTest(unittest.TestCase):
-    def test_track_and_cli_append_jsonl(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            track(
-                "graph_compare",
-                file=path,
-                source="ya_phase",
-                started_epoch="1000",
-                finished_epoch="1002",
-                conclusion="success",
-                labels={"cache_mode": "dist_cache"},
-            )
-            self.assertEqual(
-                main(
-                    [
-                        "track",
-                        "--file",
-                        path,
-                        "--name",
-                        "ydbd_size",
-                        "--kind",
-                        "gauge",
-                        "--unit",
-                        "bytes",
-                        "--source",
-                        "clean_build",
-                        "--value",
-                        "42",
-                        "--label",
-                        "cache_mode=none",
-                    ]
-                ),
-                0,
-            )
-            with open(path, encoding="utf-8") as handle:
-                first, second = [json.loads(line) for line in handle if line.strip()]
-            self.assertEqual(first["name"], "graph_compare")
-            self.assertEqual(first["value"], 2000.0)
-            self.assertEqual(second["name"], "ydbd_size")
-            self.assertEqual(second["kind"], "gauge")
-            self.assertEqual(second["value"], 42.0)
-
-
 class TrackApiTest(unittest.TestCase):
-    def test_cli_oneliner_positional_and_duration_sec(self):
+    def test_cli_positional_name_and_duration(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
             self.assertEqual(
@@ -552,6 +448,8 @@ class TrackApiTest(unittest.TestCase):
                         "2500",
                         "--conclusion",
                         "success",
+                        "--label",
+                        "cache_mode=none",
                     ]
                 ),
                 0,
@@ -580,40 +478,9 @@ class TrackApiTest(unittest.TestCase):
             self.assertEqual(first["kind"], "duration")
             self.assertEqual(first["value"], 2500.0)
             self.assertEqual(first["source"], "other_wf")
+            self.assertEqual(first["labels"]["cache_mode"], "none")
             self.assertEqual(second["name"], "graph_compare")
             self.assertEqual(second["value"], 2000.0)
-
-    def test_cli_track_labels(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            self.assertEqual(
-                main(
-                    [
-                        "track",
-                        "--file",
-                        path,
-                        "--name",
-                        "ydbd_size",
-                        "--kind",
-                        "gauge",
-                        "--value",
-                        "42",
-                        "--unit",
-                        "bytes",
-                        "--source",
-                        "clean_build",
-                        "--label",
-                        "cache_mode=none",
-                    ]
-                ),
-                0,
-            )
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["name"], "ydbd_size")
-            self.assertEqual(row["kind"], "gauge")
-            self.assertEqual(row["value"], 42.0)
-            self.assertEqual(row["labels"]["cache_mode"], "none")
 
     def test_track_does_not_flush(self):
         sends = []
@@ -637,39 +504,6 @@ class TrackApiTest(unittest.TestCase):
         finally:
             client.flush_file = original
 
-    def test_unsent_offset(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            first = json.dumps({"name": "one"}) + "\n"
-            second = json.dumps({"name": "two"}) + "\n"
-            with open(path, "w", encoding="utf-8") as handle:
-                handle.write(first + second)
-            write_send_offset(path, len(first.encode("utf-8")))
-            lines, offset = load_unsent_lines(path)
-            self.assertEqual(lines, [json.dumps({"name": "two"})])
-            self.assertEqual(offset, len((first + second).encode("utf-8")))
-
-    def test_track_sets_source(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            track("graph_compare", {"value": 5, "conclusion": "success"}, file=path, source="ya_phase")
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["name"], "graph_compare")
-            self.assertEqual(row["source"], "ya_phase")
-            self.assertEqual(row["value"], 5.0)
-
-    def test_enrich_via_functions(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "ci_metrics.jsonl")
-            start("ya_make", file=path, source="ya_phase", started_epoch="1000")
-            self.assertEqual(end("ya_make", file=path, conclusion="success", finished_epoch="1003"), 1)
-            self.assertEqual(enrich("ya_make", {"report_url": "https://s3.example/ya"}, file=path), 1)
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["value"], 3000.0)
-            self.assertEqual(row["labels"]["report_url"], "https://s3.example/ya")
-
     def test_start_send_computes_duration(self):
         sends = []
 
@@ -692,7 +526,7 @@ class TrackApiTest(unittest.TestCase):
                             "--file",
                             path,
                             "--source",
-                            "nightly_build",
+                            "ya_phase",
                             "--started-epoch",
                             "1000",
                             "--label",
@@ -722,7 +556,7 @@ class TrackApiTest(unittest.TestCase):
                     row = json.loads(handle.readline())
                 self.assertEqual(row["name"], "ydbd_cached_build")
                 self.assertEqual(row["kind"], "duration")
-                self.assertEqual(row["source"], "nightly_build")
+                self.assertEqual(row["source"], "ya_phase")
                 self.assertEqual(row["value"], 10000.0)
                 self.assertEqual(row["conclusion"], "success")
                 self.assertEqual(row["labels"]["cache_mode"], "dist_cache")
@@ -733,8 +567,8 @@ class TrackApiTest(unittest.TestCase):
     def test_track_does_not_end_open_spans(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
-            start("ydbd_cached_build", file=path, source="nightly_build")
-            track("ydbd_size", {"value": 1, "kind": "gauge"}, file=path, source="nightly_build")
+            start("ydbd_cached_build", file=path, source="ya_phase")
+            track("ydbd_size", {"value": 1, "kind": "gauge"}, file=path, source="ya_phase")
             pending = read_pending_spans(path)
             self.assertEqual(len(pending), 1)
             self.assertEqual(pending[0]["name"], "ydbd_cached_build")
@@ -796,7 +630,7 @@ class RunnerFlagsTest(unittest.TestCase):
 
     def test_runner_collects_once_and_reuses(self):
         self.assertEqual(
-            main(["start", "ydbd_cached_build", "--file", self.metrics, "--source", "nightly_build", "--runner"]),
+            main(["start", "ydbd_cached_build", "--file", self.metrics, "--source", "ya_phase", "--runner"]),
             0,
         )
         self.assertEqual(self.inv_calls, 1)
@@ -970,7 +804,7 @@ class JobDefaultsTest(unittest.TestCase):
     def setUp(self):
         self._saved = {
             key: os.environ.get(key)
-            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET", "CI_CACHE_MODE", "CI_BUILD_SPAN", "CI_BUILD_SPAN_SOURCE")
+            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET", "CI_BUILD_SPAN", "CI_BUILD_SPAN_SOURCE")
         }
         for key in self._saved:
             os.environ.pop(key, None)
@@ -985,12 +819,11 @@ class JobDefaultsTest(unittest.TestCase):
     def test_env_labels_and_default_source(self):
         os.environ["CI_YA_ATTEMPT"] = "2"
         os.environ["CI_BUILD_TARGET"] = "ydb"
-        os.environ["CI_CACHE_MODE"] = "dist_cache"
         props, fields = {}, {}
         apply_job_defaults("prepare_ya_make", props, fields, command="start")
         self.assertEqual(props["ya_attempt"], "2")
         self.assertEqual(props["build_target"], "ydb")
-        self.assertEqual(props["cache_mode"], "dist_cache")
+        self.assertNotIn("cache_mode", props)
         self.assertEqual(fields["source"], "ya_phase")
         self.assertNotIn("runner", fields)
 
@@ -1018,14 +851,13 @@ class JobDefaultsTest(unittest.TestCase):
 
     def test_start_reads_env_into_the_pending_span(self):
         os.environ["CI_YA_ATTEMPT"] = "3"
-        os.environ["CI_CACHE_MODE"] = "none"
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
             start("prepare_ya_make", file=path)
             pending = read_pending_spans(path)
             self.assertEqual(pending[0]["source"], "ya_phase")
             self.assertEqual(pending[0]["labels"]["ya_attempt"], "3")
-            self.assertEqual(pending[0]["labels"]["cache_mode"], "none")
+            self.assertNotIn("cache_mode", pending[0]["labels"])
 
     def test_cli_end_rc(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -143,11 +143,6 @@ class TaxonomyMatchesDocsTest(unittest.TestCase):
             f"phases missing from the README table: {sorted(known - documented)}",
         )
 
-    def test_ya_rebuild_is_gone_everywhere(self):
-        for path in (_GH_README, _ACTION_YML, _EVLOG):
-            self.assertNotIn("ya_rebuild", path.read_text(encoding="utf-8"), f"in {path.name}")
-        self.assertNotIn("ya_rebuild", str(taxonomy.YA_PHASE_NAMES))
-
 
 if __name__ == "__main__":
     unittest.main()

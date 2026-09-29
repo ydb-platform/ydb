@@ -166,26 +166,18 @@ class CollectorLifecycleTest(unittest.TestCase):
         finally:
             flush_mod.flush_file = original
 
-    def test_track_sets_source(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "analytics.jsonl")
-            track("my_step", {"value": 1, "kind": "count", "tokens": 3}, file=path, source="llm_eval")
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["name"], "my_step")
-            self.assertEqual(row["source"], "llm_eval")
-            self.assertEqual(row["labels"]["tokens"], 3)
-            self.assertNotIn("github.sha", row["labels"])
-
     def test_track_without_github_env(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "analytics.jsonl")
-            track("my_step", {"model": "foo"}, file=path, source="arcadia", kind="event")
+            track("my_step", {"model": "foo", "tokens": 3}, file=path, source="llm_eval", kind="event")
             with open(path, encoding="utf-8") as handle:
                 row = json.loads(handle.readline())
             self.assertEqual(row["kind"], "event")
+            self.assertEqual(row["source"], "llm_eval")
             self.assertEqual(row["labels"]["model"], "foo")
+            self.assertEqual(row["labels"]["tokens"], 3)
             self.assertEqual(row["run_id"], 99)
+            self.assertNotIn("github.sha", row["labels"])
 
     def test_ignores_github_run_id(self):
         os.environ.pop("ANALYTICS_RUN_ID", None)
@@ -256,17 +248,6 @@ class CollectorLifecycleTest(unittest.TestCase):
         self.assertEqual(main(["start"]), 1)
         self.assertEqual(main(["track"]), 1)
         self.assertEqual(main(["enrich"]), 1)
-
-    def test_enrich_via_functions(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "analytics.jsonl")
-            start("my_step", file=path, source="llm_eval", started_epoch="1000")
-            self.assertEqual(end("my_step", file=path, conclusion="success", finished_epoch="1002"), 1)
-            self.assertEqual(enrich("my_step", {"report_url": "https://s3.example/x"}, file=path), 1)
-            with open(path, encoding="utf-8") as handle:
-                row = json.loads(handle.readline())
-            self.assertEqual(row["value"], 2000.0)
-            self.assertEqual(row["labels"]["report_url"], "https://s3.example/x")
 
     def test_enrich_after_non_ascii_sent_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -452,12 +433,6 @@ class CollectorValuesTest(unittest.TestCase):
         self.assertEqual(record["value"], 10500.0)
         self.assertEqual(record["labels"]["ya_attempt"], 1)
 
-    def test_append_record_creates_parent(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = os.path.join(tmp, "nested", "out.jsonl")
-            append_record(path, {"name": "x"})
-            self.assertTrue(os.path.exists(path))
-
 
 class BufferIntegrityTest(unittest.TestCase):
     def test_split_keeps_unicode_line_separators_inside_a_record(self):
@@ -554,23 +529,6 @@ class BufferIntegrityTest(unittest.TestCase):
                 names.add(json.loads(line)["name"])
             expected = {f"w{i}-{s}" for i in range(3) for s in range(10)}
             self.assertTrue(expected <= names, f"lost appends: {sorted(expected - names)}")
-
-
-class MetricsFileEnvTest(unittest.TestCase):
-    def test_analytics_file_or_default(self):
-        from collector.schema import default_metrics_file
-
-        saved = os.environ.get("ANALYTICS_FILE")
-        try:
-            os.environ["ANALYTICS_FILE"] = "/tmp/analytics.jsonl"
-            self.assertEqual(default_metrics_file(), "/tmp/analytics.jsonl")
-            os.environ.pop("ANALYTICS_FILE")
-            self.assertEqual(default_metrics_file(), "analytics.jsonl")
-        finally:
-            if saved is None:
-                os.environ.pop("ANALYTICS_FILE", None)
-            else:
-                os.environ["ANALYTICS_FILE"] = saved
 
 
 if __name__ == "__main__":

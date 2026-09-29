@@ -630,6 +630,15 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         this->Send(Scanner, new TEvExportScan::TEvFeed());
     }
 
+    TString GetObjectKeyForListing() const {
+        if constexpr (std::is_same_v<TSettings, NKikimrSchemeOp::TS3Settings>) {
+            // The S3 SDK normalizes slashes in object paths, but not in query parameters.
+            return NBackup::NormalizeItemPath(CurrentObjectKey);
+        } else {
+            return CurrentObjectKey;
+        }
+    }
+
     void Handle(TEvExternalStorage::TEvCompleteMultipartUploadResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
@@ -647,7 +656,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
             CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
             auto request = Aws::S3::Model::ListObjectsRequest()
-                .WithPrefix(CurrentObjectKey)
+                .WithPrefix(GetObjectKeyForListing())
                 .WithMaxKeys(1);
             this->Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
             return this->Become(&TThis::StateCheckUploadedData);
@@ -672,9 +681,10 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
             {"result", result});
 
         if (result.IsSuccess()) {
+            const auto expectedKey = GetObjectKeyForListing();
             for (const auto& object : result.GetResult().GetContents()) {
                 const auto& key = object.GetKey();
-                if (TStringBuf(key.data(), key.size()) == CurrentObjectKey) {
+                if (TStringBuf(key.data(), key.size()) == expectedKey) {
                     return PassAway();
                 }
             }

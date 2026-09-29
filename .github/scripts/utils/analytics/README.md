@@ -35,12 +35,14 @@ flowchart LR
 
 1. **Внутри job.** Шаги пишут JSONL и заливают закрытые строки. Так измеряются
    фазы `ya make` — того, чего нет в GitHub API.
-2. **После run.** Отдельный job раз в 30 минут выгружает длительности job и
-   step. Watermark / open / failed держит в `analytics/ci_metrics_state`.
+2. **После run.** Отдельный job раз в 30 минут спрашивает у GitHub, сколько
+   шли job и step, и пишет те же колонки. Где выгрузка остановилась в прошлый
+   раз — в `analytics/ci_metrics_state` (это не измерения, туда не смотрит
+   дашборд).
 
-Фазу джойнят с job по одному ключу: у фазы
-`labels.parent_span_id = job-{github_job_id}`, у строки job то же значение в
-`span_id`.
+Чтобы на дашборде связать фазу с job: у фазы в `labels` лежит
+`parent_span_id = job-456`, у строки этого job в колонке `span_id` то же
+`job-456`.
 
 `collector/` про GitHub не знает. `github_actions/` добавляет колонки Actions и
 выгрузку.
@@ -51,7 +53,8 @@ flowchart LR
 python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
 ```
 
-Идемпотентно. В `collect_analytics_fast.yml` вызывается перед выгрузкой.
+Повторный запуск ничего не ломает: `CREATE TABLE IF NOT EXISTS`. В
+`collect_analytics_fast.yml` вызывается перед выгрузкой.
 
 ## Тесты
 

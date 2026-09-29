@@ -1,13 +1,14 @@
 # collector
 
-JSONL-буфер и заливка в YDB. Про GitHub, `ya` и CI ничего не знает: в другой
+Пишет события в YDB: сначала в локальный JSONL, потом `flush` заливает
+закрытые строки в таблицу. Про GitHub, `ya` и CI ничего не знает — в другой
 проект копируется эта папка.
 
 ## Как подключить
 
 1. Скопируйте `collector/` и положите на `PYTHONPATH` каталог, в котором она лежит.
-2. Рядом должен импортироваться `ydb_wrapper` (см. ниже) и стоять SDK `ydb`.
-3. Задайте `ANALYTICS_FILE` (локальный JSONL) и `ANALYTICS_RUN_ID` — номер
+2. Рядом нужен модуль `ydb_wrapper` (см. ниже) и пакет `ydb`.
+3. Задайте `ANALYTICS_FILE` — локальный JSONL. И `ANALYTICS_RUN_ID` — номер
    этого запуска, чтобы потом выбрать все его события (`WHERE run_id = …`).
    Любое целое: id пайплайна, timestamp, счётчик. В GitHub Actions обёртка
    подставляет `GITHUB_RUN_ID` сама.
@@ -39,10 +40,9 @@ flush_file()
 
 ## Что окажется в таблице
 
-Таблица по умолчанию — `analytics/events`. `start compile` запоминает время,
-`end compile` считает длительность, `flush` пишет **одну строку**. Пока нет
-`end`, в таблицу ничего не едет. `track` — сразу готовое число, без пары
-start/end.
+Пишет в `analytics/events`. `start compile` запоминает время, `end compile`
+считает длительность, `flush` пишет **одну строку**. Пока нет `end`, в таблицу
+ничего не едет. `track` — сразу готовое число, без пары start/end.
 
 | Колонка | В примере | Кто заполняет |
 | --- | --- | --- |
@@ -83,7 +83,7 @@ WHERE run_id = 42 AND name = "compile";
 | `flush` | залить только закрытые строки |
 | `send` | закрыть незакрытые `start` и залить всё |
 
-`flush` и `send` идемпотентны: повторно уже залитое не едет.
+`flush` и `send` можно вызывать сколько угодно раз: уже залитое повторно не едет.
 
 Флаги: `--kind duration\|gauge\|count\|event\|info`, `--value`, `--unit`,
 `--duration-ms`, `--started-epoch`, `--finished-epoch`, `--conclusion`,
@@ -91,35 +91,40 @@ WHERE run_id = 42 AND name = "compile";
 
 ## Файлы рядом с буфером
 
+Рядом с `$ANALYTICS_FILE` collector держит служебные файлы:
+
 | Файл | Зачем |
 | --- | --- |
 | `$ANALYTICS_FILE` | буфер, по строке на событие |
 | `.offset` | сколько байт уже залито |
 | `.pending` | незакрытые `start`; поэтому `flush` их не заливает |
 | `.skipped` | отвергнутые строки + `reason` |
-| `.lock` | flock на `enrich` / append |
+| `.lock` | чтобы `enrich` и запись в файл не пересеклись |
 
-Незакрытый хвост файла (обрыв записи) offset не перешагивает; следующий append
-его завершает, чтобы не склеиться с новой строкой.
+Если файл оборвался посередине строки, `flush` эту строку не заливает.
+Следующая запись допишет перевод строки, чтобы новая не приклеилась к обрывку.
 
 ## Заливка в YDB
 
-Креды — `ANALYTICS_YDB_CREDENTIALS` (путь к ключу). В этом репозитории ещё
-читается `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`.
+Пишет в таблицу `analytics/events`. Строки живут год, потом удаляются.
+Первый `flush` создаёт таблицу сам, если её ещё нет.
 
-Без кредов или без SDK `flush` печатает warning и выходит 0: процесс зелёный,
-данных нет.
+Ключ сервисного аккаунта — `ANALYTICS_YDB_CREDENTIALS` (путь к json). В этом
+репозитории ещё подходит `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`.
 
-Таблица: PK `(event_ts, date, run_id, source, name, kind, span_id)`, TTL 1 год
-на `event_ts`. `flush` создаёт её сам (`ensure_table=True`). Обёртка может
-выключить это и создать таблицу отдельно.
+Нет ключа или нет пакета `ydb` — `flush` пишет warning и выходит 0. Сборка
+зелёная, в базу ничего не попало.
 
-Путь по умолчанию `analytics/events`. Логический ключ для
-`ydb_wrapper.get_table_path` — `analytics_events`.
+В этом репозитории путь таблицы задаётся в
+[`.github/config/ydb_qa_config.json`](../../../../config/ydb_qa_config.json):
+`"analytics_events": "analytics/events"`. Это тот же словарь, из которого
+другие QA-скрипты берут `ci_metrics` → `analytics/ci_metrics`. В другом
+проекте конфига нет — collector просто пишет в `analytics/events`.
 
-`YDBWrapper` сначала ищется обычным `import`, затем (только в этом репозитории)
-по `../../../analytics/ydb_wrapper.py` относительно `collector/`. Класс должен
-уметь:
+Рядом должен быть модуль `ydb_wrapper` с классом `YDBWrapper`. В этом
+репозитории файл уже есть: `.github/scripts/analytics/ydb_wrapper.py`.
+Collector сначала делает обычный `import ydb_wrapper`, если не нашёл —
+подхватывает этот файл. Класс должен уметь:
 
 ```python
 class YDBWrapper:
@@ -131,7 +136,8 @@ class YDBWrapper:
     def bulk_upsert_batches(self, table_path, rows, column_types, batch_size=1000) -> None: ...
 ```
 
-Больше от него ничего не нужно.
+`get_table_path("analytics_events")` должен вернуть путь таблицы. Нет такого
+имени в конфиге — collector возьмёт `analytics/events`.
 
 ## Тесты
 

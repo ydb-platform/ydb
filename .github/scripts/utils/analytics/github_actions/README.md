@@ -1,11 +1,12 @@
 # github_actions
 
 Обёртка над [`collector/`](../collector/README.md) для GitHub Actions: колонки
-workflow / job / PR / commit, инвентарь раннера, выгрузка длительностей job и
-step из GitHub API.
+workflow / job / PR / commit, cpu/ram/disk раннера, выгрузка длительностей
+job и step из GitHub API.
 
-Таблица — `analytics/ci_metrics`. Служебное состояние выгрузки —
-`analytics/ci_metrics_state` (не смешивать с измерениями).
+Измерения — таблица `analytics/ci_metrics`. Где выгрузка остановилась в
+прошлый раз — отдельная таблица `analytics/ci_metrics_state`, туда дашборд
+не смотрит.
 
 ## Добавить измерение
 
@@ -30,16 +31,16 @@ python3 "$PY" flush
 
 `--source` — кто пишет (ваш workflow или `ya_phase`). `--name` (`compile`) — что
 измерено. Новые значения сначала внесите в [`taxonomy.py`](taxonomy.py) и в
-таблицы ниже, иначе drift-тест не пройдёт.
+таблицы ниже: тест сверит README с кодом.
 
 Дополнительно к collector:
 
-- `--runner` — кэш cpu/ram/disk хоста, ключи `runner.inventory.*`
-- `--usage` — свежий замер, ключи `runner.usage.*`
+- `--runner` — один раз снять cpu/ram/disk машины, положить в labels
+- `--usage` — то же, но свежий замер в конце
 - `--report <ya report.json>` на `enrich` — `labels.tests` (`passed`, `failed`,
   `errors`, `skipped`, `muted`, `not_launched`, `other`, `total`)
-- `--rc N` — conclusion по коду возврата
-- `--ya-attempt N` или `$CI_YA_ATTEMPT` — `labels.ya_attempt`
+- `--rc N` — `success`, если 0, иначе `failure`
+- `--ya-attempt N` или `$CI_YA_ATTEMPT` — номер попытки `ya make` в labels
 
 ### Что окажется в `analytics/ci_metrics`
 
@@ -74,9 +75,10 @@ WHERE run_id = 123 AND name = "compile";
 | `labels.parent_span_id` | обёртка | `job-456` (у самой строки job не ставится) |
 | `labels.cache_mode` | `--label` / `$CI_CACHE_MODE` | `dist_cache` |
 
-PK `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`,
-TTL 1 год. У выгрузки `span_id` фиксированный: `job-{id}`, `queue-{id}`,
-`step-{id}-{N}` — по нему фазу джойнят с job.
+Первичный ключ:
+`(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`.
+Строки живут год. У выгрузки из GitHub API `span_id` не случайный, а
+`job-{id}`, `queue-{id}`, `step-{id}-{N}` — по нему фазу джойнят с job.
 
 ### Новая фаза в `test_ya`
 
@@ -91,7 +93,8 @@ ci end my_new_phase --rc "$RC"
 ```
 
 `$CI_YA_ATTEMPT`, `$CI_BUILD_TARGET`, `$CI_CACHE_MODE` подмешаются сами. Если
-`name == $CI_BUILD_SPAN`, на start добавится `--runner`, на end — `--usage`.
+имя совпало с `$CI_BUILD_SPAN` (обычно фаза сборки), на start снимок железа,
+на end — загрузка.
 
 В `test_ya` bash только обёртка и trap (Python не видит `set -e`):
 
@@ -138,7 +141,7 @@ trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
 ## Выгрузка job и step
 
 Отдельный job в `collect_analytics_fast.yml`, не на раннере сборки. Таблицы
-создаёт `provision_tables.py` (не hot path записи).
+создаёт `provision_tables.py` до выгрузки.
 
 ```bash
 export GITHUB_TOKEN=...
@@ -148,20 +151,23 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
 
 - По умолчанию все активные workflow; `--workflow` / `CI_METRICS_WORKFLOW`
   сужает список.
-- Окно `created`: холодный старт — `--hours`, дальше от `export_watermark`
-  минус 30 минут, без пола.
-- Идущие run пишутся в `open_runs` и дочитываются по сохранённой попытке.
+- Первый запуск смотрит `--hours` часов назад. Дальше продолжает с того
+  места, где остановился в прошлый раз (поле `export_watermark` в
+  `analytics/ci_metrics_state`), с запасом 30 минут.
+- Ещё не закончившиеся run запоминаются в `open_runs` и читаются снова в
+  следующий раз, той же попыткой.
 - Уже записанный `github_job_id` пропускается (re-run failed jobs не теряется).
-- Watermark двигается только если окно прочитано целиком. Rate limit или сбой
-  списка — ненулевой код, следующее окно то же.
+- Метка «досюда выгрузили» сдвигается только если всё окно прочитано без
+  ошибок. Rate limit или сбой списка — ненулевой код, следующее окно то же.
 
-`analytics/ci_metrics_state`: `export_watermark`, `open_runs`, `failed_runs`.
+В `analytics/ci_metrics_state` три поля: `export_watermark` (до какого
+момента выгрузили), `open_runs` (ещё идут), `failed_runs` (надо повторить).
 
 ## Миграция живой таблицы
 
 Разовый ремонт уже записанных строк: `migrate_ci_metrics.py`. Без `--apply`
-ничего не пишет. Команды — в docstring скрипта и в комментарии «Миграция» git
-history; живую таблицу этот PR не переписывает.
+ничего не пишет. Команды — в docstring скрипта. Живую таблицу этот PR не
+переписывает.
 
 ## Тесты
 

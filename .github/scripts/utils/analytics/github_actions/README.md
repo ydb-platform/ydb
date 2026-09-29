@@ -117,13 +117,13 @@ WHERE run_id = 123 AND name = "compile";
 3. В action:
 
 ```bash
-ci start my_new_phase
+analytics start my_new_phase
 # …
-ci end my_new_phase --rc "$RC"
+analytics end my_new_phase --rc "$RC"
 ```
 
-`ci` — короткая функция в `action.yml`: вызывает `ci_metrics.py` и глотает
-его ошибку (`|| true`), чтобы сломанная аналитика не валила сборку.
+`analytics` — короткая функция в `analytics.sh`: вызывает `ci_metrics.py` и
+глотает его ошибку (`|| true`), чтобы сломанная аналитика не валила сборку.
 
 В labels сами допишутся, если переменные заданы: номер попытки `ya make`
 (`$CI_YA_ATTEMPT`), цель сборки (`$CI_BUILD_TARGET`), режим кэша
@@ -138,10 +138,10 @@ ci end my_new_phase --rc "$RC"
 На `init` и `checkout` это не нужно.
 
 В шаге стоит `set -e`: любая упавшая команда сразу выходит из скрипта.
-Тогда `ci start` уже вызван, а до `ci end` дело не дойдёт — в таблице
-повиснет дыра без длительности и без `failure`. Python этого не видит:
-он не исполняет bash. Поэтому в начале шага два хука (`trap` — «когда
-случится X, выполни вот это»):
+Тогда `analytics start` уже вызван, а до `analytics end` дело не дойдёт —
+в таблице повиснет дыра без длительности и без `failure`. Python этого не
+видит: он не исполняет bash. Поэтому в начале шага два хука (`trap` —
+«когда случится X, выполни вот это»):
 
 - GitHub прислал TERM/INT (job отменили) — закрыть всё как `cancelled` и
   залить.
@@ -152,10 +152,9 @@ ci end my_new_phase --rc "$RC"
 там тоже `set -e`.
 
 ```bash
-CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
-ci() { python3 "$CI_METRICS_PY" "$@" || true; }
-trap 'trap - EXIT; ci send --conclusion cancelled' TERM INT
-trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
+. .github/scripts/utils/analytics/github_actions/analytics.sh
+trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
+trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 ```
 
 ## Что уже пишется

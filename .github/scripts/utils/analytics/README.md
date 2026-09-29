@@ -19,7 +19,7 @@
 ```mermaid
 flowchart LR
   subgraph inJob [Внутри job]
-    bash["test_ya: ci start / ci end"] --> cli["ci_metrics.py"]
+    bash["test_ya: analytics start / analytics end"] --> cli["ci_metrics.py"]
     evlog["ya_evlog_phases.py"] --> cli
     cli --> jsonl[("JSONL на диске раннера")]
     jsonl -->|"flush / send"| ydb

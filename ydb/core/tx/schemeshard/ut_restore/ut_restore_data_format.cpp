@@ -656,11 +656,15 @@ void DoImport(
     Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
     bool enableParquetFeatureFlag = true,
     TStringBuf expectedIssue = {},
-    bool enableDirectPartImport = false)
+    bool enableDirectPartImport = false,
+    TMaybe<ui64> readBufferSizeLimit = Nothing())
 {
     TTestEnv env(runtime, TTestEnvOptions());
     ApplyParquetFeatureFlag(runtime, format, enableParquetFeatureFlag);
     runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDirectPartImport);
+    if (readBufferSizeLimit) {
+        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(*readBufferSizeLimit);
+    }
 
     ui64 id = 100;
 
@@ -1008,6 +1012,54 @@ Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
             /*enableParquetFeatureFlag=*/true,
             "column 'value' has an invalid Json value in row 1 of row group 0",
             EnableDataShardDirectPartImport);
+    }
+
+    // A row group above the limit of the importer is a file of another origin:
+    // the exporter keeps its row groups far below it. The limit is a setting.
+    Y_UNIT_TEST(ShouldFailOnParquetRowGroupAboveTheLimit) {
+        // one row group of 96 KB
+        const TVector<TParquetUtf8Row> rows = {
+            {"a1", TString(24_KB, 'a')},
+            {"a2", TString(24_KB, 'b')},
+            {"a3", TString(24_KB, 'c')},
+            {"a4", TString(24_KB, 'd')},
+        };
+        const auto s3Data = MakeParquetS3Data(Utf8KeySchemePb(), {BuildParquetUtf8Data(rows)});
+
+        {
+            TTestBasicRuntime runtime;
+            DoImport(
+                runtime,
+                s3Data,
+                ERestoreDataFormat::Parquet,
+                Ydb::StatusIds::CANCELLED,
+                /*enableParquetFeatureFlag=*/true,
+                "the limit is 81920 bytes (RestoreReadBufferSizeLimit)",
+                /*enableDirectPartImport=*/false,
+                // above the 64 KB of the file the footer is looked for in
+                /*readBufferSizeLimit=*/80_KB);
+        }
+
+        {
+            TTestBasicRuntime runtime;
+            DoImport(
+                runtime,
+                s3Data,
+                ERestoreDataFormat::Parquet,
+                Ydb::StatusIds::SUCCESS,
+                /*enableParquetFeatureFlag=*/true,
+                /*expectedIssue=*/{},
+                /*enableDirectPartImport=*/false,
+                /*readBufferSizeLimit=*/1_MB);
+
+            auto content = ReadTable(
+                runtime,
+                TTestTxConfig::FakeHiveTablets,
+                "Table",
+                {"key"},
+                {"key", "value"});
+            NKqp::CompareYson(GenerateCsvUtf8Rows(rows).YsonStr, content);
+        }
     }
 
     Y_UNIT_TEST(ShouldFailWhenFeatureFlagDisabled) {

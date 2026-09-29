@@ -469,9 +469,15 @@ TString ValueBytes(const arrow::Array& array, i64 index) {
 
 // Written the way the exporter does it: default writer properties (Parquet
 // format 1.0) and the Arrow schema stored in the file.
-TString WriteParquetLikeExporter(const std::shared_ptr<arrow::Table>& table, i64 rowGroupSize) {
+TString WriteParquetLikeExporter(
+    const std::shared_ptr<arrow::Table>& table,
+    i64 rowGroupSize,
+    parquet::Compression::type compression = parquet::Compression::UNCOMPRESSED)
+{
     auto sink = arrow::io::BufferOutputStream::Create(0).ValueOrDie();
 
+    parquet::WriterProperties::Builder propertiesBuilder;
+    propertiesBuilder.compression(compression);
     auto arrowPropertiesBuilder = parquet::ArrowWriterProperties::Builder();
     arrowPropertiesBuilder.store_schema();
     const auto writeStatus = parquet::arrow::WriteTable(
@@ -479,7 +485,7 @@ TString WriteParquetLikeExporter(const std::shared_ptr<arrow::Table>& table, i64
         arrow::default_memory_pool(),
         sink,
         rowGroupSize,
-        parquet::WriterProperties::Builder().build(),
+        propertiesBuilder.build(),
         arrowPropertiesBuilder.build());
     UNIT_ASSERT_C(writeStatus.ok(), writeStatus.ToString());
 
@@ -505,7 +511,11 @@ TString ValueTypeName(const NKikimrSchemeOp::TTableDescription& scheme) {
 }
 
 // The data file of the table above: keys k0, k1, ... and the given values.
-TString BuildKeyValueParquet(const std::shared_ptr<arrow::Array>& values, i64 rowGroupSize) {
+TString BuildKeyValueParquet(
+    const std::shared_ptr<arrow::Array>& values,
+    i64 rowGroupSize,
+    parquet::Compression::type compression = parquet::Compression::UNCOMPRESSED)
+{
     TVector<TString> keys;
     for (i64 i = 0; i < values->length(); ++i) {
         keys.push_back(TStringBuilder() << "k" << i);
@@ -516,7 +526,7 @@ TString BuildKeyValueParquet(const std::shared_ptr<arrow::Array>& values, i64 ro
         arrow::field("value", values->type()),
     });
     return WriteParquetLikeExporter(
-        arrow::Table::Make(schema, {MakeStringArray(keys), values}), rowGroupSize);
+        arrow::Table::Make(schema, {MakeStringArray(keys), values}), rowGroupSize, compression);
 }
 
 // A column type with restrictions on its values that the Arrow type of the
@@ -604,12 +614,23 @@ TVector<TValueCase> MakeValueCases() {
 
 struct TImportOutcome {
     TVector<std::pair<TString, TMaybe<TString>>> Rows; // the key and the value cell of every row
+    ui64 RequestedBytes = 0; // the bytes of the file the engine has asked for
     TMaybe<TString> Error;
 };
 
 // Imports a data file of a table with one key and one value column.
-TImportOutcome ImportKeyValueParquet(const TEngineFixture& fixture, const TString& source) {
-    auto engine = fixture.MakeEngine(EDataFormat::Parquet, source, /*readBatchSize=*/8_KB);
+TImportOutcome ImportKeyValueParquet(
+    const TEngineFixture& fixture,
+    const TString& source,
+    ui64 bufferSizeLimit = 1_MB)
+{
+    auto engine = fixture.MakeEngine(
+        EDataFormat::Parquet,
+        source,
+        /*readBatchSize=*/8_KB,
+        /*validateChecksum=*/false,
+        ECompressionCodec::None,
+        bufferSizeLimit);
 
     TMemoryPool pool(256);
     TImportOutcome outcome;
@@ -633,9 +654,14 @@ TImportOutcome ImportKeyValueParquet(const TEngineFixture& fixture, const TStrin
 
         switch (data->Status) {
         case IImportS3Engine::EDataStatus::NeedInput: {
-            const auto range = ExtractValue(engine->NextRange());
-            UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
-            if (auto result = engine->PutRange(range.Range, Slice(source, range.Range)); !result) {
+            const auto range = engine->NextRange();
+            if (!range) {
+                outcome.Error = range.error();
+                return outcome;
+            }
+            UNIT_ASSERT(range->Status == IImportS3Engine::ENextRangeStatus::Ready);
+            outcome.RequestedBytes += range->Range.Length;
+            if (auto result = engine->PutRange(range->Range, Slice(source, range->Range)); !result) {
                 outcome.Error = result.error();
                 return outcome;
             }
@@ -664,15 +690,15 @@ struct TBatchedImport {
 // Imports a data file the way the downloader does: every batch the engine
 // reports as ready is one upload.
 TBatchedImport ImportInBatches(const TEngineFixture& fixture, const TString& source, ui32 readBatchSize) {
-    // The buffer limit is set to hold any row group of the tests: they are
-    // about the rows decoded from a row group, not about its bytes.
+    // The buffer limit is set to hold any row group of the tests, decoded:
+    // they are about how a row group is read, not about its size.
     auto engine = fixture.MakeEngine(
         EDataFormat::Parquet,
         source,
         readBatchSize,
         /*validateChecksum=*/false,
         ECompressionCodec::None,
-        /*bufferSizeLimit=*/16_MB);
+        /*bufferSizeLimit=*/128_MB);
 
     auto* arrowPool = arrow::default_memory_pool();
     const i64 arrowBytesBefore = arrowPool->bytes_allocated();
@@ -1885,40 +1911,89 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         const TString source = BuildSmallParquet(/*rowGroupSize=*/4, /*valueSize=*/96_KB);
         UNIT_ASSERT_GT(source.size(), BufferSizeLimit);
 
-        TEngineFixture fixture;
-        auto engine = fixture.MakeEngine(
-            EDataFormat::Parquet,
-            source,
-            /*readBatchSize=*/8_KB,
-            /*validateChecksum=*/false,
-            ECompressionCodec::None,
-            BufferSizeLimit);
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source, BufferSizeLimit);
 
-        TMemoryPool pool(256);
-        TVector<TDecodedRow> rows;
-        const auto addRow = CaptureRows(rows);
-        const auto unexpectedChecksum = [](TStringBuf) {
-            UNIT_FAIL("checksum callback was called with validation disabled");
-        };
+        UNIT_ASSERT_C(outcome.Error, "a row group above the buffer limit was imported");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet row group 0 takes ");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
+            " bytes in the file, the limit is 196608 bytes (RestoreReadBufferSizeLimit)");
+        UNIT_ASSERT(outcome.Rows.empty());
+        // The footer is enough to reject it: the row group itself is not downloaded.
+        UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
+    }
 
-        for (ui32 step = 0; step < 256; ++step) {
-            const auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
-            UNIT_ASSERT(data.Status == IImportS3Engine::EDataStatus::NeedInput);
+    Y_UNIT_TEST(ParquetRejectsARowGroupAboveTheLimit) {
+        // The exporter keeps its row groups far below the limit of the importer,
+        // so a bigger one is a file of another origin. It is rejected with an
+        // error that names it, in any of the forms a row group has.
+        static constexpr ui64 Limit = 128_KB;
+        const TString limitText = ", the limit is 131072 bytes (RestoreReadBufferSizeLimit)";
+        const TString narrow = "narrow";
+        const TEngineFixture fixture;
 
-            auto rangeResult = engine->NextRange();
-            if (!rangeResult) {
-                UNIT_ASSERT_C(rangeResult.error().Contains("reached buffer size limit"), rangeResult.error());
-                UNIT_ASSERT_C(rangeResult.error().Contains("rowGroup=0"), rangeResult.error());
-                UNIT_ASSERT(rows.empty());
-                return;
-            }
+        // In the file. Two rows a row group: the first one is within the limit,
+        // the second one holds 200 KB.
+        {
+            const auto outcome = ImportKeyValueParquet(
+                fixture,
+                BuildKeyValueParquet(
+                    MakeStringArray({narrow, narrow, TString(100_KB, 'a'), TString(100_KB, 'b')}),
+                    /*rowGroupSize=*/2),
+                Limit);
 
-            const auto range = std::move(*rangeResult);
-            UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
-            AssertSuccess(engine->PutRange(range.Range, Slice(source, range.Range)));
+            UNIT_ASSERT_C(outcome.Error, "a row group above the limit in the file was imported");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet row group 1 takes ");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, " bytes in the file" + limitText);
+            // by the footer: no row group is downloaded, the first one included
+            UNIT_ASSERT(outcome.Rows.empty());
+            UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
         }
 
-        UNIT_FAIL("oversized Parquet row group did not reach the buffer limit");
+        // Uncompressed. The same rows, compressed: they take little in the file.
+        {
+            const TString source = BuildKeyValueParquet(
+                MakeStringArray({narrow, narrow, TString(100_KB, 'a'), TString(100_KB, 'b')}),
+                /*rowGroupSize=*/2,
+                parquet::Compression::ZSTD);
+            UNIT_ASSERT_LT(source.size(), Limit);
+
+            const auto outcome = ImportKeyValueParquet(fixture, source, Limit);
+
+            UNIT_ASSERT_C(outcome.Error, "a row group above the limit when uncompressed was imported");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet row group 1 takes ");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, " bytes when uncompressed" + limitText);
+            UNIT_ASSERT(outcome.Rows.empty());
+        }
+
+        // Decoded. A value that repeats is in the file once, as an entry of a
+        // dictionary, so the footer says nothing about the rows it decodes to.
+        {
+            const TString value(64_KB, 'a');
+            const TString source = BuildKeyValueParquet(
+                MakeStringArray({narrow, narrow, value, value, value, value}), /*rowGroupSize=*/4);
+
+            const auto outcome = ImportKeyValueParquet(fixture, source, Limit);
+
+            UNIT_ASSERT_C(outcome.Error, "a row group above the limit when decoded was imported");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet row group 0 takes at least ");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, " bytes when decoded" + limitText);
+            // It is found while its rows are read, before the last of them.
+            UNIT_ASSERT_LT(outcome.Rows.size(), 6);
+        }
+
+        // A row group below the limit in all the forms is imported.
+        {
+            const auto outcome = ImportKeyValueParquet(
+                fixture,
+                BuildKeyValueParquet(
+                    MakeStringArray({narrow, narrow, TString(50_KB, 'a'), TString(50_KB, 'b')}),
+                    /*rowGroupSize=*/2),
+                Limit);
+
+            UNIT_ASSERT_C(!outcome.Error, outcome.Error.GetOrElse(""));
+            UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), 4);
+        }
     }
 
     Y_UNIT_TEST(ParquetPreservesCachedFooterAcrossRangeRetry) {

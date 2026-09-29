@@ -393,6 +393,27 @@ public:
         return {};
     }
 
+    TVector<TRowGroupInfo> GetRowGroups() const override {
+        TVector<TRowGroupInfo> rowGroups;
+        if (!Session || !Session->FileReader) {
+            return rowGroups;
+        }
+
+        const auto metadata = Session->FileReader->parquet_reader()->metadata();
+        rowGroups.reserve(metadata->num_row_groups());
+        for (int i = 0; i < metadata->num_row_groups(); ++i) {
+            const auto rowGroup = metadata->RowGroup(i);
+
+            TRowGroupInfo info;
+            for (const int column : Session->ColumnIndices) {
+                info.UncompressedBytes += static_cast<ui64>(
+                    Max<int64_t>(rowGroup->ColumnChunk(column)->total_uncompressed_size(), 0));
+            }
+            rowGroups.push_back(info);
+        }
+        return rowGroups;
+    }
+
     std::expected<void, TString> OpenRowGroup(ui32 rowGroupIndex) override {
         if (!Session || !Session->FileReader) {
             return std::unexpected(TString("Parquet metadata is not open"));

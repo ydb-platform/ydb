@@ -926,6 +926,10 @@ public:
             // reported with the batch that completes it.
             UncheckpointedDataBytes += parsedBatch.DataBytes;
             UncheckpointedRows += parsedBatch.Rows;
+            if (UncheckpointedDataBytes >= BufferSizeLimit) {
+                return SetDataError(RowGroupIsTooBig(CurrentRowGroup,
+                    TStringBuilder() << "at least " << UncheckpointedDataBytes << " bytes when decoded"));
+            }
 
             TDataBatch batch;
             batch.Id = NextBatchId++;
@@ -1229,6 +1233,11 @@ private:
         }
         RowGroupRanges = std::move(*ranges);
 
+        if (auto result = CheckRowGroupSizes(); !result) {
+            Parser->ResetFile();
+            return result;
+        }
+
         CurrentRowGroup = 0;
         RowGroupParserOpen = false;
 
@@ -1255,6 +1264,46 @@ private:
         }
 
         return PlanCurrentRowGroup();
+    }
+
+    // A row group is handled as a whole piece: its bytes are held in the buffer
+    // while its rows are decoded. The exporter keeps its row groups far below
+    // the limit of the buffer, so a bigger one is a file of another origin. It
+    // is rejected, in any of the three forms it has:
+    //  - in the file and uncompressed, by the footer, before any of its bytes
+    //    are downloaded;
+    //  - decoded, while its rows are read, since no file tells that size.
+    // The error is final: a retry would meet the same file.
+    TString RowGroupIsTooBig(ui32 rowGroup, const TString& size) const {
+        return TStringBuilder() << "Parquet row group " << rowGroup << " takes " << size
+            << ", the limit is " << BufferSizeLimit << " bytes (RestoreReadBufferSizeLimit)";
+    }
+
+    std::expected<void, TString> CheckRowGroupSizes() const {
+        const auto rowGroups = Parser->GetRowGroups();
+        if (rowGroups.size() != RowGroupRanges.size()) {
+            return std::unexpected(TStringBuilder() << "Parquet footer has " << rowGroups.size()
+                << " row groups, but " << RowGroupRanges.size() << " are planned");
+        }
+
+        for (ui32 rowGroup = 0; rowGroup < RowGroupRanges.size(); ++rowGroup) {
+            ui64 fileBytes = 0;
+            for (const auto& range : RowGroupRanges[rowGroup]) {
+                fileBytes = SumWithSaturation(fileBytes, range.Length);
+            }
+            if (fileBytes >= BufferSizeLimit) {
+                return std::unexpected(RowGroupIsTooBig(rowGroup,
+                    TStringBuilder() << fileBytes << " bytes in the file"));
+            }
+
+            const ui64 uncompressedBytes = rowGroups[rowGroup].UncompressedBytes;
+            if (uncompressedBytes >= BufferSizeLimit) {
+                return std::unexpected(RowGroupIsTooBig(rowGroup,
+                    TStringBuilder() << uncompressedBytes << " bytes when uncompressed"));
+            }
+        }
+
+        return {};
     }
 
     std::expected<void, TString> PlanCurrentRowGroup() {

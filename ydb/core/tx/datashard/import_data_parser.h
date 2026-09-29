@@ -61,6 +61,14 @@ public:
         bool HasMore = false;
     };
 
+    struct TRowGroupInfo {
+        // The bytes of the pages of the table's columns when they are
+        // uncompressed, as the footer of the file states them. The rows
+        // decoded from the pages can take more: a page of a dictionary holds a
+        // value once, however many rows have it.
+        ui64 UncompressedBytes = 0;
+    };
+
     virtual bool HasOpenFile() const = 0;
 
     virtual std::expected<void, TString> OpenFile(TStringBuf data) = 0;
@@ -72,6 +80,9 @@ public:
     // populated with one row group's bytes at a time later.
     virtual std::expected<void, TString> OpenMetadata(
         std::shared_ptr<arrow::io::RandomAccessFile> source) = 0;
+
+    // The row groups of the file whose metadata is open.
+    virtual TVector<TRowGroupInfo> GetRowGroups() const = 0;
 
     virtual std::expected<void, TString> OpenRowGroup(ui32 rowGroupIndex) = 0;
 

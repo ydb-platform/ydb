@@ -229,7 +229,7 @@ A **vector index** is a specialized type of [secondary index](#secondary-index) 
 
 #### Full-text index {#fulltext-index}
 
-A **full-text index** is an additional data structure used to speed up text search in a table column (by words and phrases, and, when using N-grams, also by substrings).
+A **full-text index** is an additional data structure used to speed up text search in a table column (by words and combinations of words, and, when using N-grams, also by substrings).
 
 The capabilities of full-text search and index parameters are described in the articles [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 

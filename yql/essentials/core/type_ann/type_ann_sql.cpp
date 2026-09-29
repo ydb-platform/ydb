@@ -2103,7 +2103,7 @@ bool GatherExtraSortColumns(
 
         scanLambda(*oneSort->Child(1));
         for (const auto& s : sublinks) {
-            auto c = ExtractExternalColumns(s->Tail());
+            auto c = ExtractExternalColumns(*s->Child(4));
             for (const auto&[name, index] : c) {
                 YQL_ENSURE(index < inputsCount);
                 columns[index].insert("_yql_extra_" + name);
@@ -5127,8 +5127,13 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
     const TStringBuf sqlSelect = isYql ? "YqlSelect" : "PgSelect";
     const TStringBuf sqlSetItem = isYql ? "YqlSetItem" : "PgSetItem";
 
-    Y_UNUSED(output);
-    if (!EnsureArgsCount(*input, 5, ctx.Expr)) {
+    if (!EnsureMinMaxArgsCount(*input, 5, 6, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!isYql && input->ChildrenSize() == 6) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(5)->Pos()),
+            "Settings are allowed only for YqlSubLink"));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -5147,6 +5152,15 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
             TStringBuilder() << "Unknown link type: " << linkType));
         return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isYql) {
+        bool isUniversal;
+        if (const auto status = ValidateYqlSubLinkSettings(input, ctx, isUniversal);
+            status != IGraphTransformer::TStatus::Ok || isUniversal)
+        {
+            return status;
+        }
     }
 
     bool hasType = false;
@@ -5264,6 +5278,7 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Ok;
     }
 
+    const TTypeAnnotationNode* collectionItemType = nullptr;
     const TTypeAnnotationNode* valueType = nullptr;
     if (linkType != "exists") {
         if (input->Child(4)->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
@@ -5278,7 +5293,8 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
             return IGraphTransformer::TStatus::Error;
         }
 
-        valueType = itemType->GetItems()[0]->GetItemType();
+        collectionItemType = itemType->GetItems()[0]->GetItemType();
+        valueType = collectionItemType;
         if (!valueType->IsOptionalOrNull()) {
             valueType = ctx.Expr.MakeType<TOptionalExprType>(valueType);
         }
@@ -5327,6 +5343,17 @@ IGraphTransformer::TStatus SqlSubLinkWrapper(const TExprNode::TPtr& input, TExpr
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                     TStringBuilder() << "Expected pg bool, but got " << NPg::LookupType(testExprType).Name));
                 return IGraphTransformer::TStatus::Error;
+            }
+
+            if (isYql && input->ChildrenSize() == 6) {
+                const auto lookupType = lambda->Tail().Head().GetTypeAnn();
+                YQL_ENSURE(lookupType);
+                if (const auto status = ValidateYqlSublinkInCollectionItemsNullable(
+                        input, output, ctx, lookupType, collectionItemType);
+                    status != IGraphTransformer::TStatus::Ok)
+                {
+                    return status;
+                }
             }
         }
     } else {

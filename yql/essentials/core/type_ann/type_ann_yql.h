@@ -73,6 +73,18 @@ IGraphTransformer::TStatus YqlColumnOrTypeWrapper(
 IGraphTransformer::TStatus FinalizeYqlColumnRefs(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 
+IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
+    const TExprNode::TPtr& input,
+    TContext& ctx,
+    bool& isUniversal);
+
+IGraphTransformer::TStatus ValidateYqlSublinkInCollectionItemsNullable(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TContext& ctx,
+    const TTypeAnnotationNode* lookupType,
+    const TTypeAnnotationNode* collectionItemType);
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 

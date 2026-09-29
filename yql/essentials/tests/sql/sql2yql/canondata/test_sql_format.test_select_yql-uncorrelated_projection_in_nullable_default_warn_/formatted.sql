@@ -1,0 +1,15 @@
+$x = (
+    SELECT
+        *
+    FROM (
+        VALUES
+            (NULL),
+            (1)
+    ) AS x (
+        a
+    )
+);
+
+SELECT
+    (2 IN $x)
+; -- false: Bool, also warning

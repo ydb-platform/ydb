@@ -743,6 +743,92 @@ IGraphTransformer::TStatus FinalizeYqlColumnRefs(
         settings);
 }
 
+IGraphTransformer::TStatus ValidateYqlSubLinkSettings(
+    const TExprNode::TPtr& input,
+    TContext& ctx,
+    bool& isUniversal)
+{
+    YQL_ENSURE(input->IsCallable("YqlSubLink"));
+    isUniversal = false;
+    if (input->ChildrenSize() != 6) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    const auto settings = input->Child(5);
+    if (settings->GetTypeAnn() && settings->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+        input->SetTypeAnn(settings->GetTypeAnn());
+        isUniversal = true;
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!settings->GetTypeAnn() && settings->IsLambda()) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Pos()), "Expected settings, but got lambda"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (input->Head().Content() != "any") {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Pos()),
+            "Settings are allowed only for link type 'any'"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const auto validator = [](TStringBuf name, TExprNode& setting, TExprContext& ctx) -> bool {
+        if (setting.ChildrenSize() != 1) {
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                TStringBuilder() << "No extra parameters are expected by setting '" << name << "'"));
+            return false;
+        }
+        return true;
+    };
+
+    if (!EnsureValidSettings(*settings, {"ansiIn", "warnNoAnsiIn"}, validator, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (HasSetting(*settings, "ansiIn") && HasSetting(*settings, "warnNoAnsiIn")) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(settings->Pos()),
+            "Settings 'ansiIn' and 'warnNoAnsiIn' are mutually exclusive"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus ValidateYqlSublinkInCollectionItemsNullable(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TContext& ctx,
+    const TTypeAnnotationNode* lookupType,
+    const TTypeAnnotationNode* collectionItemType)
+{
+    YQL_ENSURE(input->IsCallable("YqlSubLink"));
+    if (input->ChildrenSize() != 6) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    const auto settings = input->Child(5);
+    if (!HasSetting(*settings, "warnNoAnsiIn")) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    if (!lookupType->HasOptionalOrNull() &&
+        !IsSqlInCollectionItemsNullable(lookupType, collectionItemType))
+    {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    auto issue = TIssue(ctx.Expr.GetPosition(input->Pos()),
+        "IN may produce unexpected result when used with nullable arguments. "
+        "Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'");
+    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_LEGACY_IN_FOR_EMPTY_OR_NULLABLE, issue);
+    if (!ctx.Expr.AddWarning(issue)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    output = ctx.Expr.ChangeChild(*input, 5, RemoveSetting(*settings, "warnNoAnsiIn", ctx.Expr));
+    return IGraphTransformer::TStatus::Repeat;
+}
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx)
 {

@@ -1295,9 +1295,9 @@
     ],
     "test.test[select_yql-ansi_alias_shadowing-default.txt-Debug]": [
         {
-            "checksum": "73cfdc7663bd341314279200468cfcc2",
-            "size": 1927,
-            "uri": "https://{canondata_backend}/1903885/8f81b060ce05601b75075548daa0509a92f60deb/resource.tar.gz#test.test_select_yql-ansi_alias_shadowing-default.txt-Debug_/opt.yql"
+            "checksum": "600251bad059b80f67c1c075fa61f9f7",
+            "size": 1944,
+            "uri": "https://{canondata_backend}/1871102/c7eefbbdf32ab2965ab661c6383995fc8baafc19/resource.tar.gz#test.test_select_yql-ansi_alias_shadowing-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-ansi_alias_shadowing-default.txt-Results]": [
@@ -1392,6 +1392,23 @@
             "checksum": "f9a40ce704e450668912cbb5f4baeef9",
             "size": 887,
             "uri": "https://{canondata_backend}/1847551/c9103bf55cc11afa84471242d8aeba02b20d6dea/resource.tar.gz#test.test_select_yql-uncorrelated_asterisk_subquery_scalar_with_join-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-uncorrelated_projection_in_nullable_default_warn-default.txt-Debug]": [
+        {
+            "checksum": "78e0ab2787c7150174492a26d9190e07",
+            "size": 372,
+            "uri": "https://{canondata_backend}/1942100/bba9439ac90550975832a0a5fdf525610bd1fac0/resource.tar.gz#test.test_select_yql-uncorrelated_projection_in_nullable_default_warn-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-uncorrelated_projection_in_nullable_default_warn-default.txt-Results]": [
+        {
+            "checksum": "4e0454ff3e398b0998ff20c20092ef8e",
+            "size": 698,
+            "uri": "https://{canondata_backend}/1942100/bba9439ac90550975832a0a5fdf525610bd1fac0/resource.tar.gz#test.test_select_yql-uncorrelated_projection_in_nullable_default_warn-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_select_yql-uncorrelated_projection_in_nullable_default_warn-default.txt-Results_/extracted"
         }
     ],
     "test.test[select_yql-window_pg_tutorial_6-default.txt-Debug]": [

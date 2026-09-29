@@ -1144,7 +1144,7 @@ public:
             return false;
         }
 
-        Node_ = ToSubLink(Source_, Variant_);
+        Node_ = BuildSubLink(Source_, Variant_, ctx);
         return true;
     }
 
@@ -1177,13 +1177,13 @@ private:
         return in.Expression->Init(ctx, src);
     }
 
-    TNodePtr ToSubLink(TNodePtr source, const TVariant& variant) {
+    TNodePtr BuildSubLink(TNodePtr source, const TVariant& variant, TContext& ctx) {
         source = Y("lambda", Q(Y()), std::move(source));
         return std::visit(
             TOverloaded{
                 [&](const TScalar& x) { return ToSubLink(std::move(source), x); },
                 [&](const TExists& x) { return ToSubLink(std::move(source), x); },
-                [&](const TIn& x) { return ToSubLink(std::move(source), x); },
+                [&](const TIn& x) { return ToSubLink(std::move(source), x, ctx); },
             }, variant);
     }
 
@@ -1195,9 +1195,15 @@ private:
         return Y("YqlSubLink", Q("exists"), Y("Void"), Y("Void"), Y("Void"), std::move(lambda));
     }
 
-    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in) {
+    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in, const TContext& ctx) {
         TNodePtr compare = Y("lambda", Q(Y("value")), Y("==", in.Expression, "value"));
-        return Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+        TNodePtr link = Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+        if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined()) {
+            link = L(std::move(link), Q(Y(Q(Y(Q("warnNoAnsiIn"))))));
+        } else if (*ctx.AnsiInForEmptyOrNullableItemsCollections) {
+            link = L(std::move(link), Q(Y(Q(Y(Q("ansiIn"))))));
+        }
+        return link;
     }
 
     static TNodePtr Unbox(TNodePtr node) {

@@ -297,14 +297,14 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
         if (it != subLinks.end()) {
             auto linkType = node->Head().Content();
             auto testLambda = node->ChildPtr(3);
-            auto extColumns = NTypeAnnImpl::ExtractExternalColumns(node->Tail());
+            auto extColumns = NTypeAnnImpl::ExtractExternalColumns(*node->Child(4));
 
             const auto subLinkId = it->second;
             const auto* originalNode = originalSubLinks.at(subLinkId);
 
             if (extColumns.empty()) {
                 auto select = ExpandSqlSelectSublink(
-                    node->TailPtr(), originalNode->TailPtr(),
+                    node->ChildPtr(4), originalNode->ChildPtr(4),
                     ctx, optCtx, subLinkId,
                     cleanedInputs, inputAliases);
 
@@ -404,17 +404,24 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                         auto value = ctx.ReplaceNodes(testLambda->Tail().ChildPtr(0), {
                             {testLambda->Head().Child(0), originalArg},
                         });
+                        auto options = node->ChildrenSize() == 6
+                            ? node->ChildPtr(5)
+                            : ctx.NewList(node->Pos(), {});
+                        if (HasSetting(*options, "ansiIn")) {
+                            options = RemoveSetting(*options, "ansiIn", ctx);
+                            options = AddSetting(*options, node->Pos(), "ansi", nullptr, ctx);
+                        } else if (HasSetting(*options, "warnNoAnsiIn")) {
+                            options = RemoveSetting(*options, "warnNoAnsiIn", ctx);
+                            options = AddSetting(*options, node->Pos(), "warnNoAnsi", nullptr, ctx);
+                        }
+                        options = AddSetting(*options, node->Pos(), "tableSource", nullptr, ctx);
 
                         // clang-format off
                         return ctx.Builder(node->Pos())
                             .Callable("SqlIn")
                                 .Add(0, select)
                                 .Add(1, value)
-                                .List(2)
-                                    .List(0)
-                                        .Atom(0, "tableSource", TNodeFlags::Default)
-                                    .Seal()
-                                .Seal()
+                                .Add(2, options)
                             .Seal()
                             .Build();
                         // clang-format on
@@ -514,7 +521,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                 // clang-format on
 
                 auto select = ExpandSqlSelectSublink(
-                    node->TailPtr(), originalNode->TailPtr(),
+                    node->ChildPtr(4), originalNode->ChildPtr(4),
                     ctx, optCtx, subLinkId,
                     cleanedInputs, inputAliases);
 
@@ -1074,7 +1081,7 @@ void AddColumnsFromType(const TTypeAnnotationNode* type, TUsedColumns& columns) 
 
 void AddColumnsFromSublinks(const TNodeMap<ui32>& subLinks, TUsedColumns& columns) {
     for (const auto& s : subLinks) {
-        auto extColumns = NTypeAnnImpl::ExtractExternalColumns(s.first->Tail());
+        auto extColumns = NTypeAnnImpl::ExtractExternalColumns(*s.first->Child(4));
         for (const auto& c : extColumns) {
             columns.insert(std::make_pair(c.first, std::make_pair(Max<ui32>(), TString())));
         }

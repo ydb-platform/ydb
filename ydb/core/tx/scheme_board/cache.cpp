@@ -26,7 +26,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
-#include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <library/cpp/json/writer/json.h>
@@ -101,14 +100,9 @@ namespace {
 
     template <typename TEvRequest, typename TDerived>
     class TDbResolver: public TActorBootstrapped<TDerived> {
-        void Handle(TEvNavigateResult::TPtr& ev) {
+        void Handle() {
             Request->Rewrite(Request->GetTypeRewrite(), Cache);
             this->Send(Request.Release());
-            if (ev->Get()->Request->ErrorCount) {
-                Span.EndError("Cannot resolve database");
-            } else {
-                Span.EndOk();
-            }
             this->PassAway();
         }
 
@@ -121,8 +115,6 @@ namespace {
             : Cache(cache)
             , Request(request)
             , DomainOwnerId(domainOwnerId)
-            , Span(TComponentTracingLevels::TDistributedTransactions::Detailed,
-                NWilson::TTraceId(Request->TraceId), "SchemeCache.ResolveDatabase", NWilson::EFlags::AUTO_END)
         {
         }
 
@@ -137,13 +129,13 @@ namespace {
             request->ResultSet.emplace_back(std::move(entry));
             request->DomainOwnerId = DomainOwnerId;
 
-            this->Send(Cache, new TEvNavigate(request.Release()), 0, 0, Span.GetTraceId());
+            this->Send(Cache, new TEvNavigate(request.Release()));
             this->Become(&TDerived::StateWork);
         }
 
         STATEFN(StateWork) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+                sFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             }
         }
 
@@ -153,7 +145,6 @@ namespace {
         const TActorId Cache;
         typename TEvRequest::TPtr Request;
         const ui64 DomainOwnerId;
-        NWilson::TSpan Span;
 
     }; // TDbResolver
 
@@ -274,13 +265,7 @@ namespace {
                 {"recipient", Context->Sender},
                 {"result", Context->Request->ToString(*AppData()->TypeRegistry)});
 
-            if (Context->Request->ErrorCount) {
-                Context->Span.EndError("Scheme cache request failed");
-            } else {
-                Context->Span.EndOk();
-            }
-            this->Send(Context->Sender, new TEvResult(Context->Request.Release()), 0, Context->Cookie,
-                Context->Span.GetTraceId());
+            this->Send(Context->Sender, new TEvResult(Context->Request.Release()), 0, Context->Cookie);
             this->PassAway();
         }
 
@@ -1145,19 +1130,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             PathId = pathId;
         }
 
-        void SendSyncRequest(NWilson::TTraceId traceId) const {
+        void SendSyncRequest() const {
             Y_ABORT_UNLESS(Subscriber, "it hangs if no subscriber");
-            Owner->Send(Subscriber.Subscriber, new NInternalEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie, std::move(traceId));
+            Owner->Send(Subscriber.Subscriber, new NInternalEvents::TEvSyncRequest(), 0, ++Subscriber.SyncCookie);
         }
 
         void ResendSyncRequests(THashMap<TVariantContextPtr, TVector<TRequest>>& inFlight) const {
-            for (auto& [context, requests] : inFlight) {
+            for (auto& [_, requests] : inFlight) {
                 for (auto& request : requests) {
                     if (!request.IsSync) {
                         continue;
                     }
 
-                    SendSyncRequest(std::visit([](const auto& ptr) { return ptr->Span.GetTraceId(); }, context));
+                    SendSyncRequest();
                     request.Cookie = Subscriber.SyncCookie;
                 }
             }
@@ -1452,7 +1437,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             if (isSync) {
-                SendSyncRequest(context->Span.GetTraceId());
+                SendSyncRequest();
             }
 
             auto it = InFlight.find(context);
@@ -2743,9 +2728,6 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         for (const auto& x : cacheItem->ProcessInFlight(response)) {
-            if (response.IsSync && ev->TraceId) {
-                std::visit([&](const auto& context) { context->Span.Link(ev->TraceId); }, x);
-            }
             if (auto* context = std::get_if<TNavigateContextPtr>(&x)) {
                 if (!context->Get()->WaitCounter) {
                     Complete(*context);
@@ -2854,10 +2836,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     template <typename TContext, typename TEvent>
-    TIntrusivePtr<TContext> MakeContext(TEvent& ev, const char* spanName) const {
+    TIntrusivePtr<TContext> MakeContext(TEvent& ev) const {
         TIntrusivePtr<TContext> context(new TContext(ev->Sender, ev->Cookie, ev->Get()->Request, Now()));
-        context->Span = NWilson::TSpan(TComponentTracingLevels::TDistributedTransactions::Detailed,
-            std::move(ev->TraceId), spanName, NWilson::EFlags::AUTO_END);
 
         if (context->Request->DatabaseName) {
             if (auto* db = Cache.FindPtr(CanonizePath(context->Request->DatabaseName))) {
@@ -2887,7 +2867,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return;
         }
 
-        auto context = MakeContext<TNavigateContext>(ev, "SchemeCache.Navigate");
+        auto context = MakeContext<TNavigateContext>(ev);
         auto& resultSet = context->Request->ResultSet;
         for (size_t i = 0; i < resultSet.size(); ++i) {
             auto& entry = resultSet[i];
@@ -2962,7 +2942,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return;
         }
 
-        auto context = MakeContext<TResolveContext>(ev, "SchemeCache.Resolve");
+        auto context = MakeContext<TResolveContext>(ev);
 
         auto pathExtractor = [](const TResolve::TEntry& entry) {
             const TKeyDesc* keyDesc = entry.KeyDescription.Get();

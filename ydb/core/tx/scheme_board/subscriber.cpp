@@ -4,9 +4,6 @@
 #include "monitorable_actor.h"
 #include "subscriber.h"
 
-#include <ydb/library/actors/wilson/wilson_span.h>
-#include <ydb/library/wilson_ids/wilson.h>
-
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/domain.h>
 #include <ydb/core/base/statestorage_impl.h>
@@ -368,7 +365,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
             return;
         }
 
-        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie, std::move(ev->TraceId));
+        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
@@ -378,7 +375,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
             {"cookie", ev->Cookie});
 
         CurrentSyncRequest = ev->Cookie;
-        this->Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie, std::move(ev->TraceId));
+        this->Send(Replica, ev->Release().Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
@@ -391,7 +388,7 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
             return;
         }
 
-        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie, std::move(ev->TraceId));
+        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie);
         CurrentSyncRequest = 0;
     }
 
@@ -534,14 +531,13 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             return Sleep();
         }
 
-        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie, std::move(ev->TraceId));
+        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie);
         Delay = DefaultDelay;
     }
 
     void Handle(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
         CurrentSyncRequest = ev->Cookie;
-        CurrentSyncTraceId = NWilson::TTraceId(ev->TraceId);
-        this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie, std::move(ev->TraceId));
+        this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
     }
 
     void HandleSleep(NInternalEvents::TEvSyncVersionRequest::TPtr& ev) {
@@ -550,7 +546,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             {"sender", ev->Sender},
             {"cookie", ev->Cookie});
 
-        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, ev->Cookie, std::move(ev->TraceId));
+        this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, ev->Cookie);
     }
 
     void Handle(NInternalEvents::TEvSyncVersionResponse::TPtr& ev) {
@@ -564,7 +560,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
             return;
         }
 
-        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie, std::move(ev->TraceId));
+        this->Send(Parent, ev->Release().Release(), 0, ev->Cookie);
         CurrentSyncRequest = 0;
     }
 
@@ -595,7 +591,7 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         }
 
         if (CurrentSyncRequest) {
-            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest, std::move(CurrentSyncTraceId));
+            this->Send(Parent, new NInternalEvents::TEvSyncVersionResponse(0), 0, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }
 
@@ -703,7 +699,6 @@ private:
     TDuration Delay;
 
     ui64 CurrentSyncRequest;
-    NWilson::TTraceId CurrentSyncTraceId;
 
     static constexpr TDuration DefaultDelay = TDuration::MilliSeconds(10);
     static constexpr TDuration MaxDelay = TDuration::Seconds(5);
@@ -812,9 +807,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
 
     void EnqueueSyncRequest(NInternalEvents::TEvSyncRequest::TPtr& ev) {
         DelayedSyncRequest = Max(DelayedSyncRequest, ev->Cookie);
-        if (ev->TraceId) {
-            DelayedSyncTraces.push_back(std::move(ev->TraceId));
-        }
     }
 
     bool MaybeRunVersionSync() {
@@ -828,23 +820,9 @@ class TSubscriber: public TMonitorableActor<TDerived> {
         DelayedSyncRequest = 0;
 
         Y_ABORT_UNLESS(PendingSync.empty());
-        CurrentSyncTraces.swap(DelayedSyncTraces);
-        const NWilson::TTraceId* parent = nullptr;
-        for (const auto& traceId : CurrentSyncTraces) {
-            if (!parent || traceId.GetVerbosity() > parent->GetVerbosity()) {
-                parent = &traceId;
-            }
-        }
-        SyncSpan = NWilson::TSpan(TComponentTracingLevels::TDistributedTransactions::Detailed,
-            parent ? NWilson::TTraceId(*parent) : NWilson::TTraceId(), "SchemeBoard.Sync", NWilson::EFlags::AUTO_END);
-        for (const auto& traceId : CurrentSyncTraces) {
-            if (&traceId != parent) {
-                SyncSpan.Link(traceId);
-            }
-        }
         for (const auto& proxyGroup : ProxyGroups) {
             for (const auto& [proxy, _] : proxyGroup.Proxies) {
-                this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest, SyncSpan.GetTraceId());
+                this->Send(proxy, new NInternalEvents::TEvSyncVersionRequest(Path), 0, CurrentSyncRequest);
                 PendingSync.emplace(proxy);
             }
         }
@@ -1058,14 +1036,7 @@ class TSubscriber: public TMonitorableActor<TDerived> {
                 {"cookie", ev->Cookie});
         }
 
-        this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, !syncIsComplete), 0, ev->Cookie,
-            SyncSpan.GetTraceId());
-        if (syncIsComplete) {
-            SyncSpan.EndOk();
-        } else {
-            SyncSpan.EndError("SchemeBoard synchronization is incomplete");
-        }
-        CurrentSyncTraces.clear();
+        this->Send(Owner, new NInternalEvents::TEvSyncResponse(Path, !syncIsComplete), 0, ev->Cookie);
 
         CurrentSyncRequest = 0;
         PendingSync.clear();
@@ -1101,11 +1072,6 @@ class TSubscriber: public TMonitorableActor<TDerived> {
             YDB_LOG_INFO("Delay current sync",
                 {"request", CurrentSyncRequest});
             DelayedSyncRequest = Max(DelayedSyncRequest, CurrentSyncRequest);
-            for (auto& traceId : CurrentSyncTraces) {
-                DelayedSyncTraces.push_back(std::move(traceId));
-            }
-            CurrentSyncTraces.clear();
-            SyncSpan.EndError("SchemeBoard replica set changed");
             CurrentSyncRequest = 0;
         }
 
@@ -1319,9 +1285,6 @@ private:
 
     ui64 DelayedSyncRequest;
     ui64 CurrentSyncRequest;
-    TVector<NWilson::TTraceId> DelayedSyncTraces;
-    TVector<NWilson::TTraceId> CurrentSyncTraces;
-    NWilson::TSpan SyncSpan;
     TSet<TActorId> PendingSync;
     TMap<TActorId, bool> ReceivedSync;
 

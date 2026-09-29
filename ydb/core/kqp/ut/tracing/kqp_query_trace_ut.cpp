@@ -12,8 +12,6 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/tx/scheme_board/cache.h>
-#include <ydb/core/tx/scheme_board/events_internal.h>
 #include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -754,7 +752,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         UNIT_ASSERT_VALUES_EQUAL(batch->links_size(), 3);
         AssertStatus(*uploader, "LongTx.AcquireSnapshotBatch",
             Fail ? NTraceProto::Status::STATUS_CODE_ERROR : NTraceProto::Status::STATUS_CODE_OK);
-        AssertDescendant(*uploader, "SchemeCache.Navigate", "LongTx.AcquireSnapshotBatch");
+        UNIT_ASSERT_VALUES_EQUAL(TString(static_cast<const char*>(batchTrace.GetTraceIdPtr()), batchTrace.GetTraceIdSize()), batch->trace_id());
+        UNIT_ASSERT_VALUES_EQUAL(TString(static_cast<const char*>(batchTrace.GetSpanIdPtr()), batchTrace.GetSpanIdSize()), batch->span_id());
         ui32 waits = 0;
         for (const auto& span : uploader->Spans) {
             if (span.name() == "LongTx.AcquireReadSnapshot" || span.name() == "LongTx.BeginTxSnapshot") {
@@ -767,86 +766,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(waits, 3);
-    }
-
-    Y_UNIT_TEST(SchemeCacheInternalTracePropagation) {
-        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-        auto [runtime, server, sender] = CreateServer();
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
-        auto* uploader = RegisterUploader(runtime);
-        auto config = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(
-            &runtime.GetAppData(0), new NMonitoring::TDynamicCounters());
-        const auto cache = runtime.Register(CreateSchemeBoardSchemeCache(config.Get()));
-        runtime.EnableScheduleForActor(cache, true);
-        NWilson::TSpan parent(1, NWilson::TTraceId::NewTraceId(15, 4095), "Schema request",
-            NWilson::EFlags::AUTO_END, runtime.GetActorSystem(0));
-        auto navigate = [&](TString path, bool sync, NWilson::TTraceId traceId, ui64 cookie = 0) {
-            auto request = MakeHolder<TNavigate>();
-            request->DatabaseName = "/Root";
-            auto& entry = request->ResultSet.emplace_back();
-            entry.Path = SplitPath(path);
-            entry.Operation = TNavigate::OpTable;
-            entry.SyncVersion = sync;
-            runtime.Send(new IEventHandle(cache, sender, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()),
-                0, cookie, nullptr, std::move(traceId)), 0, true);
-        };
-        navigate("/Root/table-1", false, parent.GetTraceId());
-        auto cold = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(cold->Get()->Request->ErrorCount, 0);
-        UNIT_ASSERT(cold->TraceId);
-        const auto tableId = cold->Get()->Request->ResultSet.front().TableId;
-
-        ui32 syncRequests = 0;
-        ui32 replicaRequests = 0;
-        ui32 replicaResponses = 0;
-        const auto syncs = runtime.AddObserver<NSchemeBoard::NInternalEvents::TEvSyncRequest>([&](auto& ev) {
-            if (ev->Sender == cache) {
-                UNIT_ASSERT(ev->TraceId);
-                ++syncRequests;
-            }
-        });
-        const auto replicas = runtime.AddObserver<NSchemeBoard::NInternalEvents::TEvSyncVersionRequest>([&](auto& ev) {
-            UNIT_ASSERT(ev->TraceId);
-            ++replicaRequests;
-        });
-        const auto responses = runtime.AddObserver<NSchemeBoard::NInternalEvents::TEvSyncVersionResponse>([&](auto& ev) {
-            UNIT_ASSERT(ev->TraceId);
-            ++replicaResponses;
-        });
-        NWilson::TSpan other(1, NWilson::TTraceId::NewTraceId(15, 4095), "Other schema request",
-            NWilson::EFlags::AUTO_END, runtime.GetActorSystem(0));
-        navigate("/Root/table-1", true, parent.GetTraceId(), 1);
-        navigate("/Root/table-1", true, other.GetTraceId(), 2);
-        for (ui32 i = 0; i < 2; ++i) {
-            auto result = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Request->ErrorCount, 0);
-            const auto expected = result->Cookie == 1 ? parent.GetTraceId() : other.GetTraceId();
-            UNIT_ASSERT_VALUES_EQUAL(TString(static_cast<const char*>(result->TraceId.GetTraceIdPtr()), result->TraceId.GetTraceIdSize()),
-                TString(static_cast<const char*>(expected.GetTraceIdPtr()), expected.GetTraceIdSize()));
-        }
-        auto resolve = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
-        resolve->ResultSet.emplace_back(MakeHolder<TKeyDesc>(tableId, TTableRange({}),
-            TKeyDesc::ERowOperation::Unknown, TVector<NScheme::TTypeInfo>(), TVector<TKeyDesc::TColumnOp>()));
-        runtime.Send(new IEventHandle(cache, sender, new TEvTxProxySchemeCache::TEvResolveKeySet(resolve.Release()),
-            0, 0, nullptr, parent.GetTraceId()), 0, true);
-        auto resolved = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvResolveKeySetResult>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(resolved->Get()->Request->ErrorCount, 0);
-        UNIT_ASSERT(resolved->TraceId);
-        navigate("/Root/missing", false, parent.GetTraceId());
-        auto missing = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
-        UNIT_ASSERT(missing->Get()->Request->ErrorCount);
-        parent.EndOk();
-        other.EndOk();
-        runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(syncRequests, 2);
-        UNIT_ASSERT(replicaRequests > 0 && replicaResponses > 0);
-        UNIT_ASSERT(uploader->BuildTraceTrees());
-        AssertDescendant(*uploader, "SchemeCache.ResolveDatabase", "Schema request");
-        AssertDescendant(*uploader, "SchemeCache.Resolve", "Schema request");
-        AssertDescendant(*uploader, "SchemeBoard.Sync", "SchemeCache.Navigate");
-        UNIT_ASSERT(std::ranges::any_of(uploader->Spans, [](const auto& span) {
-            return span.name() == "SchemeCache.Navigate" && span.status().code() == NTraceProto::Status::STATUS_CODE_ERROR;
-        }));
     }
 
     Y_UNIT_TEST(CommonConfigSamplesSdkReadPaths) {

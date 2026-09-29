@@ -137,7 +137,6 @@ public:
     // Seconds without successful physical I/O before issuing a one-sector
     // health read. Zero disables the probe; the ICB default is zero.
     TControlWrapper IdleDeviceProbeIntervalSeconds;
-    i64 IdleDeviceProbeIntervalSecondsCached = 0;
     i64 SemiStrictSpaceIsolationCached = 0;
     TControlWrapper StaticGroupChunkReservePerMille;
     i64 StaticGroupChunkReservePerMilleCached = 0;
@@ -252,10 +251,9 @@ public:
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
 #if defined(__linux__)
-    // Created and accessed by the PDisk worker. Normal Stop() joins that worker
-    // before retiring the router; the error path requests retirement on the
-    // worker and performs the blocking part outside StateMutex. DDisk/PB hold
-    // IUringRouterClient copies, but PDisk remains the lifecycle owner.
+    // Created and used by the PDisk worker. Normal Stop() joins that worker
+    // before retiring the router; error stop runs on the worker. DDisk/PB may
+    // retain client references, but StopSync closes the duplicated device fd.
     std::shared_ptr<TUringRouter> SharedUringRouter;
 #endif
     bool SharedUringCreateAttempted = false;
@@ -272,21 +270,12 @@ public:
     volatile ui64 InitialNonceJumpSize = 0;
     TAtomic IsStarted = false;
     TMutex StopMutex;
-    enum class EDeviceIoState : ui8 {
-        Running,
-        Stopping,
-        Stopped,
-    };
-    std::atomic<EDeviceIoState> DeviceIoState = EDeviceIoState::Running;
-    TMutex DeviceIoStopMutex;
-    bool DeviceIoErrorStopRequested = false; // PDisk worker only, under StateMutex.
 
     ui64 ObservedDeviceIoCompletionGeneration = 0;
     NHPTimer::STime LastDeviceIoCompletionGenerationChange = 0;
     // The generic device-halt watchdog detects an accepted probe that does not
     // complete. Keep one probe in flight so its buffer remains uniquely owned.
     std::atomic<bool> IdleDeviceProbeInFlight = false;
-    std::atomic<bool> IdleDeviceProbeFailed = false;
 
     TIntrusivePtr<TPDiskConfig> Cfg;
     TInstant CreationTime;

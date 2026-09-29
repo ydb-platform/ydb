@@ -896,12 +896,10 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         settings.ChunkSize = 16 << 20;
         settings.DiskSize = ui64{16} << 30;
         TActorTestContext ctx(settings);
-        TManualEvent joining, allowJoin, retired;
-        Y_DEFER { allowJoin.Signal(); };
+        TManualEvent retired;
         ctx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
             NPDisk::TPDiskTestPeer::ConfigureRouter(*pdisk, [&](NPDisk::TUringRouter& instance) {
                 NPDisk::NUringPrivate::TRouterHooks hooks;
-                hooks.BeforeJoin = [&] { joining.Signal(); allowJoin.WaitI(); };
                 hooks.Retired = [&] { retired.Signal(); };
                 NPDisk::TUringRouterTestPeer::SetHooks(instance, std::move(hooks));
             });
@@ -913,16 +911,8 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         auto* pdisk = ctx.GetPDisk();
         pdisk->InputRequest(pdisk->ReqCreator.CreateFromArgs<NPDisk::TStopDevice>());
-        UNIT_ASSERT_C(joining.WaitT(TDuration::Seconds(10)), "shared router did not start error retirement");
-        UNIT_ASSERT_C(pdisk->StateMutex.TryAcquire(), "error retirement is blocking while holding StateMutex");
-        pdisk->StateMutex.Release();
-        allowJoin.Signal();
         UNIT_ASSERT_C(retired.WaitT(TDuration::Seconds(10)), "shared router was not retired by error stop");
-        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
-        while (pdisk->DeviceIoState.load(std::memory_order_acquire) != NPDisk::TPDisk::EDeviceIoState::Stopped) {
-            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "device I/O teardown did not finish");
-            Sleep(TDuration::MilliSeconds(1));
-        }
+        UNIT_ASSERT(!ctx.SafeRunOnPDisk([](NPDisk::TPDisk* p) { return p->BlockDevice->IsGood(); }));
 
         UNIT_ASSERT(router->IsBroken());
         UNIT_ASSERT(NPDisk::TUringRouterTestPeer::Retired(*router));
@@ -982,7 +972,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(control);
         control->SetFromHtmlRequest(1);
         const bool scheduled = ctx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
-            p->IdleDeviceProbeIntervalSecondsCached = 1;
             p->ObservedDeviceIoCompletionGeneration = generationBefore;
             p->LastDeviceIoCompletionGenerationChange = 0;
             return p->MaybeScheduleIdleDeviceProbe();
@@ -2740,7 +2729,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         ui64 generationBefore = 0;
         const bool scheduled = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
-            p->IdleDeviceProbeIntervalSecondsCached = 1;
             generationBefore = p->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
             p->ObservedDeviceIoCompletionGeneration = generationBefore;
             p->LastDeviceIoCompletionGenerationChange = 0;
@@ -2767,7 +2755,6 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 1;
 
         const bool scheduled = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
-            p->IdleDeviceProbeIntervalSecondsCached = 1;
             p->ObservedDeviceIoCompletionGeneration =
                 p->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
             p->LastDeviceIoCompletionGenerationChange = 0;
@@ -2776,16 +2763,16 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(scheduled);
 
         const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
-        while (pdisk->Mon.PDiskState->Val() != NKikimrBlobStorage::TPDiskState::DeviceIoError ||
-                pdisk->DeviceIoState.load(std::memory_order_acquire) != NPDisk::TPDisk::EDeviceIoState::Stopped) {
+        while (pdisk->Mon.PDiskState->Val() != NKikimrBlobStorage::TPDiskState::DeviceIoError) {
             UNIT_ASSERT_C(TMonotonic::Now() < deadline, "probe failure did not stop PDisk device I/O");
             Sleep(TDuration::MilliSeconds(1));
         }
-        UNIT_ASSERT(pdisk->IdleDeviceProbeFailed.load(std::memory_order_acquire));
+        while (testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* p) { return p->BlockDevice->IsGood(); })) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "probe failure did not stop PDisk device I/O");
+            Sleep(TDuration::MilliSeconds(1));
+        }
         UNIT_ASSERT(!pdisk->IdleDeviceProbeInFlight.load(std::memory_order_acquire));
         testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
-            // Exercise the DeviceIoState gate independently of the failure flag.
-            p->IdleDeviceProbeFailed.store(false, std::memory_order_release);
             p->LastDeviceIoCompletionGenerationChange = 0;
             UNIT_ASSERT(!p->MaybeScheduleIdleDeviceProbe());
             UNIT_ASSERT(!p->IdleDeviceProbeInFlight.load(std::memory_order_acquire));

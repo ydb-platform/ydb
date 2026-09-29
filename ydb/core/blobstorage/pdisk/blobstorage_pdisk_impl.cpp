@@ -46,9 +46,6 @@ public:
     }
 
     void Release(TActorSystem*) override {
-        if (Result != EIoResult::Unknown && Result != EIoResult::Ok) {
-            PDisk->IdleDeviceProbeFailed.store(true, std::memory_order_release);
-        }
         PDisk->IdleDeviceProbeInFlight.store(false, std::memory_order_release);
         delete this;
     }
@@ -485,12 +482,6 @@ void TPDisk::Stop() {
 }
 
 void TPDisk::StopDeviceIo(bool isError) {
-    TGuard<TMutex> guard(DeviceIoStopMutex);
-    if (DeviceIoState.load(std::memory_order_acquire) == EDeviceIoState::Stopped) {
-        return;
-    }
-    DeviceIoState.store(EDeviceIoState::Stopping, std::memory_order_release);
-
 #if defined(__linux__)
     if (SharedUringRouter) {
         if (isError) {
@@ -504,7 +495,6 @@ void TPDisk::StopDeviceIo(bool isError) {
 #endif
 
     BlockDevice->Stop();
-    DeviceIoState.store(EDeviceIoState::Stopped, std::memory_order_release);
 }
 
 void TPDisk::ObliterateCommonLogSectorSet() {
@@ -2331,8 +2321,7 @@ TOwner TPDisk::FindNextOwnerId() {
 }
 
 void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode) {
-    if (SharedUringCreateAttempted ||
-            DeviceIoState.load(std::memory_order_acquire) != EDeviceIoState::Running) {
+    if (SharedUringCreateAttempted) {
         return;
     }
     SharedUringCreateAttempted = true;
@@ -4302,8 +4291,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestCompactionBidder:
             break;
         case ERequestType::RequestStopDevice:
-            DeviceIoState.store(EDeviceIoState::Stopping, std::memory_order_release);
-            DeviceIoErrorStopRequested = true;
+            StopDeviceIo(true);
             delete request;
             return false;
         case ERequestType::RequestChunkReadPiece:
@@ -4621,7 +4609,7 @@ void TPDisk::EnqueueAll() {
             {"requestType", TypeName(*request)},
             {"alreadyProcessedReqs", processedReqs});
         AtomicSub(InputQueueCost, request->Cost);
-        if (IsQueuePaused && request->GetType() != ERequestType::RequestStopDevice) {
+        if (IsQueuePaused) {
             if (IsQueueStep) {
                 IsQueueStep = false;
                 PausedQueue.push_back(request);
@@ -4664,7 +4652,7 @@ void TPDisk::EnqueueAll() {
             }
         }
         ++processedReqs;
-        if (DeviceIoErrorStopRequested || processedReqs >= MAX_REQS_PER_CYCLE) {
+        if (processedReqs >= MAX_REQS_PER_CYCLE) {
             break;
         }
     }
@@ -4767,7 +4755,6 @@ void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
     LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
 
-    bool stopDeviceIo = false;
     {
         TGuard<TMutex> guard(StateMutex);
 
@@ -4809,16 +4796,7 @@ void TPDisk::Update() {
         // Make input queue empty
         EnqueueAll();
 
-        stopDeviceIo = std::exchange(DeviceIoErrorStopRequested, false);
-        if (!stopDeviceIo) {
-            MaybeScheduleIdleDeviceProbe();
-        }
-    }
-
-    if (stopDeviceIo) {
-        // Router retirement may wait for DDisk/PersistentBuffer callbacks and
-        // join the io_uring thread. Do not hold StateMutex across that barrier.
-        StopDeviceIo(true);
+        MaybeScheduleIdleDeviceProbe();
     }
 
     // Make token injection to correct drive model underestimations and avoid disk underutilization
@@ -4967,16 +4945,8 @@ bool TPDisk::MaybeScheduleIdleDeviceProbe() {
     const NHPTimer::STime now = HPNow();
     const i64 intervalSeconds = IdleDeviceProbeIntervalSeconds;
 
-    if (intervalSeconds != IdleDeviceProbeIntervalSecondsCached) {
-        IdleDeviceProbeIntervalSecondsCached = intervalSeconds;
-        ObservedDeviceIoCompletionGeneration =
-            Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
-        LastDeviceIoCompletionGenerationChange = now;
-    }
-
     if (!intervalSeconds || InitPhase.load(std::memory_order_acquire) != EInitPhase::Initialized ||
-            DeviceIoState.load(std::memory_order_acquire) != EDeviceIoState::Running ||
-            IdleDeviceProbeFailed.load(std::memory_order_acquire)) {
+            !BlockDevice->IsGood()) {
         return false;
     }
 

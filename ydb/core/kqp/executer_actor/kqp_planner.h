@@ -150,6 +150,7 @@ private:
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
     std::shared_ptr<IQueryQuotaManager> QueryQuotaManager;
+    NYql::NDq::IMemoryQuotaManager::TPtr ArrowQuotaManager;
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;

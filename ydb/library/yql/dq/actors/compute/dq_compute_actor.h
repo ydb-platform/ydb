@@ -375,6 +375,9 @@ struct TComputeMemoryLimits {
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    // Per query, thread safe: charged for the arrow buffers of TDqArrowMemoryPool allocated under the compute actor's
+    // TArrowMemoryQuotaScope (opened by the KQP compute actors) and by the sources, see TSourceArguments
+    IMemoryQuotaManager::TPtr ArrowQuotaManager;
 
     // Bind the compute actor memory quota to the memory hungry operators (DqHashCombine, DqHashAggregate,
     // DqBlockHashJoin), see IDqOperatorMemoryQuota. Off: operators use the allocator heuristics only.

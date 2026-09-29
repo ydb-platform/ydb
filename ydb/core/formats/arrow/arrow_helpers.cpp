@@ -256,6 +256,21 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
 }
 
+arrow::Result<std::shared_ptr<arrow::Table>> TryReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool) {
+    if (!original) {
+        return original;
+    }
+
+    auto batches = NArrow::SliceToRecordBatches(original);
+
+    const NArrow::NSerialization::TNativeSerializer serializer;
+    const NArrow::NSerialization::TNativeSerializer deserializer(pool);
+    for (auto&& i : batches) {
+        ARROW_ASSIGN_OR_RAISE(i, deserializer.Deserialize(serializer.SerializeFull(i)));
+    }
+    return arrow::Table::FromRecordBatches(batches);
+}
+
 std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool) {
     if (!original) {
         return original;

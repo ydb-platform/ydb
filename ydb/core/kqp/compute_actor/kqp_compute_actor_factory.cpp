@@ -123,6 +123,7 @@ public:
 
         memoryLimits.MemoryQuotaManager = std::move(args.TaskQuotaManager);
         memoryLimits.ChannelQuotaManager = std::move(args.ChannelQuotaManager);
+        memoryLimits.ArrowQuotaManager = std::move(args.ArrowQuotaManager);
 
         NYql::NDq::TComputeRuntimeSettings runtimeSettings;
 

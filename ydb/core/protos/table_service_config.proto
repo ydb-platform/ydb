@@ -90,6 +90,12 @@ message TTableServiceConfig {
         // RM/ArenaBurstGrows. The free part counts against the kqp queue limit like the usage.
         optional uint64 MemoryArenaMinFreeSize = 37 [default = 33554432];   // 32 MiB
         optional uint64 MemoryArenaMaxFreeSize = 38 [default = 134217728];  // 128 MiB
+
+        // Charge the arrow buffers of the KQP arrow pool (GetArrowMemoryPool) and of the sources that use
+        // NYql::NDq::TDqArrowMemoryPool to a per query quota manager, which takes the memory from the query's
+        // resource manager memory. Also switches MKQL to the default (system) arrow allocator. Read at the node
+        // start only, a change takes effect after a restart.
+        optional bool EnableArrowMemoryQuota = 39 [default = false];
     }
 
     message TSpillingServiceConfig {

@@ -47,5 +47,9 @@ NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(NYql::NDq::IMemoryQu
 NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
     ui64 initialMemoryLimit, ui64 allocationStep = 1_MB);
 
+// Per query, thread safe: the arrow buffers of NYql::NDq::TDqArrowMemoryPool allocated on behalf of the query, see
+// NYql::NDq::TArrowMemoryQuotaScope. Starts with no memory, takes it from the query quota manager in allocation steps
+NYql::NDq::IMemoryQuotaManager::TPtr CreateArrowQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
+    ui64 allocationStep = 1_MB);
 
 } // namespace NKikimr::NKqp

@@ -121,6 +121,8 @@ public:
         TIntrusivePtr<NRm::TTxState> TxInfo;
         NYql::NDq::IMemoryQuotaManager::TPtr TaskQuotaManager;
         NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
+        // per query, nullptr: the arrow memory quota is off
+        NYql::NDq::IMemoryQuotaManager::TPtr ArrowQuotaManager;
         TMaybe<NYql::NDq::TReportStatsSettings> ReportStatsSettings;
         NWilson::TTraceId TraceId;
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;

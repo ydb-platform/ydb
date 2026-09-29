@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
+#include <ydb/library/yql/dq/actors/compute/dq_arrow_memory_pool.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/mon.h>
@@ -18,8 +19,11 @@
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <util/generic/size_literals.h>
 
+#include <arrow/buffer.h>
+
 #include <atomic>
 #include <limits>
+#include <thread>
 
 #ifndef NDEBUG
 const bool DETAILED_LOG = false;
@@ -423,6 +427,7 @@ public:
         UNIT_TEST(OptionalMemoryConcurrent);
         UNIT_TEST(OptionalMemoryRefusedByBroker);
         UNIT_TEST(QueryQuotaManager);
+        UNIT_TEST(ArrowQuotaManager);
         UNIT_TEST(ServiceMemoryQuota);
         UNIT_TEST(ConcurrentServiceMemoryQuota);
         UNIT_TEST(SnapshotSharingByExchanger);
@@ -495,6 +500,7 @@ public:
     void OptionalMemoryConcurrent();
     void OptionalMemoryRefusedByBroker();
     void QueryQuotaManager();
+    void ArrowQuotaManager();
     void ServiceMemoryQuota();
     void ConcurrentServiceMemoryQuota();
     void SnapshotSharing();
@@ -1339,6 +1345,69 @@ void KqpRm::QueryQuotaManager() {
         UNIT_ASSERT_VALUES_EQUAL(tx->TxExecutionUnits.load(), 0);
 
         // the periodic pass returns the arena memory to the node total
+        TickArenaAdjust();
+    }
+
+    AssertResourceManagerStats(rm, 1000, 100);
+}
+
+// The arrow quota manager starts with nothing and takes Memory from the query quota manager in steps for the buffers of
+// the arrow pool allocated under its scope. A refused charge fails the allocation. A buffer keeps the managers alive:
+// what it holds returns to the resource manager when the last buffer is freed, on any thread
+void KqpRm::ArrowQuotaManager() {
+    StartRms();
+    NKikimr::TActorSystemStub stub;
+
+    auto rm = GetKqpResourceManager(ResourceManagers.front().NodeId());
+
+    {
+        auto tx = MakeTx(1, rm);
+        auto held = [&tx]() -> ui64 {
+            return tx->TxScanQueryMemory.load() + tx->TxExternalDataQueryMemory.load();
+        };
+        auto query = CreateQueryQuotaManager(tx);
+        auto arrowQuota = CreateArrowQuotaManager(query, 16);
+        auto* pool = NYql::NDq::GetDqArrowMemoryPool();
+
+        std::shared_ptr<arrow::Buffer> buffer;
+        {
+            NYql::NDq::TArrowMemoryQuotaScope scope(arrowQuota);
+            // arrow rounds the capacity up to 64 bytes: 128, aligned to the 16 byte step
+            auto result = arrow::AllocateBuffer(100, pool);
+            UNIT_ASSERT(result.ok());
+            buffer = std::move(*result);
+            UNIT_ASSERT_VALUES_EQUAL(arrowQuota->GetCurrentQuota(), 128);
+            UNIT_ASSERT_VALUES_EQUAL(query->GetCurrentQuota(), 128);
+            UNIT_ASSERT_VALUES_EQUAL(held(), 128);
+
+            // beyond the node memory, 10 steps and more: refused
+            auto refused = arrow::AllocateBuffer(2000, pool);
+            UNIT_ASSERT(refused.status().IsOutOfMemory());
+            UNIT_ASSERT_VALUES_EQUAL(RmRate("RM/NotEnoughMemory"), 1);
+            UNIT_ASSERT_VALUES_EQUAL(arrowQuota->GetCurrentQuota(), 128);
+            UNIT_ASSERT_VALUES_EQUAL(held(), 128);
+        }
+
+        // unbound: not charged
+        {
+            auto result = arrow::AllocateBuffer(100, pool);
+            UNIT_ASSERT(result.ok());
+            UNIT_ASSERT_VALUES_EQUAL(arrowQuota->GetCurrentQuota(), 128);
+        }
+
+        // the owners are gone, the buffer holds the managers and the memory
+        std::weak_ptr<NYql::NDq::IMemoryQuotaManager> weak = arrowQuota;
+        arrowQuota.reset();
+        query.reset();
+        UNIT_ASSERT(!weak.expired());
+        UNIT_ASSERT_VALUES_EQUAL(held(), 128);
+
+        std::thread([buffer = std::move(buffer)]() mutable {
+            buffer.reset();
+        }).join();
+        UNIT_ASSERT(weak.expired());
+        UNIT_ASSERT_VALUES_EQUAL(held(), 0);
+
         TickArenaAdjust();
     }
 

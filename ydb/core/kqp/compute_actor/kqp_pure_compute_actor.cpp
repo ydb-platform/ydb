@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
+#include <ydb/library/yql/dq/actors/compute/dq_arrow_memory_pool.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_TASKS_RUNNER
 
@@ -193,6 +194,7 @@ STFUNC(TKqpComputeActor::StateFunc) {
     if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
         wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
     }
+    NYql::NDq::TArrowMemoryQuotaScope arrowQuotaScope(MemoryLimits.ArrowQuotaManager);
     try {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpCompute::TEvScanInitActor, HandleExecute);

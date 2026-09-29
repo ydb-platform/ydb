@@ -1,6 +1,8 @@
 #include "kqp_node_service.h"
 #include "kqp_query_control_plane.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_arrow_memory_pool.h>
+
 #include <ydb/library/actors/async/wait_for_event.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -179,7 +181,7 @@ NYql::NDq::IMemoryQuotaManager::TPtr CreateTaskQuotaManager(NYql::NDq::IMemoryQu
     return std::make_shared<TMemoryQuotaManager>(std::move(queryQuotaManager), initialMemoryLimit, allocationStep);
 }
 
-// for event/messages, IS THREAD SAFE, allows little overquoating
+// for event/messages and arrow buffers, IS THREAD SAFE, allows little overquoating
 
 struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 
@@ -268,6 +270,11 @@ struct TChannelQuotaManager : public NYql::NDq::IMemoryQuotaManager {
 NYql::NDq::IMemoryQuotaManager::TPtr CreateChannelQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
     ui64 initialMemoryLimit, ui64 allocationStep) {
     return std::make_shared<TChannelQuotaManager>(std::move(queryQuotaManager), initialMemoryLimit, allocationStep);
+}
+
+NYql::NDq::IMemoryQuotaManager::TPtr CreateArrowQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr queryQuotaManager,
+    ui64 allocationStep) {
+    return std::make_shared<TChannelQuotaManager>(std::move(queryQuotaManager), 0, allocationStep);
 }
 
 template <class TTasksCollection>
@@ -476,6 +483,10 @@ public:
             ChannelQuotaManager = CreateChannelQuotaManager(QueryQuotaManager, channelMemory);
         }
 
+        if (NYql::NDq::IsArrowMemoryQuotaEnabled() && !ArrowQuotaManager) {
+            ArrowQuotaManager = CreateArrowQuotaManager(QueryQuotaManager);
+        }
+
         auto reportStatsSettings = ReportStatsSettingsFromProto(runtimeSettings);
 
         for (auto& dqTask: *msg.MutableTasks()) {
@@ -495,6 +506,7 @@ public:
                 .TxInfo = QueryQuotaManager->GetTx(),
                 .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
                 .ChannelQuotaManager = ChannelQuotaManager,
+                .ArrowQuotaManager = ArrowQuotaManager,
                 .ReportStatsSettings = reportStatsSettings,
                 .TraceId = NWilson::TTraceId(ev->TraceId),
                 .Arena = ev->Get()->Arena,
@@ -640,6 +652,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferInflightBytes;
     NYql::NDq::IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    NYql::NDq::IMemoryQuotaManager::TPtr ArrowQuotaManager;
     const bool EnableSmallComputeMemoryAllocations;
     const bool EnableChannelMemoryTracking;
 };

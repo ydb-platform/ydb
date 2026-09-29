@@ -192,6 +192,7 @@
 #include <ydb/library/signal_backtrace/signal_backtrace.h>
 #endif
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/dq/actors/compute/dq_arrow_memory_pool.h>
 
 #include <util/charset/wide.h>
 #include <util/folder/dirut.h>
@@ -1502,6 +1503,11 @@ void TKikimrRunner::InitializeAllocator(const TKikimrRunConfig& runConfig) {
         NKikimr::UseDefaultArrowAllocator();
     }
 
+    if (cfg.GetTableServiceConfig().GetResourceManager().GetEnableArrowMemoryQuota()) {
+        // the quota pool is system malloc, MKQL arrow buffers go the same way
+        NKikimr::UseDefaultArrowAllocator();
+        NYql::NDq::SetArrowMemoryQuotaEnabled(true);
+    }
 }
 
 void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)

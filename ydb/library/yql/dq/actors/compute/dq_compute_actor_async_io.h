@@ -305,6 +305,8 @@ public:
         ::NMonitoring::TDynamicCounterPtr TaskCounters;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IMemoryQuotaManager::TPtr MemoryQuotaManager;
+        // for the arrow buffers of the source, see TDqArrowMemoryPool and TArrowMemoryQuotaScope; nullptr: not charged
+        IMemoryQuotaManager::TPtr ArrowQuotaManager;
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;

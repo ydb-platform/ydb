@@ -864,10 +864,14 @@ std::vector<std::string> ConvertStrings(const std::vector<TString>& input) {
 }
 
 std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool) {
+    return TStatusValidator::GetValid(TryDeepCopy(table, pool));
+}
+
+arrow::Result<std::shared_ptr<arrow::Table>> TryDeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool) {
     arrow::ArrayVector arrays;
 
     for (const auto& column : table->columns()) {
-        auto&& array = TStatusValidator::GetValid(arrow::Concatenate(column->chunks(), pool));
+        ARROW_ASSIGN_OR_RAISE(auto array, arrow::Concatenate(column->chunks(), pool));
         arrays.push_back(std::move(array));
     }
 

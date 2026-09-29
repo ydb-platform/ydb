@@ -121,10 +121,18 @@ private:
             case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_NONE:
                 return batch;
             case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_DEEP_COPY:
-                return NArrow::DeepCopy(batch, GetArrowMemoryPool());
+                return GetCopy(NArrow::TryDeepCopy(batch, GetArrowMemoryPool()));
             case NKikimrConfig::TTableServiceConfig::BLOCK_TRACKING_SERIALIZE:
-                return NArrow::ReallocateBatch(batch, GetArrowMemoryPool());
+                return GetCopy(NArrow::TryReallocateBatch(batch, GetArrowMemoryPool()));
         }
+    }
+
+    // the pool refuses an allocation when the arrow memory quota of the query is exceeded
+    static inline std::shared_ptr<arrow::Table> GetCopy(arrow::Result<std::shared_ptr<arrow::Table>>&& copy) {
+        if (copy.status().IsOutOfMemory()) {
+            throw TMemoryLimitExceededException();
+        }
+        return NArrow::TStatusValidator::GetValid(std::move(copy));
     }
 };
 

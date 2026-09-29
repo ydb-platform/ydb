@@ -3,6 +3,8 @@
 #include "util/string/builder.h"
 #include "util/system/types.h"
 
+#include <optional>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -22,7 +24,7 @@ struct TEngineHostCounters {
 
     ui64 InvisibleRowSkips = 0;
 
-    ui64 NAffectedRows = 0;
+    std::optional<ui64> NAffectedRows;
 
     TEngineHostCounters& operator+=(const TEngineHostCounters& other) {
         NSelectRow += other.NSelectRow;
@@ -37,7 +39,9 @@ struct TEngineHostCounters {
         UpdateRowBytes += other.UpdateRowBytes;
         EraseRowBytes += other.EraseRowBytes;
         InvisibleRowSkips += other.InvisibleRowSkips;
-        NAffectedRows += other.NAffectedRows;
+        if (other.NAffectedRows) {
+            NAffectedRows = NAffectedRows.value_or(0) + *other.NAffectedRows;
+        }
         return *this;
     }
 
@@ -55,7 +59,8 @@ struct TEngineHostCounters {
             << ", EraseRowBytes: " << EraseRowBytes
             << ", SelectRangeDeletedRowSkips: " << SelectRangeDeletedRowSkips
             << ", InvisibleRowSkips: " << InvisibleRowSkips
-            << ", NAffectedRows: " << NAffectedRows
+            << ", NAffectedRows: "
+            << (NAffectedRows ? TStringBuilder() << *NAffectedRows : TString("null"))
             << "}";
     }
 };

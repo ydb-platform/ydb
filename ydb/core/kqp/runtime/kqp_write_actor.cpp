@@ -300,7 +300,7 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
@@ -321,7 +321,9 @@ struct TKqpTableWriterStatistics {
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
             EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
-            AffectedRows += tableAccessStats.GetAffectedRows();
+            if (tableAccessStats.HasAffectedRows()) {
+                AffectedRows = AffectedRows.value_or(0) + tableAccessStats.GetAffectedRows();
+            }
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -368,7 +370,7 @@ struct TKqpTableWriterStatistics {
         stats->MutableExtra()->PackFrom(extraStats);
     }
 
-    void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath, bool collectAffectedRows) {
+    void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
         AddLockStats(stats, LocksBrokenAsBreaker, LocksBrokenAsVictim, BreakerQuerySpanIds,
                      DeferredBreakerQuerySpanIds, DeferredBreakerNodeIds);
         LocksBrokenAsBreaker = 0;
@@ -399,8 +401,8 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-        if (collectAffectedRows) {
-            tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
+        if (AffectedRows) {
+            tableStats->SetAffectedRows(tableStats->GetAffectedRows() + *AffectedRows);
         }
 
         ReadRows = 0;
@@ -409,7 +411,7 @@ struct TKqpTableWriterStatistics {
         WriteBytes = 0;
         EraseRows = 0;
         EraseBytes = 0;
-        AffectedRows = 0;
+        AffectedRows.reset();
 
         tableStats->SetAffectedPartitions(
             tableStats->GetAffectedPartitions() + AffectedPartitions.size());
@@ -1816,7 +1818,7 @@ public:
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) {
-        Stats.FillStats(stats, TablePath, CollectAffectedRows);
+        Stats.FillStats(stats, TablePath);
     }
 
     bool FlushBeforeCommit() const {

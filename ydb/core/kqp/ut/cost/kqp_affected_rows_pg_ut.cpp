@@ -990,6 +990,142 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         runCase(BeginSerializableRW(), "SerializableRW");
         runCase(BeginSnapshotRW(), "SnapshotRW");
     }
+
+    Y_UNIT_TEST(CollectAffectedRows_MixedSettingsOneFlushWindow) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteQuery(Q_(R"(
+            CREATE TABLE `/Root/repro_affected_flush` (
+                id Int32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto seed = session.ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/repro_affected_flush` (id) VALUES (1), (2), (3);
+        )"), BeginReadCommittedRW(), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(seed.GetStatus(), EStatus::SUCCESS, seed.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(seed, "/Root/repro_affected_flush"), 0u);
+        UNIT_ASSERT_C(!HasAnyAffectedRowsField(seed),
+            "affected_rows must be absent for a statement without collect_affected_rows");
+
+        auto del = session.ExecuteQuery(Q_(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            DELETE FROM `/Root/repro_affected_flush` WHERE id <= 3;
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::ReadCommittedRW()), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(del.GetStatus(), EStatus::SUCCESS, del.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(del, "/Root/repro_affected_flush"), 3u);
+        UNIT_ASSERT_C(HasAnyAffectedRowsField(del),
+            "affected_rows must be present for a statement with collect_affected_rows");
+
+        auto tx = del.GetTransaction();
+        UNIT_ASSERT_C(tx.has_value(), "DELETE did not return a transaction handle");
+
+        auto ins = session.ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/repro_affected_flush` (id) VALUES (1), (2), (3);
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(ins.GetStatus(), EStatus::SUCCESS, ins.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(ins, "/Root/repro_affected_flush"), 0u);
+        UNIT_ASSERT_C(!HasAnyAffectedRowsField(ins),
+            "affected_rows must be absent for a statement without collect_affected_rows");
+
+        auto commit = tx->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CollectAffectedRows_DeferredEffects_FalseUpsertFlushedByTrueStatement) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteQuery(Q_(R"(
+            CREATE TABLE `/Root/repro_affected_deferred` (
+                id Int32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto upsert = session.ExecuteQuery(Q_(R"(
+            UPSERT INTO `/Root/repro_affected_deferred` (id) VALUES (1), (2), (3);
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(upsert, "/Root/repro_affected_deferred"), 0u);
+        UNIT_ASSERT_C(!HasAnyAffectedRowsField(upsert),
+            "affected_rows must be absent for a statement without collect_affected_rows");
+
+        auto tx = upsert.GetTransaction();
+        UNIT_ASSERT_C(tx.has_value(), "UPSERT did not return a transaction handle");
+
+        auto del = session.ExecuteQuery(Q_(R"(
+            DELETE FROM `/Root/repro_affected_deferred` WHERE id <= 3;
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(del.GetStatus(), EStatus::SUCCESS, del.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(del, "/Root/repro_affected_deferred"), 6u);
+        UNIT_ASSERT_C(HasAnyAffectedRowsField(del),
+            "affected_rows must be present for the statement that flushes the deferred batch");
+
+        auto commit = tx->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(CollectAffectedRows_DeferredEffects_TrueUpsertFlushedByFalseStatement) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto create = session.ExecuteQuery(Q_(R"(
+            CREATE TABLE `/Root/repro_affected_deferred2` (
+                id Int32 NOT NULL,
+                PRIMARY KEY (id)
+            );
+        )"), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto upsert = session.ExecuteQuery(Q_(R"(
+            UPSERT INTO `/Root/repro_affected_deferred2` (id) VALUES (1), (2), (3);
+        )"), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(upsert, "/Root/repro_affected_deferred2"), 0u);
+        UNIT_ASSERT_C(!HasAnyAffectedRowsField(upsert),
+            "affected_rows must be absent for a deferred statement flushed by a later one");
+
+        auto tx = upsert.GetTransaction();
+        UNIT_ASSERT_C(tx.has_value(), "UPSERT did not return a transaction handle");
+
+        auto upsert2 = session.ExecuteQuery(Q_(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            UPSERT INTO `/Root/repro_affected_deferred2` (id) VALUES (1), (2), (3);
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(upsert2.GetStatus(), EStatus::SUCCESS, upsert2.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(upsert2, "/Root/repro_affected_deferred2"), 0u);
+        UNIT_ASSERT_C(!HasAnyAffectedRowsField(upsert2),
+            "affected_rows must be absent for a statement without collect_affected_rows");
+
+        auto ctrl = session.ExecuteQuery(Q_(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            UPSERT INTO `/Root/repro_affected_deferred2` (id) VALUES (4), (5), (6);
+        )"), NYdb::NQuery::TTxControl::Tx(*tx), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(ctrl.GetStatus(), EStatus::SUCCESS, ctrl.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(ctrl, "/Root/repro_affected_deferred2"), 3u);
+        UNIT_ASSERT_C(HasAnyAffectedRowsField(ctrl),
+            "affected_rows must be present for a statement with collect_affected_rows");
+
+        auto commit = tx->Commit().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+
+        auto final = session.ExecuteQuery(Q_(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            UPSERT INTO `/Root/repro_affected_deferred2` (id) VALUES (7), (8), (9);
+        )"), BeginSerializableRW(), GetQuerySettingsBasic()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(final.GetStatus(), EStatus::SUCCESS, final.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(final, "/Root/repro_affected_deferred2"), 3u);
+        UNIT_ASSERT_C(HasAnyAffectedRowsField(final),
+            "affected_rows must be present for a statement with collect_affected_rows");
+    }
 }
 
 } // namespace NKqp

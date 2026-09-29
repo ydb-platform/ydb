@@ -1452,7 +1452,6 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     // Scenario: a TCP XDC payload is partially read, the input session is closed without dropping the output session,
     // and replay must use the saved XDC catch buffer to finish the event exactly once.
     Y_UNIT_TEST(TcpXdcCatchReplayAfterPartialPayloadRead) {
-        return;
         RunXdcCatchReplayAfterPartialPayloadRead(EXdcCatchReplayMode::Tcp);
     }
 
@@ -1460,7 +1459,6 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     // scheduled yet. RDMA sessions must not use graceful reconnect here; the old receive session is replaced instead
     // of replaying serialized RDMA commands across reconnect.
     Y_UNIT_TEST(RdmaXdcCatchReplayAfterPartialPayloadRead) {
-        return;
         if (SkipIfRdmaUnavailable(true, "RdmaXdcCatchReplayAfterPartialPayloadRead")) {
             return;
         }
@@ -1471,7 +1469,6 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     // cursor may have moved. RDMA sessions must use a fresh session instead of attempting graceful replay with stale
     // RDMA state.
     Y_UNIT_TEST(RdmaXdcCatchReplayAfterPartialRdmaRead) {
-        return;
         if (SkipIfRdmaUnavailable(true, "RdmaXdcCatchReplayAfterPartialRdmaRead")) {
             return;
         }
@@ -1482,7 +1479,6 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     // debug API. RDMA sessions must reject graceful continuation and replace the old receive session instead of
     // replaying stale RDMA state.
     Y_UNIT_TEST(RdmaXdcCatchReplayAfterPartialRdmaReadOnPeerSocketClose) {
-        return;
         if (SkipIfRdmaUnavailable(true, "RdmaXdcCatchReplayAfterPartialRdmaReadOnPeerSocketClose")) {
             return;
         }
@@ -1718,7 +1714,6 @@ Y_UNIT_TEST_SUITE(Interconnect) {
     }
 
     Y_UNIT_TEST(SetupRdmaSession) {
-        return;
         if (NRdmaTest::IsRdmaTestDisabled()) {
             Cerr << "SetupRdmaSession test skipped" << Endl;
             return;

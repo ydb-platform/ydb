@@ -2,6 +2,13 @@ items:
 - { name: Overview,                     href: index.md }
 - { name: Lexical structure,            href: lexer.md }
 - { name: Expressions,                  href: expressions.md }
+<<<<<<< HEAD
+=======
+- name: Limitations
+  items:
+  - { name: Unsupported statements,       href: not_yet_supported.md }
+  - { name: Correlated subqueries, EXISTS, and NOT EXISTS, href: correlated-subqueries.md }
+>>>>>>> 8b398c7e853 (docs: improve unsupported constructs navigation (#54419))
 - { name: ACTION,                       href: action.md }
 - { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md,    when: feature_async_replication }
 - { name: ALTER DATABASE,               include: { mode: link, path: alter_database/toc_p.yaml } }

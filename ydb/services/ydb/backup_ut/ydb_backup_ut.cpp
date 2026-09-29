@@ -363,7 +363,7 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     UNIT_ASSERT(std::holds_alternative<TLocalBloomNgramFilterSettings>(indexDesc.GetIndexSettings()));
                     break;
                 case EIndexType::GlobalVectorKMeansTree:
-                case EIndexType::GlobalDistributedHnsw: {
+                case EIndexType::GlobalHnsw: {
                     Ydb::Table::KMeansTreeSettings settings;
                     std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::KMeansTreeSettings expected;
@@ -826,8 +826,8 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalUnique;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
-            return NYdb::NTable::EIndexType::GlobalDistributedHnsw;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            return NYdb::NTable::EIndexType::GlobalHnsw;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             return NYdb::NTable::EIndexType::GlobalFulltextPlain;
@@ -865,9 +865,9 @@ void TestRestoreTableWithIndex(
             )", "table"_a = table, "index"_a = index, "index_type"_a = ConvertIndexTypeToSQL(indexType));
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
-            type = indexType == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw
-                ? "distributed_hnsw" : "vector_kmeans_tree";
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            type = indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                ? "hnsw" : "vector_kmeans_tree";
             if (prefix) {
                 query = fmt::format(R"(CREATE TABLE `{table}` (
                     Key Uint32,
@@ -3566,7 +3566,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalDistributedHnsw:
+            case EIndexTypeGlobalHnsw:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:
@@ -5058,7 +5058,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
-            case EIndexTypeGlobalDistributedHnsw:
+            case EIndexTypeGlobalHnsw:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:

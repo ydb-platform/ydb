@@ -3166,7 +3166,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                 auto success = SpecializedIndexDescription
                     .emplace<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>()
                     .ParseFromString(description);
@@ -3277,7 +3277,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
                 alterData->SpecializedIndexDescription = config.GetVectorIndexKmeansTreeDescription();
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:

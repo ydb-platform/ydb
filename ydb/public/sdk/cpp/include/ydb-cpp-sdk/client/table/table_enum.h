@@ -35,7 +35,7 @@ enum class EIndexType {
     GlobalAsync,
     GlobalUnique,
     GlobalVectorKMeansTree,
-    GlobalDistributedHnsw,
+    GlobalHnsw,
     GlobalFulltextPlain,
     GlobalFulltextRelevance,
     GlobalJson,

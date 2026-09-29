@@ -1511,7 +1511,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             const TString createIndex(Q_(R"(
                 ALTER TABLE `/Root/TestTable`
                     ADD INDEX index
-                    GLOBAL USING distributed_hnsw
+                    GLOBAL USING hnsw
                     ON (emb) COVER (emb, data)
                     WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
             )"));
@@ -1614,10 +1614,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             auto result = session.ExecuteSchemeQuery(Q_(R"(
                 ALTER TABLE `/Root/HnswFollower`
                     ADD INDEX index
-                    GLOBAL USING distributed_hnsw
+                    GLOBAL USING hnsw
                     ON (emb)
                     WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                          levels=1, clusters=2, hnsw_min_rows=1);
+                          levels=1, clusters=2, min_rows=1);
             )")).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
@@ -1722,12 +1722,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                         auto* alter = tx.MutableAlterTable();
                         alter->SetVectorIndexEmbeddingColumn("emb");
                         alter->SetVectorIndexEmbeddingColumnId(2);
+                        alter->SetVectorIndexHnsw(true);
                         auto* settings = alter->MutableVectorIndexKmeansTreeDescription()
                             ->MutableSettings()->mutable_settings();
                         settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
                         settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
                         settings->set_vector_dimension(2);
-                        settings->set_hnsw_min_rows(1);
+                        settings->set_min_rows(1);
                         UNIT_ASSERT(tx.SerializeToString(record.MutableTxBody()));
                         buildTxId = record.GetTxId();
                     }
@@ -1806,9 +1807,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         });
         Y_DEFER { runtime->SetObserverFunc(observer); };
         scheme(Q_(R"(
-            ALTER TABLE `/Root/HnswReady` ADD INDEX idx GLOBAL USING distributed_hnsw ON (emb)
+            ALTER TABLE `/Root/HnswReady` ADD INDEX idx GLOBAL USING hnsw ON (emb)
             WITH (distance=euclidean, vector_type="float", vector_dimension=2,
-                  levels=1, clusters=2, hnsw_min_rows=1);
+                  levels=1, clusters=2, min_rows=1);
         )"));
         UNIT_ASSERT_C(postingShard, "posting finalization did not carry HNSW metadata");
         if (ConstrainedGrant) {
@@ -1849,9 +1850,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )")); });
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         scheme(Q_(R"(
-            ALTER TABLE `/Root/HnswNoController` ADD INDEX idx GLOBAL USING distributed_hnsw ON (emb)
+            ALTER TABLE `/Root/HnswNoController` ADD INDEX idx GLOBAL USING hnsw ON (emb)
             WITH (distance=euclidean, vector_type="float", vector_dimension=2,
-                  levels=1, clusters=2, hnsw_min_rows=1);
+                  levels=1, clusters=2, min_rows=1);
         )"));
         const auto describe = kikimr.RunCall([&] {
             return session.DescribeTable("/Root/HnswNoController").ExtractValueSync();
@@ -1860,7 +1861,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(describe.GetTableDescription().GetIndexDescriptions().size(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(
             describe.GetTableDescription().GetIndexDescriptions().front().GetIndexType(),
-            EIndexType::GlobalDistributedHnsw);
+            EIndexType::GlobalHnsw);
         const auto result = kikimr.RunCall([&] {
             return session.ExecuteDataQuery(Q_(R"(
                 $q = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
@@ -1913,10 +1914,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         schemeQuery(Q_(R"(
             ALTER TABLE `/Root/HnswCounters`
                 ADD INDEX index
-                GLOBAL USING distributed_hnsw
+                GLOBAL USING hnsw
                 ON (emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows=1);
+                      levels=1, clusters=2, min_rows=1);
         )"));
 
         // Add another posting row before restarting the shard.
@@ -2043,9 +2044,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswFullRange`
-                ADD INDEX index GLOBAL USING distributed_hnsw ON (emb)
+                ADD INDEX index GLOBAL USING hnsw ON (emb)
                 WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows=1, hnsw_search_candidates=50);
+                      levels=1, clusters=2, min_rows=1);
         )"));
 
         // Like the benchmark, search the posting table directly. Its query
@@ -2138,9 +2139,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswFullRange`
-                ADD INDEX index GLOBAL USING distributed_hnsw ON (emb)
+                ADD INDEX index GLOBAL USING hnsw ON (emb)
                 WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows=1, hnsw_search_candidates=50);
+                      levels=1, clusters=2, min_rows=1);
         )"));
 
         const TString posting = "/Root/HnswFullRange/index/indexImplPostingTable";
@@ -2271,11 +2272,39 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )")); });
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         scheme(Q_(R"(
-            ALTER TABLE `/Root/HnswView` ADD INDEX vidx GLOBAL USING distributed_hnsw ON (emb)
+            ALTER TABLE `/Root/HnswView` ADD INDEX vidx GLOBAL USING hnsw ON (emb)
             WITH (distance=euclidean, vector_type="float", vector_dimension=2,
-                  levels=1, clusters=2, hnsw_min_rows=1, hnsw_search_candidates=16,
-                  hnsw_rebuild_threshold_percent=5);
+                  levels=1, clusters=2, min_rows=1, M=24, ef_construction=100,
+                  delta_rows=5);
         )"));
+        const auto description = kikimr.RunCall([&] {
+            return session.DescribeTable("/Root/HnswView").ExtractValueSync();
+        });
+        UNIT_ASSERT_C(description.IsSuccess(), description.GetIssues().ToString());
+        const auto indexes = description.GetTableDescription().GetIndexDescriptions();
+        UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1u);
+        const auto& index = indexes.front();
+        UNIT_ASSERT_VALUES_EQUAL(index.GetIndexType(), EIndexType::GlobalHnsw);
+        const auto& vectorSettings = std::get<TKMeansTreeSettings>(index.GetIndexSettings()).Settings;
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.MinRows, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.M, 24u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.EfConstruction, 100u);
+        UNIT_ASSERT_VALUES_EQUAL(vectorSettings.DeltaRows, 5u);
+        const auto show = kikimr.RunCall([&] {
+            return kikimr.GetQueryClient().ExecuteQuery("SHOW CREATE TABLE `/Root/HnswView`;",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(show.IsSuccess(), show.GetIssues().ToString());
+        TResultSetParser createParser(show.GetResultSet(0));
+        UNIT_ASSERT(createParser.TryNextRow());
+        const TString createText = createParser.ColumnParser(0).GetOptionalUtf8().value_or("");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "USING hnsw");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "min_rows = 1");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "M = 24");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "ef_construction = 100");
+        UNIT_ASSERT_STRING_CONTAINS(createText, "delta_rows = 5");
+        UNIT_ASSERT(!createText.Contains("hnsw_search_candidates"));
+
         const TString posting = "/Root/HnswView/vidx/indexImplPostingTable";
         if (Followers) {
             for (const TString& path : {TString("/Root/HnswView"),
@@ -2284,8 +2313,25 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             }
             runtime->SimulateSleep(TDuration::Seconds(5));
         }
-        for (const bool positive : {false, true}) {
+        ui32 expectedEfSearch = 15;
+        ui64 vectorReads = 0;
+        auto observer = runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::TEvRead::EventType) {
+                const auto& read = ev->Get<TEvDataShard::TEvRead>()->Record;
+                if (read.HasVectorTopK()) {
+                    UNIT_ASSERT_VALUES_EQUAL(read.GetVectorTopK().GetHnswEfSearch(), expectedEfSearch);
+                    ++vectorReads;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime->SetObserverFunc(observer); };
+        // A query override must reach the shard without changing later defaults.
+        for (const bool positive : {false, true, false}) {
+            expectedEfSearch = positive ? 50 : 15;
+            const ui64 readsBefore = vectorReads;
             const TString query = TStringBuilder()
+                << (positive ? "PRAGMA ydb.HNSWEfSearch = \"50\"; " : "")
                 << "PRAGMA ydb.KMeansTreeSearchTopSize = \"1\"; "
                 << "$q = Knn::ToBinaryStringFloat([" << (positive ? "1000.0f" : "-1000.0f") << ", 32.0f]); "
                 << "SELECT pk FROM `/Root/HnswView` VIEW vidx "
@@ -2304,7 +2350,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 for (const auto& phase : NYdb::TProtoAccessor::GetProto(*result.GetStats()).query_phases()) {
                     for (const auto& access : phase.table_access()) {
                         UNIT_ASSERT_C(!access.name().EndsWith("/indexImplLevelTable"),
-                            "distributed_hnsw VIEW must not traverse k-means clusters");
+                            "hnsw VIEW must not traverse k-means clusters");
                         if (access.name() == posting) {
                             rowsRead += access.reads().rows();
                         }
@@ -2317,6 +2363,37 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 runtime->SimulateSleep(TDuration::Seconds(1));
             }
             UNIT_ASSERT_C(accelerated, "VIEW vidx did not use its partition-local HNSW graph");
+            UNIT_ASSERT_GT(vectorReads, readsBefore);
+        }
+        expectedEfSearch = 75;
+        const ui64 readsBefore = vectorReads;
+        const auto direct = kikimr.RunCall([&] {
+            return session.ExecuteDataQuery(Q_(R"(
+                PRAGMA ydb.HNSWEfSearch = "75";
+                $q = Knn::ToBinaryStringFloat([1000.0f, 32.0f]);
+                SELECT pk FROM `/Root/HnswView/vidx/indexImplPostingTable`
+                ORDER BY Knn::EuclideanDistance(emb, $q) LIMIT 1;
+            )"), TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+        });
+        UNIT_ASSERT_C(direct.IsSuccess(), direct.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(direct.GetResultSet(0)), "[[96u]]");
+        UNIT_ASSERT_GT(vectorReads, readsBefore);
+    }
+
+    Y_UNIT_TEST(HnswEfSearchPragmaValidation) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        for (const TString& value : {"0", "1001", "-1", "invalid"}) {
+            const auto result = session.ExplainDataQuery(
+                "PRAGMA ydb.HNSWEfSearch = \"" + value + "\"; SELECT 1;").ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), value);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "HNSWEfSearch");
+        }
+        for (const TString& value : {"1", "15", "1000"}) {
+            const auto result = session.ExplainDataQuery(
+                "PRAGMA ydb.HNSWEfSearch = \"" + value + "\"; SELECT 1;").ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 
@@ -2420,10 +2497,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswWrites`
                 ADD INDEX index
-                GLOBAL USING distributed_hnsw
+                GLOBAL USING hnsw
                 ON (emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows=1);
+                      levels=1, clusters=2, min_rows=1);
         )"));
 
         const TString search(Q_(R"(
@@ -2491,10 +2568,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(initial.IsSuccess(), initial.GetIssues().ToString());
         scheme(Q_(R"(
-            ALTER TABLE `/Root/HnswPending` ADD INDEX index GLOBAL USING distributed_hnsw ON (emb)
+            ALTER TABLE `/Root/HnswPending` ADD INDEX index GLOBAL USING hnsw ON (emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                    levels=1, clusters=2, hnsw_min_rows=1,
-                    hnsw_rebuild_threshold_percent=1000);
+                    levels=1, clusters=2, min_rows=1,
+                    delta_rows=1000);
         )"));
         const TString search(Q_(R"(
             $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
@@ -2558,9 +2635,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )"));
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswSnapshotDefault` ADD INDEX index
-                GLOBAL USING distributed_hnsw ON (emb)
+                GLOBAL USING hnsw ON (emb)
                 WITH (distance=euclidean, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows=1);
+                      levels=1, clusters=2, min_rows=1);
         )"));
         const TString posting = "/Root/HnswSnapshotDefault/index/indexImplPostingTable";
         const TString search = "$q = Knn::ToBinaryStringFloat([1.0f, 0.0f]); SELECT pk FROM `"
@@ -2627,10 +2704,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswMvcc`
                 ADD INDEX index
-                GLOBAL USING distributed_hnsw
+                GLOBAL USING hnsw
                 ON (emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows=1);
+                      levels=1, clusters=2, min_rows=1);
         )"));
 
         const TString search(Q_(R"(
@@ -2685,9 +2762,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 "(1, Untag(Knn::ToBinaryStringFloat([1.0f, 0.0f]), \"FloatVector\")), "
                 "(2, Untag(Knn::ToBinaryStringFloat([2.0f, 0.0f]), \"FloatVector\"));");
             UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
-            scheme("ALTER TABLE `/Root/" + name + "` ADD INDEX index GLOBAL USING distributed_hnsw "
+            scheme("ALTER TABLE `/Root/" + name + "` ADD INDEX index GLOBAL USING hnsw "
                 "ON (emb) WITH (similarity=inner_product, vector_type=\"float\", vector_dimension=2, "
-                "levels=1, clusters=2, hnsw_min_rows=1);");
+                "levels=1, clusters=2, min_rows=1);");
         }
         auto read = [&](const TString& name) {
             const auto result = session.ExecuteDataQuery(
@@ -2760,10 +2837,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         scheme(Q1_(std::format(R"(
             ALTER TABLE `/Root/HnswFallback`
                 ADD INDEX index
-                GLOBAL USING distributed_hnsw
+                GLOBAL USING hnsw
                 ON (emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows={});
+                      levels=1, clusters=2, min_rows={});
         )", minRows)));
 
         const TString search(Q_(R"(
@@ -2934,9 +3011,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )")); });
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         scheme(Q_(R"(
-            ALTER TABLE `/Root/HnswCoveredCache` ADD INDEX index GLOBAL USING distributed_hnsw
+            ALTER TABLE `/Root/HnswCoveredCache` ADD INDEX index GLOBAL USING hnsw
             ON (emb) COVER (payload) WITH (distance=cosine, vector_type="float", vector_dimension=4,
-                  levels=1, clusters=2, hnsw_min_rows=1);
+                  levels=1, clusters=2, min_rows=1);
         )"));
         const TString posting = "/Root/HnswCoveredCache/index/indexImplPostingTable";
         WaitForCompaction(&kikimr.GetTestServer(), posting);
@@ -3021,9 +3098,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )")); });
         UNIT_ASSERT_C(write.IsSuccess(), write.GetIssues().ToString());
         scheme(Q_(R"(
-            ALTER TABLE `/Root/HnswReplicas` ADD INDEX index GLOBAL USING distributed_hnsw ON (emb)
+            ALTER TABLE `/Root/HnswReplicas` ADD INDEX index GLOBAL USING hnsw ON (emb)
             WITH (similarity=inner_product, vector_type="float", vector_dimension=2,
-                  levels=1, clusters=2, hnsw_min_rows=1);
+                  levels=1, clusters=2, min_rows=1);
         )"));
         scheme(Q_(R"(
             ALTER TABLE `/Root/HnswReplicas/index/indexImplPostingTable`

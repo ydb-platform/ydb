@@ -839,31 +839,40 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         Ydb::Table::KMeansTreeSettings settings;
         TString error;
 
-        UNIT_ASSERT(FillSetting(settings, "hnsw_min_rows", "10000", error));
-        UNIT_ASSERT(FillSetting(settings, "hnsw_connectivity", "24", error));
-        UNIT_ASSERT(FillSetting(settings, "hnsw_construction_candidates", "200", error));
-        UNIT_ASSERT(FillSetting(settings, "hnsw_search_candidates", "15", error));
-        UNIT_ASSERT(FillSetting(settings, "hnsw_rebuild_threshold_percent", "5", error));
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_min_rows(), 10000);
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_connectivity(), 24);
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_construction_candidates(), 200);
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_search_candidates(), 15);
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_rebuild_threshold_percent(), 5);
+        UNIT_ASSERT(FillSetting(settings, "min_rows", "10000", error));
+        UNIT_ASSERT(FillSetting(settings, "m", "24", error));
+        UNIT_ASSERT(FillSetting(settings, "ef_construction", "200", error));
+        UNIT_ASSERT(FillSetting(settings, "delta_rows", "5", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().min_rows(), 10000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().m(), 24);
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().ef_construction(), 200);
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 5);
+        UNIT_ASSERT(FillSetting(settings, "delta_rows", "0", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 0);
+        UNIT_ASSERT(FillSetting(settings, "delta_rows", "4294967296", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), 4294967296ULL);
+        UNIT_ASSERT(FillSetting(settings, "delta_rows", "18446744073709551615", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().delta_rows(), Max<ui64>());
+        UNIT_ASSERT(!FillSetting(settings, "delta_rows", "18446744073709551616", error));
+        UNIT_ASSERT(!FillSetting(settings, "delta_rows", "-1", error));
+        UNIT_ASSERT(!FillSetting(settings, "delta_rows", "bad", error));
+        for (const TString& oldName : {"hnsw_min_rows", "hnsw_connectivity", "hnsw_construction_candidates",
+                                     "hnsw_rebuild_threshold_percent", "hnsw_search_candidates"}) {
+            UNIT_ASSERT(!FillSetting(settings, oldName, "15", error));
+        }
 
-        UNIT_ASSERT(FillSetting(settings, "hnsw_min_rows", "4294967296", error));
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_min_rows(), 4294967296ULL);
-        UNIT_ASSERT(FillSetting(settings, "hnsw_min_rows", "18446744073709551615", error));
-        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_min_rows(), Max<ui64>());
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_min_rows", "18446744073709551616", error));
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_min_rows", "-1", error));
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_min_rows", "not-a-number", error));
+        UNIT_ASSERT(FillSetting(settings, "min_rows", "4294967296", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().min_rows(), 4294967296ULL);
+        UNIT_ASSERT(FillSetting(settings, "min_rows", "18446744073709551615", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().min_rows(), Max<ui64>());
+        UNIT_ASSERT(!FillSetting(settings, "min_rows", "18446744073709551616", error));
+        UNIT_ASSERT(!FillSetting(settings, "min_rows", "-1", error));
+        UNIT_ASSERT(!FillSetting(settings, "min_rows", "not-a-number", error));
 
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_connectivity", "0", error));
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_construction_candidates", "0", error));
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_search_candidates", "0", error));
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_connectivity", ToString(MaxHnswConnectivity + 1), error));
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_construction_candidates", ToString(MaxHnswConstructionCandidates + 1), error));
-        UNIT_ASSERT(!FillSetting(settings, "hnsw_search_candidates", ToString(MaxHnswSearchCandidates + 1), error));
+        UNIT_ASSERT(!FillSetting(settings, "m", "0", error));
+        UNIT_ASSERT(!FillSetting(settings, "ef_construction", "0", error));
+        UNIT_ASSERT(!FillSetting(settings, "m", ToString(MaxHnswConnectivity + 1), error));
+        UNIT_ASSERT(!FillSetting(settings, "ef_construction", ToString(MaxHnswConstructionCandidates + 1), error));
     }
 
     Y_UNIT_TEST(ValidateHnswResourceLimits) {
@@ -873,19 +882,17 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         settings.set_vector_dimension(4);
         TString error;
 
-        settings.set_hnsw_connectivity(MaxHnswConnectivity + 1);
+        settings.set_m(MaxHnswConnectivity + 1);
         UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_connectivity");
+        UNIT_ASSERT_STRING_CONTAINS(error, "M");
 
-        settings.set_hnsw_connectivity(MaxHnswConnectivity);
-        settings.set_hnsw_construction_candidates(MaxHnswConstructionCandidates + 1);
+        settings.set_m(MaxHnswConnectivity);
+        settings.set_ef_construction(MaxHnswConstructionCandidates + 1);
         UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_construction_candidates");
+        UNIT_ASSERT_STRING_CONTAINS(error, "ef_construction");
 
-        settings.set_hnsw_construction_candidates(MaxHnswConstructionCandidates);
-        settings.set_hnsw_search_candidates(MaxHnswSearchCandidates + 1);
-        UNIT_ASSERT(!ValidateSettings(settings, error));
-        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_search_candidates");
+        settings.set_ef_construction(MaxHnswConstructionCandidates);
+        UNIT_ASSERT(ValidateSettings(settings, error));
     }
 }
 

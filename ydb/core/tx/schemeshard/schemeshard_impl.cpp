@@ -8544,7 +8544,7 @@ void TSchemeShard::FillTableDescriptionForShardIdx(
     if (pinfo->Name == NTableIndex::NKMeans::PostingTable) {
         const auto indexIt = Indexes.find(pinfo->ParentPathId);
         if (indexIt != Indexes.end()
-                && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw
+                && indexIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw
                 && indexIt->second->State == NKikimrSchemeOp::EIndexStateReady
                 && !indexIt->second->IndexKeys.empty()) {
             const auto& index = *indexIt->second;

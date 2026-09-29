@@ -68,6 +68,7 @@ struct TReadIteratorVectorTopItem {
 struct TReadIteratorVectorTop {
     ui32 Column = 0;
     ui32 Limit = 0;
+    ui32 HnswEfSearch = 15;
     TString Target;
     std::unique_ptr<NKMeans::IClusters> KMeans;
     std::vector<ui32> DistinctColumns;
@@ -417,7 +418,7 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
 
     const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
         precharge.ItemsPrecharged, settings.vector_dimension(),
-        settings.has_hnsw_connectivity() ? settings.hnsw_connectivity() : 16);
+        settings.has_m() ? settings.m() : 16);
     memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
     if (!memoryReservation) {
         return {};
@@ -451,7 +452,7 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     // scanned rows as well as their keys before handing the build its budget.
     const ui64 requiredBytes = THnswIndex::EstimateMemoryBytes(
         result.size(), settings.vector_dimension(),
-        settings.has_hnsw_connectivity() ? settings.hnsw_connectivity() : 16, keyBytes);
+        settings.has_m() ? settings.m() : 16, keyBytes);
     if (requiredBytes > reservedBytes) {
         auto additionalReservation = dataShard.TryReserveHnswCacheMemory(requiredBytes - reservedBytes);
         if (!additionalReservation) {
@@ -1509,7 +1510,7 @@ private:
         }
 
         while (true) {
-            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion);
+            auto candidates = topK.HnswIndex->Search(topK.Target, requested, State.ReadVersion, topK.HnswEfSearch);
             if (!candidates.Covered) {
                 return candidates;
             }
@@ -3106,6 +3107,9 @@ public:
                 }
                 topState->DistinctColumns.push_back(colIdx);
             }
+            if (topK.GetHnswEfSearch() == 0 || topK.GetHnswEfSearch() > NKMeans::MaxHnswSearchCandidates) {
+                error = "HNSWEfSearch must be in 1..1000";
+            }
             if (error != "") {
                 SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                     << error << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");
@@ -3113,6 +3117,7 @@ public:
             }
             topState->Column = topK.GetColumn();
             topState->Limit = topK.GetLimit();
+            topState->HnswEfSearch = topK.GetHnswEfSearch();
             topState->Target = topK.GetTargetVector();
 
             // Prefer the index built at vector-index finalization. If it is
@@ -3121,9 +3126,8 @@ public:
             const ui32 localTid = TableInfo.LocalTid;
             const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
             const bool useCachedHnswParameters = topK.GetSettings().vector_dimension() == 0
-                && !topK.GetSettings().has_hnsw_connectivity()
-                && !topK.GetSettings().has_hnsw_construction_candidates()
-                && !topK.GetSettings().has_hnsw_search_candidates();
+                && !topK.GetSettings().has_m()
+                && !topK.GetSettings().has_ef_construction();
             auto hnswSettings = topK.GetSettings();
             if (NKMeans::NeedsVectorSettingsAutoSelect(hnswSettings)) {
                 NKMeans::AutoSelectVectorSettings(hnswSettings, topK.GetTargetVector());

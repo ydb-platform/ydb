@@ -346,8 +346,8 @@ void TSchemeShard::TIndexBuilder::TTxBase::Fill(NKikimrIndexBuilder::TIndexBuild
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
             *index.mutable_global_vector_kmeans_tree_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw:
-            *index.mutable_global_distributed_hnsw_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw:
+            *index.mutable_global_hnsw_index() = Ydb::Table::GlobalVectorKMeansTreeIndex();
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:

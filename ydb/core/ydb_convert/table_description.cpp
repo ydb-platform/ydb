@@ -2003,9 +2003,9 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             );
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw: {
-            auto* vectorIndex = tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw
-                ? index->mutable_global_distributed_hnsw_index()
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw: {
+            auto* vectorIndex = tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                ? index->mutable_global_hnsw_index()
                 : index->mutable_global_vector_kmeans_tree_index();
             FillGlobalIndexSettings(
                 *vectorIndex->mutable_level_table_settings(),
@@ -2270,9 +2270,9 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             break;
 
-        case Ydb::Table::TableIndex::kGlobalDistributedHnswIndex:
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw);
-            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_distributed_hnsw_index().vector_settings();
+        case Ydb::Table::TableIndex::kGlobalHnswIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw);
+            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_hnsw_index().vector_settings();
             break;
 
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:

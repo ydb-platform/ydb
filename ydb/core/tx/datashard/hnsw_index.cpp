@@ -36,9 +36,8 @@ constexpr size_t EstimatedBytesPerNodeOverhead = 256;
 constexpr unsigned BuildThreadsPerIndex = 1;
 constexpr ui32 DefaultHnswConnectivity = 16;
 constexpr ui32 DefaultHnswConstructionCandidates = 200;
-constexpr ui32 DefaultHnswSearchCandidates = 15;
 constexpr ui64 DefaultHnswMinRows = 10000;
-constexpr ui32 DefaultHnswRebuildThresholdPercent = 10;
+constexpr ui64 DefaultHnswDeltaRows = 10000;
 
 std::unique_ptr<similarity::Space<float>> CreateSpace(VectorIndexSettings::Metric metric, TString& error) {
     switch (metric) {
@@ -96,35 +95,30 @@ struct TFloatVectorView {
 } // namespace
 
 ui64 GetHnswMinRows(const VectorIndexSettings& settings) {
-    return settings.has_hnsw_min_rows() ? settings.hnsw_min_rows() : DefaultHnswMinRows;
+    return settings.has_min_rows() ? settings.min_rows() : DefaultHnswMinRows;
 }
 
-ui32 GetHnswRebuildThresholdPercent(const VectorIndexSettings& settings) {
-    return settings.has_hnsw_rebuild_threshold_percent()
-        ? settings.hnsw_rebuild_threshold_percent() : DefaultHnswRebuildThresholdPercent;
+ui64 GetHnswDeltaRows(const VectorIndexSettings& settings) {
+    return settings.has_delta_rows()
+        ? settings.delta_rows() : DefaultHnswDeltaRows;
 }
 
 bool AreHnswIndexSettingsCompatible(
         const VectorIndexSettings& cached,
         const VectorIndexSettings& requested) {
     const auto connectivity = [](const auto& settings) {
-        return settings.has_hnsw_connectivity()
-            ? settings.hnsw_connectivity() : DefaultHnswConnectivity;
+        return settings.has_m()
+            ? settings.m() : DefaultHnswConnectivity;
     };
     const auto constructionCandidates = [](const auto& settings) {
-        return settings.has_hnsw_construction_candidates()
-            ? settings.hnsw_construction_candidates() : DefaultHnswConstructionCandidates;
-    };
-    const auto searchCandidates = [](const auto& settings) {
-        return settings.has_hnsw_search_candidates()
-            ? settings.hnsw_search_candidates() : DefaultHnswSearchCandidates;
+        return settings.has_ef_construction()
+            ? settings.ef_construction() : DefaultHnswConstructionCandidates;
     };
     return cached.metric() == requested.metric()
         && cached.vector_type() == requested.vector_type()
         && cached.vector_dimension() == requested.vector_dimension()
         && connectivity(cached) == connectivity(requested)
-        && constructionCandidates(cached) == constructionCandidates(requested)
-        && searchCandidates(cached) == searchCandidates(requested);
+        && constructionCandidates(cached) == constructionCandidates(requested);
 }
 
 void THnswIndexChanges::Set(TString key, TRowVersion version,
@@ -236,12 +230,12 @@ public:
 
         Index = std::make_unique<similarity::Hnsw<float>>(/* PrintProgress */ false, *Space, Objects);
 
-        Connectivity = settings.has_hnsw_connectivity()
-            ? settings.hnsw_connectivity() : DefaultHnswConnectivity;
+        Connectivity = settings.has_m()
+            ? settings.m() : DefaultHnswConnectivity;
         similarity::AnyParams buildParams(std::vector<std::string>{
             "M=" + std::to_string(Connectivity),
-            "efConstruction=" + std::to_string(settings.has_hnsw_construction_candidates()
-                ? settings.hnsw_construction_candidates() : DefaultHnswConstructionCandidates),
+            "efConstruction=" + std::to_string(settings.has_ef_construction()
+                ? settings.ef_construction() : DefaultHnswConstructionCandidates),
             "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
         });
         Index->CreateIndex(buildParams);
@@ -251,13 +245,10 @@ public:
                 return false;
             }
         }
-        Index->SetQueryTimeParams(similarity::AnyParams({
-            "efSearch=" + std::to_string(settings.has_hnsw_search_candidates()
-                ? settings.hnsw_search_candidates() : DefaultHnswSearchCandidates)}));
         return true;
     }
 
-    THnswSearchResult Search(TStringBuf targetVector, size_t k, TRowVersion readVersion) const {
+    THnswSearchResult Search(TStringBuf targetVector, size_t k, TRowVersion readVersion, ui32 efSearch) const {
         THnswSearchResult result;
         if (!CanRead(readVersion)) {
             result.Covered = false;
@@ -278,7 +269,7 @@ public:
         const size_t graphK = Min(k, Keys.size()) + Min(ChangeCount(), Keys.size() - Min(k, Keys.size()));
         similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(Max<size_t>(graphK, 1)));
         if (Index) {
-            Index->Search(&query, -1);
+            Index->SearchWithEf(&query, efSearch);
         }
 
         const similarity::KNNQueue<float>* queue = query.Result();
@@ -467,8 +458,8 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
     }
 
     if (maxMemoryBytes != 0) {
-        const ui32 connectivity = settings.has_hnsw_connectivity()
-            ? settings.hnsw_connectivity() : DefaultHnswConnectivity;
+        const ui32 connectivity = settings.has_m()
+            ? settings.m() : DefaultHnswConnectivity;
         size_t keyBytes = 0;
         for (const auto& [key, _] : keysAndVectors) {
             if (key.size() > Max<size_t>() - keyBytes) {
@@ -514,8 +505,8 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
     return std::unique_ptr<THnswIndex>(new THnswIndex(std::move(impl)));
 }
 
-THnswSearchResult THnswIndex::Search(TStringBuf targetVector, size_t k, TRowVersion version) const {
-    return Impl->Search(targetVector, k, version);
+THnswSearchResult THnswIndex::Search(TStringBuf targetVector, size_t k, TRowVersion version, ui32 efSearch) const {
+    return Impl->Search(targetVector, k, version, efSearch);
 }
 
 bool THnswIndex::GetVector(TStringBuf key, TString& result, TRowVersion version) const {
@@ -557,9 +548,8 @@ bool THnswIndex::CanRead(TRowVersion version) const {
     return Impl->CanRead(version);
 }
 
-bool THnswIndex::NeedsRebuild(ui32 thresholdPercent) const {
-    return static_cast<long double>(ChangeCount()) * 100
-        > static_cast<long double>(Max<size_t>(Size(), 1)) * thresholdPercent;
+bool THnswIndex::NeedsRebuild(ui64 deltaRows) const {
+    return ChangeCount() > deltaRows;
 }
 
 bool THnswIndex::IsValidVector(TStringBuf vector, size_t dimension) {

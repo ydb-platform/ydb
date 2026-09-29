@@ -96,7 +96,7 @@ bool IsSecondaryIndex(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -119,7 +119,7 @@ TTableColumns CalcTableImplDescription(NKikimrSchemeOp::EIndexType indexType, co
     auto takeKeyColumns = index.KeyColumns.size();
     if (!isSecondaryIndex) { // vector and fulltext indexes have special embedding and text key columns
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -176,8 +176,8 @@ std::optional<NKikimrSchemeOp::EIndexType> TryConvertIndexType(Ydb::Table::Table
             return NKikimrSchemeOp::EIndexTypeGlobalUnique;
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
             return NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalDistributedHnswIndex:
-            return NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex:
+            return NKikimrSchemeOp::EIndexTypeGlobalHnsw;
         case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextPlainIndex:
             return enableFulltextCompact
                 ? NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact
@@ -207,7 +207,7 @@ bool IsLocalTableIndex(Ydb::Table::TableIndex::TypeCase type) {
         case Ydb::Table::TableIndex::kGlobalAsyncIndex:
         case Ydb::Table::TableIndex::kGlobalUniqueIndex:
         case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
-        case Ydb::Table::TableIndex::kGlobalDistributedHnswIndex:
+        case Ydb::Table::TableIndex::kGlobalHnswIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
         case Ydb::Table::TableIndex::kGlobalJsonIndex:
@@ -294,7 +294,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     } else {
         // Vector and fulltext indexes allow to add all columns both to index & data
         Y_ASSERT(indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-            || indexType == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw
+            || indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance
             || indexType == NKikimrSchemeOp::EIndexTypeGlobalJson
@@ -317,7 +317,7 @@ bool DoesIndexSupportTTL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             return true;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -341,7 +341,7 @@ std::span<const std::string_view> GetImplTables(
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             return GlobalSecondaryImplTables;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
             if (indexKeys.size() == 1) {
                 return GlobalKMeansTreeImplTables;
             } else {

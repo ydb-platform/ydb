@@ -41,11 +41,11 @@ public:
     TString IndexName = "index";
 
     TString IndexType = "KmeansTree";
-    ui64 HnswMinRows = 10000;
-    ui32 HnswConnectivity = 16;
-    ui32 HnswConstructionCandidates = 200;
-    ui32 HnswSearchCandidates = 15;
-    ui32 HnswRebuildThresholdPercent = 10;
+    ui64 MinRows = 10000;
+    ui32 M = 16;
+    ui32 EfConstruction = 200;
+    ui32 HnswEfSearch = 15;
+    ui64 DeltaRows = 10000;
     bool KmeansTreeCovering = false;
     bool KmeansTreePrefixed = false;
 
@@ -74,7 +74,7 @@ public:
     bool Recall = false;
     bool NonIndexedSearch = false;
     bool StaleRO = false;
-    bool DistributedHnsw = false;
+    bool Hnsw = false;
     bool KeyIsInt = false;
 };
 

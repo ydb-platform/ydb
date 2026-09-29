@@ -248,7 +248,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 }
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                 TString msg;
                 if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
@@ -457,7 +457,7 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 break;
             }
             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-            case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                 const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
                 NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {

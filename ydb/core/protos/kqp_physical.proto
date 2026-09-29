@@ -314,6 +314,7 @@ message TKqpPhyVectorTopK {
     TKqpPhyValue TargetVector = 3;
     TKqpPhyValue Limit = 4;
     repeated uint32 DistinctColumns = 5;
+    optional uint32 HnswEfSearch = 6;
 }
 
 message TKqpPhyCnStreamLookup {
@@ -364,8 +365,9 @@ message TKqpPhyCnVectorSearch {
     // Prefixed index: the transform input carries, per prefix group, the root
     // __ydb_parent id alongside the target vector.
     bool HasPrefix = 13;
-    // Unprefixed distributed_hnsw searches every partition-local graph.
+    // Unprefixed hnsw searches every partition-local graph.
     bool FullRangeHnsw = 14;
+    optional uint32 HnswEfSearch = 15;
 }
 
 message TKqpPhyCnSequencer {

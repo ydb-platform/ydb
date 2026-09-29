@@ -8,7 +8,7 @@ An authentication client is a user who undergoes the authentication procedure wh
 
 {% endnote %}
 
-The following authentication modes are supported:
+The following authentication types are supported:
 
 * [Anonymous](#anonymous) authentication.
 * Authentication by [login and password](#static-credentials).
@@ -19,9 +19,7 @@ The following authentication modes are supported:
 
 ## Anonymous authentication {#anonymous}
 
-Anonymous authentication allows you to connect to {{ ydb-short-name }} without specifying any credentials like username and password. This type of access should be used only for educational purposes in local databases that cannot be accessed over the network.
-
-However, if a user or token is specified, the corresponding authentication mode will work with subsequent authorization.
+By default, {{ ydb-short-name }} allows executing requests without specifying authentication data, such as a username or [token](../concepts/glossary.md#auth-token). Access rights verification ([authorization](authorization.md)) is also not performed in this case.
 
 {% note warning %}
 
@@ -29,18 +27,18 @@ Anonymous authentication should be used only for evaluation purposes for local d
 
 {% endnote %}
 
-To enable anonymous authentication, use `false` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/auth_config.md#auth).
+The `enforce_user_token_requirement` flag in the [authentication mode settings](../reference/configuration/security_config.md#security-auth) of {{ ydb-short-name }} is responsible for disabling anonymous authentication.
 
-## Authenticating by username and password {#static-credentials}
+Depending on the authentication mode settings, the actual authentication may not be anonymous:
 
 - A token missing from requests may be replaced with a default token.
 - A token explicitly specified in requests may be checked according to the appropriate rules.
 
 Then requests will be executed non-anonymously, and permission checks will also be performed.
 
-Only digits and lowercase Latin letters can be used in usernames. [Password complexity requirements](#password-complexity) can be configured.
+Depending on the [access level settings](../reference/configuration/security_config.md#security-access-levels), anonymous requests may also perform actions in the system that require administrative access level.
 
-The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.
+## Authentication by login and password {#static-credentials}
 
 Authentication by login and password via the {{ ydb-short-name }} server is available only for [local users](../concepts/glossary.md#access-user). External user authentication involves servers of external systems.
 
@@ -75,11 +73,11 @@ There is another way to prevent a user from authenticating: forced blocking by a
 
 {{ ydb-short-name }} provides protection against password brute force by the user. A user will be considered blocked if they exceed the number of incorrect password attempts. After the specified time expires, they will be able to authenticate again.
 
-By default, a user has four attempts to enter a password. If a user fails to enter the correct password in four attempts, the user will be locked out for an hour. You can change these lockout settings in the `auth_config` section of the [configuration](../reference/configuration/auth_config.md#account-lockout).
+{% note info %}
 
 This mechanism applies only to users that are served by {{ ydb-short-name }} itself, the so-called built-in users. Users served by external authentication sources, such as LDAP servers, are not subject to the password brute-force protection mechanism.
 
-### Manual user lockout
+{% endnote %}
 
 By default, the user is given 4 attempts to enter the correct password. Otherwise, authentication will be blocked for them for one hour. You can configure user blocking criteria in the [configuration](../reference/configuration/auth_config.md#account-lockout).
 
@@ -87,34 +85,11 @@ If necessary, the cluster or database administrator can [unblock](../yql/referen
 
 Information about the user's lock status and the number of incorrect password entry attempts can be found in the user's [system view](../dev/system-views.md#users).
 
-Examples of supported LDAP implementations include [OpenLDAP](https://openldap.org/) and [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
+## Authentication using an LDAP directory {#ldap}
 
 {{ ydb-short-name }} integrates interaction with the [LDAP directory](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol). The LDAP directory is external to the {{ ydb-short-name }} service and is used for authenticating and authorizing database users. Before using this method of authentication and authorization, you must have a deployed LDAP service and configured network access between it and the {{ ydb-short-name }} servers.
 
-* **Anonymous**: Empty token passed in a request.
-* **Access Token**: Fixed token set as a parameter for the client (SDK or CLI) and passed in requests.
-* **Refresh Token**: [OAuth token](https://auth0.com/blog/refresh-tokens-what-are-they-and-when-to-use-them/) of a user's personal account set as a parameter for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
-* **Service Account Key**: Service account attributes and a signature key set as parameters for the client (SDK or CLI), which the client periodically sends to the IAM API in the background to rotate a token (obtain a new one) to pass in requests.
-* **Metadata**: Client (SDK or CLI) periodically accesses a local service to rotate a token (obtain a new one) to pass in requests.
-* **OAuth 2.0 token exchange** - The client (SDK or CLI) exchanges a token of another type for an access token using the [OAuth 2.0 token exchange protocol](https://www.rfc-editor.org/rfc/rfc8693), then it uses the access token in {{ ydb-short-name }} API requests.
-
-Any owner of a valid token can get access to perform operations; therefore, the principal objective of the security system is to ensure that a token remains private and to protect it from being compromised.
-
-Authentication modes with token rotation, such as **Refresh Token** and **Service Account Key**, provide a higher level of security compared to the **Access Token** mode that uses a fixed token, since only secrets with a short validity period are transmitted to the {{ ydb-short-name }} server over the network.
-
-The highest level of security and performance is provided when using the **Metadata** mode, since it eliminates the need to work with secrets when deploying an application and allows accessing the IAM system and caching a token in advance, before running the application.
-
-When choosing the authentication mode among those supported by the server and environment, follow the recommendations below:
-
-* **You would normally use Anonymous** on self-deployed local {{ ydb-short-name }} clusters that are inaccessible over the network.
-* **You would use Access Token** when other modes are not supported on server side or for setup/debugging purposes. It does not require that the client access IAM. However, if the IAM system supports an API for token rotation, fixed tokens issued by this IAM usually have a short validity period, which makes it necessary to update them manually in the IAM system on a regular basis.
-* **Refresh Token** can be used when performing one-time manual operations under a personal account, for example, related to DB data maintenance, performing ad-hoc operations in the CLI, or running applications from a workstation. You can manually obtain this token from IAM once to have it last a long time and save it in an environment variable on a personal workstation to use automatically and with no additional authentication parameters on CLI launch.
-* **Service Account Key** is mainly used for applications designed to run in environments where the **Metadata** mode is supported, when testing them outside these environments (for example, on a workstation). It can also be used for applications outside these environments, working as an analog of **Refresh Token** for service accounts. Unlike a personal account, service account access objects and roles can be restricted.
-* **Metadata** is used when deploying applications in clouds. Currently, this mode is supported on virtual machines and in {{ sf-name }} {{ yandex-cloud }}.
-
-The token to specify in request parameters can be obtained in the IAM system that the specific {{ ydb-short-name }} deployment is associated with. In particular, {{ ydb-short-name }} in {{ yandex-cloud }} uses Yandex.Passport OAuth and {{ yandex-cloud }} service accounts. When using {{ ydb-short-name }} in a corporate context, a company's standard centralized authentication system may be used.
-
-When using modes in which the {{ ydb-short-name }} client accesses the IAM system, the IAM URL that provides an API for issuing tokens can be set additionally. By default, existing SDKs and CLIs attempt to access the {{ yandex-cloud }} IAM API hosted at `iam.api.cloud.yandex.net:443`.
+Examples of supported LDAP directory implementations: [OpenLdap](https://openldap.org/), [Active Directory](https://azure.microsoft.com/en-us/products/active-directory/).
 
 ### Authentication
 
@@ -176,9 +151,10 @@ By default, {{ ydb-short-name }} searches only for groups in which the user is d
 
 {% note info %}
 
-In the current implementation, the group names that {{ ydb-short-name }} uses match the values stored in the *memberOf* attribute. These names can be long and difficult to read.
+In the current implementation, the group names that {{ ydb-short-name }} will operate with match the values written in the `memberOf` attribute. They can be long and hard to read.
 
 Example:
+
 
 ```text
 cn=Developers,ou=Groups,dc=mycompany,dc=net@ldap
@@ -194,11 +170,11 @@ The frequency of updating information about a user and their groups is set by th
 
 {% note warning %}
 
-It should be noted that currently, {{ ydb-short-name }} does not have the capability to track group renaming on the LDAP server side. Consequently, a group with a new name will not retain the rights assigned to the group under its previous name.
+Note that currently {{ ydb-short-name }} cannot track group renames made on the LDAP server side. As a result, a group with a new name will not have the same permissions as the group with the old name.
 
 {% endnote %}
 
-### LDAP users and groups in {{ ydb-short-name }}
+### LDAP users and LDAP groups in {{ ydb-short-name }}
 
 Since {{ ydb-short-name }} allows using different user authentication methods, when working with user and group names it is often useful to distinguish where exactly the user was authenticated. For all authentication types except login and password authentication, group and user names are appended with a suffix of the form `@<auth-domain>`.
 
@@ -212,7 +188,7 @@ For LDAP users, *auth-domain* is set in the [configuration parameter](../referen
 
 To distinguish that the entered login must be a login of a user from the LDAP directory rather than a login of a local {{ ydb-short-name }} user, you need to add the suffix `@ldap` to it.
 
-Below are examples of authenticating the user `user1` using the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md):
+Below are examples of authenticating user `user1` using the [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md):
 
 * Authenticating a user from the LDAP directory: `ydb --user user1@ldap -p ydb_profile scheme ls`
 * Authenticating a user via the internal {{ ydb-short-name }} mechanism: `ydb --user user1 -p ydb_profile scheme ls`
@@ -223,12 +199,12 @@ Below are examples of authenticating the user `user1` using the [{{ ydb-short-na
 
 Depending on the specified configuration parameters, {{ ydb-short-name }} can establish either an encrypted or an unencrypted connection. An encrypted connection to an LDAP server is established using the TLS protocol. This method is recommended for production clusters. There are two ways to enable a TLS connection:
 
-* Automatically via the [`ldaps`](#ldaps) connection scheme.
-* Using the [`StartTls`](#starttls) LDAP protocol extension*.
+* Automatically. The connection scheme [`ldaps`](#ldaps) is used.
+* Using the LDAP protocol extension [`StartTls`](#starttls)
 
 When using an unencrypted connection, all data transmitted in requests to the LDAP server will be sent in plaintext, including passwords. This connection method is easier to start using and is more suitable for experiments or testing.
 
-#### LDAPS {#ldaps}
+#### LDAPS
 
 For {{ ydb-short-name }} to automatically establish an encrypted connection to the LDAP server, you need to set the value `ldaps` in the [configuration parameter](../reference/configuration/auth_config.md#ldap-auth-config) **scheme**. The TLS handshake will be initiated on the port specified in the configuration. If no port is specified, the default port 636 will be used for the `ldaps` scheme. The LDAP server must be configured to accept TLS connections on the specified ports.
 
@@ -358,8 +334,8 @@ After device authentication, [authentication](./authentication.md) of a user or 
 Device authentication is optional and configured independently: the mechanism can be enabled on some ports and disabled on others.
 
 - **Interconnect** — when TLS is enabled in the [interconnect_config](../reference/configuration/tls.md#interconnect) section, [Interconnect](../concepts/glossary.md#actor-system-interconnect) requires a client certificate.
-- **Kafka API** — when mTLS is enabled, it requires a client certificate. Only the chain of trust to the CA is verified, and a connection without a certificate or with an untrusted certificate is not established. Server configuration is described in the [kafka_proxy_config](../reference/configuration/kafka_proxy_config.md) section, and client connection in the [Device authentication by mTLS](../reference/kafka-api/auth.md#device-auth) section.
-- **gRPC** and **YDB Monitoring** — you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section. YDB Monitoring configuration is described in the [monitoring_config](../reference/configuration/monitoring_config.md#tls) section.
+- **Kafka API** — when mTLS is enabled, it requires a client certificate. Only the chain of trust to the CA is verified, and a connection without a certificate or with an untrusted certificate is not established. Server configuration is set in `kafka_proxy_config`, and client connection is described in the [Device authentication by mTLS](../reference/kafka-api/auth.md#device-auth) section.
+- **gRPC** and **YDB Monitoring** — you can enable a client certificate request for device authentication, and also separately enable its mandatory verification (an untrusted certificate is always rejected). gRPC configuration is described in the [grpc_config](../reference/configuration/tls.md#grpc) and [client_certificate_authorization](../reference/configuration/client_certificate_authorization.md) sections, and client connection — in the [TLS connection parameters](../reference/ydb-cli/connect.md#tls) section. YDB Monitoring configuration is set in `monitoring_config`.
 
 ## Authentication using a third-party IAM provider {#iam}
 

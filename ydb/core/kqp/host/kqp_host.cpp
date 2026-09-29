@@ -2193,6 +2193,7 @@ private:
         TypesCtx->MatchRecognize = QueryServiceConfig.GetEnableMatchRecognize();
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));
+        TypesCtx->RuntimeSettings = EnsureKqpDefaultRuntimeSettings(TypesCtx->RuntimeSettings);
 
         YqlTransformer = TTransformationPipeline(TypesCtx)
             .AddServiceTransformers()

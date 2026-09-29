@@ -383,7 +383,7 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 

@@ -95,15 +95,27 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
     Y_UNIT_TEST(OmittedMinRowsUsesDocumentedDefault) {
         Ydb::Table::VectorIndexSettings settings;
         UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 10000u);
-        settings.set_hnsw_min_rows(0);
+        settings.set_min_rows(0);
         UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 0u);
     }
 
     Y_UNIT_TEST(OmittedRebuildThresholdUsesDocumentedDefault) {
         Ydb::Table::VectorIndexSettings settings;
-        UNIT_ASSERT_VALUES_EQUAL(GetHnswRebuildThresholdPercent(settings), 10u);
-        settings.set_hnsw_rebuild_threshold_percent(5);
-        UNIT_ASSERT_VALUES_EQUAL(GetHnswRebuildThresholdPercent(settings), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 10000u);
+        settings.set_delta_rows(5);
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 5u);
+    }
+
+    Y_UNIT_TEST(LegacyPercentageIsNotAnAbsoluteRowCount) {
+        Ydb::Table::VectorIndexSettings settings;
+        // Former field 8 held 5 percent, not a five-row limit.
+        UNIT_ASSERT(settings.ParseFromString(TString("\x40\x05", 2)));
+        UNIT_ASSERT(!settings.has_delta_rows());
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 10000u);
+        settings.set_delta_rows(0);
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 0u);
+        settings.set_delta_rows(1ULL << 40);
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswDeltaRows(settings), 1ULL << 40);
     }
 
     Y_UNIT_TEST(CacheSettingsIdentityIsNormalizedAndComplete) {
@@ -112,9 +124,8 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
             2);
         auto requested = cached;
-        requested.set_hnsw_connectivity(16);
-        requested.set_hnsw_construction_candidates(200);
-        requested.set_hnsw_search_candidates(15);
+        requested.set_m(16);
+        requested.set_ef_construction(200);
         UNIT_ASSERT(AreHnswIndexSettingsCompatible(cached, requested));
 
         requested.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
@@ -123,7 +134,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         requested.set_vector_dimension(3);
         UNIT_ASSERT(!AreHnswIndexSettingsCompatible(cached, requested));
         requested = cached;
-        requested.set_hnsw_search_candidates(16);
+        requested.set_m(17);
         UNIT_ASSERT(!AreHnswIndexSettingsCompatible(cached, requested));
     }
 
@@ -262,9 +273,8 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
             2);
-        settings.set_hnsw_connectivity(24);
-        settings.set_hnsw_construction_candidates(100);
-        settings.set_hnsw_search_candidates(10);
+        settings.set_m(24);
+        settings.set_ef_construction(100);
 
         std::vector<std::pair<TString, TString>> data = {
             {"a", SerializeFloatVector({1.0f, 0.0f})},
@@ -340,12 +350,11 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
                 Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT}) {
             auto settings = MakeSettings(metric,
                 Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, dimensions);
-            settings.set_hnsw_search_candidates(1);
-            settings.set_hnsw_connectivity(4);
+            settings.set_m(4);
             TString error;
             auto index = THnswIndex::Build(settings, data, 0, error);
             UNIT_ASSERT_C(index, error);
-            const auto result = index->Search(target, requested);
+            const auto result = index->Search(target, requested, TRowVersion::Max(), 1);
             UNIT_ASSERT_C(result.Covered, error);
             UNIT_ASSERT_VALUES_EQUAL_C(result.Results.size(), requested, static_cast<int>(metric));
             THashSet<TString> keys;
@@ -354,6 +363,48 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
                 keys.insert(key);
             }
             UNIT_ASSERT_VALUES_EQUAL(keys.size(), requested);
+        }
+    }
+
+    Y_UNIT_TEST(QueryLocalEfSearchIsConcurrentAndDoesNotMutateTheGraph) {
+        TFastRng<ui64> rng(42);
+        std::vector<std::pair<TString, TString>> data;
+        for (size_t i = 0; i < 256; ++i) {
+            data.emplace_back(KeyFor(i), RandomFloatVector(rng, 8));
+        }
+        const auto target = RandomFloatVector(rng, 8);
+        for (const auto metric : {Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+                                 Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN,
+                                 Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN,
+                                 Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT}) {
+            auto settings = MakeSettings(metric, Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT, 8);
+            settings.set_m(4);
+            TString error;
+            auto index = THnswIndex::Build(settings, data, 0, error);
+            UNIT_ASSERT_C(index, error);
+            const std::vector<ui32> widths{1, 15, 50, 1000};
+            std::vector<THnswSearchResult> expected;
+            for (ui32 width : widths) {
+                expected.push_back(index->Search(target, 64, TRowVersion::Max(), width));
+                UNIT_ASSERT_VALUES_EQUAL(expected.back().Results.size(), 64u);
+            }
+            std::atomic<bool> matches{true};
+            std::vector<std::thread> readers;
+            for (size_t i = 0; i < widths.size(); ++i) {
+                readers.emplace_back([&, i] {
+                    for (size_t attempt = 0; attempt < 20; ++attempt) {
+                        const auto result = index->Search(target, 64, TRowVersion::Max(), widths[i]);
+                        if (!result.Covered || result.Results != expected[i].Results) {
+                            matches.store(false);
+                        }
+                    }
+                });
+            }
+            for (auto& reader : readers) {
+                reader.join();
+            }
+            UNIT_ASSERT(matches.load());
+            UNIT_ASSERT(index->Search(target, 64).Results == expected[1].Results);
         }
     }
 
@@ -409,7 +460,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
             2);
-        settings.set_hnsw_connectivity(NKMeans::MaxHnswConnectivity + 1);
+        settings.set_m(NKMeans::MaxHnswConnectivity + 1);
         std::vector<std::pair<TString, TString>> data = {
             {"a", SerializeFloatVector({1.0f, 0.0f})},
         };
@@ -417,7 +468,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         TString error;
         auto index = THnswIndex::Build(settings, data, 0, error);
         UNIT_ASSERT(!index);
-        UNIT_ASSERT_STRING_CONTAINS(error, "hnsw_connectivity");
+        UNIT_ASSERT_STRING_CONTAINS(error, "M");
     }
 
     Y_UNIT_TEST(RejectsEmptyInput) {
@@ -681,13 +732,15 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         index->SetSnapshot({100, 0}, std::make_shared<THnswIndexChanges>());
         UNIT_ASSERT(!index->NeedsRebuild(0));
         index->Upsert("new", vector, {120, 0});
-        UNIT_ASSERT(!index->NeedsRebuild(50));
-        UNIT_ASSERT(index->NeedsRebuild(49));
+        UNIT_ASSERT(!index->NeedsRebuild(1));
+        UNIT_ASSERT(index->NeedsRebuild(0));
         index->Upsert("new", vector, {130, 0});
         UNIT_ASSERT_VALUES_EQUAL(index->ChangeCount(), 1);
-        UNIT_ASSERT(!index->NeedsRebuild(50));
+        UNIT_ASSERT(!index->NeedsRebuild(1));
         index->Erase("a", {140, 0});
-        UNIT_ASSERT(index->NeedsRebuild(50));
+        UNIT_ASSERT(index->NeedsRebuild(1));
+        UNIT_ASSERT(!index->NeedsRebuild(2));
+        UNIT_ASSERT(!index->NeedsRebuild(1ULL << 40));
     }
 
     Y_UNIT_TEST(MvccPruneReleasesVersionReservations) {
@@ -721,8 +774,8 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
         const auto results = index->Search(target, 1, {120, 0});
         UNIT_ASSERT_VALUES_EQUAL(results.Results.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(results.Results[0].first, "new");
-        UNIT_ASSERT(index->NeedsRebuild(99));
-        UNIT_ASSERT(!index->NeedsRebuild(100));
+        UNIT_ASSERT(index->NeedsRebuild(0));
+        UNIT_ASSERT(!index->NeedsRebuild(1));
     }
 
 }

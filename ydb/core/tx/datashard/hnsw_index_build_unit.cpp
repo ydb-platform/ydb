@@ -47,7 +47,7 @@ bool ScanPostingTableVectors(
 
     const ui64 estimatedBytes = THnswIndex::EstimateMemoryBytes(
         precharge.ItemsPrecharged, settings.vector_dimension(),
-        settings.has_hnsw_connectivity() ? settings.hnsw_connectivity() : 16);
+        settings.has_m() ? settings.m() : 16);
     memoryReservation = dataShard.TryReserveHnswCacheMemory(estimatedBytes);
     if (!memoryReservation) {
         return true;
@@ -88,7 +88,7 @@ bool ScanPostingTableVectors(
     // scanned rows as well as their keys before handing the build its budget.
     const ui64 requiredBytes = THnswIndex::EstimateMemoryBytes(
         keysAndVectors.size(), settings.vector_dimension(),
-        settings.has_hnsw_connectivity() ? settings.hnsw_connectivity() : 16, keyBytes);
+        settings.has_m() ? settings.m() : 16, keyBytes);
     if (requiredBytes > reservedBytes) {
         auto additionalReservation = dataShard.TryReserveHnswCacheMemory(requiredBytes - reservedBytes);
         if (!additionalReservation) {
@@ -259,7 +259,7 @@ protected:
         if (keysAndVectors.size() < GetHnswMinRows(settings)) {
             DataShard.SetHnswIndexBuilding(table.LocalTid, false);
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
-                << " HNSW: partition is below hnsw_min_rows for localTid=" << table.LocalTid
+                << " HNSW: partition is below min_rows for localTid=" << table.LocalTid
                 << " rows=" << keysAndVectors.size()
                 << " minimum=" << GetHnswMinRows(settings));
             return false;

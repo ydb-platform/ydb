@@ -517,7 +517,7 @@ bool DfsOnTableChildrenTree(
                                 return false;
                             }
                             case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-                            case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+                            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                                 const auto& index = context.SS->Indexes.at(childPathId);
                                 bool isGlobalVectorIndex = index->IndexKeys.size() == 1;
                                 bool isPrefixVectorIndex = index->IndexKeys.size() > 1;

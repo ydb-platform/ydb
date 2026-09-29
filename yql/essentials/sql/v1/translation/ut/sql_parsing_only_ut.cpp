@@ -5035,15 +5035,15 @@ Y_UNIT_TEST(CreateTableAddIndexVector) {
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
 }
 
-Y_UNIT_TEST(CreateTableAddDistributedHnswIndex) {
+Y_UNIT_TEST(CreateTableAddHnswIndex) {
     const auto result = SqlToYql(R"sql(USE ydb;
                 CREATE TABLE table (
                     pk INT32 NOT NULL,
                     embedding String,
-                    INDEX idx GLOBAL USING distributed_hnsw
+                    INDEX idx GLOBAL USING hnsw
                         ON (embedding)
                         WITH (distance=cosine, vector_type=float, vector_dimension=128,
-                              levels=1, clusters=10, hnsw_rebuild_threshold_percent=5),
+                              levels=1, clusters=10, min_rows=1, M=24, ef_construction=100, delta_rows=5),
                     PRIMARY KEY (pk))
                     )sql");
     UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());

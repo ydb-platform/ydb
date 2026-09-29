@@ -216,6 +216,11 @@ namespace NKikimr::NKqp {
                 return *this;
             }
 
+            TSettingsBuilder& EfSearch(ui32 value) {
+                Settings.SetHnswEfSearch(value);
+                return *this;
+            }
+
             TSettingsBuilder& FullRangeHnsw() {
                 Settings.SetFullRangeHnsw(true);
                 return *this;
@@ -1118,7 +1123,7 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(FullRangeHnswPreservesReadConsistency) {
             for (const bool followers : {false, true}) {
-                auto builder = TSettingsBuilder().FullRangeHnsw().Covered().TopK(1);
+                auto builder = TSettingsBuilder().FullRangeHnsw().Covered().TopK(1).EfSearch(75);
                 if (followers) {
                     builder.Followers();
                 }
@@ -1132,6 +1137,7 @@ namespace NKikimr::NKqp {
                 const TSerializedTableRange range(settings.GetFullRange());
                 UNIT_ASSERT(range.ToTableRange().IsFullRange(settings.KeyColumnTypesSize()));
                 UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().GetLimit(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().GetHnswEfSearch(), 75u);
                 UNIT_ASSERT_VALUES_EQUAL(settings.GetVectorTopK().DistinctColumnsSize(), 0u);
                 UNIT_ASSERT_VALUES_EQUAL(settings.GetUseFollowers(), followers);
                 UNIT_ASSERT_VALUES_EQUAL(settings.HasSnapshot(), !followers);

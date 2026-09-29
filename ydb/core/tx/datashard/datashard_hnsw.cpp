@@ -60,7 +60,7 @@ public:
         KeyBytes += serialized.size();
         // Account for both graph storage and the scan/build input buffer.
         const auto required = THnswIndex::EstimateMemoryBytes(Rows.size() + 1,
-            Settings.vector_dimension(), Settings.has_hnsw_connectivity() ? Settings.hnsw_connectivity() : 16,
+            Settings.vector_dimension(), Settings.has_m() ? Settings.m() : 16,
             2 * KeyBytes) + (Rows.size() + 1) * cells[0].Size();
         if (required > Reservation->Bytes) {
             const ui64 additional = required - Reservation->Bytes;
@@ -175,7 +175,7 @@ public:
         auto& entry = it->second;
         entry.RebuildScheduled = false;
         if (entry.Building || !entry.Index || !entry.Changes->Valid
-                || !entry.Index->NeedsRebuild(GetHnswRebuildThresholdPercent(entry.Settings))) {
+                || !entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings))) {
             return true;
         }
         const auto base = Self->GetHnswBuildVersion();
@@ -550,7 +550,7 @@ void TDataShard::ScheduleHnswRebuild(ui32 localTid) {
     auto& entry = HnswIndexCache.at(localTid);
     if (!entry.Building && !entry.RebuildScheduled && entry.Index
             && entry.Changes->Valid
-            && entry.Index->NeedsRebuild(GetHnswRebuildThresholdPercent(entry.Settings))) {
+            && entry.Index->NeedsRebuild(GetHnswDeltaRows(entry.Settings))) {
         entry.RebuildScheduled = true;
         Send(SelfId(), new TEvPrivate::TEvRebuildHnswIndex(localTid));
     }

@@ -435,10 +435,10 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         result = session.ExecuteSchemeQuery(Q_(R"(
             ALTER TABLE `/Root/HnswPrefix`
                 ADD INDEX index
-                GLOBAL USING distributed_hnsw
+                GLOBAL USING hnsw
                 ON (user, emb)
                 WITH (similarity=cosine, vector_type="float", vector_dimension=2,
-                      levels=1, clusters=2, hnsw_min_rows=1);
+                      levels=1, clusters=2, min_rows=1);
         )")).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 

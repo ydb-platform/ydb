@@ -39,6 +39,8 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .StoreTrue(&Recall);
         opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index")
             .StoreTrue(&NonIndexedSearch);
+        opts.AddLongOption("ef-search", "HNSW query search breadth, 1..1000 (PRAGMA ydb.HNSWEfSearch)")
+            .DefaultValue(HnswEfSearch).StoreResult(&HnswEfSearch);
         opts.AddLongOption("stale-ro", "Read with StaleRO mode")
             .StoreTrue(&StaleRO);
     };
@@ -84,18 +86,16 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
     NVector::ConfigureVectorOpts(opts, &VectorOpts);
-    opts.AddLongOption("index-type", "Type of index: None, KmeansTree (vector_kmeans_tree), DistributedHnsw (distributed_hnsw)")
+    opts.AddLongOption("index-type", "Type of index: None, KmeansTree (vector_kmeans_tree), Hnsw (hnsw)")
         .DefaultValue(IndexType).StoreResult(&IndexType);
-    opts.AddLongOption("hnsw-min-rows", "Minimum partition rows for HNSW acceleration (distributed_hnsw)")
-        .DefaultValue(HnswMinRows).StoreResult(&HnswMinRows);
-    opts.AddLongOption("hnsw-connectivity", "HNSW graph connectivity, 1..100 (distributed_hnsw)")
-        .DefaultValue(HnswConnectivity).StoreResult(&HnswConnectivity);
-    opts.AddLongOption("hnsw-construction-candidates", "HNSW construction candidates, 1..1000 (distributed_hnsw)")
-        .DefaultValue(HnswConstructionCandidates).StoreResult(&HnswConstructionCandidates);
-    opts.AddLongOption("hnsw-search-candidates", "HNSW search candidates, 1..1000 (stored in distributed_hnsw index)")
-        .DefaultValue(HnswSearchCandidates).StoreResult(&HnswSearchCandidates);
-    opts.AddLongOption("hnsw-rebuild-threshold-percent", "HNSW committed-change rebuild threshold in percent (distributed_hnsw)")
-        .DefaultValue(HnswRebuildThresholdPercent).StoreResult(&HnswRebuildThresholdPercent);
+    opts.AddLongOption("min-rows", "Minimum partition rows for HNSW acceleration (hnsw)")
+        .DefaultValue(MinRows).StoreResult(&MinRows);
+    opts.AddLongOption("M", "HNSW graph connectivity, 1..100 (hnsw)")
+        .DefaultValue(M).StoreResult(&M);
+    opts.AddLongOption("ef-construction", "HNSW construction candidates, 1..1000 (hnsw)")
+        .DefaultValue(EfConstruction).StoreResult(&EfConstruction);
+    opts.AddLongOption("delta-rows", "Maximum distinct changed rows before an HNSW rebuild (hnsw)")
+        .DefaultValue(DeltaRows).StoreResult(&DeltaRows);
     opts.AddLongOption("distance", "Distance/similarity function. "
             "Possible values: 'inner_product', 'cosine', 'euclidean', 'manhattan'")
         .DefaultValue("inner_product").StoreResult(&Distance);
@@ -112,29 +112,26 @@ TString TVectorWorkloadParams::GetIndexTypeDDL() const {
     if (IndexType == "KmeansTree" || IndexType == "vector_kmeans_tree") {
         return "vector_kmeans_tree";
     }
-    if (IndexType == "DistributedHnsw" || IndexType == "distributed_hnsw") {
-        return "distributed_hnsw";
+    if (IndexType == "Hnsw" || IndexType == "hnsw") {
+        return "hnsw";
     }
     ythrow yexception() << "Unknown index type: " << IndexType
-        << ". Expected None, KmeansTree, or DistributedHnsw (distributed_hnsw)";
+        << ". Expected None, KmeansTree, or Hnsw (hnsw)";
 }
 
 TString TVectorWorkloadParams::GetHnswSettingsDDL() const {
-    if (GetIndexTypeDDL() != "distributed_hnsw") {
+    if (GetIndexTypeDDL() != "hnsw") {
         return {};
     }
-    Y_ENSURE(HnswConnectivity >= 1 && HnswConnectivity <= 100,
-        "hnsw-connectivity must be in 1..100");
-    Y_ENSURE(HnswConstructionCandidates >= 1 && HnswConstructionCandidates <= 1000,
-        "hnsw-construction-candidates must be in 1..1000");
-    Y_ENSURE(HnswSearchCandidates >= 1 && HnswSearchCandidates <= 1000,
-        "hnsw-search-candidates must be in 1..1000");
+    Y_ENSURE(M >= 1 && M <= 100,
+        "M must be in 1..100");
+    Y_ENSURE(EfConstruction >= 1 && EfConstruction <= 1000,
+        "ef-construction must be in 1..1000");
     return TStringBuilder()
-        << ",\n    hnsw_min_rows=" << HnswMinRows
-        << ",\n    hnsw_connectivity=" << HnswConnectivity
-        << ",\n    hnsw_construction_candidates=" << HnswConstructionCandidates
-        << ",\n    hnsw_search_candidates=" << HnswSearchCandidates
-        << ",\n    hnsw_rebuild_threshold_percent=" << HnswRebuildThresholdPercent;
+        << ",\n    min_rows=" << MinRows
+        << ",\n    M=" << M
+        << ",\n    ef_construction=" << EfConstruction
+        << ",\n    delta_rows=" << DeltaRows;
 }
 
 TString TVectorWorkloadParams::GetDistanceDDL() const {
@@ -172,9 +169,9 @@ void TVectorWorkloadParams::Init() {
     for (const auto& index : tableDescription.GetIndexDescriptions()) {
         if (index.GetIndexName() == IndexName) {
             Y_ENSURE(index.GetIndexType() == NYdb::NTable::EIndexType::GlobalVectorKMeansTree
-                || index.GetIndexType() == NYdb::NTable::EIndexType::GlobalDistributedHnsw,
-                "Index " << IndexName << " must be vector_kmeans_tree or distributed_hnsw");
-            DistributedHnsw = index.GetIndexType() == NYdb::NTable::EIndexType::GlobalDistributedHnsw;
+                || index.GetIndexType() == NYdb::NTable::EIndexType::GlobalHnsw,
+                "Index " << IndexName << " must be vector_kmeans_tree or hnsw");
+            Hnsw = index.GetIndexType() == NYdb::NTable::EIndexType::GlobalHnsw;
             indexFound = true;
 
             // Check if we have more than one column (indicating a prefixed index)
@@ -232,7 +229,10 @@ void TVectorWorkloadParams::Init() {
     }
 }
 
-void TVectorWorkloadParams::Validate(const ECommandType /*commandType*/, int /*workloadType*/) {
+void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
+    if (commandType == ECommandType::Run && workloadType == static_cast<int>(EWorkloadRunType::Select)) {
+        Y_ENSURE(HnswEfSearch >= 1 && HnswEfSearch <= 1000, "ef-search must be in 1..1000");
+    }
 }
 
 THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {

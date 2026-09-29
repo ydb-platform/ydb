@@ -71,7 +71,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
@@ -96,7 +96,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     if (op.GetIsRebuild()
             && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-            && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw) {
+            && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalHnsw) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed,
             "REBUILD INDEX is only supported for vector indexes")};
     }
@@ -304,7 +304,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             NKikimrSchemeOp::TTableDescription indexLevelTableDesc, indexPostingTableDesc, indexPrefixTableDesc;
             // TODO After IndexImplTableDescriptions are persisted, this should be replaced with Y_ABORT_UNLESS

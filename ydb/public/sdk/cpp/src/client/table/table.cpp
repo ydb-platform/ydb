@@ -915,12 +915,12 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
     Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
 }
 
-void TTableDescription::AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
-    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalDistributedHnsw, indexColumns, indexSettings);
+void TTableDescription::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalHnsw, indexColumns, indexSettings);
 }
 
-void TTableDescription::AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
-    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalDistributedHnsw, indexColumns, dataColumns, indexSettings);
+void TTableDescription::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalHnsw, indexColumns, dataColumns, indexSettings);
 }
 
 void TTableDescription::AddFulltextIndex(const std::string& indexName, EIndexType indexType, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
@@ -1449,13 +1449,13 @@ TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexN
     return *this;
 }
 
-TTableBuilder& TTableBuilder::AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
-    TableDescription_.AddDistributedHnswIndex(indexName, indexColumns, dataColumns, indexSettings);
+TTableBuilder& TTableBuilder::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddHnswIndex(indexName, indexColumns, dataColumns, indexSettings);
     return *this;
 }
 
-TTableBuilder& TTableBuilder::AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
-    TableDescription_.AddDistributedHnswIndex(indexName, indexColumns, indexSettings);
+TTableBuilder& TTableBuilder::AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
+    TableDescription_.AddHnswIndex(indexName, indexColumns, indexSettings);
     return *this;
 }
 
@@ -2735,7 +2735,7 @@ TIndexDescription TIndexDescription::CreatePrefixedVectorIndex(
     );
 }
 
-TIndexDescription TIndexDescription::CreateDistributedHnswIndex(
+TIndexDescription TIndexDescription::CreateHnswIndex(
     const std::string& name,
     const std::string& vectorColumn,
     const TKMeansTreeSettings& specializedIndexSettings,
@@ -2744,12 +2744,12 @@ TIndexDescription TIndexDescription::CreateDistributedHnswIndex(
     const TGlobalIndexSettings& postingTableSettings
 ) {
     return TIndexDescription(
-        name, EIndexType::GlobalDistributedHnsw, {vectorColumn}, dataColumns,
+        name, EIndexType::GlobalHnsw, {vectorColumn}, dataColumns,
         {levelTableSettings, postingTableSettings}, specializedIndexSettings
     );
 }
 
-TIndexDescription TIndexDescription::CreatePrefixedDistributedHnswIndex(
+TIndexDescription TIndexDescription::CreatePrefixedHnswIndex(
     const std::string& name,
     const std::vector<std::string>& indexColumns,
     const TKMeansTreeSettings& specializedIndexSettings,
@@ -2759,7 +2759,7 @@ TIndexDescription TIndexDescription::CreatePrefixedDistributedHnswIndex(
     const TGlobalIndexSettings& prefixTableSettings
 ) {
     return TIndexDescription(
-        name, EIndexType::GlobalDistributedHnsw, indexColumns, dataColumns,
+        name, EIndexType::GlobalHnsw, indexColumns, dataColumns,
         {levelTableSettings, postingTableSettings, prefixTableSettings}, specializedIndexSettings
     );
 }
@@ -2964,11 +2964,10 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         .Metric = covertMetric(),
         .VectorType = convertVectorType(),
         .VectorDimension = proto.vector_dimension(),
-        .HnswMinRows = proto.has_hnsw_min_rows() ? proto.hnsw_min_rows() : 10000,
-        .HnswConnectivity = proto.has_hnsw_connectivity() ? proto.hnsw_connectivity() : 16,
-        .HnswConstructionCandidates = proto.has_hnsw_construction_candidates() ? proto.hnsw_construction_candidates() : 200,
-        .HnswSearchCandidates = proto.has_hnsw_search_candidates() ? proto.hnsw_search_candidates() : 15,
-        .HnswRebuildThresholdPercent = proto.has_hnsw_rebuild_threshold_percent() ? proto.hnsw_rebuild_threshold_percent() : 10,
+        .MinRows = proto.has_min_rows() ? proto.min_rows() : 10000,
+        .M = proto.has_m() ? proto.m() : 16,
+        .EfConstruction = proto.has_ef_construction() ? proto.ef_construction() : 200,
+        .DeltaRows = proto.has_delta_rows() ? proto.delta_rows() : 10000,
     };
 }
 
@@ -3012,20 +3011,17 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
     settings.set_metric(convertMetric());
     settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
-    if (HnswMinRows != 10000) {
-        settings.set_hnsw_min_rows(HnswMinRows);
+    if (MinRows != 10000) {
+        settings.set_min_rows(MinRows);
     }
-    if (HnswConnectivity != 16) {
-        settings.set_hnsw_connectivity(HnswConnectivity);
+    if (M != 16) {
+        settings.set_m(M);
     }
-    if (HnswConstructionCandidates != 200) {
-        settings.set_hnsw_construction_candidates(HnswConstructionCandidates);
+    if (EfConstruction != 200) {
+        settings.set_ef_construction(EfConstruction);
     }
-    if (HnswSearchCandidates != 15) {
-        settings.set_hnsw_search_candidates(HnswSearchCandidates);
-    }
-    if (HnswRebuildThresholdPercent != 10) {
-        settings.set_hnsw_rebuild_threshold_percent(HnswRebuildThresholdPercent);
+    if (DeltaRows != 10000) {
+        settings.set_delta_rows(DeltaRows);
     }
 }
 
@@ -3328,9 +3324,9 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
         break;
     }
-    case TProto::kGlobalDistributedHnswIndex: {
-        type = EIndexType::GlobalDistributedHnsw;
-        const auto& vectorProto = proto.global_distributed_hnsw_index();
+    case TProto::kGlobalHnswIndex: {
+        type = EIndexType::GlobalHnsw;
+        const auto& vectorProto = proto.global_hnsw_index();
         const bool prefixVectorIndex = indexColumns.size() > 1;
         globalIndexSettings.resize(prefixVectorIndex ? 3 : 2);
         globalIndexSettings[TGlobalIndexSettings::VectorKMeansTreeLevelTablePosition] =
@@ -3429,9 +3425,9 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         break;
     }
     case EIndexType::GlobalVectorKMeansTree:
-    case EIndexType::GlobalDistributedHnsw: {
-        auto* global_vector_kmeans_tree_index = IndexType_ == EIndexType::GlobalDistributedHnsw
-            ? proto.mutable_global_distributed_hnsw_index()
+    case EIndexType::GlobalHnsw: {
+        auto* global_vector_kmeans_tree_index = IndexType_ == EIndexType::GlobalHnsw
+            ? proto.mutable_global_hnsw_index()
             : proto.mutable_global_vector_kmeans_tree_index();
         auto& level_settings = *global_vector_kmeans_tree_index->mutable_level_table_settings();
         auto& posting_settings = *global_vector_kmeans_tree_index->mutable_posting_table_settings();
@@ -3537,7 +3533,7 @@ void TIndexDescription::Out(IOutputStream& o) const {
     case EIndexType::Unknown:
         break;
     case EIndexType::GlobalVectorKMeansTree:
-    case EIndexType::GlobalDistributedHnsw:
+    case EIndexType::GlobalHnsw:
         if (auto settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
             o << ", vector_settings: " << *settings;
         }

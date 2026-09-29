@@ -87,7 +87,7 @@ template <typename TColumnsRange>
 void FillVectorTopKSettings(
     NKqpProto::TKqpPhyVectorTopK& vectorTopK,
     const TKqpReadTableSettings& settings,
-    const TColumnsRange& columns)
+    const TColumnsRange& columns, ui32 hnswEfSearch)
 {
     // Find column index
     ui32 columnIdx = 0;
@@ -101,6 +101,7 @@ void FillVectorTopKSettings(
     }
     YQL_ENSURE(columnFound, "VectorTopK column " << settings.VectorTopKColumn << " not found in read columns");
     vectorTopK.SetColumn(columnIdx);
+    vectorTopK.SetHnswEfSearch(hnswEfSearch);
 
     // Set the metric settings
     auto* indexSettings = vectorTopK.MutableSettings();
@@ -488,7 +489,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
 }
 
 template <typename TReader, typename TProto>
-void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto) {
+void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta*/, TProto& readProto, ui32 hnswEfSearch) {
     auto ranges = read.Ranges().template Maybe<TCoParameter>();
 
     if (ranges.IsValid()) {
@@ -525,7 +526,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& /*tableMeta
     // Handle VectorTopK settings for brute force vector search
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadRanges>) {
         if (settings.VectorTopKColumn) {
-            FillVectorTopKSettings(*readProto.MutableVectorTopK(), settings, read.Columns());
+            FillVectorTopKSettings(*readProto.MutableVectorTopK(), settings, read.Columns(), hnswEfSearch);
         }
     }
 
@@ -1032,7 +1033,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges());
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadRanges(), Config->HNSWEfSearch.Get().GetOrElse(15));
                 if (auto stats = OptimizeCtx.KqpStats.GetStats(exprNode.get())) {
                     tableOp.SetEstimatedRows(stats->Nrows);
                 } else if (tableMeta->RecordsCount) {
@@ -1047,7 +1048,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get().GetOrElse(15));
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
@@ -1065,7 +1066,7 @@ private:
                 FillTablesMap(readTableRanges.Table(), readTableRanges.Columns(), tablesMap);
                 FillTableId(readTableRanges.Table(), *tableOp.MutableTable());
                 FillColumns(readTableRanges.Columns(), *tableMeta, tableOp, true);
-                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange());
+                FillReadRanges(readTableRanges, *tableMeta, *tableOp.MutableReadOlapRange(), Config->HNSWEfSearch.Get().GetOrElse(15));
                 auto miniKqlResultType = GetMKqlResultType(readTableRanges.Process().Ref().GetTypeAnn());
                 FillOlapProgram(readTableRanges, miniKqlResultType, *tableMeta, *tableOp.MutableReadOlapRange(), ctx, TypesCtx);
                 FillResultType(miniKqlResultType, *tableOp.MutableReadOlapRange());
@@ -1410,7 +1411,7 @@ private:
 
             // Handle VectorTopK settings for brute force vector search
             if (readSettings.VectorTopKColumn) {
-                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast());
+                FillVectorTopKSettings(*readProto.MutableVectorTopK(), readSettings, settings.Columns().Cast(), Config->HNSWEfSearch.Get().GetOrElse(15));
             }
 
         } else if (auto settings = source.Settings().Maybe<TKqpReadTableFullTextIndexSourceSettings>()) {
@@ -2644,6 +2645,7 @@ private:
     void FillStreamLookupVectorTop(NKqpProto::TKqpPhyCnStreamLookup& streamLookupProto,
         const TKqpCnStreamLookup& streamLookup, const TKqpStreamLookupSettings& settings) {
         NKqpProto::TKqpPhyVectorTopK& vectorTopK = *streamLookupProto.MutableVectorTopK();
+        vectorTopK.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(15));
         const auto implTablePath = streamLookup.Table().Path();
         const auto mainTableFromImpl = TablesData->GetMainTableIfTableIsImplTableOfIndex(Cluster, implTablePath);
         const auto mainTable = mainTableFromImpl ? mainTableFromImpl : &TablesData->ExistingTable(Cluster, implTablePath);
@@ -3153,12 +3155,13 @@ private:
             const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
             *proto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
             proto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
-            proto.SetFullRangeHnsw(indexDesc->Type == TIndexDescription::EType::GlobalSyncDistributedHnsw
+            proto.SetFullRangeHnsw(indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw
                 && indexDesc->KeyColumns.size() == 1);
             proto.SetLevels(std::max<ui32>(1, kmeansDesc.GetSettings().levels()));
 
             const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;
             proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
+            proto.SetHnswEfSearch(Config->HNSWEfSearch.Get().GetOrElse(15));
 
             // Main table
             FillTablesMap(vectorSearch.Table(), tablesMap);

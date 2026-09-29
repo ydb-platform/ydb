@@ -196,7 +196,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         const auto indexInfoIt = context.SS->Indexes.find(index.Base()->PathId);
         const bool distributedHnsw = indexInfoIt != context.SS->Indexes.end()
-            && indexInfoIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw;
+            && indexInfoIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
 
         // The embedding column keeps its original base table name. Recover it
         // from the active build when available, or from the persistent index

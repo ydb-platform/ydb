@@ -346,11 +346,11 @@ public:
     EMetric Metric = EMetric::Unspecified;
     EVectorType VectorType = EVectorType::Unspecified;
     uint32_t VectorDimension = 0;
-    uint64_t HnswMinRows = 10000;
-    uint32_t HnswConnectivity = 16;
-    uint32_t HnswConstructionCandidates = 200;
-    uint32_t HnswSearchCandidates = 15;
-    uint32_t HnswRebuildThresholdPercent = 10;
+    uint64_t MinRows = 10000;
+    uint32_t M = 16;
+    uint32_t EfConstruction = 200;
+    // Rebuild after more than this many distinct rows change since the graph snapshot.
+    uint64_t DeltaRows = 10000;
 
     static TVectorIndexSettings FromProto(const Ydb::Table::VectorIndexSettings& proto);
 
@@ -526,7 +526,7 @@ public:
         const TGlobalIndexSettings& prefixTableSettings = {}
     );
 
-    static TIndexDescription CreateDistributedHnswIndex(
+    static TIndexDescription CreateHnswIndex(
         const std::string& name,
         const std::string& vectorColumn,
         const TKMeansTreeSettings& specializedIndexSettings,
@@ -535,7 +535,7 @@ public:
         const TGlobalIndexSettings& postingTableSettings = {}
     );
 
-    static TIndexDescription CreatePrefixedDistributedHnswIndex(
+    static TIndexDescription CreatePrefixedHnswIndex(
         const std::string& name,
         const std::vector<std::string>& indexColumns,
         const TKMeansTreeSettings& specializedIndexSettings,
@@ -1212,8 +1212,8 @@ private:
     // vector KMeansTree
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     void AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
-    void AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
-    void AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
+    void AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    void AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
     // fulltext
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings);
@@ -1471,8 +1471,8 @@ public:
     // vector KMeansTree
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
     TTableBuilder& AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
-    TTableBuilder& AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
-    TTableBuilder& AddDistributedHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings);
+    TTableBuilder& AddHnswIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings);
 
     // fulltext
     TTableBuilder& AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings);

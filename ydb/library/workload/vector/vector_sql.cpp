@@ -60,6 +60,7 @@ std::string MakeSelect(const TVectorWorkloadParams& params, const TString& index
 
     TStringBuilder ret;
     ret << "--!syntax_v1" << "\n";
+    ret << "PRAGMA ydb.HNSWEfSearch=\"" << params.HnswEfSearch << "\";\n";
     ret << "DECLARE $Embedding as String;" << "\n";
     if (params.PrefixColumn)
         ret << "DECLARE $PrefixValue as " << params.PrefixType << ";" << "\n";

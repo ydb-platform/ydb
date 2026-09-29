@@ -18,6 +18,7 @@ class ClusterDeploymentTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
         self.run = {
+            "root": self.directory,
             "lock": threading.RLock(),
             "store": SimpleNamespace(manifest={}),
             "release_cluster": threading.Event(),

@@ -583,37 +583,129 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         return {};
     }
 
-    Y_UNIT_TEST(QueryServiceTransactionTracePropagation) {
+    Y_UNIT_TEST_TWIN(TransactionTracePropagation, TableService) {
         NKqp::TKikimrRunner kikimr(ExternalTracingSettings());
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         RegisterUploader(runtime);
-        auto client = kikimr.GetQueryClient();
-        auto sessionResult = client.GetSession().GetValueSync();
-        UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
-        auto session = sessionResult.GetSession();
         const TString beginParent = "00-11111111111111111111111111111111-1111111111111111-01";
         const TString commitParent = "00-22222222222222222222222222222222-2222222222222222-01";
         const TString rollbackParent = "00-33333333333333333333333333333333-3333333333333333-01";
 
-        auto begin = session.BeginTransaction(NYdb::NQuery::TTxSettings::SerializableRW(),
-            NYdb::NQuery::TBeginTxSettings().TraceParent(beginParent)).GetValueSync();
-        UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
-        auto snapshot = WaitForExternalTrace(runtime, beginParent, {"GrpcRequestProxy", "Query Proxy", "Begin transaction"});
-        AssertDescendant(snapshot, "Begin transaction", "GrpcRequestProxy");
+        auto check = [&](auto beginTransaction, auto commitSettings, auto rollbackSettings) {
+            auto begin = beginTransaction(beginParent);
+            UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+            auto snapshot = WaitForExternalTrace(runtime, beginParent, {"GrpcRequestProxy", "Query Proxy", "Begin transaction"});
+            AssertDescendant(snapshot, "Begin transaction", "GrpcRequestProxy");
 
-        auto tx = begin.GetTransaction();
-        auto commit = tx.Commit(NYdb::NQuery::TCommitTxSettings().TraceParent(commitParent)).GetValueSync();
-        UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
-        snapshot = WaitForExternalTrace(runtime, commitParent, {"GrpcRequestProxy", "Query Proxy", "Commit transaction"});
-        AssertDescendant(snapshot, "Commit transaction", "GrpcRequestProxy");
+            auto tx = begin.GetTransaction();
+            auto commit = tx.Commit(commitSettings.TraceParent(commitParent)).GetValueSync();
+            UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
+            snapshot = WaitForExternalTrace(runtime, commitParent, {"GrpcRequestProxy", "Query Proxy", "Commit transaction"});
+            AssertDescendant(snapshot, "Commit transaction", "GrpcRequestProxy");
 
-        begin = session.BeginTransaction(NYdb::NQuery::TTxSettings::SerializableRW()).GetValueSync();
-        UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
-        tx = begin.GetTransaction();
-        auto rollback = tx.Rollback(NYdb::NQuery::TRollbackTxSettings().TraceParent(rollbackParent)).GetValueSync();
-        UNIT_ASSERT_C(rollback.IsSuccess(), rollback.GetIssues().ToString());
-        snapshot = WaitForExternalTrace(runtime, rollbackParent, {"GrpcRequestProxy", "Query Proxy", "Rollback transaction"});
-        AssertDescendant(snapshot, "Rollback transaction", "GrpcRequestProxy");
+            begin = beginTransaction(TString());
+            UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+            tx = begin.GetTransaction();
+            auto rollback = tx.Rollback(rollbackSettings.TraceParent(rollbackParent)).GetValueSync();
+            UNIT_ASSERT_C(rollback.IsSuccess(), rollback.GetIssues().ToString());
+            snapshot = WaitForExternalTrace(runtime, rollbackParent, {"GrpcRequestProxy", "Query Proxy", "Rollback transaction"});
+            AssertDescendant(snapshot, "Rollback transaction", "GrpcRequestProxy");
+        };
+        if constexpr (TableService) {
+            auto sessionResult = kikimr.GetTableClient().CreateSession().GetValueSync();
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+            auto session = sessionResult.GetSession();
+            check([&](const TString& parent) {
+                return session.BeginTransaction(NYdb::NTable::TTxSettings::SerializableRW(),
+                    NYdb::NTable::TBeginTxSettings().TraceParent(parent)).GetValueSync();
+            }, NYdb::NTable::TCommitTxSettings(), NYdb::NTable::TRollbackTxSettings());
+        } else {
+            auto sessionResult = kikimr.GetQueryClient().GetSession().GetValueSync();
+            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+            auto session = sessionResult.GetSession();
+            check([&](const TString& parent) {
+                return session.BeginTransaction(NYdb::NQuery::TTxSettings::SerializableRW(),
+                    NYdb::NQuery::TBeginTxSettings().TraceParent(parent)).GetValueSync();
+            }, NYdb::NQuery::TCommitTxSettings(), NYdb::NQuery::TRollbackTxSettings());
+        }
+    }
+
+    Y_UNIT_TEST(SdkRequestVariantsTracePropagation) {
+        auto settings = ExternalTracingSettings();
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableReadCommittedIsolation(true);
+        settings.SetEnableStrictSerializableIsolation(true);
+        NKqp::TKikimrRunner kikimr(settings);
+        kikimr.GetTestClient().CreateTable("/Root", R"(
+            Name: "trace_variants"
+            Columns { Name: "key", Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        RegisterUploader(runtime);
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        const TString sql = "SELECT * FROM `/Root/trace_variants`;";
+        auto newParent = [] {
+            auto parent = NWilson::TTraceId::NewTraceId(15, 4095).Span(15).ToTraceresponseHeader();
+            parent.back() = '1';
+            return parent;
+        };
+        auto check = [&](const auto& result, const TString& parent, TStringBuf spanName,
+                NYdb::EStatus expected = NYdb::EStatus::SUCCESS) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
+            const auto snapshot = WaitForExternalTrace(runtime, parent, {"Query Proxy", spanName});
+            AssertDescendant(snapshot, spanName, "Query Proxy");
+            AssertStatus(snapshot, spanName, expected == NYdb::EStatus::SUCCESS
+                ? NTraceProto::Status::STATUS_CODE_OK : NTraceProto::Status::STATUS_CODE_ERROR);
+        };
+
+        for (const auto& tx : {NYdb::NTable::TTxSettings::SerializableRW(), NYdb::NTable::TTxSettings::OnlineRO(),
+                NYdb::NTable::TTxSettings::StaleRO(), NYdb::NTable::TTxSettings::SnapshotRO(),
+                NYdb::NTable::TTxSettings::SnapshotRW(), NYdb::NTable::TTxSettings::StrictSerializableRW()}) {
+            const auto parent = newParent();
+            check(tableSession.ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx(tx).CommitTx(),
+                NYdb::NTable::TExecDataQuerySettings().TraceParent(parent)).GetValueSync(), parent, "Query session");
+        }
+        for (const auto& tx : {NYdb::NQuery::TTxSettings::SerializableRW(), NYdb::NQuery::TTxSettings::OnlineRO(),
+                NYdb::NQuery::TTxSettings::StaleRO(), NYdb::NQuery::TTxSettings::SnapshotRO(),
+                NYdb::NQuery::TTxSettings::SnapshotRW(), NYdb::NQuery::TTxSettings::ReadCommittedRW(),
+                NYdb::NQuery::TTxSettings::StrictSerializableRW()}) {
+            const auto parent = newParent();
+            check(queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::BeginTx(tx).CommitTx(),
+                NYdb::NQuery::TExecuteQuerySettings().TraceParent(parent)).GetValueSync(), parent, "Query session");
+        }
+
+        auto parent = newParent();
+        auto prepared = tableSession.PrepareDataQuery(sql,
+            NYdb::NTable::TPrepareDataQuerySettings().TraceParent(parent)).GetValueSync();
+        check(prepared, parent, "Prepare query");
+        parent = newParent();
+        check(prepared.GetQuery().Execute(NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+            NYdb::NTable::TExecDataQuerySettings().TraceParent(parent)).GetValueSync(), parent, "Query session");
+
+        for (const auto mode : {NYdb::NQuery::EExecMode::Validate, NYdb::NQuery::EExecMode::Explain}) {
+            parent = newParent();
+            const auto result = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(mode).TraceParent(parent)).GetValueSync();
+            const bool validate = mode == NYdb::NQuery::EExecMode::Validate;
+            if (validate) {
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unexpected query type");
+            }
+            check(result, parent, validate ? "Validate query" : "Explain query",
+                validate ? NYdb::EStatus::BAD_REQUEST : NYdb::EStatus::SUCCESS);
+        }
+        NYdb::NScripting::TScriptingClient scripting(kikimr.GetDriver());
+        for (const auto mode : {NYdb::NScripting::ExplainYqlRequestMode::Validate, NYdb::NScripting::ExplainYqlRequestMode::Plan}) {
+            parent = newParent();
+            check(scripting.ExplainYqlScript(sql,
+                NYdb::NScripting::TExplainYqlRequestSettings().Mode(mode).TraceParent(parent)).GetValueSync(),
+                parent, mode == NYdb::NScripting::ExplainYqlRequestMode::Validate ? "Validate query" : "Explain query");
+        }
+
+        parent = newParent();
+        check(queryClient.ExecuteQuery("SELECT 42;", NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().Syntax(NYdb::NQuery::ESyntax::Pg).TraceParent(parent)).GetValueSync(),
+            parent, "Query session", NYdb::EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(ExecuteScriptTracePropagation) {
@@ -679,93 +771,6 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
         }
-    }
-
-    Y_UNIT_TEST_TWIN(LongTxSnapshotBatchTracePropagation, Fail) {
-        using TEvents = NLongTxService::TEvLongTxService;
-        auto [runtime, server, sender] = CreateServer();
-        auto* uploader = RegisterUploader(runtime);
-        const auto service = NLongTxService::MakeLongTxServiceID(runtime.GetNodeId());
-        NWilson::TSpan first(1, NWilson::TTraceId::NewTraceId(10, 4095), "First snapshot request",
-            NWilson::EFlags::AUTO_END, runtime.GetActorSystem(0));
-        NWilson::TSpan second(1, NWilson::TTraceId::NewTraceId(15, 4095), "Second snapshot request",
-            NWilson::EFlags::AUTO_END, runtime.GetActorSystem(0));
-        NWilson::TSpan begin(1, NWilson::TTraceId::NewTraceId(15, 4095), "Begin snapshot request",
-            NWilson::EFlags::AUTO_END, runtime.GetActorSystem(0));
-        NWilson::TTraceId batchTrace;
-        ui32 forwarded = 0;
-        const auto navigates = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
-            if (runtime.FindActorName(ev->Sender) == "LONG_TX_SERVICE_ACQUIRE_SNAPSHOT") {
-                UNIT_ASSERT(ev->TraceId);
-                batchTrace = NWilson::TTraceId(ev->TraceId);
-            }
-        });
-        auto previous = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvPipeCache::TEvForward::EventType) {
-                const auto* message = ev->Get<TEvPipeCache::TEvForward>();
-                if (message->Ev->Type() == TEvTxProxy::TEvAcquireReadStep::EventType) {
-                    UNIT_ASSERT(batchTrace && ev->TraceId == batchTrace);
-                    ++forwarded;
-                    if constexpr (Fail) {
-                        runtime.Send(new IEventHandle(ev->Sender, ev->Recipient,
-                            new TEvPipeCache::TEvDeliveryProblem(message->TabletId, true)), 0, true);
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        // The first queued request is untraced; traced callers still need shared work in their trace.
-        runtime.Send(new IEventHandle(service, sender, new TEvents::TEvAcquireReadSnapshot("/Root"), 0, 0), 0, true);
-        runtime.Send(new IEventHandle(service, sender, new TEvents::TEvAcquireReadSnapshot("/Root"),
-            0, 1, nullptr, first.GetTraceId()), 0, true);
-        runtime.Send(new IEventHandle(service, sender, new TEvents::TEvAcquireReadSnapshot("/Root"),
-            0, 2, nullptr, second.GetTraceId()), 0, true);
-        runtime.Send(new IEventHandle(service, sender, new TEvents::TEvBeginTx("/Root",
-            NKikimrLongTxService::TEvBeginTx::MODE_READ_ONLY), 0, 3, nullptr, begin.GetTraceId()), 0, true);
-        for (ui32 i = 0; i < 3; ++i) {
-            const auto result = runtime.GrabEdgeEventRethrow<TEvents::TEvAcquireReadSnapshotResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, Fail ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(bool(result->TraceId), result->Cookie != 0);
-            if (result->Cookie) {
-                const auto expected = result->Cookie == 1 ? first.GetTraceId() : second.GetTraceId();
-                UNIT_ASSERT_VALUES_EQUAL(TString(static_cast<const char*>(result->TraceId.GetTraceIdPtr()), result->TraceId.GetTraceIdSize()),
-                    TString(static_cast<const char*>(expected.GetTraceIdPtr()), expected.GetTraceIdSize()));
-            }
-        }
-        const auto result = runtime.GrabEdgeEventRethrow<TEvents::TEvBeginTxResult>(sender);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), Fail ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT(result->TraceId);
-        const auto beginTrace = begin.GetTraceId();
-        UNIT_ASSERT_VALUES_EQUAL(TString(static_cast<const char*>(result->TraceId.GetTraceIdPtr()), result->TraceId.GetTraceIdSize()),
-            TString(static_cast<const char*>(beginTrace.GetTraceIdPtr()), beginTrace.GetTraceIdSize()));
-        runtime.SetObserverFunc(std::move(previous));
-        first.EndOk();
-        second.EndOk();
-        begin.EndOk();
-        runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(forwarded > 0);
-        UNIT_ASSERT(uploader->BuildTraceTrees());
-        const auto* batch = FindSpan(*uploader, "LongTx.AcquireSnapshotBatch");
-        UNIT_ASSERT(batch);
-        UNIT_ASSERT_VALUES_EQUAL(FindAttribute(*batch, "ydb.snapshot.batch_size")->value().int_value(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(batch->links_size(), 3);
-        AssertStatus(*uploader, "LongTx.AcquireSnapshotBatch",
-            Fail ? NTraceProto::Status::STATUS_CODE_ERROR : NTraceProto::Status::STATUS_CODE_OK);
-        UNIT_ASSERT_VALUES_EQUAL(TString(static_cast<const char*>(batchTrace.GetTraceIdPtr()), batchTrace.GetTraceIdSize()), batch->trace_id());
-        UNIT_ASSERT_VALUES_EQUAL(TString(static_cast<const char*>(batchTrace.GetSpanIdPtr()), batchTrace.GetSpanIdSize()), batch->span_id());
-        ui32 waits = 0;
-        for (const auto& span : uploader->Spans) {
-            if (span.name() == "LongTx.AcquireReadSnapshot" || span.name() == "LongTx.BeginTxSnapshot") {
-                ++waits;
-                UNIT_ASSERT_VALUES_EQUAL(span.links_size(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(span.links(0).trace_id(), batch->trace_id());
-                UNIT_ASSERT_VALUES_EQUAL(span.links(0).span_id(), batch->span_id());
-                UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(span.status().code()),
-                    static_cast<int>(Fail ? NTraceProto::Status::STATUS_CODE_ERROR : NTraceProto::Status::STATUS_CODE_OK));
-            }
-        }
-        UNIT_ASSERT_VALUES_EQUAL(waits, 3);
     }
 
     Y_UNIT_TEST(CommonConfigSamplesSdkReadPaths) {

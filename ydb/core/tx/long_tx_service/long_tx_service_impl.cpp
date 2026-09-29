@@ -12,7 +12,6 @@
 #include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/wilson_ids/wilson.h>
 #include <atomic>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LONG_TX_SERVICE
@@ -132,8 +131,6 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvBeginTx::TPtr& ev) {
             req.TxId = txId;
             req.Sender = ev->Sender;
             req.Cookie = ev->Cookie;
-            req.Span = NWilson::TSpan(TComponentTracingLevels::TDistributedTransactions::Basic,
-                std::move(ev->TraceId), "LongTx.BeginTxSnapshot", NWilson::EFlags::AUTO_END);
             ScheduleAcquireSnapshot(databaseName, dbState);
             return;
         }
@@ -407,13 +404,10 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
 
     LWTRACK(AcquireReadSnapshotRequest, msg->Orbit, databaseName);
 
-    NWilson::TSpan span(TComponentTracingLevels::TDistributedTransactions::Basic,
-        std::move(ev->TraceId), "LongTx.AcquireReadSnapshot", NWilson::EFlags::AUTO_END);
     if (databaseName.empty()) {
         NYql::TIssues issues;
         issues.AddIssue("Cannot acquire snapshot for an unspecified database");
-        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::SCHEME_ERROR, std::move(issues), std::move(msg->Orbit)), 0, ev->Cookie, span.GetTraceId());
-        span.EndError("Cannot acquire snapshot for an unspecified database");
+        Send(ev->Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(Ydb::StatusIds::SCHEME_ERROR, std::move(issues), std::move(msg->Orbit)), 0, ev->Cookie);
         return;
     }
 
@@ -426,7 +420,6 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr&
         req.Cookie = ev->Cookie;
         req.TableIds = std::move(msg->TableIds);
         req.Orbit = std::move(msg->Orbit);
-        req.Span = std::move(span);
     }
 
     if (Settings.Counters) {
@@ -492,8 +485,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
             }();
 
             LWTRACK(AcquireReadSnapshotSuccess, userReq.Orbit, msg->Snapshot.Step, msg->Snapshot.TxId);
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(snapshotHandle), std::move(userReq.Orbit)), 0, userReq.Cookie, userReq.Span.GetTraceId());
-            userReq.Span.EndOk();
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(databaseName, msg->Snapshot, std::move(snapshotHandle), std::move(userReq.Orbit)), 0, userReq.Cookie);
         }
         for (auto& beginReq : req->BeginTxRequests) {
             auto txId = beginReq.TxId;
@@ -512,18 +504,15 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
                     {"logPrefix", LogPrefix},
                     {"longTxId", txId});
             }
-            Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(txId), 0, beginReq.Cookie, beginReq.Span.GetTraceId());
-            beginReq.Span.EndOk();
+            Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(txId), 0, beginReq.Cookie);
         }
     } else {
         for (auto& userReq : req->UserRequests) {
             LWTRACK(AcquireReadSnapshotFailure, userReq.Orbit, int(msg->Status));
-            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(msg->Status, msg->Issues, std::move(userReq.Orbit)), 0, userReq.Cookie, userReq.Span.GetTraceId());
-            userReq.Span.EndError(msg->Issues.ToOneLineString());
+            Send(userReq.Sender, new TEvLongTxService::TEvAcquireReadSnapshotResult(msg->Status, msg->Issues, std::move(userReq.Orbit)), 0, userReq.Cookie);
         }
         for (auto& beginReq : req->BeginTxRequests) {
-            Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(msg->Status, msg->Issues), 0, beginReq.Cookie, beginReq.Span.GetTraceId());
-            beginReq.Span.EndError(msg->Issues.ToOneLineString());
+            Send(beginReq.Sender, new TEvLongTxService::TEvBeginTxResult(msg->Status, msg->Issues), 0, beginReq.Cookie);
         }
     }
 

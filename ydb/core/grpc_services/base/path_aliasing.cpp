@@ -36,7 +36,8 @@ namespace NKikimr::NGRpcService {
         }
 
         const TString method = GetRpcMethodName();
-        if (method.StartsWith("Ydb.Cms.V1.CmsService/")) {
+        if (method.StartsWith("Ydb.PersQueue.V1.") ||
+            method.StartsWith("Ydb.Cms.V1.CmsService/")) {
             DisablePathNormalization();
             return;
         }

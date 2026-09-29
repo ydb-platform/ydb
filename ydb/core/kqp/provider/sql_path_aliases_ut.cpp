@@ -43,10 +43,14 @@ TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicClust
     std::function<TString(TStringBuf)> normalizePath;
     if (withAliases) {
         normalizePath = [](TStringBuf path) {
-            if (path == "/alias") {
+            TStringBuf normalizedPath = path;
+            while (normalizedPath.StartsWith("//")) {
+                normalizedPath = normalizedPath.SubStr(1);
+            }
+            if (normalizedPath == "/alias") {
                 return TString("/canonical");
             }
-            return path.StartsWith("/alias/") ? TString("/canonical") + TString(path.SubStr(6)) : TString(path);
+            return normalizedPath.StartsWith("/alias/") ? TString("/canonical") + TString(normalizedPath.SubStr(6)) : TString(path);
         };
     }
     UNIT_ASSERT_C(RewriteSqlPathAliases(query, ctx, "plato", normalizePath), ctx.IssueManager.GetIssues().ToString());

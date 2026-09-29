@@ -36,15 +36,6 @@ bool IsPathKey(TStringBuf tag) {
     return false;
 }
 
-TString NormalizeSqlPath(TStringBuf path, const std::function<TString(TStringBuf)>& normalizePath) {
-    TStringBuf canonicalPath = path;
-    while (canonicalPath.StartsWith("//")) {
-        canonicalPath = canonicalPath.SubStr(1);
-    }
-    TString normalized = normalizePath(canonicalPath);
-    return normalized == canonicalPath ? TString(path) : normalized;
-}
-
 TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
     const std::function<TString(TStringBuf)>& normalizePath) {
     if (!key->IsCallable("Key") || !key->ChildrenSize() || key->Child(0)->ChildrenSize() < 2) {
@@ -58,7 +49,7 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
     }
 
     const auto* atom = path->Child(0);
-    TString normalized = NormalizeSqlPath(atom->Content(), normalizePath);
+    TString normalized = normalizePath(atom->Content());
     auto newEntry = key->ChildPtr(0);
     if (normalized != atom->Content()) {
         auto newPath = ctx.ChangeChild(*path, 0, ctx.NewAtom(atom->Pos(), std::move(normalized)));
@@ -69,7 +60,7 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
         const auto* prefix = key->Child(0)->Child(2);
         if (prefix->ChildrenSize() == 1 && prefix->Child(0)->IsAtom()) {
             const auto* prefixAtom = prefix->Child(0);
-            TString normalizedPrefix = NormalizeSqlPath(prefixAtom->Content(), normalizePath);
+            TString normalizedPrefix = normalizePath(prefixAtom->Content());
             if (normalizedPrefix != prefixAtom->Content()) {
                 auto newPrefix = ctx.ChangeChild(*prefix, 0, ctx.NewAtom(prefixAtom->Pos(), std::move(normalizedPrefix)));
                 newEntry = ctx.ChangeChild(*newEntry, 2, std::move(newPrefix));
@@ -83,7 +74,7 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
 TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx,
     const std::function<TString(TStringBuf)>& normalizePath) {
     if (value->IsAtom()) {
-        TString normalized = NormalizeSqlPath(value->Content(), normalizePath);
+        TString normalized = normalizePath(value->Content());
         return normalized == value->Content() ? value : ctx.NewAtom(value->Pos(), std::move(normalized));
     }
 

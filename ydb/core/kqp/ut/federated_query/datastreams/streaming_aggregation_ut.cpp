@@ -174,6 +174,10 @@ public:
                           const TAggregationSettings& settings = {}) {
         CreateStateTable(useStateTable);
         CreateAggregationTopics(settings.Partitions);
+        Y_DEFER {
+            DropTopic(InputTopic);
+            DropTopic(OutputTopic);
+        };
 
         TString planner;
         if (settings.Tasks > 1) {
@@ -318,6 +322,9 @@ public:
         CreateStateTable(useStateTable);
         InputTopic = TStringBuilder() << "finiteAggregationInput_" << CreateGuidAsString();
         CreateTopic(InputTopic);
+        Y_DEFER {
+            DropTopic(InputTopic);
+        };
         CreatePqSource("source");
         const std::vector<std::string> messages = {
             R"({"key":"a","value":5})", R"({"key":"b","value":10})",
@@ -567,6 +574,10 @@ public:
         const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(useStateTable);
         CreateAggregationTopics();
+        Y_DEFER {
+            DropTopic(InputTopic);
+            DropTopic(OutputTopic);
+        };
         const auto setQuery = [&](bool create, bool aggregate) {
             ExecQuery(fmt::format(R"(
                 {ddl} STREAMING QUERY aggregation {settings} AS DO BEGIN
@@ -666,9 +677,16 @@ public:
         const auto pqGateway = SetupMockPqGateway();
         CreateStateTable(useStateTable);
         CreateAggregationTopics();
+        Y_DEFER {
+            DropTopic(InputTopic);
+            DropTopic(OutputTopic);
+        };
         const TString secondOutput = TStringBuilder() << OutputTopic << "_subkey";
         const TString rawOutput = TStringBuilder() << OutputTopic << "_raw";
         CreateTopic(secondOutput);
+        Y_DEFER {
+            DropTopic(secondOutput);
+        };
         TString sinks;
         if (extraSinks) {
             CreateTopic(rawOutput);
@@ -685,6 +703,11 @@ public:
                 UPSERT INTO rawRows SELECT id, key, subkey, value FROM $input LIMIT 4;
             )", rawOutput);
         }
+        Y_DEFER {
+            if (extraSinks) {
+                DropTopic(rawOutput);
+            }
+        };
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY aggregation AS DO BEGIN
                 PRAGMA ydb.DisableCheckpoints = "TRUE";
@@ -1867,7 +1890,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         const TString inputTopic = TStringBuilder() << "aggregationInput_" << CreateGuidAsString();
         const TString outputTopic = TStringBuilder() << "aggregationOutput_" << CreateGuidAsString();
         CreateTopic(inputTopic);
+        Y_DEFER {
+            DropTopic(inputTopic);
+        };
         CreateTopic(outputTopic);
+        Y_DEFER {
+            DropTopic(outputTopic);
+        };
         CreatePqSource("source");
 
         // A relative state table path must resolve in the serverless query's database.

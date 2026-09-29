@@ -29,7 +29,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
         constexpr char inputTopicName[] = "dropDeletesCheckpointsInputTopic";
         constexpr char outputTopicName[] = "dropDeletesCheckpointsOutputTopic";
         CreateTopic(inputTopicName);
+        Y_DEFER {
+            DropTopic(inputTopicName);
+        };
         CreateTopic(outputTopicName);
+        Y_DEFER {
+            DropTopic(outputTopicName);
+        };
 
         constexpr char pqSourceName[] = "pqSource";
         CreatePqSource(pqSourceName);
@@ -141,7 +147,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
         constexpr char inputTopicName[] = "dropStoppedDeletesCheckpointsInputTopic";
         constexpr char outputTopicName[] = "dropStoppedDeletesCheckpointsOutputTopic";
         CreateTopic(inputTopicName);
+        Y_DEFER {
+            DropTopic(inputTopicName);
+        };
         CreateTopic(outputTopicName);
+        Y_DEFER {
+            DropTopic(outputTopicName);
+        };
 
         constexpr char pqSourceName[] = "pqSourceStopped";
         CreatePqSource(pqSourceName);

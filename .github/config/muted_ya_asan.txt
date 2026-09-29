@@ -115,6 +115,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningGeneratedWithDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningGeneratedWithoutDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningIndependentColumn
 ydb/core/kqp/ut/scheme GeneratedStored.ReplaceReturningMultipleRows
+ydb/core/kqp/ut/scheme GeneratedStored.StoredComplexExpressionsMaterialize
 ydb/core/kqp/ut/scheme GeneratedStored.StoredGeneratedRejectedForColumnTable
 ydb/core/kqp/ut/scheme GeneratedStored.StoredNullableResultWithIndex
 ydb/core/kqp/ut/scheme GeneratedStored.StreamWriteModesMaterializeStoredColumn+EnableStreamWrite
@@ -193,6 +194,8 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_AllTypes
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Insert-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Ast_Replace+EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_NotNullDefault+EnableCompileTimeDefaults
+ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_NotNullDefault-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_NullableDefault+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_WithGlobalAsyncIndex-EnableIndexStreamWrite

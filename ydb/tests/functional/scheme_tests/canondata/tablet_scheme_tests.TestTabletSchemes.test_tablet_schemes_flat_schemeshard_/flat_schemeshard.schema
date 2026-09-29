@@ -9588,7 +9588,6 @@
                 "ColumnId": 5,
                 "ColumnName": "OperationOwnerActorId",
                 "ColumnType": "ActorID"
-
             }
         ],
         "ColumnsDropped": [],

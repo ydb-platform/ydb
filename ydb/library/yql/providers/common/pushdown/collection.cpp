@@ -121,7 +121,7 @@ private:
     }
 
     static bool IsDateTimeType(std::optional<NUdf::EDataSlot> dataSlot) {
-        return dataSlot && IsDataTypeDateOrTzDateOrInterval(*dataSlot);
+        return dataSlot == NUdf::EDataSlot::Date || dataSlot == NUdf::EDataSlot::Timestamp || dataSlot == NUdf::EDataSlot::Interval;
     }
 
     static bool IsUuidType(std::optional<NUdf::EDataSlot> dataSlot) {

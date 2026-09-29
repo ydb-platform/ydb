@@ -7,13 +7,16 @@ JSONL-буфер и заливка в YDB. Про GitHub, `ya` и CI ничег�
 
 1. Скопируйте `collector/` и положите на `PYTHONPATH` каталог, в котором она лежит.
 2. Рядом должен импортироваться `ydb_wrapper` (см. ниже) и стоять SDK `ydb`.
-3. Задайте `ANALYTICS_RUN_ID` (кто измеряет) и `ANALYTICS_FILE` (куда писать JSONL).
+3. Задайте `ANALYTICS_FILE` (локальный JSONL) и `ANALYTICS_RUN_ID` — номер
+   этого запуска, чтобы потом выбрать все его события (`WHERE run_id = …`).
+   Любое целое: id пайплайна, timestamp, счётчик. В GitHub Actions обёртка
+   подставляет `GITHUB_RUN_ID` сама.
 4. Вызовите `start` → работа → `end` → `flush`.
 
 ```bash
 export PYTHONPATH=/opt/analytics          # здесь лежит пакет collector/
 export ANALYTICS_FILE=/tmp/analytics.jsonl
-export ANALYTICS_RUN_ID=42
+export ANALYTICS_RUN_ID=42               # все span этого запуска получат run_id=42
 export ANALYTICS_YDB_CREDENTIALS=/path/to/sa.json
 
 python3 -m collector start compile --source my_pipeline --label cache=hit
@@ -42,7 +45,7 @@ flush_file()
 | --- | --- | --- |
 | `date` | `2026-09-21` | из `event_ts` |
 | `event_ts` | момент `start` | collector |
-| `run_id` | `42` | `ANALYTICS_RUN_ID` / `--run-id` |
+| `run_id` | `42` | id запуска: `ANALYTICS_RUN_ID` / `--run-id` |
 | `name` | `compile` | первый аргумент |
 | `kind` | `duration` | `--kind`, по умолчанию duration |
 | `source` | `my_pipeline` | `--source`, без него строка не пишется |

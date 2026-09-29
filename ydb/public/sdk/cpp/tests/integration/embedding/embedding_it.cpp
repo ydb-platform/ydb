@@ -45,6 +45,9 @@ TEST(Embedding, MatchesKnnSerialization) {
         .SetDatabase(std::getenv("YDB_DATABASE")));
     NQuery::TQueryClient client(driver);
 
+    CheckEmbedding(client, "Float",
+        TValueBuilder().EmptyList(TTypeBuilder().Primitive(EPrimitiveType::Float).Build()).Build(),
+        NValueHelpers::Embedding(std::vector<float>{}));
     CheckEmbedding(client, "Int64",
         TValueBuilder().BeginList().AddListItem().Int64(-2).AddListItem().Int64(16777217).EndList().Build(),
         NValueHelpers::Embedding(std::array<std::int64_t, 2>{-2, 16777217}));

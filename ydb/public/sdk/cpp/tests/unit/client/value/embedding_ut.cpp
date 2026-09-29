@@ -44,16 +44,12 @@ TEST(Embedding, Float64IsConvertedToFloat32) {
     EXPECT_EQ(parser.GetBytes(), std::string("\x00\x00\x80\x3f\x01", 5));
 }
 
-TEST(Embedding, EmptyIsNullBytes) {
+TEST(Embedding, EmptyHasFormatByte) {
     const auto value = NValueHelpers::Embedding(std::vector<float>{});
-    TTypeParser type(value.GetType());
-
-    ASSERT_EQ(type.GetKind(), TTypeParser::ETypeKind::Optional);
-    type.OpenOptional();
-    EXPECT_EQ(type.GetPrimitive(), EPrimitiveType::Bytes);
     TValueParser parser(value);
-    parser.OpenOptional();
-    EXPECT_TRUE(parser.IsNull());
+
+    EXPECT_EQ(parser.GetPrimitiveType(), EPrimitiveType::Bytes);
+    EXPECT_EQ(parser.GetBytes(), std::string("\x01", 1));
 }
 
 } // namespace NYdb

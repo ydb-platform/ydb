@@ -20,16 +20,12 @@ concept TEmbeddingNumber = (std::integral<T> && sizeof(T) > 1) || std::same_as<T
 } // namespace NPrivate
 
 //! Builds a Bytes value in YDB FloatVector format. Elements are converted to Float32.
-//! An empty range produces a NULL Bytes value. Declare the query parameter as Bytes.
+//! An empty range produces a single format byte. Declare the query parameter as Bytes.
 template <typename TRange>
     requires std::ranges::sized_range<const TRange&> && NPrivate::TEmbeddingNumber<std::ranges::range_value_t<TRange>>
 TValue Embedding(const TRange& values) {
     static_assert(sizeof(float) == sizeof(std::uint32_t));
     static_assert(std::numeric_limits<float>::is_iec559);
-
-    if (std::ranges::empty(values)) {
-        return TValueBuilder().EmptyOptional(EPrimitiveType::Bytes).Build();
-    }
 
     std::string bytes;
     bytes.reserve(std::ranges::size(values) * sizeof(float) + 1);

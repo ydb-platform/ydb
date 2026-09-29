@@ -457,10 +457,10 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,
             R'predicate: (`time` IN (102, 103, 104))')
-        filter = ' CAST(`time` AS Interval) > Interval("PT1M41S")'
+        filter = ' CAST(`time` AS Interval) > Interval("PT0.000101S")'
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,
-            R'predicate: (CAST(`time` AS Interval?) > Interval(\"PT101S\"))')
+            R'predicate: (CAST(`time` AS Interval?) > Interval(\"PT0.000101S\"))')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):

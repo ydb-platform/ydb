@@ -3625,6 +3625,10 @@ public:
 
         if (QueryState && QueryState->TxCtx) {
             auto& txCtx = QueryState->TxCtx;
+            if (isFinal) {
+                // Drop snapshot handle early
+                txCtx->SnapshotHandle.Handle = NKqp::TSnapshotHandle();
+            }
             if (txCtx->IsInvalidated()) {
                 Transactions.AddToBeAborted(txCtx);
                 Transactions.ReleaseTransaction(QueryState->TxId.GetValue());
@@ -3690,7 +3694,7 @@ public:
             }
         }
 
-        YDB_LOG_INFO("Cleanup start",
+        YDB_LOG(QueryState && QueryState->IsWarmupCompilation_ ? PRI_DEBUG : PRI_INFO, "Cleanup start",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
             {"isFinal", isFinal},

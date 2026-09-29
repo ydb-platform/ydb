@@ -657,6 +657,12 @@ void TDqPqRdReadActor::Init() {
 }
 
 void TDqPqRdReadActor::InitChild() {
+    if (Parent->WatermarkTracker) {
+        const auto now = TInstant::Now();
+        for (const auto partitionId : GetPartitionsToRead()) {
+            Parent->WatermarkTracker->RegisterPartition({Cluster, partitionId}, now);
+        }
+    }
     for (auto& [partitionKey, info]: Parent->Partitions) {
         if (Cluster == partitionKey.Cluster && info.Offset) {
             NextOffsetFromRD[partitionKey.PartitionId] = *info.Offset;
@@ -700,14 +706,6 @@ void TDqPqRdReadActor::ProcessGlobalState() {
             return;
         }
         auto partitionToRead = GetPartitionsToRead();
-        if (WatermarkTracker) {
-            auto now = TInstant::Now();
-            TPartitionKey partitionKey { .Cluster = Cluster };
-            for (auto partitionId: partitionToRead) {
-                partitionKey.PartitionId = partitionId;
-                WatermarkTracker->RegisterPartition(partitionKey, now);
-            }
-        }
         auto cookie = ++CoordinatorRequestCookie;
         SRC_LOG_I("Send TEvCoordinatorRequest to coordinator " << CoordinatorActorId->ToString() << ", partIds: "
             << JoinSeq(", ", partitionToRead) << " cookie " << cookie);
@@ -914,10 +912,10 @@ std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
         for (const auto& partitioningParams : readParams.GetPartitioningParams()) {
             ui32 partitionsCount = partitioningParams.GetTopicPartitionsCount();
             ui64 currentPartition = partitioningParams.GetEachTopicPartitionGroupId();
-            do {
+            while (currentPartition < partitionsCount) {
                 res.emplace_back(currentPartition); // 0-based in topic API
                 currentPartition += partitioningParams.GetDqPartitionsCount();
-            } while (currentPartition < partitionsCount);
+            }
         }
     }
     return res;
@@ -1610,6 +1608,11 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
     sourceParams.SetEndpoint(TString(Clusters[clusterIndex].Info.Endpoint));
     sourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
     TVector<NPq::NProto::TDqReadTaskParams> readParams = ReadParams;
+    for (auto& readParam : readParams) {
+        for (auto& partitionParam : *readParam.MutablePartitioningParams()) {
+            partitionParam.SetTopicPartitionsCount(Clusters[clusterIndex].PartitionsCount);
+        }
+    }
     auto actor = new TDqPqRdReadActor(
         InputIndex,
         IngressStats.Level,

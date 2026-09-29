@@ -128,6 +128,9 @@ bool TConfigFlags::ApplyFlag(const TPosition& pos, const TStringBuf name, const 
 
     auto it = Flags_.find(name);
     if (it == Flags_.end()) {
+        if (fromInitialize) {
+            return true;
+        }
         ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
         return false;
     }

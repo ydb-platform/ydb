@@ -90,6 +90,7 @@ sql_stmt_core:
   | materialize_stmt
   | create_symlink_stmt
   | drop_symlink_stmt
+  | kill_session_stmt
 ;
 
 expr:
@@ -999,6 +1000,8 @@ symlink_ref: (cluster_expr DOT)? symlink_path;
 create_symlink_stmt: CREATE SYMLINK (IF NOT EXISTS)? symlink_ref TO symlink_path;
 drop_symlink_stmt: DROP SYMLINK (IF EXISTS)? symlink_ref;
 
+kill_session_stmt: KILL SESSION (id | bind_parameter);
+
 create_user_stmt: CREATE USER role_name user_option*;
 alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
 
@@ -1273,7 +1276,7 @@ create_secret_stmt: CREATE (OR REPLACE)? SECRET (IF NOT EXISTS)? object_ref
     with_secret_settings
 ;
 with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* COMMA? RPAREN;
-secret_setting_entry: an_id EQUALS secret_setting_value;
+secret_setting_entry: an_id_or_type EQUALS secret_setting_value;
 secret_setting_value: expr;
 
 alter_secret_stmt: ALTER SECRET (IF EXISTS)? object_ref
@@ -1589,6 +1592,7 @@ keyword_as_compat:
   // | ISNULL
   // | JOIN
   // | KEY
+  | KILL
   | LAST
   // | LEFT
   | LEGACY
@@ -1678,6 +1682,7 @@ keyword_as_compat:
   | SHOW
   | TSKIP
   | SEQUENCE
+  | SESSION
   | SOURCE
   | START
   | STATISTICS
@@ -1835,6 +1840,7 @@ keyword_compat: (
   | ISNULL
   | JOIN
   | KEY
+  | KILL
   | LAST
   | LEFT
   | LEGACY
@@ -1924,6 +1930,7 @@ keyword_compat: (
   | TSKIP
   | SECRET
   | SEQUENCE
+  | SESSION
   | SOURCE
   | START
   | STATISTICS
@@ -2214,6 +2221,7 @@ JSON_EXISTS: J S O N '_' E X I S T S;
 JSON_QUERY: J S O N '_' Q U E R Y;
 JSON_VALUE: J S O N '_' V A L U E;
 KEY: K E Y;
+KILL: K I L L;
 LAST: L A S T;
 LEFT: L E F T;
 LEGACY: L E G A C Y;
@@ -2320,6 +2328,7 @@ SHOW: S H O W;
 TSKIP: S K I P;
 SECRET: S E C R E T;
 SEQUENCE: S E Q U E N C E;
+SESSION: S E S S I O N;
 SOURCE: S O U R C E;
 START: S T A R T;
 STORED: S T O R E D;

@@ -75,6 +75,14 @@ protected:
         PassAway();
     }
 
+    void OnAccessDenied(const TString& errorReason) {
+        OnFatalError(TStringBuilder()
+            << "Access denied: cannot read from topic '" << TopicPath << "' (partition " << PartitionId << ")"
+            << " with consumer '" << Consumer << "'."
+            << " Check read permissions (ydb.topic.read / ydb.generic.read) for the transfer credentials."
+            << " Original error: " << errorReason);
+    }
+
     NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "LocalTopicPartitionReaderActor"},
@@ -135,11 +143,7 @@ private:
         }
 
         if (record.GetErrorCode() == NPersQueue::NErrorCode::ACCESS_DENIED) {
-            return OnFatalError(TStringBuilder()
-                << "Access denied: cannot read from topic '" << TopicPath << "' (partition " << PartitionId << ")"
-                << " with consumer '" << Consumer << "'."
-                << " Check read permissions (ydb.topic.read / ydb.generic.read) for the transfer credentials."
-                << " Original error: " << record.GetErrorReason());
+            return OnAccessDenied(record.GetErrorReason());
         }
 
         if (record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
@@ -280,11 +284,7 @@ private:
         TString error;
         if (!NPQ::BasicCheck(record, error)) {
             if (record.GetErrorCode() == NPersQueue::NErrorCode::ACCESS_DENIED) {
-                return OnFatalError(TStringBuilder()
-                    << "Access denied: cannot read from topic '" << TopicPath << "' (partition " << PartitionId << ")"
-                    << " with consumer '" << Consumer << "'."
-                    << " Check read permissions (ydb.topic.read / ydb.generic.read) for the transfer credentials."
-                    << " Original error: " << record.GetErrorReason());
+                return OnAccessDenied(record.GetErrorReason());
             }
             return OnError(TStringBuilder() << "Wrong read response: " << error);
         }

@@ -192,24 +192,12 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         if (!ev->Get()->Result.IsSuccess()) {
             const auto status = ev->Get()->Result.GetStatus();
             const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
-            switch (status) {
-            case NYdb::EStatus::SCHEME_ERROR:
-            case NYdb::EStatus::BAD_REQUEST:
-            case NYdb::EStatus::UNAUTHORIZED:
-                YDB_LOG_ERROR("Failed to commit offset due to fatal error",
-                    {"status", status},
-                    {"issues", issues},
-                    {"topicPath", Settings.GetBase().Topics_.at(0).Path_},
-                    {"consumerName", Settings.GetBase().ConsumerName_});
-                return Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder()
-                    << "Cannot commit offset for topic '" << Settings.GetBase().Topics_.at(0).Path_
-                    << "' with consumer '" << Settings.GetBase().ConsumerName_
-                    << "'. Original error: " << issues);
-            default:
-                YDB_LOG_WARN("Handle",
-                    {"ev", ev->Get()->ToString()});
-                return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
+            if (LeaveOnFatalError(status, issues, "Failed to commit offset due to fatal error", "Cannot commit offset")) {
+                return;
             }
+            YDB_LOG_WARN("Handle",
+                {"ev", ev->Get()->ToString()});
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
         } else {
             YDB_LOG_DEBUG("Handle",
                 {"committedOffset", CommittedOffset},
@@ -249,21 +237,29 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         const auto status = ev->Get()->Result.GetStatus();
         const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
 
+        if (LeaveOnFatalError(status, issues, "Topic reader has gone due to fatal error", "Cannot read from topic")) {
+            return;
+        }
+        return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
+    }
+
+    bool LeaveOnFatalError(NYdb::EStatus status, const TString& issues, const char* logMessage, const char* errorPrefix) {
         switch (status) {
         case NYdb::EStatus::SCHEME_ERROR:
         case NYdb::EStatus::BAD_REQUEST:
         case NYdb::EStatus::UNAUTHORIZED:
-            YDB_LOG_ERROR("Topic reader has gone due to fatal error",
+            YDB_LOG_ERROR(logMessage,
                 {"status", status},
                 {"issues", issues},
                 {"topicPath", Settings.GetBase().Topics_.at(0).Path_},
                 {"consumerName", Settings.GetBase().ConsumerName_});
-            return Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder()
-                << "Cannot read from topic '" << Settings.GetBase().Topics_.at(0).Path_
+            Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder()
+                << errorPrefix << " for topic '" << Settings.GetBase().Topics_.at(0).Path_
                 << "' with consumer '" << Settings.GetBase().ConsumerName_
                 << "'. Original error: " << issues);
+            return true;
         default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
+            return false;
         }
     }
 

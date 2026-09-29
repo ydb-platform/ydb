@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/tx.h>
 
 #include <ydb/library/actors/core/executor_thread.h>
+#include <ydb/core/util/tuples.h>
 
 namespace NEtcd {
 

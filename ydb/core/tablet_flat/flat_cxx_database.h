@@ -16,6 +16,11 @@
 // https://wiki.yandex-team.ru/kikimr/techdoc/db/cxxapi/nicedb/
 
 namespace NKikimr {
+
+// Defined in ydb/core/util/ui64id.h
+template <class TTag>
+class TUi64Id;
+
 namespace NIceDb {
 
 using TToughDb = NTable::TDatabase;
@@ -405,6 +410,45 @@ struct TConvertValue<TColumnType, TIdWrapper<T, Tag>, TRawTypeValue> {
     TTypeValue Value;
     TConvertValue(const TRawTypeValue & value) : Value(value) {}
     operator TIdWrapper<T, Tag>() const { return TIdWrapper<T, Tag>::FromValue(static_cast<T>(Value)); }
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TUi64Id conversion (see ydb/core/util/ui64id.h)
+
+template <typename TColumnType, class TTag>
+struct TConvertValue<TColumnType, TRawTypeValue, NKikimr::TUi64Id<TTag>> {
+    typedef NKikimr::TUi64Id<TTag> TSourceType;
+
+    ui64 Store;
+    TTypeValue Value;
+
+    TConvertValue(const TSourceType& value)
+        : Store(ui64(value))
+        , Value(Store, TColumnType::ColumnType)
+    {
+        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint64, "use TUi64Id only with Uint64");
+    }
+
+    operator const TRawTypeValue&() const {
+        return Value;
+    }
+};
+
+template <typename TColumnType, class TTag>
+struct TConvertValue<TColumnType, NKikimr::TUi64Id<TTag>, TRawTypeValue> {
+    typedef NKikimr::TUi64Id<TTag> TTargetType;
+
+    TTypeValue Value;
+
+    TConvertValue(const TRawTypeValue& value)
+        : Value(value)
+    {
+        static_assert(TColumnType::ColumnType == NScheme::NTypeIds::Uint64, "use TUi64Id only with Uint64");
+    }
+
+    operator TTargetType() const {
+        return TTargetType(ui64(Value));
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

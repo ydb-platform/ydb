@@ -26,6 +26,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/generic/algorithm.h>
+#include <util/generic/xrange.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_POPULATOR
 

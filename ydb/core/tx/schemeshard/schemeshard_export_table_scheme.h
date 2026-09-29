@@ -7,8 +7,7 @@
 namespace NKikimr::NSchemeShard {
 
 struct TExportTableSchemeContext {
-    TString SourcePath; // Absolute path used by auxiliary ALTER statements
-    TString TablePath; // Database-relative path used by CREATE TABLE and CDC statements
+    TString TablePath; // Database-relative path used throughout the exported SQL
     NKikimrSchemeOp::TPathDescription PathDescription;
     NKikimrSchemeOp::TChangefeedUnderlyingTopics ChangefeedUnderlyingTopics;
 };

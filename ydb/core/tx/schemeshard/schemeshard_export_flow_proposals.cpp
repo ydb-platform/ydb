@@ -125,7 +125,6 @@ bool FillExportTableSchemePaths(
         return false;
     }
 
-    context.SourcePath = sourcePath;
     context.TablePath = paths.second;
     return true;
 }
@@ -305,14 +304,12 @@ bool FillPartitioning(
 
 bool PrepareExportTableSchemeContext(
     TSchemeShard* ss,
-    const TString& sourcePathName,
     const TPath& sourcePath,
     const TPath& exportItemPath,
     TExportTableSchemeContext& context,
     TString& error
 ) {
     error.clear();
-    context.SourcePath.clear();
     context.TablePath.clear();
     context.PathDescription.Clear();
     context.ChangefeedUnderlyingTopics.Clear();
@@ -326,7 +323,6 @@ bool PrepareExportTableSchemeContext(
         return false;
     }
 
-    context.SourcePath = sourcePathName;
     auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
 
     if (sourceDescription.HasTable()) {
@@ -360,7 +356,6 @@ bool PrepareExportTableSchemeContext(
     TString& error
 ) {
     error.clear();
-    context.SourcePath.clear();
     context.TablePath.clear();
     context.PathDescription.Clear();
     context.ChangefeedUnderlyingTopics.Clear();
@@ -374,7 +369,6 @@ bool PrepareExportTableSchemeContext(
         return false;
     }
 
-    context.SourcePath = sourcePathName;
     context.PathDescription.CopyFrom(task.GetTable());
 
     if (context.PathDescription.HasTable()) {
@@ -408,7 +402,7 @@ bool FillBackupTaskTableDescription(
 
     const bool prepared = schemeSnapshot && schemeSnapshot->HasTable()
         ? PrepareExportTableSchemeContext(ss, sourcePathName, *schemeSnapshot, exportItemPath, context, error)
-        : PrepareExportTableSchemeContext(ss, sourcePathName, sourcePath, exportItemPath, context, error);
+        : PrepareExportTableSchemeContext(ss, sourcePath, exportItemPath, context, error);
     if (!prepared) {
         return false;
     }

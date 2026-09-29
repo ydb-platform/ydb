@@ -35,13 +35,13 @@ namespace {
 NSysView::TFormatResult FormatCreateTable(const TExportTableSchemeContext& context) {
     const auto& pathDescription = context.PathDescription;
     const auto& tablePath = context.TablePath;
-    Y_ENSURE(tablePath && context.SourcePath, "Missing original table path for SQL backup");
+    Y_ENSURE(tablePath, "Missing table path for SQL backup");
 
     NSysView::TCreateTableFormatter formatter;
     if (pathDescription.HasColumnTableDescription()) {
         const auto& description = pathDescription.GetColumnTableDescription();
         Y_ENSURE(description.GetSchema().ColumnsSize(), "Column table description has no columns");
-        return formatter.Format(tablePath, context.SourcePath, description, false,
+        return formatter.Format(tablePath, tablePath, description, false,
             AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject());
     }
 
@@ -69,7 +69,7 @@ NSysView::TFormatResult FormatCreateTable(const TExportTableSchemeContext& conte
         sequences.emplace(pathId, std::move(result));
     }
 
-    return formatter.Format(tablePath, context.SourcePath, description, false, persQueues, sequences);
+    return formatter.Format(tablePath, tablePath, description, false, persQueues, sequences);
 }
 
 } // namespace

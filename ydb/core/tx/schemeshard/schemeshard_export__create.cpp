@@ -593,7 +593,7 @@ private:
 
         const bool prepared = backupTask && backupTask->HasTable()
             ? PrepareExportTableSchemeContext(Self, item.SourcePathName, *backupTask, exportItemPath, context, error)
-            : PrepareExportTableSchemeContext(Self, item.SourcePathName, sourcePath, exportItemPath, context, error);
+            : PrepareExportTableSchemeContext(Self, sourcePath, exportItemPath, context, error);
 
         if (!prepared || !FillExportTableSchemePaths(Self, item.SourcePathName, context, error)) {
             Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));

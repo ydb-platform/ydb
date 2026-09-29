@@ -2896,8 +2896,56 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         const auto sql = GetS3FileContent("/nested/create_table.sql");
         UNIT_ASSERT_C(sql.Contains("CREATE TABLE `Dir/Table`"), sql);
         UNIT_ASSERT_C(sql.Contains("ALTER TABLE `Dir/Table`"), sql);
-        UNIT_ASSERT_C(sql.Contains("ALTER SEQUENCE `/MyRoot/Dir/Table/seq`"), sql);
+        UNIT_ASSERT_C(sql.Contains("ALTER SEQUENCE `Dir/Table/seq`"), sql);
+        UNIT_ASSERT_C(!sql.Contains("/MyRoot/Dir/Table"), sql);
         UNIT_ASSERT_C(!sql.Contains("CREATE TABLE `Table`"), sql);
+    }
+
+    Y_UNIT_TEST(ColumnTableBackupAsSqlUsesDatabaseRelativePath) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        ui64 txId = 100;
+
+        TestMkDir(Runtime(), ++txId, "/MyRoot", "Dir");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestCreateColumnTable(Runtime(), ++txId, "/MyRoot/Dir", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key" Type: "Uint32" NotNull: true }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: "key"
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestAlterColumnTable(Runtime(), ++txId, "/MyRoot/Dir", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                Options { ScanReaderPolicyName: "SIMPLE" }
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Dir/ColumnTable"
+                    destination_prefix: "nested-column"
+                }
+            }
+        )", S3Port()));
+        WaitTableSqlExport(exportId);
+
+        const auto sql = GetS3FileContent("/nested-column/create_table.sql");
+        CheckSqlBackup("/nested-column", {});
+        UNIT_ASSERT_C(sql.Contains("CREATE TABLE `Dir/ColumnTable`"), sql);
+        UNIT_ASSERT_C(sql.Contains("ALTER OBJECT `Dir/ColumnTable` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS"), sql);
+        UNIT_ASSERT_C(!sql.Contains("/MyRoot/Dir/ColumnTable"), sql);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {

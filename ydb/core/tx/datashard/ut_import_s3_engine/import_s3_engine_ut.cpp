@@ -1,7 +1,16 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
+#include <ydb/core/scheme/scheme_type_info.h>
+#include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/tx/datashard/export_data_format.h>
 #include <ydb/core/tx/datashard/import_s3_engine.h>
 #include <ydb/core/tx/datashard/import_parquet_s3_file.h>
+
+#include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -11,10 +20,13 @@
 #include <parquet/file_reader.h>
 #include <contrib/libs/zstd/include/zstd.h>
 
+#include <util/generic/maybe.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
+#include <util/stream/null.h>
 #include <util/string/builder.h>
+#include <util/string/join.h>
 
 #include <array>
 #include <memory>
@@ -311,6 +323,335 @@ TString MakePseudoRandomAscii(size_t size) {
         ch = Alphabet[state % Alphabet.size()];
     }
     return value;
+}
+
+NKikimrSchemeOp::TTableDescription MakeDyNumberJsonDocumentTableScheme() {
+    NKikimrSchemeOp::TTableDescription scheme;
+    scheme.SetName("Table");
+    scheme.SetPath("/Root/Table");
+
+    const auto addColumn = [&scheme](ui32 id, const char* name, NScheme::TTypeId typeId) {
+        auto* column = scheme.AddColumns();
+        column->SetId(id);
+        column->SetName(name);
+        column->SetTypeId(typeId);
+    };
+    addColumn(1, "key", NScheme::NTypeIds::Utf8);
+    addColumn(2, "dyn", NScheme::NTypeIds::DyNumber);
+    addColumn(3, "doc", NScheme::NTypeIds::JsonDocument);
+
+    scheme.AddKeyColumnIds(1);
+    scheme.AddKeyColumnNames("key");
+    return scheme;
+}
+
+// A row of the table above with its cells in the stored form, i.e. as a table
+// scan hands them to the exporter: DyNumber and JsonDocument are binary.
+struct TStoredRow {
+    TString Key;
+    TMaybe<TString> DyNumber;
+    TMaybe<TString> JsonDocument;
+};
+
+TString StoredDyNumber(TStringBuf text) {
+    const auto value = NDyNumber::ParseDyNumberString(text);
+    UNIT_ASSERT_C(value, "invalid DyNumber literal " << text);
+    return *value;
+}
+
+TString StoredJsonDocument(TStringBuf json) {
+    const auto value = NBinaryJson::SerializeToBinaryJson(json);
+    UNIT_ASSERT_C(std::holds_alternative<NBinaryJson::TBinaryJson>(value), "invalid JSON literal " << json);
+    const auto& binaryJson = std::get<NBinaryJson::TBinaryJson>(value);
+    return TString(binaryJson.Data(), binaryJson.Size());
+}
+
+// Runs the rows through the Parquet exporter itself, so the result is exactly
+// the data file of a backup.
+TString ExportToParquet(const TVector<TStoredRow>& rows, ui64 rowGroupSize) {
+    IExport::TTableColumns columns;
+    columns.emplace(1, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "key", true));
+    columns.emplace(2, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::DyNumber), "", "dyn", false));
+    columns.emplace(3, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::JsonDocument), "", "doc", false));
+
+    TParquetExportSettings settings;
+    settings.WithColumns(std::move(columns)).WithRowGroupSize(rowGroupSize);
+    const auto format = CreateExportDataFormat(std::move(settings));
+    UNIT_ASSERT_C(format->ColumnsOrder({1, 2, 3}), format->GetError());
+
+    const auto set = [](NTable::IScan::TRow& row, ui32 pos, const TMaybe<TString>& value) {
+        if (value) {
+            row.Set(pos, NTable::ECellOp::Set, TCell(value->data(), value->size()));
+        } else {
+            row.Set(pos, NTable::ECellOp::Null, TCell());
+        }
+    };
+
+    for (const auto& row : rows) {
+        NTable::IScan::TRow scanRow;
+        scanRow.Init(3);
+        scanRow.Set(0, NTable::ECellOp::Set, TCell(row.Key.data(), row.Key.size()));
+        set(scanRow, 1, row.DyNumber);
+        set(scanRow, 2, row.JsonDocument);
+        UNIT_ASSERT_C(format->Collect(scanRow, Cnull), format->GetError());
+    }
+
+    const auto data = format->Flush(/*last=*/true);
+    UNIT_ASSERT_C(data, format->GetError());
+    return TString(data->Data(), data->Size());
+}
+
+std::shared_ptr<arrow::Array> FinishArray(arrow::ArrayBuilder& builder) {
+    std::shared_ptr<arrow::Array> array;
+    const auto status = builder.Finish(&array);
+    UNIT_ASSERT_C(status.ok(), status.ToString());
+    return array;
+}
+
+template <typename TArrowType>
+std::shared_ptr<arrow::Array> MakeNumericArray(
+    const std::shared_ptr<arrow::DataType>& type,
+    const TVector<typename TArrowType::c_type>& values)
+{
+    arrow::NumericBuilder<TArrowType> builder(type, arrow::default_memory_pool());
+    for (const auto value : values) {
+        UNIT_ASSERT(builder.Append(value).ok());
+    }
+    return FinishArray(builder);
+}
+
+std::shared_ptr<arrow::Array> MakeStringArray(const TVector<TString>& values) {
+    arrow::StringBuilder builder;
+    for (const auto& value : values) {
+        UNIT_ASSERT(builder.Append(value.data(), value.size()).ok());
+    }
+    return FinishArray(builder);
+}
+
+std::shared_ptr<arrow::Array> MakeBinaryArray(const TVector<TString>& values) {
+    arrow::BinaryBuilder builder;
+    for (const auto& value : values) {
+        UNIT_ASSERT(builder.Append(value.data(), value.size()).ok());
+    }
+    return FinishArray(builder);
+}
+
+std::shared_ptr<arrow::Array> MakeDecimalArray(const TVector<NYql::NDecimal::TInt128>& values) {
+    arrow::FixedSizeBinaryBuilder builder(arrow::fixed_size_binary(sizeof(NYql::NDecimal::TInt128)));
+    for (const auto& value : values) {
+        UNIT_ASSERT(builder.Append(reinterpret_cast<const char*>(&value)).ok());
+    }
+    return FinishArray(builder);
+}
+
+// The bytes of a value of the array, which is what its cell holds.
+TString ValueBytes(const arrow::Array& array, i64 index) {
+    switch (array.type_id()) {
+    case arrow::Type::STRING:
+    case arrow::Type::BINARY: {
+        const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
+        return TString(view.data(), view.size());
+    }
+    case arrow::Type::FIXED_SIZE_BINARY: {
+        const auto view = static_cast<const arrow::FixedSizeBinaryArray&>(array).GetView(index);
+        return TString(view.data(), view.size());
+    }
+    default: {
+        const auto& values = static_cast<const arrow::PrimitiveArray&>(array);
+        const size_t width = static_cast<const arrow::FixedWidthType&>(*array.type()).bit_width() / 8;
+        return TString(
+            reinterpret_cast<const char*>(values.values()->data()) + (array.offset() + index) * width,
+            width);
+    }
+    }
+}
+
+// Written the way the exporter does it: default writer properties (Parquet
+// format 1.0) and the Arrow schema stored in the file.
+TString WriteParquetLikeExporter(const std::shared_ptr<arrow::Table>& table, i64 rowGroupSize) {
+    auto sink = arrow::io::BufferOutputStream::Create(0).ValueOrDie();
+
+    auto arrowPropertiesBuilder = parquet::ArrowWriterProperties::Builder();
+    arrowPropertiesBuilder.store_schema();
+    const auto writeStatus = parquet::arrow::WriteTable(
+        *table,
+        arrow::default_memory_pool(),
+        sink,
+        rowGroupSize,
+        parquet::WriterProperties::Builder().build(),
+        arrowPropertiesBuilder.build());
+    UNIT_ASSERT_C(writeStatus.ok(), writeStatus.ToString());
+
+    auto buffer = sink->Finish().ValueOrDie();
+    return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+}
+
+// A table with a Utf8 key and a value column of the given type.
+NKikimrSchemeOp::TTableDescription MakeValueTableScheme(NScheme::TTypeId typeId, TMaybe<ui32> pgTypeId) {
+    auto scheme = MakeUtf8TableScheme();
+    auto& value = *scheme.MutableColumns(1);
+    value.SetTypeId(typeId);
+    if (pgTypeId) {
+        value.MutableTypeInfo()->SetPgTypeId(*pgTypeId);
+    }
+    return scheme;
+}
+
+TString ValueTypeName(const NKikimrSchemeOp::TTableDescription& scheme) {
+    const auto& value = scheme.GetColumns(1);
+    return NScheme::TypeName(NScheme::TypeInfoModFromProtoColumnType(
+        value.GetTypeId(), value.HasTypeInfo() ? &value.GetTypeInfo() : nullptr).TypeInfo);
+}
+
+// The data file of the table above: keys k0, k1, ... and the given values.
+TString BuildKeyValueParquet(const std::shared_ptr<arrow::Array>& values, i64 rowGroupSize) {
+    TVector<TString> keys;
+    for (i64 i = 0; i < values->length(); ++i) {
+        keys.push_back(TStringBuilder() << "k" << i);
+    }
+
+    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{
+        arrow::field("key", arrow::utf8()),
+        arrow::field("value", values->type()),
+    });
+    return WriteParquetLikeExporter(
+        arrow::Table::Make(schema, {MakeStringArray(keys), values}), rowGroupSize);
+}
+
+// A column type with restrictions on its values that the Arrow type of the
+// column does not carry.
+struct TValueCase {
+    NScheme::TTypeId TypeId;
+    TMaybe<ui32> PgTypeId;
+    // Four values as they are in a backup. The arrays differ in the last value
+    // only: Valid has one at the limit of what the type allows, Invalid has
+    // one that a table of this type must not hold.
+    std::shared_ptr<arrow::Array> Valid;
+    std::shared_ptr<arrow::Array> Invalid;
+};
+
+template <typename TArrowType>
+TValueCase MakeNumericCase(
+    NScheme::TTypeId typeId,
+    const std::shared_ptr<arrow::DataType>& type,
+    typename TArrowType::c_type valid,
+    typename TArrowType::c_type invalid)
+{
+    return {
+        .TypeId = typeId,
+        .PgTypeId = Nothing(),
+        .Valid = MakeNumericArray<TArrowType>(type, {0, 1, 2, valid}),
+        .Invalid = MakeNumericArray<TArrowType>(type, {0, 1, 2, invalid}),
+    };
+}
+
+TVector<TValueCase> MakeValueCases() {
+    using namespace NYql::NUdf;
+    using namespace NYql::NDecimal;
+
+    static constexpr ui32 PgTextTypeId = 25;
+
+    const TString json = R"({"key":"value"})";
+    const TString invalidUtf8 = "\xC3\x28"; // the second byte is not a continuation byte
+
+    const auto makeStringCase = [](NScheme::TTypeId typeId, const TString& valid, const TString& invalid,
+        TMaybe<ui32> pgTypeId = Nothing())
+    {
+        return TValueCase{
+            .TypeId = typeId,
+            .PgTypeId = pgTypeId,
+            .Valid = MakeStringArray({valid, valid, valid, valid}),
+            .Invalid = MakeStringArray({valid, valid, valid, invalid}),
+        };
+    };
+    const auto makeBinaryCase = [](NScheme::TTypeId typeId, const TString& valid, const TString& invalid) {
+        return TValueCase{
+            .TypeId = typeId,
+            .PgTypeId = Nothing(),
+            .Valid = MakeBinaryArray({valid, valid, valid, valid}),
+            .Invalid = MakeBinaryArray({valid, valid, valid, invalid}),
+        };
+    };
+
+    return {
+        MakeNumericCase<arrow::UInt16Type>(NScheme::NTypeIds::Date, arrow::uint16(), MAX_DATE - 1, MAX_DATE),
+        // uint32 is stored as INT64 and cast back by the importer
+        MakeNumericCase<arrow::UInt32Type>(NScheme::NTypeIds::Datetime, arrow::uint32(), MAX_DATETIME - 1, MAX_DATETIME),
+        MakeNumericCase<arrow::TimestampType>(NScheme::NTypeIds::Timestamp,
+            arrow::timestamp(arrow::TimeUnit::MICRO), MAX_TIMESTAMP - 1, MAX_TIMESTAMP),
+        // the exporter writes Interval as int64
+        MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Interval, arrow::int64(), MAX_TIMESTAMP - 1, MAX_TIMESTAMP),
+        MakeNumericCase<arrow::Int32Type>(NScheme::NTypeIds::Date32, arrow::int32(), MAX_DATE32, MAX_DATE32 + 1),
+        MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Datetime64, arrow::int64(), MAX_DATETIME64, MAX_DATETIME64 + 1),
+        MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Timestamp64, arrow::int64(), MAX_TIMESTAMP64, MAX_TIMESTAMP64 + 1),
+        MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Interval64, arrow::int64(), MAX_INTERVAL64, MAX_INTERVAL64 + 1),
+        TValueCase{
+            .TypeId = NScheme::NTypeIds::Decimal,
+            .PgTypeId = Nothing(),
+            .Valid = MakeDecimalArray({0, 1, 2, Nan()}),
+            .Invalid = MakeDecimalArray({0, 1, 2, Err()}),
+        },
+        makeStringCase(NScheme::NTypeIds::Utf8, "valid", invalidUtf8),
+        makeStringCase(NScheme::NTypeIds::Json, json, "not-json"),
+        makeBinaryCase(NScheme::NTypeIds::Yson, "{key=value}", "{key="),
+        // the stored form is binary, the text of a value is not a valid one
+        makeBinaryCase(NScheme::NTypeIds::DyNumber, StoredDyNumber("3.14"), "3.14"),
+        makeBinaryCase(NScheme::NTypeIds::JsonDocument, StoredJsonDocument(json), json),
+        makeStringCase(NScheme::NTypeIds::Pg, "valid", invalidUtf8, PgTextTypeId),
+    };
+}
+
+struct TImportOutcome {
+    TVector<std::pair<TString, TMaybe<TString>>> Rows; // the key and the value cell of every row
+    TMaybe<TString> Error;
+};
+
+// Imports a data file of a table with one key and one value column.
+TImportOutcome ImportKeyValueParquet(const TEngineFixture& fixture, const TString& source) {
+    auto engine = fixture.MakeEngine(EDataFormat::Parquet, source, /*readBatchSize=*/8_KB);
+
+    TMemoryPool pool(256);
+    TImportOutcome outcome;
+    const auto addRow = [&outcome](const TVector<TCell>& keys, const TVector<TCell>& values) {
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+        outcome.Rows.emplace_back(
+            TString(keys.front().AsBuf()),
+            values.front().IsNull() ? Nothing() : MakeMaybe(TString(values.front().AsBuf())));
+    };
+    const auto unexpectedChecksum = [](TStringBuf) {
+        UNIT_FAIL("checksum callback was called with validation disabled");
+    };
+
+    for (ui32 step = 0; step < 1024; ++step) {
+        auto data = engine->GetData(pool, addRow, unexpectedChecksum);
+        if (!data) {
+            outcome.Error = data.error();
+            return outcome;
+        }
+
+        switch (data->Status) {
+        case IImportS3Engine::EDataStatus::NeedInput: {
+            const auto range = ExtractValue(engine->NextRange());
+            UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+            if (auto result = engine->PutRange(range.Range, Slice(source, range.Range)); !result) {
+                outcome.Error = result.error();
+                return outcome;
+            }
+            break;
+        }
+        case IImportS3Engine::EDataStatus::Ready:
+            AssertSuccess(engine->Commit(data->Batch.Id));
+            break;
+        case IImportS3Engine::EDataStatus::Finished:
+            return outcome;
+        case IImportS3Engine::EDataStatus::WaitingForCommit:
+            UNIT_FAIL("unexpected batch waiting for commit");
+        }
+    }
+
+    UNIT_FAIL("Parquet import engine did not finish");
+    return outcome;
 }
 
 Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
@@ -676,6 +1017,120 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         UNIT_FAIL("the incompatible Parquet schema was not rejected");
+    }
+
+    Y_UNIT_TEST(ParquetRoundTripsDyNumberAndJsonDocument) {
+        // The exporter writes cells in their stored form, so a backup holds
+        // DyNumber and JsonDocument in binary (a CSV backup holds their text).
+        // They must be imported as they are, not parsed as text.
+        const TVector<TStoredRow> exported = {
+            {"k1", StoredDyNumber("3.14"), StoredJsonDocument(R"({"key":"value"})")},
+            {"k2", Nothing(), Nothing()},
+            {"k3", StoredDyNumber("-18"), StoredJsonDocument(R"([1,2,{"a":null}])")},
+        };
+        const TString source = ExportToParquet(exported, /*rowGroupSize=*/2);
+
+        TEngineFixture fixture(MakeDyNumberJsonDocumentTableScheme());
+        auto engine = fixture.MakeEngine(EDataFormat::Parquet, source, /*readBatchSize=*/8_KB);
+
+        TMemoryPool pool(256);
+        TVector<TStoredRow> imported;
+        const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
+            UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
+            const auto stored = [](const TCell& cell) -> TMaybe<TString> {
+                return cell.IsNull() ? Nothing() : MakeMaybe(TString(cell.AsBuf()));
+            };
+            imported.push_back({TString(keys.front().AsBuf()), stored(values[0]), stored(values[1])});
+        };
+        const auto unexpectedChecksum = [](TStringBuf) {
+            UNIT_FAIL("checksum callback was called with validation disabled");
+        };
+
+        bool finished = false;
+        for (ui32 step = 0; step < 1024 && !finished; ++step) {
+            auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
+            switch (data.Status) {
+            case IImportS3Engine::EDataStatus::NeedInput: {
+                const auto range = ExtractValue(engine->NextRange());
+                UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+                AssertSuccess(engine->PutRange(range.Range, Slice(source, range.Range)));
+                break;
+            }
+            case IImportS3Engine::EDataStatus::Ready:
+                AssertSuccess(engine->Commit(data.Batch.Id));
+                break;
+            case IImportS3Engine::EDataStatus::Finished:
+                finished = true;
+                break;
+            case IImportS3Engine::EDataStatus::WaitingForCommit:
+                UNIT_FAIL("unexpected batch waiting for commit");
+            }
+        }
+
+        UNIT_ASSERT_C(finished, "Parquet import engine did not finish");
+        UNIT_ASSERT_VALUES_EQUAL(imported.size(), exported.size());
+        for (size_t i = 0; i < exported.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(imported[i].Key, exported[i].Key, "row " << i);
+            UNIT_ASSERT_C(imported[i].DyNumber == exported[i].DyNumber,
+                "row " << i << ": DyNumber differs from the exported stored value");
+            UNIT_ASSERT_C(imported[i].JsonDocument == exported[i].JsonDocument,
+                "row " << i << ": JsonDocument differs from the exported stored value");
+        }
+
+        // The imported cells are valid stored values, readable by the table.
+        UNIT_ASSERT_VALUES_EQUAL(NDyNumber::DyNumberToString(*imported[0].DyNumber), ".314e1");
+        UNIT_ASSERT_VALUES_EQUAL(NDyNumber::DyNumberToString(*imported[2].DyNumber), "-.18e2");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NBinaryJson::SerializeToJson(TStringBuf(*imported[0].JsonDocument)), R"({"key":"value"})");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NBinaryJson::SerializeToJson(TStringBuf(*imported[2].JsonDocument)), R"([1,2,{"a":null}])");
+    }
+
+    Y_UNIT_TEST(ParquetRejectsValuesInvalidForTheColumnType) {
+        // The Arrow type of a column does not carry the value restrictions of
+        // its YDB type, so a file with a matching schema can still hold values
+        // that a table must not.
+        TVector<TString> imported; // types whose invalid value was imported
+        for (const auto& valueCase : MakeValueCases()) {
+            const TEngineFixture fixture(MakeValueTableScheme(valueCase.TypeId, valueCase.PgTypeId));
+            const TString typeName = ValueTypeName(fixture.Scheme);
+
+            // Two row groups of two rows: the invalid value is row 1 of row group 1.
+            const auto outcome = ImportKeyValueParquet(
+                fixture, BuildKeyValueParquet(valueCase.Invalid, /*rowGroupSize=*/2));
+            if (!outcome.Error) {
+                imported.push_back(typeName);
+                continue;
+            }
+
+            UNIT_ASSERT_STRING_CONTAINS_C(*outcome.Error,
+                TStringBuilder() << "column 'value' has an invalid " << typeName
+                    << " value in row 1 of row group 1",
+                typeName);
+            // The rows before the invalid one reach the sink, the invalid one does not.
+            UNIT_ASSERT_VALUES_EQUAL_C(outcome.Rows.size(), 3, typeName);
+        }
+
+        UNIT_ASSERT_C(imported.empty(), "invalid values were imported for: " << JoinSeq(", ", imported));
+    }
+
+    Y_UNIT_TEST(ParquetAcceptsValuesAtTheLimitsOfTheColumnType) {
+        for (const auto& valueCase : MakeValueCases()) {
+            const TEngineFixture fixture(MakeValueTableScheme(valueCase.TypeId, valueCase.PgTypeId));
+            const TString typeName = ValueTypeName(fixture.Scheme);
+
+            const auto outcome = ImportKeyValueParquet(
+                fixture, BuildKeyValueParquet(valueCase.Valid, /*rowGroupSize=*/2));
+            UNIT_ASSERT_C(!outcome.Error, typeName << ": " << outcome.Error.GetOrElse(""));
+
+            UNIT_ASSERT_VALUES_EQUAL_C(outcome.Rows.size(), valueCase.Valid->length(), typeName);
+            for (size_t i = 0; i < outcome.Rows.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL_C(outcome.Rows[i].first, TStringBuilder() << "k" << i, typeName);
+                UNIT_ASSERT_C(outcome.Rows[i].second == MakeMaybe(ValueBytes(*valueCase.Valid, i)),
+                    typeName << ": the value of row " << i << " differs from the one in the file");
+            }
+        }
     }
 
     Y_UNIT_TEST(ParquetResumesFromCommittedRowGroup) {

@@ -581,6 +581,20 @@ TString Int32KeySchemePb() {
     )";
 }
 
+TString JsonValueSchemePb() {
+    return R"(
+        columns {
+          name: "key"
+          type { optional_type { item { type_id: UTF8 } } }
+        }
+        columns {
+          name: "value"
+          type { optional_type { item { type_id: JSON } } }
+        }
+        primary_key: "key"
+    )";
+}
+
 void ApplyParquetFeatureFlag(TTestBasicRuntime& runtime, ERestoreDataFormat format, bool enable = true) {
     if (format == ERestoreDataFormat::Parquet && enable) {
         runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
@@ -641,10 +655,12 @@ void DoImport(
     ERestoreDataFormat format,
     Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
     bool enableParquetFeatureFlag = true,
-    TStringBuf expectedIssue = {})
+    TStringBuf expectedIssue = {},
+    bool enableDirectPartImport = false)
 {
     TTestEnv env(runtime, TTestEnvOptions());
     ApplyParquetFeatureFlag(runtime, format, enableParquetFeatureFlag);
+    runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDirectPartImport);
 
     ui64 id = 100;
 
@@ -972,6 +988,26 @@ Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
             {"key"},
             {"key", "value"});
         NKqp::CompareYson(GenerateCsvUtf8Rows(rows).YsonStr, content);
+    }
+
+    Y_UNIT_TEST_FLAG(ShouldFailOnInvalidParquetValue, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+
+        // The schema of the file matches the table (Json is utf8 in Arrow), the
+        // second value does not.
+        const auto parquet = BuildParquetUtf8Data({
+            {"a1", R"({"valid":"json"})"},
+            {"a2", "not-json"},
+        });
+
+        DoImport(
+            runtime,
+            MakeParquetS3Data(JsonValueSchemePb(), {parquet}),
+            ERestoreDataFormat::Parquet,
+            Ydb::StatusIds::CANCELLED,
+            /*enableParquetFeatureFlag=*/true,
+            "column 'value' has an invalid Json value in row 1 of row group 0",
+            EnableDataShardDirectPartImport);
     }
 
     Y_UNIT_TEST(ShouldFailWhenFeatureFlagDisabled) {

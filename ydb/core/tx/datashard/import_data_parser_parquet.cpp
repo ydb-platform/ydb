@@ -4,7 +4,12 @@
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
+#include <ydb/core/io_formats/cell_maker/cell_maker.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+
+#include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
@@ -27,8 +32,32 @@ struct TColumnMeta {
     ui32 KeyOrder = Max<ui32>();
 };
 
+// Checks the restrictions a YDB type puts on its values and its Arrow type
+// does not carry: the range of a date, well-formed JSON and so on. CSV import
+// enforces them by parsing the text of a value and by CheckCellValue(). A
+// Parquet backup holds cells in their stored form, so the types that
+// CheckCellValue() leaves to the text parser are checked here in that form.
+bool IsValidCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
+    if (cell.IsNull()) {
+        return true;
+    }
+
+    switch (typeInfo.GetTypeId()) {
+    case NScheme::NTypeIds::DyNumber:
+        return NDyNumber::IsValidDyNumber(cell.AsBuf());
+    case NScheme::NTypeIds::JsonDocument:
+        return NBinaryJson::IsValidBinaryJson(cell.AsBuf());
+    case NScheme::NTypeIds::Pg:
+        return !NPg::PgNativeBinaryValidate(cell.AsBuf(), typeInfo.GetPgTypeDesc());
+    default:
+        return NFormats::CheckCellValue(cell, typeInfo);
+    }
+}
+
 // Splits the converter's flat cell row into keys (in key order) and values (in
-// scheme order) and forwards them to the engine's addRow.
+// scheme order) and forwards them to the engine's addRow. A row with a value
+// that is invalid for its column is not forwarded, and neither is any row
+// after it: the import fails.
 //
 // The cells are borrowed from the converter (see IRowWriter::AddRow) and are
 // not copied here: IDataParser::TAddRowFn carries the same borrowed-cells
@@ -50,6 +79,18 @@ public:
     void AddRow(const TConstArrayRef<TCell>& cells) override {
         Y_ENSURE(cells.size() == ColumnMeta.size(),
             "parquet row has " << cells.size() << " cells, expected " << ColumnMeta.size());
+
+        if (Error) {
+            return; // the converter has no way to stop early
+        }
+
+        for (size_t i = 0; i < cells.size(); ++i) {
+            if (!IsValidCellValue(cells[i], ColumnMeta[i].TypeInfo)) {
+                Error = TStringBuilder() << "column '" << ColumnMeta[i].Name << "' has an invalid "
+                    << NScheme::TypeName(ColumnMeta[i].TypeInfo) << " value";
+                return;
+            }
+        }
 
         TVector<TCell> keys;
         keys.resize(KeyCount);
@@ -77,12 +118,19 @@ public:
         };
     }
 
+    // Set once a row has an invalid value. That row is the one after the rows
+    // counted by GetParsedData().
+    const TMaybe<TString>& GetError() const {
+        return Error;
+    }
+
 private:
     const IDataParser::TAddRowFn& AddRowFn;
     const TVector<TColumnMeta>& ColumnMeta;
     const ui32 KeyCount;
     ui64 PendingBytes = 0;
     ui64 PendingRows = 0;
+    TMaybe<TString> Error;
 };
 
 // The Arrow writer stores some types differently from how it reads them back.
@@ -99,9 +147,11 @@ struct TParquetFileSession {
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
     std::vector<int> ColumnIndices; // parquet leaf columns to decode, in scheme order
     std::vector<std::pair<std::string, std::shared_ptr<arrow::DataType>>> CastColumns; // see IsWriterCoercion
+    std::vector<int> RowGroups; // the row groups BatchReader reads, in that order
     std::unique_ptr<arrow::RecordBatchReader> BatchReader;
     std::shared_ptr<arrow::RecordBatch> HeldBatch; // rows [HeldOffset, num_rows) not yet emitted
     i64 HeldOffset = 0;
+    ui64 RowsRead = 0; // rows of the open row groups that have been emitted
     ui64 RowBytesEstimate = 1; // average cell bytes per row of the open row groups
 };
 
@@ -274,9 +324,11 @@ public:
             return;
         }
 
+        Session->RowGroups.clear();
         Session->BatchReader.reset();
         Session->HeldBatch.reset();
         Session->HeldOffset = 0;
+        Session->RowsRead = 0;
     }
 
     std::expected<TParsedBatch, TString> ProcessNextBatch(
@@ -291,7 +343,14 @@ public:
         }
 
         TImportParquetRowWriter rowWriter(addRow, ColumnMeta, KeyCount);
-        NArrow::TArrowToYdbConverter converter(YdbSchema, rowWriter);
+        // A backup holds cells in their stored form: the exporter appends them
+        // to the Arrow builders as they are, so DyNumber and JsonDocument are
+        // binary in the file. The converter's text conversions are meant for
+        // user-supplied Arrow data (DyNumber as a numeric string, JsonDocument
+        // as JSON text) and must stay off here.
+        NArrow::TArrowToYdbConverter converter(
+            YdbSchema, rowWriter, /*allowInfDouble=*/false, /*withConversion=*/false);
+        const ui64 firstRow = Session->RowsRead;
 
         // Makes sure HeldBatch holds unread rows; false once the row group is exhausted.
         const auto fetch = [this]() -> std::expected<bool, TString> {
@@ -352,7 +411,14 @@ public:
                 ResetRowGroup();
                 return std::unexpected(std::move(error));
             }
+            if (const auto& invalidValue = rowWriter.GetError()) {
+                error = TStringBuilder() << *invalidValue
+                    << " in " << DescribeRow(firstRow + rowWriter.GetParsedData().Rows);
+                ResetRowGroup();
+                return std::unexpected(std::move(error));
+            }
 
+            Session->RowsRead += take;
             Session->HeldOffset += take;
             if (Session->HeldOffset >= held->num_rows()) {
                 held.reset();
@@ -434,6 +500,20 @@ private:
         return batch;
     }
 
+    // Names a row of the open row groups by its position in the file. Both
+    // numbers are zero-based, the way Parquet tools count them.
+    TString DescribeRow(ui64 row) const {
+        const auto metadata = Session->FileReader->parquet_reader()->metadata();
+        for (const int rowGroup : Session->RowGroups) {
+            const ui64 rows = static_cast<ui64>(Max<int64_t>(metadata->RowGroup(rowGroup)->num_rows(), 0));
+            if (row < rows) {
+                return TStringBuilder() << "row " << row << " of row group " << rowGroup;
+            }
+            row -= rows;
+        }
+        return TStringBuilder() << "row " << row << " past the open row groups";
+    }
+
     std::expected<void, TString> OpenRowGroups(std::vector<int> rowGroupIndices) {
         ResetRowGroup();
 
@@ -455,6 +535,7 @@ private:
             return std::unexpected(TStringBuilder()
                 << "failed to get parquet record batch reader: " << st.ToString());
         }
+        Session->RowGroups = std::move(rowGroupIndices);
 
         return {};
     }

@@ -24,6 +24,7 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
 
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -1712,11 +1713,16 @@ value {
         }
     }
 
-    void ExportImportOnSupportedDatatypesImpl(bool encrypted, bool commonPrefix, bool enableDataShardDirectPartImport, bool emptyTable = false) {
+    void ExportImportOnSupportedDatatypesImpl(bool encrypted, bool commonPrefix, bool enableDataShardDirectPartImport, bool emptyTable = false,
+        EBackupTestDataFormat dataFormat = EBackupTestDataFormat::Csv)
+    {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        // Both flags are inert for CSV.
+        runtime.GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
@@ -1845,14 +1851,16 @@ value {
             )";
         }
 
+        const char* dataFormatSettings = dataFormat == EBackupTestDataFormat::Parquet ? "parquet {}" : "";
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
               %s
               %s
+              %s
             }
-        )", port, exportItems.c_str(), encryptionSettings.c_str()));
+        )", port, exportItems.c_str(), encryptionSettings.c_str(), dataFormatSettings));
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
@@ -1946,6 +1954,12 @@ value {
 
     Y_UNIT_TEST_FLAG(ExportImportOnSupportedDatatypesEncryptedNoData, EnableDataShardDirectPartImport) {
         ExportImportOnSupportedDatatypesImpl(true, true, EnableDataShardDirectPartImport, true);
+    }
+
+    // A Parquet backup holds cells in their stored form (DyNumber and
+    // JsonDocument are binary there), unlike the text of a CSV backup.
+    Y_UNIT_TEST_FLAG(ExportImportOnSupportedDatatypesParquet, EnableDataShardDirectPartImport) {
+        ExportImportOnSupportedDatatypesImpl(false, false, EnableDataShardDirectPartImport, false, EBackupTestDataFormat::Parquet);
     }
 
     Y_UNIT_TEST_FLAG(ZeroLengthEncryptedFileTreatedAsCorrupted, EnableDataShardDirectPartImport) {

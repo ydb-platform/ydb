@@ -184,6 +184,9 @@ namespace {
     }
 
     std::string TryBlurValue(const TString& authMethod, const TString& value) {
+        if (authMethod == "oidc-access-token-file" || authMethod == "oidc-client-secret-file") {
+            return "***";
+        }
         if (authMethod.StartsWith("oidc-")) {
             return value;
         }
@@ -207,7 +210,7 @@ namespace {
             auto authValue = profile->GetValue(AuthNode);
             TString authMethod = authValue["method"].as<TString>();
             Cout << "  " << authMethod;
-            if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "iam-token"
+            if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "oidc-config" || authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
                 || authMethod == "token-file" || authMethod == "yc-token-file") {
                 Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
@@ -398,6 +401,7 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"database", Database},
         {"token-file", TokenFile},
         {"oauth2-key-file", Oauth2KeyFile},
+        {"oidc-config", Oidc.ConfigFile},
         {"oidc-issuer", Oidc.Issuer},
         {"oidc-flow", Oidc.Flow},
         {"oidc-client-id", Oidc.ClientId},
@@ -623,7 +627,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
             description << "Use current settings\t" << method;
             if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
                 description << ": " << BlurSecret(authValue["data"].as<TString>());
-            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file") {
+            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file" || method == "oidc-config") {
                 description << ": " << authValue["data"].as<TString>();
             }
             options.push_back(description);

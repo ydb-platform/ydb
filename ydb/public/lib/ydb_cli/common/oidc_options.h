@@ -16,6 +16,7 @@ class TClientCommandOptions;
 class TOptionsParseResult;
 
 struct TOidcCliOptions {
+    TString ConfigFile;
     TString Issuer;
     TString Flow;
     TString ClientId;

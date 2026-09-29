@@ -79,6 +79,30 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(values)->CreateProvider()->GetAuthInfo(), "Bearer original-token");
     }
 
+    Y_UNIT_TEST(ConfigFileIsLoadedOnceAndProfileStoresOnlyPath) {
+        TTempDir dir;
+        const auto path = dir.Path() / "oidc.yaml";
+        const auto token = dir.Path() / "token";
+        TFileOutput(token.GetPath()).Write("config-token");
+        TFileOutput(path.GetPath()).Write("issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: token\n");
+        TOidcCliOptions values;
+        TClientCommandOptions options;
+        AddOidcOptions(options, values, false);
+        const char* args[] = {"ydb", "--oidc-config", path.GetPath().c_str()};
+        TOptionsParseResult parsed(&options, std::size(args), args);
+        UNIT_ASSERT(parsed.ParseFromProfilesAndEnv(nullptr, nullptr).empty());
+        ResolveOidcOptions(values, parsed);
+        UNIT_ASSERT(values.IsConfigured());
+        UNIT_ASSERT(values.HasOptions());
+        const auto auth = values.MakeProfileAuth();
+        UNIT_ASSERT_VALUES_EQUAL(auth["method"].as<std::string>(), "oidc-config");
+        UNIT_ASSERT_VALUES_EQUAL(auth["data"].as<std::string>(), path.GetPath());
+        UNIT_ASSERT(!TString(YAML::Dump(auth)).Contains("config-token"));
+        path.DeleteIfExists();
+        token.DeleteIfExists();
+        UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(values)->CreateProvider()->GetAuthInfo(), "Bearer config-token");
+    }
+
     Y_UNIT_TEST(RejectsTokenFileForOtherFlows) {
         auto options = DeviceOptions();
         options.AccessTokenFile = "/nonexistent/token";

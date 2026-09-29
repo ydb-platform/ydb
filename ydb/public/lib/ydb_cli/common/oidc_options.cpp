@@ -2,6 +2,7 @@
 
 #include "client_command_options.h"
 #include "common.h"
+#include "oidc_config.h"
 #include "oidc_token_cache.h"
 
 #include <util/generic/strbuf.h>
@@ -18,6 +19,11 @@ namespace NYdb::NConsoleClient {
 namespace {
 
 constexpr TStringBuf OIDC_METHOD = "oidc";
+constexpr TStringBuf OIDC_CONFIG = "oidc-config";
+constexpr TStringBuf CONFIG_CONFLICT_ERROR = "--oidc-config cannot be combined with direct OIDC options";
+constexpr TStringBuf PATH_ARGUMENT = "PATH";
+constexpr TStringBuf PROFILE_METHOD = "method";
+constexpr TStringBuf PROFILE_DATA = "data";
 constexpr TStringBuf ISSUER_OPTION = "oidc-issuer";
 constexpr TStringBuf FLOW_OPTION = "oidc-flow";
 constexpr TStringBuf CLIENT_ID_OPTION = "oidc-client-id";
@@ -138,10 +144,13 @@ void CheckAllowedFields(const TOidcCliOptions& options, const TString& flow) {
 } // namespace
 
 bool TOidcCliOptions::IsConfigured() const {
-    return !Issuer.empty();
+    return !ConfigFile.empty() || !Issuer.empty();
 }
 
 bool TOidcCliOptions::HasOptions() const {
+    if (!ConfigFile.empty()) {
+        return true;
+    }
     for (const auto& field : FIELDS) {
         if (!(this->*field.Member).empty()) {
             return true;
@@ -151,6 +160,14 @@ bool TOidcCliOptions::HasOptions() const {
 }
 
 NOidc::TOidcConfig TOidcCliOptions::MakeConfig() const {
+    if (!ConfigFile.empty()) {
+        for (const auto& field : FIELDS) {
+            if (!(this->*field.Member).empty()) {
+                throw std::invalid_argument(std::string(CONFIG_CONFLICT_ERROR));
+            }
+        }
+        return LoadOidcConfig(std::string(ConfigFile));
+    }
     if (Issuer.empty()) {
         throw std::invalid_argument("OIDC authentication requires --oidc-issuer or YDB_OIDC_ISSUER");
     }
@@ -197,17 +214,26 @@ NOidc::TOidcConfig TOidcCliOptions::MakeConfig() const {
 
 YAML::Node TOidcCliOptions::MakeProfileAuth() const {
     YAML::Node auth;
-    auth["method"] = std::string(OIDC_METHOD);
+    if (!ConfigFile.empty()) {
+        auth[PROFILE_METHOD.data()] = std::string(OIDC_CONFIG);
+        auth[PROFILE_DATA.data()] = std::string(ConfigFile);
+        return auth;
+    }
+    auth[PROFILE_METHOD.data()] = std::string(OIDC_METHOD);
     for (const auto& field : FIELDS) {
         const auto& value = this->*field.Member;
         if (!value.empty()) {
-            auth["data"][field.Profile] = std::string(value);
+            auth[PROFILE_DATA.data()][field.Profile] = std::string(value);
         }
     }
     return auth;
 }
 
 void TOidcCliOptions::Print(IOutputStream& output) const {
+    if (!ConfigFile.empty()) {
+        output << OIDC_CONFIG << VALUE_SEPARATOR << ConfigFile << Endl;
+        return;
+    }
     if (Issuer.empty()) {
         return;
     }
@@ -227,12 +253,28 @@ void TOidcCliOptions::Print(IOutputStream& output) const {
 }
 
 TAuthMethodOption& AddOidcOptions(TClientCommandOptions& options, TOidcCliOptions& values, bool profileCommand) {
+    auto& config = options.AddAuthMethodOption(TString(OIDC_CONFIG),
+        "OIDC YAML configuration file; cannot be combined with direct --oidc-* options");
+    config.AuthMethod(TString(OIDC_CONFIG));
+    // Keep the path: load the file only after authentication selection, so an
+    // overridden profile can reference an unavailable file without causing errors.
+    config.RequiredArgument(TString(PATH_ARGUMENT)).StoreResult(&values.ConfigFile)
+        .Handler([](const TString& value) {
+            if (value.empty()) {
+                throw std::invalid_argument(std::string(OPTION_PREFIX) + std::string(OIDC_CONFIG) + std::string(EMPTY_OPTION_ERROR));
+            }
+        });
+    if (!profileCommand) {
+        config.SimpleProfileDataParam(TString(OIDC_CONFIG), false)
+            .LogToConnectionParams(TString(OIDC_CONFIG));
+    }
+
     TAuthMethodOption* issuer = nullptr;
     for (const auto& field : FIELDS) {
         const bool mainOption = field.Member == &TOidcCliOptions::Issuer;
         auto& option = options.AddAuthMethodOption(field.Option, field.Help, mainOption);
         option.AuthMethod(TString(OIDC_METHOD));
-        option.RequiredArgument(IsSecretFile(field) ? "PATH" : "VALUE");
+        option.RequiredArgument(IsSecretFile(field) ? TString(PATH_ARGUMENT) : TString("VALUE"));
         if (IsSecretFile(field) && !profileCommand) {
             // Resolve the source before storing a path: environment variables contain
             // literal credentials, and files from unselected profiles must not be read.
@@ -276,6 +318,9 @@ void ResolveOidcOptions(TOidcCliOptions& values, const TOptionsParseResult& resu
     for (const auto& field : FIELDS) {
         const auto* parsed = result.FindResult(field.Option);
         if (parsed != nullptr && parsed->GetValueSource() == EOptionValueSource::Explicit) {
+            if (method == OIDC_CONFIG) {
+                throw std::invalid_argument(std::string(CONFIG_CONFLICT_ERROR));
+            }
             if (method != OIDC_METHOD) {
                 throw std::invalid_argument("Direct OIDC options require --oidc-issuer and cannot be combined with another authentication method");
             }
@@ -284,7 +329,15 @@ void ResolveOidcOptions(TOidcCliOptions& values, const TOptionsParseResult& resu
             }
         }
     }
+    if (method == OIDC_CONFIG) {
+        auto configFile = std::move(values.ConfigFile);
+        values = {};
+        values.ConfigFile = std::move(configFile);
+        values.ResolvedConfig = values.MakeConfig();
+        return;
+    }
     if (method == OIDC_METHOD) {
+        values.ConfigFile.clear();
         for (const auto& field : FIELDS) {
             const auto* parsed = result.FindResult(field.Option);
             if (IsSecretFile(field) && parsed != nullptr && parsed->GetValueSource() != EOptionValueSource::EnvironmentVariable) {

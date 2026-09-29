@@ -9,6 +9,7 @@ namespace {
 
 TString TokenProfile(const TString& endpoint, const TString& database, const TString& tokenFile);
 TString ClientProfile(const TString& issuer, const TString& secretFile);
+TString ConfigProfile(const TString& configFile);
 
 TString TokenProfile(const TString& endpoint, const TString& database, const TString& tokenFile) {
     return TStringBuilder()
@@ -30,9 +31,141 @@ TString ClientProfile(const TString& issuer, const TString& secretFile) {
         << "        client_secret_file: " << secretFile << "\nactive_profile: oidc\n";
 }
 
+TString ConfigProfile(const TString& configFile) {
+    return TStringBuilder()
+        << "profiles:\n  oidc:\n    authentication:\n      method: oidc-config\n"
+        << "      data: " << configFile << "\nactive_profile: oidc\n";
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
+    Y_UNIT_TEST_F(StaticOidcConfigFromCommandLine, TCliTestFixture) {
+        TTempDir dir;
+        TFileOutput((dir.Path() / "token").GetPath()).Write("Bearer config-token\n");
+        const auto config = (dir.Path() / "oidc.yaml").GetPath();
+        TFileOutput(config).Write("issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: token\n");
+        ExpectToken("Bearer config-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", config, "scheme", "ls"}, {
+            {"YDB_TOKEN", "ignored-token"}, {"YDB_OIDC_ISSUER", "ignored-issuer"},
+            {"YDB_OIDC_FLOW", "ignored-flow"}, {"YDB_OIDC_CLIENT_ID", "ignored-client"},
+            {"YDB_OIDC_SCOPE", "ignored-scope"}, {"YDB_OIDC_ACCESS_TOKEN", "ignored-access-token"},
+        });
+        const auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", config, "config", "info"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "oidc-config: " + config);
+        UNIT_ASSERT(!output.Contains("config-token"));
+    }
+
+    Y_UNIT_TEST_F(ClientOidcConfigUsesLiteralEnvironmentSecret, TCliTestFixture) {
+        TOidcTestServer idp;
+        idp.Enqueue(R"({"access_token":"client-config-token","token_type":"Bearer","expires_in":600})", HTTP_OK);
+        const auto config = EnvFile(TStringBuilder() << "issuer: " << idp.Issuer()
+            << "\nclient_credentials_grant:\n  client_id: yaml-client\n", "oidc.yaml");
+        ExpectToken("Bearer client-config-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", config, "scheme", "ls"}, {
+            {"YDB_OIDC_CLIENT_SECRET", "literal-secret"}, {"YDB_OIDC_CLIENT_ID", "ignored-client"},
+        });
+        const auto requests = idp.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Authorization, "Basic " + Base64Encode("yaml-client:literal-secret"));
+    }
+
+    Y_UNIT_TEST_F(CreatesAndUsesOidcConfigProfile, TCliTestFixture) {
+        const auto token = EnvFile("profile-config-token", "token");
+        const auto config = EnvFile(TStringBuilder() << "issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: " << token << "\n", "oidc.yaml");
+        const auto profileFile = EnvFile("", "profiles.yaml");
+        RunCliWithInput({"--profile-file", profileFile, "config", "profile", "create", "oidc-config-profile",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", config}, "");
+        const auto stored = TFileInput(profileFile).ReadAll();
+        UNIT_ASSERT_STRING_CONTAINS(stored, "method: oidc-config");
+        UNIT_ASSERT_STRING_CONTAINS(stored, config);
+        UNIT_ASSERT(!stored.Contains("profile-config-token"));
+        ExpectToken("Bearer profile-config-token");
+        RunCli({"--profile-file", profileFile, "--profile", "oidc-config-profile", "scheme", "ls"}, {
+            {"YDB_TOKEN", "ignored-token"}, {"YDB_OIDC_ISSUER", "invalid-ignored-issuer"},
+        });
+        const auto output = RunCli({"--profile-file", profileFile, "config", "profile", "get", "oidc-config-profile"});
+        UNIT_ASSERT_STRING_CONTAINS(output, "oidc-config: " + config);
+        UNIT_ASSERT(!output.Contains("profile-config-token"));
+    }
+
+    Y_UNIT_TEST_F(OidcConfigAuthenticationPriority, TCliTestFixture) {
+        const auto token = EnvFile("profile-config-token", "token");
+        const auto config = EnvFile(TStringBuilder() << "issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: " << token << "\n", "oidc.yaml");
+        const auto profile = ConfigProfile(config);
+        ExpectToken("Bearer profile-config-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "scheme", "ls"}, {}, profile);
+        ExpectToken("legacy-env-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "scheme", "ls"}, {{"YDB_TOKEN", "legacy-env-token"}}, profile);
+        ExpectToken("Bearer profile-config-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--profile", "oidc", "scheme", "ls"}, {{"YDB_TOKEN", "ignored-env-token"}}, profile);
+        const auto explicitToken = EnvFile("explicit-token", "token");
+        ExpectToken("explicit-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--profile", "oidc", "--token-file", explicitToken, "scheme", "ls"}, {}, ConfigProfile("/nonexistent/oidc.yaml"));
+        ExpectToken("Bearer profile-config-token");
+        RunCli({"--profile", "oidc", "--oidc-config", config, "scheme", "ls"}, {{"YDB_TOKEN", "ignored-env-token"}},
+            TokenProfile(GetEndpoint(), GetDatabase(), "/nonexistent/old-token"));
+    }
+
+    Y_UNIT_TEST_F(DirectOidcOptionsOverrideConfigProfileWithoutOpeningFile, TCliTestFixture) {
+        const auto profile = ConfigProfile("/nonexistent/oidc.yaml");
+        ExpectToken("Bearer fresh-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "scheme", "ls"}, {
+            {"YDB_OIDC_ISSUER", "https://issuer.example"}, {"YDB_OIDC_ACCESS_TOKEN", "fresh-token"},
+        }, profile);
+        const auto token = EnvFile("fresh-token", "token");
+        ExpectToken("Bearer fresh-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--profile", "oidc", "--oidc-issuer", "https://issuer.example",
+            "--oidc-access-token-file", token, "scheme", "ls"}, {}, profile);
+    }
+
+    Y_UNIT_TEST_F(RejectsConflictingOidcConfigOptions, TCliTestFixture) {
+        const auto token = EnvFile("token", "token");
+        const auto config = EnvFile(TStringBuilder() << "issuer: https://issuer.example\nstatic_credentials:\n  access_token_file: " << token << "\n", "oidc.yaml");
+        for (const auto& [option, value] : std::initializer_list<std::pair<TString, TString>>{
+                {"--oidc-issuer", "https://issuer.example"}, {"--oidc-flow", "static"}, {"--oidc-scope", "read"},
+                {"--oidc-access-token-file", token}, {"--oidc-client-secret-file", token}, {"--token-file", token}})
+        {
+            ExpectFail();
+            RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", config, option, value, "config", "info"});
+            ExpectFail();
+            RunCliWithInput({"config", "profile", "create", "conflicting", "--oidc-config", config, option, value}, "");
+        }
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-scope", "read", "config", "info"}, {}, ConfigProfile(config));
+    }
+
+    Y_UNIT_TEST_F(RejectsMissingEmptyAndInvalidOidcConfig, TCliTestFixture) {
+        const auto empty = EnvFile("", "empty.yaml");
+        const auto invalid = EnvFile("{broken yaml", "invalid.yaml");
+        const auto inlineSecret = EnvFile("issuer: https://issuer.example\nstatic_credentials:\n  access_token: forbidden-inline-token\n", "inline.yaml");
+        for (const TString& config : {TString(), TString("/nonexistent/oidc.yaml"), empty, invalid, inlineSecret}) {
+            ExpectFail();
+            RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", config, "config", "info"}, {{"YDB_TOKEN", "must-not-fall-back"}});
+        }
+        ExpectFail();
+        RunCliWithInput({"config", "profile", "create", "empty-config", "--oidc-config", ""}, "");
+    }
+
+    Y_UNIT_TEST_F(DeviceOidcConfigReusesRelativeCache, TCliTestFixture) {
+        TOidcTestServer idp;
+        idp.Enqueue(TStringBuilder() << R"({"device_code":"code","user_code":"USER","verification_uri":")"
+            << idp.Issuer() << R"(/verify","expires_in":60,"interval":1})", HTTP_OK);
+        idp.Enqueue(R"({"access_token":"device-config-token","token_type":"Bearer","expires_in":600})", HTTP_OK);
+        TTempDir dir;
+        const auto config = (dir.Path() / "oidc.yaml").GetPath();
+        TFileOutput(config).Write(TStringBuilder() << "issuer: " << idp.Issuer()
+            << "\ncache_path: tokens.json\ndevice_authorization_grant:\n  client_id: cli\n");
+        const TList<TString> args = {"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-config", config, "scheme", "ls"};
+        ExpectToken("Bearer device-config-token");
+        RunCli(args);
+        UNIT_ASSERT_VALUES_EQUAL(idp.Requests().size(), 2);
+        UNIT_ASSERT((dir.Path() / "tokens.json").Exists());
+        ExpectToken("Bearer device-config-token");
+        RunCli(args);
+        UNIT_ASSERT_VALUES_EQUAL(idp.Requests().size(), 2);
+    }
+
     Y_UNIT_TEST_F(OidcTokenFileFromCommandLine, TCliTestFixture) {
         const auto file = EnvFile("raw-oidc-token\n", "token");
         ExpectToken("Bearer raw-oidc-token");
@@ -161,6 +294,7 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         RunCliWithInput({"config", "profile", "create", "oidc-file", "--oidc-key-file", file}, "");
         const auto help = RunCli({"--help"});
         UNIT_ASSERT(!help.Contains("--oidc-key-file"));
+        UNIT_ASSERT_STRING_CONTAINS(help, "--oidc-config");
         UNIT_ASSERT_STRING_CONTAINS(help, "--oidc-access-token-file");
         UNIT_ASSERT(!help.Contains("--oidc-token-file"));
         UNIT_ASSERT_STRING_CONTAINS(help, "Device flow requires browser sign-in");

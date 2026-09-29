@@ -40,7 +40,7 @@ Create the table for the workload:
 |---|---|---|
 | `--table <name>` | Name of the main table that stores vectors. | `vector_index_workload` |
 | `--min-partitions <value>` | Minimum number of table partitions. | `40` |
-| `--partition-size <value>` | Target partition size, in MB. | `2000` |
+| `--partition-size <value>` | Target partition size, in MiB. | `2000` |
 | `--auto-partition <value>` | Enable auto-partitioning by load (`1` — enabled, `0` — disabled). | `1` |
 | `--prefixed` | Add a `prefix` column to the table for use with a [filtered (prefixed) vector index](../../yql/reference/syntax/create_table/vector_index.md). | |
 | `--clear` | Drop and recreate the table if it already exists. | |

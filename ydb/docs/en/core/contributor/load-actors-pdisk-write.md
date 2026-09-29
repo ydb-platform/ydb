@@ -26,7 +26,7 @@ You can generate two types of load:
 
 ## Examples {#example}
 
-The following actor writes data blocks of `32` MB during `120` seconds with `64` in-flight requests (continuous load):
+The following actor writes data blocks of 32 KiB with a chunk size of 128 MiB during `120` seconds with `64` in-flight requests (continuous load):
 
 ```proto
 PDiskWriteLoad: {

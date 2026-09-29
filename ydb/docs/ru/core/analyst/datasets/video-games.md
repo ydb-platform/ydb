@@ -6,7 +6,7 @@
 
 **Источник**: [Kaggle - Video Game Sales](https://www.kaggle.com/datasets/gregorut/videogamesales)
 
-**Размер**: 1.36 MB
+**Размер**: 1.36 МБ
 
 ## Пример загрузки
 

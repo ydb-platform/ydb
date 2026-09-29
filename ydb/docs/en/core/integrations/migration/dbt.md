@@ -32,10 +32,10 @@ A core concept in {{ dbt }} is a [data model](https://docs.getdbt.com/docs/build
    | primary_key                         | Yes      |                           | [Primary key](../../dev/primary-key/index.md) of the table |
    | store_type                          | No       | `row`                       | Table type. `row` for [row-oriented table](../../concepts/datamodel/table.md#row-oriented-tables) or `column` for [column-oriented table](../../concepts/datamodel/table.md#column-oriented-tables) |
    | auto_partitioning_by_size           | No       |                           | [Automatic partitioning by size](../../concepts/datamodel/table.md#auto_partitioning_by_size) |
-   | auto_partitioning_partition_size_mb | No       |                           | [Partition size threshold](../../concepts/datamodel/table.md#auto_partitioning_partition_size_mb) |
+   | auto_partitioning_partition_size_mb | No       |                           | [Partition size threshold](../../concepts/datamodel/table.md#auto_partitioning_partition_size_mb). Despite the `_mb` suffix, the size is specified in mebibytes (MiB). |
    | ttl                                 | No       |                           | [Time-To-Live](../../concepts/ttl.md) rule |
 
-   Example of a model materialized as a table based on another model (using [ref](https://docs.getdbt.com/reference/dbt-jinja-functions/ref)).  
+   Example of a model materialized as a table based on another model (using [ref](https://docs.getdbt.com/reference/dbt-jinja-functions/ref)).
    Configured with a primary key, TTL, and automatic partitioning by size.
 
    ```text

@@ -45,7 +45,7 @@ Per the SQL standard (ISO/IEC 9075), you can't compare `NULL` with other values.
 
 ## Is there an optimal size of a database row? {#string-size}
 
-To achieve high performance, we don't recommend writing rows larger than 8 MB and key columns larger than 2 KB to the DB.
+To achieve high performance, we don't recommend writing rows larger than 8 MB and key columns larger than 2 kB to the DB.
 
 For more information about limits, see [Database limits](../../concepts/limits-ydb.md).
 

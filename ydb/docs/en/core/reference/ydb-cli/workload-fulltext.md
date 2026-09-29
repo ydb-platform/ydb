@@ -47,7 +47,7 @@ Create the tables for the workload:
 | Name | Description | Default value |
 |---|---|---|
 | `--min-partitions <value>` | Minimum number of table partitions. | `40` |
-| `--partition-size <value>` | Target partition size, in MB. | `2000` |
+| `--partition-size <value>` | Target partition size, in MiB. | `2000` |
 | `--auto-partition <value>` | Enable auto-partitioning by load (`1` — enabled, `0` — disabled). | `1` |
 | `--clear` | Drop and recreate the table if it already exists. | |
 

@@ -6,7 +6,7 @@
 
 **Источник**: [Kaggle - E-commerce behavior data](https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store/data)
 
-**Размер**: 9 GB
+**Размер**: 9 ГБ
 
 ## Пример загрузки
 

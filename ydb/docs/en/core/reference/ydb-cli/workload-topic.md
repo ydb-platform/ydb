@@ -1,5 +1,7 @@
 # Topic load
 
+The output examples retain the CLI label `MB/s`. The rate is actually calculated in MiB/s: the byte count is divided by 1024² and the elapsed time in seconds.
+
 Applies load to your {{ ydb-short-name }} [topics](../../concepts/datamodel/topic.md), using them as message queues. You can use a variety of input parameters to simulate production load: message number, message size, target write rate, and number of consumers and producers.
 
 As you apply load to your topic, the console displays the results (the number of written messages, message write rate, and others).
@@ -71,15 +73,15 @@ Subcommand options:
 | `--percentile`         | Percentile that is output in statistics.<br/>Default value: `50`.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `--topic`              | Topic name.<br/>Default value: `workload-topic`.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `--threads`, `-t`      | Number of producer threads. Each thread will write to all partitions of the specified topic.<br/>Default value: `1`.                                                                                                                                                                                                                                                                                                                                                               |
-| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br/>Default value: `10K`.                                                                                                                                                                                                                                                                                                                                                   |
+| `--message-size`, `-m` | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KiB, MiB, or GiB, respectively.<br/>Default value: `10K`.                                                                                                                                                                                                                                                                                                                                                   |
 | `--message-rate`       | Total target write rate in messages per second. Can't be used together with the `--byte-rate` option.<br/>Default value: `0` (no limit).                                                                                                                                                                                                                                                                                                                                           |
-| `--byte-rate`          | Total target write rate in bytes per second. Can't be used together with the `--message-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br/>Default value: `0` (no limit).                                                                                                                                                                                                                                                     |
+| `--byte-rate`          | Total target write rate in bytes per second. Can't be used together with the `--message-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KiB/s, MiB/s, or GiB/s, respectively.<br/>Default value: `0` (no limit).                                                                                                                                                                                                                                                     |
 | `--codec`              | Codec used to compress messages on the client before sending them to the server.<br/>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br/>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
 | `--use-tx`             | Use transactions.<br/>Disabled by default.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `--tx-commit-interval` | Transaction commit interval, in milliseconds. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1000`.                                                                                                                                                                                                               |
 | `--tx-commit-messages` | Number of messages required to commit a transaction. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1 000 000`.                                                                                                                                                                                                   |
 
-To write data to `100` producer threads at the target rate of `80` MB/s for `10` seconds, run this command:
+To write data to `100` producer threads at the target rate of `80` MiB/s for `10` seconds, run this command:
 
 ```bash
 {{ ydb-cli }} --profile quickstart workload topic run write --threads 100 --byte-rate 80M
@@ -106,7 +108,7 @@ Total   7203    70      3023            250
 ```
 
 * `Window`: Sequence number of the statistics window.
-* `Write speed`: Message write rate in messages per second and MB/s.
+* `Write speed`: Message write rate in messages per second and MiB/s.
 * `Write time`: Percentile of the message write time, in milliseconds.
 * `Inflight`: Maximum number of messages awaiting commit across all partitions.
 
@@ -175,7 +177,7 @@ Total   30176           0               80267   784     0
 * `Window`: Sequence number of the statistics window.
 * `Lag`: Maximum consumer lag in the statistics window. Messages across all partitions are included.
 * `Lag time`: Percentile of the message lag time in milliseconds.
-* `Read`: Message read rate for the consumer (in messages per second and MB/s).
+* `Read`: Message read rate for the consumer (in messages per second and MiB/s).
 * `Full time`: Percentile of the full message processing time (from writing by the producer to reading by the consumer), in milliseconds.
 
 ## Read and write load {#run-full}
@@ -209,9 +211,9 @@ Subcommand options:
 | `--percentile`             | Percentile that is output in statistics.<br/>Default value: `50`.                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `--topic`                  | Topic name.<br/>Default value: `workload-topic`.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `--producer-threads`, `-p` | Number of producer threads. Each thread will write to all partitions of the specified topic.<br/>Default value: `1`.                                                                                                                                                                                                                                                                                                                                                               |
-| `--message-size`, `-m`     | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KB, MB, or GB, respectively.<br/>Default value: `10K`.                                                                                                                                                                                                                                                                                                                                                   |
+| `--message-size`, `-m`     | Message size in bytes. Use the `K`, `M`, or `G` suffix to set the size in KiB, MiB, or GiB, respectively.<br/>Default value: `10K`.                                                                                                                                                                                                                                                                                                                                                   |
 | `--message-rate`           | Total target write rate in messages per second. Can't be used together with the `--message-rate` option.<br/>Default value: `0` (no limit).                                                                                                                                                                                                                                                                                                                                        |
-| `--byte-rate`              | Total target write rate in bytes per second. Can't be used together with the `--byte-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KB/s, MB/s, or GB/s, respectively.<br/>Default value: `0` (no limit).                                                                                                                                                                                                                                                        |
+| `--byte-rate`              | Total target write rate in bytes per second. Can't be used together with the `--byte-rate` option. Use the `K`, `M`, or `G` suffix to set the rate in KiB/s, MiB/s, or GiB/s, respectively.<br/>Default value: `0` (no limit).                                                                                                                                                                                                                                                        |
 | `--codec`                  | Codec used to compress messages on the client before sending them to the server.<br/>Compression increases CPU usage on the client when reading and writing messages, but usually enables you to reduce the amounts of data stored and transmitted over the network. When consumers read messages, they decompress them by the codec that was used to write the messages, with no special options needed.<br/>Acceptable values: `RAW` - no compression (default), `GZIP`, `ZSTD`. |
 | `--consumers`, `-c`        | Number of consumers.<br/>Default value: `1`.                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `--consumer-prefix`        | Consumer name prefix.<br/>Default value: `workload-consumer`.<br/>For example, if the number of consumers `--consumers` is `2` and the prefix `--consumer-prefix` is `workload-consumer`, then the following consumer names will be used: `workload-consumer-0`, `workload-consumer-1`.                                                                                                                                                                                            |
@@ -220,7 +222,7 @@ Subcommand options:
 | `--tx-commit-interval`     | Transaction commit interval, in milliseconds. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1000`.                                                                                                                                                                                                               |
 | `--tx-commit-messages`     | Number of messages required to commit a transaction. A transaction is committed if the time specified in the `--tx-commit-interval` parameter elapses or if the number of messages specified in the `--tx-commit-messages` parameter is written.<br/>Default value: `1 000 000`.                                                                                                                                                                                                   |
 
-Example of a command that reads `50` threads by `2` consumers and writes data to `100` producer threads at the target rate of `80` MB/s and duration of `10` seconds:
+Example of a command that reads `50` threads by `2` consumers and writes data to `100` producer threads at the target rate of `80` MiB/s and duration of `10` seconds:
 
 ```bash
 {{ ydb-cli }} --profile quickstart workload topic run full --producer-threads 100 --consumers 2 --consumer-threads 50 --byte-rate 80M
@@ -247,12 +249,12 @@ Total   1814    17      5247            22              12150           28671   
 ```
 
 * `Window`: Sequence number of the statistics window.
-* `Write speed`: Message write rate in messages per second and MB/s.
+* `Write speed`: Message write rate in messages per second and MiB/s.
 * `Write time`: Percentile of the message write time, in milliseconds.
 * `Inflight`: Maximum number of messages awaiting commit across all partitions.
 * `Lag`: Maximum number of messages awaiting reading, in the statistics window. Messages across all partitions are included.
 * `Lag time`: Percentile of the message lag time in milliseconds.
-* `Read`: Message read rate for the consumer (in messages per second and MB/s).
+* `Read`: Message read rate for the consumer (in messages per second and MiB/s).
 * `Full time`: Percentile of the full message processing time, from writing by the producer to reading by the consumer, in milliseconds.
 
 ## Deleting a topic {#clean}

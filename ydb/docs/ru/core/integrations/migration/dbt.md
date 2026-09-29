@@ -33,7 +33,7 @@
    | primary_key                         | Да             |                           | [Первичный ключ](../../dev/primary-key/index.md) таблицы |
    | store_type                          | Нет            | row                       | Тип таблицы. 'row' - для [строковой таблицы](../../concepts/datamodel/table.md#row-oriented-tables) и 'column' для [колоночной таблицы](../../concepts/datamodel/table.md#column-oriented-tables)      |
    | auto_partitioning_by_size           | Нет            |                           | [Автоматическое партиционирование по размеру](../../concepts/datamodel/table.md#auto_partitioning_by_size)      |
-   | auto_partitioning_partition_size_mb | Нет            |                           | [Порог размера партиции](../../concepts/datamodel/table.md#auto_partitioning_partition_size_mb)      |
+   | auto_partitioning_partition_size_mb | Нет            |                           | [Порог размера партиции](../../concepts/datamodel/table.md#auto_partitioning_partition_size_mb). Несмотря на суффикс `_mb`, размер задаётся в мебибайтах (МиБ). |
    | ttl                                 | Нет            |                           | Правило [Time-To-Live](../../concepts/ttl.md)       |
 
    Пример модели, материализуемой как таблица на основе другой модели (связаны через [ref](https://docs.getdbt.com/reference/dbt-jinja-functions/ref)).

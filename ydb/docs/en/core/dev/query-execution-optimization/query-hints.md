@@ -280,13 +280,13 @@ Bytes(t1 t2 ... tn (*|/|+|-|#) Number)
 -- Multiply the expected data size by 1.5
 Bytes(large_table * 1.5)
 
--- Replace the size of the data for the connection with 1GB
+-- Replace the size of the data for the connection with 1 GiB
 Bytes(table1 table2 # 1073741824)
 
 -- Reduce the expected size by 2
 Bytes(compressed_table / 2)
 
--- Add 100MB to the expected size
+-- Add 100 MiB to the expected size
 Bytes(temp_table + 104857600)
 ```
 

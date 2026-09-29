@@ -1,5 +1,7 @@
 # Data schema versioning and migration in {{ ydb-short-name }} using "goose"
 
+The CLI output examples retain the labels `Mb` and `Kb` printed by the command. Here these labels denote binary byte units: MiB and KiB, respectively.
+
 ## Introduction
 
 [Goose](https://github.com/pressly/goose) is an open-source tool that helps to version the data schema in the database and manage migrations between these versions. Goose supports many different database management systems, including {{ ydb-short-name }}. Goose uses migration files and stores the state of migrations directly in the database in a special table.

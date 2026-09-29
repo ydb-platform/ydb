@@ -52,7 +52,7 @@ With a small amount of data or low load, a table can consist of a single partiti
 
 The partition size threshold for splitting and enabling or disabling automatic splitting can be configured individually for each database table.
 
-Regardless of the [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_by_size) parameter value, {{ ydb-short-name }} performs partition splitting and merging based on a size of 2000 MB. At the same time, {{ ydb-short-name }} does not restrict user settings and works in parallel with them. For example, if you set the [partition size](#auto_partitioning_by_size) to 100 MB and the [limit](#auto_partitioning_max_partitions_count) to 10 partitions, the table stops splitting when it reaches 10 partitions of 100 MB each, and partition sizes begin to grow. When any partition exceeds 2000 MB, it splits, and the table has 11 partitions. If the size of two adjacent partitions drops to 1000 MB, they merge, and the table has 10 partitions again.
+Regardless of the [AUTO_PARTITIONING_PARTITION_SIZE_MB](#auto_partitioning_by_size) parameter value, {{ ydb-short-name }} performs partition splitting and merging based on a size of 2048 MiB. At the same time, {{ ydb-short-name }} does not restrict user settings and works in parallel with them. For example, if you set the [partition size](#auto_partitioning_by_size) to 100 MiB and the [limit](#auto_partitioning_max_partitions_count) to 10 partitions, the table stops splitting when it reaches 10 partitions of 100 MiB each, and partition sizes begin to grow. When any partition exceeds 2048 MiB, it splits, and the table has 11 partitions. If the size of two adjacent partitions drops to 1024 MiB, they merge, and the table has 10 partitions again.
 
 In addition to automatic splitting, you can create an empty table with a predefined number of partitions. You can manually set exact key split boundaries for partitions or specify uniform distribution across a predefined number of partitions. In the latter case, boundaries are created based on the first component of the primary key. Uniform distribution can be specified for tables whose first primary key component is an integer with data type `Uint64` or `Uint32`.
 
@@ -85,9 +85,9 @@ When choosing the minimum number of partitions, it makes sense to consider that 
 #### AUTO_PARTITIONING_PARTITION_SIZE_MB
 
 * Type: `Uint64`.
-* Default value: `2000 MB` (`2 GB`).
+* Default value: `2048` (2 GiB).
 
-The desired partition size threshold in megabytes. Recommended values range from `10 MB` to `2000 MB`. If this threshold is exceeded, a shard may split.
+The desired partition size threshold. Despite the `_MB` suffix, the size is specified in mebibytes (MiB). Recommended values range from `10 MiB` to `2000 MiB`. If this threshold is exceeded, a shard may split.
 The specified value serves only as a recommendation for splitting. Splitting may not occur even if the configured size is exceeded.
 This setting applies when the [`AUTO_PARTITIONING_BY_SIZE`](#auto_partitioning_by_size) mode is enabled.
 

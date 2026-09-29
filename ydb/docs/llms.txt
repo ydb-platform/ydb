@@ -10,7 +10,7 @@
 Do **not** mix locales. Choose English **or** Russian, not both.
 
 Each version has two index formats:
-- `llms.txt`: page-by-page index (recommended; on the order of ~100 KB).
+- `llms.txt`: page-by-page index (recommended; on the order of ~100 kB).
 - `llms-full.txt`: single-file Markdown dump of all pages (several MB).
 
 ## Version strategy

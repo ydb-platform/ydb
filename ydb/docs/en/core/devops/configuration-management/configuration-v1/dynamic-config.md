@@ -210,4 +210,4 @@ The list may be expanded in the future.
 ## Limitations
 
 * Using more than 30 different [labels](dynamic-config-selectors.md) in [selectors](dynamic-config-selectors.md) can lead to delays of tens of seconds during configuration validation, as {{ ydb-short-name }} needs to check the validity of each possible final configuration. At the same time, the number of values of one label has much less impact.
-* Using large files (more than 500KiB for a 1000-node cluster) configuration can lead to increased network traffic in the cluster when updating configuration. Traffic volume is directly proportional to the number of nodes and configuration volume.
+* Using large files (more than 500 KiB for a 1000-node cluster) configuration can lead to increased network traffic in the cluster when updating configuration. Traffic volume is directly proportional to the number of nodes and configuration volume.

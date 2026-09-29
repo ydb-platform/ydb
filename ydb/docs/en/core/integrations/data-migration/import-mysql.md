@@ -268,7 +268,7 @@ YDB Importer is designed for importing from many JDBC sources into a **configura
 | `BIT` | `Uint64` | `Bool` (JDBC `Types.BIT`) |
 | Secondary `KEY` / `UNIQUE KEY` | `INDEX … GLOBAL ASYNC` / `GLOBAL UNIQUE SYNC` in `CREATE TABLE` | Only `PRIMARY KEY` in DDL; secondary indexes are not created |
 | `ENUM`, `SET`, `JSON` | `Text` | `Text` (similar) |
-| `BLOB` / `BINARY` | Same column, value inline in `String` (bytes) | Column becomes `Int64` (blob identifier); data is moved to a **separate table** `${schema}/${table}_${field}` with `(id, pos, val)` rows in 64 KB blocks |
+| `BLOB` / `BINARY` | Same column, value inline in `String` (bytes) | Column becomes `Int64` (blob identifier); data is moved to a **separate table** `${schema}/${table}_${field}` with `(id, pos, val)` rows in 64 KiB blocks |
 | `TEXT` / `CLOB` (large text) | Inline `Text` in the main table | Optionally a separate CLOB table (32 K character blocks) or inline `Text` depending on settings |
 | Table **without a primary key** | **Not supported** — `CREATE TABLE` fails with an error; add `PRIMARY KEY` in MySQL before migration | A column `ydb_synth_key Text` is added as PK (SHA-256 of the row); **duplicates are collapsed** into one row |
 | `DATE` | `Date` | `Date32` by default (`conv-date=DATE_NEW`) |

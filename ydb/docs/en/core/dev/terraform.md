@@ -315,7 +315,7 @@ partitioning_settings {
 * `partition_at_keys` — (optional) [partitioning by primary key](../concepts/datamodel/table.md#partition_at_keys).
 * `auto_partitioning_min_partitions_count` — (optional) [minimum possible number of partitions](../concepts/datamodel/table.md#auto_partitioning_min_partitions_count) when auto-partitioning.
 * `auto_partitioning_max_partitions_count` — (optional) [maximum possible number of partitions](../concepts/datamodel/table.md#auto_partitioning_max_partitions_count) when auto-partitioning.
-* `auto_partitioning_partition_size_mb` — (optional) setting the value of [auto-partitioning by size](../concepts/datamodel/table.md#auto_partitioning_partition_size_mb) in megabytes.
+* `auto_partitioning_partition_size_mb` — (optional) setting the value of [auto-partitioning by size](../concepts/datamodel/table.md#auto_partitioning_partition_size_mb). Despite the `_mb` suffix, the size is specified in mebibytes (MiB).
 * `auto_partitioning_by_size_enabled` — (optional) enabling auto-partitioning by size (bool), enabled by default (true).
 * `auto_partitioning_by_load` — (optional) enabling [autopartition by load](../concepts/datamodel/table.md#auto_partitioning_by_load) (bool), disabled by default (false).
 

@@ -225,7 +225,7 @@ Using the `COMPACT` modifier forces the in-memory execution strategy: a hash tab
 The `COMPACT` modifier must be used with care. Since the hash table is built in-memory, the query may fail if the right part of `IN` contains many large or different elements.
 
 {% if feature_mapreduce %}
-Since YQL imposes a limit on the query size in bytes (it's about 1Mb), add large lists of values to your query by URLs and use the [ParseFile](../builtins/basic.md#parsefile) function.
+Since YQL imposes a limit on the query size in bytes (it's about 1 MB), add large lists of values to your query by URLs and use the [ParseFile](../builtins/basic.md#parsefile) function.
 {% endif %}
 
 ### Examples

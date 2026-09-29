@@ -1,5 +1,7 @@
 # Getting information about schema objects
 
+The CLI output examples retain the labels `Mb` and `Kb` printed by the command. Here these labels denote binary byte units: MiB and KiB, respectively.
+
 Get information about a [schema object](../../../../concepts/glossary.md#scheme-object):
 
 ```bash

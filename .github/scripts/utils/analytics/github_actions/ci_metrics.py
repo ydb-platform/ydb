@@ -211,19 +211,70 @@ def _bound(properties: Optional[Dict[str, Any]], file: Optional[str], fields: Di
     return props, extras
 
 
+def apply_job_defaults(
+    name: Optional[str],
+    properties: Dict[str, Any],
+    fields: Dict[str, Any],
+    *,
+    command: str,
+) -> None:
+    """Labels and flags that used to live in the test_ya record_ci_* wrappers."""
+    attempt = fields.pop("ya_attempt", None)
+    if attempt in (None, ""):
+        attempt = os.environ.get("CI_YA_ATTEMPT")
+    if attempt not in (None, ""):
+        properties.setdefault("ya_attempt", str(attempt))
+    target = os.environ.get("CI_BUILD_TARGET")
+    if target:
+        properties.setdefault("build_target", target)
+    cache = os.environ.get("CI_CACHE_MODE")
+    if cache:
+        properties.setdefault("cache_mode", cache)
+    build_span = os.environ.get("CI_BUILD_SPAN")
+    if name and build_span and name == build_span:
+        if command == "start":
+            fields.setdefault("runner", True)
+            if not fields.get("source"):
+                fields["source"] = os.environ.get("CI_BUILD_SPAN_SOURCE") or "ya_phase"
+        elif command == "end":
+            fields.setdefault("usage", True)
+    if command in ("start", "track") and not fields.get("source") and not properties.get("source"):
+        fields["source"] = "ya_phase"
+    rc = fields.pop("rc", None)
+    if rc is None or command not in ("end", "send"):
+        return
+    try:
+        code = int(rc)
+    except (TypeError, ValueError):
+        code = 1
+    if fields.get("conclusion") in (None, ""):
+        fields["conclusion"] = "success" if code == 0 else "failure"
+    if code != 0 and not properties.get("error"):
+        what = name or "step"
+        properties["error"] = (
+            f"{what} exited rc={code}" if command == "send" else f"{what} rc={code}"
+        )
+
+
 def start(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> str:
-    props, extras = _bound(properties, file, fields)
+    props = dict(properties or {})
+    apply_job_defaults(name, props, fields, command="start")
+    props, extras = _bound(props, file, fields)
     return collector_start(name, props, **extras)
 
 
 def end(name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> int:
-    props, extras = _bound(properties, file, fields)
+    props = dict(properties or {})
+    apply_job_defaults(name, props, fields, command="end")
+    props, extras = _bound(props, file, fields)
     extras.pop("attach", None)
     return collector_end(name, props, **extras)
 
 
 def enrich(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> int:
-    props, extras = _bound(properties, file, fields)
+    props = dict(properties or {})
+    apply_job_defaults(name, props, fields, command="enrich")
+    props, extras = _bound(props, file, fields)
     extras.pop("attach", None)
     extras.pop("enrich", None)
     ya_attempt = extras.get("ya_attempt")
@@ -240,12 +291,16 @@ def enrich(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Opti
 
 
 def track(name: str, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> None:
-    props, extras = _bound(properties, file, fields)
+    props = dict(properties or {})
+    apply_job_defaults(name, props, fields, command="track")
+    props, extras = _bound(props, file, fields)
     collector_track(name, props, **extras)
 
 
 def send(name: Optional[str] = None, properties: Optional[Dict[str, Any]] = None, *, file: Optional[str] = None, **fields: Any) -> int:
-    props, extras = _bound(properties, file, fields)
+    props = dict(properties or {})
+    apply_job_defaults(name, props, fields, command="send")
+    props, extras = _bound(props, file, fields)
     table_path = extras.pop("table_path", None)
     return collector_send(name, props, flush=flush_file, table_path=table_path, **extras)
 
@@ -351,6 +406,8 @@ def flush_file(
 def _add_runner_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--runner", action="store_true", default=False, help="Attach cached cpu/ram/disk inventory")
     parser.add_argument("--usage", action="store_true", default=False, help="Attach a fresh cpu/ram/disk snapshot")
+    parser.add_argument("--ya-attempt", default=None, help="Attempt number; also read from $CI_YA_ATTEMPT")
+    parser.add_argument("--rc", default=None, help="Command exit code: 0=success, else failure")
 
 
 def _cli_runner_flags(args: argparse.Namespace) -> Dict[str, Any]:
@@ -359,6 +416,10 @@ def _cli_runner_flags(args: argparse.Namespace) -> Dict[str, Any]:
         flags["runner"] = True
     if getattr(args, "usage", False):
         flags["usage"] = True
+    if getattr(args, "ya_attempt", None) not in (None, ""):
+        flags["ya_attempt"] = args.ya_attempt
+    if getattr(args, "rc", None) not in (None, ""):
+        flags["rc"] = args.rc
     return flags
 
 

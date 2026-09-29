@@ -13,7 +13,7 @@
 ```mermaid
 flowchart LR
   subgraph inJob [Внутри job]
-    bash["test_ya: record_ci_start / record_ci_end"] --> cli["ci_metrics.py"]
+    bash["test_ya: ci start / ci end"] --> cli["ci_metrics.py"]
     evlog["ya_evlog_phases.py"] --> cli
     cli --> jsonl[("JSONL на диске раннера")]
     jsonl -->|"flush / send"| ydb
@@ -65,5 +65,3 @@ python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
 python3 -m unittest discover -s .github/scripts/utils/tests/analytics/collector -p 'test_*.py'
 python3 -m unittest discover -s .github/scripts/utils/tests/analytics/ci -p 'test_*.py'
 ```
-
-Гоняются на каждый PR — [`analytics_scripts_tests.yml`](../../../workflows/analytics_scripts_tests.yml).

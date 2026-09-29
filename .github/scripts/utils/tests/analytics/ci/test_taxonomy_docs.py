@@ -75,9 +75,9 @@ def _span_names_from_action() -> set:
     names = set()
     for match in re.finditer(r"record_ci_start\s+\"?([A-Za-z_][\w${}]*)\"?", text):
         names.add(match.group(1))
-    # Direct CLI calls, either by path or through $CI_METRICS_PY.
+    # Direct CLI calls: full path, $CI_METRICS_PY, or the test_ya `ci` wrapper.
     for match in re.finditer(
-        r"(?:ci_metrics\.py|\"\$CI_METRICS_PY\")\s+(?:start|track)\s+"
+        r"(?:ci_metrics\.py|\"\$CI_METRICS_PY\"|\bci)\s+(?:start|track)\s+"
         r"(?:--name\s+)?\"?([A-Za-z_][\w-]*)",
         text,
     ):

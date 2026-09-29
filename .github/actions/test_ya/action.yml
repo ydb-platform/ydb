@@ -210,76 +210,11 @@ runs:
       run: |
         set -ex
         CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
-        record_ci_start() {
-          local name="$1"
-          local ya_attempt="${2:-}"
-          local source="${3:-ya_phase}"
-          local extra_args=()
-          if [ -n "$ya_attempt" ]; then
-            extra_args+=(--label "ya_attempt=${ya_attempt}")
-          fi
-          if [ -n "${CI_BUILD_TARGET:-}" ]; then
-            extra_args+=(--label "build_target=${CI_BUILD_TARGET}")
-          fi
-          if [ -n "${CI_CACHE_MODE:-}" ]; then
-            extra_args+=(--label "cache_mode=${CI_CACHE_MODE}")
-          fi
-          if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
-            extra_args+=(--runner)
-          fi
-          python3 "$CI_METRICS_PY" start --name "$name" --source "$source" "${extra_args[@]}" || true
-        }
-        record_ci_end() {
-          local name="$1"
-          local conclusion="${2:-success}"
-          local error="${3:-}"
-          local extra_args=(--conclusion "$conclusion")
-          if [ -n "$error" ]; then
-            extra_args+=(--error "$error")
-          fi
-          if [ -n "${CI_BUILD_SPAN:-}" ] && [ "$name" = "$CI_BUILD_SPAN" ]; then
-            extra_args+=(--usage)
-          fi
-          python3 "$CI_METRICS_PY" end --name "$name" "${extra_args[@]}" || true
-        }
-        record_ci_enrich() {
-          local name="$1"
-          shift
-          python3 "$CI_METRICS_PY" enrich --name "$name" "$@" || true
-        }
-        # Close a span with the real exit code of a command that ran under `|| true`.
-        record_ci_end_rc() {
-          local name="$1"
-          local rc="${2:-0}"
-          local what="${3:-$name}"
-          if [ "$rc" -eq 0 ]; then
-            record_ci_end "$name" success
-          else
-            record_ci_end "$name" failure "${what} rc=${rc}"
-          fi
-        }
-        record_ci_flush() {
-          python3 "$CI_METRICS_PY" flush || true
-        }
-        record_ci_send_cancelled() {
-          trap - EXIT
-          python3 "$CI_METRICS_PY" send --conclusion cancelled || true
-        }
-        # `set -e` can abort between start and end, which would leave the span
-        # open and its rows unsent. Close whatever is still open with the real
-        # outcome of the step.
-        record_ci_on_exit() {
-          local rc=$?
-          trap - EXIT
-          if [ "$rc" -eq 0 ]; then
-            python3 "$CI_METRICS_PY" send --conclusion success || true
-          else
-            python3 "$CI_METRICS_PY" send --conclusion failure --error "step exited rc=${rc}" || true
-          fi
-          return $rc
-        }
-        trap 'record_ci_send_cancelled' TERM INT
-        trap 'record_ci_on_exit' EXIT
+        ci() { python3 "$CI_METRICS_PY" "$@" || true; }
+        # Labels (ya_attempt, cache_mode, build_target) and runner/usage come
+        # from env / --rc in ci_metrics.py. Traps stay here: only bash sees set -e.
+        trap 'trap - EXIT; ci send --conclusion cancelled' TERM INT
+        trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
 
         if [ "${COLLECT_COREDUMPS}" = "true" ]; then
           # Bounded loop volume so a flaky suite cannot fill the runner root FS.
@@ -447,17 +382,13 @@ runs:
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
-          record_ci_start graph_compare
+          ci start graph_compare
           set +e
           ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
-          if [ $RC -ne 0 ]; then
-            record_ci_end graph_compare failure "graph_compare rc=${RC}"
-          else
-            record_ci_end graph_compare success
-          fi
-          record_ci_flush
+          ci end graph_compare --rc "$RC"
+          ci flush
 
           if [ $RC -ne 0 ]; then
             echo "graph_compare.py returned $RC, build failed"
@@ -467,9 +398,9 @@ runs:
             exit $RC
           fi
 
-          record_ci_start checkout_head
+          ci start checkout_head
           git checkout $ORIGINAL_HEAD
-          record_ci_end checkout_head success
+          ci end checkout_head
           YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
@@ -494,7 +425,8 @@ runs:
           fi
         fi
         echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
-        record_ci_start prepare_ya_make 1
+        export CI_YA_ATTEMPT=1
+        ci start prepare_ya_make
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
@@ -509,9 +441,8 @@ runs:
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
         fi
 
-        python3 "$CI_METRICS_PY" track runner_info --kind info --source ya_phase --runner \
-          --label "cache_mode=${CI_CACHE_MODE}" || true
-        record_ci_flush
+        ci track runner_info --kind info --runner
+        ci flush
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
@@ -528,9 +459,10 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
+          export CI_YA_ATTEMPT=$RETRY
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
-            record_ci_start prepare_ya_make "$RETRY"
+            ci start prepare_ya_make
           else
             IS_RETRY=0
           fi
@@ -613,11 +545,11 @@ runs:
 
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
-          record_ci_end prepare_ya_make success
+          ci end prepare_ya_make
           if [ -n "${CI_BUILD_SPAN:-}" ]; then
-            record_ci_start "$CI_BUILD_SPAN" "$RETRY" "${CI_BUILD_SPAN_SOURCE:-ya_phase}"
+            ci start "$CI_BUILD_SPAN"
           else
-            record_ci_start "ya_make_try_${RETRY}" "$RETRY"
+            ci start "ya_make_try_${RETRY}"
           fi
 
           set +e
@@ -633,11 +565,11 @@ runs:
           RC=`cat exit_code`
           YA_MAKE_NAME="${CI_BUILD_SPAN:-ya_make_try_${RETRY}}"
           if [ $RC -eq 0 ]; then
-            record_ci_end "$YA_MAKE_NAME" success
+            ci end "$YA_MAKE_NAME"
           else
-            record_ci_end "$YA_MAKE_NAME" failure "ya make rc=${RC}"
+            ci end "$YA_MAKE_NAME" --rc "$RC" --error "ya make rc=${RC}"
           fi
-          record_ci_start postprocess_try "$RETRY"
+          ci start postprocess_try
           # Every optional sub-step below runs under `|| true`; remember whether
           # any of them failed so the span is not reported as a clean success.
           POSTPROCESS_RC=0
@@ -678,7 +610,7 @@ runs:
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
-          record_ci_end_rc postprocess_try "$POSTPROCESS_RC" postprocess
+          ci end postprocess_try --rc "$POSTPROCESS_RC"
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
@@ -691,11 +623,11 @@ runs:
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
             echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
-            record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" \
+            ci enrich "$YA_MAKE_NAME" \
               --label "error=ya make rc=${RC}" \
               --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
               --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
-            record_ci_flush
+            ci flush
             break
           fi
 
@@ -703,7 +635,7 @@ runs:
           gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
           # postprocess build results report (add links, logs, mute tests etc)
-          record_ci_start transform_build_results "$RETRY"
+          ci start transform_build_results
           TRANSFORM_RC=0
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
@@ -714,20 +646,20 @@ runs:
             --public_dir_url "$PUBLIC_DIR_URL" \
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
             --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || TRANSFORM_RC=$?
-          record_ci_end_rc transform_build_results "$TRANSFORM_RC" transform_build_results
+          ci end transform_build_results --rc "$TRANSFORM_RC"
           cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0
-          record_ci_start fail_checker "$RETRY"
+          ci start fail_checker
           .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
-          record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --report "$CURRENT_REPORT"
+          ci enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT"
           if [ $TESTS_RESULT = 0 ]; then
-            record_ci_end fail_checker success
-            record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --label "tests_status=passed"
+            ci end fail_checker
+            ci enrich "$YA_MAKE_NAME" --label "tests_status=passed"
           else
-            record_ci_end fail_checker failure "failed_tests=${FAILED_TESTS_COUNT}"
-            record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" --label "tests_status=failed" --label "failed_tests=${FAILED_TESTS_COUNT}"
+            ci end fail_checker --rc "$TESTS_RESULT" --error "failed_tests=${FAILED_TESTS_COUNT}"
+            ci enrich "$YA_MAKE_NAME" --label "tests_status=failed" --label "failed_tests=${FAILED_TESTS_COUNT}"
           fi
 
           IS_LAST_RETRY=0
@@ -752,7 +684,7 @@ runs:
             # Set the correct commit SHA - use original head for accurate version tracking
             export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
             
-            record_ci_start generate_summary "$RETRY"
+            ci start generate_summary
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
               --public_dir "$PUBLIC_DIR" \
@@ -769,17 +701,17 @@ runs:
               --workflow_run_id "${{ github.run_id }}" \
               --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
-            record_ci_end generate_summary success
+            ci end generate_summary
           fi
 
-          record_ci_start s3_sync_try "$RETRY"
+          ci start s3_sync_try
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
-          record_ci_end s3_sync_try success
-          record_ci_enrich "$YA_MAKE_NAME" --label "ya_attempt=${RETRY}" \
+          ci end s3_sync_try
+          ci enrich "$YA_MAKE_NAME" \
             --label "report_url=${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
             --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
             --label "artifacts_url=${CURRENT_PUBLIC_DIR_URL}/"
-          record_ci_flush
+          ci flush
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -810,10 +742,10 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
-          record_ci_start upload_tests_results "$RETRY"
+          ci start upload_tests_results
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
-          record_ci_end upload_tests_results success
-          record_ci_flush
+          ci end upload_tests_results
+          ci flush
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break

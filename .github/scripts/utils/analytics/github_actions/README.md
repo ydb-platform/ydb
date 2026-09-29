@@ -84,28 +84,33 @@ python3 "$CI_METRICS_PY" send --conclusion cancelled                  # закр
 
 ### В `test_ya`
 
-Там те же команды завёрнуты в bash-функции, и функции сами добавляют часть
-labels:
+Там только тонкая обёртка и trap. Labels и `--runner`/`--usage` добавляет
+`ci_metrics.py` из env.
 
 ```bash
-record_ci_start <name> [ya_attempt] [source=ya_phase]
-record_ci_end   <name> [conclusion=success] [error]
-record_ci_end_rc <name> <rc> [what]   # conclusion по реальному коду возврата
-record_ci_enrich <name> <args...>
-record_ci_flush
+CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
+ci() { python3 "$CI_METRICS_PY" "$@" || true; }
+trap 'trap - EXIT; ci send --conclusion cancelled' TERM INT
+trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
+
+export CI_YA_ATTEMPT=1
+ci start prepare_ya_make
+ci end postprocess_try --rc "$RC"
+ci enrich ya_make_try_1 --report "$CURRENT_REPORT"
+ci flush
 ```
 
-`record_ci_start` подмешивает `ya_attempt`, `build_target` (из
-`$CI_BUILD_TARGET`) и `cache_mode` (из `$CI_CACHE_MODE`), а для основного
-build-span ещё `--runner` и `--usage`.
+Из env: `CI_YA_ATTEMPT` → `ya_attempt`, `CI_BUILD_TARGET`, `CI_CACHE_MODE`.
+Если `name` равен `$CI_BUILD_SPAN`, на start добавляется `--runner`, на end —
+`--usage`. `--rc 0` это success, иначе failure.
 
-Команда под `|| true` должна закрываться через `record_ci_end_rc`, иначе span
-запишется как success при упавшей команде:
+Команда под `|| true` закрывается через `--rc`, иначе span запишется как
+success при упавшей команде:
 
 ```bash
 RC=0
 some_command || RC=$?
-record_ci_end_rc my_step "$RC" my_step
+ci end my_step --rc "$RC"
 ```
 
 Спаны, оставшиеся открытыми из-за `set -e` или отмены job, закрывают

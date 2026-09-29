@@ -21,6 +21,7 @@ from github_actions import runner_info
 from github_actions.ci_metrics import (
     DEFAULT_TABLE_PATH,
     PRIMARY_KEYS,
+    apply_job_defaults,
     attach_context,
     build_create_table_sql,
     github_env_defaults,
@@ -963,6 +964,78 @@ class FlushBehaviorTest(unittest.TestCase):
                 os.environ.pop("ANALYTICS_YDB_CREDENTIALS", None)
             else:
                 os.environ["ANALYTICS_YDB_CREDENTIALS"] = saved
+
+
+class JobDefaultsTest(unittest.TestCase):
+    def setUp(self):
+        self._saved = {
+            key: os.environ.get(key)
+            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET", "CI_CACHE_MODE", "CI_BUILD_SPAN", "CI_BUILD_SPAN_SOURCE")
+        }
+        for key in self._saved:
+            os.environ.pop(key, None)
+
+    def tearDown(self):
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_env_labels_and_default_source(self):
+        os.environ["CI_YA_ATTEMPT"] = "2"
+        os.environ["CI_BUILD_TARGET"] = "ydb"
+        os.environ["CI_CACHE_MODE"] = "dist_cache"
+        props, fields = {}, {}
+        apply_job_defaults("prepare_ya_make", props, fields, command="start")
+        self.assertEqual(props["ya_attempt"], "2")
+        self.assertEqual(props["build_target"], "ydb")
+        self.assertEqual(props["cache_mode"], "dist_cache")
+        self.assertEqual(fields["source"], "ya_phase")
+        self.assertNotIn("runner", fields)
+
+    def test_build_span_gets_runner_and_usage(self):
+        os.environ["CI_BUILD_SPAN"] = "build_wall"
+        os.environ["CI_BUILD_SPAN_SOURCE"] = "custom_src"
+        start_fields: dict = {}
+        apply_job_defaults("build_wall", {}, start_fields, command="start")
+        self.assertTrue(start_fields["runner"])
+        self.assertEqual(start_fields["source"], "custom_src")
+        end_fields: dict = {}
+        apply_job_defaults("build_wall", {}, end_fields, command="end")
+        self.assertTrue(end_fields["usage"])
+
+    def test_rc_sets_conclusion_and_error(self):
+        props, fields = {}, {"rc": "7"}
+        apply_job_defaults("postprocess_try", props, fields, command="end")
+        self.assertEqual(fields["conclusion"], "failure")
+        self.assertEqual(props["error"], "postprocess_try rc=7")
+        self.assertNotIn("rc", fields)
+        ok, zero = {}, {"rc": "0"}
+        apply_job_defaults("postprocess_try", ok, zero, command="end")
+        self.assertEqual(zero["conclusion"], "success")
+        self.assertNotIn("error", ok)
+
+    def test_start_reads_env_into_the_pending_span(self):
+        os.environ["CI_YA_ATTEMPT"] = "3"
+        os.environ["CI_CACHE_MODE"] = "none"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            start("prepare_ya_make", file=path)
+            pending = read_pending_spans(path)
+            self.assertEqual(pending[0]["source"], "ya_phase")
+            self.assertEqual(pending[0]["labels"]["ya_attempt"], "3")
+            self.assertEqual(pending[0]["labels"]["cache_mode"], "none")
+
+    def test_cli_end_rc(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            self.assertEqual(main(["start", "graph_compare", "--file", path]), 0)
+            self.assertEqual(main(["end", "graph_compare", "--file", path, "--rc", "4"]), 0)
+            with open(path, encoding="utf-8") as handle:
+                row = json.loads(handle.readline())
+            self.assertEqual(row["conclusion"], "failure")
+            self.assertEqual(row["labels"]["error"], "graph_compare rc=4")
 
 
 if __name__ == "__main__":

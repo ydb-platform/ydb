@@ -3647,8 +3647,8 @@ public:
                           * `MaxVDiskSlotUsage`
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
-                        When `group` is set, sorting is disabled and `sort` is ignored (including
-                        fields that would otherwise be pulled in only for sorting).
+                        When `group` is set, sorting is disabled and fields needed only for sorting
+                        are not fetched. `sort` is still validated; unknown fields return HTTP 400.
                     required: false
                     type: string
                   - name: group

@@ -15,3 +15,14 @@ DISTRIBUTED_YDB_BENCHMARK = BENCHMARKS.register(
         builder_supported=True,
     )
 )
+
+DEDICATED_YDB_CLUSTER = BENCHMARKS.register(
+    replace(
+        DISTRIBUTED_YDB_BENCHMARK,
+        name="dedicated-ydb",
+        description="dedicated YDB cluster held until explicitly released, without a workload",
+        profile_kind="dedicated-ydb",
+        dimensions=(),
+        metrics=(),
+    )
+)

@@ -3,6 +3,10 @@ LIBRARY()
 SRCS(
     volume.cpp
     volume_actor.cpp
+    volume_database.cpp
+    volume_initschema.cpp
+    volume_loadstate.cpp
+    volume_storepartitiontabletid.cpp
 )
 
 PEERDIR(
@@ -10,9 +14,12 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/service
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
+    ydb/core/nbs/cloud/storage/core/libs/actors
     ydb/core/nbs/cloud/storage/core/libs/common
+    ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api
 
     ydb/library/actors/core
+    ydb/library/services
     library/cpp/lwtrace
     library/cpp/monlib/service/pages
     library/cpp/protobuf/util
@@ -21,9 +28,14 @@ PEERDIR(
     ydb/core/blockstore/core
     ydb/core/mind
     ydb/core/node_whiteboard
+    ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    volume_ut
+)

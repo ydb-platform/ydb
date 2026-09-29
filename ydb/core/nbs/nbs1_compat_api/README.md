@@ -22,7 +22,8 @@ Keep protobuf field numbers, field encodings and enum values compatible with
 NBS1. An original NBS1 client must work without knowing the internal package.
 
 `cloud/blockstore/libs/storage/api` declares the NBS1 tablet-pipe events that
-the NBS2 partition tablet answers (`TEvService::StatVolume`,
-`TEvVolume::WaitReady`), with the original NBS1 numeric event ids, and
+the NBS2 volume tablet forwards to the partition tablet, which answers them
+(`TEvService::StatVolume`, `TEvVolume::WaitReady`), with the original NBS1
+numeric event ids, and
 `cloud/blockstore/libs/storage/protos` holds the copied storage-level messages
 they carry.

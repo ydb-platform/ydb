@@ -9757,6 +9757,34 @@
             "uri": "https://{canondata_backend}/1903885/a6673486f5a20e67efb42fadbb43647055754f10/resource.tar.gz#test_sql2yql.test_select_yql-ansi_alias_shadowing_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-column_case_mismatch]": [
+        {
+            "checksum": "b2ccde686d53f71390d7b17e98cd9a36",
+            "size": 921,
+            "uri": "https://{canondata_backend}/1600758/b5e806732e4c0be2c41b82379c08bbadaa130d8a/resource.tar.gz#test_sql2yql.test_select_yql-column_case_mismatch_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-column_case_mismatch_order_by]": [
+        {
+            "checksum": "d2a4fabd78f2c19a85f8e40bb66eb89d",
+            "size": 947,
+            "uri": "https://{canondata_backend}/1600758/b5e806732e4c0be2c41b82379c08bbadaa130d8a/resource.tar.gz#test_sql2yql.test_select_yql-column_case_mismatch_order_by_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-column_case_mismatch_where]": [
+        {
+            "checksum": "fa48411ed059f03ec30d797ca88f971b",
+            "size": 1002,
+            "uri": "https://{canondata_backend}/1600758/b5e806732e4c0be2c41b82379c08bbadaa130d8a/resource.tar.gz#test_sql2yql.test_select_yql-column_case_mismatch_where_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-column_case_sensitive]": [
+        {
+            "checksum": "2a42a3b8bf4867db70b2a0ce1670f0ec",
+            "size": 1216,
+            "uri": "https://{canondata_backend}/1600758/b5e806732e4c0be2c41b82379c08bbadaa130d8a/resource.tar.gz#test_sql2yql.test_select_yql-column_case_sensitive_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-column_ref_or_type]": [
         {
             "checksum": "e645831788d1231a693819206af60d29",
@@ -18666,6 +18694,26 @@
     "test_sql_format.test[select_yql-ansi_alias_shadowing]": [
         {
             "uri": "file://test_sql_format.test_select_yql-ansi_alias_shadowing_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-column_case_mismatch]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-column_case_mismatch_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-column_case_mismatch_order_by]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-column_case_mismatch_order_by_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-column_case_mismatch_where]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-column_case_mismatch_where_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-column_case_sensitive]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-column_case_sensitive_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-column_ref_or_type]": [

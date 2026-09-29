@@ -1822,17 +1822,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     }
 
     /**
-     * Verify that ALTER TABLE with the detailed metrics settings on an indexed table migrated
-     * to a tenant Scheme Shard skips the index, which only the Scheme Shard that created it may
-     * alter, together with its impl table, rather than aborting the tenant Scheme Shard.
+     * Create the indexed table /MyRoot/Tenant/Table in a subdomain and upgrade the subdomain
+     * to an external one, which migrates the table and its index to a tenant Scheme Shard.
+     *
+     * @param[in] runtime The test runtime
+     * @param[in] env The test environment
+     * @param[in,out] txId The last used transaction ID
+     *
+     * @return The tablet ID of the tenant Scheme Shard
      */
-    Y_UNIT_TEST(AlterMigratedTableSkipsIndex) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
-
+    ui64 CreateMigratedIndexedTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
         TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
             Name: "Tenant"
         )");
@@ -1872,6 +1871,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
             NLs::ExtractTenantSchemeshard(&tenantSchemeShard),
         });
 
+        return tenantSchemeShard;
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings on an indexed table migrated
+     * to a tenant Scheme Shard skips the index, which only the Scheme Shard that created it may
+     * alter, together with its impl table, rather than aborting the tenant Scheme Shard.
+     */
+    Y_UNIT_TEST(AlterMigratedTableSkipsIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        const ui64 tenantSchemeShard = CreateMigratedIndexedTable(runtime, env, txId);
+
         TestAlterTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/Tenant", R"(
             Name: "Table"
             DetailedMetricsSettings {
@@ -1901,6 +1917,36 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
                 },
             }
         );
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings, sent to the root Scheme Shard
+     * for an indexed table migrated to a tenant Scheme Shard, is redirected to the tenant.
+     * The root Scheme Shard keeps the migrated paths, index and impl table included, in the
+     * Migrated state, and must not abort on it.
+     */
+    Y_UNIT_TEST(AlterMigratedTableAtRootSchemeShardRedirects) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        CreateMigratedIndexedTable(runtime, env, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot/Tenant", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )", {NKikimrScheme::StatusRedirectDomain});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Tenant"), {
+            NLs::PathExist,
+            NLs::IsExternalSubDomain("Tenant"),
+        });
     }
 
     /**

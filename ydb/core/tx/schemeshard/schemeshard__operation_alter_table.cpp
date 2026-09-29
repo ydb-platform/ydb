@@ -946,10 +946,13 @@ static ISubOperation::TPtr AppendIndexImplTableMetricsAlters(TVector<ISubOperati
 
             const TPath implTablePath = indexPath.Child(implTableName);
             const auto checks = implTablePath.Check();
-            // NotUnderDomainUpgrade goes first, as in Propose: IsUnderOperation verifies the path
-            // is in exactly one operation, and a domain upgrade counts as one more
+            // NotUnderDomainUpgrade and IsAtLocalSchemeShard go first, as in Propose:
+            // IsUnderOperation verifies the path is in exactly one operation, and a domain upgrade
+            // counts as one more, while the Migrated state of the paths the root schemeshard keeps
+            // for an upgraded subdomain counts as none
             checks
                 .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
                 .NotUnderDeleting()
                 .NotUnderOperation();
             if (!checks) {
@@ -980,6 +983,7 @@ static ISubOperation::TPtr AppendIndexImplTableMetricsAlters(TVector<ISubOperati
             const auto checks = indexPath.Check();
             checks
                 .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
                 .NotUnderDeleting()
                 .NotUnderOperation();
             if (!checks) {

@@ -17,7 +17,7 @@ void TControl::Set(TAtomicBase newValue) {
 
 void TControl::Reset(TAtomicBase defaultValue, TAtomicBase lowerBound, TAtomicBase upperBound) {
     AtomicSet(Value, defaultValue);
-    Default = defaultValue;
+    AtomicSet(Default, defaultValue);
     LowerBound = lowerBound;
     UpperBound = upperBound;
 }
@@ -43,7 +43,7 @@ TAtomicBase TControl::GetDefault() const {
 }
 
 void TControl::RestoreDefault() {
-    AtomicSet(Value, Default);
+    AtomicSet(Value, AtomicGet(Default));
 }
 
 bool TControl::IsDefault() const {

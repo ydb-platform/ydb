@@ -59,6 +59,31 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
         }
     }
 
+    // Verify that a shared wrapper restores the latest default after a control changes.
+    Y_UNIT_TEST(TestWrapperRestoresDefault) {
+        TControlWrapper control(10, 0, 20);
+        TControlWrapper shared = control;
+
+        // Change the shared control through one wrapper.
+        TDynamicControlBoard board;
+        board.RegisterSharedControl(control, "control");
+        TAtomic previous = 0;
+        board.SetValue("control", 15, previous);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(shared), 15);
+
+        // Restore through the other wrapper and verify the shared value.
+        shared.RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(control), 10);
+        UNIT_ASSERT(control.IsDefault());
+
+        // Reset the default and verify that restoration reads the new value.
+        control.Reset(12, 0, 20);
+        board.SetValue("control", 18, previous);
+        control.RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i64>(shared), 12);
+        UNIT_ASSERT_VALUES_EQUAL(shared.GetDefault(), 12);
+    }
+
     Y_UNIT_TEST(TestControlWrapperAsI64) {
         NPrivate::TMersenne64 randGen(Seed());
         TControlWrapper wrapper1;

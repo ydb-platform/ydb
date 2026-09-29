@@ -5,6 +5,7 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/generic/hash.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimrConfig {
     class TTableProfilesConfig;

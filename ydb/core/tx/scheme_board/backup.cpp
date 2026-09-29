@@ -19,6 +19,7 @@
 #include <google/protobuf/json/json.h>
 
 #include <ranges>
+#include <util/stream/file.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_BACKUP
 

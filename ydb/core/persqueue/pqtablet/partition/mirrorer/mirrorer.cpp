@@ -9,6 +9,7 @@
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service

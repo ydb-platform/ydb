@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/executor_pool_io.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/pqtablet/blob/header.h>

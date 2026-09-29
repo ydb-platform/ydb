@@ -3,6 +3,7 @@
 #include "defs.h"
 #include "ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h"
 #include "ydb/library/actors/testlib/test_runtime.h"
+#include <ydb/library/pdisk_io/aio.h>
 
 namespace NKikimr {
 

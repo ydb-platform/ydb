@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;

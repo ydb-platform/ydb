@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <util/stream/format.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 

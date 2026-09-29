@@ -19,6 +19,7 @@
 #include <util/generic/map.h>
 #include <util/generic/deque.h>
 #include <library/cpp/random_provider/random_provider.h>
+#include <util/stream/format.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_RESOLVER
 

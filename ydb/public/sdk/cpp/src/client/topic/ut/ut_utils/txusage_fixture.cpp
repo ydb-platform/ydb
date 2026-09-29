@@ -11,6 +11,7 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <library/cpp/streams/bzip2/bzip2.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 using namespace std::chrono_literals;
 

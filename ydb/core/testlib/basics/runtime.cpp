@@ -6,6 +6,7 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <util/generic/xrange.h>
 
 namespace NActors {

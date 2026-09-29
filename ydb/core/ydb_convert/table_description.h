@@ -9,6 +9,7 @@
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NYql{
     struct TKikimrTableMetadata;

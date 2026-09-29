@@ -1,6 +1,7 @@
 #include "connect_socket_protocol.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 
 namespace NActors {
 

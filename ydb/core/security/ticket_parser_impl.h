@@ -34,6 +34,7 @@
 #include <util/string/vector.h>
 
 #include <util/string/join.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NKikimr {
 

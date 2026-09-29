@@ -2,6 +2,7 @@
 #include "json_wb_req.h"
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/util/wildcard.h>
+#include <library/cpp/string_utils/base64/base64.h>
 
 namespace NKikimr::NViewer {
 

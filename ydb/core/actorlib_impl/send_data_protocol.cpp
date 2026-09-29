@@ -1,6 +1,7 @@
 #include "send_data_protocol.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <util/system/error.h>
 #include <util/system/yassert.h>
 

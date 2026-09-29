@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 #include <algorithm>
 #include <ranges>
+#include <util/stream/format.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 

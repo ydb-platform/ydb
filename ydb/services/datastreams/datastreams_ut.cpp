@@ -19,6 +19,7 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
 
 #include <random>
+#include <library/cpp/string_utils/base64/base64.h>
 
 
 using namespace NYdb;

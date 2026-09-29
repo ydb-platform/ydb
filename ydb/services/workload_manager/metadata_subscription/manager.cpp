@@ -14,6 +14,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/string/join.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 
 namespace NKikimr::NWorkloadManager {

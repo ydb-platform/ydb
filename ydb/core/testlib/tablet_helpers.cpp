@@ -1,6 +1,7 @@
 #include "tablet_helpers.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/resource_profile.h>
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/base/tablet_pipe.h>

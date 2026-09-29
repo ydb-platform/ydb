@@ -3,7 +3,7 @@
 #include <ydb/services/workload_manager/events.h>
 #include <ydb/services/workload_manager/gateway.h>
 #include <ydb/services/workload_manager/gateway_internal.h>
-#include <ydb/services/workload_manager/actors/resource_pools_cache_actor.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/service/service.h>
 #include <ydb/services/workload_manager/ut/common/query_classifier_ut_common.h>
 
@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 
 namespace NKikimr::NWorkloadManager {
@@ -54,13 +55,23 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
         runtime.GetAppData().WorkloadManagerGateway = gateway;
 
         const TActorId edge = runtime.AllocateEdgeActor();
+        const TActorId schemeCacheEdge = runtime.AllocateEdgeActor();
         runtime.RegisterService(NKqp::MakeKqpSchedulerServiceId(nodeId), edge);
         runtime.RegisterService(MakeServiceId(nodeId), edge);
-        runtime.Register(CreateResourcePoolsCacheActor(gateway));
+        runtime.RegisterService(MakeSchemeCacheID(), schemeCacheEdge);
+        const TActorId stateActor = runtime.Register(CreateWorkloadManagerStateActor(gateway));
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
         runtime.DispatchEvents(options);
+
+        // Publish a known non-serverless entry so IsResourcePoolsEnabled(TEST_DB) is true.
+        const TActorId sender = runtime.AllocateEdgeActor();
+        runtime.Send(new IEventHandle(
+            stateActor, sender,
+            new TEvFetchDatabaseResponse(Ydb::StatusIds::SUCCESS, TEST_DB, TEST_DB, /*serverless=*/false, TPathId(1, 1), {})));
+        auto watch = runtime.GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchPathId>(schemeCacheEdge, TDuration::Seconds(10));
+        UNIT_ASSERT(watch);
 
         auto classifier = runtime.RunCall([] {
             return AppData()->WorkloadManagerGateway->TryCreateQueryClassifier(TEST_DB, MakeContext());
@@ -81,7 +92,7 @@ Y_UNIT_TEST_SUITE(WorkloadManagerGateway) {
         const TActorId edge = runtime.AllocateEdgeActor();
         runtime.RegisterService(NKqp::MakeKqpSchedulerServiceId(nodeId), edge);
         runtime.RegisterService(MakeServiceId(nodeId), edge);
-        runtime.Register(CreateResourcePoolsCacheActor(gateway));
+        runtime.Register(CreateWorkloadManagerStateActor(gateway));
 
         TDispatchOptions options;
         options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);

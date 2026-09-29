@@ -16,6 +16,8 @@ namespace NKikimr::NWorkloadManager::NPrivate {
 
 struct TDatabaseInfo {
     bool Serverless = false;
+    Ydb::StatusIds::StatusCode FetchStatus = Ydb::StatusIds::SUCCESS;
+    TString FetchMessage;
 };
 
 ///
@@ -27,16 +29,20 @@ struct TSnapshot {
     THashMap<TString, TDatabaseInfo> Databases;
     bool EnableResourcePools = false;
     bool EnableResourcePoolsOnServerless = false;
+    bool ClassifierMetadataInitialized = false;
 
     bool IsResourcePoolsEnabled(const TString& databaseId) const {
         if (!EnableResourcePools) {
             return false;
         }
-        if (EnableResourcePoolsOnServerless) {
-            return true;
-        }
         const auto it = Databases.find(databaseId);
-        return it == Databases.end() || !it->second.Serverless;
+        if (it == Databases.end()) {
+            return false;
+        }
+        if (it->second.FetchStatus != Ydb::StatusIds::SUCCESS) {
+            return false;
+        }
+        return EnableResourcePoolsOnServerless || !it->second.Serverless;
     }
 };
 
@@ -49,8 +55,8 @@ using TSnapshotPtr = TTrueAtomicSharedPtr<TSnapshot>;
 ///
 class TWorkloadManagerGateway : public IGateway {
 public:
-    void OnRegistered(NActors::TActorId cacheActorId) {
-        CacheActorId_ = cacheActorId;
+    void OnRegistered(NActors::TActorId stateActorId) {
+        StateActorId_ = stateActorId;
     }
 
     void PublishSnapshot(TSnapshotPtr snapshot) {
@@ -60,9 +66,26 @@ public:
     std::shared_ptr<IQueryClassifier> TryCreateQueryClassifier(
         const TString& databaseId, TClassifyContext context) override;
 
+    TReadyInfo EnsureReady(const TString& databaseId) override;
+
+    void SubscribeOnReady(const TString& databaseId,
+                          NActors::TActorId subscriber, ui64 cookie) override;
+
+    void Warmup(const TString& databasePath) override;
+
+    TSnapshotPtr GetSnapshot() const {
+        return Snapshot_;
+    }
+
+    NActors::TActorId GetStateActorId() const {
+        return StateActorId_;
+    }
+
 private:
+    void DoWarmupRequest(const TString& databaseId);
+
     TSnapshotPtr Snapshot_;
-    NActors::TActorId CacheActorId_;
+    NActors::TActorId StateActorId_;
 };
 
 }

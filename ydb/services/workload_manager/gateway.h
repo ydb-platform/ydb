@@ -2,10 +2,28 @@
 
 #include <ydb/services/workload_manager/query_classifier.h>
 
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <util/generic/string.h>
+
 #include <memory>
 
 
 namespace NKikimr::NWorkloadManager {
+
+enum class EReadyState {
+    Ready,
+    Pending,
+    ClassificationDisabled,
+    Failed,
+};
+
+struct TReadyInfo {
+    EReadyState State;
+    Ydb::StatusIds::StatusCode FailureStatus = Ydb::StatusIds::SUCCESS;
+    TString FailureMessage;
+};
 
 ///
 /// Client-side interface for the Workload Manager gateway.
@@ -16,16 +34,15 @@ class IGateway {
 public:
     virtual ~IGateway() = default;
 
-    ///
-    /// Attempt to build a Query Classifier for the given database
-    /// and query context. Returns `nullptr` when:
-    /// - snapshot not yet published (cache actor did not finish Bootstrap);
-    /// - resource pools are disabled for the database;
-    /// - no matching pool metadata is loaded.
-    /// Caller must handle the nullptr case (typically: skip classification).
-    ///
     virtual std::shared_ptr<IQueryClassifier> TryCreateQueryClassifier(
         const TString& databaseId, TClassifyContext context) = 0;
+
+    virtual TReadyInfo EnsureReady(const TString& databaseId) = 0;
+
+    virtual void SubscribeOnReady(const TString& databaseId,
+                                   NActors::TActorId subscriber, ui64 cookie) = 0;
+
+    virtual void Warmup(const TString& databasePath) = 0;
 };
 
 using TGatewayPtr = std::shared_ptr<IGateway>;

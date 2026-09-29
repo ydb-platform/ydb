@@ -191,6 +191,7 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
         ListScriptExecutionOperations,
         CancelScriptExecutionOperation,
         GetScriptExecutionPhysicalGraph,
+        WorkloadManagerClassifierReady,
     };
 
 public:
@@ -745,7 +746,15 @@ public:
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        if (auto& gateway = AppData()->WorkloadManagerGateway) {
+            gateway->Warmup(ev->Get()->GetDatabase());
+        }
+        
         if (!DatabasesCache.SetDatabaseIdOrDefer(ev, static_cast<i32>(EDelayedRequestType::QueryRequest), ActorContext())) {
+            return;
+        }
+
+        if (!EnsureWorkloadManagerReady(ev)) {
             return;
         }
 
@@ -1526,6 +1535,7 @@ public:
             hFunc(TEvKqp::TEvListProxyNodesRequest, Handle);
             hFunc(TEvKqp::TEvUpdateDatabaseInfo, Handle);
             hFunc(TEvKqp::TEvDelayedRequestError, Handle);
+            hFunc(NWorkloadManager::TEvWorkloadManagerReady, Handle);
         default:
             Y_ABORT("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->ToString().data());
@@ -1747,8 +1757,56 @@ private:
         }
     }
 
+    // Returns true if the caller should continue processing the query; false if the query was
+    // deferred (parked awaiting workload-manager readiness) or replied to with an error.
+    // Called right after SetDatabaseIdOrDefer and before any session/request state is created,
+    // so a deferred query can restart cleanly on re-dispatch.
+    [[nodiscard]] bool EnsureWorkloadManagerReady(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        if (ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
+            return true;
+        }
+
+        auto& gateway = AppData()->WorkloadManagerGateway;
+        if (!gateway) {
+            return true;
+        }
+
+        const TString& databaseId = ev->Get()->GetDatabaseId();
+        const auto info = gateway->EnsureReady(databaseId);
+        switch (info.State) {
+            case NWorkloadManager::EReadyState::Ready:
+            case NWorkloadManager::EReadyState::ClassificationDisabled:
+                return true;
+
+            case NWorkloadManager::EReadyState::Failed: {
+                NYql::TIssues issues;
+                if (info.FailureMessage) {
+                    issues.AddIssue(NYql::TIssue(info.FailureMessage));
+                }
+                Send(SelfId(),
+                     new TEvKqp::TEvDelayedRequestError(THolder<IEventHandle>(ev.Release()), info.FailureStatus, std::move(issues)),
+                     0,
+                     static_cast<ui64>(EDelayedRequestType::WorkloadManagerClassifierReady));
+                return false;
+            }
+
+            case NWorkloadManager::EReadyState::Pending: {
+                const ui64 cookie = ++NextClassifierReadyCookie;
+                ParkedClassifierReady[cookie] = THolder<IEventHandle>(ev.Release());
+                gateway->SubscribeOnReady(databaseId, SelfId(), cookie);
+                return false;
+            }
+        }
+        return true;
+    }
+
     void SetupWorkloadManagerQueryClassifier(TEvKqp::TEvQueryRequest::TPtr& ev, const TKqpSessionInfo* sessionInfo, ui64 /*requestId*/) {
         if (ev->Get()->IsInternalCall() || ev->Get()->GetIsWarmupCompilation()) {
+            return;
+        }
+
+        auto& gateway = AppData()->WorkloadManagerGateway;
+        if (!gateway) {
             return;
         }
 
@@ -1757,17 +1815,9 @@ private:
             .AppName = sessionInfo ? sessionInfo->ClientApplicationName : "",
             .UserToken = ev->Get()->GetUserToken(),
         };
-
-        auto& gateway = AppData()->WorkloadManagerGateway;
-        if (!gateway) {
-            return;
+        if (auto classifier = gateway->TryCreateQueryClassifier(ev->Get()->GetDatabaseId(), std::move(context))) {
+            ev->Get()->SetWmQueryClassifier(std::move(classifier));
         }
-        auto classifier = gateway->TryCreateQueryClassifier(ev->Get()->GetDatabaseId(), std::move(context));
-        if (!classifier) {
-            return;
-        }
-
-        ev->Get()->SetWmQueryClassifier(std::move(classifier));
     }
 
     void UpdateYqlLogLevels() {
@@ -1793,7 +1843,8 @@ private:
 
     void HandleDelayedRequestError(EDelayedRequestType requestType, THolder<IEventHandle> requestEvent, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
         switch (requestType) {
-            case EDelayedRequestType::QueryRequest: {
+            case EDelayedRequestType::QueryRequest:
+            case EDelayedRequestType::WorkloadManagerClassifierReady: {
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
                 response->Record.SetYdbStatus(status);
                 NYql::IssuesToMessage(issues, response->Record.MutableResponse()->MutableQueryIssues());
@@ -2048,6 +2099,32 @@ private:
         HandleDelayedRequestError(static_cast<EDelayedRequestType>(ev->Cookie), std::move(ev->Get()->RequestEvent), ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
+    void Handle(NWorkloadManager::TEvWorkloadManagerReady::TPtr& ev) {
+        const ui64 cookie = ev->Get()->Cookie;
+        auto it = ParkedClassifierReady.find(cookie);
+        if (it == ParkedClassifierReady.end()) {
+            YDB_LOG_WARN("Received TEvWorkloadManagerReady with unknown cookie",
+                {"cookie", cookie});
+            return;
+        }
+        THolder<IEventHandle> parked = std::move(it->second);
+        ParkedClassifierReady.erase(it);
+
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            NYql::TIssues issues;
+            if (ev->Get()->Message) {
+                issues.AddIssue(NYql::TIssue(ev->Get()->Message));
+            }
+            Send(SelfId(),
+                 new TEvKqp::TEvDelayedRequestError(std::move(parked), ev->Get()->Status, std::move(issues)),
+                 0,
+                 static_cast<ui64>(EDelayedRequestType::WorkloadManagerClassifierReady));
+            return;
+        }
+
+        TActivationContext::Send(parked.Release());
+    }
+
     void InitSharedReading() {
         if (!FeatureFlags.GetEnableSharedReadingInStreamingQueries() || RowDispatcherService) {
             return;
@@ -2208,6 +2285,9 @@ private:
     TActorId KqpTempTablesAgentActor;
 
     TDatabasesCache DatabasesCache;
+
+    ui64 NextClassifierReadyCookie = 0;
+    THashMap<ui64, THolder<IEventHandle>> ParkedClassifierReady;
 
     std::unique_ptr<TEvKqp::TEvCloseSessionResponse> CreateEvCloseSessionResponse(
         const TString& sessionId)

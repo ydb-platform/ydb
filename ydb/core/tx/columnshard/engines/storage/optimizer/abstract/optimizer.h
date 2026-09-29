@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/reader/position.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
@@ -17,7 +18,6 @@
 
 #include <algorithm>
 #include <utility>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;

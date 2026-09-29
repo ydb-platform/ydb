@@ -588,4 +588,5 @@ for i in $(seq 1 100000); do echo "$i";done | \
 
 ## См. также {#see-also}
 
+* [Параметризованные запросы и повторная компиляция](../../dev/optimization/parameterized-queries.md)
 * [Параметризованные запросы в {{ ydb-short-name }} SDK](../ydb-sdk/parameterized_queries.md)

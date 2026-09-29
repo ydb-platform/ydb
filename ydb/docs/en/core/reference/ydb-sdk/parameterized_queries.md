@@ -29,3 +29,8 @@ Parameterized queries provide the following advantages:
 * The use of parameterized queries saves from vulnerabilities like [SQL Injection](https://en.wikipedia.org/wiki/SQL_injection).
 
 {{ ydb-short-name }} SDK automatically caches parameterized query plans by default, the setting `KeepInCache = true` is usually used for this.
+
+## See also
+
+- [Parameterized queries and recompilation](../../dev/optimization/parameterized-queries.md)
+- [{#T}](../../dev/example-app/index.md#param-queries)

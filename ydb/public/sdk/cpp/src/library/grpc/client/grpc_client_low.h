@@ -485,6 +485,22 @@ public:
      * Scheduled request write to the stream
      */
     virtual void Write(TRequest&& request, TWriteCallback callback = { }) = 0;
+
+    /**
+     * Half-close the client write side (gRPC WritesDone). Queued after any
+     * pending Write calls. Needed by one-shot upload-style RPCs that wait for
+     * the client to finish sending before they reply.
+     *
+     * Not pure virtual: this interface is implemented outside this library, and
+     * the streams that never half-close have nothing to say here. The default
+     * reports the half-close as unavailable rather than pretending it happened,
+     * so a caller that does need it fails instead of waiting forever.
+     */
+    virtual void WritesDone(TWriteCallback callback = { }) {
+        if (callback) {
+            callback(TGrpcStatus(grpc::StatusCode::UNIMPLEMENTED, "WritesDone is not supported by this stream"));
+        }
+    }
 };
 
 class TGRpcSocketMutator;
@@ -923,8 +939,9 @@ public:
     using TConnectedCallback = TStreamConnectedCallback<TRequest, TResponse>;
     using TReadCallback = typename TBase::TReadCallback;
     using TWriteCallback = typename TBase::TWriteCallback;
-    using TAsyncReaderWriterPtr = std::unique_ptr<grpc::ClientAsyncReaderWriter<TRequest, TResponse>>;
-    using TAsyncRequest = TAsyncReaderWriterPtr (TStub::*)(grpc::ClientContext*, grpc::CompletionQueue*, void*);
+    using TAsyncReaderWriter = grpc::ClientAsyncReaderWriter<TRequest, TResponse>;
+    using TAsyncReaderWriterPtr = std::unique_ptr<grpc::ClientAsyncReaderWriterInterface<TRequest, TResponse>>;
+    using TAsyncRequest = std::unique_ptr<TAsyncReaderWriter> (TStub::*)(grpc::ClientContext*, grpc::CompletionQueue*, void*);
 
     explicit TStreamRequestReadWriteProcessor(TConnectedCallback&& callback)
         : ConnectedCallback(std::move(callback))
@@ -957,7 +974,11 @@ public:
 
         {
             std::unique_lock<std::mutex> guard(Mutex);
-            if (Cancelled || ReadFinished || WriteFinished) {
+            if (Cancelled) {
+                status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Write request dropped");
+            } else if (HalfCloseRequested) {
+                status = TGrpcStatus(grpc::StatusCode::FAILED_PRECONDITION, "Client write side is already half-closed");
+            } else if (ReadFinished || WriteFinished) {
                 status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Write request dropped");
             } else if (WriteActive) {
                 auto& item = WriteQueue.emplace_back();
@@ -970,6 +991,42 @@ public:
             }
         }
 
+        if (!status.Ok() && callback) {
+            RunGuarded([&] {
+                callback(std::move(status));
+            });
+        }
+    }
+
+    void WritesDone(TWriteCallback callback) override {
+        TGrpcStatus status;
+        bool startWritesDone = false;
+
+        {
+            std::unique_lock<std::mutex> guard(Mutex);
+            if (Cancelled) {
+                status = TGrpcStatus(grpc::StatusCode::CANCELLED, "WritesDone dropped");
+            } else if (HalfCloseRequested) {
+                status = TGrpcStatus(grpc::StatusCode::FAILED_PRECONDITION, "Client write side is already half-closed");
+            } else if (WriteFinished) {
+                status = TGrpcStatus(grpc::StatusCode::CANCELLED, "WritesDone dropped");
+            } else if (WriteActive) {
+                HalfCloseRequested = true;
+                auto& item = WriteQueue.emplace_back();
+                item.Callback.swap(callback);
+                item.IsWritesDone = true;
+            } else {
+                HalfCloseRequested = true;
+                WriteActive = true;
+                WriteDonePending = true;
+                WriteCallback.swap(callback);
+                startWritesDone = true;
+            }
+        }
+
+        if (startWritesDone) {
+            Stream->WritesDone(OnWriteDoneTag.Prepare());
+        }
         if (!status.Ok() && callback) {
             RunGuarded([&] {
                 callback(std::move(status));
@@ -1098,6 +1155,7 @@ public:
 
 private:
     template<typename> friend class TServiceConnection;
+    friend struct TStreamRequestReadWriteProcessorTestAccess;
 
     void Start(TStub& stub, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
         InitCallbackGuard(provider);
@@ -1195,12 +1253,16 @@ private:
             Y_ABORT_UNLESS(WriteActive, "Unexpected Write done callback");
             Y_ABORT_UNLESS(!WriteFinished, "Unexpected WriteFinished flag");
 
+            const bool wasWritesDone = WriteDonePending;
+            WriteDonePending = false;
+
             if (ok) {
                 okCallback.swap(WriteCallback);
             } else if (WriteCallback) {
                 // Put callback back on the queue until OnFinished
                 auto& item = WriteQueue.emplace_front();
                 item.Callback.swap(WriteCallback);
+                item.IsWritesDone = wasWritesDone;
             }
 
             if (!ok || Cancelled) {
@@ -1209,9 +1271,22 @@ private:
                 if (ReadFinished) {
                     Stream->Finish(&Status, OnFinishedTag.Prepare());
                 }
+            } else if (wasWritesDone) {
+                // Client write side is half-closed; no further Write/WritesDone.
+                WriteActive = false;
+                WriteFinished = true;
+                if (ReadFinished) {
+                    Stream->Finish(&Status, OnFinishedTag.Prepare());
+                }
             } else if (!WriteQueue.empty()) {
-                WriteCallback.swap(WriteQueue.front().Callback);
-                Stream->Write(WriteQueue.front().Request, OnWriteDoneTag.Prepare());
+                auto& next = WriteQueue.front();
+                WriteCallback.swap(next.Callback);
+                if (next.IsWritesDone) {
+                    WriteDonePending = true;
+                    Stream->WritesDone(OnWriteDoneTag.Prepare());
+                } else {
+                    Stream->Write(next.Request, OnWriteDoneTag.Prepare());
+                }
                 WriteQueue.pop_front();
             } else {
                 WriteActive = false;
@@ -1319,6 +1394,7 @@ private:
     struct TWriteItem {
         TWriteCallback Callback;
         TRequest Request;
+        bool IsWritesDone = false;
     };
 
 private:
@@ -1345,6 +1421,8 @@ private:
     bool ReadFinished = false;
     bool WriteActive = false;
     bool WriteFinished = false;
+    bool HalfCloseRequested = false;
+    bool WriteDonePending = false;
     bool Finished = false;
     bool Cancelled = false;
     bool FinishedOk = false;

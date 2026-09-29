@@ -52,6 +52,7 @@ from ydb.tools.ydb_bench.lib import process_recovery
 from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.distributed_reports import attempt_counters
 from ydb.tools.ydb_bench.lib import cluster_templates_ui, distributed_builder_ui, monitoring_settings_ui
+from ydb.tools.ydb_bench.lib import cluster_operations, cluster_operations_ui
 from ydb.tools.ydb_bench.lib import cluster_config, cluster_config_ui
 from ydb.tools.ydb_bench.lib.cluster_deployment import run_deployment
 
@@ -3427,7 +3428,7 @@ function bindRunConfiguration(container,id){
     "or the dispatcher.')+'</div>':'';\n"
     "    sessionStorage.setItem('ydb-bench-active-run',activeRun);\n"
     '    const groups=profileGroups(run.steps||[]),profileKeys=Object.keys(groups),selection=parseLocalYdbProfileSelection('
-    "groups,selectedProfile),activeProfile=runView==='configuration'?'':selection.profile||(profileKeys.length===1?profileKeys[0]:''),requestedLocalView="
+    "groups,selectedProfile),activeProfile=runView?'':selection.profile||(profileKeys.length===1?profileKeys[0]:''),requestedLocalView="
     "selection.profile?selection.view:'',activeBenchmark=activeProfile?activeProfile.split('/')[0]:'';\n"
     "    const crumbs=[{route:'runs',label:'Runs'},{route:'run/'+enc(id),label:runDisplay(id)}];\n"
     "    let content=breadcrumbs(crumbs)+queueNotice+'<div class=run-header><div class=toolbar>'+(['queued','running'].includes(run.state)?'<button class=danger id=cancel-run>Cancel</button>'"
@@ -3443,7 +3444,9 @@ function bindRunConfiguration(container,id){
     "    content+='<nav class=run-tabs>'+(profileKeys.length!==1?'<a class=\"run-tab '+(!activeProfile&&!runView?'active':'')+'\" href=\"#r"
     "un/'+enc(id)+'\">Overview</a>':'')+profileKeys.map(key=>'<a class=\"run-tab '+(key===activeProfile?'active':'')+'\" href=\"#"
     "run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a>').join('')+'<a class=\"run-tab '+(runView==='configuration'?'active':'')+'\" "
-    "href=\"#run/'+enc(id)+'/configuration\">Configuration</a></nav>';\n"
+    "href=\"#run/'+enc(id)+'/configuration\">Configuration</a>"
+    "'+(profileKeys.some(key=>key.startsWith('dedicated-ydb/'))?'<a class=\"run-tab '+(runView==='operations'?'active':'')+'\" href=\"#run/'+enc(id)+'/operations\">Operations</a>':'')+'</nav>';\n"
+    "    if(runView==='operations')content+='<section id=cluster-operations></section>';\n"
     "    if(runView==='configuration'){try{const saved=await api('/api/runs/'+enc(id)+'/config.json');"
     "content+=runConfigurationHtml(id,saved)}"
     "catch(error){content+=displayError(error)}}\n"
@@ -3470,6 +3473,7 @@ function bindRunConfiguration(container,id){
     "    app.innerHTML=shell('runs',content);\n"
     "    mountMetricsExport(document.querySelector('#run-export'),id);\n"
     "    if(runView==='configuration')bindRunConfiguration(document.querySelector('#run-configuration-view'),id);\n"
+    "    if(runView==='operations')mountClusterOperations(document.querySelector('#cluster-operations'),id);\n"
     "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return ['local-ydb','distributed-ydb','dedicated-ydb'].includes(activeBenchmark)&&"
     "local?.dataset.localYdbViewExplicit==='true'?activeProfile+'/view/'+local.dataset.localYdbView:activeProfile};\n"
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute(),runView);\n"
@@ -3827,7 +3831,7 @@ async function renderComparisons(){
     "ew('builder');if(current==='new/yaml')return renderNew('yaml');if(current==='topology')return renderTopology();if(curren"
     "t==='comparisons'||pieces[0]==='comparisons')return renderSavedComparisons();if(['attempt','distributed-attempt'].includes(pieces[0])&&[4,5].includes(pieces.length))"
     "return renderLocalYdbAttempt(pieces[1],pieces[2],pieces[3],pieces[4],pieces[0]==='distributed-attempt'?'distributed-ydb':'local-ydb');if(pieces[0]==='run'){"
-    "if(pieces.length===3&&pieces[2]==='configuration')return renderRun(pieces[1],'','configuration');if(pieces[2]"
+    "if(pieces.length===3&&['configuration','operations'].includes(pieces[2]))return renderRun(pieces[1],'',pieces[2]);if(pieces[2]"
     "==='profile')return renderRun(pieces[1],pieces.slice(3).join('/'));return renderRun(pieces.slice(1).join('/'))}setRoute("
     "'runs')}\n"
     "addEventListener('hashchange',compose);setInterval(refreshActiveBanner,3000);setInterval(refreshHostAvailability,3000);refreshHostAvailability();compose();\n"
@@ -3837,6 +3841,8 @@ async function renderComparisons(){
 _CSS += cluster_templates_ui.CSS
 _CSS += cluster_config_ui.CSS
 _CSS += monitoring_settings_ui.CSS
+_CSS += cluster_operations_ui.CSS
+_JS = cluster_operations_ui.JS + _JS
 _JS = monitoring_settings_ui.JS + _JS
 _JS += cluster_templates_ui.JS
 _JS += cluster_config_ui.JS
@@ -5108,6 +5114,29 @@ class RunService:
                 self._emit_locked(run, {"type": "cluster-release-requested"})
                 run["release_cluster"].set()
                 return {"id": run_id, "release_requested": True}
+
+    def cluster_operation(self, run_id, options=None):
+        root = _run_directory(self.output, run_id)
+        with self._lock:
+            run = self._runs.get(run_id)
+        if run is not None:
+            with run['lock']:
+                manager = run.get('cluster_operations')
+                active = bool(
+                    manager
+                    and not run['finalized']
+                    and not run['cancel'].is_set()
+                    and not run['release_cluster'].is_set()
+                    and run['store'].manifest.get('deployment', {}).get('phase') == 'cluster-ready'
+                )
+                if options is not None:
+                    if not active:
+                        raise BenchmarkError('Dedicated cluster is not active')
+                    return manager.execute(options)
+                return {'active': active, 'history': manager.rows if manager else cluster_operations.read_history(root)}
+        if options is not None:
+            raise BenchmarkError('Dedicated cluster is not active')
+        return {'active': False, 'history': cluster_operations.read_history(root)}
 
     def cancel(self, run_id):
         with self._lock:
@@ -6621,6 +6650,13 @@ def _handler(service):
                 except ValueError:
                     return self._json(500, {"error": "event log contains a non-finite JSON number"})
                 return self._send(200, "text/event-stream", payload)
+            if path.startswith('/api/runs/') and path.endswith('/cluster-operations'):
+                try:
+                    return self._json(
+                        200, service.cluster_operation(unquote(path[len('/api/runs/') : -len('/cluster-operations')]))
+                    )
+                except BenchmarkError as error:
+                    return self._json(400, {'error': str(error)})
             if path.startswith("/api/runs/"):
                 item = service.detail(unquote(path[len("/api/runs/") :]))
                 return self._json(200 if item else 404, item or {"error": "run not found"})
@@ -6702,7 +6738,9 @@ def _handler(service):
                             return self.do_POST()
                         options = (
                             self._json_body()
-                            if parts[1].endswith(('/cancel', '/metrics-export', '/release-cluster'))
+                            if parts[1].endswith(
+                                ('/cancel', '/metrics-export', '/release-cluster', '/cluster-operations')
+                            )
                             else self._options()
                         )
                         if not isinstance(options, dict):
@@ -6854,6 +6892,18 @@ def _handler(service):
                 if path.startswith("/api/runs/") and path.endswith("/release-cluster"):
                     return self._json(
                         200, service.release_cluster(unquote(path[len("/api/runs/") : -len("/release-cluster")]))
+                    )
+                if path.startswith('/api/runs/') and path.endswith('/cluster-operations'):
+                    origin = self.headers.get('Origin')
+                    if self.headers.get('Content-Type', '').split(';')[0] != 'application/json' or (
+                        origin and urlparse(origin).netloc != self.headers.get('Host')
+                    ):
+                        return self._json(403, {'error': 'same-origin JSON request required'})
+                    return self._json(
+                        200,
+                        service.cluster_operation(
+                            unquote(path[len('/api/runs/') : -len('/cluster-operations')]), self._json_body()
+                        ),
                     )
             except BenchmarkError as error:
                 return self._json(400, {"error": str(error)})

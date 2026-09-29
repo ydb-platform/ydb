@@ -303,6 +303,7 @@ message TGroupInfo {
     optional uint64 BridgeSyncFirstErrorTimestamp = 27; // first error timestamp
     optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
+    optional bool DDisk = 30; // is this a Direct Block Group?
 }
 
 message TGroupEntry {

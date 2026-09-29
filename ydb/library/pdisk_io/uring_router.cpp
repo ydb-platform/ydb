@@ -609,7 +609,13 @@ bool TUringRouter::DrainSubmitQueue() {
         return false;
     }
     bool didWork = false;
+    ui32 synthetic = 0;
     for (;;) {
+        // Real submission is bounded by the SQ; bound synthetic completion the
+        // same way, so one pass cannot starve reaping and counter refresh.
+        if (Config.DevNullMode && synthetic >= Config.QueueDepth) {
+            break;
+        }
         TUringOperationBase* op = PendingSubmit;
         if (op) {
             PendingSubmit = nullptr;
@@ -634,6 +640,20 @@ bool TUringRouter::DrainSubmitQueue() {
             continue;
         }
 
+        if (Config.DevNullMode) {
+            const i64 result = static_cast<i64>(op->GetTotalSize());
+            if (op->OperationType == TUringOperationBase::EREAD) {
+                for (size_t i = op->IovBegin; i < op->Iov.size(); ++i) {
+                    memset(op->Iov[i].iov_base, 0, op->Iov[i].iov_len);
+                }
+            }
+            op->AdvanceIov(op->GetOperationBytes());
+            CompleteOperation(op, result); // The callback may delete or recycle op.
+            ++synthetic;
+            didWork = true;
+            continue;
+        }
+
         struct io_uring_sqe* sqe = GetSqe();
         if (!sqe) {
             PendingSubmit = op;
@@ -641,6 +661,10 @@ bool TUringRouter::DrainSubmitQueue() {
         }
         PrepareSqe(sqe, op);
         didWork = true;
+    }
+    if (didWork && Config.DevNullMode && Counters.CompletionThreadCPU) {
+        // Synthetic completions have no data CQEs to refresh this counter.
+        *Counters.CompletionThreadCPU = ThreadCPUTime();
     }
     return didWork;
 }
@@ -1013,7 +1037,8 @@ bool TUringRouter::Probe(TUringRouterConfig config) {
 TString TUringRouterConfig::ToString() const {
     return TStringBuilder()
         << "QueueDepth=" << QueueDepth
-        << " IdleSpinUs=" << IdleSpinUs;
+        << " IdleSpinUs=" << IdleSpinUs
+        << " DevNullMode=" << DevNullMode;
 }
 
 } // namespace NKikimr::NPDisk

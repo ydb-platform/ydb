@@ -78,12 +78,16 @@ private:
     // Cursor of the batch that will be staged, not of the last tablet response.
     // A follow-up for a blob tail starts at the split message, so its RealReadOffset
     // and LastOffset do not cover the earlier messages already in this batch.
-    ui64 DirectReadReadOffset() const {
+    ui64 DirectReadReadOffset(const NKikimrClient::TCmdReadResult& readResult) const {
         const auto* staged = StagedRead();
         if (staged && staged->ResultSize() > 0) {
             return staged->GetResult(0).GetOffset();
         }
-        return Request.GetPartitionRequest().GetCmdRead().GetOffset();
+        // Nothing was staged. LastOffset is inclusive and sits on the offset
+        // before this read, so the next DirectRead retries it. Restore requires
+        // ReadOffset <= LastOffset, otherwise the partition actor aborts.
+        const ui64 readOffset = Request.GetPartitionRequest().GetCmdRead().GetOffset();
+        return Min(readOffset, DirectReadLastOffset(readResult));
     }
 
     ui64 DirectReadLastOffset(const NKikimrClient::TCmdReadResult& readResult) const {
@@ -121,7 +125,7 @@ private:
             PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
-            prepareResponse->SetReadOffset(DirectReadReadOffset());
+            prepareResponse->SetReadOffset(DirectReadReadOffset(readResult));
             prepareResponse->SetLastOffset(DirectReadLastOffset(readResult));
             prepareResponse->SetEndOffset(readResult.GetEndOffset());
 

@@ -195,6 +195,41 @@ void SendTabletReadResult(
     runtime.Send(new IEventHandle(proxy, sender, response.Release()));
 }
 
+Y_UNIT_TEST(DirectReadEmptyStageCursorCanBeRestored) {
+    // The tablet returned no rows for offset 40, and its own LastOffset is 100.
+    // The next read must still retry 40. Restore requires ReadOffset <= LastOffset;
+    // publishing 40 and 39 aborts the partition actor.
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+    runtime->SetScheduledLimit(100000);
+
+    NKikimrClient::TPersQueueRequest request;
+    auto* read = request.MutablePartitionRequest()->MutableCmdRead();
+    read->SetClientId("user");
+    read->SetSessionId("session1");
+    read->SetOffset(40);
+    read->SetPartNo(0);
+    read->SetDirectReadId(1);
+    read->SetReadToBlobEnd(true);
+
+    const auto tablet = runtime->AllocateEdgeActor();
+    auto proxy = StartDirectRead(setup, *runtime, request, tablet);
+
+    NKikimrClient::TCmdReadResult rows;
+    rows.SetRealReadOffset(40);
+    rows.SetLastOffset(100);
+    rows.SetEndOffset(100);
+    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+    response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    response->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(rows);
+
+    const auto published = FinishFollowUp(*runtime, proxy, tablet, setup.Context.Edge, std::move(response));
+    UNIT_ASSERT(published.ReadOffset <= published.LastOffset);
+    UNIT_ASSERT_VALUES_EQUAL(published.ReadOffset, 39);
+    UNIT_ASSERT_VALUES_EQUAL(published.LastOffset, 39);
+}
+
 Y_UNIT_TEST(DirectReadFollowUpPublishesWhenTailIsGone) {
     // Offsets 13 and 14 are complete. Offset 15 is only part 0.
     // The follow-up does not return part 1: compaction left a new message at 16.

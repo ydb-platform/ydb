@@ -141,7 +141,8 @@ TQueryQuotaManagerPtr CreateQueryQuotaManager(TIntrusivePtr<NRm::TTxState> tx) {
 
 struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
 
-    // the limit is external memory of the query quota manager, it returns it when it dies
+    // the limit is external memory of the query quota manager: the compute actor returns it when it terminates (see
+    // IQueryQuotaManager::FreeTasks), the query quota manager when it dies if the compute actor did not terminate
     TMemoryQuotaManager(NYql::NDq::IMemoryQuotaManager::TPtr query
         , ui64 limit, ui64 step = 1_MB)
     : NYql::NDq::TGuaranteeQuotaManager(limit, limit, step)

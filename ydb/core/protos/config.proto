@@ -3045,8 +3045,6 @@ message TColumnShardConfig {
     optional string ScanDefaultPool = 75;
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
-    // Data blob batches (channels >= 2) use free-space weighted random, the same draw as Flat Executor
-    // external blobs. Unset keeps step round-robin.
     optional bool EnableWeightedDataChannelSelection = 77 [default = false];
 }
 

@@ -865,7 +865,15 @@ class TestViewer(object):
             'filter_group_by': 'DC',
         })
         assert 'status_code' not in filter_by_only, filter_by_only
-        assert int(filter_by_only.get('FoundNodes', 0)) == base_found, (base_found, filter_by_only)
+        assert int(filter_by_only.get('FoundNodes', 0)) == base_found, (
+            f'filter_group_by alone must not filter nodes: expected FoundNodes={base_found}, '
+            f'got {filter_by_only.get("FoundNodes")!r}')
+
+        base_fields_required = base.get('FieldsRequired')
+        filter_by_only_fields_required = filter_by_only.get('FieldsRequired')
+        assert filter_by_only_fields_required == base_fields_required, (
+            f'filter_group_by alone must not change FieldsRequired: '
+            f'base={base_fields_required!r}, with filter_group_by={filter_by_only_fields_required!r}')
 
         group_only = cls.get_viewer_normalized("/viewer/nodes", {
             'fields_required': 'NodeId',
@@ -878,10 +886,12 @@ class TestViewer(object):
             'sort': 'Missing',
         })
         assert 'status_code' not in group_and_sort, group_and_sort
-        assert group_and_sort.get('FieldsAvailable') == group_only.get('FieldsAvailable'), (
-            group_only.get('FieldsAvailable'), group_and_sort.get('FieldsAvailable'))
-        for node in group_and_sort.get('Nodes', []):
-            assert 'Missing' not in node, group_and_sort
+        group_only_fields_required = group_only.get('FieldsRequired')
+        group_and_sort_fields_required = group_and_sort.get('FieldsRequired')
+        assert group_and_sort_fields_required == group_only_fields_required, (
+            f'group= must ignore sort= for FieldsRequired: '
+            f'group_only={group_only_fields_required!r}, group+sort={group_and_sort_fields_required!r}')
+        assert group_and_sort.get('NodeGroups'), group_and_sort
 
     @classmethod
     def test_storage_groups(cls):

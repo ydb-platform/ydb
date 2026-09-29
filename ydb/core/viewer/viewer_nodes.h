@@ -896,7 +896,6 @@ class TJsonNodes : public TViewerPipeClient {
     TString FilterGroup;
     bool NeedFilter = false;
     bool NeedGroup = false;
-    bool NeedFilterGroupBy = false;
     bool NeedSort = false;
     bool NeedLimit = false;
     ui64 TotalNodes = 0;
@@ -1052,7 +1051,6 @@ public:
             FilterPath.clear();
         }
         if (TStringBuf filterGroupByParam = Params.Get("filter_group_by"); filterGroupByParam) {
-            NeedFilterGroupBy = true;
             FilterGroupBy = ParseENodeFields(filterGroupByParam);
             if (TStringBuf filterGroupParam = Params.Get("filter_group"); filterGroupParam) {
                 FilterGroup = filterGroupParam;

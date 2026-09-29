@@ -74,7 +74,7 @@ namespace NKikimr::NGRpcService {
         Y_UNIT_TEST(EmptyMappingKeepsLiveDatabase) {
             TNamedRequest request("Ydb.Query.V1.QueryService/ExecuteQuery");
             request.EnablePathNormalization();
-            request.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>());
+            request.InitializePathNormalization(nullptr);
             UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/raw");
             request.UseDatabase("/resolved");
             UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/resolved");

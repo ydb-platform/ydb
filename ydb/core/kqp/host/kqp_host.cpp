@@ -1235,7 +1235,7 @@ public:
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
         if (HasAppData(ActorSystem)) {
-            if (auto normalizer = AppData(ActorSystem)->PathNormalizer; normalizer && normalizer->HasRules()) {
+            if (auto normalizer = AppData(ActorSystem)->PathNormalizer) {
                 config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
             }
         }

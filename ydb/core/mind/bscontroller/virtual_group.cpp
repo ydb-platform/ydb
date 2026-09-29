@@ -5,6 +5,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/blob_depot/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/base/path.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 

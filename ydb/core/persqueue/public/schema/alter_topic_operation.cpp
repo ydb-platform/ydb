@@ -7,6 +7,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
+#include <ydb/core/base/path.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 

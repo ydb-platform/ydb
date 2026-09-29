@@ -4,8 +4,6 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/public/utils.h>
-#include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
@@ -19,6 +17,15 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/ptr.h>
+
+#include <memory>
+
+namespace NKikimr::NPQ {
+
+class IPartitionChooser;  // ydb/core/persqueue/writer/partition_chooser.h
+class TPartitionGraph;    // ydb/core/persqueue/public/utils.h
+
+} // namespace NKikimr::NPQ
 
 namespace NKikimr {
 

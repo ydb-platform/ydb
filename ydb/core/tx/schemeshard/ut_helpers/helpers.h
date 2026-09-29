@@ -20,6 +20,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/fwd.h>
 #include <ydb/library/login/login.h>
 
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -67,11 +68,6 @@
     static TTestRegistration##N testRegistration##N;                                                               \
     template<bool OPT1, bool OPT2>                                                                                 \
     void N(NUnitTest::TTestContext&)
-
-namespace NYdb::NTable {
-    struct TGlobalIndexSettings;
-    struct TKMeansTreeSettings;
-}
 
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;

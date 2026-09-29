@@ -12,6 +12,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 #include <util/string/vector.h>
+#include <ydb/core/protos/base.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 

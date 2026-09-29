@@ -5,6 +5,7 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 namespace NKikimr::NGRpcProxy::V1::NTopic {
 

@@ -3,6 +3,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/core/base/path.h>
 
 namespace NKikimr::NUdfStore {
 

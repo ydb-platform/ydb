@@ -6,6 +6,7 @@
 #include <util/folder/dirut.h>
 #include <util/folder/path.h>
 #include <util/system/fs.h>
+#include <ydb/core/base/path.h>
 
 namespace NKikimr::NUdfStore {
 

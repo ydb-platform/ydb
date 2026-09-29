@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 
 namespace NKikimr::NUdfStore {
 

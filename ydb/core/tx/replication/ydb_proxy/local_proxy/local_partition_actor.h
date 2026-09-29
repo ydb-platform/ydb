@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 namespace NKikimr::NReplication {
 

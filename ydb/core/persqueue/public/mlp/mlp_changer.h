@@ -11,6 +11,7 @@
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
 #include <type_traits>
+#include <ydb/core/persqueue/public/utils.h>
 
 
 namespace NKikimr::NPQ::NMLP {

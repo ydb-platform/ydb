@@ -2,6 +2,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 

@@ -7,6 +7,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <util/string/join.h>
+#include <ydb/core/base/path.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 

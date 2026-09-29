@@ -5,6 +5,7 @@
 #include <ydb/public/sdk/cpp/tests/integration/topic/utils/describe.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 
 
 namespace NYdb::inline Dev::NTopic::NTests {

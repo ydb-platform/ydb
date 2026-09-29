@@ -1,5 +1,6 @@
 #include "local_partition_actor.h"
 #include <ydb/library/actors/core/log.h>
+#include <ydb/core/persqueue/public/utils.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 

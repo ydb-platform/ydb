@@ -2,6 +2,7 @@
 #include "object.h"
 
 #include <ydb/library/table_creator/table_creator.h>
+#include <ydb/core/base/path.h>
 
 namespace NKikimr::NKqp {
 

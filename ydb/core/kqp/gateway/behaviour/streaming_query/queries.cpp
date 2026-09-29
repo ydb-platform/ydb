@@ -31,6 +31,7 @@
 #include <fmt/format.h>
 
 #include <google/protobuf/util/time_util.h>
+#include <ydb/core/base/tablet_pipe.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
 

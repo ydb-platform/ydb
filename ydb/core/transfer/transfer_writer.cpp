@@ -16,6 +16,7 @@
 #include <ydb/library/services/services.pb.h>
 
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
+#include <ydb/core/base/path.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TRANSFER
 

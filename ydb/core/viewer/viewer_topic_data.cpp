@@ -7,6 +7,7 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/lib/auth/auth_helpers.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
 

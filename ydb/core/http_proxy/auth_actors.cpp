@@ -16,6 +16,7 @@
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <util/stream/file.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 namespace NKikimr::NHttpProxy {
     NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config, const TString& userAgentHint, bool enableV2Interface)

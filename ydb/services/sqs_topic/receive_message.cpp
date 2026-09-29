@@ -45,6 +45,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
+#include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 

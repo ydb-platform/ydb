@@ -256,6 +256,10 @@ void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const T
 }
 
 void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, IHttpRequestContext::TPtr context = nullptr) {
+    if (retryStuff->IsCancelled()) {
+        // A retry scheduled before the coroutine was cancelled (LIMIT reached, poison): nobody would read or cancel it.
+        return;
+    }
     retryStuff->CancelHook = retryStuff->Gateway->Download(
         retryStuff->Url,
         retryStuff->Headers,
@@ -1067,6 +1071,12 @@ public:
     void Handle(TEvS3Provider::TEvDownloadStart::TPtr& ev) {
         HttpResponseCode = ev->Get()->HttpResponseCode;
         CurlResponseCode = ev->Get()->CurlResponseCode;
+        // A new attempt starts: the error state of the previous (retried) attempt must not leak into it.
+        // Its issues have already been reported as retriable.
+        RetryStuff->NextRetryDelay = {};
+        ErrorText.clear();
+        ServerReturnedError = false;
+        Issues.Clear();
         LOG_CORO_D("TEvDownloadStart, Http code: " << HttpResponseCode);
     }
 
@@ -1152,7 +1162,8 @@ public:
             if (Work) {
                 retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetWorkScope());
             }
-            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
+            // Through the activation context, like TActorCoroImpl::Schedule: the coroutine runs on the actor thread
+            TActivationContext::Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
             if (!InputBuffer.empty()) {
                 RetryStuff->Offset -= InputBuffer.size();
                 RetryStuff->SizeLimit += InputBuffer.size();
@@ -1346,6 +1357,9 @@ private:
         } catch (const TS3ReadAbort&) {
             // Poison handler actually
             LOG_CORO_D("S3 read ABORT");
+            // The owner stops us (LIMIT reached or it passes away): issues of an attempt that was
+            // waiting for its retry were already reported as retriable and are not a failure.
+            Issues.Clear();
         } catch (const TDtorException&) {
             // Stop any activity instantly
             RetryStuff->Cancel();
@@ -1366,6 +1380,10 @@ private:
         }
 
         CpuTime += GetCpuTimeDelta();
+
+        // Every exit (parse error, LIMIT saturation, ...) stops the async decompressor:
+        // it would otherwise wait for more input forever. Harmless if it has already finished.
+        FinishDecompressor(/* force */ true);
 
         auto issues = NS3Util::AddParentIssue(TStringBuilder{} << "Error while reading file " << Path, std::move(Issues));
         if (issues) {
@@ -1876,6 +1894,10 @@ private:
             }
             LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
             FileQueueEvents.Unsubscribe();
+            if (!UseRuntimeListing && FileQueueActor) {
+                // The local file queue is our child: it does not die with us on its own.
+                Send(FileQueueActor, new TEvents::TEvPoison());
+            }
 
             ClearMkqlData();
 

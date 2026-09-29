@@ -692,7 +692,7 @@ private:
             YDB_LOG_DEBUG("Pipe connected",
                 {"tablet", tabletId});
         } else {
-            YDB_LOG_DEBUG("Pipe connection to failed with",
+            YDB_LOG_DEBUG("Pipe connection failed",
                 {"tablet", tabletId},
                 {"status", msg->Status});
             DestroyPipe(tabletId, ctx);

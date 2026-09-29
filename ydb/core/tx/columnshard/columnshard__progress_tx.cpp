@@ -155,7 +155,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, 
     auto& record = Proto(ev->Get());
     ui64 step = record.GetStep();
     ui64 txId = record.GetTxId();
-    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "CheckTransaction planStep txId at tablet",
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "CheckTransaction",
         {"step", step},
         {"txId", txId},
         {"tabletID", TabletID()});

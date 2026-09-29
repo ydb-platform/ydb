@@ -28,13 +28,6 @@ private:
     const NOlap::TSnapshot CurrentSnapshot;
     bool CompleteReady = false;
 
-    TStringBuilder TxPrefix() const {
-        return TStringBuilder() << "TxWriteIndex[" << ToString(TabletTxNo) << "] ";
-    }
-
-    TString TxSuffix() const {
-        return TStringBuilder() << " at tablet " << Self->TabletID();
-    }
 };
 
 }   // namespace NKikimr::NColumnShard

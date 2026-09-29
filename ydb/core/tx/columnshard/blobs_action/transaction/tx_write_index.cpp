@@ -30,9 +30,10 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
         YDB_LOG_DEBUG("apply",
-            {"txPrefix", TxPrefix()},
+            {"step", "write"},
+            {"tabletTxNo", TabletTxNo},
             {"changes", changes->TypeString()},
-            {"txSuffix", TxSuffix()});
+            {"tabletId", Self->TabletID()});
         NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         changes->WriteIndexOnExecute(Self, context);
 
@@ -47,18 +48,20 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         for (ui32 i = 0; i < changes->GetWritePortionsCount(); ++i) {
             const auto* portion = changes->GetWritePortionInfo(i);
             YDB_LOG_WARN("blob cannot apply",
-                {"txPrefix", TxPrefix()},
+                {"step", "write"},
+                {"tabletTxNo", TabletTxNo},
                 {"changes", changes->TypeString()},
                 {"portion", portion->DebugString()},
-                {"changes", TxSuffix()});
+                {"tabletId", Self->TabletID()});
         }
         NOlap::TChangesFinishContext context(
             "cannot write index blobs: " + ::ToString(Ev->Get()->GetPutStatus()) + ", error: " + Ev->Get()->ErrorMessage);
         changes->Abort(*Self, context);
         YDB_LOG_ERROR("cannot write index blobs",
-            {"txPrefix", TxPrefix()},
+            {"step", "write"},
+            {"tabletTxNo", TabletTxNo},
             {"changes", changes->TypeString()},
-            {"txSuffix", TxSuffix()});
+            {"tabletId", Self->TabletID()});
     }
 
     Self->EnqueueProgressTx(ctx);

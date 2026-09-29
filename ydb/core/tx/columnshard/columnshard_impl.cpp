@@ -157,7 +157,7 @@ bool TColumnShard::WaitPlanStep(ui64 step) {
         if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) {
             MediatorTimeCastWaitingSteps.insert(step);
             SendWaitPlanStep(step);
-            YDB_LOG_DEBUG("Waiting for from mediator time cast",
+            YDB_LOG_DEBUG("Waiting for plan step from mediator time cast",
                 {"planStep", step});
             return true;
         }
@@ -335,16 +335,16 @@ void TColumnShard::RunEnsureTable(
 
     if (const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
         internalPathId && TablesManager.HasTable(*internalPathId, true)) {
-        YDB_LOG_DEBUG("EnsureTable for existed at tablet",
+        YDB_LOG_DEBUG("EnsureTable for existed path at tablet",
             {"pathId", TUnifiedOptionalPathId(internalPathId, schemeShardLocalPathId)},
             {"tabletID", TabletID()});
         return;
     }
     const auto internalPathId = TablesManager.GetOrCreateInternalPathId(schemeShardLocalPathId);
 
-    YDB_LOG_INFO("EnsureTable for ttl at tablet",
+    YDB_LOG_INFO("EnsureTable for path with ttl at tablet",
         {"pathId", TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId)},
-        {"settings", tableProto.GetTtlSettings()},
+        {"ttlSettings", tableProto.GetTtlSettings()},
         {"tabletID", TabletID()});
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
@@ -403,10 +403,10 @@ void TColumnShard::RunAlterTable(
     const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
     Y_ABORT_UNLESS(TablesManager.HasTable(internalPathId), "AlterTable on a dropped or non-existent table");
     const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
-    YDB_LOG_DEBUG("AlterTable for ttl at tablet",
+    YDB_LOG_DEBUG("AlterTable at tablet",
         {"pathId", pathId},
         {"schema", alterProto.GetSchema()},
-        {"settings", alterProto.GetTtlSettings()},
+        {"ttlSettings", alterProto.GetTtlSettings()},
         {"tabletID", TabletID()});
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
@@ -456,7 +456,7 @@ void TColumnShard::RunDropTable(
         return;
     }
 
-    YDB_LOG_DEBUG("DropTable for at tablet",
+    YDB_LOG_DEBUG("DropTable for path at tablet",
         {"pathId", pathId},
         {"tabletID", TabletID()});
     TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
@@ -1181,19 +1181,19 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
 
     // Forced compaction is only supported for standalone column tables, not for column stores.
     if (TablesManager.IsStoreTablet()) {
-        YDB_LOG_WARN("Forced compaction is not supported for column store: requested",
+        YDB_LOG_WARN("Forced compaction is not supported for column store",
             {"tablet", TabletID()},
             {"pathId", pathId},
-            {"from", ev->Sender});
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
     if (!TablesManager.HasPrimaryIndex()) {
-        YDB_LOG_WARN("Forced compaction failed, no primary index: requested",
+        YDB_LOG_WARN("Forced compaction failed, no primary index",
             {"tablet", TabletID()},
             {"pathId", pathId},
-            {"from", ev->Sender});
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
@@ -1202,10 +1202,10 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     auto& engine = TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>();
     auto granule = internalPathId ? engine.GetGranuleOptional(*internalPathId) : nullptr;
     if (!granule) {
-        YDB_LOG_WARN("Forced compaction of unknown path: requested",
+        YDB_LOG_WARN("Forced compaction of unknown path",
             {"tablet", TabletID()},
             {"pathId", pathId},
-            {"from", ev->Sender});
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
@@ -1213,30 +1213,30 @@ void TColumnShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorC
     const auto noIntersections = granule->GetOptimizerPlanner().CheckNoIntersections();
     if (noIntersections.IsFail()) {
         // The optimizer does not support forced compaction (i.e. it is not tiling++).
-        YDB_LOG_WARN("Forced compaction is not supported: requested",
+        YDB_LOG_WARN("Forced compaction is not supported",
             {"tablet", TabletID()},
             {"pathId", pathId},
             {"reason", noIntersections.GetErrorMessage()},
-            {"from", ev->Sender});
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
         return;
     }
 
     if (*noIntersections) {
-        YDB_LOG_DEBUG("Forced compaction already done: requested",
+        YDB_LOG_DEBUG("Forced compaction already done",
             {"tablet", TabletID()},
             {"pathId", pathId},
-            {"from", ev->Sender});
+            {"requestedFrom", ev->Sender});
         reply(NKikimrTxDataShard::TEvCompactTableResult::OK);
         return;
     }
 
     // Portions still intersect: hold the request and reply once the table settles. Background
     // compaction is kicked for this path; RecheckForcedCompactions() answers the waiter later.
-    YDB_LOG_DEBUG("Forced compaction registered: requested",
+    YDB_LOG_DEBUG("Forced compaction registered",
         {"tablet", TabletID()},
         {"pathId", pathId},
-        {"from", ev->Sender});
+        {"requestedFrom", ev->Sender});
     ForcedCompactionWaiters[*internalPathId].push_back({ ev->Sender, ev->Cookie, pathId });
     SetupCompaction({ *internalPathId });
 }
@@ -1268,11 +1268,11 @@ void TColumnShard::RecheckForcedCompactions(const TActorContext& ctx) {
             continue;
         }
         for (const auto& waiter : waiters) {
-            YDB_LOG_DEBUG("Forced compaction finished: reply",
+            YDB_LOG_DEBUG("Forced compaction finished",
                 {"tablet", TabletID()},
                 {"pathId", waiter.SchemePathId},
                 {"status", (int)*status},
-                {"to", waiter.Sender});
+                {"replyTo", waiter.Sender});
             auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(TabletID(), waiter.SchemePathId, *status);
             ctx.Send(waiter.Sender, response.Release(), 0, waiter.Cookie);
         }

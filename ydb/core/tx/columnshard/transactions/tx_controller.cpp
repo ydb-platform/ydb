@@ -338,9 +338,9 @@ size_t TTxController::CleanExpiredTxs() {
                 break;
             }
             ui64 txId = it->TxId;
-            YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Removing outdated txId max step outdated step",
+            YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Removing otdated step",
                 {"txId", txId},
-                {"step", it->Step});
+                {"maxStep", it->Step});
             AbortTx(*it);
             ++removedCount;
         }

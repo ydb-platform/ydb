@@ -430,8 +430,8 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
     ++CountersUpdate.BatchesCommitted;
     CountersUpdate.BlobsWritten += blobBatch.GetBlobCount();
 
-    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet Save Batch Blob",
-        {"tabletID", TabletInfo->TabletID},
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet save batch",
+        {"tabletId", TabletInfo->TabletID},
         {"genStep", blobBatch.BatchInfo->Gen},
         {"step", blobBatch.BatchInfo->Step},
         {"count", blobBatch.BatchInfo->GetBlobIds().size()});
@@ -454,7 +454,7 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
 
 void TBlobManager::DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) {
     Y_ABORT_UNLESS(blobBatch.BatchInfo);
-    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager on execute at tablet Save Batch Blob",
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager on execute at tablet save batch blob",
         {"tabletID", TabletInfo->TabletID},
         {"genStep", blobBatch.BatchInfo->Gen},
         {"step", blobBatch.BatchInfo->Step},
@@ -488,13 +488,13 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
     // Check if the deletion needs to be delayed until the blob is no longer
     // used by in-flight requests
     if (!IsBlobInUsage(blobId)) {
-        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet Delete Blob",
+        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet delete blob",
             {"tabletId", TabletInfo->TabletID},
             {"blobId", blobId});
         AFL_VERIFY(BlobsToDelete.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDelete(BlobsToDelete);
     } else {
-        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet Delay Delete Blob",
+        YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet delay delete blob",
             {"tabletId", TabletInfo->TabletID},
             {"blobId", blobId});
         AFL_VERIFY(BlobsToDeleteDelayed.Add(tabletId, blobId));

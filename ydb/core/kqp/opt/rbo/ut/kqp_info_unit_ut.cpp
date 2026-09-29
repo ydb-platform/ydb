@@ -304,6 +304,74 @@ Y_UNIT_TEST_SUITE(KqpInfoUnitCollections) {
         CheckSet(substitutions.Keys(), {});
         UNIT_ASSERT(!substitutions.Find(1));
     }
+
+    Y_UNIT_TEST(RegistryIdentityAndPhysicalNames) {
+        {
+            TInfoUnitRegistry registry;
+            const auto first = registry.Add(TInfoUnit("t", "a"));
+            const auto second = registry.Add(TInfoUnit("t", "a"));
+            const auto generated = registry.AddGenerated("intermediate_agg");
+            UNIT_ASSERT_VALUES_EQUAL(first, 0);
+            UNIT_ASSERT_VALUES_EQUAL(second, 1);
+            UNIT_ASSERT_VALUES_EQUAL(generated, 2);
+            UNIT_ASSERT_VALUES_EQUAL(registry.Get(first).GetFullName(), "t.a");
+            UNIT_ASSERT_VALUES_EQUAL(registry.Get(second).GetFullName(), "t.a");
+            UNIT_ASSERT(registry.IsGenerated(generated));
+            UNIT_ASSERT(!registry.IsGenerated(first));
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDisplayName(second), "t.a_1");
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDisplayName(generated), "intermediate_agg1_2");
+            // A copy is a fresh binding: a temporary keeps its annotation under the new ID.
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDisplayName(registry.AddCopy(generated)), "intermediate_agg2_3");
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDisplayName(registry.AddCopy(second)), "t.a_4");
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDisplayName(registry.AddGenerated()), "tmp1_5");
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDebugName(first), "%0[t.a]");
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDebugName(generated), "%2{intermediate_agg1}");
+            const TString prefix = "intermediate_agg";
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDebugName(registry.AddGenerated(prefix)), "%6{intermediate_agg3}");
+        }
+        {
+            TInfoUnitRegistry registry;
+            const auto first = registry.Add(TInfoUnit("table", "column"));
+            const auto second = registry.Add(TInfoUnit("table", "column"));
+            const auto suffix = registry.Add(TInfoUnit("table", "column_0"));
+            const TPhysicalNames names(registry);
+            UNIT_ASSERT_VALUES_EQUAL(names.Get(first), "table.column_0");
+            UNIT_ASSERT_VALUES_EQUAL(names.Get(second), "table.column_1");
+            UNIT_ASSERT_VALUES_EQUAL(names.Get(suffix), "table.column_0_2");
+
+            const auto later = registry.Add(TInfoUnit("later"));
+            UNIT_ASSERT_EXCEPTION_CONTAINS(names.Get(later), yexception, "not frozen for lowering");
+
+            const auto escapedSuffix = registry.Add(TInfoUnit("table", "column_0_"));
+            const auto unique = registry.Add(TInfoUnit("column0"));
+            const auto deadCopy = registry.AddCopy(unique);
+            const auto generated = registry.AddGenerated("agg");
+            const auto temporary = registry.Add(TInfoUnit("__kqp_win_acc_0_"));
+            const auto temporarySuffix = registry.Add(TInfoUnit("__kqp_win_acc_0__"));
+            registry.FinalizeDisplayNames({first, second, suffix, escapedSuffix, unique, generated, temporary, temporarySuffix});
+            const TPhysicalNames finalNames(registry);
+            UNIT_ASSERT_VALUES_EQUAL(finalNames.Get(first), "table.column_0__");
+            UNIT_ASSERT_VALUES_EQUAL(finalNames.Get(second), "table.column_1");
+            UNIT_ASSERT_VALUES_EQUAL(finalNames.Get(suffix), "table.column_0");
+            UNIT_ASSERT_VALUES_EQUAL(finalNames.Get(escapedSuffix), "table.column_0_");
+            UNIT_ASSERT_VALUES_EQUAL(finalNames.Get(unique), "column0");
+            UNIT_ASSERT(finalNames.Get(deadCopy) != "column0");
+            UNIT_ASSERT_VALUES_EQUAL(finalNames.Get(generated), "agg1");
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDebugName(unique), "%5[column0]");
+            UNIT_ASSERT_VALUES_EQUAL(registry.GetDebugName(generated), "%7{agg1}");
+
+            THashSet<TString> spellings;
+            for (TInfoUnitId id = 0; id < registry.Size(); ++id) {
+                UNIT_ASSERT(spellings.insert(finalNames.Get(id)).second);
+                UNIT_ASSERT_VALUES_EQUAL(finalNames.Get(id), registry.GetDisplayName(id));
+            }
+            const auto temporaryName = finalNames.GetTemporaryName("__kqp_win_acc_0_");
+            UNIT_ASSERT(!spellings.contains(temporaryName));
+            UNIT_ASSERT_VALUES_EQUAL(finalNames.GetTemporaryName("__kqp_win_acc_0_"), temporaryName);
+            UNIT_ASSERT(finalNames.GetTemporaryName("__kqp_win_acc_1_") != temporaryName);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(registry.Add(TInfoUnit("late")), yexception, "finalized");
+        }
+    }
 }
 } // namespace NKikimr::NKqp
 

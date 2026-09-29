@@ -13,7 +13,7 @@ bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connec
 bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const TIntrusivePtr<IOperator>& input, TPlanProps& props) {
     const auto aggregateStageId = *aggregate->Props.StageId;
     const auto inputStageId = *input->Props.StageId;
-    if (aggregateStageId == inputStageId || !input->IsSingleConsumer()) {
+    if (aggregateStageId == inputStageId || input->Kind == EOperator::Replicate) {
         return false;
     }
     const auto connection = props.StageGraph.GetConnections(inputStageId, aggregateStageId);
@@ -24,8 +24,8 @@ bool CanPushAggregateToStage(const TIntrusivePtr<TOpAggregate>& aggregate, const
     return (input->GetKind() != EOperator::Source || CastOperator<TOpRead>(input)->GetTableStorageType() == NYql::EStorageType::ColumnStorage);
 }
 
-bool AggregationTraitsAreValidForPropagation(const TVector<TOpAggregationTraits>& aggregationTraitsList) {
-    for (const auto& aggTraits : aggregationTraitsList) {
+bool AggregationTraitsAreValidForPropagation(const TAggregationIUs& aggregationTraitsList) {
+    for (const auto& [output, aggTraits] : aggregationTraitsList.Items()) {
         if (!AllowedAggFunction.contains(aggTraits.AggFunction)) {
             return false;
         }
@@ -55,29 +55,27 @@ std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
     Y_ENSURE(false, "Aggregation function is not supported for splitting.");
 }
 
-TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusivePtr<TOpAggregate>& aggregate) {
+TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusivePtr<TOpAggregate>& aggregate, TInfoUnitRegistry& registry) {
     const auto pos = aggregate->Pos;
     const auto props = aggregate->Props;
     const auto& aggregationTraitsList = aggregate->GetAggregationTraits();
     const auto& aggKeys = aggregate->GetKeyColumns();
     const auto distinctAll = aggregate->IsDistinctAll();
 
-    TVector<TOpAggregationTraits> intermediateTraits;
-    TVector<TOpAggregationTraits> finalTraits;
-    TVector<TInfoUnit> distKeys;
+    TAggregationIUs intermediateTraits;
+    TAggregationIUs finalTraits;
+    TOrderedIUs<> distKeys;
 
     // Here we want to split aggregate to final and intermediate.
-    for (const auto& originalTraits : aggregationTraitsList) {
-        const auto& originalColName = originalTraits.OriginalColName;
-        const auto& aggFunc = originalTraits.AggFunction;
-        const auto& resultColName = originalTraits.ResultColName;
-        const auto newIntermediateName = TInfoUnit("_intermediate_" + resultColName.GetFullName());
-        const auto [interAggFunc, finalAggFunc] = GetAggFunctions(aggFunc);
-        intermediateTraits.emplace_back(originalColName, interAggFunc, newIntermediateName);
-        finalTraits.emplace_back(newIntermediateName, finalAggFunc, resultColName);
+    for (const auto output : aggregationTraitsList.Keys()) {
+        const auto& originalTraits = *aggregationTraitsList.Find(output);
+        const auto intermediateId = registry.AddGenerated("intermediate_agg");
+        const auto [interAggFunc, finalAggFunc] = GetAggFunctions(originalTraits.AggFunction);
+        intermediateTraits.Add(intermediateId, TOpAggregationTraits{originalTraits.Input, interAggFunc});
+        finalTraits.Add(output, TOpAggregationTraits{intermediateId, finalAggFunc});
 
         if (distinctAll) {
-            distKeys.emplace_back(newIntermediateName);
+            distKeys.Append(intermediateId);
         }
     }
 
@@ -98,7 +96,7 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
     if (aggregate->GetAggregationPhase() == EOpPhase::Undefined) {
-        return EmitFinalAndIntermediateAggregates(aggregate);
+        return EmitFinalAndIntermediateAggregates(aggregate, props.InfoUnitRegistry);
     }
 
     const auto aggInput = aggregate->GetInput();
@@ -114,11 +112,11 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
         TIntrusivePtr<TConnection> connection;
         if (CanEliminateAggregateShuffle(*aggregate, ctx)) {
             connection = MakeIntrusive<TMapConnection>(outputIndex);
-        } else if (!aggregate->GetKeyColumns().empty()) {
-            TVector<TInfoUnit> shuffleByKeys;
+        } else if (!aggregate->GetKeyColumns().Items().empty()) {
+            TOrderedIUs<> shuffleByKeys;
             if (aggregate->IsDistinctAll()) {
-                for (const auto& aggTraits : aggregate->GetAggregationTraits()) {
-                    shuffleByKeys.emplace_back(aggTraits.ResultColName);
+                for (const auto output : aggregate->GetAggregationTraits().Keys()) {
+                    shuffleByKeys.Append(output);
                 }
             } else {
                 shuffleByKeys = aggregate->GetKeyColumns();

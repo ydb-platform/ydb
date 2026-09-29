@@ -12,8 +12,8 @@ class TRBOContext;
 
 class TPhysicalQueryBuilder : public NNonCopyable::TNonCopyable {
 public:
-    TPhysicalQueryBuilder(TVector<TIntrusivePtr<TOpRoot>> roots, TVector<TStageGraph>&& graph, TVector<THashMap<ui32, NYql::TExprNode::TPtr>>&& stages, TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>>&& stageArgs,
-                          TVector<THashMap<ui32, NYql::TPositionHandle>>&& stagePos, TRBOContext& rboCtx);
+    TPhysicalQueryBuilder(const TVector<TIntrusivePtr<TOpRoot>>& roots, TVector<TStageGraph>&& graph, TVector<THashMap<ui32, NYql::TExprNode::TPtr>>&& stages, TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>>&& stageArgs,
+                          TVector<THashMap<ui32, NYql::TPositionHandle>>&& stagePos, TVector<TPhysicalNames>&& names, TRBOContext& rboCtx);
 
     NYql::TExprNode::TPtr BuildPhysicalQuery();
     TPhysicalQueryBuilder() = delete;
@@ -43,17 +43,18 @@ private:
     NYql::TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
     NYql::TKqpPhyTxSettings GetPhysicalTxSettings() const;
     NYql::TExprNode::TPtr GetFinalStage(const NYql::TExprNode::TPtr& stage) const;
-    bool NeedFinalNarrowing(TOpRoot& root);
+    bool NeedFinalNarrowing(int rootIdx);
     NYql::TExprNode::TPtr BuildFinalNarrowStage(int rootIdx, const NYql::TExprNode::TPtr& stage) const;
     TVector<NYql::NNodes::TKqpParamBinding> CollectParamBindings(int rootIdx, const TVector<NYql::TExprNode::TPtr>& physicalStages);
     NYql::TExprNode::TPtr BuildMaterialize(int rootIdx, NYql::TExprNode::TPtr ranges);
     bool IsSingleTaskConnection(const NYql::NNodes::TExprBase& input) const;
 
-    TVector<TIntrusivePtr<TOpRoot>> Roots;
+    const TVector<TIntrusivePtr<TOpRoot>>& Roots;
     TVector<TStageGraph> Graphs;
     TVector<THashMap<ui32, NYql::TExprNode::TPtr>> Stages;
     TVector<THashMap<ui32, TVector<NYql::TExprNode::TPtr>>> StageArgs;
     TVector<THashMap<ui32, NYql::TPositionHandle>> StagePos;
+    TVector<TPhysicalNames> Names;
     ui32 UniqueParamsId{0};
     // Param and PhysicalTx
     TVector<TVector<std::pair<NYql::TExprNode::TPtr, NYql::TExprNode::TPtr>>> Materialize;

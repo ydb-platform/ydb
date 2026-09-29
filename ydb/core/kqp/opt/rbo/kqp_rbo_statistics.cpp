@@ -5,70 +5,17 @@
 namespace NKikimr {
 namespace NKqp {
 
-
-void TColumnLineage::AddMapping(const TInfoUnit& unit, const TColumnLineageEntry& entry) {
-    const auto rawAlias = entry.GetRawAlias();
-
-    if (entry.DuplicateNo != 0) {
-        int duplicateId = entry.DuplicateNo;
-        if (MaxDuplicateId.contains(rawAlias)) {
-            int maxId = MaxDuplicateId.at(rawAlias);
-            if (maxId > duplicateId) {
-                duplicateId = maxId;
-            }
-        }
-        Mapping.insert({unit, entry});
-        MaxDuplicateId.insert({rawAlias, duplicateId});
-    } else {
-        Mapping.insert({unit, entry});
-        MaxDuplicateId.insert({rawAlias, 0});
-    }
-    ReverseMapping.insert({TInfoUnit(entry.GetCannonicalAlias(), entry.ColumnName), unit});
+const TColumnLineageEntry* FindSourceStatistics(const IOperator& op, TInfoUnitId id, const TColumnLineage& lineage) {
+    return op.Props.Metadata && op.Props.Metadata->SourceStatsColumns.Contains(id) ? lineage.Find(id) : nullptr;
 }
 
-int TColumnLineage::AddAlias(const TString& alias, const TString& tableName) {
-    const auto rawAlias = alias != "" ? alias : tableName;
-    int duplicateId = 0;
-    if (MaxDuplicateId.contains(rawAlias)) {
-        duplicateId = MaxDuplicateId.at(rawAlias) + 1;
-    }
-    MaxDuplicateId.insert({rawAlias, duplicateId});
-    return duplicateId;
-}
-
-void TColumnLineage::Merge(const TColumnLineage& other) {
-    // We'll be adding mappings one by one, so MaxDuplicateId will be
-    // changing. Thus we save here before we start merging to detect
-    // conficts correctly
-    auto currDuplicates = MaxDuplicateId;
-
-    for (auto [iu, entry] : other.Mapping) {
-        auto rawAlias = entry.GetRawAlias();
-        if (currDuplicates.contains(rawAlias)) {
-            entry.DuplicateNo = currDuplicates.at(rawAlias) + 1;
-        }
-        AddMapping(iu, entry);
-    }
-}
-
-TInfoUnit TRBOMetadata::MapColumn(const TInfoUnit& key) {
-    if (ColumnLineage.Mapping.contains(key)) {
-        return ColumnLineage.Mapping.at(key).GetInfoUnit();
-    } else {
-        return key;
-    }
-}
-
-TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx) {
-    TVector<TInfoUnit> mappedKeyColumns;
+TOptimizerStatistics BuildOptimizerStatistics(IOperator& op, const TColumnLineage& lineage, bool withStatsAndCosts, const NYql::TTypeAnnotationContext& typeCtx) {
+    auto& props = op.Props;
+    const auto& outputIUs = op.GetOutputIUs();
     TVector<TString> keyColumnNames;
 
-    for (const auto& col : props.Metadata->KeyColumns) {
-        mappedKeyColumns.push_back(props.Metadata->MapColumn(col));
-    }
-
-    for (const auto& iu: mappedKeyColumns) {
-        keyColumnNames.push_back(iu.GetColumnName());
+    for (const auto id : props.Metadata->KeyColumns.Items()) {
+        keyColumnNames.push_back(ToString(id));
     }
 
     const double cost = props.Cost.has_value() ? *props.Cost : 0.0;
@@ -80,13 +27,20 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
     TString table;
     THashSet<TString> attributes;
 
-    for (const auto& [iu, lineageEntry]: props.Metadata->ColumnLineage.Mapping) {
-        if (table != "" && table != lineageEntry.TableName) {
+    for (const auto id : outputIUs) {
+        const auto* lineageEntry = lineage.Find(id);
+        if (!lineageEntry) {
+            continue;
+        }
+        // Columns without source statistics take an empty table name, as
+        // computed columns (e.g. aggregate results) have no source table.
+        const TString sourceTable = props.Metadata->SourceStatsColumns.Contains(id) ? lineageEntry->TableName : TString{};
+        if (table != "" && table != sourceTable) {
             attributes.clear();
             break;
         }
-        table = lineageEntry.TableName;
-        attributes.insert(lineageEntry.ColumnName);
+        table = sourceTable;
+        attributes.insert(lineageEntry->ColumnName);
     }
 
     TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> ColumnStatistics;
@@ -96,10 +50,16 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
     if (attributes.size() && typeCtx.ColumnStatisticsByTableName.contains(table)) {
         const auto& globalMap = typeCtx.ColumnStatisticsByTableName.at(table)->Data;
 
-        for (const auto& columnName : attributes) {
-            if (globalMap.contains(columnName)) {
-                columnStatsMap.insert({columnName, globalMap.at(columnName)});
-            }    
+        // The statistics consumer sees the same decimal IDs as expression ASTs.
+        // Multiple bindings of one storage field each receive its statistics.
+        for (const auto id : outputIUs) {
+            const auto* source = FindSourceStatistics(op, id, lineage);
+            if (!source) {
+                continue;
+            }
+            if (const auto it = globalMap.find(source->ColumnName); it != globalMap.end()) {
+                columnStatsMap.emplace(ToString(id), it->second);
+            }
         }
 
         if (columnStatsMap.size()) {
@@ -125,7 +85,7 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
     return stats;
 }
 
-TString TRBOMetadata::ToString(ui32 printOptions) {
+TString TRBOMetadata::ToString(ui32 printOptions, const TInfoUnitRegistry& registry) {
     TStringBuilder builder;
 
     if (printOptions & (EPrintPlanOptions::PrintBasicMetadata | EPrintPlanOptions::PrintFullMetadata)) {
@@ -166,26 +126,14 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
 
         builder << ", ColumnsCount: " << ColumnsCount << ", Storage: " << storageType << ", KeyCols: [";
 
-        for (size_t i = 0; i < KeyColumns.size(); i++) {
-            builder << KeyColumns[i].GetFullName();
-            if (i != KeyColumns.size() - 1) {
+        for (size_t i = 0; i < KeyColumns.Items().size(); i++) {
+            builder << registry.GetDebugName(KeyColumns.Items()[i]);
+            if (i != KeyColumns.Items().size() - 1) {
                 builder << ", ";
             }
         }
 
         builder << "]";
-    }
-
-    if (printOptions & EPrintPlanOptions::PrintFullMetadata) {
-        builder << ", Lineage: {";
-        for (const auto &[k, v] : ColumnLineage.Mapping) {
-            builder << k.GetFullName() << ": <ColName: " << v.ColumnName 
-                << ", Alias: " << v.SourceAlias 
-                << ", Table: " << v.TableName
-                << ", DuplicateNo: " << v.DuplicateNo
-                << ">, ";
-        }
-        builder << "}";
     }
 
     return builder;

@@ -7,7 +7,6 @@
 #include <contrib/restricted/abseil-cpp/absl/container/btree_map.h>
 #include <library/cpp/containers/absl/flat_hash_map.h>
 
-#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
@@ -53,22 +52,17 @@ inline std::pair<TString, TString> SplitAliasedMemberName(const TString& name) {
     return {TString(), name};
 }
 
-/**
- * Info Unit is a reference to a column in the plan
- * Currently we only record the name and alias of the column, but we will extend it in the future
- */
+/** A readable column spelling; logical identity is its plan-local ID. */
 struct TInfoUnit {
-    TInfoUnit(const TString& alias, const TString& column, bool subplanContext = false)
+    TInfoUnit(const TString& alias, const TString& column)
         : Alias(alias)
-        , ColumnName(column)
-        , SubplanContext(subplanContext) {
+        , ColumnName(column) {
     }
 
-    TInfoUnit(const TString& name, bool subplanContext = false) : SubplanContext(subplanContext) {
+    TInfoUnit(const TString& name) {
         std::tie(Alias, ColumnName) = SplitAliasedMemberName(name);
     }
     TInfoUnit() = default;
-    ~TInfoUnit() = default;
 
     TString GetFullName() const {
         return (Alias != "" ? Alias + "." : "") + ColumnName;
@@ -76,54 +70,174 @@ struct TInfoUnit {
 
     TString GetAlias() const { return Alias; }
     TString GetColumnName() const { return ColumnName; }
-    bool IsSubplanContext() const { return SubplanContext; }
-    void SetSubplanContext(bool subplanContext) { SubplanContext = subplanContext; }
-    void AddDependencies(TVector<TInfoUnit> deps) { 
-        SubplanDependencies.insert(SubplanDependencies.end(), deps.begin(), deps.end());
-    }
-    TVector<TInfoUnit> GetDependencies() const { return SubplanDependencies; }
 
     bool operator==(const TInfoUnit& other) const {
         return Alias == other.Alias && ColumnName == other.ColumnName;
     }
 
-    struct THashFunction {
-        size_t operator()(const TInfoUnit& c) const {
-            return THash<TString>{}(c.Alias) ^ THash<TString>{}(c.ColumnName);
-        }
-    };
-
 private:
     TString Alias;
     TString ColumnName;
-    bool SubplanContext{false};
-    TVector<TInfoUnit> SubplanDependencies;
 };
-
-using TInfoUnitSet = THashSet<TInfoUnit, TInfoUnit::THashFunction>;
-
-struct TJoinKey {
-    TInfoUnit Left;
-    TInfoUnit Right;
-    bool EqualNulls = false;
-
-    TJoinKey() = default;
-    TJoinKey(TInfoUnit left, TInfoUnit right, bool equalNulls = false)
-        : Left(std::move(left))
-        , Right(std::move(right))
-        , EqualNulls(equalNulls) {
-    }
-    bool operator==(const TJoinKey& other) const {
-        return Left == other.Left && Right == other.Right && EqualNulls == other.EqualNulls;
-    }
-};
-
-inline bool HasEqualNullsKey(const TVector<TJoinKey>& joinKeys) {
-    return AnyOf(joinKeys, [](const TJoinKey& key) { return key.EqualNulls; });
-}
 
 using TInfoUnitId = ui32;
 using TUnorderedIUs = NPrivate::TAdaptiveBitSetStorage;
+
+// IDs are array indices in one plan. Add creates a new logical definition even
+// when its name already exists. Names are not binding-lookup keys or final
+// output labels. For Read outputs, ColumnName is the physical source column.
+// Subplan membership/dependencies live in TPlanProps::Subplans.
+class TInfoUnitRegistry {
+public:
+    TInfoUnitId Add(TInfoUnit infoUnit) {
+        return Add(std::move(infoUnit), std::nullopt);
+    }
+
+    // Generated labels have a per-prefix sequence; logical identity remains the ID.
+    TInfoUnitId AddGenerated(TStringBuf annotation = {}) {
+        const TString prefix = annotation.empty() ? TString("tmp") : TString(annotation);
+        auto& counter = GeneratedCounters_[prefix];
+        Y_ENSURE(counter < std::numeric_limits<ui32>::max(), "Generated column counter overflow");
+        TString label = prefix + std::to_string(++counter);
+        return Add(TInfoUnit("", std::move(label)), prefix);
+    }
+
+    // A fresh binding for the same value, e.g. at a Replicate port. A temporary
+    // keeps its annotation under the new ID; other labels are copied.
+    TInfoUnitId AddCopy(TInfoUnitId source) {
+        Y_ENSURE(source < Entries_.size(), "Unknown information-unit ID " << source);
+        // Both paths copy the source entry's text before the registry grows.
+        if (const auto& annotation = Entries_[source].Annotation) {
+            return AddGenerated(*annotation);
+        }
+        return Add(Get(source));
+    }
+
+    // Borrowed until registry growth, assignment or destruction. Retain IDs
+    // across mutations and look the name up again.
+    const TInfoUnit& Get(TInfoUnitId id) const Y_LIFETIME_BOUND {
+        Y_ENSURE(id < Entries_.size(), "Unknown information-unit ID " << id);
+        return Entries_[id].InfoUnit;
+    }
+
+    size_t Size() const {
+        return Entries_.size();
+    }
+
+    // Freeze the shared explain/lowering spelling after logical optimization.
+    // Dead definitions must not force live columns to acquire suffixes.
+    void FinalizeDisplayNames(const TUnorderedIUs& live) {
+        Y_ENSURE(!DisplayNames_, "Information-unit display names are already finalized");
+        absl::flat_hash_map<TString, size_t> counts;
+        THashSet<TString> used;
+        for (const auto id : live) {
+            const auto name = Get(id).GetFullName();
+            ++counts[name];
+            used.insert(name);
+        }
+
+        TVector<TString> names(Size());
+        auto disambiguate = [&](TInfoUnitId id) {
+            auto name = Get(id).GetFullName() + "_" + std::to_string(id);
+            // Reserve literal names first, including spellings such as x_7.
+            while (!used.insert(name).second) {
+                name += "_";
+            }
+            return name;
+        };
+        for (const auto id : live) {
+            auto name = Get(id).GetFullName();
+            names[id] = counts.at(name) == 1 ? std::move(name) : disambiguate(id);
+        }
+        // Some builders also describe unused fields. Keep their spellings safe
+        // without letting them influence the names of the live plan.
+        for (TInfoUnitId id = 0; id < Size(); ++id) {
+            if (!live.Contains(id)) {
+                names[id] = disambiguate(id);
+            }
+        }
+        DisplayNames_ = std::move(names);
+    }
+
+    // Before finalization, diagnostics may still request an unambiguous name.
+    // Optimizer AST bindings and row-schema fields always use the decimal ID.
+    TString GetDisplayName(TInfoUnitId id) const {
+        Y_ENSURE(id < Entries_.size(), "Unknown information-unit ID " << id);
+        if (DisplayNames_) {
+            return (*DisplayNames_)[id];
+        }
+        return Get(id).GetFullName() + "_" + std::to_string(id);
+    }
+
+    TString GetDebugName(TInfoUnitId id) const {
+        return "%" + std::to_string(id) + (IsGenerated(id) ? "{" : "[")
+            + Get(id).GetFullName() + (IsGenerated(id) ? "}" : "]");
+    }
+
+    bool IsGenerated(TInfoUnitId id) const {
+        Y_ENSURE(id < Entries_.size(), "Unknown information-unit ID " << id);
+        return Entries_[id].Annotation.has_value();
+    }
+
+private:
+    struct TEntry {
+        TInfoUnit InfoUnit;
+        // The generation prefix, engaged only for temporaries.
+        std::optional<TString> Annotation;
+    };
+
+    TInfoUnitId Add(TInfoUnit infoUnit, std::optional<TString> annotation) {
+        Y_ENSURE(!DisplayNames_, "Cannot add information units after display names are finalized");
+        Y_ENSURE(Entries_.size() < std::numeric_limits<TInfoUnitId>::max(),
+            "Too many information units in one plan");
+        const auto id = static_cast<TInfoUnitId>(Entries_.size());
+        Entries_.push_back({std::move(infoUnit), std::move(annotation)});
+        return id;
+    }
+
+private:
+    TVector<TEntry> Entries_;
+    absl::flat_hash_map<TString, ui32> GeneratedCounters_;
+    std::optional<TVector<TString>> DisplayNames_;
+};
+
+// Freeze once at physical conversion entry, after logical rewrites. Every
+// internal physical field (including connection keys) uses this spelling.
+// Storage columns and external result/effect labels have separate contracts.
+// Never decode these names: IDs remain authoritative in the optimizer.
+class TPhysicalNames {
+public:
+    explicit TPhysicalNames(const TInfoUnitRegistry& registry) {
+        Names_.reserve(registry.Size());
+        for (TInfoUnitId id = 0; id < registry.Size(); ++id) {
+            Names_.push_back(registry.GetDisplayName(id));
+            const auto& name = Names_.back();
+            size_t underscores = 0;
+            while (underscores < name.size() && name[name.size() - underscores - 1] == '_') {
+                ++underscores;
+            }
+            if (underscores > TemporarySuffix_.size()) {
+                TemporarySuffix_ = TString(underscores, '_');
+            }
+        }
+    }
+
+    const TString& Get(TInfoUnitId id) const Y_LIFETIME_BOUND {
+        Y_ENSURE(id < Names_.size(), "Information-unit ID was not frozen for lowering: " << id);
+        return Names_[id];
+    }
+
+    // All temporary bases end in '_'. Append the same suffix to each so they
+    // stay distinct and end in more underscores than any logical field name.
+    TString GetTemporaryName(TString name) const {
+        Y_ENSURE(name.EndsWith('_'));
+        return name + TemporarySuffix_;
+    }
+
+private:
+    TVector<TString> Names_;
+    TString TemporarySuffix_;
+};
 
 // A positional sequence, not a unique set: repeated IDs retain separate entries.
 // Without metadata an entry is just an ID; otherwise it is {ID, value}.

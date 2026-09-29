@@ -8,14 +8,11 @@
 
 namespace NKikimr::NKqp {
 
-struct TSortElement {
-    TSortElement(const TInfoUnit& column, bool asc, bool nullsFirst) : SortColumn(column), Ascending(asc), NullsFirst(nullsFirst) {}
-    TString ToString() const;
-
-    TInfoUnit SortColumn;
+struct TSortOrder {
     bool Ascending = true;
     bool NullsFirst = true;
 };
+using TSortIUs = TOrderedIUs<TSortOrder>;
 
 /**
  * Connection structs for the Stage graph
@@ -28,16 +25,17 @@ struct TConnection: TSimpleRefCount<TConnection> {
     }
     virtual ~TConnection() = default;
 
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) = 0;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) = 0;
     template <typename T>
     NYql::TExprNode::TPtr BuildConnectionImpl(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
-    virtual TVector<TInfoUnit> GetUsedIUs() const {
-        return {};
+    virtual const TUnorderedIUs& GetUsedIUs() const {
+        static const TUnorderedIUs empty;
+        return empty;
     }
     ui32 GetOutputIndex() const {
         return OutputIndex;
     }
-    virtual NJson::TJsonValue ToJson() const;
+    virtual NJson::TJsonValue ToJson(const TInfoUnitRegistry& registry) const;
 
     TString Type;
     ui32 OutputIndex;
@@ -47,14 +45,14 @@ struct TBroadcastConnection: public TConnection {
     TBroadcastConnection(ui32 outputIndex)
         : TConnection("Broadcast", outputIndex) {
     }
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) override;
 };
 
 struct TMapConnection: public TConnection {
     TMapConnection(ui32 outputIndex)
         : TConnection("Map", outputIndex) {
     }
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) override;
 };
 
 struct TUnionAllConnection: public TConnection {
@@ -62,49 +60,49 @@ struct TUnionAllConnection: public TConnection {
         : TConnection("UnionAll", outputIndex)
         , Parallel(parallel) {
     }
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual NJson::TJsonValue ToJson() const override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) override;
+    virtual NJson::TJsonValue ToJson(const TInfoUnitRegistry& registry) const override;
 
 private:
     bool Parallel{false};
 };
 
 struct TShuffleConnection: public TConnection {
-    TShuffleConnection(const TVector<TInfoUnit>& keys,
+    TShuffleConnection(TOrderedIUs<> keys,
                        ui32 outputIndex,
                        bool useSpilling = false)
         : TConnection("HashShuffle", outputIndex)
-        , Keys(keys)
+        , Keys(std::move(keys))
         , UseSpilling(useSpilling) {
     }
 
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TVector<TInfoUnit> GetUsedIUs() const override;
-    virtual NJson::TJsonValue ToJson() const override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) override;
+    const TUnorderedIUs& GetUsedIUs() const override { return Keys.Unordered(); }
+    virtual NJson::TJsonValue ToJson(const TInfoUnitRegistry& registry) const override;
 
-    TVector<TInfoUnit> Keys;
+    TOrderedIUs<> Keys;
     std::optional<NYql::NDq::EHashShuffleFuncType> HashFuncType;
     bool UseSpilling = false;
 };
 
 struct TMergeConnection: public TConnection {
-    TMergeConnection(const TVector<TSortElement>& order, ui32 outputIndex)
+    TMergeConnection(TSortIUs order, ui32 outputIndex)
         : TConnection("Merge", outputIndex)
-        , Order(order) {
+        , Order(std::move(order)) {
     }
 
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
-    virtual TVector<TInfoUnit> GetUsedIUs() const override;
-    virtual NJson::TJsonValue ToJson() const override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) override;
+    const TUnorderedIUs& GetUsedIUs() const override { return Order.Unordered(); }
+    virtual NJson::TJsonValue ToJson(const TInfoUnitRegistry& registry) const override;
 
-    TVector<TSortElement> Order;
+    TSortIUs Order;
 };
 
 struct TSourceConnection: public TConnection {
     TSourceConnection()
         : TConnection("Source", 0) {
     }
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) override;
 };
 
 struct TStreamLookupConnection: public TConnection {
@@ -116,7 +114,7 @@ struct TStreamLookupConnection: public TConnection {
         , InputType(inputType)
         , Settings(settings) {
     }
-    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx, const TPhysicalNames& names) override;
 
     // In join mode the input type describes the tuples that the physical conversion builds at the
     // end of the input stage, so it can only be filled in once that expression exists.

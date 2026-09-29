@@ -81,6 +81,8 @@ namespace NKikimr::NSharedCache {
             bool QueueLeaves = true;
             bool Sticky = false;
             bool IndexCollectionSticky = false;
+
+            bool operator==(const TBtreeSeed&) const = default;
         };
 
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
@@ -177,6 +179,8 @@ namespace NKikimr::NSharedCache {
 
     // The pages of a sticky collection, for the owner to fetch and keep.
     struct TEvStickyCollectionPages : public TEventLocal<TEvStickyCollectionPages, EvStickyCollectionPages> {
+        static constexpr size_t MaxBatchLocations = 1024;
+
         TEvStickyCollectionPages(TLogoBlobID collectionId, TVector<TPageLocation> locations)
             : CollectionId(std::move(collectionId))
             , Locations(std::move(locations))

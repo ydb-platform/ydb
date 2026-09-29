@@ -766,6 +766,7 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
     }
 
     TVector<NSharedCache::TEvAttach::TBtreeSeed> seeds;
+    // At most two seeds per group, always current then historic.
     for (bool historic : {false, true}) {
         const auto& metas = historic ? indexes.BTreeHistoric : indexes.BTreeGroups;
         if (groupIndex >= metas.size()) {

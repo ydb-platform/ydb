@@ -24,6 +24,7 @@
 #include <ydb/core/tx/tiering/manager.h>
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

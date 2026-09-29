@@ -2,6 +2,7 @@
 #include "node_broker__scheme.h"
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
 

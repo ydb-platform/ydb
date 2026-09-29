@@ -12,6 +12,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 

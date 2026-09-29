@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/resource_broker.pb.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 namespace NKikimr {
 namespace NLocalDb {
 
@@ -159,6 +161,33 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrCompaction::TCompactionPolicy&
     if (policyPb.HasShardPolicy()) {
         ShardPolicy.CopyFrom(policyPb.GetShardPolicy());
     }
+}
+
+bool TCompactionPolicy::operator ==(const TCompactionPolicy& p) const {
+    return InMemSizeToSnapshot == p.InMemSizeToSnapshot
+            && InMemStepsToSnapshot == p.InMemStepsToSnapshot
+            && InMemForceStepsToSnapshot == p.InMemForceStepsToSnapshot
+            && InMemForceSizeToSnapshot == p.InMemForceSizeToSnapshot
+            && InMemCompactionBrokerQueue == p.InMemCompactionBrokerQueue
+            && InMemResourceBrokerTask == p.InMemResourceBrokerTask
+            && ReadAheadHiThreshold == p.ReadAheadHiThreshold
+            && ReadAheadLoThreshold == p.ReadAheadLoThreshold
+            && MinDataPageSize == p.MinDataPageSize
+            && MinBTreeIndexNodeSize == p.MinBTreeIndexNodeSize
+            && MinBTreeIndexNodeKeys == p.MinBTreeIndexNodeKeys
+            && Generations == p.Generations
+            && SnapshotCompactionBrokerQueue == p.SnapshotCompactionBrokerQueue
+            && SnapshotResourceBrokerTask == p.SnapshotResourceBrokerTask
+            && BackupCompactionBrokerQueue == p.BackupCompactionBrokerQueue
+            && BackupResourceBrokerTask == p.BackupResourceBrokerTask
+            && DefaultTaskPriority == p.DefaultTaskPriority
+            && BackgroundSnapshotPolicy == p.BackgroundSnapshotPolicy
+            && LogOverheadSizeToSnapshot == p.LogOverheadSizeToSnapshot
+            && LogOverheadCountToSnapshot == p.LogOverheadCountToSnapshot
+            && DroppedRowsPercentToCompact == p.DroppedRowsPercentToCompact
+            && CompactionStrategy == p.CompactionStrategy
+            && KeepEraseMarkers == p.KeepEraseMarkers
+            && ::google::protobuf::util::MessageDifferencer::Equals(ShardPolicy, p.ShardPolicy);
 }
 
 void TCompactionPolicy::Serialize(NKikimrCompaction::TCompactionPolicy& policyPb) const {

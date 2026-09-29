@@ -1,4 +1,5 @@
 #include "impl.h"
+#include <google/protobuf/util/message_differencer.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 

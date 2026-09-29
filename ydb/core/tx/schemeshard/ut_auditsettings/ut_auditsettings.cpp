@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <google/protobuf/util/message_differencer.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

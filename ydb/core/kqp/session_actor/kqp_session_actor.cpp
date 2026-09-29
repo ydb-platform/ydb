@@ -2567,8 +2567,15 @@ public:
     }
 
     void PublishCurrentQueryStats(TEvents::TEvWakeup::TPtr& ev) {
+        if (!QueryState) {
+            return;
+        }
         // A timer can outlive its query and arrive during the next one.
-        if (!QueryState || ev->Get()->Tag != QueryState->QueryId) {
+        if (ev->Get()->Tag != QueryState->QueryId) {
+            if (!ev->Get()->Tag) {
+                TAutoPtr<NActors::IEventHandle> event = ev.Release();
+                UnexpectedEvent(CurrentStateFuncName(), event);
+            }
             return;
         }
         if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {

@@ -14,6 +14,8 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/service/service.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/volume.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/util/actorsys_test/testactorsys.h>
@@ -43,6 +45,9 @@ constexpr ui64 DefaultVChunkSize = MaxVChunkSize;
 const TString DDiskPoolName = "ddp1";
 const TString PersistentBufferDDiskPoolName = "ddp1";
 const ui64 PartitionTabletId = MakeTabletID(1, 0, 1);
+
+using TNbs1Service = NNbs1CompatApi::NBlockStore::TEvService;
+using TNbs1Volume = NNbs1CompatApi::NBlockStore::TEvVolume;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -356,6 +361,78 @@ NProto::TError DeletePartition(
             false);
     UNIT_ASSERT(res);
     return res->Get()->GetError();
+}
+
+// A volume config with every field that the NBS 1.0 volume description shows.
+NKikimrBlockStore::TVolumeConfig CreateFullVolumeConfig()
+{
+    auto volumeConfig = CreateVolumeConfig(DefaultVolumeBlockCount);
+    volumeConfig.SetProjectId("test-project");
+    volumeConfig.SetFolderId("test-folder");
+    volumeConfig.SetCloudId("test-cloud");
+    volumeConfig.SetStorageMediaKind(
+        NNbs1CompatApi::NProto::STORAGE_MEDIA_SSD_DIRECT_MIRROR3OF5_GROUP);
+    volumeConfig.SetVersion(2);
+    volumeConfig.SetTabletVersion(3);
+    volumeConfig.SetCreationTs(100);
+    volumeConfig.SetAlterTs(200);
+    return volumeConfig;
+}
+
+// Checks the volume description built from CreateFullVolumeConfig().
+void CheckFullVolume(const NNbs1CompatApi::NBlockStore::NProto::TVolume& volume)
+{
+    UNIT_ASSERT_VALUES_EQUAL("test-volume", volume.GetDiskId());
+    UNIT_ASSERT_VALUES_EQUAL("test-project", volume.GetProjectId());
+    UNIT_ASSERT_VALUES_EQUAL("test-folder", volume.GetFolderId());
+    UNIT_ASSERT_VALUES_EQUAL("test-cloud", volume.GetCloudId());
+    UNIT_ASSERT_VALUES_EQUAL(DefaultBlockSize, volume.GetBlockSize());
+    UNIT_ASSERT_VALUES_EQUAL(DefaultVolumeBlockCount, volume.GetBlocksCount());
+    UNIT_ASSERT_EQUAL(
+        NNbs1CompatApi::NProto::STORAGE_MEDIA_SSD_DIRECT_MIRROR3OF5_GROUP,
+        volume.GetStorageMediaKind());
+    UNIT_ASSERT_VALUES_EQUAL(2u, volume.GetConfigVersion());
+    UNIT_ASSERT_VALUES_EQUAL(3u, volume.GetTabletVersion());
+    UNIT_ASSERT_VALUES_EQUAL(100u, volume.GetCreationTs());
+    UNIT_ASSERT_VALUES_EQUAL(200u, volume.GetAlterTs());
+    UNIT_ASSERT_VALUES_EQUAL(1u, volume.GetPartitionsCount());
+}
+
+NNbs1CompatApi::NBlockStore::NProto::TStatVolumeResponse
+StatVolume(TEnvironmentSetup& env, ui64 partitionTabletId, const TActorId& edge)
+{
+    auto request = std::make_unique<TNbs1Service::TEvStatVolumeRequest>();
+    request->Record.SetNoPartition(true);
+    env.Runtime->SendToPipe(
+        partitionTabletId,
+        edge,
+        request.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+
+    auto res = env.WaitForEdgeActorEvent<TNbs1Service::TEvStatVolumeResponse>(
+        edge,
+        false);
+    UNIT_ASSERT(res);
+    return res->Get()->Record;
+}
+
+NNbs1CompatApi::NBlockStore::NProto::TWaitReadyResponse
+WaitReady(TEnvironmentSetup& env, ui64 partitionTabletId, const TActorId& edge)
+{
+    auto request = std::make_unique<TNbs1Volume::TEvWaitReadyRequest>();
+    env.Runtime->SendToPipe(
+        partitionTabletId,
+        edge,
+        request.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+
+    auto res = env.WaitForEdgeActorEvent<TNbs1Volume::TEvWaitReadyResponse>(
+        edge,
+        false);
+    UNIT_ASSERT(res);
+    return res->Get()->Record;
 }
 
 NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult
@@ -4120,6 +4197,267 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 error.GetCode(),
                 FormatError(error) << " from " << actorId);
         }
+    }
+
+    Y_UNIT_TEST(ShouldRejectStatVolumeBeforeVolumeConfig)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        WaitForTabletBoot(env);
+
+        const TActorId& edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        const auto response = StatVolume(env, PartitionTabletId, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            response.GetError().GetCode(),
+            FormatError(response.GetError()));
+        UNIT_ASSERT(!response.HasVolume());
+    }
+
+    Y_UNIT_TEST(ShouldAnswerStatVolumeFromVolumeConfig)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        WaitForTabletBoot(env);
+
+        const auto updateResponse =
+            SendUpdateVolumeConfig(env, CreateFullVolumeConfig(), 1);
+        UNIT_ASSERT(updateResponse.GetStatus() == NKikimrBlockStore::OK);
+
+        const TActorId& edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        // WaitReady is answered after the config commit.
+        const auto waitReadyResponse = WaitReady(env, PartitionTabletId, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            waitReadyResponse.GetError().GetCode(),
+            FormatError(waitReadyResponse.GetError()));
+        CheckFullVolume(waitReadyResponse.GetVolume());
+
+        const auto response = StatVolume(env, PartitionTabletId, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            response.GetError().GetCode(),
+            FormatError(response.GetError()));
+        CheckFullVolume(response.GetVolume());
+        UNIT_ASSERT_VALUES_EQUAL(0u, response.ClientsSize());
+        UNIT_ASSERT(!response.GetIsVolumeOperationRestricted());
+        UNIT_ASSERT(!response.HasStats());
+    }
+
+    Y_UNIT_TEST(ShouldAnswerWaitReadyWhenPartitionIsReady)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        const auto response = WaitReady(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            S_OK,
+            response.GetError().GetCode(),
+            FormatError(response.GetError()));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "test-volume",
+            response.GetVolume().GetDiskId());
+        UNIT_ASSERT_VALUES_EQUAL(
+            DefaultVolumeBlockCount,
+            response.GetVolume().GetBlocksCount());
+        UNIT_ASSERT_VALUES_EQUAL(
+            DefaultBlockSize,
+            response.GetVolume().GetBlockSize());
+    }
+
+    Y_UNIT_TEST(ShouldQueueWaitReadyUntilPartitionIsReady)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        WaitForTabletBoot(env);
+
+        // The request is queued: the partition has no config yet.
+        const TActorId waitReadyEdge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        runtime->SendToPipe(
+            PartitionTabletId,
+            waitReadyEdge,
+            new TNbs1Volume::TEvWaitReadyRequest(),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        const TActorId updateEdge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        auto updateEvent =
+            std::make_unique<NKikimr::TEvBlockStore::TEvUpdateVolumeConfig>();
+        updateEvent->Record.MutableVolumeConfig()->CopyFrom(
+            CreateVolumeConfig(DefaultVolumeBlockCount));
+        updateEvent->Record.SetTxId(1);
+        runtime->SendToPipe(
+            PartitionTabletId,
+            updateEdge,
+            updateEvent.release(),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        // Both edges receive pipe notifications, so they are drained together.
+        bool updateAnswered = false;
+        bool waitReadyAnswered = false;
+        while (!updateAnswered || !waitReadyAnswered) {
+            auto ev =
+                runtime->WaitForEdgeActorEvent({waitReadyEdge, updateEdge});
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse::
+                            EventType)
+            {
+                const auto* msg = ev->Get<
+                    NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse>();
+                UNIT_ASSERT(msg->Record.GetStatus() == NKikimrBlockStore::OK);
+                updateAnswered = true;
+            } else if (type == TNbs1Volume::TEvWaitReadyResponse::EventType) {
+                const auto* msg = ev->Get<TNbs1Volume::TEvWaitReadyResponse>();
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    S_OK,
+                    msg->GetError().GetCode(),
+                    FormatError(msg->GetError()));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    "test-volume",
+                    msg->Record.GetVolume().GetDiskId());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    DefaultVolumeBlockCount,
+                    msg->Record.GetVolume().GetBlocksCount());
+                // The partition becomes ready only after the config is applied.
+                UNIT_ASSERT(updateAnswered);
+                waitReadyAnswered = true;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ShouldFailWaitReadyWhenInitialAllocationFails)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        // The first allocation result is turned into an error on its way to
+        // the partition.
+        bool injectError = true;
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (injectError &&
+                ev->GetTypeRewrite() ==
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                        EventType)
+            {
+                auto* msg =
+                    ev->Get<TEvBlobStorage::
+                                TEvControllerAllocateDDiskBlockGroupResult>();
+                msg->Record.SetStatus(NKikimrProto::ERROR);
+                msg->Record.SetErrorReason("injected allocation failure");
+                injectError = false;
+            }
+            return true;
+        };
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        WaitForTabletBoot(env);
+
+        const auto response = SendUpdateVolumeConfig(
+            env,
+            CreateVolumeConfig(DefaultVolumeBlockCount),
+            1);
+        UNIT_ASSERT(response.GetStatus() == NKikimrBlockStore::OK);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        const auto error = WaitReady(env, PartitionTabletId, edge).GetError();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            error.GetCode(),
+            FormatError(error));
+        UNIT_ASSERT_STRING_CONTAINS(
+            error.GetMessage(),
+            "injected allocation failure");
+
+        // The error is remembered for later requests.
+        const auto error2 = WaitReady(env, PartitionTabletId, edge).GetError();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            error2.GetCode(),
+            FormatError(error2));
+    }
+
+    Y_UNIT_TEST(ShouldRejectStatVolumeAndWaitReadyAfterDelete)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = env.Runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        const auto deleteError = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            0u,
+            deleteError.GetCode(),
+            FormatError(deleteError));
+
+        const auto waitReadyError = WaitReady(env, partition, edge).GetError();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            waitReadyError.GetCode(),
+            FormatError(waitReadyError));
+
+        const auto statError = StatVolume(env, partition, edge).GetError();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            statError.GetCode(),
+            FormatError(statError));
     }
 
     Y_UNIT_TEST(ShouldFailDeleteWhenWipeReplyIsLost)

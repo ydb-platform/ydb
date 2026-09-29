@@ -744,6 +744,9 @@ message TStatVolumeResponse
     // applied to this volume via VolumeThrottlingManager
     TVolumeVolatileThrottlingInfo VolatileThrottlingInfo = 12;
 
+    // Potentially dangerous volume operations must not be performed while set.
+    bool IsVolumeOperationRestricted = 13;
+
     // Optional response headers.
     TResponseHeaders Headers = 1000;
 }

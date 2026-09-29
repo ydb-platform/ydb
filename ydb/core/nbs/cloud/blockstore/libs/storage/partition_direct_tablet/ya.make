@@ -34,6 +34,8 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/model
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
     ydb/core/nbs/cloud/storage/core/libs/coroutine
+    ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api
+    ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/protos
 
     ydb/core/protos
     ydb/library/services

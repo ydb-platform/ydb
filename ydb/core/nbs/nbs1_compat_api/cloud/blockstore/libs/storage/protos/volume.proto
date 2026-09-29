@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos/headers.proto";
+import "ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos/volume.proto";
+import "ydb/core/nbs/cloud/storage/core/protos/error.proto";
+
+package NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/protos";
+
+////////////////////////////////////////////////////////////////////////////////
+// Wait ready request/response.
+
+message TWaitReadyRequest
+{
+    // Optional request headers.
+    THeaders Headers = 1;
+
+    // Label of volume to wait readiness of.
+    string DiskId = 2;
+}
+
+message TWaitReadyResponse
+{
+    reserved 3;
+
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+
+    // Volume information.
+    TVolume Volume = 2;
+
+    // Optional response headers.
+    TResponseHeaders Headers = 1000;
+}

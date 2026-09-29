@@ -24,6 +24,8 @@
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/mind/bscontroller/types.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/volume.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
@@ -44,6 +46,8 @@ class TPartitionActor
 {
     using TDirectBlockGroupsConnections =
         ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
+    using TNbs1Service = NNbs1CompatApi::NBlockStore::TEvService;
+    using TNbs1Volume = NNbs1CompatApi::NBlockStore::TEvVolume;
 
     enum EState
     {
@@ -64,6 +68,9 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
+    // The failure of the first DDisk block group allocation; empty until the
+    // allocation fails, cleared when a new allocation is requested.
+    NProto::TError InitialAllocationError;
     TFastPathServicePtr FastPathService;
     TPartitionSessionPtr Session;
     // A queued Ready event must not republish metadata after backend shutdown.
@@ -71,14 +78,18 @@ private:
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
-    struct TDeleteWaiter
+    // Where the reply to a queued request goes.
+    struct TWaiter
     {
         NActors::TActorId Sender;
         ui64 Cookie = 0;
     };
 
-    TVector<TDeleteWaiter> InflightDeleteRequests;
+    TVector<TWaiter> InflightDeleteRequests;
     NActors::TActorId CleanupActor;
+
+    // NBS 1.0 WaitReady requests queued until the partition serves IO or fails.
+    TVector<TWaiter> WaitReadyWaiters;
 
     struct TAddHostInFlight
     {
@@ -220,6 +231,30 @@ private:
             TEvGetLoadActorAdapterActorIdRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    // The volume config is stored by the first UpdateVolumeConfig.
+    [[nodiscard]] bool HasVolumeConfig() const;
+
+    // The partition serves IO once the fast path service is ready.
+    [[nodiscard]] bool IsReadyForIo() const;
+
+    // Answers the NBS 1.0 StatVolume with the volume built from the volume
+    // config; E_REJECTED while there is no config.
+    void HandleStatVolume(
+        const TNbs1Service::TEvStatVolumeRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Answers the NBS 1.0 WaitReady at once when the partition serves IO or
+    // its initial allocation failed; queues the request otherwise.
+    void HandleWaitReady(
+        const TNbs1Volume::TEvWaitReadyRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Answers every queued WaitReady request: with the error when there is
+    // one, with the volume built from the volume config otherwise.
+    void ReplyToWaitReadyWaiters(
+        const NActors::TActorContext& ctx,
+        const NProto::TError& error);
+
     // Replies to the volume with the outcome of its UpdateVolumeConfig request.
     // The volume matches the reply against TxId and Origin; without them it
     // drops the reply as belonging to an unknown transaction and never
@@ -311,6 +346,14 @@ private:
 
     void HandleUpdateVolumeConfigDuringDelete(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleStatVolumeDuringDelete(
+        const TNbs1Service::TEvStatVolumeRequest::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleWaitReadyDuringDelete(
+        const TNbs1Volume::TEvWaitReadyRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleUpdateVChunkConfigDuringDelete(

@@ -63,6 +63,10 @@ void TPartitionActor::StartPartitionTeardown(const NActors::TActorContext& ctx)
     AddHostInFlight.reset();
     RemoveHostInFlight.reset();
 
+    ReplyToWaitReadyWaiters(
+        ctx,
+        MakeError(E_REJECTED, "partition is being deleted"));
+
     // Idempotent: no-op when the endpoint was never started.
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -185,7 +189,7 @@ void TPartitionActor::ReplyToDeleteWaiters(
     const NActors::TActorContext& ctx,
     const NProto::TError& error)
 {
-    TVector<TDeleteWaiter> waiters;
+    TVector<TWaiter> waiters;
     waiters.swap(InflightDeleteRequests);
 
     for (const auto& waiter: waiters) {
@@ -238,6 +242,38 @@ void TPartitionActor::HandleUpdateVolumeConfigDuringDelete(
         ctx,
         ev,
         NKikimrBlockStore::ERROR_UPDATE_IN_PROGRESS);
+}
+
+// Reject stat volume during delete
+void TPartitionActor::HandleStatVolumeDuringDelete(
+    const TNbs1Service::TEvStatVolumeRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Reject StatVolume: partition is being deleted",
+        LogTitle.GetWithTime().c_str());
+
+    auto response = std::make_unique<TNbs1Service::TEvStatVolumeResponse>(
+        MakeError(E_REJECTED, "partition is being deleted"));
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+// Reject wait ready during delete
+void TPartitionActor::HandleWaitReadyDuringDelete(
+    const TNbs1Volume::TEvWaitReadyRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Reject WaitReady: partition is being deleted",
+        LogTitle.GetWithTime().c_str());
+
+    auto response = std::make_unique<TNbs1Volume::TEvWaitReadyResponse>(
+        MakeError(E_REJECTED, "partition is being deleted"));
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
 // Ignore update vchunk config during delete
@@ -384,6 +420,10 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             NKikimr::TEvBlockStore::TEvUpdateVolumeConfig,
             HandleUpdateVolumeConfigDuringDelete);
+        // Reject stat volume during delete
+        HFunc(TNbs1Service::TEvStatVolumeRequest, HandleStatVolumeDuringDelete);
+        // Reject wait ready during delete
+        HFunc(TNbs1Volume::TEvWaitReadyRequest, HandleWaitReadyDuringDelete);
         // Ignore update vchunk config during delete
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,

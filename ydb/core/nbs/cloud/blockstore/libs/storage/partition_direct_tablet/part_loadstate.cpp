@@ -188,6 +188,8 @@ void TPartitionActor::CompleteLoadState(
     if (args.VolumeConfig.Defined()) {
         VolumeConfig = *args.VolumeConfig;
 
+        // TODO: a stored VolumeConfig without connections is never
+        // reallocated after restart.
         if (args.DirectBlockGroupsConnections.Defined()) {
             DDiskBlockGroupAllocated = true;
             TouchedVChunks = std::move(args.TouchedVChunks);

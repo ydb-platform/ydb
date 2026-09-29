@@ -41,6 +41,44 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 using namespace NKikimr;
 using namespace NActors;
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TNbs1VolumeProto = NNbs1CompatApi::NBlockStore::NProto::TVolume;
+using TNbs1MediaKind = NNbs1CompatApi::NProto::EStorageMediaKind;
+
+// The volume description nbsd expects in StatVolume and WaitReady responses,
+// filled the way NBS 1.0's VolumeConfigToVolume fills it.
+TNbs1VolumeProto VolumeConfigToVolume(
+    const NKikimrBlockStore::TVolumeConfig& volumeConfig)
+{
+    ui64 blocksCount = 0;
+    for (const auto& partition: volumeConfig.GetPartitions()) {
+        blocksCount += partition.GetBlockCount();
+    }
+
+    TNbs1VolumeProto volume;
+    volume.SetDiskId(volumeConfig.GetDiskId());
+    volume.SetProjectId(volumeConfig.GetProjectId());
+    volume.SetFolderId(volumeConfig.GetFolderId());
+    volume.SetCloudId(volumeConfig.GetCloudId());
+    volume.SetBlockSize(volumeConfig.GetBlockSize());
+    volume.SetBlocksCount(blocksCount);
+    volume.SetStorageMediaKind(
+        static_cast<TNbs1MediaKind>(volumeConfig.GetStorageMediaKind()));
+    volume.SetConfigVersion(volumeConfig.GetVersion());
+    volume.SetTabletVersion(volumeConfig.GetTabletVersion());
+    volume.SetCreationTs(volumeConfig.GetCreationTs());
+    volume.SetAlterTs(volumeConfig.GetAlterTs());
+    volume.SetPartitionsCount(volumeConfig.PartitionsSize());
+    return volume;
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 TPartitionActor::TPartitionActor(
     const TActorId& tablet,
     NKikimr::TTabletStorageInfo* info)
@@ -167,6 +205,10 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
     StopBscProxy(ctx);
     AddHostInFlight.reset();
     RemoveHostInFlight.reset();
+
+    ReplyToWaitReadyWaiters(
+        ctx,
+        MakeError(E_REJECTED, "partition is stopping"));
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -434,6 +476,8 @@ TFastPathServicePtr TPartitionActor::CreateFastPathService(
 
 void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
 {
+    InitialAllocationError = {};
+
     auto request = MakeAllocateDDiskBlockGroupRequest();
 
     const ui64 regionsCount = GetRegionCount(
@@ -607,6 +651,8 @@ void TPartitionActor::HandleFastPathServiceReady(
         "%s Started NBS LoadActorAdapter: %s",
         LogTitle.GetWithTime().c_str(),
         LoadActorAdapter.ToString().c_str());
+
+    ReplyToWaitReadyWaiters(ctx, {});
 }
 
 void TPartitionActor::HandleFastPathServiceShutdown(
@@ -752,6 +798,12 @@ void TPartitionActor::HandleInitialAllocationResult(
             LogTitle.GetWithTime().c_str(),
             msg->Record.GetStatus(),
             msg->Record.GetErrorReason().data());
+
+        InitialAllocationError = MakeError(
+            E_REJECTED,
+            TStringBuilder()
+                << "BSController error: " << msg->Record.GetErrorReason());
+        ReplyToWaitReadyWaiters(ctx, InitialAllocationError);
     }
 }
 
@@ -763,6 +815,89 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
         std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdResponse>();
     response->Record.SetActorId(LoadActorAdapter.ToString());
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+bool TPartitionActor::HasVolumeConfig() const
+{
+    return VolumeConfig.PartitionsSize() != 0;
+}
+
+bool TPartitionActor::IsReadyForIo() const
+{
+    return static_cast<bool>(LoadActorAdapter);
+}
+
+void TPartitionActor::HandleStatVolume(
+    const TNbs1Service::TEvStatVolumeRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    if (!HasVolumeConfig()) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s StatVolume rejected: no volume config",
+            LogTitle.GetWithTime().c_str());
+
+        auto response = std::make_unique<TNbs1Service::TEvStatVolumeResponse>(
+            MakeError(E_REJECTED, "partition has no volume config"));
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    auto response = std::make_unique<TNbs1Service::TEvStatVolumeResponse>();
+    *response->Record.MutableVolume() = VolumeConfigToVolume(VolumeConfig);
+    response->Record.SetIsVolumeOperationRestricted(false);
+    ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+}
+
+void TPartitionActor::HandleWaitReady(
+    const TNbs1Volume::TEvWaitReadyRequest::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    if (HasError(InitialAllocationError)) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s WaitReady rejected: %s",
+            LogTitle.GetWithTime().c_str(),
+            FormatError(InitialAllocationError).c_str());
+
+        auto response = std::make_unique<TNbs1Volume::TEvWaitReadyResponse>(
+            InitialAllocationError);
+        ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
+
+    WaitReadyWaiters.push_back({.Sender = ev->Sender, .Cookie = ev->Cookie});
+
+    if (!IsReadyForIo()) {
+        LOG_DEBUG(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s WaitReady request delayed until partition is ready",
+            LogTitle.GetWithTime().c_str());
+        return;
+    }
+
+    ReplyToWaitReadyWaiters(ctx, {});
+}
+
+void TPartitionActor::ReplyToWaitReadyWaiters(
+    const NActors::TActorContext& ctx,
+    const NProto::TError& error)
+{
+    TVector<TWaiter> waiters;
+    waiters.swap(WaitReadyWaiters);
+
+    for (const auto& waiter: waiters) {
+        auto response =
+            std::make_unique<TNbs1Volume::TEvWaitReadyResponse>(error);
+        if (!HasError(error)) {
+            *response->Record.MutableVolume() =
+                VolumeConfigToVolume(VolumeConfig);
+        }
+        ctx.Send(waiter.Sender, response.release(), 0, waiter.Cookie);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -807,6 +942,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
         // delivery of the applied config and a newer alter (resize) with OK.
         // Capacity is not grown yet: do not persist or reallocate, so IO
         // bounds stay at the original size until grow is implemented.
+        // TODO: resize does not grow the partition capacity.
         const ui64 appliedVersion = VolumeConfig.GetVersion();
         const ui64 requestedVersion =
             msg->Record.GetVolumeConfig().GetVersion();
@@ -848,6 +984,7 @@ void TPartitionActor::HandleUpdateVolumeConfig(
 
     ExecuteTx(ctx, CreateTx<TStoreVolumeConfig>(volumeConfig));
 
+    // TODO: the reply is sent before the StoreVolumeConfig commit.
     ReplyUpdateVolumeConfig(ctx, ev, NKikimrBlockStore::OK);
 }
 
@@ -1062,6 +1199,8 @@ STFUNC(TPartitionActor::StateWork)
             HandleFastPathServiceStopped);
 
         HFunc(TEvService::TEvDeletePartitionRequest, HandleDeletePartition);
+        HFunc(TNbs1Service::TEvStatVolumeRequest, HandleStatVolume);
+        HFunc(TNbs1Volume::TEvWaitReadyRequest, HandleWaitReady);
 
         default:
             HandleCommonEvents(ev);

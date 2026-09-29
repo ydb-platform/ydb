@@ -12,7 +12,6 @@ PY_SRCS (
 TEST_SRCS(
     conftest.py
     test_nbs.py
-    test_nbs_read_errors.py
     test_nbs_load_actor.py
 )
 

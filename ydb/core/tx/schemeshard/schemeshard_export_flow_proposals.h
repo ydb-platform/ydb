@@ -24,7 +24,6 @@ bool FillExportTableSchemePaths(
 
 bool PrepareExportTableSchemeContext(
     TSchemeShard* ss,
-    const TString& sourcePathName,
     const TPath& sourcePath,
     const TPath& exportItemPath,
     TExportTableSchemeContext& context,

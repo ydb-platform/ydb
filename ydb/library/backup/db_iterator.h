@@ -50,6 +50,8 @@ private:
             NScheme::ESchemeEntryType::Replication,
             NScheme::ESchemeEntryType::SysView,
             NScheme::ESchemeEntryType::Transfer,
+            NScheme::ESchemeEntryType::ExternalDataSource,
+            NScheme::ESchemeEntryType::ExternalTable,
         };
 
         return values;

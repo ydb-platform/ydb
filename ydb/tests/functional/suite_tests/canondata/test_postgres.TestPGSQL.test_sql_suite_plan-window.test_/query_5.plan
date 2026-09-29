@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "Node Type": "TopSort-Aggregate-WideSort",
+                                        "Node Type": "TopSort-Aggregate-Sort",
                                         "Operators": [
                                             {
                                                 "Inputs": [
@@ -56,8 +56,8 @@
                                                         "ExternalPlanNodeId": 7
                                                     }
                                                 ],
-                                                "Name": "WideSort",
-                                                "SortBy": "_yql_wide_sort_key_0 asc, depname desc"
+                                                "Name": "Sort",
+                                                "SortBy": "[0,item.depname]"
                                             }
                                         ],
                                         "PlanNodeId": 8,
@@ -68,7 +68,7 @@
                                                 "PlanNodeType": "Connection",
                                                 "Plans": [
                                                     {
-                                                        "Node Type": "WideSort",
+                                                        "Node Type": "Sort",
                                                         "Operators": [
                                                             {
                                                                 "Inputs": [
@@ -76,8 +76,8 @@
                                                                         "ExternalPlanNodeId": 5
                                                                     }
                                                                 ],
-                                                                "Name": "WideSort",
-                                                                "SortBy": "_yql_wide_sort_key_0 asc, depname asc"
+                                                                "Name": "Sort",
+                                                                "SortBy": "[0,item.depname]"
                                                             }
                                                         ],
                                                         "PlanNodeId": 6,

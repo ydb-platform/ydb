@@ -25,6 +25,7 @@ namespace NKikimr {
         const TActorId PDiskServiceId = MakeBlobStoragePDiskID(NodeId, PDiskId);
         const TVDiskID VDiskId{GroupId, 1, 0, 0, 0};
         const TActorId VDiskServiceId = MakeBlobStorageVDiskID(NodeId, PDiskId, VSlotId);
+        const ui32 MaxResponseSize;
         TIntrusivePtr<TAllVDiskKinds> AllVDiskKinds;
         TIntrusivePtr<TPDiskMockState> PDiskMockState;
         std::unordered_map<NKikimrBlobStorage::EVDiskQueueId, TActorId> QueueIds;
@@ -74,10 +75,12 @@ namespace NKikimr {
         };
 
     public:
-        TTestEnv(TIntrusivePtr<TPDiskMockState> state = nullptr, bool enableHeapAllocator = false)
+        TTestEnv(TIntrusivePtr<TPDiskMockState> state = nullptr, bool enableHeapAllocator = false,
+                ui32 maxResponseSize = 0)
             : Runtime(std::make_unique<TTestActorSystem>(
                 1, NLog::PRI_ERROR, nullptr, MakeFeatureFlags(enableHeapAllocator)))
             , Counters(new ::NMonitoring::TDynamicCounters)
+            , MaxResponseSize(maxResponseSize)
             , AllVDiskKinds(new TAllVDiskKinds)
             , PDiskMockState(state ? state : new TPDiskMockState(NodeId, PDiskId, PDiskGuid, (ui64)10 << 40))
         {
@@ -230,6 +233,9 @@ namespace NKikimr {
                 "static");
             VDiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
             VDiskConfig->UseCostTracker = false;
+            if (MaxResponseSize) {
+                VDiskConfig->MaxResponseSize = MaxResponseSize;
+            }
             // Periodic background scans make otherwise unrelated VDisk tests
             // time-dependent. SpaceReport tests trigger a cold refresh explicitly.
             VDiskConfig->SpaceReportPeriodSeconds = 0;

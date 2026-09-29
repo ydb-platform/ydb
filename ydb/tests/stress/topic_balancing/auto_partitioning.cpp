@@ -185,6 +185,14 @@ std::string MakeTopicPath(const std::string& database, const std::string& path) 
 struct TPartState {
     ui32 RefCount = 0;
     ui64 ProcessedEnd = 0;
+    bool HasEndOffset = false;
+    ui64 EndOffset = 0;
+    std::optional<ui64> UnlockCommittedOffset;
+    ui32 UnlockAttempts = 0;
+    // How many times a sealed partition was fully released. The first release
+    // is the balancer taking it away; the commit waits for the next assignment.
+    ui32 SealedReleases = 0;
+    TInstant UnlockRetryAt = TInstant::Zero();
     TInstant LastActive = TInstant::Zero();
     TInstant KnownSince = TInstant::Zero();
 };
@@ -205,6 +213,10 @@ struct TAssignmentTracker {
                 auto& state = Parts[id];
                 if (state.KnownSince == TInstant::Zero()) {
                     state.KnownSince = now;
+                }
+                if (const auto& stats = partition.GetPartitionStats()) {
+                    state.HasEndOffset = true;
+                    state.EndOffset = stats->GetEndOffset();
                 }
                 if (partition.GetActive()) {
                     Active.insert(id);
@@ -347,6 +359,21 @@ struct TAssignmentTracker {
         }
     }
 
+    // Server took the partition off a live session (balancer release), not a
+    // close this workload initiated.
+    void NoteSealedTaken(ui32 partitionId) {
+        with_lock (Mutex) {
+            if (Active.contains(partitionId)) {
+                return;
+            }
+            auto it = Parts.find(partitionId);
+            if (it == Parts.end()) {
+                return;
+            }
+            ++it->second.SealedReleases;
+        }
+    }
+
     ui32 AssignedCount() {
         with_lock (Mutex) {
             ui32 assigned = 0;
@@ -401,6 +428,64 @@ struct TAssignmentTracker {
         const auto now = TInstant::Now();
         with_lock (Mutex) {
             return DebugStaleUnlocked(now, newPartitionGrace, maxLag);
+        }
+    }
+
+    // Sealed partitions the old SDK should commit to their end offset.
+    // The first release is left alone: the balancer takes the partition from
+    // the session that finished it and assigns it again. Commit only once that
+    // second assignment is in progress, so a further doubled delay cannot
+    // outgrow the freshness check. A commit is repeated a few times: the
+    // balancer drops the notify when the consumer does not exist yet.
+    // UnlockRetryAt hides a partition while a commit is in flight.
+    std::optional<std::pair<ui32, ui64>> NextSealedUnlockCommit(TInstant now) {
+        with_lock (Mutex) {
+            for (auto& [id, state] : Parts) {
+                if (Active.contains(id) || !state.HasEndOffset) {
+                    continue;
+                }
+                if (state.SealedReleases < 1 || state.RefCount == 0) {
+                    continue;
+                }
+                if (state.UnlockRetryAt > now) {
+                    continue;
+                }
+                if (state.UnlockCommittedOffset
+                    && *state.UnlockCommittedOffset == state.EndOffset
+                    && state.UnlockAttempts >= 3)
+                {
+                    continue;
+                }
+                state.UnlockRetryAt = now + TDuration::Seconds(30);
+                return std::make_pair(id, state.EndOffset);
+            }
+            return std::nullopt;
+        }
+    }
+
+    void NoteUnlockCommitted(ui32 partitionId, ui64 offset) {
+        with_lock (Mutex) {
+            auto& state = Parts[partitionId];
+            if (!state.UnlockCommittedOffset || *state.UnlockCommittedOffset != offset) {
+                state.UnlockAttempts = 0;
+            }
+            state.UnlockCommittedOffset = offset;
+            ++state.UnlockAttempts;
+            if (state.EndOffset == offset && state.UnlockAttempts < 3) {
+                state.UnlockRetryAt = TInstant::Now() + TDuration::Seconds(2);
+            } else {
+                state.UnlockRetryAt = TInstant::Max();
+            }
+        }
+    }
+
+    void DeferUnlockCommit(ui32 partitionId, TInstant retryAt) {
+        with_lock (Mutex) {
+            auto it = Parts.find(partitionId);
+            if (it == Parts.end()) {
+                return;
+            }
+            it->second.UnlockRetryAt = retryAt;
         }
     }
 
@@ -617,6 +702,31 @@ private:
     }
 };
 
+// Read callbacks outlive the stack frame: the handlers executor drains
+// them after RunAutoPartitioningWorkload returns. Keep everything they
+// touch here, not in locals those callbacks would capture by reference.
+struct TCallbackShared {
+    TRandomCommitQueue CommitQueue;
+    std::atomic<ui64> ReadMessages{0};
+    std::atomic<bool> AllowCommit{false};
+};
+
+struct TStoppableThread {
+    std::atomic<bool> Stop{false};
+    std::thread Thread;
+
+    ~TStoppableThread() {
+        Join();
+    }
+
+    void Join() {
+        Stop.store(true);
+        if (Thread.joinable()) {
+            Thread.join();
+        }
+    }
+};
+
 struct TWorkerPool {
     std::atomic<bool> Stop{false};
     std::vector<std::thread> Workers;
@@ -642,6 +752,7 @@ void EnsureStatus(const TStatus& status, const TString& what) {
 
 TTopicDescription Describe(TTopicClient& client, const std::string& topicPath) {
     TDescribeTopicSettings settings;
+    settings.IncludeStats(true);
     settings.ClientTimeout(TDuration::Seconds(5));
     auto result = client.DescribeTopic(topicPath, settings).GetValueSync();
     EnsureStatus(result, "DescribeTopic");
@@ -789,16 +900,14 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
     pauseWrites.store(true);
 
     TSessionPool sessions;
-    TRandomCommitQueue commitQueue;
+    auto callbackShared = std::make_shared<TCallbackShared>();
     std::atomic<ui32> targetSessions{opts.MaxSessions};
     std::atomic<ui64> opened{0};
     std::atomic<ui64> closed{0};
     std::atomic<ui64> preferredOpened{0};
     std::atomic<ui64> sessionSeq{0};
-    std::atomic<ui64> readMessages{0};
     std::atomic<bool> allowSessionChurn{false};
     std::atomic<bool> allowRewind{false};
-    std::atomic<bool> allowCommit{false};
     std::atomic<ui64> lastReplaceMs{0};
 
     auto createSession = [&]() {
@@ -808,17 +917,18 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
         auto state = tracked.State;
         const bool commitData = opts.CommitData;
 
-        auto releasePartition = [tracker, state](ui32 partitionId) {
+        auto releasePartition = [tracker, state](ui32 partitionId) -> bool {
             bool removed = false;
             with_lock (state->Mutex) {
                 if (state->Closed) {
-                    return;
+                    return false;
                 }
                 removed = state->Partitions.erase(partitionId);
             }
             if (removed) {
                 tracker->Remove(partitionId);
             }
+            return removed;
         };
 
         TTopicReadSettings topicSettings(topicPath);
@@ -864,10 +974,11 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
             });
         settings.EventHandlers_.StopPartitionSessionHandler(
             [tracker, releasePartition](TReadSessionEvent::TStopPartitionSessionEvent& ev) {
-                tracker->NoteProcessed(
-                    static_cast<ui32>(ev.GetPartitionSession()->GetPartitionId()),
-                    ev.GetCommittedOffset());
-                releasePartition(static_cast<ui32>(ev.GetPartitionSession()->GetPartitionId()));
+                const ui32 partitionId = static_cast<ui32>(ev.GetPartitionSession()->GetPartitionId());
+                tracker->NoteProcessed(partitionId, ev.GetCommittedOffset());
+                if (releasePartition(partitionId)) {
+                    tracker->NoteSealedTaken(partitionId);
+                }
                 ev.Confirm();
             });
         settings.EventHandlers_.PartitionSessionClosedHandler(
@@ -879,17 +990,17 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
                 ev.Confirm();
             });
         settings.EventHandlers_.DataReceivedHandler(
-            [commitData, &allowCommit, tracker, &readMessages, &commitQueue](TReadSessionEvent::TDataReceivedEvent& ev) {
-                readMessages.fetch_add(ev.GetMessagesCount());
+            [commitData, callbackShared, tracker](TReadSessionEvent::TDataReceivedEvent& ev) {
+                callbackShared->ReadMessages.fetch_add(ev.GetMessagesCount());
                 const ui32 partitionId = static_cast<ui32>(ev.GetPartitionSession()->GetPartitionId());
-                const bool commitNow = commitData && allowCommit.load();
+                const bool commitNow = commitData && callbackShared->AllowCommit.load();
                 for (const auto& message : ev.GetMessages()) {
                     const ui64 nextOffset = message.GetOffset() + message.GetLogicalMessageCount();
                     tracker->NoteProcessed(partitionId, nextOffset);
                     if (!commitNow) {
                         continue;
                     }
-                    commitQueue.Add(
+                    callbackShared->CommitQueue.Add(
                         message.GetPartitionSession(),
                         message.GetOffset(),
                         nextOffset
@@ -966,10 +1077,50 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
 
     TWorkerPool commitWorkers;
     if (opts.CommitData) {
-        commitWorkers.Workers.emplace_back([&]() {
+        commitWorkers.Workers.emplace_back([&, callbackShared]() {
             while (!commitWorkers.Stop.load()) {
-                if (commitQueue.CommitRandom(64) == 0) {
+                if (callbackShared->CommitQueue.CommitRandom(64) == 0) {
                     Sleep(TDuration::MilliSeconds(1));
+                }
+            }
+        });
+    }
+
+    // Old SDK unlocks children on Finish only when the read started at the
+    // end offset. Otherwise the balancer releases the partition after a delay
+    // and assigns it to another session, doubling that delay each time
+    // (2s, 4s, 8s, 16s, ...). The first such release is left to run. The
+    // commit happens on the next assignment, so the delay does not keep
+    // doubling past the freshness check.
+    std::atomic<ui64> sealedUnlockOk{0};
+    TStoppableThread sealedUnlockThread;
+    if (opts.NoAutoPartitioningSupport && !opts.CommitData) {
+        sealedUnlockThread.Thread = std::thread([&]() {
+            while (!sealedUnlockThread.Stop.load()) {
+                auto item = tracker->NextSealedUnlockCommit(TInstant::Now());
+                if (!item) {
+                    Sleep(TDuration::MilliSeconds(20));
+                    continue;
+                }
+                try {
+                    TCommitOffsetSettings commitSettings;
+                    commitSettings.ClientTimeout(TDuration::Seconds(2));
+                    auto status = client.CommitOffset(
+                        topicPath, item->first, opts.Consumer, item->second, commitSettings).GetValueSync();
+                    if (status.IsSuccess()) {
+                        tracker->NoteUnlockCommitted(item->first, item->second);
+                        sealedUnlockOk.fetch_add(1);
+                    } else {
+                        Cerr << "Commit sealed partition " << item->first
+                            << " offset " << item->second
+                            << " failed: " << status << Endl << Flush;
+                        tracker->DeferUnlockCommit(item->first, TInstant::Now() + TDuration::Seconds(1));
+                    }
+                } catch (const yexception& e) {
+                    Cerr << "Commit sealed partition " << item->first
+                        << " offset " << item->second
+                        << " failed: " << e.what() << Endl << Flush;
+                    tracker->DeferUnlockCommit(item->first, TInstant::Now() + TDuration::Seconds(1));
                 }
             }
         });
@@ -1046,7 +1197,7 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
                 pauseWrites.store(false);
                 allowSessionChurn.store(true);
                 allowRewind.store(true);
-                allowCommit.store(true);
+                callbackShared->AllowCommit.store(true);
                 Cerr << "Warmup done assigned=" << tracker->AssignedCount()
                     << " active=" << tracker->ActiveCount()
                     << " partitions=" << partitionCount
@@ -1080,9 +1231,10 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
                 << " assigned=" << tracker->AssignedCount()
                 << " seen=" << tracker->SeenActiveCount()
                 << " written=" << written.load()
-                << " read=" << readMessages.load()
-                << " commitPending=" << commitQueue.Size()
-                << " committed=" << commitQueue.Committed.load()
+                << " read=" << callbackShared->ReadMessages.load()
+                << " commitPending=" << callbackShared->CommitQueue.Size()
+                << " committed=" << callbackShared->CommitQueue.Committed.load()
+                << " sealedUnlock=" << sealedUnlockOk.load()
                 << " opened=" << opened.load()
                 << " preferred=" << preferredOpened.load()
                 << " closed=" << closed.load()
@@ -1099,6 +1251,8 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
         << tracker->DebugStale(opts.NewPartitionGrace, opts.MaxLag));
     tracker->EnsureFresh(opts.NewPartitionGrace, opts.MaxLag);
 
+    sealedUnlockThread.Join();
+
     // Join writers first: Close and Write on one producer run on different threads.
     pauseWrites.store(true);
     writeWorkers.Join();
@@ -1108,7 +1262,7 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
     writers.clear();
 
     commitWorkers.Stop.store(true);
-    commitQueue.CommitAllRandom();
+    callbackShared->CommitQueue.CommitAllRandom();
     commitWorkers.Join();
     targetSessions.store(0);
     rewindWorkers.Join();
@@ -1116,8 +1270,7 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
     sessions.CloseAll();
     // wait=true deadlocks: in-flight session contexts keep CQ from shutting down.
     driver.Stop(false);
-    // Data callbacks capture commitQueue and other locals. Stop the pool before
-    // those objects are destroyed with the stack frame.
+    // Stop the handlers pool before the stack frame that owns it is destroyed.
     handlersExecutor->Stop();
 
     Cerr << "Stress finished partitions=" << partitionCount
@@ -1125,8 +1278,9 @@ int RunAutoPartitioningWorkload(int argc, const char* argv[]) {
         << " preferredOpened=" << preferredOpened.load()
         << " sessionsClosed=" << closed.load()
         << " written=" << written.load()
-        << " read=" << readMessages.load()
-        << " committed=" << commitQueue.Committed.load()
+        << " read=" << callbackShared->ReadMessages.load()
+        << " committed=" << callbackShared->CommitQueue.Committed.load()
+        << " sealedUnlock=" << sealedUnlockOk.load()
         << " rewindOk=" << rewindOk.load()
         << " rewindFail=" << rewindFail.load() << Endl << Flush;
     return 0;

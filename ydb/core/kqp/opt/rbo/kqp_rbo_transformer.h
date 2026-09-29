@@ -102,6 +102,9 @@ private:
     THashMap<TString, THashSet<TString>> CMColumnsByTableName;
     THashMap<TString, THashSet<TString>> HistColumnsByTableName;
 
+    // Flag to reset the check of original type for multiple statement queries
+    bool ResetTypes = false;
+
     TVector<TIntrusivePtr<TOpRoot>> Roots;
     TRuleBasedOptimizer RBO;
 };

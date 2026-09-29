@@ -29,8 +29,8 @@ class _MacOSDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
         return self._append_app_name_and_version(os.path.expanduser("~/Library/Application Support"))  # ruff:ignore[os-path-expanduser]
 
     def _base_site_dirs(self) -> list[str]:
-        is_homebrew = "/opt/python" in sys.prefix
-        homebrew_prefix = sys.prefix.split("/opt/python")[0] if is_homebrew else ""
+        is_homebrew = "/opt/python" in sys.base_prefix
+        homebrew_prefix = sys.base_prefix.split("/opt/python")[0] if is_homebrew else ""
         path_list = [self._append_app_name_and_version(f"{homebrew_prefix}/share")] if is_homebrew else []
         path_list.append(self._append_app_name_and_version("/Library/Application Support"))
         return path_list
@@ -70,8 +70,8 @@ class _MacOSDefaults(PlatformDirsABC):  # ruff:ignore[too-many-public-methods]
 
     @property
     def _site_cache_dirs(self) -> list[str]:
-        is_homebrew = "/opt/python" in sys.prefix
-        homebrew_prefix = sys.prefix.split("/opt/python")[0] if is_homebrew else ""
+        is_homebrew = "/opt/python" in sys.base_prefix
+        homebrew_prefix = sys.base_prefix.split("/opt/python")[0] if is_homebrew else ""
         path_list = [self._append_app_name_and_version(f"{homebrew_prefix}/var/cache")] if is_homebrew else []
         path_list.append(self._append_app_name_and_version("/Library/Caches"))
         return path_list

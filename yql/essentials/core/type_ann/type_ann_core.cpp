@@ -16478,7 +16478,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["FormatTypeDiff"] = &FormatTypeDiffWrapper;
     Functions["CastStruct"] = &CastStructWrapper;
     ExtFunctions["AggregationTraits"] = &AggregationTraitsWrapper;
-    Functions["MultiAggregate"] = &MultiAggregateWrapper;
+    ExtFunctions["MultiAggregate"] = &MultiAggregateWrapper;
     Functions["AggOverState"] = &AggOverStateWrapper;
     Functions["SqlAggregateAll"] = &SqlAggregateAllWrapper;
     Functions["CountedAggregateAll"] = &CountedAggregateAllWrapper;

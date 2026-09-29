@@ -16,9 +16,11 @@ public:
     }
     static int WakeFd(const TUringRouter& router) { return router.WakeEventFd; }
     static std::unique_ptr<TUringRouter> Create(
-            std::unique_ptr<NUringPrivate::IUringRouterBackend> backend, ui32 depth = 16) {
+            std::unique_ptr<NUringPrivate::IUringRouterBackend> backend, ui32 depth = 16,
+            bool devNullMode = false) {
         return std::unique_ptr<TUringRouter>(new TUringRouter(TFileHandle(), nullptr,
-            TUringRouterConfig{.QueueDepth = depth, .IdleSpinUs = 0}, {}, std::move(backend)));
+            TUringRouterConfig{.QueueDepth = depth, .IdleSpinUs = 0, .DevNullMode = devNullMode},
+            {}, std::move(backend)));
     }
 
     static void SetFd(TUringRouter& router, TFileHandle fd) { router.Fd = std::move(fd); }

@@ -1604,6 +1604,11 @@ private:
         VisitAllFields(TRule_drop_object_stmt::GetDescriptor(), msg);
     }
 
+    void VisitKillSession(const TRule_kill_session_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_kill_session_stmt::GetDescriptor(), msg);
+    }
+
     void VisitCreateTopic(const TRule_create_topic_stmt& msg) {
         NewLine();
         VisitKeyword(msg.GetToken1());
@@ -3410,6 +3415,7 @@ TStaticData::TStaticData()
           {TRule_create_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateObject)},
           {TRule_alter_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterObject)},
           {TRule_drop_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropObject)},
+          {TRule_kill_session_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitKillSession)},
           {TRule_create_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateExternalDataSource)},
           {TRule_alter_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterExternalDataSource)},
           {TRule_drop_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropExternalDataSource)},

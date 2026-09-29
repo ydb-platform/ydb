@@ -337,6 +337,33 @@ archives. Collection/transfer errors are reported explicitly; an interrupted
 transfer can leave the latest interval incomplete. Older reservations without
 telemetry remain readable and are labelled as having no recorded metrics.
 
+The dedicated run's **Operations** tab provides four commands:
+
+- **Create DDisk pool**: choose a box, group count, failure-domain geometry and
+  PDisk type. The geometry uses one realm and one DDisk per failure domain.
+- **Create NBS partition**: specify its Disk ID, DDisk pool, block size, block
+  count, storage media and sync-request batch size.
+- **Write blocks**: fill the selected block range with a repeated UTF-8 pattern.
+  This overwrites existing data; the supplied block size must match the partition.
+- **Read blocks**: read a range by Disk ID; response buffers are shown as base64.
+
+Commands target the current run's deployed static-node gRPC endpoint, not a
+user-supplied server or the current version of its template. Execution is allowed
+only while the cluster is ready and neither cancellation nor release has been
+requested. After release, the operation history remains available in the run;
+requests and outcomes are saved in `cluster-operations.json`.
+
+Each request has a UUID. Resubmitting the same ID and parameters returns the
+recorded operation without replaying it; reusing the ID with different parameters
+is rejected. Requests are not automatically retried. A timeout, disconnect or
+interrupted operation is recorded as `unknown`, not as proof that nothing changed.
+Check the cluster before submitting a new mutation after such an outcome.
+
+Each run accepts up to 200 operations, with a 10-second RPC timeout. Writes are
+limited to 64 KiB and reads to 16 blocks, with a 128 KiB RPC response limit. These
+forms validate request shape and bounds, not whether the cluster's placement or
+NBS configuration can satisfy the request; server rejections appear in history.
+
 The template **Configuration** tab edits all message types reachable from the
 bundled YDB `TAppConfig` and `TEphemeralInputFields` protobuf descriptors. The latter
 covers YAML input fields such as `hosts`, `host_configs`, `fail_domain_type`,

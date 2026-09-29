@@ -1,5 +1,7 @@
 #include "grpc_pq_actor.h"
 
+#include <ydb/core/base/path.h>
+#include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 
@@ -198,6 +200,9 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         CloseSession("got second init request",  NPersQueue::NErrorCode::BAD_REQUEST, ctx);
         return;
     }
+    if (!event->Database.empty() && !event->Database.StartsWith('/')) {
+        NGRpcService::CreateCounterCb(Counters, nullptr)("persqueue_v0", "WriteSession", true)->CountRelativeDatabase();
+    }
     const auto& init = event->Request.GetInit();
 
     if (init.GetTopic().empty() || init.GetSourceId().empty()) {
@@ -215,6 +220,11 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     //2. No database. Try parse and resolve account to database. If possible, try search this path.
     //3. Fallback from 2 - legacy mode.
 
+    const bool enableRelativePaths = AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
+        && AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen();
+    if (enableRelativePaths && !event->Database.empty()) {
+        Database = CanonizePath(PrependDomainIfNeeded("/" + AppData(ctx)->DomainsInfo->GetDomain()->Name, event->Database));
+    }
     DiscoveryConverter = ConverterFactory->MakeDiscoveryConverter(init.GetTopic(), true, LocalDC, Database);
     if (!DiscoveryConverter->IsValid()) {
         CloseSession(
@@ -227,7 +237,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     }
     PeerName = event->PeerName;
     RequestId = event->RequestId;
-    if (!event->Database.empty()) {
+    if (!enableRelativePaths && !event->Database.empty()) {
         Database = CanonizePath(event->Database);
     }
 

@@ -1602,6 +1602,9 @@ void BackupFolder(const TDriver& driver, const TString& database, const TString&
 }
 
 void BackupDatabase(const TDriver& driver, const TString& database, TFsPath folderPath) {
+    const TString databasePath = database.empty() || database.StartsWith('/')
+        ? database
+        : FindClusterRootPath(driver) + "/" + database;
     TString temporalBackupPostfix = CreateTemporalBackupName();
     if (!folderPath) {
         folderPath = temporalBackupPostfix;
@@ -1612,7 +1615,7 @@ void BackupDatabase(const TDriver& driver, const TString& database, TFsPath fold
         NYql::TIssues issues;
         TFile(folderPath.Child(NDump::NFiles::Incomplete().FileName), CreateAlways).Close();
 
-        BackupDatabaseImpl(driver, database, folderPath, {
+        BackupDatabaseImpl(driver, databasePath, folderPath, {
             .WithRegularUsers = true,
             .WithContent = true,
             .TemporalBackupPostfix = temporalBackupPostfix,

@@ -715,6 +715,41 @@ Y_UNIT_TEST_TWIN(DiscoveryCountsOriginalHeaderAndBody, relativePathsEnabled) {
     UNIT_ASSERT_VALUES_EQUAL(proto.database(), "Root/db");
 }
 
+Y_UNIT_TEST_TWIN(BodyDatabaseCounters, relativePathsEnabled) {
+    TTestActorRuntime runtime;
+    InitializeDatabaseRuntime(runtime, relativePathsEnabled);
+    const auto check = [&](const auto& proto, ui64 expected) {
+        auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), TString("/Root"), &proto);
+        ctx->CounterBlock = NGRpcService::CreateCounterCb(counters, nullptr)("database_test", "body");
+        NGRpcService::TGrpcRequestNoOperationCall<std::decay_t<decltype(proto)>, Ydb::Operations::CancelOperationResponse> request(
+            ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+        request.InitRootPath(&runtime.GetAppData());
+        request.CountRequestPaths();
+        request.CountRequestPaths();
+        auto group = GetServiceCounters(counters, "ydb")->GetSubgroup("api_service", "database_test")->GetSubgroup("method", "body");
+        UNIT_ASSERT_VALUES_EQUAL(group->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val(), expected);
+    };
+    const auto checkPath = [&](auto proto) {
+        for (const TString path : {"", "/Root/db", "Root/db"}) {
+            proto.set_path(path);
+            check(proto, !path.empty() && !path.StartsWith('/'));
+        }
+    };
+    checkPath(Ydb::Cms::CreateDatabaseRequest());
+    checkPath(Ydb::Cms::AlterDatabaseRequest());
+    checkPath(Ydb::Cms::GetDatabaseStatusRequest());
+    checkPath(Ydb::Cms::GetScaleRecommendationRequest());
+    checkPath(Ydb::Cms::RemoveDatabaseRequest());
+    checkPath(Ydb::Discovery::NodeRegistrationRequest());
+    Ydb::Cms::CreateDatabaseRequest serverless;
+    serverless.set_path("/Root/db");
+    serverless.mutable_serverless_resources()->set_shared_database_path("shared");
+    check(serverless, 1);
+    serverless.set_path("db");
+    check(serverless, 1);
+}
+
 Y_UNIT_TEST(PathCountersSeparateMethodsAndDeduplicateRequests) {
     auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
     auto requestCtx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), Nothing(), nullptr, "Ydb.Table.RenameTables");

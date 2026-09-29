@@ -57,6 +57,7 @@ struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<
         bool EnableWrongIdentity = false;
         bool SetNodeAuthValues = false;
         std::vector<TString> RegisterNodeAllowedSids = {"DefaultClientAuth@cert", BUILTIN_ACL_ROOT};
+        bool EnableRelativePaths = true;
     };
 
     TKikimrServerForTestNodeRegistration(const TServerInitialization& serverInitialization)
@@ -66,6 +67,7 @@ struct TKikimrServerForTestNodeRegistration : TBasicKikimrWithGrpcAndRootSchema<
 private:
     static NKikimrConfig::TAppConfig GetAppConfig(const TServerInitialization& serverInitialization) {
         auto config = NKikimrConfig::TAppConfig();
+        config.MutableFeatureFlags()->SetEnableRelativePaths(serverInitialization.EnableRelativePaths);
 
         auto& securityConfig = *config.MutableDomainsConfig()->MutableSecurityConfig();
         if (serverInitialization.EnforceUserToken) {
@@ -171,6 +173,40 @@ void CheckAccessDenied(const NDiscovery::TNodeRegistrationResult& result, const 
 void CheckAccessDeniedRegisterNode(const NDiscovery::TNodeRegistrationResult& result, const TString& expectedError) {
     UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), expectedError);
+}
+
+Y_UNIT_TEST_TWIN(DatabasePathResolvesAgainstDomain, enableRelativePaths) {
+    TKikimrServerForTestNodeRegistration server({.EnableRelativePaths = enableRelativePaths});
+    TDriverConfig config;
+    config.UseSecureConnection(TKikimrTestWithAuthAndSsl::GetCACertAndKey().Certificate.c_str())
+        .SetDatabase("/Root")
+        .SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort())
+        .SetAuthToken(BUILTIN_ACL_ROOT);
+    TDriver driver(config);
+    NDiscovery::TDiscoveryClient client(driver);
+
+    auto absoluteSettings = GetNodeRegistrationSettings();
+    absoluteSettings.Path("/Root");
+    auto absolute = client.NodeRegistration(absoluteSettings).GetValueSync();
+    CheckGood(absolute);
+    UNIT_ASSERT_VALUES_EQUAL(absolute.GetDomainPath(), "Root");
+
+    auto relativeSettings = GetNodeRegistrationSettings();
+    relativeSettings.Path("Root");
+    auto relative = client.NodeRegistration(relativeSettings).GetValueSync();
+    if (enableRelativePaths) {
+        // Slashless Root is relative: /Root/Root does not exist.
+        UNIT_ASSERT_C(!relative.IsTransportError(), relative.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL_C(relative.GetStatus(), EStatus::GENERIC_ERROR, relative.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(relative.GetIssues().ToOneLineString(), "Perhaps the database /Root/Root does not exist");
+    } else {
+        CheckGood(relative);
+        UNIT_ASSERT_VALUES_EQUAL(relative.GetScopeTabletId(), absolute.GetScopeTabletId());
+        UNIT_ASSERT_VALUES_EQUAL(relative.GetScopePathId(), absolute.GetScopePathId());
+        UNIT_ASSERT_VALUES_EQUAL(relative.GetDomainPath(), "Root");
+    }
+    CheckGood(client.NodeRegistration(GetNodeRegistrationSettings()).GetValueSync());
+    driver.Stop(true);
 }
 
 Y_UNIT_TEST(ServerWithCertVerification_ClientWithCorrectCerts_EmptyAllowedSids) {

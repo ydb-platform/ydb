@@ -12,6 +12,7 @@
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 #include <ydb/public/api/protos/ydb_common.pb.h>
+#include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
@@ -1408,9 +1409,20 @@ public:
     }
 
     void CountRequestBodyPaths() const override {
-        if constexpr (std::is_same_v<TReq, Ydb::Discovery::ListEndpointsRequest>) {
-            if (const auto* request = dynamic_cast<const TRequest*>(GetRequest())) {
+        if (const auto* request = dynamic_cast<const TRequest*>(GetRequest())) {
+            if constexpr (std::is_same_v<TReq, Ydb::Discovery::ListEndpointsRequest>) {
                 this->CountDatabasePath(request->database());
+            }
+            if constexpr (std::is_same_v<TReq, Ydb::Cms::CreateDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Cms::AlterDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Cms::GetDatabaseStatusRequest>
+                || std::is_same_v<TReq, Ydb::Cms::GetScaleRecommendationRequest>
+                || std::is_same_v<TReq, Ydb::Cms::RemoveDatabaseRequest>
+                || std::is_same_v<TReq, Ydb::Discovery::NodeRegistrationRequest>) {
+                this->CountDatabasePath(request->path());
+            }
+            if constexpr (std::is_same_v<TReq, Ydb::Cms::CreateDatabaseRequest>) {
+                this->CountDatabasePath(request->serverless_resources().shared_database_path());
             }
         }
     }

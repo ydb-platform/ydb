@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
+#include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/pq_database.h>
@@ -671,6 +672,10 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         return;
     }
 
+    if (!event->Database.empty() && !event->Database.StartsWith('/')) {
+        NGRpcService::CreateCounterCb(Counters, nullptr)("persqueue_v0", "ReadSession", true)->CountRelativeDatabase();
+    }
+
     const auto& init = event->Request.GetInit();
 
     if (!init.TopicsSize()) {
@@ -719,7 +724,9 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     }
 
     PeerName = event->PeerName;
-    Database = CanonizePath(event->Database);
+    Database = CanonizePath(AppData(ctx)->FeatureFlags.GetEnableRelativePaths() && AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+        ? PrependDomainIfNeeded("/" + AppData(ctx)->DomainsInfo->GetDomain()->Name, event->Database)
+        : event->Database);
     RequestId = event->RequestId;
 
     ReadOnlyLocal = init.GetReadOnlyLocal();

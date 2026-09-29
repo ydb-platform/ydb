@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/tx/tx_proxy
     ydb/core/client/server
     ydb/core/grpc_services
+    ydb/core/grpc_services/counters
     ydb/core/mind/address_classification
     ydb/core/persqueue/events
     ydb/core/persqueue/public/cluster_tracker

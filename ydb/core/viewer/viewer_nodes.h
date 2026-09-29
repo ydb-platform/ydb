@@ -903,6 +903,7 @@ class TJsonNodes : public TViewerPipeClient {
     bool NoRack = false;
     bool NoDC = false;
     std::vector<TString> Problems;
+    TString InvalidParamError;
 
     void AddProblem(const TString& problem) {
         for (const auto& p : Problems) {
@@ -1021,6 +1022,15 @@ class TJsonNodes : public TViewerPipeClient {
         ReverseSort = false;
     }
 
+    bool ParsePresentationNodeField(TStringBuf paramName, TStringBuf fieldValue, ENodeFields& outField) {
+        outField = ParseENodeFields(fieldValue);
+        if (outField == ENodeFields::COUNT) {
+            InvalidParamError = TStringBuilder() << "unknown " << paramName << " field: " << fieldValue;
+            return false;
+        }
+        return true;
+    }
+
     static void AddGroupByFieldToRequired(TFieldsType& fieldsRequired, const ENodeFields groupByField) {
         fieldsRequired.set(+groupByField);
         if (groupByField == ENodeFields::Uptime) {
@@ -1051,7 +1061,9 @@ public:
             FilterPath.clear();
         }
         if (TStringBuf filterGroupByParam = Params.Get("filter_group_by"); filterGroupByParam) {
-            FilterGroupBy = ParseENodeFields(filterGroupByParam);
+            if (!ParsePresentationNodeField("filter_group_by", filterGroupByParam, FilterGroupBy)) {
+                return;
+            }
             if (TStringBuf filterGroupParam = Params.Get("filter_group"); filterGroupParam) {
                 FilterGroup = filterGroupParam;
             }
@@ -1129,17 +1141,22 @@ public:
         }
         TStringBuf sort = Params.Get("sort");
         if (sort) {
-            NeedSort = true;
-            if (sort.StartsWith("-") || sort.StartsWith("+")) {
-                ReverseSort = (sort[0] == '-');
-                sort.Skip(1);
+            TStringBuf sortField = sort;
+            if (sortField.StartsWith("-") || sortField.StartsWith("+")) {
+                ReverseSort = (sortField[0] == '-');
+                sortField.Skip(1);
             }
-            SortBy = ParseENodeFields(sort);
+            if (!ParsePresentationNodeField("sort", sortField, SortBy)) {
+                return;
+            }
+            NeedSort = true;
         }
         TStringBuf group = Params.Get("group");
         if (group) {
+            if (!ParsePresentationNodeField("group", group, GroupBy)) {
+                return;
+            }
             NeedGroup = true;
-            GroupBy = ParseENodeFields(group);
             ResetSortParams();
         }
         TString fieldsRequired = Params.Get("fields_required");
@@ -1183,6 +1200,14 @@ public:
 
     void Bootstrap() override {
         if (TBase::NeedToRedirect()) {
+            return;
+        }
+        if (!InvalidParamError.empty()) {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER,
+                "Bad request: invalid /viewer/nodes query parameter",
+                {"logPrefix", GetLogPrefix()},
+                {"error", InvalidParamError});
+            TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", InvalidParamError), "BadRequest");
             return;
         }
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {

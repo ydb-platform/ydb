@@ -894,6 +894,25 @@ class TestViewer(object):
         assert group_and_sort.get('NodeGroups'), group_and_sort
 
     @classmethod
+    def test_viewer_nodes_invalid_presentation_field_names(cls):
+        """Unknown group/sort/filter_group_by field names are rejected with 400."""
+        bogus = 'BogusFieldName'
+        cases = (
+            ({'group': bogus}, 'group'),
+            ({'sort': bogus}, 'sort'),
+            ({'filter_group_by': bogus, 'filter_group': 'x'}, 'filter_group_by'),
+            ({'filter_group_by': bogus}, 'filter_group_by'),
+        )
+        for extra, param in cases:
+            response = cls.get_viewer('/viewer/nodes', {
+                'fields_required': 'NodeId',
+                **extra,
+            })
+            assert response.get('status_code') == 400, (param, response)
+            assert param in response.get('text', '') and bogus in response.get('text', ''), (
+                param, response.get('text'), response)
+
+    @classmethod
     def test_storage_groups(cls):
         result = cls.normalize_result(cls.get_viewer("/viewer/groups", {
             'fields_required': 'all'

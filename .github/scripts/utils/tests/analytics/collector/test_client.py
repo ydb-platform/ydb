@@ -8,10 +8,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "analytics"))
 
+import contextlib
 import io
 import json
 import os
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,9 +28,20 @@ from collector import (
     start,
     track,
 )
-from collector.buffer import append_record, read_pending_spans, write_send_offset
+from collector.buffer import (
+    append_record,
+    load_unsent_lines,
+    read_pending_spans,
+    split_jsonl,
+    write_send_offset,
+)
+from collector.flush import classify_jsonl_lines
 from collector.spans import attach_context
 from collector.values import build_track_record, parse_datetime, parse_labels
+
+# json.dumps(ensure_ascii=False) writes these raw, and str.splitlines() treats
+# each of them as a line break.
+UNICODE_BREAKS = "line1\u2028line2\u2029line3\u0085line4"
 
 
 class CollectorNormalizeTest(unittest.TestCase):
@@ -444,6 +457,103 @@ class CollectorValuesTest(unittest.TestCase):
             path = os.path.join(tmp, "nested", "out.jsonl")
             append_record(path, {"name": "x"})
             self.assertTrue(os.path.exists(path))
+
+
+class BufferIntegrityTest(unittest.TestCase):
+    def test_split_keeps_unicode_line_separators_inside_a_record(self):
+        record = json.dumps({"note": UNICODE_BREAKS}, ensure_ascii=False)
+        self.assertEqual(len(record.splitlines()), 4, "precondition: splitlines would break this")
+        self.assertEqual(split_jsonl(record + "\n"), [record])
+
+    def test_split_drops_only_the_newline_terminator(self):
+        self.assertEqual(split_jsonl("a\nb\n"), ["a", "b"])
+        self.assertEqual(split_jsonl("a\nb"), ["a", "b"])
+        self.assertEqual(split_jsonl(""), [])
+
+    def test_label_with_unicode_breaks_survives_a_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "m.jsonl")
+            start("s", source="j", file=path, run_id=7)
+            end("s", file=path, conclusion="success", labels={"note": UNICODE_BREAKS})
+            enrich("s", file=path, labels={"url": "http://x"})
+            lines, _offset = load_unsent_lines(path)
+            self.assertEqual(len(lines), 1)
+            rows, skipped = classify_jsonl_lines(lines, {"run_id": 7})
+            self.assertEqual(skipped, [])
+            labels = json.loads(rows[0]["labels"])
+            self.assertEqual(labels["note"], UNICODE_BREAKS)
+            self.assertEqual(labels["url"], "http://x")
+
+    def test_offset_stops_before_an_unterminated_fragment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "m.jsonl")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write('{"n":1}\n{"n":2}\n{"n":3, interrupted')
+            lines, offset = load_unsent_lines(path)
+            self.assertEqual(lines, ['{"n":1}', '{"n":2}'])
+            self.assertLess(offset, os.path.getsize(path))
+
+    def test_append_after_a_fragment_does_not_corrupt_the_new_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "m.jsonl")
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write('{"n":1}\n{"n":3, interrupted')
+            _lines, offset = load_unsent_lines(path)
+            write_send_offset(path, offset)
+            append_record(path, {"n": 4})
+            lines, _offset = load_unsent_lines(path)
+            self.assertIn('{"n":4}', lines)
+            rows, skipped = classify_jsonl_lines(lines, {"run_id": 1, "source": "j"})
+            self.assertEqual([row["name"] for row in rows], [])
+            self.assertEqual(len(skipped), 2, "the fragment is skipped alone, record 4 stays parseable")
+
+    def test_unreadable_open_span_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "m.jsonl")
+            with open(f"{path}.pending", "w", encoding="utf-8") as handle:
+                handle.write('{"name":"ok"}\nnot json\n')
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                spans = read_pending_spans(path)
+            self.assertEqual([span["name"] for span in spans], ["ok"])
+            self.assertIn("unreadable open span", stderr.getvalue())
+
+    def test_concurrent_appends_and_enrich_lose_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "m.jsonl")
+            for index in range(5):
+                start(f"s{index}", source="j", file=path, run_id=1)
+                end(f"s{index}", file=path, conclusion="success")
+
+            errors = []
+
+            def appender(index):
+                try:
+                    for step in range(10):
+                        append_record(path, {"name": f"w{index}-{step}", "source": "j", "run_id": 1})
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(exc)
+
+            def enricher():
+                try:
+                    for index in range(5):
+                        enrich(f"s{index}", file=path, labels={"tag": "x"})
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=appender, args=(i,)) for i in range(3)]
+            threads.append(threading.Thread(target=enricher))
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertEqual(errors, [])
+            lines, _offset = load_unsent_lines(path)
+            names = set()
+            for line in lines:
+                names.add(json.loads(line)["name"])
+            expected = {f"w{i}-{s}" for i in range(3) for s in range(10)}
+            self.assertTrue(expected <= names, f"lost appends: {sorted(expected - names)}")
 
 
 if __name__ == "__main__":

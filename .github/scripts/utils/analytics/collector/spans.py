@@ -9,7 +9,14 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-from .buffer import append_record, read_pending_spans, read_send_offset, write_pending_spans
+from .buffer import (
+    append_record,
+    buffer_lock,
+    read_pending_spans,
+    read_send_offset,
+    split_jsonl,
+    write_pending_spans,
+)
 from .schema import AttachFn, EnrichFn, INTERNAL_FIELD_KEYS, default_metrics_file
 from .values import (
     build_track_record,
@@ -199,6 +206,17 @@ def enrich(
         match_labels = {}
     if not name or not os.path.exists(path):
         return 0
+    with buffer_lock(path):
+        return _enrich_locked(path, name, extras, extra_labels, match_labels)
+
+
+def _enrich_locked(
+    path: str,
+    name: str,
+    extras: Dict[str, Any],
+    extra_labels: Any,
+    match_labels: Dict[str, Any],
+) -> int:
     offset = read_send_offset(path)
     size = os.path.getsize(path)
     if offset > size:
@@ -206,7 +224,7 @@ def enrich(
     with open(path, "rb") as handle:
         prefix = handle.read(offset) if offset else b""
         rest = handle.read().decode("utf-8")
-    lines = rest.splitlines()
+    lines = split_jsonl(rest)
     index = None
     parsed: List[Optional[Dict[str, Any]]] = []
     for line in lines:

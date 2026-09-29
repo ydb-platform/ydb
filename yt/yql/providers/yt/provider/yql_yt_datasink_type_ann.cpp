@@ -1692,7 +1692,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!ValidateSettings(*settings, EYtSettingType::Mode
+        auto acceptedSettings = EYtSettingType::Mode
             | EYtSettingType::Initial
             | EYtSettingType::CompressionCodec
             | EYtSettingType::ErasureCodec
@@ -1705,8 +1705,13 @@ private:
             | EYtSettingType::MutationId
             | EYtSettingType::ColumnGroups
             | EYtSettingType::SecurityTags
-            | EYtSettingType::Columns
-            , ctx))
+            | EYtSettingType::Columns;
+
+        if (State_->Types->EngineType == EEngineType::Ytflow) {
+            acceptedSettings |= EYtSettingType::PrimaryKey;
+        }
+
+        if (!ValidateSettings(*settings, acceptedSettings, ctx))
         {
             return TStatus::Error;
         }

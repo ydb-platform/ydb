@@ -1082,5 +1082,5 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
         UNIT_ASSERT_VALUES_EQUAL_C(activeSessions, 0, "All sessions should be closed after stress test");
     }
 
-} // namespace NKqp
+} // Y_UNIT_TEST_SUITE(KqpProxy)
 } // namespace NKikimr

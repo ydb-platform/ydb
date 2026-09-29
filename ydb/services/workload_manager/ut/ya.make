@@ -27,6 +27,7 @@ SRCS(
     member_name_ut.cpp
     query_classifier_match_ut.cpp
     query_classifier_ut.cpp
+    workload_manager_state_actor_ut.cpp
     workload_service_actors_ut.cpp
     workload_service_query_sessions_ut.cpp
     workload_service_tables_ut.cpp

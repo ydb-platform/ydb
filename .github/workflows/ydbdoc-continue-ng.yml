@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Continue translation with operator feedback
-        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@9c65b82f97441788e3facc11dbfadee995d9fed4
+        uses: ydb-platform/ydbdoc-review-ng/.github/actions/doc-review@v1.0.1
         with:
           mode: continue
           pr: ${{ github.event.pull_request.number }}

@@ -6,6 +6,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/library/yql/dq/runtime/dq_channel_service_impl.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_node.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 #include <library/cpp/threading/mux_event/mux_event.h>
@@ -2102,6 +2104,68 @@ struct TConsumerPopsWhileSessionLockedTest : public TSessionTest {
     }
 };
 
+// A compute actor binds its output channels to the finish epoch before they are bound to their peer: the channel
+// holds a stub buffer then. The epoch has to reach the buffer which replaces the stub on Bind, or a channel which
+// finishes afterwards would never move the epoch, and the compute actor would wait for it forever.
+struct TOutputChannelFinishEpochTest : public TSessionTest {
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
+        TDqChannelSettings settings;
+        settings.RowType = NKikimr::NMiniKQL::TDataType::Create(NYql::NUdf::TDataType<i32>::Id, typeEnv);
+
+        auto producer = Runtime->AllocateEdgeActor(NodeIndex0);
+        auto remoteConsumer = Runtime->AllocateEdgeActor(NodeIndex1);
+        auto localConsumer = Runtime->AllocateEdgeActor(NodeIndex0);
+
+        // remote: bound on the stub, then on Bind the epoch goes to the descriptor, whose finish moves it
+        settings.ChannelId = 7;
+        auto remote = Service0->GetOutputChannel(settings);
+        auto remoteEpoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        UNIT_ASSERT(remote->BindFinishEpoch(remoteEpoch));
+        UNIT_ASSERT_VALUES_EQUAL(remoteEpoch->load(), 1);
+        remote->Bind(producer, remoteConsumer);
+        UNIT_ASSERT_VALUES_EQUAL_C(remoteEpoch->load(), 2, "the epoch did not move on Bind");
+
+        auto remoteBuffer = std::dynamic_pointer_cast<TOutputBuffer>(dynamic_cast<TFastDqOutputChannel&>(*remote).Serializer->Buffer);
+        UNIT_ASSERT(remoteBuffer);
+        {
+            std::lock_guard lock(remoteBuffer->Descriptor->FlowControlMutex);
+            UNIT_ASSERT_C(remoteBuffer->Descriptor->FinishEpoch == remoteEpoch, "the bound buffer does not hold the epoch");
+        }
+        UNIT_ASSERT(!remote->IsFinished());
+        // the peer confirms the finish
+        remoteBuffer->Descriptor->HandleUpdate(false, 0, true, false, remoteBuffer->NodeState.get(), remoteBuffer->Descriptor);
+        UNIT_ASSERT_VALUES_EQUAL_C(remoteEpoch->load(), 3, "a finish after Bind did not move the epoch");
+        UNIT_ASSERT(remote->IsFinished());
+
+        // local: the same forwarding to the local buffer (its finish paths are covered by FinishEpoch1n)
+        settings.ChannelId = 8;
+        auto local = Service0->GetOutputChannel(settings);
+        auto localEpoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        UNIT_ASSERT(local->BindFinishEpoch(localEpoch));
+        local->Bind(producer, localConsumer);
+        UNIT_ASSERT_VALUES_EQUAL_C(localEpoch->load(), 2, "the epoch did not move on Bind");
+        auto localBuffer = std::dynamic_pointer_cast<TLocalBuffer>(dynamic_cast<TFastDqOutputChannel&>(*local).Serializer->Buffer);
+        UNIT_ASSERT(localBuffer);
+        {
+            std::lock_guard lock(localBuffer->Mutex);
+            UNIT_ASSERT_C(localBuffer->FinishEpoch == localEpoch, "the bound buffer does not hold the epoch");
+        }
+
+        // the channels hold MiniKQL state of this allocator, and buffers of the node services
+        remoteBuffer.reset();
+        localBuffer.reset();
+        remote.Reset();
+        local.Reset();
+        Destroy();
+    }
+};
+
 // The resends of the reconciliations and the waiters interleave with the messages built off the session lock:
 // every consumer checks the order of what it gets
 struct TOrderedReconTest : public TReconTest {
@@ -2177,6 +2241,14 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(EarlyFinishEpoch1n) {
         FinishEpochTest(true, true);
+    }
+
+    Y_UNIT_TEST(OutputChannelFinishEpochBinding) {
+        TOutputChannelFinishEpochTest test;
+
+        test.Local = false;
+
+        test.Run();
     }
 
     Y_UNIT_TEST(SimpleFinish2n) {

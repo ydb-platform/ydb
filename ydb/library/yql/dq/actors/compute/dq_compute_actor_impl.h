@@ -2915,9 +2915,9 @@ protected:
     // every output channel is bound to OutputFinishEpoch: ProcessOutputsImpl may then reuse the sum of the last pass
     bool AllOutputsFinishEpochBound = false;
     struct TOutputChannelsSummary {
-        bool ChannelsReady;
-        bool HasDataToSend;
-        bool AllOutputsFinished;
+        bool ChannelsReady = true;
+        bool HasDataToSend = false;
+        bool AllOutputsFinished = true;
     };
     std::optional<TOutputChannelsSummary> OutputChannelsSummary;
     bool HasEffectsOutputs = false; // track execution of DISCARD results

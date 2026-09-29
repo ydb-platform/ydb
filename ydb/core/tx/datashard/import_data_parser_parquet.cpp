@@ -58,7 +58,7 @@ bool IsValidCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
 // Splits the converter's flat cell row into keys (in key order) and values (in
 // scheme order) and forwards them to the engine's addRow. A row with a value
 // that is invalid for its column is not forwarded, and neither is any row
-// after it: the import fails.
+// after it or after a row that addRow has rejected: the import fails.
 //
 // The cells are borrowed from the converter (see IRowWriter::AddRow) and are
 // not copied here: IDataParser::TAddRowFn carries the same borrowed-cells
@@ -98,9 +98,10 @@ public:
         TVector<TCell> values;
         values.reserve(cells.size() - KeyCount);
 
+        ui64 rowBytes = 0;
         for (size_t i = 0; i < cells.size(); ++i) {
             const auto& cell = cells[i];
-            PendingBytes += cell.Size();
+            rowBytes += cell.Size();
             if (ColumnMeta[i].KeyOrder != Max<ui32>()) {
                 keys[ColumnMeta[i].KeyOrder] = cell;
             } else {
@@ -108,7 +109,11 @@ public:
             }
         }
 
-        AddRowFn(keys, values);
+        if (auto added = AddRowFn(keys, values); !added) {
+            Error = std::move(added.error());
+            return;
+        }
+        PendingBytes += rowBytes;
         ++PendingRows;
     }
 
@@ -119,8 +124,8 @@ public:
         };
     }
 
-    // Set once a row has an invalid value. That row is the one after the rows
-    // counted by GetParsedData().
+    // Set once a row has an invalid value or is rejected. That row is the one
+    // after the rows counted by GetParsedData().
     const TMaybe<TString>& GetError() const {
         return Error;
     }

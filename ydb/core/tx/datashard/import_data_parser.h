@@ -23,7 +23,12 @@ namespace NKikimr::NDataShard {
 class IDataParser {
 public:
     using TPtr = THolder<IDataParser>;
-    using TAddRowFn = std::function<void(const TVector<TCell>& keys, const TVector<TCell>& values)>;
+    // Takes a row of the file. The cells are borrowed and valid only for the
+    // duration of the call. An error rejects the row: the one that takes rows
+    // knows the table, the parser knows where the row is in the file, so the
+    // parser adds the place to the error and stops.
+    using TAddRowFn = std::function<std::expected<void, TString>(
+        const TVector<TCell>& keys, const TVector<TCell>& values)>;
 
     struct TParsedData {
         ui64 DataBytes = 0;
@@ -39,8 +44,8 @@ public:
         const TTableInfo& tableInfo,
         const NKikimrSchemeOp::TTableDescription& scheme) = 0;
 
-    // Parses one self-contained block and calls addRow for every row. TCell
-    // values are borrowed and valid only for the duration of that call.
+    // Parses one self-contained block and calls addRow for every row, until
+    // one of them is rejected.
     virtual std::expected<TParsedData, TString> ParseBlock(
         TStringBuf data,
         TMemoryPool& pool,

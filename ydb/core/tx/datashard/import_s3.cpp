@@ -170,6 +170,53 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         ProcessTag = 1,
     };
 
+    // The columns that take no NULL, by the place of their cell in a row: the
+    // keys are in the order of the key, the values in the order of the scheme.
+    class TNotNullColumns {
+    public:
+        TNotNullColumns(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
+            const auto name = [&tableInfo](ui32 id) -> TMaybe<TString> {
+                const auto& column = tableInfo.GetColumn(id);
+                // a column that is being set NOT NULL takes no NULL either
+                return column.NotNull || column.SetNotNullInProgress ? MakeMaybe(column.Name) : Nothing();
+            };
+
+            for (const ui32 id : tableInfo.GetKeyColumnIds()) {
+                Keys.push_back(name(id));
+            }
+
+            TVector<TString> columnNames;
+            for (const auto& column : scheme.GetColumns()) {
+                columnNames.push_back(column.GetName());
+            }
+            for (const ui32 id : tableInfo.GetValueColumnIds(columnNames)) {
+                Values.push_back(name(id));
+            }
+        }
+
+        // The column of the row that holds NULL and must not, if there is one.
+        const TString* FindNull(const TVector<TCell>& keys, const TVector<TCell>& values) const {
+            if (const auto* column = FindNull(keys, Keys)) {
+                return column;
+            }
+            return FindNull(values, Values);
+        }
+
+    private:
+        static const TString* FindNull(const TVector<TCell>& cells, const TVector<TMaybe<TString>>& columns) {
+            for (size_t i = 0; i < Min(cells.size(), columns.size()); ++i) {
+                if (columns[i] && cells[i].IsNull()) {
+                    return columns[i].Get();
+                }
+            }
+            return nullptr;
+        }
+
+    private:
+        TVector<TMaybe<TString>> Keys;
+        TVector<TMaybe<TString>> Values;
+    };
+
     class TUploadRowsRequestBuilder {
     public:
         void New(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
@@ -645,39 +692,44 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     void Process() {
-        TString error;
         Counters.LatencyProcess.Start(Now());
 
         if (!DirectPartImportEnabled) {
             RequestBuilder.New(TableInfo, Scheme);
         }
+        if (!NotNullColumns) {
+            NotNullColumns.ConstructInPlace(TableInfo, Scheme);
+        }
 
-        auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
-            if (!error.empty()) {
-                return;
+        // A row is rejected here, where the table is known, for any format of
+        // the file. The parser adds the place of the row in the file.
+        auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
+            if (keys.empty()) {
+                return std::unexpected("row has no key columns");
             }
 
-            if (keys.empty()) {
-                error = "row has no key columns";
-                return;
+            if (const auto* column = NotNullColumns->FindNull(keys, values)) {
+                return std::unexpected(TStringBuilder() << "column '" << *column
+                    << "' has a NULL value but is NOT NULL");
             }
 
             if (!TableInfo.IsMyKey(keys)) {
-                error = "key is out of range";
-                return;
+                return std::unexpected("key is out of range");
             }
 
             if (DirectPartImportEnabled) {
                 auto ctx = TActivationContext::AsActorContext();
                 if (!DirectImport->FeedRow(keys, values, TRowVersion::Min(), ctx)) {
-                    error = DirectImport->Error();
-                    if (error.empty()) {
-                        error = "failed to add row to direct import writer";
-                    }
+                    TString error = DirectImport->Error();
+                    return std::unexpected(error.empty()
+                        ? TString("failed to add row to direct import writer")
+                        : std::move(error));
                 }
             } else {
                 RequestBuilder.AddRow(keys, values);
             }
+
+            return {};
         };
 
         IImportS3Engine::TAddChecksumChunkFn addChecksumChunk;
@@ -691,10 +743,6 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         auto result = Engine->GetData(pool, addRow, addChecksumChunk);
         Counters.LatencyProcess.Finish(Now());
 
-        if (!error.empty()) {
-            return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": " << error);
-        }
         if (!result) {
             return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                 << ": cannot process data: " << result.error());
@@ -749,12 +797,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             case IImportS3Engine::ENextRangeStatus::Blocked:
                 return;
             case IImportS3Engine::ENextRangeStatus::Exhausted:
-                error = "import engine needs input after exhausting source ranges";
                 break;
             }
 
             return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
-                << ": cannot request source range: " << error);
+                << ": cannot request source range: import engine needs input after exhausting source ranges");
         }
 
         case IImportS3Engine::EDataStatus::WaitingForCommit:
@@ -1288,6 +1335,7 @@ private:
     bool DataFormatSelected = false;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
+    TMaybe<TNotNullColumns> NotNullColumns; // set by the first row: the scheme is checked by then
 
     const ui32 Retries;
     ui32 Attempt = 0;

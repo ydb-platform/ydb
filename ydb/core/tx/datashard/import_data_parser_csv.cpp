@@ -60,7 +60,9 @@ public:
                 return std::unexpected(TStringBuilder() << strError << " on line: " << origLine);
             }
 
-            addRow(keys, values);
+            if (auto added = addRow(keys, values); !added) {
+                return std::unexpected(TStringBuilder() << added.error() << " on line: " << origLine);
+            }
             ++result.Rows;
         }
 

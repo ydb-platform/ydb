@@ -113,7 +113,7 @@ struct TDecodedRow {
 };
 
 IImportS3Engine::TAddRowFn CaptureRows(TVector<TDecodedRow>& rows) {
-    return [&rows](const TVector<TCell>& keys, const TVector<TCell>& values) {
+    return [&rows](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
         UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
         UNIT_ASSERT(!keys.front().IsNull());
@@ -123,6 +123,7 @@ IImportS3Engine::TAddRowFn CaptureRows(TVector<TDecodedRow>& rows) {
             TString(keys.front().AsBuf()),
             TString(values.front().AsBuf()),
         });
+        return {};
     };
 }
 
@@ -634,12 +635,13 @@ TImportOutcome ImportKeyValueParquet(
 
     TMemoryPool pool(256);
     TImportOutcome outcome;
-    const auto addRow = [&outcome](const TVector<TCell>& keys, const TVector<TCell>& values) {
+    const auto addRow = [&outcome](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
         UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
         outcome.Rows.emplace_back(
             TString(keys.front().AsBuf()),
             values.front().IsNull() ? Nothing() : MakeMaybe(TString(values.front().AsBuf())));
+        return {};
     };
     const auto unexpectedChecksum = [](TStringBuf) {
         UNIT_FAIL("checksum callback was called with validation disabled");
@@ -706,7 +708,7 @@ TBatchedImport ImportInBatches(const TEngineFixture& fixture, const TString& sou
     TMemoryPool pool(256);
     TBatchedImport result;
     ui64 batchBytes = 0;
-    const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
+    const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
         UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
         result.Keys.emplace_back(keys.front().AsBuf());
         for (const auto& cell : keys) {
@@ -718,6 +720,7 @@ TBatchedImport ImportInBatches(const TEngineFixture& fixture, const TString& sou
 
         const i64 arrowBytes = arrowPool->bytes_allocated() - arrowBytesBefore;
         result.PeakArrowBytes = Max<ui64>(result.PeakArrowBytes, Max<i64>(arrowBytes, 0));
+        return {};
     };
     const auto unexpectedChecksum = [](TStringBuf) {
         UNIT_FAIL("checksum callback was called with validation disabled");
@@ -787,6 +790,57 @@ void CheckBatchesAreFilledToTheBudget(const TVector<TString>& values, ui32 budge
 
     UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", imported.Keys), JoinSeq(",", keys));
     UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", imported.BatchBytes), JoinSeq(",", FillBatches(rowBytes, budget)));
+}
+
+// Runs an import to its end and returns the error it ends with, if any.
+TMaybe<TString> RunImport(IImportS3Engine& engine, const TString& source, const IImportS3Engine::TAddRowFn& addRow) {
+    TMemoryPool pool(256);
+    const auto unexpectedChecksum = [](TStringBuf) {
+        UNIT_FAIL("checksum callback was called with validation disabled");
+    };
+
+    for (ui32 step = 0; step < 1024; ++step) {
+        const auto data = engine.GetData(pool, addRow, unexpectedChecksum);
+        if (!data) {
+            return data.error();
+        }
+
+        switch (data->Status) {
+        case IImportS3Engine::EDataStatus::NeedInput: {
+            const auto range = engine.NextRange();
+            if (!range) {
+                return range.error();
+            }
+            UNIT_ASSERT(range->Status == IImportS3Engine::ENextRangeStatus::Ready);
+            if (auto result = engine.PutRange(range->Range, Slice(source, range->Range)); !result) {
+                return result.error();
+            }
+            break;
+        }
+        case IImportS3Engine::EDataStatus::Ready:
+            AssertSuccess(engine.Commit(data->Batch.Id));
+            break;
+        case IImportS3Engine::EDataStatus::Finished:
+            return Nothing();
+        case IImportS3Engine::EDataStatus::WaitingForCommit:
+            UNIT_FAIL("unexpected batch waiting for commit");
+        }
+    }
+
+    UNIT_FAIL("import engine did not finish");
+    return Nothing();
+}
+
+// Takes the rows up to the one with the key, which it rejects.
+IImportS3Engine::TAddRowFn RejectRow(TStringBuf key, TVector<TString>& taken) {
+    return [key, &taken](const TVector<TCell>& keys, const TVector<TCell>&) -> std::expected<void, TString> {
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+        if (keys.front().AsBuf() == key) {
+            return std::unexpected("the row is rejected");
+        }
+        taken.emplace_back(keys.front().AsBuf());
+        return {};
+    };
 }
 
 Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
@@ -1087,10 +1141,11 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
         TMemoryPool pool(256);
         TVector<ui32> importedKeys;
-        const auto addRow = [&](const TVector<TCell>& rowKeys, const TVector<TCell>&) {
+        const auto addRow = [&](const TVector<TCell>& rowKeys, const TVector<TCell>&) -> std::expected<void, TString> {
             UNIT_ASSERT_VALUES_EQUAL(rowKeys.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(rowKeys.front().Size(), sizeof(ui32));
             importedKeys.push_back(rowKeys.front().AsValue<ui32>());
+            return {};
         };
         const auto unexpectedChecksum = [](TStringBuf) {
             UNIT_FAIL("checksum callback was called with validation disabled");
@@ -1128,8 +1183,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         auto engine = fixture.MakeEngine(EDataFormat::Parquet, source, /*readBatchSize=*/64_KB);
 
         TMemoryPool pool(256);
-        const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) {
+        const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) -> std::expected<void, TString> {
             UNIT_FAIL("a row was produced from a file with an incompatible schema");
+            return {};
         };
         const auto unexpectedChecksum = [](TStringBuf) {
             UNIT_FAIL("checksum callback was called with validation disabled");
@@ -1170,13 +1226,14 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
         TMemoryPool pool(256);
         TVector<TStoredRow> imported;
-        const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
+        const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
             UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(values.size(), 2);
             const auto stored = [](const TCell& cell) -> TMaybe<TString> {
                 return cell.IsNull() ? Nothing() : MakeMaybe(TString(cell.AsBuf()));
             };
             imported.push_back({TString(keys.front().AsBuf()), stored(values[0]), stored(values[1])});
+            return {};
         };
         const auto unexpectedChecksum = [](TStringBuf) {
             UNIT_FAIL("checksum callback was called with validation disabled");
@@ -1220,6 +1277,36 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             NBinaryJson::SerializeToJson(TStringBuf(*imported[0].JsonDocument)), R"({"key":"value"})");
         UNIT_ASSERT_VALUES_EQUAL(
             NBinaryJson::SerializeToJson(TStringBuf(*imported[2].JsonDocument)), R"([1,2,{"a":null}])");
+    }
+
+    // A row is rejected by the one that takes it, which knows the table: a key
+    // out of the range of the shard, NULL in a column that is NOT NULL. The
+    // parser knows where the row is in the file and adds the place to the error.
+    Y_UNIT_TEST(CsvReportsTheLineOfARejectedRow) {
+        const TString source = "\"k1\",\"v1\"\n\"k2\",\"v2\"\n\"k3\",\"v3\"\n";
+        const TEngineFixture fixture;
+        auto engine = fixture.MakeEngine(EDataFormat::YdbDump, source, /*readBatchSize=*/source.size());
+
+        TVector<TString> taken;
+        const auto error = RunImport(*engine, source, RejectRow("k2", taken));
+
+        UNIT_ASSERT_C(error, "a rejected row did not stop the import");
+        UNIT_ASSERT_VALUES_EQUAL(*error, "the row is rejected on line: \"k2\",\"v2\"");
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", taken), "k1");
+    }
+
+    Y_UNIT_TEST(ParquetReportsThePlaceOfARejectedRow) {
+        // two row groups of two rows, with the keys from k1 to k4
+        const TString source = BuildSmallParquet(/*rowGroupSize=*/2, /*valueSize=*/16);
+        const TEngineFixture fixture;
+        auto engine = fixture.MakeEngine(EDataFormat::Parquet, source, /*readBatchSize=*/8_KB);
+
+        TVector<TString> taken;
+        const auto error = RunImport(*engine, source, RejectRow("k4", taken));
+
+        UNIT_ASSERT_C(error, "a rejected row did not stop the import");
+        UNIT_ASSERT_VALUES_EQUAL(*error, "the row is rejected in row 1 of row group 1");
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", taken), "k1,k2,k3");
     }
 
     Y_UNIT_TEST(ParquetRejectsValuesInvalidForTheColumnType) {
@@ -1560,8 +1647,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
         TMemoryPool pool(256);
         TString checksumInput;
-        const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) {
+        const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) -> std::expected<void, TString> {
             UNIT_FAIL("empty Parquet file emitted a row");
+            return {};
         };
         const auto addChecksum = [&](TStringBuf data) {
             checksumInput.append(data.data(), data.size());
@@ -1661,8 +1749,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
                 /*readBatchSize=*/8_KB);
 
             TMemoryPool pool(256);
-            const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) {
+            const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) -> std::expected<void, TString> {
                 UNIT_FAIL("empty Parquet file emitted a row");
+                return {};
             };
             const auto unexpectedChecksum = [](TStringBuf) {
                 UNIT_FAIL("checksum callback was called with validation disabled");

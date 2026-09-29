@@ -268,7 +268,7 @@ void CheckLargeParquetRoundTrip(const TLargeParquetData& source) {
 
     ui64 decodedBytes = 0;
     ui64 decodedRows = 0;
-    const NDataShard::IDataParser::TAddRowFn addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
+    const NDataShard::IDataParser::TAddRowFn addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
         UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
         UNIT_ASSERT(!keys[0].IsNull());
@@ -285,6 +285,7 @@ void CheckLargeParquetRoundTrip(const TLargeParquetData& source) {
 
         decodedBytes += keys[0].Size() + values[0].Size();
         ++decodedRows;
+        return {};
     };
 
     TMemoryPool pool(256);
@@ -590,6 +591,21 @@ TString JsonValueSchemePb() {
         columns {
           name: "value"
           type { optional_type { item { type_id: JSON } } }
+        }
+        primary_key: "key"
+    )";
+}
+
+TString NotNullValueSchemePb() {
+    return R"(
+        columns {
+          name: "key"
+          type { optional_type { item { type_id: UTF8 } } }
+        }
+        columns {
+          name: "value"
+          type { type_id: UTF8 }
+          not_null: true
         }
         primary_key: "key"
     )";
@@ -1060,6 +1076,36 @@ Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
                 {"key", "value"});
             NKqp::CompareYson(GenerateCsvUtf8Rows(rows).YsonStr, content);
         }
+    }
+
+    // A backup of the table has no NULL in a column that is NOT NULL, so such
+    // a file is of another origin. It is rejected, for any format, with the
+    // place of the row in the file.
+    Y_UNIT_TEST(ShouldFailOnNullInNotNullColumn, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
+
+        TTestBasicRuntime runtime;
+
+        THashMap<TString, TString> s3Data;
+        TString place;
+        if (format == ERestoreDataFormat::Parquet) {
+            // k1 has NULL, k2 has a value
+            s3Data = MakeParquetS3Data(NotNullValueSchemePb(), {BuildParquetUtf8WithNullValue()});
+            place = " in row 0 of row group 0";
+        } else {
+            s3Data = ConvertTableTestData(TTestDataWithScheme(
+                NotNullValueSchemePb(),
+                {TTestData("\"k1\",null\n\"k2\",\"v2\"\n", "")}));
+            place = " on line: \"k1\",null";
+        }
+
+        DoImport(
+            runtime,
+            s3Data,
+            format,
+            Ydb::StatusIds::CANCELLED,
+            /*enableParquetFeatureFlag=*/true,
+            "column 'value' has a NULL value but is NOT NULL" + place);
     }
 
     Y_UNIT_TEST(ShouldFailWhenFeatureFlagDisabled) {

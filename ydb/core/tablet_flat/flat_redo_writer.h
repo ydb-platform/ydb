@@ -158,8 +158,17 @@ namespace NRedo {
             }
         }
 
-        TWriter& EvUpdateTx(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ui64 txId)
+        TWriter& EvUpdateTx(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ui64 txId, ui32 savepointSeqNum = 0)
         {
+            if (savepointSeqNum) {
+                // Only written when a savepoint seq num is present, so logs stay readable by older versions otherwise
+                return EvUpdate(table, rop, key, ops, ERedo::UpdateTxSavepointSeqNum, sizeof(TEvUpdateTxSavepointSeqNum),
+                    [&](auto& out) {
+                        TEvUpdateTxSavepointSeqNum tail{ txId, savepointSeqNum };
+                        Write(out, &tail, sizeof(tail));
+                    });
+            }
+
             return EvUpdate(table, rop, key, ops, ERedo::UpdateTx, sizeof(TEvUpdateTx),
                 [&](auto& out) {
                     TEvUpdateTx tail{ txId };

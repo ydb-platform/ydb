@@ -775,7 +775,7 @@ public:
         Writer.CloseMap();
     }
 
-    void DoUpdateTx(ui32, ERowOp, TKeys, TOps, ui64)
+    void DoUpdateTx(ui32, ERowOp, TKeys, TOps, ui64, ui32)
     {
         Y_TABLET_ERROR("UpdateTx is unsupported");
     }

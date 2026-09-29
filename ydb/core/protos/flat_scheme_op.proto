@@ -756,6 +756,7 @@ message TColumnTableSchemeOptions {
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TColumnTableSchema {
@@ -803,6 +804,7 @@ message TColumnTableRequestedOptions {
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
     optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TAlterColumnTableSchema {

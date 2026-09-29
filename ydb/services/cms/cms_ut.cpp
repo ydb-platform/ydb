@@ -12,6 +12,7 @@
 #include <ydb/core/protos/console_tenant.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>

@@ -432,6 +432,7 @@ message TKqpVectorSearchSettings {
 
     // Search all posting partitions without k-means cluster-range pruning.
     optional bool FullRangeHnsw = 29;
+    optional uint32 HnswEfSearch = 30 [default = 15];
 }
 
 message TKqpTaskInfo {

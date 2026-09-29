@@ -20,7 +20,7 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
-        case NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw: {
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
             const bool prefixVectorIndex = indexDesc.GetKeyColumnNames().size() > 1;
             res.IndexTableCount = (prefixVectorIndex ? 3 : 2);
             res.SequenceCount = (prefixVectorIndex ? 1 : 0);

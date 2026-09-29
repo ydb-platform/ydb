@@ -124,7 +124,7 @@ public:
         GlobalFulltextCompact = 10,
         GlobalFulltextCompactRelevance = 11,
         GlobalJsonCompact = 12,
-        GlobalSyncDistributedHnsw = 13,
+        GlobalSyncHnsw = 13,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -137,7 +137,7 @@ public:
 
     static bool IsVectorIndex(EType type) {
         return type == EType::GlobalSyncVectorKMeansTree
-            || type == EType::GlobalSyncDistributedHnsw;
+            || type == EType::GlobalSyncHnsw;
     }
 
     const TString Name;
@@ -190,7 +190,7 @@ public:
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
             case EType::GlobalSyncVectorKMeansTree:
-            case EType::GlobalSyncDistributedHnsw: {
+            case EType::GlobalSyncHnsw: {
                 NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
                 *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
                 SpecializedIndexDescription = std::move(vectorIndexDescription);
@@ -299,8 +299,8 @@ public:
                 return TIndexDescription::EType::GlobalSyncUnique;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
                 return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
-            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw:
-                return TIndexDescription::EType::GlobalSyncDistributedHnsw;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw:
+                return TIndexDescription::EType::GlobalSyncHnsw;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain:
                 return TIndexDescription::EType::GlobalFulltextPlain;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextRelevance:
@@ -334,8 +334,8 @@ public:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
-            case NYql::TIndexDescription::EType::GlobalSyncDistributedHnsw:
-                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw;
+            case NYql::TIndexDescription::EType::GlobalSyncHnsw:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw;
             case NYql::TIndexDescription::EType::GlobalFulltextPlain:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextPlain;
             case NYql::TIndexDescription::EType::GlobalFulltextRelevance:
@@ -397,7 +397,7 @@ public:
                 }
                 break;
             case EType::GlobalSyncVectorKMeansTree:
-            case EType::GlobalSyncDistributedHnsw:
+            case EType::GlobalSyncHnsw:
                 *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
                 break;
             case EType::GlobalFulltextPlain:
@@ -431,7 +431,7 @@ public:
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-            case EType::GlobalSyncDistributedHnsw:
+            case EType::GlobalSyncHnsw:
                 if (State != EIndexState::Ready) {
                     // Do not try to update vector indexes until their build is finished
                     return false;
@@ -473,7 +473,7 @@ public:
             case EType::GlobalSyncUnique:
             case EType::GlobalAsync:
             case EType::GlobalSyncVectorKMeansTree:
-            case EType::GlobalSyncDistributedHnsw:
+            case EType::GlobalSyncHnsw:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:

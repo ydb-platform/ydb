@@ -19,7 +19,7 @@ namespace NKikimr::NDataShard {
 // Proto3 optional fields have no schema-level defaults. Keep the documented
 // server-side default in one place so omitted SQL settings do not behave as 0.
 ui64 GetHnswMinRows(const Ydb::Table::VectorIndexSettings& settings);
-ui32 GetHnswRebuildThresholdPercent(const Ydb::Table::VectorIndexSettings& settings);
+ui64 GetHnswDeltaRows(const Ydb::Table::VectorIndexSettings& settings);
 
 // Returns whether an index built with `cached` may serve a request with
 // `requested`. This compares normalized values, so an omitted HNSW parameter
@@ -172,7 +172,7 @@ public:
     // Returns up to k nearest neighbors of targetVector (same wire format as
     // build-time vectors), ordered from closest to farthest.
     THnswSearchResult Search(TStringBuf targetVector, size_t k,
-        TRowVersion readVersion = TRowVersion::Max()) const;
+        TRowVersion readVersion = TRowVersion::Max(), ui32 efSearch = 15) const;
 
     // Resolves the visible vector; base vectors are reconstructed from the
     // wrapper-owned NMSLIB Objects, and delta vectors retain their wire format.
@@ -192,7 +192,8 @@ public:
         TRowVersion upper = TRowVersion::Max());
     TRowVersion GetBaseVersion() const;
     bool CanRead(TRowVersion version) const;
-    bool NeedsRebuild(ui32 thresholdPercent) const;
+    // The limit counts distinct changed rows, independently of graph size.
+    bool NeedsRebuild(ui64 deltaRows) const;
     static bool IsValidVector(TStringBuf vector, size_t dimension);
 
     size_t Size() const;

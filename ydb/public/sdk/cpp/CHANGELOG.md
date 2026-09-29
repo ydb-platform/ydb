@@ -1,5 +1,9 @@
 * Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.
 
+* Renamed the `distributed_hnsw` index type to `hnsw` (`GlobalHnsw` in the C++ SDK). Search breadth is now set per query with `PRAGMA ydb.HNSWEfSearch`, default 15, instead of an index setting.
+
+* Renamed vector index settings to `MinRows`, `M`, `EfConstruction`, and `DeltaRows`. `DeltaRows` is a 64-bit absolute changed-row limit with a default of 10000, replacing the percentage threshold.
+
 * Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.
 
 * Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state and optional timestamps, and incremental `UploadModuleFromFile` on a dedicated I/O executor. Upload futures include the final gRPC status.

@@ -257,8 +257,8 @@ TString IndexTypeToName(NYql::TIndexDescription::EType type) {
             return "global sync unique secondary";
         case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
             return "global sync vector_kmeans_tree";
-        case NYql::TIndexDescription::EType::GlobalSyncDistributedHnsw:
-            return "global sync distributed_hnsw";
+        case NYql::TIndexDescription::EType::GlobalSyncHnsw:
+            return "global sync hnsw";
         case NYql::TIndexDescription::EType::GlobalFulltextPlain:
         case NYql::TIndexDescription::EType::GlobalFulltextCompact:
             return "global sync fulltext_plain";
@@ -1208,7 +1208,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 return false;
             case TIndexDescription::EType::GlobalSyncUnique:
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-            case TIndexDescription::EType::GlobalSyncDistributedHnsw:
+            case TIndexDescription::EType::GlobalSyncHnsw:
             case TIndexDescription::EType::GlobalFulltextPlain:
             case TIndexDescription::EType::GlobalFulltextRelevance:
             case TIndexDescription::EType::GlobalJson:

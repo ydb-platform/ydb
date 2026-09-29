@@ -487,7 +487,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
                 // Row-table local indexes represented as named scheme objects (e.g. prefix bloom
                 // filter) have no impl table. (Column-table/OLAP local indexes use a separate path.)
                 if (indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree
-                    && indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw
+                    && indexDesc.GetType() != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw
                     && indexDesc.IndexImplTableDescriptionsSize() > 0) {
                     FormatIndexImplTable(tablePath, indexDesc.GetName(), indexDesc.GetIndexImplTableDescriptions(0));
                 }
@@ -586,9 +586,9 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
             break;
         }
-        case TableIndex::kGlobalDistributedHnswIndex: {
-            Stream << " GLOBAL USING distributed_hnsw ON ";
-            kMeansTreeSettings = index.global_distributed_hnsw_index().vector_settings();
+        case TableIndex::kGlobalHnswIndex: {
+            Stream << " GLOBAL USING hnsw ON ";
+            kMeansTreeSettings = index.global_hnsw_index().vector_settings();
             break;
         }
         case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex: {
@@ -724,26 +724,22 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         }
 
         const auto& vectorSettings = kMeansTreeSettings->settings();
-        if (vectorSettings.has_hnsw_min_rows()) {
-            Stream << del << "hnsw_min_rows="
-                << (vectorSettings.has_hnsw_min_rows() ? vectorSettings.hnsw_min_rows() : 10000);
+        if (vectorSettings.has_min_rows()) {
+            Stream << del << "min_rows="
+                << (vectorSettings.has_min_rows() ? vectorSettings.min_rows() : 10000);
             del = ", ";
         }
-        if (vectorSettings.has_hnsw_connectivity()) {
-            Stream << del << "hnsw_connectivity=" << vectorSettings.hnsw_connectivity();
+        if (vectorSettings.has_m()) {
+            Stream << del << "M=" << vectorSettings.m();
             del = ", ";
         }
-        if (vectorSettings.has_hnsw_construction_candidates()) {
-            Stream << del << "hnsw_construction_candidates=" << vectorSettings.hnsw_construction_candidates();
+        if (vectorSettings.has_ef_construction()) {
+            Stream << del << "ef_construction=" << vectorSettings.ef_construction();
             del = ", ";
         }
-        if (vectorSettings.has_hnsw_search_candidates()) {
-            Stream << del << "hnsw_search_candidates=" << vectorSettings.hnsw_search_candidates();
-            del = ", ";
-        }
-        if (vectorSettings.has_hnsw_rebuild_threshold_percent()) {
-            Stream << del << "hnsw_rebuild_threshold_percent="
-                << vectorSettings.hnsw_rebuild_threshold_percent();
+        if (vectorSettings.has_delta_rows()) {
+            Stream << del << "delta_rows="
+                << vectorSettings.delta_rows();
             del = ", ";
         }
 

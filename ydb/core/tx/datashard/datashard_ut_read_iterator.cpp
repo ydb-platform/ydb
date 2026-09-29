@@ -6241,7 +6241,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             vectorSettings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
             vectorSettings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
             vectorSettings->set_vector_dimension(2);
-            vectorSettings->set_hnsw_min_rows(1);
+            vectorSettings->set_min_rows(1);
             if (advanceEdge) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
@@ -6346,7 +6346,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             settings->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
             settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
             settings->set_vector_dimension(2);
-            settings->set_hnsw_min_rows(1);
+            settings->set_min_rows(1);
             return helper.SendRead("table-vector-prefix", request.release());
         };
         const auto cold = read(true);
@@ -6420,9 +6420,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         settings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         settings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
         settings.set_vector_dimension(2);
-        settings.set_hnsw_min_rows(1);
+        settings.set_min_rows(1);
         // Isolate the reader's pinned graph and journal from rebuild buffers.
-        settings.set_hnsw_rebuild_threshold_percent(1000);
+        settings.set_delta_rows(1000);
         ui64 readId = 0;
         auto read = [&] {
             auto request = helper.GetBaseReadRequest("table-vector-memory", ++readId, NKikimrDataEvents::FORMAT_CELLVEC);
@@ -6508,8 +6508,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
             settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
             settings->set_vector_dimension(2);
-            settings->set_hnsw_min_rows(1);
-            settings->set_hnsw_rebuild_threshold_percent(1000);
+            settings->set_min_rows(1);
+            settings->set_delta_rows(1000);
             return request;
         };
 
@@ -6594,8 +6594,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         indexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         indexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
         indexSettings.set_vector_dimension(2);
-        indexSettings.set_hnsw_min_rows(1);
-        indexSettings.set_hnsw_rebuild_threshold_percent(Rebuild ? 50 : 1000);
+        indexSettings.set_min_rows(1);
+        indexSettings.set_delta_rows(Rebuild ? 1 : 1000);
         ui64 readId = 0;
         auto read = [&](TRowVersion version) {
             auto request = helper.GetBaseReadRequest("hnsw-mvcc", ++readId,
@@ -6636,8 +6636,8 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
             UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStats().GetRows(), 1);
         }
         if (Rebuild) {
-            // Inserting and deleting the same key changed one of two base rows:
-            // exactly 50%, so no automatic rebuild may have started.
+            // Inserting and deleting the same key changes one distinct row:
+            // exactly delta_rows=1, so no automatic rebuild may have started.
             runtime.SimulateSleep(TDuration::MilliSeconds(200));
             UNIT_ASSERT(shard->GetHnswIndex(tid, 3, indexSettings, false) == original);
             TVector<TAutoPtr<IEventHandle>> delayed;
@@ -6731,7 +6731,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
         indexSettings.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
         indexSettings.set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
         indexSettings.set_vector_dimension(2);
-        indexSettings.set_hnsw_min_rows(1);
+        indexSettings.set_min_rows(1);
         ui64 id = 0;
         auto read = [&](TRowVersion version, ui32 expected) {
             auto request = helper.GetBaseReadRequest("hnsw-cold", ++id, NKikimrDataEvents::FORMAT_CELLVEC, version);

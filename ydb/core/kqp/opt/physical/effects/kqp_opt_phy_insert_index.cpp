@@ -113,7 +113,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
         || std::any_of(indexes.begin(), indexes.end(), [](const auto& index) {
             switch (index.second->Type) {
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-                case TIndexDescription::EType::GlobalSyncDistributedHnsw:
+                case TIndexDescription::EType::GlobalSyncHnsw:
                 case TIndexDescription::EType::GlobalFulltextPlain:
                 case TIndexDescription::EType::GlobalFulltextRelevance:
                 case TIndexDescription::EType::GlobalJson:
@@ -226,7 +226,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 break;
             }
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-            case TIndexDescription::EType::GlobalSyncDistributedHnsw: {
+            case TIndexDescription::EType::GlobalSyncHnsw: {
                 upsertIndexRows = MakeInsertIndexRows(*insertRows, table, inputColumnsSet, indexTableColumns,
                     insert.Pos(), ctx, true);
                 if (indexDesc->KeyColumns.size() > 1) {

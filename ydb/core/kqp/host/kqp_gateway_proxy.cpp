@@ -1201,7 +1201,7 @@ public:
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;
                             case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-                            case TIndexDescription::EType::GlobalSyncDistributedHnsw:
+                            case TIndexDescription::EType::GlobalSyncHnsw:
                                 *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                             case TIndexDescription::EType::GlobalFulltextPlain:

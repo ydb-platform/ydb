@@ -660,6 +660,7 @@ namespace NKikimr {
                 *topK->MutableSettings() = Settings.GetIndexSettings();
                 topK->SetTargetVector(TargetVector);
                 topK->SetLimit(limit);
+                topK->SetHnswEfSearch(Settings.GetHnswEfSearch());
                 return topK;
             }
 

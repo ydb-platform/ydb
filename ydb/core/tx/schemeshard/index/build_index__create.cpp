@@ -415,17 +415,17 @@ private:
             break;
         }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex:
-        case Ydb::Table::TableIndex::TypeCase::kGlobalDistributedHnswIndex: {
+        case Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex: {
             const bool distributedHnsw = index.type_case()
-                == Ydb::Table::TableIndex::TypeCase::kGlobalDistributedHnswIndex;
+                == Ydb::Table::TableIndex::TypeCase::kGlobalHnswIndex;
             const auto& requestedSettings = distributedHnsw
-                ? index.global_distributed_hnsw_index().vector_settings()
+                ? index.global_hnsw_index().vector_settings()
                 : index.global_vector_kmeans_tree_index().vector_settings();
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
             buildInfo.IndexType = distributedHnsw
-                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalDistributedHnsw
+                ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalHnsw
                 : NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
 

@@ -187,7 +187,7 @@ TQueryInfoList TVectorWorkloadGenerator::Select() {
     TQueryInfo queryInfo(query, std::move(params));
     queryInfo.UseStaleRO = Params.StaleRO;
     // Lock-taking reads bypass HNSW; use a consistent read-only snapshot by default.
-    queryInfo.UseSnapshotRO = Params.DistributedHnsw && !Params.StaleRO;
+    queryInfo.UseSnapshotRO = Params.Hnsw && !Params.StaleRO;
 
     return TQueryInfoList(1, queryInfo);
 }

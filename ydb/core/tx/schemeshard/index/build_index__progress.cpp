@@ -1026,7 +1026,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
 
     if (buildInfo.IsBuildVectorIndex()
             && (buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree
-                || buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalDistributedHnsw)) {
+                || buildInfo.IndexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw)) {
         if (auto* desc = std::get_if<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(&buildInfo.SpecializedIndexDescription)) {
             *indexBuild.MutableVectorIndexKmeansTreeDescription() = *desc;
         }

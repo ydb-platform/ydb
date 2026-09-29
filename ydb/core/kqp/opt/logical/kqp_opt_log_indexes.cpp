@@ -3927,7 +3927,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         // Unprefixed distributed HNSW uses the actor's all-partition search;
         // the legacy lookup chain only implements k-means cluster traversal.
         if (kqpCtx.Config->GetEnableVectorSearchActor()
-                || indexDesc->Type == TIndexDescription::EType::GlobalSyncDistributedHnsw) {
+                || indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {
             return DoRewriteTopSortOverKMeansTreeToVectorSearch(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                                                 ctx, *indexDesc);
         }

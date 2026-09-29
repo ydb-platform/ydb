@@ -1646,8 +1646,8 @@ private:
                 indexType = TIndexDescription::EType::GlobalSyncUnique;
             } else if (type == "globalVectorKmeansTree") {
                 indexType = TIndexDescription::EType::GlobalSyncVectorKMeansTree;
-            } else if (type == "globalDistributedHnsw") {
-                indexType = TIndexDescription::EType::GlobalSyncDistributedHnsw;
+            } else if (type == "globalHnsw") {
+                indexType = TIndexDescription::EType::GlobalSyncHnsw;
             } else if (type == "globalFulltextPlain") {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableFulltextIndex()) {
                     ctx.AddError(TIssue(ctx.GetPosition(index.Pos()), "Fulltext index support is disabled"));
@@ -1759,7 +1759,7 @@ private:
                 TString error;
                 switch (indexType) {
                     case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-                    case TIndexDescription::EType::GlobalSyncDistributedHnsw: {
+                    case TIndexDescription::EType::GlobalSyncHnsw: {
                         NKikimr::NKMeans::FillSetting(
                             *vectorIndexKmeansTreeDescription.MutableSettings(),
                             nameLower, value.StringValue(), error);
@@ -1811,7 +1811,7 @@ private:
                     // no settings validation
                     break;
                 case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
-                case TIndexDescription::EType::GlobalSyncDistributedHnsw: {
+                case TIndexDescription::EType::GlobalSyncHnsw: {
                     TString error;
                     if (!NKikimr::NKMeans::ValidateSettingsPartial(vectorIndexKmeansTreeDescription.GetSettings(), error)) {
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));

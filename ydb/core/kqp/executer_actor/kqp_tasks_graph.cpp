@@ -1074,6 +1074,7 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         if (limit) {
             auto& out = *settings->MutableVectorTopK();
             out.SetColumn(in.GetColumn());
+            out.SetHnswEfSearch(in.HasHnswEfSearch() ? in.GetHnswEfSearch() : 15);
             *out.MutableSettings() = in.GetSettings();
             auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
             out.SetTargetVector(TString(target.AsStringRef()));
@@ -1184,6 +1185,7 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
         settings->SetTopK(static_cast<ui32>(std::min<ui64>(raw, Max<ui32>())));
     }
     settings->SetLevelTop(vectorSearch.GetLevelTop());
+    settings->SetHnswEfSearch(vectorSearch.HasHnswEfSearch() ? vectorSearch.GetHnswEfSearch() : 15);
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());
     settings->SetHasPrefix(vectorSearch.GetHasPrefix());
     settings->SetFullRangeHnsw(vectorSearch.GetFullRangeHnsw());
@@ -3207,6 +3209,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
             if (limit) {
                 auto& out = *settings->MutableVectorTopK();
                 out.SetColumn(in.GetColumn());
+                out.SetHnswEfSearch(in.HasHnswEfSearch() ? in.GetHnswEfSearch() : 15);
                 *out.MutableSettings() = in.GetSettings();
                 auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
                 out.SetTargetVector(TString(target.AsStringRef()));

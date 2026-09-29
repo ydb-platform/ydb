@@ -134,6 +134,179 @@ Y_UNIT_TEST(DirectReadLastOffsetWaitsForBlobTail) {
     UNIT_ASSERT_VALUES_EQUAL(plainRows.GetResult(1).GetOffset(), 14);
 }
 
+// Sends the follow-up answer and returns the published prepare cursor.
+// A second follow-up is dropped so a retry loop cannot spin the runtime.
+// The stage event goes to a node-0 service id, which this runtime aborts on,
+// so it is dropped here as well.
+struct TPublishedPrepare {
+    ui64 ReadOffset = 0;
+    ui64 LastOffset = 0;
+};
+
+TPublishedPrepare FinishFollowUp(
+        TTestActorRuntime& runtime,
+        const TActorId& proxy,
+        const TActorId& tablet,
+        const TActorId& clientEdge,
+        THolder<TEvPersQueue::TEvResponse> followUp)
+{
+    int extraFollowups = 0;
+    runtime.SetEventFilter([&](NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPersQueue::TEvRequest::EventType) {
+            ++extraFollowups;
+            return true;
+        }
+        return ev->CastAsLocal<TEvPQ::TEvStageDirectReadData>() != nullptr;
+    });
+    runtime.Send(new IEventHandle(proxy, tablet, followUp.Release()));
+    auto prepared = runtime.GrabEdgeEvent<TEvPersQueue::TEvResponse>(clientEdge, TDuration::Seconds(5));
+    runtime.SetEventFilter(&NActors::TTestActorRuntimeBase::DefaultFilterFunc);
+
+    UNIT_ASSERT_VALUES_EQUAL(extraFollowups, 0);
+    UNIT_ASSERT(prepared && prepared->Get());
+    const auto& prepare = prepared->Get()->Record.GetPartitionResponse().GetCmdPrepareReadResult();
+    return {prepare.GetReadOffset(), prepare.GetLastOffset()};
+}
+
+TActorId StartDirectRead(
+        TTestSetup& setup,
+        TTestActorRuntime& runtime,
+        NKikimrClient::TPersQueueRequest& request,
+        const TActorId& tablet)
+{
+    auto proxy = runtime.Register(CreateReadProxy(
+            setup.Context.Edge, 1, tablet, 1, TDirectReadKey{"session1", 1, 1}, request, TActorId{}));
+    TDispatchOptions opts;
+    opts.FinalEvents.emplace_back(TEvents::TEvBootstrap::EventType, 1);
+    runtime.DispatchEvents(opts);
+    return proxy;
+}
+
+void SendTabletReadResult(
+        TTestActorRuntime& runtime,
+        const TActorId& proxy,
+        const TActorId& sender,
+        const NKikimrClient::TCmdReadResult& rows)
+{
+    auto response = MakeHolder<TEvPersQueue::TEvResponse>();
+    response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    response->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(rows);
+    runtime.Send(new IEventHandle(proxy, sender, response.Release()));
+}
+
+Y_UNIT_TEST(DirectReadFollowUpPublishesWhenTailIsGone) {
+    // Offsets 13 and 14 are complete. Offset 15 is only part 0.
+    // The follow-up does not return part 1: compaction left a new message at 16.
+    // The proxy must publish 13..14 and skip 15, instead of requesting part 1 again.
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+    runtime->SetScheduledLimit(100000);
+
+    NKikimrClient::TPersQueueRequest request;
+    auto* read = request.MutablePartitionRequest()->MutableCmdRead();
+    read->SetClientId("user");
+    read->SetSessionId("session1");
+    read->SetOffset(13);
+    read->SetPartNo(0);
+    read->SetDirectReadId(1);
+    read->SetReadToBlobEnd(true);
+
+    const auto tablet = runtime->AllocateEdgeActor();
+    auto proxy = StartDirectRead(setup, *runtime, request, tablet);
+
+    NKikimrClient::TCmdReadResult rows;
+    rows.SetRealReadOffset(13);
+    rows.SetLastOffset(15);
+    rows.SetEndOffset(24);
+    auto add = [&](ui64 offset, ui32 partNo, ui32 totalParts) {
+        auto* row = rows.AddResult();
+        row->SetOffset(offset);
+        row->SetData("x");
+        row->SetPartNo(partNo);
+        row->SetTotalParts(totalParts);
+    };
+    add(13, 0, 1);
+    add(14, 0, 1);
+    add(15, 0, 2);
+    SendTabletReadResult(*runtime, proxy, setup.Context.Edge, rows);
+
+    auto followup = runtime->GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(followup);
+    const auto& follow = followup->Record.GetPartitionRequest().GetCmdRead();
+    UNIT_ASSERT_VALUES_EQUAL(follow.GetOffset(), 15);
+    UNIT_ASSERT_VALUES_EQUAL(follow.GetPartNo(), 1);
+
+    NKikimrClient::TCmdReadResult tailGone;
+    tailGone.SetRealReadOffset(16);
+    tailGone.SetLastOffset(16);
+    tailGone.SetEndOffset(24);
+    auto* next = tailGone.AddResult();
+    next->SetOffset(16);
+    next->SetPartNo(0);
+    next->SetTotalParts(1);
+    next->SetData("z");
+    auto tail = MakeHolder<TEvPersQueue::TEvResponse>();
+    tail->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    tail->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    tail->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(tailGone);
+
+    const auto published = FinishFollowUp(*runtime, proxy, tablet, setup.Context.Edge, std::move(tail));
+    UNIT_ASSERT_VALUES_EQUAL(published.ReadOffset, 13);
+    UNIT_ASSERT_VALUES_EQUAL(published.LastOffset, 15);
+}
+
+Y_UNIT_TEST(DirectReadFollowUpPublishesWhenTailPartIsEmpty) {
+    // The only staged row is an incomplete message, and its tail comes back empty.
+    TTestSetup setup;
+    auto runtime = setup.GetRuntime();
+    runtime->SetScheduledLimit(100000);
+
+    NKikimrClient::TPersQueueRequest request;
+    auto* read = request.MutablePartitionRequest()->MutableCmdRead();
+    read->SetClientId("user");
+    read->SetSessionId("session1");
+    read->SetOffset(15);
+    read->SetPartNo(0);
+    read->SetDirectReadId(1);
+    read->SetReadToBlobEnd(true);
+
+    const auto tablet = runtime->AllocateEdgeActor();
+    auto proxy = StartDirectRead(setup, *runtime, request, tablet);
+
+    NKikimrClient::TCmdReadResult rows;
+    rows.SetRealReadOffset(15);
+    rows.SetLastOffset(15);
+    rows.SetEndOffset(24);
+    auto* row = rows.AddResult();
+    row->SetOffset(15);
+    row->SetData("x");
+    row->SetPartNo(0);
+    row->SetTotalParts(2);
+    SendTabletReadResult(*runtime, proxy, setup.Context.Edge, rows);
+
+    auto followup = runtime->GrabEdgeEvent<TEvPersQueue::TEvRequest>(TDuration::Seconds(5));
+    UNIT_ASSERT(followup);
+    UNIT_ASSERT_VALUES_EQUAL(followup->Record.GetPartitionRequest().GetCmdRead().GetPartNo(), 1);
+
+    NKikimrClient::TCmdReadResult emptyTail;
+    emptyTail.SetRealReadOffset(15);
+    emptyTail.SetLastOffset(15);
+    emptyTail.SetEndOffset(24);
+    auto* missing = emptyTail.AddResult();
+    missing->SetOffset(15);
+    missing->SetPartNo(1);
+    missing->SetTotalParts(2);
+    auto tail = MakeHolder<TEvPersQueue::TEvResponse>();
+    tail->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
+    tail->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
+    tail->Record.MutablePartitionResponse()->MutableCmdReadResult()->CopyFrom(emptyTail);
+
+    const auto published = FinishFollowUp(*runtime, proxy, tablet, setup.Context.Edge, std::move(tail));
+    UNIT_ASSERT_VALUES_EQUAL(published.ReadOffset, 15);
+    UNIT_ASSERT_VALUES_EQUAL(published.LastOffset, 15);
+}
+
 Y_UNIT_TEST(TestPublishAndForget) {
     TTestSetup setup;
     auto runtime = setup.GetRuntime();

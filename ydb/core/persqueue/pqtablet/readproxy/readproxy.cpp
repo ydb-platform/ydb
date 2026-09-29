@@ -88,7 +88,19 @@ private:
 
     ui64 DirectReadLastOffset(const NKikimrClient::TCmdReadResult& readResult) const {
         const auto* staged = StagedRead();
-        if (!staged || staged->ResultSize() == 0) {
+        const bool hasRows = staged && staged->ResultSize() > 0;
+        ui64 stagedEnd = 0;
+        if (hasRows) {
+            const auto& last = staged->GetResult(staged->ResultSize() - 1);
+            const ui64 logical = last.GetLogicalMessageCount() > 0 ? last.GetLogicalMessageCount() : 1;
+            stagedEnd = last.GetOffset() + logical - 1;
+        }
+        // A dropped tail is not in the staged rows. Keep the cursor on it so the
+        // next DirectRead starts at the following message instead of the hole.
+        if (SkippedThrough.Defined()) {
+            return hasRows ? Max(stagedEnd, *SkippedThrough) : *SkippedThrough;
+        }
+        if (!hasRows) {
             const ui64 readOffset = Request.GetPartitionRequest().GetCmdRead().GetOffset();
             const ui64 lastOffset = readResult.GetLastOffset();
             if (readOffset > 0) {
@@ -96,9 +108,7 @@ private:
             }
             return lastOffset;
         }
-        const auto& last = staged->GetResult(staged->ResultSize() - 1);
-        const ui64 logical = last.GetLogicalMessageCount() > 0 ? last.GetLogicalMessageCount() : 1;
-        return last.GetOffset() + logical - 1;
+        return stagedEnd;
     }
 
     void SendResponse(const TActorContext& ctx, bool isDirectRead, const NKikimrClient::TCmdReadResult& readResult,
@@ -230,6 +240,32 @@ private:
             }
         };
 
+        // Follow-up did not bring the missing part. Drop that message and publish
+        // the complete prefix. arrivedOffset is the offset the tablet returned
+        // instead; 0 means the follow-up had no rows.
+        auto dropIncompleteTail = [&] (ui64 arrivedOffset) {
+            if (partResp->ResultSize() == 0) {
+                return;
+            }
+            const auto& back = partResp->GetResult(partResp->ResultSize() - 1);
+            if (back.GetPartNo() + 1 >= back.GetTotalParts()) {
+                return;
+            }
+            const ui64 backOffset = back.GetOffset();
+            const ui64 logical = back.GetLogicalMessageCount() > 0 ? back.GetLogicalMessageCount() : 1;
+            ui64 skipped = backOffset + logical - 1;
+            if (arrivedOffset > backOffset) {
+                // Do not step over a message the tablet already has.
+                skipped = arrivedOffset - 1;
+            }
+            if (isDirectRead) {
+                if (!SkippedThrough.Defined() || skipped > *SkippedThrough) {
+                    SkippedThrough = skipped;
+                }
+            }
+            partResp->MutableResult()->RemoveLast();
+        };
+
         auto makeErrorResponse = [&] (const TString& errorMessage) {
             partResp->MutableResult()->Clear();
             responseRecord.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
@@ -241,6 +277,11 @@ private:
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             const auto& currentReadResult = readResult.GetResult(i);
             if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
+                if (!InitialRequest) {
+                    // The tail we asked for was removed. Publish instead of asking again.
+                    dropIncompleteTail(currentReadResult.GetOffset());
+                    break;
+                }
                 LastSkipOffset = currentReadResult.GetOffset();
                 continue; // Skip the empty part;
             }
@@ -261,12 +302,13 @@ private:
                     break;
                 }
                 if (currentReadResult.GetPartNo() == 0) {
-                    // This is new message. If we still have another incomplete message stored previously, its' last parts were probably deleted by retention of compactification.
-                    // This is fine, we can drop last message;
+                    // New message: the previous tail was deleted by retention or compaction.
+                    dropIncompleteTail(currentReadResult.GetOffset());
                     break;
                 }
                 const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
                 if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
+                    dropIncompleteTail(currentReadResult.GetOffset());
                     break;
                 }
             }
@@ -356,6 +398,12 @@ private:
             Send(TabletActorId, req.Release());
             return;
         }
+        if (!InitialRequest && readResult.ResultSize() == 0
+            && responseRecord.GetStatus() == NMsgBusProxy::MSTATUS_OK)
+        {
+            // Follow-up returned nothing. The missing part is not there.
+            dropIncompleteTail(0);
+        }
         if (!partResp->GetResult().empty()) {
             const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);
             if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) {
@@ -434,6 +482,8 @@ private:
     const TActorId BatchProcessorActor;
     bool InitialRequest = true;
     TMaybe<ui64> LastSkipOffset;
+    // Inclusive offset skipped because its blob tail is gone.
+    TMaybe<ui64> SkippedThrough;
     bool PendingDirectRead = false;
     NKikimrClient::TPersQueuePartitionResponse PendingPartitionResponse;
 };

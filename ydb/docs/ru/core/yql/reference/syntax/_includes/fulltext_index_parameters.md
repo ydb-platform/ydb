@@ -7,7 +7,7 @@
     * `filter_length_min` - минимальная длина токена (положительное целое); применяется только при `use_filter_length=true`
     * `filter_length_max` - максимальная длина токена (положительное целое); применяется только при `use_filter_length=true`
     * `use_filter_snowball` - фильтр лемматизации [Snowball](https://snowballstem.org/) (`true` или `false`)
-    * `language` - язык или список языков через запятую для лемматизатора [Snowball](https://snowballstem.org/). Пробелы вокруг запятых допустимы, например `"english, russian"`. Готовый анализатор `snowball` дополнительно удаляет стоп-слова, поэтому вместе с ним можно указать только `english` и `russian` {#fulltext-languages}
+    * `language` - язык или список языков через запятую для лемматизатора [Snowball](https://snowballstem.org/). Пробелы вокруг запятых допустимы, например `"english, russian"`. Готовый анализатор `snowball` дополнительно удаляет стоп-слова, поэтому вместе с ним можно указать только `english` и `russian`
     * `use_filter_ngram` - фильтр [N-грамм](https://en.wikipedia.org/wiki/N-gram) (`true` или `false`)
     * `use_filter_edge_ngram` - фильтр краевых [N-грамм](https://en.wikipedia.org/wiki/N-gram) (`true` или `false`)
     * `filter_ngram_min_length` - минимальная длина N-граммы (положительное целое)

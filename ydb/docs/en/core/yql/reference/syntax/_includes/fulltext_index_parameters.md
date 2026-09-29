@@ -7,7 +7,7 @@
     * `filter_length_min` - minimum token length (positive integer); only applied when `use_filter_length=true`
     * `filter_length_max` - maximum token length (positive integer); only applied when `use_filter_length=true`
     * `use_filter_snowball` - [Snowball](https://snowballstem.org/) lemmatization filter (`true` or `false`)
-    * `language` - one language or a comma-separated list for the [Snowball](https://snowballstem.org/) lemmatizer. Spaces around commas are allowed, for example `"english, russian"`. The `snowball` analyzer also removes stopwords, so with that preset only `english` and `russian` can be set {#fulltext-languages}
+    * `language` - one language or a comma-separated list for the [Snowball](https://snowballstem.org/) lemmatizer. Spaces around commas are allowed, for example `"english, russian"`. The `snowball` analyzer also removes stopwords, so with that preset only `english` and `russian` can be set
     * `use_filter_ngram` - [n-gram](https://en.wikipedia.org/wiki/N-gram) filter (`true` or `false`)
     * `use_filter_edge_ngram` - edge [n-gram](https://en.wikipedia.org/wiki/N-gram) filter (`true` or `false`)
     * `filter_ngram_min_length` - minimum n-gram length (positive integer)

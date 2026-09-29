@@ -50,7 +50,7 @@ CREATE TABLE articles (
 
 ### Multilingual lemmatization {#snowball}
 
-The Snowball preset lemmatizes tokens and matches English and Russian word forms in the same text column. `language` accepts several [supported languages](#fulltext-languages), separated by commas. Spaces after commas are allowed:
+The Snowball preset lemmatizes tokens and matches English and Russian word forms in the same text column. `language` accepts several supported languages, separated by commas. Spaces after commas are allowed:
 
 ```yql
 CREATE TABLE documents (

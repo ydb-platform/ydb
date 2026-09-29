@@ -410,8 +410,10 @@ class GrpcTransport:
             request.SecurityToken = self.params.token
         # Lifecycle mutations have no run dedup key. Do not retry an ambiguous
         # delete: an operator could have recreated its owner index meanwhile.
-        retryable = command.Operation in (Control.CAPABILITIES, Control.LIST, Control.DESCRIBE,
-                                           Control.START, Control.GET, Control.STOP)
+        retryable = command.Operation in (
+            Control.CAPABILITIES, Control.LIST, Control.DESCRIBE,
+            Control.START, Control.GET, Control.STOP,
+        )
         attempts = endpoints if retryable else endpoints[:1]
         deadline = min(deadline, self.clock() + self.timeout) if deadline is not None else self.clock() + self.timeout
         for index, endpoint in enumerate(attempts):
@@ -437,8 +439,8 @@ class GrpcTransport:
                     continue
                 # gRPC details and request debug strings may contain credentials.
                 error_type = WaitTimeout if error.code() == grpc.StatusCode.DEADLINE_EXCEEDED else LoadError
-                raise error_type('TestShardControl transport failure (%s); outcome may be unknown'
-                                % error.code().name) from None
+                message = 'TestShardControl transport failure (%s); outcome may be unknown' % error.code().name
+                raise error_type(message) from None
             if response.Status != 1 and response.HasField('NbsDbgLikeLoadControl'):
                 if self.params.token:
                     response.NbsDbgLikeLoadControl.Error = response.NbsDbgLikeLoadControl.Error.replace(self.params.token, '<redacted>')

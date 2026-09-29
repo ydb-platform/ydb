@@ -56,6 +56,7 @@ PEERDIR(
     ydb/library/yql/providers/pq/proto
     ydb/services/metadata/abstract
     ydb/services/udf_store/wasm
+    yql/essentials/minikql/runtime_settings
 )
 
 GENERATE_ENUM_SERIALIZATION(

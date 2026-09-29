@@ -252,9 +252,10 @@ public:
     TPDiskThread PDiskThread;
     THolder<IBlockDevice> BlockDevice;
 #if defined(__linux__)
-    // DDisk/PB hold IUringRouterClient copies of this pointer. PDisk releases
-    // it during Stop() only when no clients remain; otherwise the final owner
-    // destroys the router, drains accepted I/O, and closes the duplicated fd.
+    // Created and accessed by the PDisk worker. Normal Stop() joins that worker
+    // before retiring the router; the error path requests retirement on the
+    // worker and performs the blocking part outside StateMutex. DDisk/PB hold
+    // IUringRouterClient copies, but PDisk remains the lifecycle owner.
     std::shared_ptr<TUringRouter> SharedUringRouter;
 #endif
     bool SharedUringCreateAttempted = false;
@@ -278,9 +279,12 @@ public:
     };
     std::atomic<EDeviceIoState> DeviceIoState = EDeviceIoState::Running;
     TMutex DeviceIoStopMutex;
+    bool DeviceIoErrorStopRequested = false; // PDisk worker only, under StateMutex.
 
     ui64 ObservedDeviceIoCompletionGeneration = 0;
     NHPTimer::STime LastDeviceIoCompletionGenerationChange = 0;
+    // The generic device-halt watchdog detects an accepted probe that does not
+    // complete. Keep one probe in flight so its buffer remains uniquely owned.
     std::atomic<bool> IdleDeviceProbeInFlight = false;
     std::atomic<bool> IdleDeviceProbeFailed = false;
 
@@ -569,6 +573,8 @@ public:
     void EnqueueAll();
     void GetJobsFromForsetti();
     void Update() override;
+    // The result is used by tests to observe submission without racing its
+    // completion; production intentionally needs no action on successful submit.
     bool MaybeScheduleIdleDeviceProbe();
     void Wakeup() override;
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

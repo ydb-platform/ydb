@@ -4302,7 +4302,8 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestCompactionBidder:
             break;
         case ERequestType::RequestStopDevice:
-            StopDeviceIo(true);
+            DeviceIoState.store(EDeviceIoState::Stopping, std::memory_order_release);
+            DeviceIoErrorStopRequested = true;
             delete request;
             return false;
         case ERequestType::RequestChunkReadPiece:
@@ -4620,7 +4621,7 @@ void TPDisk::EnqueueAll() {
             {"requestType", TypeName(*request)},
             {"alreadyProcessedReqs", processedReqs});
         AtomicSub(InputQueueCost, request->Cost);
-        if (IsQueuePaused) {
+        if (IsQueuePaused && request->GetType() != ERequestType::RequestStopDevice) {
             if (IsQueueStep) {
                 IsQueueStep = false;
                 PausedQueue.push_back(request);
@@ -4663,7 +4664,7 @@ void TPDisk::EnqueueAll() {
             }
         }
         ++processedReqs;
-        if (processedReqs >= MAX_REQS_PER_CYCLE) {
+        if (DeviceIoErrorStopRequested || processedReqs >= MAX_REQS_PER_CYCLE) {
             break;
         }
     }
@@ -4766,6 +4767,7 @@ void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
     LWTRACK(PDiskUpdateStarted, UpdateCycleOrbit, PCtx->PDiskId);
 
+    bool stopDeviceIo = false;
     {
         TGuard<TMutex> guard(StateMutex);
 
@@ -4807,7 +4809,16 @@ void TPDisk::Update() {
         // Make input queue empty
         EnqueueAll();
 
-        MaybeScheduleIdleDeviceProbe();
+        stopDeviceIo = std::exchange(DeviceIoErrorStopRequested, false);
+        if (!stopDeviceIo) {
+            MaybeScheduleIdleDeviceProbe();
+        }
+    }
+
+    if (stopDeviceIo) {
+        // Router retirement may wait for DDisk/PersistentBuffer callbacks and
+        // join the io_uring thread. Do not hold StateMutex across that barrier.
+        StopDeviceIo(true);
     }
 
     // Make token injection to correct drive model underestimations and avoid disk underutilization

@@ -60,6 +60,15 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(request->GetDatabaseName().GetOrElse(""), "/resolved");
         }
 
+        Y_UNIT_TEST(EmptyMappingKeepsLiveDatabase) {
+            TNamedRequest request("Ydb.Query.V1.QueryService/ExecuteQuery");
+            request.EnablePathNormalization();
+            request.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>());
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/raw");
+            request.UseDatabase("/resolved");
+            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/resolved");
+        }
+
         Y_UNIT_TEST(EnabledRequestCachesRewrittenDatabase) {
             TNamedRequest request("Ydb.Topic.V1.TopicService/CreateTopic");
             request.EnablePathNormalization();
@@ -69,15 +78,6 @@ namespace NKikimr::NGRpcService {
             request.UseDatabase("/resolved");
             request.InitializePathNormalization(MakeNormalizer());
             UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/rewritten");
-        }
-
-        Y_UNIT_TEST(EmptyMappingKeepsLiveDatabase) {
-            TNamedRequest request("Ydb.Query.V1.QueryService/ExecuteQuery");
-            request.EnablePathNormalization();
-            request.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>());
-            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/raw");
-            request.UseDatabase("/resolved");
-            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/resolved");
         }
 
         Y_UNIT_TEST(LegacyServicesKeepRawDatabaseAndIdentityPaths) {

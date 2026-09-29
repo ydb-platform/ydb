@@ -106,7 +106,8 @@ TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext&
     if (settings.CollectCurrentQueryStats) {
         const auto interval = context.CurrentQueryStatsInterval;
         // Remote tasks already send periodic stats. Only local tasks need an extra timer.
-        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{interval, interval};
+        const auto minInterval = progressStatsPeriod ? Min(progressStatsPeriod, interval) : interval;
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{minInterval, interval};
     }
     return settings;
 }

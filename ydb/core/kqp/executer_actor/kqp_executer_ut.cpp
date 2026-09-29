@@ -149,9 +149,9 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         runtime.WaitFor("paused result channel", [&] { return !pausedChannels.empty(); });
         runtime.SimulateSleep(TDuration::Seconds(2));
-        UNIT_ASSERT_VALUES_EQUAL(queryStatsReports, 1);
+        UNIT_ASSERT_GE(queryStatsReports, 1);
         runtime.SimulateSleep(TDuration::Seconds(33));
-        UNIT_ASSERT_VALUES_EQUAL(queryStatsReports, 2);
+        UNIT_ASSERT_GE(queryStatsReports, 2);
         UNIT_ASSERT(!pausedChannels.empty());
         UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
             "not all rows should be delivered while every result channel is paused");
@@ -342,7 +342,8 @@ using namespace NYql::NDqProto;
                     UNIT_ASSERT_VALUES_EQUAL(settings.WithProgressStats, progressPeriod != TDuration::Zero());
                     UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings.Defined(), enabled);
                     if (enabled) {
-                        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MinInterval, TDuration::Seconds(30));
+                        UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MinInterval,
+                            progressPeriod ? progressPeriod : TDuration::Seconds(30));
                         UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MaxInterval, TDuration::Seconds(30));
                     }
                     UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings.Defined(), streaming);
@@ -363,8 +364,7 @@ using namespace NYql::NDqProto;
         UNIT_ASSERT(publisher.Update(report));
         auto first = publisher.Publish(TMonotonic::Seconds(30));
         UNIT_ASSERT(first);
-        UNIT_ASSERT(first->Stats.ReadIngressBytesRate);
-        UNIT_ASSERT_VALUES_EQUAL(*first->Stats.ReadIngressBytesRate, 30);
+        UNIT_ASSERT(!first->Stats.ReadIngressBytesRate);
         UNIT_ASSERT(first->ScheduleNextPublish);
 
         auto stale = publisher.Publish(TMonotonic::Seconds(60));
@@ -378,6 +378,14 @@ using namespace NYql::NDqProto;
         UNIT_ASSERT(zero);
         UNIT_ASSERT(zero->Stats.ReadIngressBytesRate);
         UNIT_ASSERT_VALUES_EQUAL(*zero->Stats.ReadIngressBytesRate, 0);
+
+        report.Stats.ReadIngressBytes = 1200;
+        report.SequenceNo = 3;
+        UNIT_ASSERT(publisher.Update(report));
+        auto rate = publisher.Publish(TMonotonic::Seconds(120));
+        UNIT_ASSERT(rate);
+        UNIT_ASSERT(rate->Stats.ReadIngressBytesRate);
+        UNIT_ASSERT_VALUES_EQUAL(*rate->Stats.ReadIngressBytesRate, 20);
     }
 
 TDqComputeActorStats MakeReport(ui64 taskId, ui64 cpu, ui64 memory, ui64 tableBytes, ui64 sourceBytes) {

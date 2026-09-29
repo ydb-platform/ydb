@@ -124,7 +124,7 @@ public:
 
         TCurrentQueryStats::TPublishedSnapshot published;
         static_cast<TCurrentQueryResources&>(published) = *current;
-        if (UpdatedSincePublish) {
+        if (SequenceNo && UpdatedSincePublish) {
             const auto elapsed = now - LastPublishedAt;
             if (elapsed != TDuration::Zero()) {
                 published.ReadIngressBytesRate = (current->ReadIngressBytes - LastPublishedReadIngressBytes)

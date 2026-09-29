@@ -1,3 +1,9 @@
+* Fixed channel reuse across clients with different TLS settings. Changes to TLS mode, trusted roots, client credentials or the target-name override now replace the cached channel without interrupting existing requests.
+
+* Added request-scoped `TRequestControl` cancellation and `RequestLifetime` retention through transport and callback destruction. Query streaming and table session/metadata requests support opt-in protobuf complexity validation before decoding. `SetBoundedResponseTransport` caps channel metadata and read-ahead; it does not promise a hard allocator limit. Standalone table sessions can disable implicit destructor cleanup with `AutoCloseSession(false)` and close explicitly under their request settings.
+
+* Added `NQuery::TExecuteQueryIterator::Cancel` to explicitly cancel a streaming query, including while a `ReadNext` call is pending.
+
 * Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state and optional timestamps, and incremental `UploadModuleFromFile` on a dedicated I/O executor. Upload futures include the final gRPC status.
 
 * Added an optional S3 object key prefix to TTL eviction settings for column tables.

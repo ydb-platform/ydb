@@ -57,14 +57,20 @@ public:
     using TGRpcStatus = NYdbGrpc::TGrpcStatus;
     using TBatchReadResult = std::pair<TResponse, TGRpcStatus>;
 
-    TReaderImpl(TStreamProcessorPtr streamProcessor, const std::string& endpoint, const std::optional<TSession>& session)
-        : StreamProcessor_(streamProcessor)
+    TReaderImpl(TStreamProcessorPtr streamProcessor, const std::string& endpoint, const std::optional<TSession>& session,
+        std::shared_ptr<void> lifetime)
+        : RequestLifetime_(std::move(lifetime))
+        , StreamProcessor_(streamProcessor)
         , Finished_(false)
         , Endpoint_(endpoint)
         , Session_(session)
     {}
 
     ~TReaderImpl() {
+        Cancel();
+    }
+
+    void Cancel() {
         StreamProcessor_->Cancel();
     }
 
@@ -132,6 +138,7 @@ public:
     }
 
 private:
+    std::shared_ptr<void> RequestLifetime_;
     TStreamProcessorPtr StreamProcessor_;
     TResponse Response_;
     bool Finished_;
@@ -149,6 +156,12 @@ TAsyncExecuteQueryPart TExecuteQueryIterator::ReadNext() {
     }
 
     return ReaderImpl_->ReadNext(ReaderImpl_);
+}
+
+void TExecuteQueryIterator::Cancel() {
+    if (ReaderImpl_) {
+        ReaderImpl_->Cancel();
+    }
 }
 
 using TExecuteQueryProcessorPtr = TExecuteQueryIterator::TReaderImpl::TStreamProcessorPtr;
@@ -314,6 +327,9 @@ public:
         const TExecuteQuerySettings& settings, const std::optional<TSession>& session)
     {
         auto rpcSettings = TRpcRequestSettings::Make(settings);
+        if (settings.BoundedResponse_) {
+            rpcSettings.BoundedResponseMethod = "/Ydb.Query.V1.QueryService/ExecuteQuery";
+        }
         if (session.has_value()) {
             rpcSettings.TryUpdateDeadline(session->GetPropagatedDeadline());
             rpcSettings.PreferredEndpoint = TEndpointKey(GetNodeIdFromSession(session->GetId()));
@@ -411,6 +427,7 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
     TExecuteQueryProcessorPtr processor;
 
     auto sessionCopy = session;
+    auto requestLifetime = settings.RequestLifetime_;
 
     if (auto* txPtr = std::get_if<TTransaction>(&txControl.Tx_); txPtr && txControl.CommitTx_) {
         auto queryCopy = query;
@@ -440,7 +457,7 @@ TAsyncExecuteQueryIterator TExecQueryImpl::StreamExecuteQuery(const std::shared_
 
     co_return TExecuteQueryIterator(
         processor
-            ? std::make_shared<TExecuteQueryIterator::TReaderImpl>(processor, plainStatus.Endpoint, sessionCopy)
+            ? std::make_shared<TExecuteQueryIterator::TReaderImpl>(processor, plainStatus.Endpoint, sessionCopy, std::move(requestLifetime))
             : nullptr,
         std::move(plainStatus)
     );

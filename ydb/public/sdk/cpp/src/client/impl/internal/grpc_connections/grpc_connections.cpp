@@ -321,6 +321,7 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , GRpcLoadBalancingPolicy_(params->GetGRpcLoadBalancingPolicy())
     , GRpcCompressionAlgorithm_(params->GetGRpcCompressionAlgorithm())
     , MemoryQuota_(params->GetMemoryQuota())
+    , BoundedResponseTransport_(params->GetBoundedResponseTransport())
     , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
     , MaxOutboundMessageSize_(params->GetMaxOutboundMessageSize())
     , MaxMessageSize_(params->GetMaxMessageSize())
@@ -702,6 +703,8 @@ void TGRpcConnectionsImpl::StopResponseQueue() {
 TCallMeta TGRpcConnectionsImpl::MakeCallMeta(const TRpcRequestSettings& requestSettings, const TDbDriverStatePtr& dbState) const {
     TCallMeta meta;
     meta.Timeout = requestSettings.Deadline;
+    meta.RequestLifetime = requestSettings.RequestLifetime;
+    meta.BoundedResponseMethod = requestSettings.BoundedResponseMethod;
 #ifndef YDB_GRPC_UNSECURE_AUTH
     if (requestSettings.UseAuth) {
         meta.CallCredentials = dbState->GetCallCredentials();

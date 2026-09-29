@@ -128,7 +128,15 @@ public:
     class TReaderImpl;
 
     //! Asynchronously reads the next response part. Read until the returned part reports EOS().
+    //! Only one ReadNext() may be outstanding, including across copies of this iterator.
     TAsyncExecuteQueryPart ReadNext();
+
+    //! Asynchronously requests cancellation of the stream shared by all copies of this iterator.
+    //! May be called concurrently with ReadNext() or other Cancel() calls. A pending read completes
+    //! through the transport; a response already received or stream completion may win the race.
+    //! Repeated calls and calls on a finished, failed, or moved-from iterator are harmless.
+    //! Does not wait for server-side execution to stop and does not roll back committed effects.
+    void Cancel();
 
 private:
     TExecuteQueryIterator(
@@ -150,6 +158,9 @@ using TAsyncExecuteQueryIterator = NThreading::TFuture<TExecuteQueryIterator>;
 
 //! Settings for executing or streaming a query.
 struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
+    //! Limits each response to 8 MiB, 4096 protobuf fields and nesting depth 32.
+    //! Unknown fields and noncanonical duplicate message fields are rejected before parsing.
+    FLUENT_SETTING_DEFAULT(bool, BoundedResponse, false);
     //! Limits one streamed result part to the specified number of bytes.
     FLUENT_SETTING_OPTIONAL(uint32_t, OutputChunkMaxSize);
     //! Selects the query syntax; defaults to YQL version 1.

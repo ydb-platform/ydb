@@ -90,6 +90,12 @@ public:
     //! default: 0
     TDriverConfig& SetGrpcMemoryQuota(uint64_t bytes);
 
+    //! Disables adaptive HTTP/2 receive windows, limits stream read-ahead to
+    //! 64 KiB and incoming metadata to 16 KiB, and disables compressed responses
+    //! and decompression. These limits override generic channel parameters.
+    //! Does not replace a memory quota.
+    TDriverConfig& SetBoundedResponseTransport(bool enabled);
+
     //! Specify tcp keep alive settings
     //! This option allows to adjust tcp keep alive settings, useful to work
     //! with balancers or to detect unexpected connectivity problem.

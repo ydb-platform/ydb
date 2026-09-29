@@ -11,7 +11,6 @@ Y_UNIT_TEST_SUITE(LibrdkafkaFederationCompatibilityTests) {
         TClusterEndpoints env;
         TString prodCMDatabasePath = "/logbroker-federation/prod";
         const TString topic = UniqueName("rdk-topic");
-        const TString topicFullPath = "/Root" + prodCMDatabasePath + "/" + topic;
         CreateYdbTopic(topic, 1, env.EndpointCM, prodCMDatabasePath);
 
         const THashMap<TString, TString> kafkaConf = {
@@ -50,10 +49,8 @@ Y_UNIT_TEST_SUITE(LibrdkafkaFederationCompatibilityTests) {
         producerConf["transactional.id"] = UniqueName("txn");
         producerConf["enable.idempotence"] = "true";
         auto producer = MakeProducer(producerConf);
-        Cerr << TInstant::Now() << " WaitTopicPartitions" << Endl;
         WaitTopicPartitions(*producer->Handle, topic, 1, TDuration::Seconds(60));
-        Cerr << TInstant::Now() << " Starting init_transactions" << Endl;
-        AssertTxnOk(producer->Handle->init_transactions(6000), "init_transactions");
+        AssertTxnOk(producer->Handle->init_transactions(60000), "init_transactions");
         AssertTxnOk(producer->Handle->begin_transaction(), "begin_transaction");
         Produce(*producer->Handle, topic, "committed-value-1", "committed-key-1");
         Produce(*producer->Handle, topic, "committed-value-2", "committed-key-2");

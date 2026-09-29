@@ -116,7 +116,8 @@ class FederationRecipe(object):
         grpc_port = node.grpc_port
         self.__cluster_ports[name] = grpc_port
         _setenv("{}_port".format(name), str(grpc_port))
-        _setenv("{}_kafka_static_port".format(name), str(node.kafka_api_port))
+        if node.kafka_api_port is not None
+            _setenv("{}_kafka_static_port".format(name), str(node.kafka_api_port))
         logger.info("YDB cluster {} started on grpc port {}".format(name, grpc_port))
         return cluster, grpc_port
 

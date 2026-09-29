@@ -18,6 +18,7 @@ ADDINCL(
 SRCS(
     federation_tests.cpp
     common_functions.cpp
+    cluster_write_close_test.cpp
     ../kafka/test_common/helpers.cpp
     kafka_compatibility_tests.cpp
 )

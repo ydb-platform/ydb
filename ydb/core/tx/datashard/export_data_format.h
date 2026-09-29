@@ -60,6 +60,11 @@ struct TParquetExportSettings {
         return *this;
     }
 
+    TParquetExportSettings& WithRowGroupBytes(ui64 rowGroupBytes) {
+        RowGroupBytes = rowGroupBytes;
+        return *this;
+    }
+
     TParquetExportSettings& WithCompression(const TCompressionSettings& compressionSettings) {
         CompressionSettings.Emplace(compressionSettings);
         return *this;
@@ -67,6 +72,7 @@ struct TParquetExportSettings {
 
     IExport::TTableColumns Columns;
     ui64 RowGroupSize = 10000;
+    ui64 RowGroupBytes = 256ull << 20; // 0 means no limit
     TMaybe<TCompressionSettings> CompressionSettings;
 };
 

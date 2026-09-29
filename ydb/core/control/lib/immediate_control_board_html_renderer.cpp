@@ -58,6 +58,11 @@ void TControlBoardTableHtmlRenderer::AddTableItem(const TString& name, TIntrusiv
             HtmlStrm << "<input name='" << name << "' type='text' value='"
                 << control->Get() << "'/>";
             HtmlStrm  << "<button type='submit' style='color:red;'><b>Change</b></button>";
+            if (!isDefault) {
+                HtmlStrm << "<button type='submit' name='restoreDefault' value='" << name
+                    << "' style='color:green; margin-left:4px; white-space:nowrap;'>"
+                    << "<b>Restore Default</b></button>";
+            }
             HtmlStrm  << "</form>";
         }
         TABLED() { HtmlStrm << !isDefault; }
@@ -68,7 +73,7 @@ TString TControlBoardTableHtmlRenderer::GetHtml() {
     TableBody.Clear();
     Table.Clear();
     HtmlStrm << "<form class='form_horizontal' method='post'>";
-    HtmlStrm << "<button type='submit' name='restoreDefaults' style='color:green;'><b>Restore Default</b></button>";
+    HtmlStrm << "<button type='submit' name='restoreDefaults' style='color:green;'><b>Restore Defaults</b></button>";
     HtmlStrm << "</form>";
     Html.Clear();
     return HtmlStrm.Str();

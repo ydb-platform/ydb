@@ -330,6 +330,8 @@ public:
 };
 
 class TTestHttpPostReaction : public TBaseTest {
+    // Shared dynamic control used for named restore and duplicate-name checks.
+    TControlWrapper Control{10};
     TAutoPtr<THttpRequest> HttpRequest;
     NMonitoring::TMonService2HttpRequest MonService2HttpRequest;
 
@@ -338,21 +340,31 @@ class TTestHttpPostReaction : public TBaseTest {
         VERBOSE_COUT("Test step " << TestStep);
         switch (TestStep) {
             case 0:
+                // Submit an unknown parameter.
                 VERBOSE_COUT("Testing POST request with an unexistentParameter");
                 HttpRequest->CgiParameters.emplace("unexistentParameter", "10");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             case 10:
             {
+                // Verify that POST did not create the unknown parameter.
                 ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
                 Dcb->GetValue("unexistentParameter", value, isControlExists);
                 ASSERT_YTHROW(!isControlExists, "Parameter mustn't be created by POST request");
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 20:
+            {
+                // Register a dynamic control and submit a value for it.
                 VERBOSE_COUT("Testing POST request with an existentParameter");
                 TControlWrapper control(10);
                 Dcb->RegisterSharedControl(control, "existentParameter");
+                bool isControlExists;
+                TAtomicBase value;
                 Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
@@ -361,8 +373,9 @@ class TTestHttpPostReaction : public TBaseTest {
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             }
-            case 20:
+            case 30:
             {
+                // Verify that POST changed the registered control.
                 ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
@@ -370,26 +383,39 @@ class TTestHttpPostReaction : public TBaseTest {
                 Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Parameter haven't changed by POST request");
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 40:
+                // Submit the bulk restore command.
                 VERBOSE_COUT("Test of restoreDefaults POST request");
                 HttpRequest->CgiParameters.clear();
                 HttpRequest->CgiParameters.emplace("restoreDefaults", "");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
-            }
-            case 30:
+            case 50:
             {
+                // Verify that bulk restore returned the control to its default.
                 ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
                 Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
-                ASSERT_YTHROW(value == 10,  "Parameter haven't restored default value");
+                ASSERT_YTHROW(value == 10, "Parameter haven't restored default value");
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 60:
+            {
+                // Submit values outside the bounds of two dynamic controls.
                 VERBOSE_COUT("Test is bounds pulling wokrs");
                 TControlWrapper control1(10, 5, 15);
                 TControlWrapper control2(10, 5, 15);
                 Dcb->RegisterSharedControl(control1, "existentParameterWithBoundsLower");
                 Dcb->RegisterSharedControl(control2, "existentParameterWithBoundsUpper");
+                bool isControlExists;
+                TAtomicBase value;
                 Dcb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Error in control creation and registration");
@@ -402,25 +428,117 @@ class TTestHttpPostReaction : public TBaseTest {
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             }
-            case 40:
+            case 70:
             {
+                // Verify that both submitted values were clamped to their bounds.
                 ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
                 TAtomicBase value;
-
                 Dcb->GetValue("existentParameterWithBoundsLower", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 5, "Pulling value to bounds doesn't work");
-
                 Dcb->GetValue("existentParameterWithBoundsUpper", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 15, "Pulling value to bounds doesn't work");
-
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 80:
+                // Clear state left by the bounds checks before named restore.
+                Dcb->RestoreDefaults();
+                TestStep += 10;
+                [[fallthrough]];
+            case 90:
+                // Change one dynamic control through the monitoring actor.
+                Dcb->RegisterSharedControl(Control, "restoreParameter");
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("restoreParameter", "15");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            case 100:
+            {
+                // Verify the changed value and the named action in the response.
+                ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
+                        "Unexpected response message type, expected is HttpInfoRes");
+                ASSERT_YTHROW(static_cast<i64>(Control) == 15, "POST did not change the control");
+                ASSERT_YTHROW(LastResponse.HttpResult->Answer.find("name='restoreDefault' value='restoreParameter'") != TString::npos,
+                        "Named restore button is missing");
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 110:
+                // Restore by name while ignoring the text input from the same form.
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("restoreParameter", "15");
+                HttpRequest->CgiParameters.emplace("restoreDefault", "restoreParameter");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            case 120:
+            {
+                // Verify that named restore also clears the changed-control gauges.
+                ASSERT_YTHROW(static_cast<i64>(Control) == 10, "Named restore did not recover the default");
+                auto counters = GetServiceCounters(Counters, "utils");
+                ASSERT_YTHROW(counters->GetCounter("Icb/ChangedControlsCount")->Val() == 0,
+                        "Named restore did not clear the changed-control count");
+                ASSERT_YTHROW(counters->GetCounter("Icb/HasChangedContol")->Val() == 0,
+                        "Named restore did not clear the changed-control indicator");
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 130:
+            {
+                // Submit a change for a name present in both control boards.
+                TControlWrapper staticControl(10, 0, 20);
+                TControlBoard::RegisterLocalControl(staticControl, Icb->DataShardControls.MaxTxInFly);
+                TAtomic previous = 0;
+                Dcb->RegisterSharedControl(Control, "DataShardControls.MaxTxInFly");
+                Dcb->SetValue("DataShardControls.MaxTxInFly", 15, previous);
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("DataShardControls.MaxTxInFly", "12");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            }
+            case 140:
+            {
+                // Verify that change selected the static control first.
+                const auto control = Icb->DataShardControls.MaxTxInFly.AtomicLoad();
+                ASSERT_YTHROW(control->Get() == 12, "Change did not select the static control");
+                ASSERT_YTHROW(static_cast<i64>(Control) == 15, "Change modified the dynamic control");
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 150:
+                // Restore the name present in both control boards.
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("restoreDefault", "DataShardControls.MaxTxInFly");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            case 160:
+            {
+                // Verify that named restore selected the static control first.
+                const auto control = Icb->DataShardControls.MaxTxInFly.AtomicLoad();
+                ASSERT_YTHROW(control->Get() == 10, "Restore did not select the static control");
+                ASSERT_YTHROW(static_cast<i64>(Control) == 15, "Restore modified the dynamic control");
+                TestStep += 10;
+                [[fallthrough]];
+            }
+            case 170:
+                // Restore an unknown name to check that it is ignored.
+                HttpRequest->CgiParameters.clear();
+                HttpRequest->CgiParameters.emplace("restoreDefault", "unknown");
+                ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
+                break;
+            case 180:
+                // Verify that an unknown restore leaves registered controls intact.
+                ASSERT_YTHROW(static_cast<i64>(Control) == 15,
+                        "Restore of an unknown name modified another control");
+                TestStep += 10;
+                [[fallthrough]];
+            case 190:
                 VERBOSE_COUT("Done");
                 SignalDoneEvent();
                 break;
-            }
             default:
                 ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
                 break;

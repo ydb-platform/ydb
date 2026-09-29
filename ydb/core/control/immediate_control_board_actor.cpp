@@ -72,6 +72,16 @@ public:
 
 private:
     void HandlePostParams(const TCgiParameters &cgi) {
+        // Handle a named restore before the text input from the same form.
+        if (cgi.Has("restoreDefault")) {
+            const TString& controlName = cgi.Get("restoreDefault");
+            if (auto control = Icb->GetControlByName(controlName)) {
+                control->RestoreDefault();
+            } else {
+                Dcb->RestoreDefault(controlName);
+            }
+            return;
+        }
         if (cgi.Has("restoreDefaults")) {
             Icb->RestoreDefaults();
             Dcb->RestoreDefaults();

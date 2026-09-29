@@ -1,0 +1,4 @@
+/* custom error: "Input" is not a symlink */
+USE plato;
+
+DROP SYMLINK IF EXISTS Input;

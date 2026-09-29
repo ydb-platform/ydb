@@ -9,6 +9,8 @@ PY_SRCS(
     cluster_config.py
     cluster_config_ui.py
     cluster_deployment.py
+    cluster_operations.py
+    cluster_operations_ui.py
     common.py
     config.py
     distributed_sessions.py
@@ -48,9 +50,11 @@ PEERDIR(
     contrib/python/grpcio
     contrib/python/PyYAML
     ydb/core/protos
+    ydb/core/nbs/cloud/blockstore/public/api/protos
     ydb/library/yaml_config/protos
     ydb/deploy/helm/ydb-prometheus/dashboards
     ydb/public/api/grpc
+    ydb/public/api/grpc/draft
     ydb/public/api/protos
     ydb/tools/ydb_bench/benchmarks
 )

@@ -1,6 +1,9 @@
-#include "kqp_executer_stats.h"
 #include "kqp_planner.h"
+
+#include "kqp_executer_stats.h"
 #include "kqp_planner_strategy.h"
+
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
@@ -108,6 +111,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
+    , Trace(args.Trace)
     , ExecuterRetriesConfig(args.ExecuterRetriesConfig)
     , TasksGraph(args.TasksGraph)
     , MkqlMemoryLimit(args.MkqlMemoryLimit)
@@ -258,7 +262,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
+        auto* serializedTask = SerializeTaskForExecution(task);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -534,21 +538,29 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
     return TasksGraph.GetMeta().Snapshot;
 }
 
+NYql::NDqProto::TDqTask* TKqpPlanner::SerializeTaskForExecution(const TTask& task) {
+    auto* result = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    if (Trace) {
+        Trace->AnnotateTask({task.StageId.TxId, task.StageId.StageId}, *result);
+    }
+    return result;
+}
+
 // optimizeProtoForLocalExecution - if we want to execute compute actor locally and don't want to serialize & then deserialize proto message
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
+    auto* taskDesc = SerializeTaskForExecution(task);
 
-    if (!TxInfo) {
+    if (!QueryQuotaManager) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
             memoryPoolPercent = UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode;
         }
 
-        TxInfo = MakeIntrusive<NRm::TTxState>(
+        QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
             ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
-            CaFactory_->GetVerboseMemoryLimitException());
+            CaFactory_->GetVerboseMemoryLimitException()));
     }
 
     if (ArrayBufferMinFillPercentage) {
@@ -563,8 +575,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
 
-    auto rmResult = ResourceManager_->AllocateResources(
-        *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
+    // the task starts with it and returns it when its compute actor terminates
+    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
 
     if (!rmResult) {
         return rmResult.GetFailReason();
@@ -577,8 +589,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .LockNodeId = TasksGraph.GetMeta().LockNodeId,
         .LockMode = TasksGraph.GetMeta().LockMode,
         .Task = taskDesc,
-        .TxInfo = TxInfo,
-        .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
+        .TxInfo = QueryQuotaManager->GetTx(),
+        .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
         .ReportStatsSettings = Nothing(),
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
@@ -596,6 +608,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
+        .QueryQuotaManager = QueryQuotaManager,
+        .InitialMemoryLimit = initialMemoryLimit,
         .UserToken = UserToken,
         .Database = Database,
         .Query = Query,

@@ -17,6 +17,7 @@ SRCS(
     group_test_ut.cpp
     nbs_dbg_like_alloc_helper_ut.cpp
     util_ut.cpp
+    nbs_dbg_like_load_registry_ut.cpp
 )
 
 END()

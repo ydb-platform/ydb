@@ -72,8 +72,8 @@ private:
     // Names of the modules currently loaded on this node.
     THashSet<TString> LoadedUdfs;
     THashMap<TString, ui32> FetchRetryCounts;
-    // Libraries whose compile finished in DB but CurrentSnapshot may still say pending.
-    THashSet<TString> LocallyReadyLibraries;
+    // Artifact uid of each library known ready on this platform.
+    THashMap<TString, TString> LocallyReadyLibraries;
 
     static constexpr ui32 MaxFetchRetries = 5;
 

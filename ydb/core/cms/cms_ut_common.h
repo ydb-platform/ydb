@@ -34,6 +34,7 @@ struct TFakeNodeInfo {
     TMap<TTabletId, NKikimrWhiteboard::TTabletStateInfo> TabletStateInfo;
     TMap<TString, NKikimrWhiteboard::TNodeStateInfo> NodeStateInfo;
     TMap<ui32, NKikimrWhiteboard::TPDiskStateInfo> PDiskStateInfo;
+    TVector<NKikimrWhiteboard::TDDiskStateInfo> DDiskStateInfo;
     TMap<TVDiskID, NKikimrWhiteboard::TVDiskStateInfo, TVDiskIDComparator> VDiskStateInfo;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     bool Connected = true;

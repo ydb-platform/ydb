@@ -36,14 +36,9 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 LibraryName_,
                 TUdfModule::TypeToString(EUdfType::LIBRARY));
             break;
+        case EStep::EnsurePending:
         case EStep::MarkCompiling:
-            NTableQuery::SetUpdateCompileStatusParams(
-                request,
-                LibraryName_,
-                TUdfModule::TypeToString(EUdfType::LIBRARY),
-                LibrarySource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
-                "");
+            NTableQuery::SetSelectArtifactParams(request, LibraryName_, Kind_, LibrarySource_.Uid);
             break;
         case EStep::ReadLibraryChunks:
             NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid, SourceChunks_.size());
@@ -67,15 +62,6 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 chunk.Data);
             break;
         }
-        case EStep::UpdateMetaReady:
-            NTableQuery::SetUpdateCompileStatusParams(
-                request,
-                LibraryName_,
-                TUdfModule::TypeToString(EUdfType::LIBRARY),
-                LibrarySource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Ready),
-                "");
-            break;
         case EStep::VerifyStillCurrent:
         case EStep::ConfirmStillCurrent:
             NTableQuery::SetSelectModuleByNameParams(
@@ -92,14 +78,9 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 LibrarySource_.Uid,
                 TUdfModule::TypeToString(EUdfType::LIBRARY));
             break;
-        case EStep::UpdateMetaFailed:
-            NTableQuery::SetUpdateCompileStatusParams(
-                request,
-                LibraryName_,
-                TUdfModule::TypeToString(EUdfType::LIBRARY),
-                LibrarySource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Failed),
-                ErrorMessage_);
+        case EStep::MarkArtifactFailed:
+            NTableQuery::SetMarkArtifactFailedParams(
+                request, LibraryName_, Kind_, LibrarySource_.Uid, ErrorMessage_);
             break;
     }
 
@@ -127,7 +108,7 @@ void TWasmLibraryCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequest
     const TString message = TStringBuilder()
         << "YQL request failed at library compile step " << static_cast<int>(Step_)
         << ": " << ev->Get()->GetErrorMessage();
-    if (Step_ == EStep::UpdateMetaFailed) {
+    if (Step_ == EStep::MarkArtifactFailed) {
         // A failure to persist must terminate instead of recursively retrying
         // the same update, and must keep the original compilation error.
         ReplyError(TStringBuilder() << ErrorMessage_ << "; failed to persist error: " << message);
@@ -144,8 +125,13 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                     ReplyError(TStringBuilder() << "Library source '" << LibraryName_ << "' not found");
                     return;
                 }
+                Step_ = EStep::EnsurePending;
+                ExecuteQuery(NTableQuery::BuildEnsurePendingArtifactQuery(ArtifactTablePath_), false);
+                return;
+            }
+            case EStep::EnsurePending: {
                 Step_ = EStep::MarkCompiling;
-                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+                ExecuteQuery(NTableQuery::BuildMarkArtifactCompilingQuery(ArtifactTablePath_), false);
                 return;
             }
             case EStep::MarkCompiling: {
@@ -194,14 +180,6 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                 return;
             }
             case EStep::UpsertArtifact: {
-                Step_ = EStep::UpdateMetaReady;
-                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
-                return;
-            }
-            case EStep::UpdateMetaReady: {
-                // Scoped by uid, so it did nothing at all if the library was
-                // re-uploaded meanwhile. Read the row back before reporting an
-                // upload nobody asked for as locally ready.
                 Step_ = EStep::VerifyStillCurrent;
                 ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
                 return;
@@ -264,7 +242,7 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                 ReplySuccess();
                 return;
             }
-            case EStep::UpdateMetaFailed:
+            case EStep::MarkArtifactFailed:
                 ReplyError(ErrorMessage_);
                 return;
         }
@@ -341,8 +319,8 @@ void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
         ReplyError(message);
         return;
     }
-    Step_ = EStep::UpdateMetaFailed;
-    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+    Step_ = EStep::MarkArtifactFailed;
+    ExecuteQuery(NTableQuery::BuildMarkArtifactFailedQuery(ArtifactTablePath_), false);
 }
 
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {

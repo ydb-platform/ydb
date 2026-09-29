@@ -1056,6 +1056,8 @@ namespace NKikimr {
                             }
                         }
                         {
+                            str << "<a class=\"btn btn-default\" href=\"?type=spacereportvisual&force=1\">"
+                                << "VDisk Space Report</a> ";
                             str << "<a class=\"btn btn-default\" href=\"?type=restart\" "
                                 << (
                                     IsVDiskRestartAllowed(VDiskMonGroup.VDiskState())

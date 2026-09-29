@@ -486,9 +486,10 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
     return DumpHandler();
 }
 
-NThreading::TFuture<TDbgSnapshot>
-TDirectBlockGroupMock::BuildMonSnapshot() const
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
 {
+    Y_UNUSED(detail);
     return NThreading::MakeFuture(TDbgSnapshot{});
 }
 

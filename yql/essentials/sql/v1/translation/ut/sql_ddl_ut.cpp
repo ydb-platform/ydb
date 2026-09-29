@@ -4,6 +4,213 @@
 
 using namespace NSQLTranslationV1;
 
+Y_UNIT_TEST_SUITE(Symlink) {
+Y_UNIT_TEST(CreateSymlink) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE SYMLINK link TO target;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(CreateSymlinkIfNotExists) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; CREATE SYMLINK IF NOT EXISTS link TO target;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link")) '('target (String '"target"))) (Void) '('('mode 'create_symlink_if_not_exists))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(DropSymlink) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; DROP SYMLINK link;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link"))) (Void) '('('mode 'drop_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(DropSymlinkIfExists) {
+    NYql::TAstParseResult res = SqlToYql("USE plato; DROP SYMLINK IF EXISTS link;");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"link"))) (Void) '('('mode 'drop_symlink_if_exists))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(SymlinkReferenceForms) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        DECLARE $cluster AS String;
+        DECLARE $link AS String;
+        DECLARE $target AS String;
+        CREATE SYMLINK $link TO $target;
+        CREATE SYMLINK yt:$cluster.$link TO $target;
+        DROP SYMLINK plato.$link;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(CreateSymlinkWithTablePathPrefix) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        CREATE SYMLINK link TO target;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"/prefix/link")) '('target (String '"/prefix/target"))) (Void) '('('mode 'create_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(CreateSymlinkWithTablePathPrefixKeepsAbsolutePaths) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        CREATE SYMLINK `//home/link` TO `//home/target`;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"//home/link")) '('target (String '"//home/target"))) (Void) '('('mode 'create_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(DropSymlinkWithTablePathPrefix) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        DROP SYMLINK link;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos,
+                                         line.find(R"__((Write! world sink (Key '('link (String '"/prefix/link"))) (Void) '('('mode 'drop_symlink))))__"), line);
+        }
+    };
+
+    TWordCountHive elementStat = {"Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(SymlinkParametersWithTablePathPrefix) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        USE plato;
+        PRAGMA TablePathPrefix = "/prefix";
+        DECLARE $link AS String;
+        DECLARE $target AS String;
+        CREATE SYMLINK $link TO $target;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+        if (word == "Write!") {
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"__('('link (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$link"))))))__");
+            UNIT_ASSERT_STRING_CONTAINS(line,
+                                        R"__('('target (String (EvaluateAtom (BuildTablePath (String '"/prefix") (String (EvaluateAtom "$target"))))))__");
+        }
+    };
+
+    TWordCountHive elementStat = {"BuildTablePath", "Write!"};
+    VerifyProgram(res, elementStat, verifyLine);
+    UNIT_ASSERT_VALUES_EQUAL(2, elementStat["BuildTablePath"]);
+    UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+}
+
+Y_UNIT_TEST(SymlinkDoesNotAcceptAtPrefix) {
+    const TVector<TString> queries = {
+        "USE plato; CREATE SYMLINK @link TO target;",
+        "USE plato; CREATE SYMLINK link TO @target;",
+        "USE plato; DROP SYMLINK @link;",
+    };
+
+    for (const auto& query : queries) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+
+Y_UNIT_TEST(CreateSymlinkUsesClusterFromLinkOrUse) {
+    const TVector<TString> queries = {
+        "USE plato; CREATE SYMLINK hahn.link TO target;",
+        "USE hahn; CREATE SYMLINK link TO target;",
+    };
+
+    for (const auto& query : queries) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+        TWordCountHive elementStat = {"Write!"};
+        const auto program = VerifyProgram(res, elementStat);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(TString::npos, program.find(R"__((DataSink '"yt" '"hahn"))__"), program);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write!"]);
+    }
+}
+
+Y_UNIT_TEST(CreateSymlinkTargetDoesNotAcceptCluster) {
+    const TVector<TString> queries = {
+        "CREATE SYMLINK plato.link TO plato.target;",
+        "USE plato; CREATE SYMLINK link TO hahn.target;",
+        "CREATE SYMLINK plato.link TO mon.target;",
+    };
+
+    for (const auto& query : queries) {
+        const auto res = SqlToYql(query);
+        UNIT_ASSERT_C(!res.IsOk(), query);
+    }
+}
+} // Y_UNIT_TEST_SUITE(Symlink)
+
 Y_UNIT_TEST_SUITE(ExternalDataSource) {
 Y_UNIT_TEST(CreateExternalDataSourceWithAuthNone) {
     NYql::TAstParseResult res = SqlToYql(R"sql(

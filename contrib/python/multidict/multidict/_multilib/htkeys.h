@@ -24,9 +24,9 @@ over pair_list for, e.g., md.get() or md.pop() is safe.
 
 typedef struct entry {
     Py_hash_t hash;
-    PyObject *identity;
-    PyObject *key;
-    PyObject *value;
+    PyObject* identity;
+    PyObject* key;
+    PyObject* value;
 } entry_t;
 
 #define DKIX_EMPTY (-1) /* empty (never used) slot */
@@ -68,40 +68,40 @@ typedef struct _htkeys {
 
 #if SIZEOF_VOID_P > 4
 static inline Py_ssize_t
-htkeys_nslots(const htkeys_t *keys)
+htkeys_nslots(const htkeys_t* keys)
 {
     return ((int64_t)1) << keys->log2_size;
 }
 #else
 static inline Py_ssize_t
-htkeys_nslots(const htkeys_t *keys)
+htkeys_nslots(const htkeys_t* keys)
 {
     return 1 << keys->log2_size;
 }
 #endif
 
 static inline Py_ssize_t
-htkeys_mask(const htkeys_t *keys)
+htkeys_mask(const htkeys_t* keys)
 {
     return htkeys_nslots(keys) - 1;
 }
 
-static inline entry_t *
-htkeys_entries(const htkeys_t *dk)
+static inline entry_t*
+htkeys_entries(const htkeys_t* dk)
 {
-    int8_t *indices = (int8_t *)(dk->indices);
+    int8_t* indices = (int8_t*)(dk->indices);
     size_t index = (size_t)1 << dk->log2_index_bytes;
-    return (entry_t *)(&indices[index]);
+    return (entry_t*)(&indices[index]);
 }
 
 #define LOAD_INDEX(keys, size, idx) \
-    ((const int##size##_t *)(keys->indices))[idx]
+    ((const int##size##_t*)(keys->indices))[idx]
 #define STORE_INDEX(keys, size, idx, value) \
-    ((int##size##_t *)(keys->indices))[idx] = (int##size##_t)value
+    ((int##size##_t*)(keys->indices))[idx] = (int##size##_t)value
 
 /* lookup indices.  returns DKIX_EMPTY, DKIX_DUMMY, or ix >=0 */
 static inline Py_ssize_t
-htkeys_get_index(const htkeys_t *keys, Py_ssize_t i)
+htkeys_get_index(const htkeys_t* keys, Py_ssize_t i)
 {
     uint8_t log2size = keys->log2_size;
     Py_ssize_t ix;
@@ -125,7 +125,7 @@ htkeys_get_index(const htkeys_t *keys, Py_ssize_t i)
 
 /* write to indices. */
 static inline void
-htkeys_set_index(htkeys_t *keys, Py_ssize_t i, Py_ssize_t ix)
+htkeys_set_index(htkeys_t* keys, Py_ssize_t i, Py_ssize_t ix)
 {
     uint8_t log2size = keys->log2_size;
 
@@ -218,8 +218,7 @@ calculate_log2_keysize(Py_ssize_t minsize)
 #else
     uint8_t log2_size;
     for (log2_size = HT_LOG_MINSIZE; (((Py_ssize_t)1) << log2_size) < minsize;
-         log2_size++)
-        ;
+         log2_size++);
     return log2_size;
 #endif
 }
@@ -241,7 +240,7 @@ estimate_log2_keysize(Py_ssize_t n)
  * See https://github.com/python/cpython/pull/127568#discussion_r1868070614
  * for the rationale of using log2_index_bytes=3 instead of 0.
  */
-static htkeys_t empty_htkeys = {
+static const htkeys_t empty_htkeys = {
     0, /* log2_size */
     3, /* log2_index_bytes */
     0, /* usable (immutable) */
@@ -257,14 +256,14 @@ static htkeys_t empty_htkeys = {
 };
 
 static inline Py_ssize_t
-htkeys_sizeof(htkeys_t *keys)
+htkeys_sizeof(htkeys_t* keys)
 {
     Py_ssize_t usable = USABLE_FRACTION((size_t)1 << keys->log2_size);
     return (sizeof(htkeys_t) + ((size_t)1 << keys->log2_index_bytes) +
             sizeof(entry_t) * usable);
 }
 
-static inline htkeys_t *
+static inline htkeys_t*
 htkeys_new(uint8_t log2_size)
 {
     assert(log2_size >= HT_LOG_MINSIZE);
@@ -286,7 +285,7 @@ htkeys_new(uint8_t log2_size)
         log2_bytes = log2_size + 2;
     }
 
-    htkeys_t *keys = NULL;
+    htkeys_t* keys = NULL;
     /* TODO: CPython uses freelist of key objects with unicode type
        and log2_size == PyDict_LOG_MINSIZE */
     keys = PyMem_Malloc(sizeof(htkeys_t) + ((size_t)1 << log2_bytes) +
@@ -307,42 +306,44 @@ htkeys_new(uint8_t log2_size)
 }
 
 static inline void
-htkeys_free(htkeys_t *dk)
+htkeys_free(htkeys_t* dk)
 {
     /* TODO: CPython uses freelist of key objects with unicode type
        and log2_size == PyDict_LOG_MINSIZE */
     PyMem_Free(dk);
 }
 
+/* Returns the identity's hash folded into its non-negative half (see the
+   MD_HASH_MARK comment in hashtable.h), or -1 if hashing raised. Only the
+   value returned to the caller is folded; the unicode object's own cached
+   hash slot is left untouched, since it is shared with the rest of the
+   process. */
 static inline Py_hash_t
-_unicode_hash(PyObject *o)
+_unicode_hash(PyObject* o)
 {
     assert(PyUnicode_CheckExact(o));
-    PyASCIIObject *ascii = (PyASCIIObject *)o;
-    if (ascii->hash != -1) {
-        return ascii->hash;
+    PyASCIIObject* ascii = (PyASCIIObject*)o;
+    Py_hash_t hash = ascii->hash;
+    if (hash == -1) {
+        hash = PyUnicode_Type.tp_hash(o);
+        if (hash == -1) {
+            return -1;
+        }
     }
-    return PyUnicode_Type.tp_hash(o);
+    return hash & PY_SSIZE_T_MAX;
 }
 
 /*
 Internal routine used by ht_resize() to build a hashtable of entries.
 */
 static inline int
-htkeys_build_indices(htkeys_t *keys, entry_t *ep, Py_ssize_t n, bool update)
+htkeys_build_indices(htkeys_t* keys, entry_t* ep, Py_ssize_t n, bool update)
 {
     size_t mask = htkeys_mask(keys);
     for (Py_ssize_t ix = 0; ix != n; ix++, ep++) {
         Py_hash_t hash = ep->hash;
-        if (update) {
-            if (hash == -1) {
-                hash = _unicode_hash(ep->identity);
-                if (hash == -1) {
-                    return -1;
-                }
-            }
-        } else {
-            assert(hash != -1);
+        if (update && hash < 0) {
+            hash &= PY_SSIZE_T_MAX;
         }
         size_t i = hash & mask;
         for (size_t perturb = hash; htkeys_get_index(keys, i) != DKIX_EMPTY;) {
@@ -358,7 +359,7 @@ htkeys_build_indices(htkeys_t *keys, entry_t *ep, Py_ssize_t n, bool update)
    when it is known that the key is not present in the dict.
  */
 static inline Py_ssize_t
-htkeys_find_empty_slot(htkeys_t *keys, Py_hash_t hash)
+htkeys_find_empty_slot(htkeys_t* keys, Py_hash_t hash)
 {
     const size_t mask = htkeys_mask(keys);
     size_t i = hash & mask;
@@ -383,7 +384,7 @@ htkeys_find_empty_slot(htkeys_t *keys, Py_hash_t hash)
 */
 
 typedef struct _htkeysiter {
-    htkeys_t *keys;
+    htkeys_t* keys;
     size_t mask;  // htkeys_mask(keys)
     size_t slot;  // masked hash, Py_hash_t h & mask;
     size_t perturb;
@@ -391,7 +392,7 @@ typedef struct _htkeysiter {
 } htkeysiter_t;
 
 static inline void
-htkeysiter_init(htkeysiter_t *iter, htkeys_t *keys, Py_hash_t hash)
+htkeysiter_init(htkeysiter_t* iter, htkeys_t* keys, Py_hash_t hash)
 {
     iter->keys = keys;
     iter->mask = htkeys_mask(keys);
@@ -401,7 +402,7 @@ htkeysiter_init(htkeysiter_t *iter, htkeys_t *keys, Py_hash_t hash)
 }
 
 static inline void
-htkeysiter_next(htkeysiter_t *iter)
+htkeysiter_next(htkeysiter_t* iter)
 {
     iter->perturb >>= HT_PERTURB_SHIFT;
     iter->slot = (iter->slot * 5 + iter->perturb + 1) & iter->mask;

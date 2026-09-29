@@ -246,9 +246,13 @@ namespace NKikimr::NBsController {
             // First, iterate over PDisk and initialize the map.
             for (const auto& pdisk : config.GetPDisk()) {
                 TPDiskId pdiskId(pdisk.GetNodeId(), pdisk.GetPDiskId());
+                const auto& metrics = pdisk.GetPDiskMetrics();
+                const ui32 expectedSlotCount = metrics.HasExpectedSlotCount()
+                    ? metrics.GetExpectedSlotCount()
+                    : std::max<ui32>(pdisk.GetExpectedSlotCount(), 1);
                 storageInfo.PDiskUsageMap[pdiskId] = {
                     .NumVDisks = pdisk.GetNumStaticSlots(), // initialize with static groups
-                    .ExpectedSlotCount = std::max<ui32>(pdisk.GetExpectedSlotCount(), 1),
+                    .ExpectedSlotCount = expectedSlotCount,
                 };
             }
 

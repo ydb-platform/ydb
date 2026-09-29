@@ -312,6 +312,7 @@ struct TGlobalMemoryUsage {
     ui64 InputInflightBytes = 0;
     ui64 OutputInflightBytes = 0;
     ui64 LocalInflightBytes = 0;
+    ui64 MemQueryAllocated = 0;
 };
 
 struct TNodeExecutionStats {
@@ -468,6 +469,10 @@ public:
         , DeadlockTimeoutUs(deadlockTimeoutMs * 1000)
     {
         HistorySampleCount = 32;
+    }
+
+    ui64 GetCpuTimeUs() const {
+        return StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
     }
 
     void Prepare();

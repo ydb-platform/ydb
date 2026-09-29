@@ -617,7 +617,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                     });
 
                     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
+                    auto status = ExpandApplyNoRepeat(traits, traits, ctx, *optCtx.Types);
                     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
 
                     switch (factoryIndex) {
@@ -1289,8 +1289,9 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
                 if (columns.ChildrenSize() > 0) {
                     auto readOrder = optCtx.Types->LookupColumnOrder(read);
                     YQL_ENSURE(readOrder);
+                    TColumnOrder aliases;
                     for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
-                        if (columns.Child(i)->Content() == column) {
+                        if (aliases.AddColumn(TString(columns.Child(i)->Content())) == column) {
                             foundColumn = true;
                             x.second.second = readOrder->at(i).PhysicalName;
                             break;

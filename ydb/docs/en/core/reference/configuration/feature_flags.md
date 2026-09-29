@@ -1,13 +1,17 @@
 # feature_flags
 
-The `feature_flags` section enables or disables certain {{ ydb-short-name }} features using boolean flags. To enable a feature, set the corresponding feature flag to `true` in the cluster configuration.
-
+The `feature_flags` section enables or disables certain {{ ydb-short-name }} features using boolean flags. To enable a feature, set the corresponding feature flag to `true` in the cluster configuration. For example, to enable auto-partitioning of topics in CDC, add the following lines to the configuration:
 
 ```yaml
 feature_flags:
   enable_topic_autopartitioning_for_cdc: true
 ```
 
+{% note warning %}
+
+Change the `feature_flags` settings only if you are sure of the consequences. Incorrect configuration may disrupt the cluster.
+
+{% endnote %}
 
 ## Feature flags
 

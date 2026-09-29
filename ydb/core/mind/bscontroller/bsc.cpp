@@ -182,14 +182,18 @@ bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGr
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
-            const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount) ? expectedSlotCount : pdisk->NumActiveDynamicSlots;
+            const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
+                ? expectedSlotCount
+                : pdisk->NumActiveDynamicSlots + pdisk->StaticSlotUsage;
             vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
 
-        const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount) ? expectedSlotCount : pdisk->VSlotsOnPDisk.size();
+        const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
+            ? expectedSlotCount
+            : pdisk->VSlotsOnPDisk.size() + pdisk->StaticSlotUsage;
         if (metrics.HasMaxIOPS()) {
             iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
         }

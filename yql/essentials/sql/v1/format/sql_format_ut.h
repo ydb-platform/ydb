@@ -50,6 +50,12 @@ Y_UNIT_TEST(TruncateTable) {
 
         {"use plato;truncate table `/Root/test/table` with();",
          "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH ();\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE);\n"},
+
+        {"use plato;truncate table `/Root/test/table` with(unsafe = true,other = false);",
+         "USE plato;\n\nTRUNCATE TABLE `/Root/test/table` WITH (unsafe = TRUE, other = FALSE);\n"},
     };
 
     TSetup setup;
@@ -379,6 +385,18 @@ Y_UNIT_TEST(TtlTieringObjectKeyPrefix) {
                 "ALTER TABLE t\n\tSET ttl interval('P1D') TO EXTERNAL DATA SOURCE `eds`.`archive/data` ON ts\n;\n"}});
 }
 
+Y_UNIT_TEST(SymlinkOperations) {
+    TCases cases = {
+        {"create symlink plato.link to target", "CREATE SYMLINK plato.link TO target;\n"},
+        {"create symlink if not exists link to target", "CREATE SYMLINK IF NOT EXISTS link TO target;\n"},
+        {"drop symlink link", "DROP SYMLINK link;\n"},
+        {"drop symlink if exists plato.link", "DROP SYMLINK IF EXISTS plato.link;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(CreateTable) {
     TCases cases = {
         {"create table user(user int32)", "CREATE TABLE user (\n\tuser int32\n);\n"},
@@ -473,6 +491,17 @@ Y_UNIT_TEST(CreateTable) {
          "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1) STORED\n);\n"},
         {"create table user(key int32, val int64 (not null, generated always as (key+1) stored))",
          "CREATE TABLE user (\n\tkey int32,\n\tval int64 (NOT NULL, GENERATED ALWAYS AS (key + 1) STORED)\n);\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(KillSession) {
+    TCases cases = {
+        {"kill session `ydb://session/3?node_id=1&id=test`",
+         "KILL SESSION `ydb://session/3?node_id=1&id=test`;\n"},
+        {"KiLl SeSsIoN $session_id", "KILL SESSION $session_id;\n"},
     };
 
     TSetup setup;
@@ -1258,6 +1287,63 @@ Y_UNIT_TEST(Select) {
          "SELECT\n\t1\nUNION ALL\nSELECT\n\t2\n;\n"},
         {"select * from $user where key == 1 -- comment",
          "SELECT\n\t*\nFROM\n\t$user\nWHERE\n\tkey == 1 -- comment\n;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
+Y_UNIT_TEST(GroupingElementLists) {
+    TCases cases = {
+        {R"sql(select 1 from user group by cube (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                CUBE (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by rollup (a, b))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                ROLLUP (
+                    a,
+                    b
+                )
+            ;
+
+         )sql")},
+        {R"sql(select 1 from user group by grouping sets (cube (a, b), rollup (c, d), e))sql",
+         TrimIndent(R"sql(
+            SELECT
+                1
+            FROM
+                user
+            GROUP BY
+                GROUPING SETS (
+                    CUBE (
+                        a,
+                        b
+                    ),
+                    ROLLUP (
+                        c,
+                        d
+                    ),
+                    e
+                )
+            ;
+
+         )sql")},
     };
 
     TSetup setup;

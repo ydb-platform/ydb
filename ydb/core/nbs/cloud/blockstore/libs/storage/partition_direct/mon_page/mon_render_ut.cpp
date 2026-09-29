@@ -139,7 +139,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         };
         return {
             .Index = index,
-            .VChunkCount = 32,
             .Hosts = {online, sufferer},
             .Connections = {locked, notLocked},
             .PBuffersUsage = {.Count = 1, .Size = 4096},
@@ -559,7 +558,6 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         };
         return {
             .Index = index,
-            .VChunkCount = 32,
             .Hosts = {host},
             .Connections = {connection},
             .LatencyHistoryCapacity = 10,
@@ -739,6 +737,125 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
         UNIT_ASSERT_STRING_CONTAINS(html, ">1:1000:18</a>");
         UNIT_ASSERT_STRING_CONTAINS(html, "Locked");
         UNIT_ASSERT_STRING_CONTAINS(html, "connected");
+    }
+
+    Y_UNIT_TEST(DbgDetailShowsAllVChunksByHost)
+    {
+        TDbgSnapshot dbg = MakeDbg(1);
+        auto first = TVChunkConfig::MakeDefault(4, 2, 1);
+        first.SetDBGIndex(1);
+        auto second = TVChunkConfig::MakeDefault(37, 2, 1);
+        second.SetDBGIndex(1);
+        second.DisableHost(0);
+        dbg.VChunks = {
+            {.Config = first,
+             .Touched = true,
+             .FreshBytes = 8_KB,
+             .RottenBytes = 12_KB,
+             .PBufferBytes = 4_KB},
+            {.Config = second},
+        };
+        dbg.FreshDDisks[4].Set(0);
+
+        const TMonPageData data{
+            .Page = EMonPage::Dbg,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs = {std::move(dbg)},
+            .SelectedDbg = 1,
+        };
+
+        const TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        const size_t table = html.find("<h4>VChunks</h4>");
+        UNIT_ASSERT(table != TString::npos);
+        const TStringBuf vchunks = TStringBuf(html).SubStr(table);
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "<th>H0</th>");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "<th>H1</th>");
+        UNIT_ASSERT(!vchunks.Contains("<th>Touched</th>"));
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "Fresh<br>bytes");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "Rotten<br>bytes");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "PBuffer<br>bytes");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "vchunk-host-legend");
+        UNIT_ASSERT_VALUES_EQUAL(6, CountOccurrences(vchunks, " = "));
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-primary' title='Primary'>P = Primary</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-fresh' title='Fresh'>F = Fresh</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-handoff' title='HandOff'>H = HandOff</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-rotten' title='Rotten'>R = Rotten</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-disabled' title='Disabled'>- = Disabled</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-demoted' title='Demoted'>_ = Demoted</td>");
+        UNIT_ASSERT(!vchunks.Contains("Host state:"));
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "page=vchunk&vchunk=4'>#4</a>");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "page=vchunk&vchunk=37'>#37</a>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-touched-on' title='Touched'></span><a href="
+            "'?TabletID=42&page=vchunk&vchunk=4'>#4</a>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-touched-off' title='Not touched'></span><a href="
+            "'?TabletID=42&page=vchunk&vchunk=37'>#37</a>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-fresh' title='Fresh'>F</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            vchunks,
+            "vchunk-host-disabled' title='Disabled'>-</td>");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "<td>8.00 KiB</td>");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "<td>12.00 KiB</td>");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "<td>4.00 KiB</td>");
+        UNIT_ASSERT_STRING_CONTAINS(vchunks, "Enabled<br>DDisks");
+        UNIT_ASSERT(!vchunks.Contains("Desired<br>PBuffers"));
+    }
+
+    Y_UNIT_TEST(DbgDetailShowsImbalanceAndBalanceButtons)
+    {
+        TDbgSnapshot dbg = MakeDbg(1);
+        dbg.TouchedDDiskImbalance = {
+            .Moves = 3,
+            .TotalDDiskCount = 9,
+            .Percent = 33};
+        dbg.ConfiguredDDiskImbalance = {
+            .Moves = 6,
+            .TotalDDiskCount = 15,
+            .Percent = 40};
+
+        const TMonPageData data{
+            .Page = EMonPage::Dbg,
+            .TabletInfo = {.TabletId = 42},
+            .Dbgs = {std::move(dbg)},
+            .SelectedDbg = 1,
+        };
+
+        const TString html =
+            RenderMonPage(data, EmptyVChunkConfigs, EmptyTouchedProvider);
+        const size_t imbalance = html.find("<h4>DDisk imbalance</h4>");
+        const size_t vchunks = html.find("<h4>VChunks</h4>");
+        UNIT_ASSERT(imbalance != TString::npos);
+        UNIT_ASSERT(imbalance < vchunks);
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<td>Touched</td><td>3</td><td>9</td><td>33%</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "<td>Configured</td><td>6</td><td>15</td><td>40%</td>");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "page=dbg&action=balance&from=1&to=2&strategy=touched&dbg=1");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "page=dbg&action=balance&from=1&to=2&strategy=configured&dbg=1");
     }
 
     Y_UNIT_TEST(DbgDetailNotFound)

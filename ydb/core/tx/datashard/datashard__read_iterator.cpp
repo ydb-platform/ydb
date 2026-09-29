@@ -132,14 +132,12 @@ void EmitVictimAndDeferredBreakerTli(
     ui64 tabletId,
     TReadResultRecord& record,
     TMaybe<ui64> victimQuerySpanId,
-    ui64 currentQuerySpanId,
     ui64 breakerQuerySpanId,
     ui32 breakerNodeId)
 {
     NDataIntegrity::LogVictimDetected(ctx, tabletId,
         "Read transaction was a victim of broken locks",
-        victimQuerySpanId,
-        currentQuerySpanId ? TMaybe<ui64>(currentQuerySpanId) : Nothing());
+        victimQuerySpanId);
 
     if (!victimQuerySpanId) {
         return;
@@ -2785,8 +2783,7 @@ private:
 
         NDataIntegrity::LogVictimDetected(ctx, Self->TabletID(),
             "Read transaction was a victim of broken locks",
-            victimQuerySpanId,
-            state.QuerySpanId ? TMaybe<ui64>(state.QuerySpanId) : Nothing());
+            victimQuerySpanId);
 
         // In deferred lock scenarios, emit breaker logs and pass info to SessionActor
         if (victimQuerySpanId) {
@@ -2850,7 +2847,6 @@ private:
             Self->TabletID(),
             Result->Record,
             victimQuerySpanId,
-            state.QuerySpanId,
             breakerQuerySpanId,
             breakerNodeId);
 
@@ -3614,7 +3610,6 @@ public:
                     Self->TabletID(),
                     Result->Record,
                     victimQuerySpanId,
-                    state.QuerySpanId,
                     breakerQuerySpanId,
                     breakerNodeId);
                 state.Lock->ConsumeBreakerInfo();

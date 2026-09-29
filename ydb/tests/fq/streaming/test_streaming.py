@@ -2007,7 +2007,8 @@ FROM `{table_name}`"""
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
                   AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
                   AND (CAST(CAST(d AS String) AS Date) = Date("1984-01-01"))
-                  AND (i > Interval("PT61S"))
+                  AND (i < Interval("PT3600S"))
+                  AND (i > Interval("-PT1S"))
                   AND (ts = Timestamp("1991-08-19T05:00:00.123456Z"))
                   AND (str1??"x" <= MAX_OF(str1??"x", str2??"x"))
                   AND (str2??"y" >= MIN_OF(str2??"y", str1??"y"))
@@ -2078,7 +2079,8 @@ FROM `{table_name}`"""
                     assert "<= MAX_OF(" in filter
                     assert "1984-01-01" in filter
                     assert "1991-08-19" in filter
-                    assert '"PT61S"' in filter
+                    assert '"PT3600S"' in filter
+                    assert '"-PT1S"' in filter
                     # validate simplified LIKE
                     assert "EndsWith(" in filter
                     assert "StartsWith(" in filter

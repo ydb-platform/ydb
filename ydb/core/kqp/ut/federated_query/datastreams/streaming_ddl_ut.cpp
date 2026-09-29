@@ -3507,10 +3507,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "A-2025-08-24T00:00:00.000000Z-P1-1");
 
         Sleep(TDuration::Seconds(2));
-        auto readDisposition = TInstant::Now();
+        const auto readDisposition = TInstant::Now();
 
-        // Write failure message for key B
-        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
+        // Keep the failure message in the open window so it is not dropped as late after recovery.
+        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
 
         // Wait script execution retry
         WaitFor(TDuration::Seconds(10), "wait retry", [&](TString& error) {
@@ -3538,18 +3538,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 {"fqdn": "host2.example.com", "payload": "P2"             })");
         Sleep(TDuration::Seconds(2));
 
-        // Check that offset is restored
+        // Both B messages must be counted after the failed message is replayed from the restored offset.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
-        ReadTopicMessage(outputTopicName, "B-2025-08-24T00:00:00.000000Z-P2-1", readDisposition);
 
-        Sleep(TDuration::Seconds(1));
-        readDisposition = TInstant::Now();
-
-        // Check that HOP state is restored
+        // Close the window and check both the restored HOP state for A and the replayed input for B.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})");
         ReadTopicMessages(outputTopicName, {
             "A-2025-08-25T00:00:00.000000Z-P1-1",
-            "B-2025-08-25T00:00:00.000000Z-P2-1"
+            "B-2025-08-25T00:00:00.000000Z-P2-2"
         }, readDisposition, /* sort */ true);
     }
 

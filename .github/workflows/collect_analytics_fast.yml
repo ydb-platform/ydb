@@ -140,11 +140,13 @@ jobs:
       uses: actions/checkout@v5
       with:
         ref: ${{ inputs.commit_sha }}
-    - name: Setup
-      uses: ./.github/actions/setup_collect_analytics
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+    - name: Install dependencies
+      run: python3 -m pip install ydb ydb[yc]
     - name: Provision CI metrics tables
       run: python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
     - name: Export GitHub job metrics

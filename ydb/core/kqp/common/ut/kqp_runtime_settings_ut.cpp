@@ -6,15 +6,23 @@
 
 using namespace NKikimr::NKqp;
 
+namespace {
+
+constexpr TStringBuf DateTime2ModuleName = "DateTime2";
+constexpr TStringBuf WriteOffsetWithColonAvailableSinceSetting = "MakeWriteOffsetWithColonAvailableSince";
+constexpr TStringBuf WriteOffsetWithColonAvailableSinceValue = "2025.01";
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
     Y_UNIT_TEST(DefaultPinsWriteOffsetWithColon) {
-        auto settings = MakeKqpDefaultRuntimeSettings();
+        TKqpRuntimeSettings defaults;
+        const auto& settings = defaults.Get();
         UNIT_ASSERT_VALUES_EQUAL(
             settings->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting),
             WriteOffsetWithColonAvailableSinceValue);
 
         auto proto = NYql::SerializeRuntimeSettingsToProto(*settings);
-        UNIT_ASSERT(HasWriteOffsetWithColonSetting(proto));
         auto restored = NYql::DeserializeRuntimeSettingsFromProto(proto);
         UNIT_ASSERT_VALUES_EQUAL(
             restored->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting),
@@ -22,9 +30,10 @@ Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
     }
 
     Y_UNIT_TEST(EnsureFillsEmptyProtoOnce) {
+        TKqpRuntimeSettings defaults;
         NYql::NProto::TRuntimeSettings proto;
-        EnsureKqpDefaultRuntimeSettings(proto);
-        EnsureKqpDefaultRuntimeSettings(proto);
+        defaults.ApplyTo(proto);
+        defaults.ApplyTo(proto);
         UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).GetModule(), DateTime2ModuleName);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).RuntimeSettingsSize(), 1);
@@ -33,6 +42,7 @@ Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
     }
 
     Y_UNIT_TEST(EnsureKeepsOtherUdfSettings) {
+        TKqpRuntimeSettings defaults;
         NYql::NProto::TRuntimeSettings proto;
         auto* other = proto.AddUdfSettings();
         other->SetModule("Other");
@@ -40,13 +50,14 @@ Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
         setting->SetName("Key");
         setting->SetValue("Val");
 
-        EnsureKqpDefaultRuntimeSettings(proto);
+        defaults.ApplyTo(proto);
         UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).GetModule(), "Other");
         UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(1).GetModule(), DateTime2ModuleName);
     }
 
     Y_UNIT_TEST(EnsureKeepsExplicitValue) {
+        TKqpRuntimeSettings defaults;
         NYql::NProto::TRuntimeSettings proto;
         auto* udf = proto.AddUdfSettings();
         udf->SetModule(TString(DateTime2ModuleName));
@@ -54,8 +65,22 @@ Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
         setting->SetName(TString(WriteOffsetWithColonAvailableSinceSetting));
         setting->SetValue("2025.05");
 
-        EnsureKqpDefaultRuntimeSettings(proto);
+        defaults.ApplyTo(proto);
         UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).GetRuntimeSettings(0).GetValue(), "2025.05");
+    }
+
+    Y_UNIT_TEST(EnsureReplacesEmptyValue) {
+        TKqpRuntimeSettings defaults;
+        NYql::NProto::TRuntimeSettings proto;
+        auto* udf = proto.AddUdfSettings();
+        udf->SetModule(TString(DateTime2ModuleName));
+        auto* setting = udf->AddRuntimeSettings();
+        setting->SetName(TString(WriteOffsetWithColonAvailableSinceSetting));
+
+        defaults.ApplyTo(proto);
+        UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).RuntimeSettingsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetUdfSettings(0).GetRuntimeSettings(0).GetValue(), WriteOffsetWithColonAvailableSinceValue);
     }
 }

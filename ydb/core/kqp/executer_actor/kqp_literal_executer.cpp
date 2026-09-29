@@ -205,7 +205,7 @@ public:
         protoTask.SetStageId(task.StageId.StageId);
         protoTask.SetEnableSpilling(false); // TODO: enable spilling
         protoTask.MutableProgram()->CopyFrom(stage.GetProgram()); // it's not good...
-        EnsureKqpDefaultRuntimeSettings(*protoTask.MutableProgram()->MutableRuntimeSettings());
+        KqpRuntimeSettings.ApplyTo(*protoTask.MutableProgram()->MutableRuntimeSettings());
 
         std::optional<NUdfStore::NWasm::TQueryCompartmentScope> wasmScope;
         std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
@@ -444,6 +444,7 @@ private:
     }
 
 private:
+    TKqpRuntimeSettings KqpRuntimeSettings;
     IKqpGateway::TExecPhysicalRequest Request;
     TKqpRequestCounters::TPtr Counters;
     TInstant StartTime;

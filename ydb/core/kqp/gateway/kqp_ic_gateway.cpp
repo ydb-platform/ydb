@@ -98,7 +98,9 @@ bool ContainOnlyLiteralStages(NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest& 
     return true;
 }
 
-void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, ui32 langVer, NKqpProto::TKqpPhyQuery& phyQuery, const TString& program, const NKikimrMiniKQL::TType& resultType) {
+void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, const TKqpRuntimeSettings& runtimeSettings,
+    ui32 langVer, NKqpProto::TKqpPhyQuery& phyQuery, const TString& program, const NKikimrMiniKQL::TType& resultType)
+{
     literalRequest.NeedTxId = false;
     literalRequest.MaxAffectedShards = 0;
     literalRequest.TotalReadSizeLimitBytes = 0;
@@ -113,7 +115,7 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, ui
     stageProgram.SetRaw(program);
     YQL_ENSURE(langVer > 0);
     stageProgram.SetLangVer(langVer);
-    EnsureKqpDefaultRuntimeSettings(*stageProgram.MutableRuntimeSettings());
+    runtimeSettings.ApplyTo(*stageProgram.MutableRuntimeSettings());
     stage.SetOutputsCount(1);
 
     auto& taskResult = *transaction.AddResults();
@@ -1912,7 +1914,7 @@ public:
         auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto& phyQuery = *preparedQuery->MutablePhysicalQuery();
         NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest request(txAlloc);
-        PrepareLiteralRequest(request, langVer, phyQuery, program, resultType);
+        PrepareLiteralRequest(request, KqpRuntimeSettings, langVer, phyQuery, program, resultType);
         request.TraceId = NWilson::TTraceId(WilsonTraceId);
 
         NKikimr::NKqp::TPreparedQueryHolder queryHolder(preparedQuery.release(), txAlloc->HolderFactory.GetFunctionRegistry());
@@ -2420,6 +2422,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientAddress;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
+    TKqpRuntimeSettings KqpRuntimeSettings;
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     NWilson::TTraceId WilsonTraceId;
 };

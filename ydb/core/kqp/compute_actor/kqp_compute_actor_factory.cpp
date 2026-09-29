@@ -20,6 +20,7 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
+    TKqpRuntimeSettings KqpRuntimeSettings;
 
     std::atomic<bool> VerboseMemoryLimitException = false;
 
@@ -85,7 +86,7 @@ public:
 
     TActorId CreateKqpComputeActor(TCreateArgs&& args) override {
         args.TraceId = GetTaskTraceParent(*args.Task, args.TraceId);
-        EnsureKqpDefaultRuntimeSettings(*args.Task->MutableProgram()->MutableRuntimeSettings());
+        KqpRuntimeSettings.ApplyTo(*args.Task->MutableProgram()->MutableRuntimeSettings());
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();

@@ -1235,7 +1235,7 @@ public:
 
         TypesCtx->LangVer = config->GetDefaultLangVer();
         TypesCtx->BackportMode = config->GetYqlBackportMode();
-        TypesCtx->RuntimeSettings = MakeKqpDefaultRuntimeSettings();
+        TypesCtx->RuntimeSettings = KqpRuntimeSettings.Get();
         SessionCtx->SetDatabase(database);
         SessionCtx->SetDatabaseId(Gateway->GetDatabaseId());
         SessionCtx->SetCluster(cluster);
@@ -2341,6 +2341,7 @@ private:
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FuncRegistryHolder;
     const NKikimr::NMiniKQL::IFunctionRegistry* FuncRegistry;
 
+    TKqpRuntimeSettings KqpRuntimeSettings;
     TIntrusivePtr<TTypeAnnotationContext> TypesCtx;
     TAutoPtr<IPlanBuilder> PlanBuilder;
     IDataProvider::TFillSettings FillSettings;

@@ -190,9 +190,26 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
         if (!ev->Get()->Result.IsSuccess()) {
-            YDB_LOG_WARN("Handle",
-                {"ev", ev->Get()->ToString()});
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            const auto status = ev->Get()->Result.GetStatus();
+            const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
+            switch (status) {
+            case NYdb::EStatus::SCHEME_ERROR:
+            case NYdb::EStatus::BAD_REQUEST:
+            case NYdb::EStatus::UNAUTHORIZED:
+                YDB_LOG_ERROR("Failed to commit offset due to fatal error",
+                    {"status", status},
+                    {"issues", issues},
+                    {"topicPath", Settings.GetBase().Topics_.at(0).Path_},
+                    {"consumerName", Settings.GetBase().ConsumerName_});
+                return Leave(TEvWorker::TEvGone::SCHEME_ERROR, TStringBuilder()
+                    << "Cannot commit offset for topic '" << Settings.GetBase().Topics_.at(0).Path_
+                    << "' with consumer '" << Settings.GetBase().ConsumerName_
+                    << "'. Original error: " << issues);
+            default:
+                YDB_LOG_WARN("Handle",
+                    {"ev", ev->Get()->ToString()});
+                return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
+            }
         } else {
             YDB_LOG_DEBUG("Handle",
                 {"committedOffset", CommittedOffset},
@@ -230,7 +247,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
         }
 
         const auto status = ev->Get()->Result.GetStatus();
-        const auto issues = ev->Get()->Result.GetIssues().ToOneLineString();
+        const TString issues = ev->Get()->Result.GetIssues().ToOneLineString();
 
         switch (status) {
         case NYdb::EStatus::SCHEME_ERROR:
@@ -246,7 +263,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
                 << "' with consumer '" << Settings.GetBase().ConsumerName_
                 << "'. Original error: " << issues);
         default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE, TString(issues));
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE, issues);
         }
     }
 

@@ -22,7 +22,7 @@ Fulltext indexes build an inverted index over a text column and allow:
 * fulltext matching via [FulltextMatch](../../yql/reference/builtins/fulltext.md#fulltext-match) (query modes `Keywords` / `Wildcard`, default operator `And` / `Or`)
 * relevance ranking ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) via [FulltextScore](../../yql/reference/builtins/fulltext.md#fulltext-score) when using [fulltext_relevance](../../dev/fulltext-indexes.md#relevance)
 
-Search behavior (what counts as a term, case/word-form handling, wildcard support) is configured at index creation time via analyzer presets or explicit tokenizers and filters (for example, lowercase, stopwords, multilingual Snowball stemming, n-grams). For details, see the index creation syntax [{#T}](../../yql/reference/syntax/create_table/fulltext_index.md).
+Search behavior (what counts as a term, case/word-form handling, wildcard support) is configured at index creation time via analyzer presets or explicit tokenizers and filters (for example, lowercase, stopwords, multilingual Snowball lemmatization, n-grams). For details, see the index creation syntax [{#T}](../../yql/reference/syntax/create_table/fulltext_index.md).
 
 Learn more:
 

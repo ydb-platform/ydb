@@ -48,9 +48,9 @@ CREATE TABLE articles (
 )
 ```
 
-### Стемминг для нескольких языков {#snowball}
+### Лемматизация для нескольких языков {#snowball}
 
-Готовый анализатор Snowball позволяет искать формы английских и русских слов в одной текстовой колонке:
+Готовый анализатор Snowball выполняет лемматизацию и позволяет искать формы английских и русских слов в одной текстовой колонке. В `language` можно перечислить несколько [поддерживаемых языков](#fulltext-languages) через запятую, в том числе с пробелами:
 
 ```yql
 CREATE TABLE documents (
@@ -58,7 +58,7 @@ CREATE TABLE documents (
     body Utf8,
     PRIMARY KEY (id),
     INDEX ft_idx GLOBAL USING fulltext_relevance ON (body)
-    WITH (analyzer="snowball", language="english,russian")
+    WITH (analyzer="snowball", language="english, russian")
 );
 ```
 

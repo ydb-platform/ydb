@@ -10,7 +10,7 @@ Fulltext indexes in {{ ydb-short-name }} are built by tokenizing text and creati
 
 * fast filtering with [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match)
 * relevance ranking ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) with [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) when using [fulltext_relevance](#relevance)
-* case normalization, stemming, and n-gram matching via index filters
+* case normalization, lemmatization, and n-gram matching via index filters
 
 The current implementation supports two indexes:
 

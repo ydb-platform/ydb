@@ -48,9 +48,9 @@ CREATE TABLE articles (
 )
 ```
 
-### Multilingual stemming {#snowball}
+### Multilingual lemmatization {#snowball}
 
-Use the Snowball preset to match English and Russian word forms in the same text column:
+The Snowball preset lemmatizes tokens and matches English and Russian word forms in the same text column. `language` accepts several [supported languages](#fulltext-languages), separated by commas. Spaces after commas are allowed:
 
 ```yql
 CREATE TABLE documents (
@@ -58,7 +58,7 @@ CREATE TABLE documents (
     body Utf8,
     PRIMARY KEY (id),
     INDEX ft_idx GLOBAL USING fulltext_relevance ON (body)
-    WITH (analyzer="snowball", language="english,russian")
+    WITH (analyzer="snowball", language="english, russian")
 );
 ```
 

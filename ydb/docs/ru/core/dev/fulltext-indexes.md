@@ -10,7 +10,7 @@
 
 * быстро фильтровать строки через [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match);
 * ранжировать результаты по релевантности ([BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) через [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score) при использовании [fulltext_relevance](#relevance);
-* применять нормализацию регистра, стемминг и N-граммы с помощью фильтров индекса.
+* применять нормализацию регистра, лемматизацию и N-граммы с помощью фильтров индекса.
 
 В текущей реализации доступны два варианта индекса:
 

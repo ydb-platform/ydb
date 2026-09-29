@@ -4,7 +4,7 @@
 
 ## Configuring authentication for local users {{ ydb-short-name }} {#local-auth-config}
 
-For more information about the authentication of [local {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
+For more information about authentication of [local users](../../concepts/glossary.md#access-user), see the section on [login and password authentication](../../security/authentication.md#static-credentials). To configure authentication of local users by login and password, specify the following parameters in the `auth_config` section:
 
 #|
 || Parameter | Description ||
@@ -41,7 +41,7 @@ Default value: `true`
 || `domain_login_only`
 | The flag defines the scope of access rights for local users in the {{ ydb-short-name }} cluster.
 
-Valid values:
+Possible values:
 
 - `true` — local users {{ ydb-short-name }} exist at the cluster level and can be granted access rights to multiple [databases](../../concepts/glossary.md#database).
 - `false` — local users can exist both at the cluster level and at the level of each individual database. The access rights boundaries of local users created at the database level are limited to the database in which they were created.
@@ -52,7 +52,7 @@ Default value: `true`
 | Lifetime of the authentication token created in exchange for the local user's username and password.
 
 Default value: `12h`
-    ||
+||
 |#
 
 ### Configuring user lockout on incorrect password {#account-lockout}
@@ -60,6 +60,7 @@ Default value: `12h`
 {{ ydb-short-name }} allows you to prevent a user from authenticating if they have made several unsuccessful password attempts. To configure the user lockout conditions, fill in the `account_lockout` section.
 
 Example of the `account_lockout` section:
+
 
 ```yaml
 auth_config:
@@ -69,6 +70,7 @@ auth_config:
     attempt_reset_duration: "1h"
   #...
 ```
+
 
 #|
 || Parameter | Description ||
@@ -86,26 +88,25 @@ If a zero value is specified (`"0s"` — a record equivalent to 0 seconds), the 
 
 The minimum blocking time interval is 1 second.
 
-The minimum lockout duration is 1 second.
+Supported units of measurement:
 
-Supported time units:
+- Seconds. `30s`
+- Minutes. `20m`
+- Hours. `5h`
+- Days. `3d`
 
-- Seconds: `30s`
-- Minutes: `20m`
-- Hours: `5h`
-- Days: `3d`
-
-It is not allowed to combine time units in one entry. For example, the entry `1d12h` is incorrect. It should be replaced with an equivalent, such as `36h`.
+Combining units of measurement in a single line is not allowed. For example, the following entry is incorrect: `1d12h`. Such an entry should be replaced with an equivalent one, for example `36h`.
 
 Default value: `1h`
-    ||
+||
 |#
 
-### Configuring Password Complexity Requirements {#password-complexity}
+### Configuring password complexity requirements {#password-complexity}
 
 {{ ydb-short-name }} allows authenticating users by login and password. For more details, see the section [login and password authentication](../../security/authentication.md#static-credentials). To improve security, {{ ydb-short-name }} provides the ability to configure the complexity of passwords used by [local users](../../concepts/glossary.md#access-user). To configure password requirements, you need to describe the `password_complexity` section.
 
 Example of the `password_complexity` section:
+
 
 ```yaml
 auth_config:
@@ -120,6 +121,7 @@ auth_config:
     can_contain_username: false
   #...
 ```
+
 
 #|
 || Parameter | Description ||
@@ -159,20 +161,21 @@ Default value: empty string (allows all valid special characters)
 | The flag determines whether the username can be included in the password.
 
 Default value: `false`
-    ||
+||
 |#
 
 {% note info %}
 
-Any changes to the password policy do not affect existing user passwords, so it is not necessary to change current passwords; they will be accepted as they are.
+Any changes to the password policy do not affect existing user passwords, so there is no need to change existing passwords; they will be accepted as is.
 
 {% endnote %}
 
-## Configuring LDAP Authentication {#ldap-auth-config}
+## LDAP authentication configuration {#ldap-auth-config}
 
-One of the user authentication methods in {{ ydb-short-name }} is using an LDAP directory. For more details, see [Interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, define the `ldap_authentication` section inside the `auth_config` section.
+One way to authenticate users in {{ ydb-short-name }} is to use an [LDAP](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol) directory. More about this type of authentication is described in the section on [using an LDAP directory](../../security/authentication.md#ldap). To configure LDAP authentication, you need to describe the `ldap_authentication` section.
 
 Example of the `ldap_authentication` section:
+
 
 ```yaml
 auth_config:
@@ -191,46 +194,50 @@ auth_config:
     requested_group_attribute: "memberOf"
     extended_settings:
       enable_nested_groups_search: true
+      enable_sasl_external_bind: true
     use_tls:
       enable: true
       ca_cert_file: "/path/to/ca.pem"
       cert_require: DEMAND
+      cert_file: "/path/to/client-cert.pem"
+      key_file: "/path/to/client-key.pem"
   ldap_authentication_domain: "ldap"
   refresh_time: "1h"
   #...
 ```
 
+
 #|
 || Parameter | Description ||
 || `hosts`
-| Specifies a list of hostnames where the LDAP server is running.
-    ||
+| List of host names on which the LDAP server runs
+||
 || `port`
-| Specifies the port used to connect to the LDAP server.
-    ||
+| Port for connecting to the LDAP server
+||
 || `base_dn`
-| Specifies the root of the subtree in the LDAP directory from which the user entry search begins.
-    ||
+| Root of the subtree in the LDAP directory from which the user record search will be performed
+||
 || `bind_dn`
-| Specifies the Distinguished Name (DN) of the service account used to search for the user entry.
-    ||
+| Distinguished Name (DN) of the service account on whose behalf the user record search is performed
+||
 || `bind_password`
-| Specifies the password for the service account used to search for the user entry.
-    ||
+| Password of the service account on whose behalf the user record search is performed. Not set when `extended_settings.enable_sasl_external_bind: true`
+||
 || `search_filter`
-| Specifies a filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database.
-    ||
+| Filter for searching the user record in the LDAP directory. The filter string may contain the character sequence *$username*, which will be replaced with the user name requested for authentication in the database
+||
 || `use_tls`
-| Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server.
-    ||
+| Settings for configuring the TLS connection between {{ ydb-short-name }} and the LDAP server
+||
 || `enable`
 | Determines whether an attempt will be made to establish a TLS connection [using the `StartTls` request](../../security/authentication.md#starttls). When setting this parameter to `true`, you must disable the use of the `ldaps` connection scheme by setting the `ldap_authentication.scheme` parameter to `ldap`
 ||
 || `ca_cert_file`
-| Specifies the path to the certification authority's certificate file.
-    ||
+| Path to the certificate authority file
+||
 || `cert_require`
-| Specifies the certificate requirement level for the LDAP server.
+| Level of requirements for the LDAP server certificate.
 
 Possible values:
 
@@ -288,37 +295,10 @@ Default value: `false`
 | User name suffix that distinguishes users from the LDAP directory from users authenticated by other providers.
 
 Default value: `ldap`
-    ||
-|| `scheme`
-| Specifies the connection scheme to the LDAP server.
-
-Possible values:
-
-- `ldap` - Connects without encryption, sending passwords in plain text.
-- `ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../security/authentication.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.
-- Any other value defaults to `ldap`.
-
-Default value: `ldap`
-    ||
-|| `requested_group_attribute`
-| Specifies the attribute used for reverse group membership. The default is `memberOf`.
-    ||
-|| `extended_settings.enable_nested_groups_search`
-| Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong.
-
-Possible values:
-
-- `true` — {{ ydb-short-name }} requests information about all groups to which the user's direct groups belong. It might take a long time to traverse the entire hierarchy of nested parent groups.
-- `false` — {{ ydb-short-name }} requests a flat list of groups, to which the user belongs. This request does not traverse possible nested parent groups.
-
-Default value: `false`
-    ||
-|| `host`
-| Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter.
-    ||
+||
 |#
 
-## Configuring Third-Party IAM Authentication {#iam-auth-config}
+## Configuring client certificate authentication {#certificate-auth-config}
 
 {{ ydb-short-name }} supports [client certificate authentication](../../security/authentication.md#client-certificate). Certificate verification rules are set in the [client_certificate_authorization](client_certificate_authorization.md) section. Additionally, the `auth_config` section may specify a suffix for user names authenticated by certificate:
 
@@ -493,7 +473,7 @@ Default value: `1000`
 | The flag enables the use of IAM API keys. An API key is a secret key issued in Yandex Cloud IAM for simplified authorization of service accounts in the Yandex Cloud API. It is used when it is not possible to automatically request an IAM token.
 
 Default value: `false`
-    ||
+||
 |#
 
 ## Authentication result caching settings {#caching-auth-results}
@@ -551,7 +531,7 @@ Default value: `1s`
 | Limits the increase of the interval between re-checks after retryable errors of user token refresh. Does not limit the total duration of re-checks.
 
 Default value: `1m`
-    ||
+||
 |#
 
 Example for authentication by login and password:

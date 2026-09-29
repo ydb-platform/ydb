@@ -13,6 +13,8 @@ items:
     href: fulltext_search.md
   - name: Hybrid search
     href: hybrid_search.md
+  - name: JSON Search
+    href: json_search.md
   - name: Local indexes
     href: local_indexes.md
   - name: Federated query

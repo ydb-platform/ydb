@@ -457,7 +457,7 @@ class TestPqRowDispatcher(TestYdsBase):
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,
             R'predicate: (`time` IN (102, 103, 104))')
-        filter = ' CAST(`time` AS Interval) > Inteval("PT1M41S")'
+        filter = ' CAST(`time` AS Interval) > Interval("PT1M41S")'
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,
             R'predicate: (CAST(`time` AS Interval?) > Interval(\"PT101S\"))')

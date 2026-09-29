@@ -200,7 +200,6 @@ TConsumer::~TConsumer() {
 TString BootstrapServers() {
     TString port = GetEnv("YDB_KAFKA_PROXY_PORT");
     if (port.empty()) {
-        // port = GetEnv("cluster_a_prod_kafka_dynamic_port");
         port = GetEnv("cluster_a_kafka_static_port");
     }
     UNIT_ASSERT_C(port, "Neither YDB_KAFKA_PROXY_PORT nor cluster_a_kafka_static_port is set");
@@ -210,7 +209,6 @@ TString BootstrapServers() {
 ui16 KafkaProxyPort() {
     TString port = GetEnv("YDB_KAFKA_PROXY_PORT");
     if (port.empty()) {
-        // port = GetEnv("cluster_a_prod_kafka_dynamic_port");
         port = GetEnv("cluster_a_kafka_static_port");
     }
     return FromString<ui16>(port);

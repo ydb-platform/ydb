@@ -26,10 +26,6 @@ Y_UNIT_TEST_SUITE(LibrdkafkaFederationCompatibilityTests) {
 
         auto consumer = MakeConsumer(UniqueName("group"), kafkaConf);
         AssertRdKafkaOk(consumer->Handle->subscribe({std::string(topic)}), "subscribe full");
-        // std::vector<RdKafka::TopicPartition*> tps;
-        // tps.push_back(RdKafka::TopicPartition::create(std::string(topic), 0, RdKafka::Topic::OFFSET_BEGINNING));
-        // AssertRdKafkaOk(consumer->Handle->assign(tps), "assign");
-        // RdKafka::TopicPartition::destroy(tps);
         const auto first = ConsumeMessages(*consumer->Handle, 3);
         for (size_t i = 1; i < 4; i++) {
             UNIT_ASSERT_VALUES_EQUAL(first[i - 1].Payload, "message" + std::to_string(i));
@@ -66,11 +62,7 @@ Y_UNIT_TEST_SUITE(LibrdkafkaFederationCompatibilityTests) {
         THashMap<TString, TString> consumerConf = kafkaConf;
         consumerConf["isolation.level"] = "read_committed";
         auto consumer = MakeConsumer(UniqueName("group"), consumerConf);
-        std::vector<RdKafka::TopicPartition*> tps;
-        tps.push_back(RdKafka::TopicPartition::create(std::string(topic), 0, RdKafka::Topic::OFFSET_BEGINNING));
-        AssertRdKafkaOk(consumer->Handle->assign(tps), "assign");
-        RdKafka::TopicPartition::destroy(tps);
-        // AssertRdKafkaOk(consumer->Handle->subscribe({std::string(topic)}), "subscribe");
+        AssertRdKafkaOk(consumer->Handle->subscribe({std::string(topic)}), "subscribe");
         const auto messages = ConsumeMessages(*consumer->Handle, 2);
         UNIT_ASSERT_VALUES_EQUAL(messages[0].Payload, "committed-value-1");
         UNIT_ASSERT_VALUES_EQUAL(messages[0].Key, "committed-key-1");

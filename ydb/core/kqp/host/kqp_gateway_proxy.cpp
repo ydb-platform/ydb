@@ -318,6 +318,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         proto.mutable_storage_settings()->set_external_data_channels_count(*count);
     }
 
+    if (const auto level = metadata->TableSettings.MetricsLevel) {
+        proto.mutable_metrics_settings()->set_metrics_level(*level);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -965,8 +969,8 @@ public:
             return result;
         }
 
-        if (settings.SchemeLimits) {
-            NSchemeHelpers::FillAlterDatabaseSchemeLimits(modifyScheme, basename, *settings.SchemeLimits);
+        if (settings.SchemeLimits || settings.TablesMetricsLevel) {
+            NSchemeHelpers::FillAlterDatabaseSettings(modifyScheme, basename, settings);
 
             TGenericResult result;
             result.SetSuccess();
@@ -999,7 +1003,7 @@ public:
                 if (settings.Owner) {
                     *schemeOp.MutableModifyPermissions() = modifyScheme;
                 }
-                if (settings.SchemeLimits) {
+                if (settings.SchemeLimits || settings.TablesMetricsLevel) {
                     *schemeOp.MutableAlterDatabase() = modifyScheme;
                 }
 

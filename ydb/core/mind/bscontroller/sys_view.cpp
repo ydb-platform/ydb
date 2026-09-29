@@ -407,6 +407,7 @@ void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageContro
 void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo,
         const TBlobStorageController::TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
     info->SetGeneration(groupInfo->Generation);
+    info->SetDDisk(groupInfo->DDisk);
     info->SetErasureSpeciesV2(TErasureType::ErasureSpeciesName(groupInfo->ErasureSpecies));
     info->SetBoxId(std::get<0>(groupInfo->StoragePoolId));
     info->SetStoragePoolId(std::get<1>(groupInfo->StoragePoolId));

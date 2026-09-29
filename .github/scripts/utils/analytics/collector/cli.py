@@ -156,7 +156,7 @@ def add_track_cli_args(parser: argparse.ArgumentParser, *, kind_default: Optiona
     parser.add_argument("positional_name", nargs="?", default=None, help="Event/metric name")
     parser.add_argument("--name", default=None, help="Event/metric name")
     parser.add_argument("--kind", default=kind_default, choices=sorted(KIND_UNITS))
-    parser.add_argument("--source", default=None, help="Producer id, e.g. nightly_build")
+    parser.add_argument("--source", default=None, help="Producer id, e.g. ya_phase")
     parser.add_argument("--value", type=float, default=None)
     parser.add_argument("--duration-ms", type=float, default=None, help="Duration shortcut (kind=duration)")
     parser.add_argument("--unit", default=None)

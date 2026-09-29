@@ -16,7 +16,6 @@ from github_actions import taxonomy
 _ANALYTICS = _SCRIPTS / "analytics"
 _GITHUB = _SCRIPTS.parent.parent
 _ACTION_YML = _GITHUB / "actions" / "test_ya" / "action.yml"
-_NIGHTLY_YML = _GITHUB / "workflows" / "nightly_build.yml"
 _GH_README = _ANALYTICS / "github_actions" / "README.md"
 _EVLOG = _ANALYTICS / "github_actions" / "ya_evlog_phases.py"
 _EXPORT = _ANALYTICS / "github_actions" / "export_github_job_metrics.py"
@@ -120,12 +119,6 @@ class TaxonomyMatchesCodeTest(unittest.TestCase):
         self.assertNotIn("export_state", text)
         self.assertNotIn('"run_id": 0', text)
 
-    def test_nightly_names_match_the_workflow(self):
-        text = _NIGHTLY_YML.read_text(encoding="utf-8")
-        self.assertIn(f"--source {taxonomy.NIGHTLY_SOURCE}", text)
-        for name in taxonomy.NIGHTLY_NAMES:
-            self.assertIn(name, text, f"{name} is in the taxonomy but not in nightly_build.yml")
-
 
 class TaxonomyMatchesDocsTest(unittest.TestCase):
     def test_readme_documents_every_source(self):
@@ -133,7 +126,7 @@ class TaxonomyMatchesDocsTest(unittest.TestCase):
 
     def test_readme_documents_every_exported_name(self):
         documented = _documented_export_names()
-        for name in taxonomy.GITHUB_JOB_NAMES + taxonomy.NIGHTLY_NAMES:
+        for name in taxonomy.GITHUB_JOB_NAMES:
             self.assertIn(name, documented, f"{name} is not in the README source/name table")
 
     def test_readme_phase_table_matches_the_taxonomy_exactly(self):

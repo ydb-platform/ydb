@@ -35,15 +35,10 @@ YA_PHASE_NAMES = (
 # Phases derived from ya_evlog.jsonl by ya_evlog_phases.py.
 YA_EVLOG_NAMES = ("ya_build", "ya_tests", "ya_cache_download", "ya_cache_upload")
 
-# Written by nightly_build.yml.
-NIGHTLY_SOURCE = "nightly_build"
-NIGHTLY_NAMES = ("ydbd_cached_build", "ydbd_size")
-
 SOURCES = {
     "github_job": GITHUB_JOB_NAMES,
     "github_step": (),
     YA_PHASE_SOURCE: YA_PHASE_NAMES,
-    NIGHTLY_SOURCE: NIGHTLY_NAMES,
 }
 
 # `ya_make_try_1`, `ya_make_try_2`, ... are one row per attempt.

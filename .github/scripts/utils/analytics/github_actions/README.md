@@ -131,11 +131,10 @@ analytics end my_new_phase --rc "$RC"
 
 `$CI_BUILD_SPAN` — имя строки, которая измеряет **сам вызов** `./ya make`
 (от запуска команды до её exit code). По умолчанию это `ya_make_try_1`,
-`ya_make_try_2`, … по номеру ретрая. Если nightly хочет в таблице другое
-имя — `ydbd_cached_build` — workflow выставляет `$CI_BUILD_SPAN` и
-`test_ya` пишет start/end с ним. Только для этой строки Python сам
-запишет железо: на старте сколько ядер и RAM, в конце сколько занято.
-На `init` и `checkout` это не нужно.
+`ya_make_try_2`, … по номеру ретрая. Если workflow задаст другое имя в
+`$CI_BUILD_SPAN`, `test_ya` пишет start/end с ним. Только для этой строки
+Python сам запишет железо: на старте сколько ядер и RAM, в конце сколько
+занято. На `init` и `checkout` это не нужно.
 
 В шаге стоит `set -e`: любая упавшая команда сразу выходит из скрипта.
 Тогда `analytics start` уже вызван, а до `analytics end` дело не дойдёт —
@@ -167,7 +166,6 @@ trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
 | `github_job` | `queue` | выгрузка | сколько job ждал раннера; `labels.queued_ms` то же число |
 | `github_step` | имя шага | выгрузка | сколько шёл шаг GitHub Actions |
 | `ya_phase` | см. ниже | `test_ya` | фазы внутри job |
-| `nightly_build` | `ydbd_cached_build`, `ydbd_size` | `nightly_build.yml` | сборка ydbd и размер бинаря |
 
 | `name` | Что измеряет |
 | --- | --- |

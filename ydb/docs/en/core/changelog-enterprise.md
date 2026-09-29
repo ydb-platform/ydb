@@ -1,4 +1,4 @@
-# Yandex Managed Service for YDB changelog
+# Yandex Enterprise Database changelog
 
 ## Version 26.1 {#26-1}
 
@@ -6,11 +6,11 @@
 
 Release date: August 3, 2026.
 
-The version includes all improvements contained in build {{ ydb-short-name }} 26.1.1.22, see [change description](./changelog-server.md#26-1-1-22). In addition, the version includes the [improvements specific to Managed Service for YDB](#26-1-1-ent-3-extras) listed below.
+The version includes all improvements contained in build {{ ydb-short-name }} 26.1.1.22, see [change description](./changelog-server.md#26-1-1-22). In addition, the version includes the [improvements specific to Yandex Enterprise Database](#26-1-1-ent-3-extras) listed below.
 
-#### Improvements specific to Managed Service for YDB {#26-1-1-ent-3-extras}
+#### Improvements specific to Yandex Enterprise Database {#26-1-1-ent-3-extras}
 
-The following changes are available in Yandex Managed Service for YDB in addition to the corresponding build {{ ydb-short-name }}:
+The following changes are available in Yandex Enterprise Database in addition to the corresponding build {{ ydb-short-name }}:
 
 * Added an optimization that allows filtering rows by index columns before querying the main table, reducing the number of accesses to the main table when executing certain types of queries.
 * Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare "hang" situations in running queries and reduces memory consumption when executing queries.
@@ -44,7 +44,7 @@ The version includes all improvements contained in build {{ ydb-short-name }} 25
 
 #### Additional fixes {#25-2-1-ent-13-extras}
 
-The following changes were ported from version 26.1 to the supported stable versions of Yandex Managed Service for YDB:
+The following changes were ported from version 26.1 to the supported stable versions of Yandex Enterprise Database:
 
 * Fixed a bug that violated the sort order specified in the query when accessing system tables.
 * Fixed a bug in the internal state integrity check logic that, in rare cases, could lead to a single (not mass) restart of storage nodes.

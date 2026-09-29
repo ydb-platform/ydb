@@ -11283,6 +11283,27 @@
             "uri": "https://{canondata_backend}/1597364/fdeffca975c2d2d1bc708528a504feb47b36c5c9/resource.tar.gz#test_sql2yql.test_select_yql-with_cte_single_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-without]": [
+        {
+            "checksum": "0b00051ef3448b96ce808e784ed5283f",
+            "size": 10778,
+            "uri": "https://{canondata_backend}/1920236/2915f3c81a30592fac5da5ee4bb9bbba6505269c/resource.tar.gz#test_sql2yql.test_select_yql-without_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-without_duplicate_fail]": [
+        {
+            "checksum": "77da6834cf25bef2cfab7e389960607b",
+            "size": 925,
+            "uri": "https://{canondata_backend}/1784117/ac3fcb6cbbd8ce5969d0e6bf77e916f88f1c320a/resource.tar.gz#test_sql2yql.test_select_yql-without_duplicate_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-without_missing_fail]": [
+        {
+            "checksum": "99e7638c3781bfb7daa45668688c5cfe",
+            "size": 898,
+            "uri": "https://{canondata_backend}/1784117/ac3fcb6cbbd8ce5969d0e6bf77e916f88f1c320a/resource.tar.gz#test_sql2yql.test_select_yql-without_missing_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-yql_21501]": [
         {
             "checksum": "af7687953f5a54c77ea3f278355a9eee",
@@ -19785,6 +19806,21 @@
     "test_sql_format.test[select_yql-with_cte_single]": [
         {
             "uri": "file://test_sql_format.test_select_yql-with_cte_single_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-without]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-without_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-without_duplicate_fail]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-without_duplicate_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-without_missing_fail]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-without_missing_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-yql_21501]": [

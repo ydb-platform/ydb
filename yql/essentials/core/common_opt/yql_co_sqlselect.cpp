@@ -3,6 +3,7 @@
 #include "yql_co_yqlselect.h"
 
 #include <yql/essentials/core/type_ann/type_ann_pg.h>
+#include <yql/essentials/core/type_ann/type_ann_yql.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_join.h>
@@ -2329,6 +2330,8 @@ TExprNode::TPtr BuildProjectionLambda(
     bool isExternalInputExist,
     bool emitPgStar,
     bool isYql,
+    const TExprNode* without,
+    bool isJoin,
     TExprContext& ctx)
 {
     TMap<TStringBuf, TStringBuf> columnNamesMap;
@@ -2449,6 +2452,9 @@ TExprNode::TPtr BuildProjectionLambda(
                         }
 
                         for (const auto& item : type->GetItems()) {
+                            if (without && NTypeAnnImpl::IsYqlWithoutItem(item->GetName(), *without, isJoin)) {
+                                continue;
+                            }
                             TStringBuf column = item->GetName();
                             auto columnName = isExternalInputExist ? column : NTypeAnnImpl::RemoveAlias(column);
                             auto rightColumnName = order.AddColumn(localOrder.Find(TString(columnName)));
@@ -4595,6 +4601,8 @@ TExprNode::TPtr ExpandSqlSelectImpl(
         auto distinctAll = GetSetting(setItem->Tail(), "distinct_all");
         auto distinctOn = GetSetting(setItem->Tail(), "distinct_on");
         auto sort = GetSetting(setItem->Tail(), "sort");
+        auto without = GetSetting(setItem->Tail(), "without");
+        YQL_ENSURE(!without || isYql);
         auto extraSortColumns = GetSetting(setItem->Tail(), "final_extra_sort_columns");
         auto extraSortKeys = GetSetting(setItem->Tail(), "final_extra_sort_keys");
         bool emitPgStar = (GetSetting(setItem->Tail(), "emit_pg_star") != nullptr);
@@ -4624,6 +4632,8 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                 isExternalInputExist,
                 emitPgStar,
                 isYql,
+                without.Get(),
+                from && from->Tail().ChildrenSize() > 1,
                 ctx);
 
             TExprNode::TPtr projectionArg = projectionLambda->Head().HeadPtr();

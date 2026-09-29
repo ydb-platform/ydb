@@ -273,6 +273,7 @@ public:
         auto projection = InitProjection(ctx, src);
 
         if (!projection ||
+            !InitWithout(ctx) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
             (GroupBy && !Init(ctx, src, *GroupBy)) ||
@@ -293,6 +294,14 @@ public:
             }
 
             item->Add(Q(Y(Q("result"), Q(std::move(items)))));
+        }
+
+        if (Without) {
+            TNodePtr setting = Y(Q("without"), Q(BuildWithoutColumns(Without->Columns)));
+            if (Without->IsIfExists) {
+                setting->Add(Q("if_exists"));
+            }
+            item->Add(Q(std::move(setting)));
         }
 
         if (Distinct) {
@@ -415,6 +424,30 @@ public:
     }
 
 private:
+    bool InitWithout(TContext& ctx) const {
+        if (!Without || !IsJoin()) {
+            return true;
+        }
+        bool valid = true;
+        for (const auto& column : Without->Columns) {
+            if (column.Source.empty()) {
+                ctx.Error(column.Position) << "Expected correlation name for WITHOUT in JOIN";
+                valid = false;
+            }
+        }
+        return valid;
+    }
+
+    TNodePtr BuildWithoutColumns(const TVector<TYqlWithout::TColumn>& withoutColumns) const {
+        TNodePtr columns = Y();
+        for (const auto& column : withoutColumns) {
+            columns->Add(Q(Y(
+                BuildQuotedAtom(column.Position, column.Source),
+                BuildQuotedAtom(column.Position, column.Name))));
+        }
+        return columns;
+    }
+
     TMaybe<TVector<TProjectionItem>> InitProjection(TContext& ctx, ISource* src) const {
         return std::visit(
             TOverloaded{
@@ -599,8 +632,7 @@ private:
         TString name = *term->GetColumnName();
 
         if (const auto* source = term->GetSourceName();
-            source && !source->empty() &&
-            Source && 1 < Source->Sources.size()) {
+            source && !source->empty() && IsJoin()) {
             name.prepend(".").prepend(*source);
         }
 
@@ -880,6 +912,10 @@ private:
             case FrameFollowing:
                 return "f";
         }
+    }
+
+    bool IsJoin() const {
+        return Source && 1 < Source->Sources.size();
     }
 
     TNodePtr Node_;

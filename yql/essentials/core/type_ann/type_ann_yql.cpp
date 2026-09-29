@@ -392,7 +392,114 @@ TYqlColumnOrder ToColumnOrder(TVector<TYqlResultItemLabel> labels) {
     return order;
 }
 
+TString YqlWithoutName(TStringBuf source, TStringBuf name) {
+    return TStringBuilder() << source << "." << name;
+}
+
+TString YqlWithoutItemName(TStringBuf itemName, bool isJoin) {
+    TString alias;
+    const TStringBuf name = RemoveAlias(itemName, alias);
+    return isJoin && !alias.empty() ? YqlWithoutName(alias, name) : TString(name);
+}
+
+TString YqlWithoutColumnName(const TExprNode& column, bool isJoin) {
+    return isJoin
+        ? YqlWithoutName(column.Head().Content(), column.Tail().Content())
+        : TString(column.Tail().Content());
+}
+
+void ReportMissingYqlWithoutItem(
+    TStringBuf name,
+    TPositionHandle position,
+    const TVector<const TItemExprType*>& items,
+    bool isJoin,
+    TExtContext& ctx)
+{
+    TVector<const TItemExprType*> namedItems(Reserve(items.size()));
+    for (const auto* item : items) {
+        namedItems.push_back(ctx.Expr.MakeType<TItemExprType>(
+            YqlWithoutItemName(item->GetName(), isJoin), item->GetItemType()));
+    }
+    const auto currentType = ctx.Expr.MakeType<TStructExprType>(namedItems);
+    FindOrReportMissingMember(name, position, *currentType, ctx.Expr);
+}
+
+TExprNode::TPtr GetYqlWithoutForStarResult(const TExprNode& setItem) {
+    YQL_ENSURE(setItem.IsCallable("YqlSetItem"));
+    const auto& settings = setItem.Head();
+    const auto result = GetSetting(settings, "result");
+    const bool hasStarResult = result && AnyOf(
+        result->Tail().Children(), [](const auto& item) {
+            return item->Tail().Tail().IsCallable("YqlStar");
+        });
+    return hasStarResult ? GetSetting(settings, "without") : nullptr;
+}
+
 } // namespace
+
+bool ValidateYqlWithoutSetting(TExprNode& setting, TExprContext& ctx) {
+    if (!EnsureTupleMinSize(setting, 2, ctx) ||
+        !EnsureTupleMaxSize(setting, 3, ctx) ||
+        !EnsureTuple(*setting.Child(1), ctx)) {
+        return false;
+    }
+
+    for (const auto& column : setting.Child(1)->Children()) {
+        if (!EnsureTupleSize(*column, 2, ctx) ||
+            !EnsureAtom(column->Head(), ctx) ||
+            !EnsureAtom(column->Tail(), ctx)) {
+            return false;
+        }
+    }
+
+    if (setting.ChildrenSize() == 3 &&
+        (!EnsureAtom(*setting.Child(2), ctx) || setting.Child(2)->Content() != "if_exists")) {
+        ctx.AddError(TIssue(ctx.GetPosition(setting.Child(2)->Pos()), "Expected if_exists"));
+        return false;
+    }
+    return true;
+}
+
+bool IsYqlWithoutItem(TStringBuf itemName, const TExprNode& without, bool isJoin) {
+    const TString normalizedItemName = YqlWithoutItemName(itemName, isJoin);
+    return AnyOf(without.Child(1)->Children(), [&](const auto& column) {
+        return normalizedItemName == YqlWithoutColumnName(*column, isJoin);
+    });
+}
+
+IGraphTransformer::TStatus ApplyYqlWithoutToStar(
+    const TExprNode& setItem,
+    const TInputs& inputs,
+    TVector<const TItemExprType*>& items,
+    TExtContext& ctx)
+{
+    YQL_ENSURE(setItem.IsCallable("YqlSetItem"));
+    const auto without = GetSetting(setItem.Head(), "without");
+    if (!without) {
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    const bool isJoin = CountIf(inputs, [](const auto& input) {
+        return input.Priority == TInput::Current;
+    }) > 1;
+    YQL_ENSURE(
+        without->ChildrenSize() == 2 || without->ChildrenSize() == 3,
+        "Expected WITHOUT setting with 2 or 3 children, got " << without->ChildrenSize());
+    const bool ifExists = without->ChildrenSize() == 3;
+    for (const auto& column : without->Child(1)->Children()) {
+        const TString name = YqlWithoutColumnName(*column, isJoin);
+        const size_t itemCount = items.size();
+        EraseIf(items, [&](const auto* item) {
+            return YqlWithoutItemName(item->GetName(), isJoin) == name;
+        });
+        if (items.size() == itemCount && !ifExists) {
+            ReportMissingYqlWithoutItem(name, column->Tail().Pos(), items, isJoin, ctx);
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    return IGraphTransformer::TStatus::Ok;
+}
 
 TMaybe<TYqlFromSettings> TYqlFromSettings::Parse(const TExprNode::TPtr& settings, TExtContext& ctx) {
     TYqlFromSettings parsed;
@@ -500,10 +607,12 @@ IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
     const TInputs& groupInputs,
     const TVector<ui32>& lhsIndexes,
     const TVector<ui32>& rhsIndexes,
+    const TExprNode& setItem,
     TVector<std::pair<TString, TString>>& implicitUsing,
     TExtContext& ctx)
 {
     auto equalities = GetImplicitUsingEqualities(predicate);
+    const auto without = GetYqlWithoutForStarResult(setItem);
 
     implicitUsing.clear();
     implicitUsing.reserve(equalities.size());
@@ -517,6 +626,12 @@ IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
             status != IGraphTransformer::TStatus::Ok)
         {
             return status;
+        }
+
+        if (without &&
+            (IsYqlWithoutItem(entry.first, *without, /*isJoin=*/true) ||
+             IsYqlWithoutItem(entry.second, *without, /*isJoin=*/true))) {
+            continue;
         }
 
         implicitUsing.emplace_back(std::move(entry));

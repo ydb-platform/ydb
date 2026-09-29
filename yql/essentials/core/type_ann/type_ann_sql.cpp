@@ -3112,7 +3112,15 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                         withRemovedAlias[aliasClashes.AddColumn(TString(e->TailPtr()->Content()))] = e->HeadPtr()->Content();
                                     }
                                 }
-                                for (const auto& item : column->Tail().GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
+                                TVector<const TItemExprType*> starItems =
+                                    column->Tail().GetTypeAnn()->Cast<TStructExprType>()->GetItems();
+                                if (isYql) {
+                                    if (auto status = ApplyYqlWithoutToStar(*input, joinInputs, starItems, ctx);
+                                        status != IGraphTransformer::TStatus::Ok) {
+                                        return status;
+                                    }
+                                }
+                                for (const auto& item : starItems) {
                                     auto name = TString(item->GetName());
                                     if (/* auto it = */ withRemovedAlias.FindPtr(name)) {
                                         name = withRemovedAlias[name];
@@ -3258,6 +3266,11 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 return IGraphTransformer::TStatus::Repeat;
                             }
                         }
+                    }
+                }
+                else if (isYql && optionName == "without") {
+                    if (!ValidateYqlWithoutSetting(*option, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
                     }
                 }
                 else if (optionName == "from") {
@@ -3849,6 +3862,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                         if (auto status = InferYqlImplicitUsingJoinColumns(
                                             child->Tail().Child(1)->TailPtr(),
                                             groupInputs, leftSide, rightSide,
+                                            *input,
                                             implicitUsingAll, ctx);
                                             status != IGraphTransformer::TStatus::Ok)
                                         {

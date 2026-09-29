@@ -37,7 +37,18 @@ IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
     const TInputs& groupInputs,
     const TVector<ui32>& lhsIndexes,
     const TVector<ui32>& rhsIndexes,
+    const TExprNode& setItem,
     TVector<std::pair<TString, TString>>& implicitUsing,
+    TExtContext& ctx);
+
+bool ValidateYqlWithoutSetting(TExprNode& setting, TExprContext& ctx);
+
+bool IsYqlWithoutItem(TStringBuf itemName, const TExprNode& without, bool isJoin);
+
+IGraphTransformer::TStatus ApplyYqlWithoutToStar(
+    const TExprNode& setItem,
+    const TInputs& inputs,
+    TVector<const TItemExprType*>& items,
     TExtContext& ctx);
 
 IGraphTransformer::TStatus InferYqlInferUnionType(

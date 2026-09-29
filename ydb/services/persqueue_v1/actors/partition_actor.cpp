@@ -1550,7 +1550,7 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
 
         auto request = MakeReadRequest(
             dr.GetReadOffset(),
-            dr.GetLastOffset() + 1,
+            TMaybe<ui64>(dr.GetLastOffset() + 1),
             std::numeric_limits<i32>::max(), // maxCount
             std::numeric_limits<i32>::max(), // maxSize
             0, // maxTimeLagMs
@@ -1755,7 +1755,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
 
 NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
-        ui64 readOffset, std::optional<ui64> lastOffset, ui64 maxCount, ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs, ui64 directReadId, ui64 sizeEstimate
+        ui64 readOffset, TMaybe<ui64> lastOffset, ui64 maxCount, ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs, ui64 directReadId, ui64 sizeEstimate
 ) const {
     NKikimrClient::TPersQueueRequest request;
 
@@ -1789,8 +1789,8 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
     }
 
     read->SetOffset(readOffset);
-    if (lastOffset) {
-        read->SetLastOffset(lastOffset.value());
+    if (lastOffset.Defined()) {
+        read->SetLastOffset(*lastOffset);
     }
     read->SetTimeoutMs(READ_TIMEOUT_DURATION.MilliSeconds());
     return request;
@@ -1819,7 +1819,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
 
     const auto req = ev->Get();
 
-    auto request = MakeReadRequest(ReadOffset, ClientMaxOffset.GetOrElse(0), req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
+    auto request = MakeReadRequest(ReadOffset, ClientMaxOffset, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
     RequestInfly = true;
     CurrentRequest = request;
 

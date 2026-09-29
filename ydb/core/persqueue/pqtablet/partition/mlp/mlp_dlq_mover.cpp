@@ -192,10 +192,26 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& response = ev->Get()->Record;
-    if (!response.GetPartitionResponse().HasCmdReadResult()
-            || response.GetPartitionResponse().GetCmdReadResult().ResultSize() == 0) {
-        return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
-            << "Fetch message failed: empty read result: " << response.DebugString());
+    const bool hasResult = response.GetPartitionResponse().HasCmdReadResult()
+        && response.GetPartitionResponse().GetCmdReadResult().ResultSize() > 0;
+    const ui64 requestedOffset = Queue.front().Offset;
+    // A trimmed offset is read from StartOffset, so the result can be a later message.
+    // That body belongs to another offset. The requested one is already gone.
+    const bool gotRequested = hasResult
+        && response.GetPartitionResponse().GetCmdReadResult().GetResult(0).GetOffset() == requestedOffset;
+    if (!gotRequested) {
+        LOG_D(
+            "Source message is missing, treat as moved",
+            {"offset", requestedOffset},
+            {"seqNo", Queue.front().SeqNo},
+            {"hasResult", hasResult}
+        );
+        Processed.emplace_back(requestedOffset, Queue.front().SeqNo);
+        Queue.pop_front();
+        if (Queue.empty() && Pending.empty()) {
+            return ReplySuccess();
+        }
+        return ProcessQueue();
     }
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
     auto messageSize = result->GetData().size();

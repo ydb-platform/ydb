@@ -528,12 +528,41 @@ Y_UNIT_TEST(DirectMove_MissingSourceOffset) {
     CreateSourceAndDlqTopics(setup);
 
     // No writes to source topic — read returns an empty result set.
-    auto response = RunDirectMover(setup, TString(kDlqTopic), {{.Offset = 0, .SeqNo = 1}});
+    // A missing body was deleted by retention, so the move is successful.
+    auto response = RunDirectMover(setup, TString(kDlqTopic), {
+        {.Offset = 0, .SeqNo = 1},
+        {.Offset = 0, .SeqNo = 2},
+    });
     const auto* result = response->Get();
-    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::INTERNAL_ERROR);
-    UNIT_ASSERT(result->ErrorDescription.Contains("empty read result")
-        || result->ErrorDescription.Contains("Fetch message failed"));
-    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].first, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].second, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].first, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].second, 2);
+}
+
+Y_UNIT_TEST(DirectMove_MissingOffsetThenExistingMessage) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+
+    const auto msg = "keep-me";
+    setup->Write(TString(kSourceTopic), msg, 0);
+    Sleep(TDuration::Seconds(1));
+
+    // Offset 1 is at the partition end, so the read is empty. Offset 0 is still there.
+    auto response = RunDirectMover(setup, TString(kDlqTopic), {
+        {.Offset = 1, .SeqNo = 1},
+        {.Offset = 0, .SeqNo = 2},
+    });
+    const auto* result = response->Get();
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].first, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].second, 1);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].first, 0);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].second, 2);
+    ExpectDlqContains(setup, msg);
 }
 
 Y_UNIT_TEST(DirectMove_BigMessage) {

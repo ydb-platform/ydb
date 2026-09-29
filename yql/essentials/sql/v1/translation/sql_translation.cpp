@@ -2954,9 +2954,6 @@ bool StoreConsumerSettingsEntry(
         }
         if (reset) {
             settings.ReadFromTs.Reset();
-        } else if (valueExprNode->GetOpName() == "Interval") {
-            ctx.Error() << "reading only messages from the last N seconds is not supported";
-            return false;
         } else {
             settings.ReadFromTs.Set(valueExprNode);
         }

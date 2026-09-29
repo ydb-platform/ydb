@@ -1005,6 +1005,9 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
+        // All EvWrites in TKqpTableWriteActor are sent with Cookie >= 1
+        AFL_ENSURE(ev->Cookie != 0);
+
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
             // A late TEvWriteResult for a shard removed by a reroute: its pending
             // batches were re-sent to the covering shards, so a result from the dead

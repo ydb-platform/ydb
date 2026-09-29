@@ -2464,7 +2464,8 @@ IShardedWriteControllerPtr CreateShardedWriteController(
 }
 
 bool IsSupersededWriteResult(const ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata) {
-    return cookie != 0 && (!metadata || metadata->Cookie != cookie);
+    AFL_ENSURE(cookie != 0);
+    return !metadata || metadata->Cookie != cookie;
 }
 
 bool IsIgnorableSupersededStatus(const NKikimrDataEvents::TEvWriteResult::EStatus status) {

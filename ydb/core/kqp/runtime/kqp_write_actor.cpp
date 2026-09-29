@@ -1032,13 +1032,6 @@ public:
         //    the cookie never matches. Hence the whole rule does not apply in
         //    COMMIT mode: without the exemption every commit completion would be
         //    dropped as superseded and the commit acknowledgement would be lost.
-        //  - Cookie-0 results: not tied to a specific message. Current-version shards
-        //    echo the request cookie on all per-message replies, including gate
-        //    rejections (e.g. STATUS_WRONG_SHARD_STATE for a shard split/offlined
-        //    behind the pipe), which pass via the cookie match; cookie 0 is only
-        //    produced by shards that do not echo cookies (e.g. 26-3 datashards during
-        //    a rolling upgrade), and their rejections must pass to drive the
-        //    re-resolve logic.
         // Superseded results are ignored only when their status is positive or
         // retryable (see IsIgnorableSupersededStatus): a fatal status (ABORTED,
         // LOCKS_BROKEN, ...) indicates a shard-side problem the latest attempt

@@ -303,9 +303,8 @@ struct TShardedWriteControllerSettings {
 // in flight, and every resent message is guaranteed its own answer with the resent
 // message's cookie: a deduped replay (write seq num dedup) re-sends the result with
 // the new message's cookie, and an overload-rejected write is re-sent after the
-// TEvOverloadReady wakeup. A result with cookie 0 is not tied to any specific message
-// (replies of shards that do not echo cookies, e.g. 26-3 datashards during a rolling
-// upgrade; distributed/volatile commit completions) and always passes.
+// TEvOverloadReady wakeup. Every reply (including gate rejections) echoes the
+// cookie of the request it answers, so a zero cookie is a protocol violation.
 bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
 
 bool IsIgnorableSupersededStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);

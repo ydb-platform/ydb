@@ -97,11 +97,6 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         UNIT_ASSERT(IsSupersededWriteResult(6, MetadataWithCookie(7)));
         // A result for a shard unknown to the controller is dropped.
         UNIT_ASSERT(IsSupersededWriteResult(7, std::nullopt));
-        // Zero-cookie results (replies of shards that do not echo cookies, e.g.
-        // 26-3 datashards during a rolling upgrade) are not tied to a specific
-        // message and always pass.
-        UNIT_ASSERT(!IsSupersededWriteResult(0, std::nullopt));
-        UNIT_ASSERT(!IsSupersededWriteResult(0, MetadataWithCookie(7)));
     }
 
     Y_UNIT_TEST_F(FreshCookieForEachMessage, TShardedWriteControllerFixture) {
@@ -122,9 +117,8 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         Controller->OnMessageSent(TestShardId, resendCookie);
 
         // Only the result echoing the last minted cookie acknowledges the round.
-        // Note: a zero-cookie result (e.g. a reply of a pre-26-4 shard) can never
-        // acknowledge the round - callers never pass such a cookie here (see the
-        // AFL_ENSURE in OnMessageAcknowledged).
+        // Note: a zero cookie can never acknowledge the round - callers never
+        // pass such a cookie here (see the AFL_ENSURE in OnMessageAcknowledged).
         UNIT_ASSERT(!Controller->OnMessageAcknowledged(TestShardId, firstCookie));
 
         const auto acknowledged = Controller->OnMessageAcknowledged(TestShardId, resendCookie);
@@ -156,14 +150,26 @@ Y_UNIT_TEST_SUITE(KqpWriteTable) {
         UNIT_ASSERT(!Controller->GetMessageMetadata(TestShardId));
     }
 
-    Y_UNIT_TEST_F(MetadataLookupDoesNotCreateShardEntries, TShardedWriteControllerFixture) {
+    Y_UNIT_TEST_F(ReadOnlyLookupsDoNotAlterShardSet, TShardedWriteControllerFixture) {
         WriteRound(1, 11, 0);
 
-        // A lookup for an unknown shard must not create a shard entry: the write
-        // actor drops results of shards without a controller record before any
-        // lookup, and unknown-shard lookups are asserted in the controller.
-        // Verify the unknown shard stays unknown and does not leak into the
-        // shard set used for external-prepare exclusion.
+        Controller->PrepareMessageMetadata(TestShardId);
+        const ui64 cookie = Controller->AllocateMessageCookie(TestShardId);
+        Controller->OnMessageSent(TestShardId, cookie);
+        UNIT_ASSERT(Controller->GetMessageMetadata(TestShardId));
+
+        // Acknowledge the round: the shard stays registered (needed for the
+        // external-prepare exclusion) but is empty, and a read-only metadata
+        // lookup for it returns nothing without removing or altering the entry.
+        const auto acknowledged = Controller->OnMessageAcknowledged(TestShardId, cookie);
+        UNIT_ASSERT(acknowledged);
+        UNIT_ASSERT(acknowledged->IsShardEmpty);
+        UNIT_ASSERT(!Controller->GetMessageMetadata(TestShardId));
+
+        // Lookups for shards unknown to the controller must not create entries
+        // (the write actor drops results of such shards before any lookup, and
+        // direct metadata lookups for them are asserted in the controller), so
+        // the unknown shard stays unknown and does not leak into the shard set.
         UNIT_ASSERT(!Controller->HasShard(UnknownShardId));
 
         const auto shardIds = Controller->GetShardsIds();

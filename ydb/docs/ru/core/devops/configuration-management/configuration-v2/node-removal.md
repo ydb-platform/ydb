@@ -23,10 +23,10 @@
 
 На оставшихся узлах должно быть достаточно свободного места и слотов на [PDisk](../../../concepts/glossary.md#pdisk) для всех VDisk с удаляемого узла. Размещение VDisk по [доменам отказа](../../../concepts/glossary.md#fail-domain) и [областям отказа](../../../concepts/glossary.md#fail-realm) должно соответствовать используемой [схеме кодирования](../../../concepts/glossary.md#erasure-coding), чтобы после удаления узла сохранялась отказоустойчивость групп. Расчёт необходимого запаса приведён в статье [{#T}](../../concepts/capacity-planning.md#hardware-estimation).
 
-[SelfHeal](../../concepts/selfheal-storage.md) динамических групп включён по умолчанию. Перед удалением узла убедитесь, что он также включён для остальных ресурсов, размещённых на этом узле:
+[SelfHeal](../../concepts/selfheal-storage.md) для динамических групп включён по умолчанию. Перед удалением узла убедитесь, что он также включён для остальных ресурсов, размещённых на этом узле:
 
 * Если на узле есть VDisk статической группы, [включите SelfHeal статической группы](static-group-self-heal.md#on-off). Как альтернативу можно перенести VDisk статической группы с узла вручную, см. [{#T}](static-group-move.md).
-* Если узел содержит реплики State Storage, Board или SchemeBoard, включите [SelfHeal State Storage](../../concepts/selfheal-metadata-distribution.md#on-off). Как альтернативу можно перенести эти реплики с узла вручную, см. [{#T}](state-storage-reconfiguration.md).
+* Если узел содержит реплики State Storage, Board или SchemeBoard, включите [SelfHeal подсистем распространения метаданных](../../concepts/selfheal-metadata-distribution.md#on-off). Как альтернативу можно перенести эти реплики с узла вручную, см. [{#T}](state-storage-reconfiguration.md).
 
 Чтобы удалить статический узел:
 

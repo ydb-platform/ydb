@@ -69,7 +69,7 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 | **Timeout (sec.)**                       | Таймаут обновления состояний PDisk'ов. |
 | **Change status retries**                | Количество повторных попыток на изменение статуса PDisk в BSC (`ACTIVE`, `FAULTY`, `BROKEN` и др.). |
 | **Change status retry interval (sec.)**  | Задержка между повторными попытками передать новый статус PDisk в BSC. |
-| **Default state limit**                  | Для состояний, для которых нет указана настройка, может использоваться это значение "по умолчанию". Для неизвестных состояний PDisk, для которых нет настройки, тоже используется это значение. Это значение используется если значение не задано для состояний `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, `Normal`. |
+| **Default state limit**                  | Для состояний, для которых не указана настройка, может использоваться это значение «по умолчанию». Для неизвестных состояний PDisk, для которых нет настройки, тоже используется это значение. Это значение используется, если значение не задано для состояний `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, `Normal`. |
 | **Initial**                              | PDisk начинает инициализацию. Переход в `FAULTY`. |
 | **InitialFormatRead**                    | PDisk читает свою запись формата. Переход в `FAULTY`. |
 | **InitialFormatReadError**               | PDisk получил ошибку при чтении своей записи формата. Переход в `FAULTY`. |

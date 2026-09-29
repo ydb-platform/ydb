@@ -26,7 +26,7 @@ The remaining nodes must have enough free [PDisk](../../../concepts/glossary.md#
 [SelfHeal](../../concepts/selfheal-storage.md) is enabled for dynamic groups by default. Before removing the node, make sure it is also enabled for any resources hosted on this node:
 
 * If the node contains a static group VDisk, [enable static group SelfHeal](static-group-self-heal.md#on-off). Alternatively, you can move the static group VDisk off the node manually, see [{#T}](static-group-move.md).
-* If the node contains State Storage, Board, or SchemeBoard replicas, enable [SelfHeal State Storage](../../concepts/selfheal-metadata-distribution.md#on-off). Alternatively, you can move these replicas off the node manually, see [{#T}](state-storage-reconfiguration.md).
+* If the node contains State Storage, Board, or SchemeBoard replicas, enable [Metadata Distribution SelfHeal](../../concepts/selfheal-metadata-distribution.md#on-off). Alternatively, you can move these replicas off the node manually, see [{#T}](state-storage-reconfiguration.md).
 
 To remove a static node:
 

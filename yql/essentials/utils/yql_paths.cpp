@@ -4,7 +4,13 @@
 
 namespace NYql {
 
-TString BuildTablePath(TStringBuf prefixPath, TStringBuf path) {
+TString BuildTablePath(TStringBuf prefixPath, TStringBuf path,
+                       const std::function<TString(TStringBuf)>& normalizePath) {
+    TString normalizedPath;
+    if (normalizePath) {
+        normalizedPath = normalizePath(path);
+        path = normalizedPath;
+    }
     if (prefixPath.empty()) {
         return TString(path);
     }

@@ -19,6 +19,7 @@
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 
+#include <functional>
 #include <utility>
 
 namespace NSQLTranslationV1 {
@@ -181,6 +182,7 @@ public:
 
     TNodePtr GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path);
     TStringBuf GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const;
+    std::function<TString(TStringBuf)> GetPathNormalizer(const TDeferredAtom& cluster) const;
 
     TNodePtr UniversalAlias(const TString& baseName, TNodePtr&& node);
 

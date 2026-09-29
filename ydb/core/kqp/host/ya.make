@@ -12,6 +12,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/path_aliasing
     ydb/core/kqp/common
     ydb/core/kqp/query_data
     ydb/core/kqp/federated_query

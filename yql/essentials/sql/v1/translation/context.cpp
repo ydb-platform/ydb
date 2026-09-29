@@ -24,13 +24,14 @@ namespace NSQLTranslationV1 {
 
 namespace {
 
-TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
-    if (prefixPath.empty()) {
-        return path.Build();
+TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path,
+                            const std::function<TString(TStringBuf)>& normalizePath) {
+    if (path.GetLiteral()) {
+        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral(), normalizePath));
     }
 
-    if (path.GetLiteral()) {
-        return BuildQuotedAtom(path.Build()->GetPos(), BuildTablePath(prefixPath, *path.GetLiteral()));
+    if (prefixPath.empty()) {
+        return path.Build();
     }
 
     auto pathNode = path.Build();
@@ -416,11 +417,16 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
-    TStringBuf prefixPath = GetPrefixPath(service, cluster);
-    if (prefixPath) {
-        return AddTablePathPrefix(*this, prefixPath, path);
+    return AddTablePathPrefix(*this, GetPrefixPath(service, cluster), path, GetPathNormalizer(cluster));
+}
+
+std::function<TString(TStringBuf)> TContext::GetPathNormalizer(const TDeferredAtom& cluster) const {
+    if (!Settings.NormalizePath || !cluster.GetLiteral()) {
+        return {};
     }
-    return path.Build();
+    return [normalize = Settings.NormalizePath, name = *cluster.GetLiteral()](TStringBuf path) {
+        return normalize(name, path);
+    };
 }
 
 TStringBuf TContext::GetPrefixPath(const TString& service, const TDeferredAtom& cluster) const {

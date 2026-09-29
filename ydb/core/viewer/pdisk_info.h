@@ -1,6 +1,7 @@
 #pragma once
 #include "json_pipe_req.h"
 #include "viewer.h"
+#include "ddisk_info.h"
 #include <ydb/core/viewer/yaml/yaml.h>
 
 namespace NKikimr::NViewer {
@@ -35,6 +36,7 @@ protected:
 
     ui32 NodeId = 0;
     ui32 PDiskId = 0;
+    bool IncludeDDisks = false;
 
 public:
     TPDiskInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
@@ -42,6 +44,7 @@ public:
     {}
 
     void Bootstrap() override {
+        IncludeDDisks = FromStringWithDefault<bool>(Params.Get("include_ddisks"), false);
         TString pDiskId = Params.Get("pdisk_id");
         if (pDiskId.Contains('-')) {
             NodeId = FromStringWithDefault<ui32>(TStringBuf(pDiskId).Before('-'), 0);
@@ -88,6 +91,7 @@ public:
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
         auto pdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest();
         pdiskRequest->Record.AddFieldsRequired(-1);
+        pdiskRequest->Record.SetIncludeDDiskState(IncludeDDisks);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
             pdiskRequest,
@@ -196,6 +200,16 @@ public:
         NKikimrViewer::TPDiskInfo proto;
         bool hasPDisk = false;
         bool hasVDisk = false;
+        THashMap<ui32, NKikimrWhiteboard::TDDiskStateInfo> ddisks;
+        if (IncludeDDisks && WhiteboardPDisk) {
+            for (const auto& sample : WhiteboardPDisk->Record.GetDDiskStateInfo()) {
+                if (sample.GetPDiskId() == PDiskId) {
+                    auto& ddisk = ddisks[sample.GetDDiskSlotId()];
+                    ddisk.CopyFrom(sample);
+                    ddisk.SetHasWhiteboardData(true);
+                }
+            }
+        }
         if (WhiteboardPDisk && WhiteboardPDisk->Record.PDiskStateInfoSize() > 0) {
             for (const auto& pdisk : WhiteboardPDisk->Record.GetPDiskStateInfo()) {
                 if (pdisk.GetPDiskId() == PDiskId) {
@@ -229,6 +243,16 @@ public:
         if (SysViewVSlots && SysViewVSlots->Record.EntriesSize() > 0) {
             for (const auto& vdisk : SysViewVSlots->Record.GetEntries()) {
                 proto.MutableBSC()->AddVDisks()->CopyFrom(vdisk);
+                if (IncludeDDisks && vdisk.GetInfo().GetDDisk()) {
+                    auto& ddisk = ddisks[vdisk.GetKey().GetVSlotId()];
+                    ddisk.SetPDiskId(PDiskId);
+                    ddisk.SetDDiskSlotId(vdisk.GetKey().GetVSlotId());
+                    ddisk.SetGroupId(vdisk.GetInfo().GetGroupId());
+                    if (!ddisk.HasHasWhiteboardData()) {
+                        ddisk.SetHasWhiteboardData(false);
+                    }
+                    continue;
+                }
                 if (!hasVDisk) {
                     const auto& bscInfo(vdisk.GetInfo());
                     auto& vdiskInfo(*proto.MutableWhiteboard()->AddVDisks());
@@ -242,6 +266,10 @@ public:
                     vdiskInfo.SetAvailableSize(bscInfo.GetAvailableSize());
                 }
             }
+        }
+        for (auto& [slotId, ddisk] : ddisks) {
+            FillDDiskIdentity(ddisk, NodeId);
+            proto.MutableWhiteboard()->AddDDisks()->Swap(&ddisk);
         }
         TBase::ReplyAndPassAway(GetHTTPOKJSON(proto));
     }
@@ -259,6 +287,12 @@ public:
               description: pdisk identifier
               required: true
               type: string
+            - name: include_ddisks
+              in: query
+              description: Return DDisks separately instead of legacy VDisk fallback entries
+              required: false
+              type: boolean
+              default: false
             responses:
               200:
                 description: OK

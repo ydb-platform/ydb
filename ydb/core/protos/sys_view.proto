@@ -243,6 +243,7 @@ message TVSlotInfo {
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
     optional bool PhantomOnly = 20;
+    optional bool DDisk = 21;
 }
 
 message TVSlotEntry {

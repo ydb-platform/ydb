@@ -1207,6 +1207,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(record.GetDDiskSlotId(), 1);
             UNIT_ASSERT(record.HasPersistentBufferOccupancy());
             UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferOccupancy(), 0);
+            UNIT_ASSERT(record.HasAllocatedSize());
+            UNIT_ASSERT(record.HasAvailableSize());
+            UNIT_ASSERT(record.HasTotalSize());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferId(), disk.PBServiceId.ToString());
             break;
         }
         SendToDDisk(ctx, disk.PBServiceId,

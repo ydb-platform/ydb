@@ -4,6 +4,7 @@
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "wb_group.h"
+#include "ddisk_info.h"
 
 namespace NKikimr::NViewer {
 
@@ -187,6 +188,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::optional<std::size_t> MaximumSlotsPerDisk;
     ui32 SpaceUsageProblem = 90; // %
     bool OffloadMerge = true;
+    bool IncludeDDisks = false;
     size_t OffloadMergeAttempts = 2;
     size_t OffloadMergeBatchSize = 200;
 
@@ -199,6 +201,7 @@ class TJsonNodes : public TViewerPipeClient {
         std::vector<NKikimrSysView::TPDiskEntry> SysViewPDisks;
         std::vector<NKikimrWhiteboard::TVDiskStateInfo> VDisks;
         std::vector<NKikimrSysView::TVSlotEntry> SysViewVDisks;
+        THashMap<std::pair<ui32, ui32>, NKikimrWhiteboard::TDDiskStateInfo> DDisks;
         std::vector<NKikimrViewer::TTabletStateInfo> Tablets;
         std::vector<NKikimrWhiteboard::TNodeStateInfo> Peers; // information about sessions from this node
         std::vector<NKikimrWhiteboard::TNodeStateInfo> ReversePeers; // information about sessions to this node
@@ -419,11 +422,14 @@ class TJsonNodes : public TViewerPipeClient {
             }
         }
 
-        void RemapDisks() {
+        void RemapDisks(bool includeDDisks) {
             RemapPDisks();
             if (VDisks.empty() && !SysViewVDisks.empty()) {
                 for (const auto& entry : SysViewVDisks) {
                     const auto& vdisk(entry.GetInfo());
+                    if (includeDDisks && vdisk.GetDDisk()) {
+                        continue;
+                    }
                     auto& vDiskState = VDisks.emplace_back();
                     vDiskState.SetHasWhiteboardData(false);
                     vDiskState.MutableVDiskId()->SetGroupID(vdisk.GetGroupId());
@@ -1051,6 +1057,7 @@ public:
             }
         }
 
+        IncludeDDisks = FromStringWithDefault<bool>(Params.Get("include_ddisks"), false);
         OffloadMerge = FromStringWithDefault(Params.Get("offload_merge"), OffloadMerge);
         OffloadMergeAttempts = FromStringWithDefault(Params.Get("offload_merge_attempts"), OffloadMergeAttempts);
         OffloadMergeBatchSize = FromStringWithDefault(Params.Get("offload_merge_batch_size"), OffloadMergeBatchSize);
@@ -1159,6 +1166,9 @@ public:
             NeedLimit = false;
         }
         FieldsRequested = FieldsRequired; // no dependent fields
+        if (IncludeDDisks && FieldsRequired.test(+ENodeFields::VDisks)) {
+            FieldsRequired.set(+ENodeFields::PDisks);
+        }
         for (auto field = +ENodeFields::NodeId; field != +ENodeFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
                 auto itDependentFields = DependentFields.find(static_cast<ENodeFields>(field));
@@ -1276,7 +1286,7 @@ public:
         if (TNode* node = FindNode(nodeId)) {
             node->DisconnectNode();
             if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
-                node->RemapDisks();
+                node->RemapDisks(IncludeDDisks);
             }
         }
     }
@@ -2331,6 +2341,7 @@ public:
 
     template<>
     void InitWhiteboardRequest(NKikimrWhiteboard::TEvPDiskStateRequest* request) {
+        request->SetIncludeDDiskState(IncludeDDisks);
         if (AllWhiteboardFields) {
             request->AddFieldsRequired(-1);
         } else {
@@ -2724,6 +2735,13 @@ public:
                         }
                     }
                     auto& pDiskResponse(*(response.Get()->Record.MutablePDiskResponse()));
+                    for (const auto& sample : pDiskResponse.GetDDiskStateInfo()) {
+                        if (TNode* node = FindNode(sample.GetNodeId())) {
+                            auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
+                            ddisk.CopyFrom(sample);
+                            ddisk.SetHasWhiteboardData(true);
+                        }
+                    }
                     for (const auto& pDiskState : pDiskResponse.GetPDiskStateInfo()) {
                         TNode* node = FindNode(pDiskState.GetNodeId());
                         if (node) {
@@ -2738,6 +2756,11 @@ public:
                     const auto& pDiskState(response.Get()->Record);
                     TNode* node = FindNode(nodeId);
                     if (node) {
+                        for (const auto& sample : pDiskState.GetDDiskStateInfo()) {
+                            auto& ddisk = node->DDisks[std::make_pair(sample.GetPDiskId(), sample.GetDDiskSlotId())];
+                            ddisk.CopyFrom(sample);
+                            ddisk.SetHasWhiteboardData(true);
+                        }
                         node->HasPDiskWhiteboardResponse = true;
                         for (const auto& protoPDiskState : pDiskState.GetPDiskStateInfo()) {
                             node->PDisks.emplace_back(protoPDiskState).SetHasWhiteboardData(true);
@@ -3480,6 +3503,24 @@ public:
                     }
                 }
                 if (FieldsAvailable.test(+ENodeFields::VDisks) && FieldsRequested.test(+ENodeFields::VDisks)) {
+                    if (IncludeDDisks) {
+                        for (const auto& entry : node->SysViewVDisks) {
+                            if (entry.GetInfo().GetDDisk()) {
+                                const auto& key = entry.GetKey();
+                                auto& ddisk = node->DDisks[std::make_pair(key.GetPDiskId(), key.GetVSlotId())];
+                                ddisk.SetPDiskId(key.GetPDiskId());
+                                ddisk.SetDDiskSlotId(key.GetVSlotId());
+                                ddisk.SetGroupId(entry.GetInfo().GetGroupId());
+                                if (!ddisk.HasHasWhiteboardData()) {
+                                    ddisk.SetHasWhiteboardData(false);
+                                }
+                            }
+                        }
+                        for (auto& [key, ddisk] : node->DDisks) {
+                            FillDDiskIdentity(ddisk, node->GetNodeId());
+                            jsonNode.AddDDisks()->Swap(&ddisk);
+                        }
+                    }
                     std::sort(node->VDisks.begin(), node->VDisks.end(), [](const NKikimrWhiteboard::TVDiskStateInfo& a, const NKikimrWhiteboard::TVDiskStateInfo& b) {
                         return VDiskIDFromVDiskID(a.vdiskid()) < VDiskIDFromVDiskID(b.vdiskid());
                     });
@@ -3537,6 +3578,12 @@ public:
                 summary: To get information about nodes
                 description: Information about nodes
                 parameters:
+                  - name: include_ddisks
+                    in: query
+                    description: Return DDisks separately instead of legacy VDisk fallback entries (requires VDisks)
+                    required: false
+                    type: boolean
+                    default: false
                   - name: database
                     in: query
                     description: database name

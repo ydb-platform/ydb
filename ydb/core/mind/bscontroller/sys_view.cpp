@@ -399,9 +399,12 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
 }
 
 void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageController::TVSlotInfo>& vSlotInfo,
-        const TBlobStorageController::TGroupInfo::TGroupFinder& /*finder*/, const TBridgeInfo* /*bridgeInfo*/) {
+        const TBlobStorageController::TGroupInfo::TGroupFinder& finder, const TBridgeInfo* /*bridgeInfo*/) {
     SerializeVSlotInfo(info, vSlotInfo->GetVDiskId(), vSlotInfo->Metrics, vSlotInfo->VDiskStatus,
         vSlotInfo->Kind, vSlotInfo->IsBeingDeleted(), vSlotInfo->IsReplicatingWithPhantomsOnly());
+    if (const auto* group = finder(vSlotInfo->GroupId)) {
+        info->SetDDisk(group->DDisk);
+    }
 }
 
 void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo,

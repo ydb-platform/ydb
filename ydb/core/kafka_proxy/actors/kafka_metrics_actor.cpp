@@ -39,6 +39,7 @@ namespace NKafka {
                 HFunc(TEvKafka::TEvUpdateHistCounter, Handle);
                 HFunc(TEvKafka::TEvGetCountersRequest, Handle);
                 HFunc(TEvKafka::TEvGetGroupMemberCounter, Handle);
+                HFunc(TEvKafka::TEvCleanupGroupMemberCounter, Handle);
             }
         }
 
@@ -46,6 +47,7 @@ namespace NKafka {
         void Handle(TEvKafka::TEvUpdateHistCounter::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvKafka::TEvGetCountersRequest::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvKafka::TEvGetGroupMemberCounter::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvKafka::TEvCleanupGroupMemberCounter::TPtr& ev, const TActorContext& ctx);
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetGroupFromLabels(const TVector<std::pair<TString, TString>>& labels);
 
     private:
@@ -85,7 +87,29 @@ namespace NKafka {
         if (req.MemberCount.has_value()) {
             counter->Set(*req.MemberCount);
         }
-        Send(req.ConnectionId, new TEvKafka::TEvSaveGroupMemberCounter(std::move(counter), req.GroupId));
+        Send(req.ConnectionId, new TEvKafka::TEvSaveGroupMemberCounter(
+            std::move(counter), req.GroupId, req.Generation));
+    }
+
+    void TKafkaMetricsActor::Handle(TEvKafka::TEvCleanupGroupMemberCounter::TPtr& ev, const TActorContext&) {
+        const auto& labels = ev->Get()->Labels;
+        if (labels.size() < 2) {
+            return;
+        }
+
+        auto parent = Settings.Counters;
+        for (size_t i = 0; i + 2 < labels.size(); ++i) {
+            parent = parent->FindSubgroup(labels[i].first, labels[i].second);
+            if (!parent) {
+                return;
+            }
+        }
+
+        const auto& [name, value] = labels[labels.size() - 2];
+        auto group = parent->FindSubgroup(name, value);
+        if (group && group->ReadSnapshot().empty()) {
+            parent->RemoveSubgroup(name, value);
+        }
     }
 
 

@@ -1509,6 +1509,7 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
 
     response->Leader = Master;
 
+    auto labels = BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count");
     if (IsMaster) {
         response->Members.reserve(WorkerStates.size());
         for (const auto& [mId, meta] : WorkerStates) {
@@ -1519,10 +1520,12 @@ void TKafkaBalancerActor::SendJoinGroupResponseOk(const TActorContext& ctx, ui64
             response->Members.push_back(std::move(member));
         }
 
-        auto labels = BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count");
         std::optional<i64> memberCount = static_cast<i64>(WorkerStates.size());
         Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvGetGroupMemberCounter(
-            std::move(labels), Context->ConnectionId, GroupId, memberCount));
+            std::move(labels), Context->ConnectionId, GroupId, GenerationId, memberCount));
+    } else {
+        Send(Context->ConnectionId, new TEvKafka::TEvReleaseGroupMemberCounter(
+            GroupId, GenerationId, std::move(labels)));
     }
 
     Send(Context->ConnectionId, new TEvKafka::TEvReadSessionInfo(GroupId));
@@ -1549,6 +1552,9 @@ void TKafkaBalancerActor::SendLeaveGroupResponseOk(const TActorContext& ctx, ui6
         {LogPrefix()});
     auto response = std::make_shared<TLeaveGroupResponseData>();
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
+    auto labels = BuildGroupLabels(Context, GroupId, "api.kafka.consumer_group.members_count");
+    Send(Context->ConnectionId, new TEvKafka::TEvReleaseGroupMemberCounter(
+        GroupId, GenerationId, std::move(labels)));
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));
     Die(ctx);
 }

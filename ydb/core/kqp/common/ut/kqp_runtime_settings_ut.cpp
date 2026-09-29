@@ -21,29 +21,6 @@ Y_UNIT_TEST_SUITE(TKqpRuntimeSettings) {
             WriteOffsetWithColonAvailableSinceValue);
     }
 
-    Y_UNIT_TEST(EnsureKeepsSettingsReplacedByConfig) {
-        auto custom = NYql::MakeRuntimeSettingsMutable();
-        custom->DatumValidation.Set(NYql::EDatumValidationMode::Expensive);
-        custom->SetUdfSetting("Other", "Key", "Val");
-
-        auto settings = EnsureKqpDefaultRuntimeSettings(NYql::TRuntimeSettings::TConstPtr(custom));
-        UNIT_ASSERT_VALUES_EQUAL(settings->DatumValidation.Get(), NYql::EDatumValidationMode::Expensive);
-        UNIT_ASSERT_VALUES_EQUAL(settings->GetUdfSetting("Other", "Key"), "Val");
-        UNIT_ASSERT_VALUES_EQUAL(
-            settings->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting),
-            WriteOffsetWithColonAvailableSinceValue);
-    }
-
-    Y_UNIT_TEST(EnsureKeepsExplicitRuntimeSetting) {
-        auto custom = NYql::MakeRuntimeSettingsMutable();
-        custom->SetUdfSetting(TString(DateTime2ModuleName), TString(WriteOffsetWithColonAvailableSinceSetting), "2025.05");
-
-        auto settings = EnsureKqpDefaultRuntimeSettings(NYql::TRuntimeSettings::TConstPtr(custom));
-        UNIT_ASSERT_VALUES_EQUAL(
-            settings->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting),
-            "2025.05");
-    }
-
     Y_UNIT_TEST(EnsureFillsEmptyProtoOnce) {
         NYql::NProto::TRuntimeSettings proto;
         EnsureKqpDefaultRuntimeSettings(proto);

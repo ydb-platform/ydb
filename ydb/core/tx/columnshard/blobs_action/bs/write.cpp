@@ -31,6 +31,9 @@ void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, co
 }
 
 void TWriteAction::DoUpdateChannelApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) {
+    if (!Manager->IsWeightedDataChannelSelectionEnabled()) {
+        return;
+    }
     auto ev = std::make_unique<NColumnShard::TEvPrivate::TEvUpdateChannelApproximateFreeSpace>(blobId.Channel(), approximateFreeSpaceShare);
     TActorContext::AsActorContext().Send(TabletActorId, ev.release());
 }

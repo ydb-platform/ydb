@@ -187,6 +187,10 @@ public:
     // Raw ApproximateFreeSpaceShare from TEvPutResult. 0 means unknown.
     void UpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare);
 
+    bool IsWeightedDataChannelSelectionEnabled() const {
+        return WeightedDataChannelSelection;
+    }
+
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
     }

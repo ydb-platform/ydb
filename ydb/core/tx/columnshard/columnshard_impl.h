@@ -623,10 +623,6 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
-    const NKikimrConfig::TColumnShardConfig* GetColumnShardConfig() const {
-        return ColumnShardConfig.get();
-    }
-
     ui64 TabletTxCounter = 0;
 
     std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {

@@ -1517,11 +1517,16 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     return DescribePath(self, ctx, path, options);
 }
 
-NKikimrSchemeOp::TBackupTask MakeBackupTableSchemeSnapshot(
+bool MakeBackupTableSchemeSnapshot(
     TSchemeShard* self,
     const TActorContext& ctx,
-    const TPathId& sourcePathId
+    const TPathId& sourcePathId,
+    NKikimrSchemeOp::TBackupTask& snapshot,
+    TString& error
 ) {
+    snapshot.Clear();
+    error.clear();
+
     NKikimrSchemeOp::TDescribeOptions options;
     options.SetReturnPartitioningInfo(false);
     options.SetReturnPartitionConfig(true);
@@ -1530,35 +1535,58 @@ NKikimrSchemeOp::TBackupTask MakeBackupTableSchemeSnapshot(
     options.SetShowPrivateTable(true);
 
     const TPath sourcePath = TPath::Init(sourcePathId, self);
-    Y_ABORT_UNLESS(sourcePath.IsResolved());
+    if (!sourcePath.IsResolved()) {
+        error = TStringBuilder() << "Cannot capture backup scheme snapshot: source path is not resolved"
+            << ", pathId: " << sourcePathId;
+        return false;
+    }
 
-    auto sourceResult = DescribePath(self, ctx, sourcePathId, options);
-    Y_ABORT_UNLESS(sourceResult->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess);
-    auto sourceDescription = sourceResult->GetRecord().GetPathDescription();
+    auto describe = [&](const TPathId& pathId, TStringBuf object, NKikimrSchemeOp::TPathDescription& description) {
+        auto result = DescribePath(self, ctx, pathId, options);
+        const auto& record = result->GetRecord();
+        if (record.GetStatus() != NKikimrScheme::StatusSuccess) {
+            error = TStringBuilder() << "Cannot capture backup scheme snapshot: failed to describe " << object
+                << ", pathId: " << pathId
+                << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
+                << ", reason: " << record.GetReason();
+            return false;
+        }
 
-    NKikimrSchemeOp::TBackupTask snapshot;
+        description.CopyFrom(record.GetPathDescription());
+        return true;
+    };
+
+    NKikimrSchemeOp::TPathDescription sourceDescription;
+    if (!describe(sourcePathId, "source table", sourceDescription)) {
+        return false;
+    }
+
     snapshot.SetTableName(sourcePath.LeafName());
 
     if (sourceDescription.HasTable()) {
         for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
-            auto cdcResult = DescribePath(self, ctx, TPathId::FromProto(cdcStream.GetPathId()), options);
-            Y_ABORT_UNLESS(cdcResult->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess);
+            NKikimrSchemeOp::TPathDescription cdcDescription;
+            if (!describe(TPathId::FromProto(cdcStream.GetPathId()), "changefeed", cdcDescription)) {
+                return false;
+            }
 
-            for (const auto& child : cdcResult->GetRecord().GetPathDescription().GetChildren()) {
+            for (const auto& child : cdcDescription.GetChildren()) {
                 if (child.GetPathType() != NKikimrSchemeOp::EPathTypePersQueueGroup) {
                     continue;
                 }
 
-                auto topicResult = DescribePath(self, ctx,TPathId(child.GetSchemeshardId(), child.GetPathId()), options);
-                Y_ABORT_UNLESS(topicResult->GetRecord().GetStatus() == NKikimrScheme::StatusSuccess);
+                NKikimrSchemeOp::TPathDescription topicDescription;
+                if (!describe(TPathId(child.GetSchemeshardId(), child.GetPathId()), "changefeed topic", topicDescription)) {
+                    return false;
+                }
 
-                snapshot.AddChangefeedUnderlyingTopics()->CopyFrom(topicResult->GetRecord().GetPathDescription());
+                snapshot.AddChangefeedUnderlyingTopics()->Swap(&topicDescription);
             }
         }
     }
 
     snapshot.MutableTable()->Swap(&sourceDescription);
-    return snapshot;
+    return true;
 }
 
 void TSchemeShard::DescribeTable(

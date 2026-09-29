@@ -583,6 +583,7 @@ public:
 
         auto schema = Transaction.GetCreateTable();
         const bool isBackup = schema.GetIsBackup();
+        const bool captureBackupSchemeSnapshot = isBackup && schema.GetCaptureBackupSchemeSnapshot();
         const EPathCategory pathCategory = isBackup ? EPathCategory::Backup : EPathCategory::Regular;
 
         TPath dstPath = parent.Child(name);
@@ -667,8 +668,10 @@ public:
         }
 
         NKikimrSchemeOp::TBackupTask backupSchemeSnapshot;
-        if (isBackup) {
-            backupSchemeSnapshot = MakeBackupTableSchemeSnapshot(context.SS, context.Ctx, srcPath.Base()->PathId);
+        if (captureBackupSchemeSnapshot && !MakeBackupTableSchemeSnapshot(
+                context.SS, context.Ctx, srcPath.Base()->PathId, backupSchemeSnapshot, errStr)) {
+            result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
         }
 
         const bool omitFollowers = schema.GetOmitFollowers();
@@ -750,7 +753,7 @@ public:
         TTableInfo::TPtr tableInfo = new TTableInfo(std::move(*alterData));
         alterData.Reset();
 
-        if (isBackup) {
+        if (captureBackupSchemeSnapshot) {
             tableInfo->BackupSettings.Swap(&backupSchemeSnapshot);
         }
 
@@ -856,7 +859,7 @@ public:
         Y_ABORT_UNLESS(tableInfo->GetPartitions().back()->EndOfRange.empty(), "End of last range must be +INF");
 
         context.SS->Tables.Set(newTable->PathId, tableInfo);
-        if (isBackup) {
+        if (captureBackupSchemeSnapshot) {
             context.DbChanges.PersistBackupSchemeSnapshot(newTable->PathId);
         }
 
@@ -993,6 +996,9 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         operation->SetCopyFromTable(copying.GetCopyFromTable());
         operation->SetOmitFollowers(copying.GetOmitFollowers());
         operation->SetIsBackup(copying.GetIsBackup());
+        if (copying.GetCaptureBackupSchemeSnapshot()) {
+            operation->SetCaptureBackupSchemeSnapshot(true);
+        }
         operation->MutablePartitionConfig()->CopyFrom(copying.GetPartitionConfig());
         if (cdcPeerOp) {
             schema.MutableCreateCdcStream()->CopyFrom(*cdcPeerOp);

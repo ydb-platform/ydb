@@ -34,14 +34,14 @@ namespace {
 
 NSysView::TFormatResult FormatCreateTable(const TExportTableSchemeContext& context) {
     const auto& pathDescription = context.PathDescription;
-    const auto& tableName = pathDescription.GetSelf().GetName();
-    Y_ENSURE(tableName && context.SourcePath, "Missing original table path for SQL backup");
+    const auto& tablePath = context.TablePath;
+    Y_ENSURE(tablePath && context.SourcePath, "Missing original table path for SQL backup");
 
     NSysView::TCreateTableFormatter formatter;
     if (pathDescription.HasColumnTableDescription()) {
         const auto& description = pathDescription.GetColumnTableDescription();
         Y_ENSURE(description.GetSchema().ColumnsSize(), "Column table description has no columns");
-        return formatter.Format(tableName, context.SourcePath, description, false,
+        return formatter.Format(tablePath, context.SourcePath, description, false,
             AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject());
     }
 
@@ -53,7 +53,7 @@ NSysView::TFormatResult FormatCreateTable(const TExportTableSchemeContext& conte
 
     THashMap<TString, THolder<NKikimrSchemeOp::TPersQueueGroupDescription>> persQueues;
     for (int i = 0; i < description.GetCdcStreams().size(); ++i) {
-        const auto topicPath = JoinPath({tableName, description.GetCdcStreams(i).GetName(), "streamImpl"});
+        const auto topicPath = JoinPath({tablePath, description.GetCdcStreams(i).GetName(), "streamImpl"});
         persQueues.emplace(topicPath,
             MakeHolder<NKikimrSchemeOp::TPersQueueGroupDescription>(topics.Get(i).GetPersQueueGroup()));
     }
@@ -69,7 +69,7 @@ NSysView::TFormatResult FormatCreateTable(const TExportTableSchemeContext& conte
         sequences.emplace(pathId, std::move(result));
     }
 
-    return formatter.Format(tableName, context.SourcePath, description, false, persQueues, sequences);
+    return formatter.Format(tablePath, context.SourcePath, description, false, persQueues, sequences);
 }
 
 } // namespace

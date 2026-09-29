@@ -15,6 +15,13 @@ TString ComputeIndexItemSuffix(
     bool encrypted
 );
 
+bool FillExportTableSchemePaths(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    TExportTableSchemeContext& context,
+    TString& error
+);
+
 bool PrepareExportTableSchemeContext(
     TSchemeShard* ss,
     const TString& sourcePathName,

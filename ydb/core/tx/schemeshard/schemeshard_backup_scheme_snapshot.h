@@ -4,10 +4,12 @@
 
 namespace NKikimr::NSchemeShard {
 
-NKikimrSchemeOp::TBackupTask MakeBackupTableSchemeSnapshot(
+bool MakeBackupTableSchemeSnapshot(
     TSchemeShard* self,
     const TActorContext& ctx,
-    const TPathId& sourcePathId
+    const TPathId& sourcePathId,
+    NKikimrSchemeOp::TBackupTask& snapshot,
+    TString& error
 );
 
 } // namespace NKikimr::NSchemeShard

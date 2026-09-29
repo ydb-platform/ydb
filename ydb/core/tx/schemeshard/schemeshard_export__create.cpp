@@ -595,7 +595,7 @@ private:
             ? PrepareExportTableSchemeContext(Self, item.SourcePathName, *backupTask, exportItemPath, context, error)
             : PrepareExportTableSchemeContext(Self, item.SourcePathName, sourcePath, exportItemPath, context, error);
 
-        if (!prepared) {
+        if (!prepared || !FillExportTableSchemePaths(Self, item.SourcePathName, context, error)) {
             Send(Self->SelfId(), new TEvPrivate::TEvExportSchemeUploadResult(exportInfo.Id, itemIdx, false, error));
             return;
         }

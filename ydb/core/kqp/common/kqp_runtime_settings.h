@@ -7,9 +7,6 @@
 
 namespace NKikimr::NKqp {
 
-// DateTime2::Format grows WriteOffsetWithColon at langver 2025.05. YDB stays on
-// 2025.01, and stable-26-3 pins the same threshold, so mixed clusters disagree
-// on the optional-arg count unless KQP forces the threshold down. KIKIMR-26019.
 inline constexpr TStringBuf DateTime2ModuleName = "DateTime2";
 inline constexpr TStringBuf WriteOffsetWithColonAvailableSinceSetting = "MakeWriteOffsetWithColonAvailableSince";
 inline constexpr TStringBuf WriteOffsetWithColonAvailableSinceValue = "2025.01";
@@ -39,9 +36,6 @@ inline void EnsureKqpDefaultRuntimeSettings(NYql::NProto::TRuntimeSettings& prot
     setting->SetValue(TString(WriteOffsetWithColonAvailableSinceValue));
 }
 
-// Returns settings that declare the KQP default. Copies UDF settings already present.
-// Host settings that were explicitly overridden are not copied: call this on the
-// context created by TTypeAnnotationContext, before anything else mutates them.
 inline NYql::TRuntimeSettings::TConstPtr WithKqpDefaultRuntimeSettings(const NYql::TRuntimeSettings::TConstPtr& settings) {
     if (settings && !settings->GetUdfSetting(DateTime2ModuleName, WriteOffsetWithColonAvailableSinceSetting).empty()) {
         return settings;

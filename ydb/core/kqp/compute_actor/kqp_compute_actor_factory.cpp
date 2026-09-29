@@ -85,8 +85,6 @@ public:
 
     TActorId CreateKqpComputeActor(TCreateArgs&& args) override {
         args.TraceId = GetTaskTraceParent(*args.Task, args.TraceId);
-        // Programs compiled by stable-26-3 do not carry RuntimeSettings, but their
-        // DateTime2::Format signature already matches the 2025.01 threshold.
         EnsureKqpDefaultRuntimeSettings(*args.Task->MutableProgram()->MutableRuntimeSettings());
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;

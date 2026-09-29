@@ -292,6 +292,7 @@ struct TPersistentBufferTest : public TPDiskTest<ChunkSize> {
             NDDisk::TDDiskConfig ddiskConfig;
             ddiskConfig.EnableChecksums = !TBase::Cfg.DisableDDiskChecksums;
             ddiskConfig.ForcePDiskFallback = TBase::Cfg.ForcePDiskFallback;
+            ddiskConfig.IntegrityChecksumCacheBytes = TBase::Cfg.DDiskChecksumsCacheBytes;
             TBase::Printer->AddGlobalParam("DDiskChecksums", ddiskConfig.EnableChecksums ? "on" : "off");
 
             for (ui32 i = 0; i < TBase::Cfg.NumDevices(); ++i) {

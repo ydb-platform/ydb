@@ -487,7 +487,7 @@ namespace NKikimr::NBsController {
         }
 
         // Adjust active slots on destination PDisk.
-        destinationPDisk->NumActiveSlots = sourcePDisk->NumActiveSlots;
+        destinationPDisk->NumActiveDynamicSlots = sourcePDisk->NumActiveDynamicSlots;
         destinationPDisk->Mood = TPDiskMood::Restarting;
 
         // And remove old pdisk altogether.

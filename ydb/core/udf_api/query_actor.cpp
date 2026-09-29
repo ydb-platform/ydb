@@ -27,7 +27,6 @@ namespace NKikimr::NUdfApi {
 
 using namespace NActors;
 
-using NUdfStore::ECompileStatus;
 using NUdfStore::EUdfType;
 
 namespace {
@@ -76,15 +75,6 @@ public:
             }
             Filter_.Type = type;
         }
-        if (Request_.status_filter() != Ydb::Udf::COMPILE_STATUS_UNSPECIFIED) {
-            ECompileStatus status = ECompileStatus::Pending;
-            if (!FromProtoCompileStatus(Request_.status_filter(), status)) {
-                ReplyError(Ydb::StatusIds::BAD_REQUEST, "status_filter is not a known compile status");
-                return;
-            }
-            Filter_.CompileStatus = status;
-        }
-
         ExecuteYqlAsSystem(
             SelfId(),
             NQuery::BuildListModulesQuery(NUdfStore::GetModulesTablePath(), Filter_),
@@ -228,15 +218,15 @@ private:
                 return;
             }
             case EStep::SelectArtifact: {
-                bool ready = false;
-                if (!NQuery::ParseArtifactReadyResponse(ev->Get()->GetResult(), ready)) {
+                TMaybe<NQuery::TArtifactCompileState> state;
+                if (!NQuery::ParseArtifactStateResponse(ev->Get()->GetResult(), state)) {
                     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder()
                         << "failed to read the artifact table of cpu_spec '" << CpuSpecs_[NextCpuSpecIndex_] << "'");
                     return;
                 }
                 auto& platform = *Result_.add_platforms();
                 platform.set_cpu_spec(CpuSpecs_[NextCpuSpecIndex_]);
-                FillPlatform(platform, CpuSpecs_[NextCpuSpecIndex_], ready);
+                FillPlatform(platform, CpuSpecs_[NextCpuSpecIndex_], state);
                 ++NextCpuSpecIndex_;
                 SelectNextArtifact();
                 return;
@@ -313,7 +303,6 @@ private:
             return;
         }
         for (const auto& platform : ev->Get()->Record.GetPlatforms()) {
-            ControllerPlatforms_[platform.GetCpuSpec()] = platform;
             CpuSpecs_.push_back(platform.GetCpuSpec());
         }
         SortUnique(CpuSpecs_);
@@ -343,24 +332,28 @@ private:
         TActorBootstrapped::PassAway();
     }
 
-    void FillPlatform(Ydb::Udf::PlatformCompileStatus& result, const TString& cpuSpec, bool ready) {
+    void FillPlatform(
+        Ydb::Udf::PlatformCompileStatus& result,
+        const TString& cpuSpec,
+        const TMaybe<NQuery::TArtifactCompileState>& state)
+    {
         result.set_cpu_spec(cpuSpec);
-        result.set_status(ready ? Ydb::Udf::READY : Ydb::Udf::PENDING);
-        if (!ready) {
-            if (const auto it = ControllerPlatforms_.find(cpuSpec); it != ControllerPlatforms_.end()) {
-                if (it->second.GetFailed()) {
-                    result.set_status(Ydb::Udf::FAILED);
-                    result.set_compile_error(it->second.GetError());
-                } else if (it->second.GetCompiling()) {
-                    result.set_status(Ydb::Udf::COMPILING);
-                }
-            }
+        result.set_status(state ? ToProtoCompileStatus(state->Status) : Ydb::Udf::PENDING);
+        if (!state) {
+            return;
+        }
+        result.set_compile_error(state->Error);
+        if (state->StartedAt) {
+            FillTimestamp(*state->StartedAt, *result.mutable_compile_started_at());
+        }
+        if (state->FinishedAt) {
+            FillTimestamp(*state->FinishedAt, *result.mutable_compile_finished_at());
         }
     }
 
     void SelectNextArtifact() {
         while (NextCpuSpecIndex_ < CpuSpecs_.size() && !ArtifactTables_.contains(CpuSpecs_[NextCpuSpecIndex_])) {
-            FillPlatform(*Result_.add_platforms(), CpuSpecs_[NextCpuSpecIndex_++], false);
+            FillPlatform(*Result_.add_platforms(), CpuSpecs_[NextCpuSpecIndex_++], {});
         }
         if (NextCpuSpecIndex_ >= CpuSpecs_.size()) {
             ReplySuccess();
@@ -369,10 +362,10 @@ private:
         Step_ = EStep::SelectArtifact;
         ExecuteYqlAsSystem(
             SelfId(),
-            NQuery::BuildSelectArtifactReadyQuery(NUdfStore::GetArtifactTablePath(CpuSpecs_[NextCpuSpecIndex_])),
+            NQuery::BuildSelectArtifactStateQuery(NUdfStore::GetArtifactTablePath(CpuSpecs_[NextCpuSpecIndex_])),
             true,
             [this](Ydb::Table::ExecuteDataQueryRequest& request) {
-                NQuery::SetSelectArtifactReadyParams(request, Name_, ArtifactKind_, Uid_);
+                NQuery::SetSelectArtifactStateParams(request, Name_, ArtifactKind_, Uid_);
             });
     }
 
@@ -397,7 +390,6 @@ private:
     TString ArtifactKind_;
     TVector<TString> CpuSpecs_;
     THashSet<TString> ArtifactTables_;
-    THashMap<TString, NKikimrUdfStore::TEvDescribeModuleResult::TPlatform> ControllerPlatforms_;
     TActorId ControllerPipe_;
     size_t NextCpuSpecIndex_ = 0;
     Ydb::Udf::DescribeModuleResult Result_;

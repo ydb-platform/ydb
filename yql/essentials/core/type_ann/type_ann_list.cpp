@@ -8701,9 +8701,11 @@ namespace {
 
     IGraphTransformer::TStatus MultiHoppingCoreWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
-        if (!EnsureMinMaxArgsCount(*input, TCoMultiHoppingCore::idx_HoppingColumn + 1, TCoMultiHoppingCore::idx_LatePolicy + 1, ctx.Expr)) {
+
+        if (!EnsureMinMaxArgsCount(*input, TCoMultiHoppingCore::idx_HoppingColumn + 1, TCoMultiHoppingCore::idx_CheckMinWindowStart + 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
+
         auto& item = input->ChildRef(0);
         auto& lambdaKeyExtractor = input->ChildRef(1);
 
@@ -8840,6 +8842,10 @@ namespace {
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (TCoMultiHoppingCore::idx_CheckMinWindowStart < input->ChildrenSize() && !EnsureAtom(*input->Child(TCoMultiHoppingCore::idx_CheckMinWindowStart), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
         }
 
         if (!UpdateLambdaAllArgumentsTypes(lambdaInit, {itemType}, ctx.Expr)) {

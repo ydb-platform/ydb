@@ -35,6 +35,8 @@ SRCS(
     executor_pool_basic_ut.cpp
     executor_pool_semaphore_ut.cpp
     executor_pools_ut.cpp
+    inmemory_metrics_ut.cpp
+    metric_system_ut.cpp
     log_ut.cpp
     mon_ut.cpp
     scheduler_actor_ut.cpp

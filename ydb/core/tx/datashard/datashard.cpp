@@ -14,6 +14,7 @@
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -4149,6 +4150,8 @@ void TDataShard::SendTableInfoToCountersAggregator(const TActorContext &ctx) {
     if (TableInfos.empty()) {
         return;
     }
+
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::NodeMemoryTag());
 
     // Expected that it's almost always one table here, hence only TableInfos.begin()
     // IsBackup can be filtered out though

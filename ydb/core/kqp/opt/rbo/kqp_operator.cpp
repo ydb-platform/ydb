@@ -117,12 +117,27 @@ void IOperator::ComputeOutputIUsSubtree() {
 void TOpEmptySource::ComputeOutputIUs() {
     if (!Props.OutputIUs.has_value()) {
         Props.OutputIUs = TVector<TInfoUnit>{};
+        if (Input) {
+            // Actual column names a placed inside declare with type specification.
+            const auto* structType = Input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+            for (const auto* item : structType->GetItems()) {
+                Props.OutputIUs->emplace_back(TString(item->GetName()));
+            }
+        }
     }
 }
 
 TString TOpEmptySource::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx); 
     return "EmptySource"; 
+}
+
+NJson::TJsonValue TOpEmptySource::ToJson(ui32 explainFlags) {
+    auto res = IOperator::ToJson(explainFlags);
+    if (Input && TCoParameter::Match(Input.Get())) {
+        res["Parameter"] = TCoParameter(Input).Name().StringValue();
+    }
+    return res;
 }
 
 /**
@@ -1705,19 +1720,18 @@ TString TOpCBOTree::ToString(TExprContext& ctx) {
 /**
 * Table Effect operator methods: these are inserts/updates/deletes
 */
-TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options)
+TOpTableEffect::TOpTableEffect(TIntrusivePtr<IOperator> input, TPositionHandle pos, TExprNode::TPtr table, EEffectType type, TEffectOptions options, const TVector<TInfoUnit>& usedColumns)
     : IUnaryOperator(EOperator::TableEffect, pos, input)
     , Table(table)
     , EffectType(type)
-    , Options(options) {
+    , Options(options)
+    , UsedIUs(usedColumns) {
 
     if (options.ReturningColumns.has_value()) {
         for (const auto & c : options.ReturningColumns.value()) {
             OutputIUs.push_back(TInfoUnit(c));
         }
     }
-
-    UsedIUs = GetInput()->GetOutputIUs();
 }
 
 TVector<TInfoUnit> TOpTableEffect::GetUsedIUs(TPlanProps& props) {
@@ -1757,16 +1771,25 @@ TExprNode::TPtr TOpTableEffect::BuildSettings(TExprContext& ctx) {
 
     TString mode;
     
-    if (EffectType == EEffectType::InsertRows) {
-        mode = "insert";
-    } else if (EffectType == EEffectType::UpdateRows) {
-        mode = "update";
-    } else if (EffectType == EEffectType::UpsertRows) {
-        mode = "upsert";
-    } else if (EffectType == EEffectType::DeleteRows) {
-        mode = "delete";
-    } else {
-        Y_ENSURE(false, "Unsupported DML in new optimizer");
+    switch(EffectType) {
+        case EEffectType::InsertRows:
+        case EEffectType::InsertRowsIndex:
+            mode = "insert";
+            break;
+        case EEffectType::UpdateRows:
+        case EEffectType::UpdateRowsIndex:
+            mode = "update";
+            break;
+        case EEffectType::UpsertRows:
+        case EEffectType::UpsertRowsIndex:
+            mode = "upsert";
+            break;
+        case EEffectType::DeleteRows:
+        case EEffectType::DeleteRowsIndex:
+            mode = "delete";
+            break;
+        default:
+            Y_ENSURE(false, "Unsupported DML in new optimizer");
     }
 
     TString isBatch = "false";

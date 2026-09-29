@@ -91,11 +91,19 @@ namespace NKikimr {
             ui64 LockedFreeSlots = 0;
         };
 
+        struct TStripeHeapSpaceStat {
+            ui64 ChunkCount = 0;
+            ui64 UsedBytes = 0;
+            ui64 FreeBytes = 0;
+            ui64 LockedFreeBytes = 0;
+        };
+
         struct THeapSpaceStat {
             std::vector<TSizeClassSpaceStat> SizeClasses;
             ui64 FreeChunkCount = 0;
             ui64 FreeChunkReservation = 0;
             ui64 ForbiddenChunkCount = 0;
+            TStripeHeapSpaceStat StripeHeap;
         };
 
         ////////////////////////////////////////////////////////////////////////////

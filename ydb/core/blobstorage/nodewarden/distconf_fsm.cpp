@@ -335,6 +335,7 @@ namespace NKikimr::NStorage {
             std::vector<TSuccessfulDisk> HavingDisksCommitted;
         };
         THashMap<TStorageConfigMeta, TDiskConfigInfo> persistentConfigs;
+        ui64 maxSeenGeneration = 0;
         for (auto&& [field, isCommitted] : {
                     std::make_tuple(&res->GetCommittedConfigs(), true),
                     std::make_tuple(&res->GetProposedConfigs(), false),
@@ -357,6 +358,8 @@ namespace NKikimr::NStorage {
                     r.HavingDisksProposedOrCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
                         disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
                     if (isCommitted) {
+                        // A committed copy must be accounted for even before its quorum joins the collection.
+                        maxSeenGeneration = Max(maxSeenGeneration, config.GetGeneration());
                         r.HavingDisksCommitted.emplace_back(disk.GetNodeId(), disk.GetPath(),
                             disk.HasGuid() ? std::make_optional(disk.GetGuid()) : std::nullopt);
                     }
@@ -397,13 +400,8 @@ namespace NKikimr::NStorage {
 
         // find the latest actual configuration with quorum
         NKikimrBlobStorage::TStorageConfig *persistedConfig = nullptr;
-        ui64 maxSeenGeneration = 0;
         for (auto& [generation, item] : configsWithQuorum) {
-            auto& [committed, configPtr] = item;
-            if (committed) {
-                maxSeenGeneration = Max(maxSeenGeneration, configPtr->GetGeneration());
-            }
-            persistedConfig = configPtr; // we pick the latest
+            persistedConfig = std::get<1>(item); // we pick the latest
         }
         if (maxSeenGeneration && (!persistedConfig || persistedConfig->GetGeneration() < maxSeenGeneration)) {
             return {.ErrorReason = "Couldn't obtain quorum for configuration that was seen in effect"};

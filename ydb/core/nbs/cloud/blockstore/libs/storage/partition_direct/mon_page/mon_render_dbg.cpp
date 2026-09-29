@@ -12,6 +12,8 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 
+#include <array>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 namespace {
@@ -179,6 +181,231 @@ void RenderDbgList(
                         str << FormatByteSize(totalDDiskBytes) << " / "
                             << FormatByteSize(totalRottenBytes) << " / "
                             << FormatByteSize(totalFreshBytes);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Returns the CSS color class for a compact VChunk host state.
+const char* GetVChunkHostStateClass(
+    TVChunkConfig::EHostHumanReadableState state)
+{
+    switch (state) {
+        case TVChunkConfig::EHostHumanReadableState::Primary:
+            return "vchunk-host-primary";
+        case TVChunkConfig::EHostHumanReadableState::Fresh:
+            return "vchunk-host-fresh";
+        case TVChunkConfig::EHostHumanReadableState::HandOff:
+            return "vchunk-host-handoff";
+        case TVChunkConfig::EHostHumanReadableState::Rotten:
+            return "vchunk-host-rotten";
+        case TVChunkConfig::EHostHumanReadableState::Disabled:
+            return "vchunk-host-disabled";
+        case TVChunkConfig::EHostHumanReadableState::Demoted:
+            return "vchunk-host-demoted";
+    }
+    return "";
+}
+
+enum class EVChunkHostStateFormat
+{
+    Brief,    // A compact symbol in a VChunk row.
+    Legend,   // A symbol and full state name in the legend.
+};
+
+constexpr std::array<TVChunkConfig::EHostHumanReadableState, 6>
+    VChunkHostStates = {
+        TVChunkConfig::EHostHumanReadableState::Primary,
+        TVChunkConfig::EHostHumanReadableState::Fresh,
+        TVChunkConfig::EHostHumanReadableState::HandOff,
+        TVChunkConfig::EHostHumanReadableState::Rotten,
+        TVChunkConfig::EHostHumanReadableState::Disabled,
+        TVChunkConfig::EHostHumanReadableState::Demoted,
+};
+
+void RenderVChunkHostState(
+    IOutputStream& str,
+    TVChunkConfig::EHostHumanReadableState state,
+    EVChunkHostStateFormat format)
+{
+    const TString fullName = Print(state, false);
+    str << "<td class='vchunk-host-state " << GetVChunkHostStateClass(state)
+        << "' title='" << fullName << "'>" << Print(state, true);
+    if (format == EVChunkHostStateFormat::Legend) {
+        str << " = " << fullName;
+    }
+    str << "</td>";
+}
+
+void RenderVChunkHostStateLegend(IOutputStream& str)
+{
+    HTML (str) {
+        TABLE_CLASS ("table table-condensed table-bordered vchunk-host-legend")
+        {
+            TABLEBODY () {
+                TABLER () {
+                    for (const auto state: VChunkHostStates) {
+                        RenderVChunkHostState(
+                            str,
+                            state,
+                            EVChunkHostStateFormat::Legend);
+                    }
+                }
+            }
+        }
+    }
+}
+
+void RenderDDiskImbalance(
+    IOutputStream& str,
+    const TTabletInfo& tabletInfo,
+    const TDbgSnapshot& dbg)
+{
+    HTML (str) {
+        TAG (TH4) {
+            str << "DDisk imbalance";
+        }
+        TABLE_CLASS ("table table-condensed") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "Strategy";
+                    }
+                    TABLEH () {
+                        str << "Need move";
+                    }
+                    TABLEH () {
+                        str << "Total DDisks";
+                    }
+                    TABLEH () {
+                        str << "Imbalance";
+                    }
+                    TABLEH () {
+                        str << "Action";
+                    }
+                }
+            }
+            TABLEBODY () {
+                const auto renderRow = [&](TStringBuf name,
+                                           const TDDiskImbalance& imbalance,
+                                           EDDiskBalanceStrategy strategy)
+                {
+                    TABLER () {
+                        TABLED () {
+                            str << name;
+                        }
+                        TABLED () {
+                            str << imbalance.Moves;
+                        }
+                        TABLED () {
+                            str << imbalance.TotalDDiskCount;
+                        }
+                        TABLED () {
+                            str << imbalance.Percent << "%";
+                        }
+                        TABLED () {
+                            RenderBalanceDDisksButton(
+                                str,
+                                tabletInfo.TabletId,
+                                EMonPage::Dbg,
+                                dbg.Index,
+                                dbg.Index + 1,
+                                strategy);
+                        }
+                    }
+                };
+
+                renderRow(
+                    "Touched",
+                    dbg.TouchedDDiskImbalance,
+                    EDDiskBalanceStrategy::Touched);
+                renderRow(
+                    "Configured",
+                    dbg.ConfiguredDDiskImbalance,
+                    EDDiskBalanceStrategy::Configured);
+            }
+        }
+    }
+}
+
+void RenderVChunks(
+    IOutputStream& str,
+    const TTabletInfo& tabletInfo,
+    const TDbgSnapshot& dbg)
+{
+    HTML (str) {
+        TAG (TH4) {
+            str << "VChunks";
+        }
+        RenderVChunkHostStateLegend(str);
+        TABLE_CLASS ("table table-condensed table-bordered") {
+            TABLEHEAD () {
+                TABLER () {
+                    TABLEH () {
+                        str << "VChunk";
+                    }
+                    for (const auto& connection: dbg.Connections) {
+                        TABLEH () {
+                            str << PrintHostIndex(connection.HostIndex);
+                        }
+                    }
+                    TABLEH () {
+                        str << "Fresh<br>bytes";
+                    }
+                    TABLEH () {
+                        str << "Rotten<br>bytes";
+                    }
+                    TABLEH () {
+                        str << "PBuffer<br>bytes";
+                    }
+                    TABLEH () {
+                        str << "Enabled<br>DDisks";
+                    }
+                }
+            }
+            TABLEBODY () {
+                for (const auto& vchunk: dbg.VChunks) {
+                    const auto& config = vchunk.Config;
+                    const auto* freshDDisks =
+                        dbg.FreshDDisks.FindPtr(config.GetVChunkIndex());
+                    TABLER () {
+                        TABLED () {
+                            str << "<span class='vchunk-touched-marker ";
+                            if (vchunk.Touched) {
+                                str << "vchunk-touched-on' title='Touched";
+                            } else {
+                                str << "vchunk-touched-off' title='Not touched";
+                            }
+                            str << "'></span><a href='?TabletID="
+                                << tabletInfo.TabletId << "&page=vchunk&vchunk="
+                                << config.GetVChunkIndex() << "'>#"
+                                << config.GetVChunkIndex() << "</a>";
+                        }
+                        for (const auto& connection: dbg.Connections) {
+                            const THostIndex host = connection.HostIndex;
+                            const bool fresh = freshDDisks != nullptr &&
+                                               freshDDisks->Get(host);
+                            const auto state =
+                                config.GetHostHumanReadableState(host, fresh);
+                            RenderVChunkHostState(
+                                str,
+                                state,
+                                EVChunkHostStateFormat::Brief);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(vchunk.FreshBytes);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(vchunk.RottenBytes);
+                        }
+                        TABLED () {
+                            str << FormatByteSize(vchunk.PBufferBytes);
+                        }
+                        TABLED () {
+                            str << config.GetEnabledDDisks().Count();
+                        }
                     }
                 }
             }
@@ -455,6 +682,8 @@ void RenderDbgDetail(
                 }
             }
         }
+        RenderDDiskImbalance(str, tabletInfo, dbg);
+        RenderVChunks(str, tabletInfo, dbg);
     }
 }
 

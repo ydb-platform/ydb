@@ -23,7 +23,8 @@ struct TDDiskConfig {
 
     // Bounds the memory TIntegrityManager spends on cached data block checksums / digests
     // (see the memory note in integrity_manager.h). Must match
-    // TIntegrityManager::DefaultChecksumCacheBytes by default.
+    // TIntegrityManager::DefaultChecksumCacheBytes by default. Zero disables caching;
+    // state needed by in-flight operations is retained until they complete.
     ui64 IntegrityChecksumCacheBytes = 64ull << 20;
 };
 

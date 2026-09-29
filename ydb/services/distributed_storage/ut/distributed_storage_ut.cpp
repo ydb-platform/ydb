@@ -242,6 +242,7 @@ const Ydb::DistributedStorage::VDisk* FindVDisk(const TStorageStateResult& stora
 void IgnoreAllSafetyChecks(Ydb::DistributedStorage::SafetyOptions& safety) {
     safety.set_ignore_degraded_groups(true);
     safety.set_ignore_group_failure_model(true);
+    safety.set_ignore_group_layout_checks(true);
 }
 
 } // namespace

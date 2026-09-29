@@ -20,11 +20,8 @@ struct TModuleRow {
     NUdfStore::EUdfType Type = NUdfStore::EUdfType::WASM;
     ui64 Version = 0;
     ui64 ChunkCount = 0;
-    NUdfStore::ECompileStatus CompileStatus = NUdfStore::ECompileStatus::Pending;
-    TString CompileError;
     TString Manifest;
     TInstant CreatedAt;
-    TInstant CompileFinishedAt;
 };
 
 //! Reads a module by its primary key. WASM modules and libraries share the
@@ -37,7 +34,6 @@ bool ParseModuleRowResponse(const Ydb::Table::ExecuteDataQueryResponse& response
 
 struct TListFilter {
     TMaybe<NUdfStore::EUdfType> Type;
-    TMaybe<NUdfStore::ECompileStatus> CompileStatus;
 };
 
 //! Lists modules ordered by name so that the offset a page token carries keeps
@@ -80,8 +76,7 @@ struct TWriteConditions {
 //! `write_mode` nor `expected_uid` would mean anything.
 //!
 //! `created_at` survives a replace because it belongs to the module rather than
-//! to the upload, while the compile timestamps are cleared: they describe an
-//! artifact of the previous uid that this row no longer points at.
+//! to the upload.
 TString BuildFlipModuleQuery(const TString& modulesTablePath, bool withManifest);
 void SetFlipModuleParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
@@ -116,16 +111,24 @@ void SetUpsertSourceChunkParams(
     ui64 chunkIdx,
     const TString& data);
 
-//! Asks a single platform whether it already holds finished object code for
-//! this very upload. Absence is the normal answer for a fresh upload, so the
-//! caller reports PENDING rather than an error.
-TString BuildSelectArtifactReadyQuery(const TString& artifactTablePath);
-void SetSelectArtifactReadyParams(
+struct TArtifactCompileState {
+    NUdfStore::ECompileStatus Status = NUdfStore::ECompileStatus::Pending;
+    TString Error;
+    TMaybe<TInstant> StartedAt;
+    TMaybe<TInstant> FinishedAt;
+};
+
+//! Reads persisted compile state for this upload on one platform. Absence is
+//! reported as PENDING by the caller until reconciliation creates the row.
+TString BuildSelectArtifactStateQuery(const TString& artifactTablePath);
+void SetSelectArtifactStateParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
     const TString& id,
     const TString& kind,
     const TString& uid);
-bool ParseArtifactReadyResponse(const Ydb::Table::ExecuteDataQueryResponse& response, bool& ready);
+bool ParseArtifactStateResponse(
+    const Ydb::Table::ExecuteDataQueryResponse& response,
+    TMaybe<TArtifactCompileState>& state);
 
 //! Drops every artifact of a module, whichever upload built it. Only used on
 //! delete, where no upload of that name is left to own them.

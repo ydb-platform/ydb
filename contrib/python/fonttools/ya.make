@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.63.0)
+VERSION(4.64.0)
 
 LICENSE(MIT)
 
@@ -205,6 +205,7 @@ PY_SRCS(
     fontTools/ttLib/tables/DefaultTable.py
     fontTools/ttLib/tables/E_B_D_T_.py
     fontTools/ttLib/tables/E_B_L_C_.py
+    fontTools/ttLib/tables/E_B_S_C_.py
     fontTools/ttLib/tables/F_F_T_M_.py
     fontTools/ttLib/tables/F__e_a_t.py
     fontTools/ttLib/tables/G_D_E_F_.py
@@ -246,7 +247,10 @@ PY_SRCS(
     fontTools/ttLib/tables/__init__.py
     fontTools/ttLib/tables/_a_n_k_r.py
     fontTools/ttLib/tables/_a_v_a_r.py
+    fontTools/ttLib/tables/_b_d_a_t.py
     fontTools/ttLib/tables/_b_g_c_l.py
+    fontTools/ttLib/tables/_b_h_e_d.py
+    fontTools/ttLib/tables/_b_l_o_c.py
     fontTools/ttLib/tables/_b_s_l_n.py
     fontTools/ttLib/tables/_c_i_d_g.py
     fontTools/ttLib/tables/_c_m_a_p.py

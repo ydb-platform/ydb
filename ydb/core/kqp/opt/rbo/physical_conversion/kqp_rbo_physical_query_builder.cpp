@@ -410,7 +410,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
                 .Args({"arg"})
                 .Body("arg")
             .Build()
-            .Settings(NYql::NDq::TDqStageSettings().BuildNode(ctx, stage->Pos()))
+            .Settings(NYql::NDq::TDqStageSettings().New().BuildNode(ctx, stage->Pos()))
         .Done().Ptr();
     // clang-format on
     } else {
@@ -493,7 +493,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
 
         materializeSize += Materialize[i].size();
 
-        for (ui32 j = 0; j < materializeSize; ++j) {
+        for (ui32 j = 0; j < Materialize[i].size(); ++j) {
             auto param = TExprBase(Materialize[i][j].first).Cast<TCoParameter>();
             auto materializeResult = TExprBase(Materialize[i][j].second).Cast<TDqCnValue>();
 
@@ -666,7 +666,18 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     }
     auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
 
-    return ctx.NewList(Roots[0]->Pos, {ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns})});
+    TVector<TExprNode::TPtr> listElements;
+    if (RBOCtx.EmptyPreamble) {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {}));
+    }
+
+    if (!phyTxSettings.WithEffects) {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery, queryColumns}));
+    } else {
+        listElements.push_back(ctx.NewList(Roots[0]->Pos, {phyQuery}));
+    }
+
+    return ctx.NewList(Roots[0]->Pos, std::move(listElements));
 }
 
 TKqpPhyQuerySettings TPhysicalQueryBuilder::GetPhysicalQuerySettings() const {

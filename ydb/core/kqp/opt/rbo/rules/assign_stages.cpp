@@ -79,7 +79,6 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
-        auto opRead = CastOperator<TOpRead>(input);
         TString readName;
         if (input->Kind == EOperator::Source) {
             const auto opRead = CastOperator<TOpRead>(input);

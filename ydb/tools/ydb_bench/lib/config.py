@@ -101,8 +101,19 @@ def _parameter_schema(parameter):
 
 
 def _profile_schema(benchmark):
+    if benchmark.profile_kind == "dedicated-ydb":
+        properties = _profile_schema(BENCHMARKS.get("distributed-ydb"))["properties"]
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["cluster-template"],
+            "properties": {
+                name: properties[name] for name in ("cluster-template", "storage", "tenants", "reset-disks")
+            },
+        }
     if benchmark.profile_kind == "distributed-ydb":
         schema = _profile_schema(BENCHMARKS.get("local-ydb"))
+        schema["properties"]["actor-system"]["properties"].pop("use-waker")
         for field in ("geometry", "affinity", "ydbd-binary"):
             schema["properties"].pop(field, None)
         schema["properties"]["cluster-template"] = {
@@ -180,6 +191,7 @@ def _profile_schema(benchmark):
                         "use-shared-threads": {"type": "boolean", "default": False},
                         "use-united-pool": {"type": "boolean", "default": False},
                         "use-ring-queue": {"type": "boolean", "default": True},
+                        "use-waker": {"type": "boolean", "default": False},
                         **{
                             role: {
                                 "type": "object",
@@ -623,14 +635,17 @@ def _parse_local_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_
             _config_error(location + ".ydbd-binary", "must be an absolute path on the benchmark host")
         binary_config["ydbd_binary"] = binary_path
 
+    actor_flags = (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
+    if benchmark.profile_kind == "local-ydb":
+        actor_flags += (("use-waker", False),)
     actor_system = _mapping(
         value.get("actor-system"),
         location + ".actor-system",
-        ("use-shared-threads", "use-united-pool", "use-ring-queue", "static-nodes", "dynamic-nodes"),
+        tuple(name for name, _ in actor_flags) + ("static-nodes", "dynamic-nodes"),
     )
     actor_system_config = {
         name.replace("-", "_"): _boolean(actor_system.get(name, default), location + ".actor-system." + name)
-        for name, default in (("use-shared-threads", False), ("use-united-pool", False), ("use-ring-queue", True))
+        for name, default in actor_flags
     }
     for role in ("static-nodes", "dynamic-nodes"):
         if role in actor_system:
@@ -1036,7 +1051,10 @@ def _distributed_actor(raw, where, role):
 
 def _parse_deployment_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
     location = benchmark.name + "." + profile_name
-    value = _mapping(value, location, ("mode", "cluster-template", "storage", "tenants", "reset-disks"))
+    fields = ("cluster-template", "storage", "tenants", "reset-disks")
+    if benchmark.profile_kind == "distributed-ydb":
+        fields += ("mode",)
+    value = _mapping(value, location, fields)
     if perf_enabled:
         _config_error(location, "perf is not supported for cluster deployment")
     snapshot = value.get("cluster-template")
@@ -1207,6 +1225,8 @@ def _parse_distributed_builder_profile(benchmark, profile_name, value, perf_enab
 
 
 def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency):
+    if benchmark.profile_kind == "dedicated-ydb":
+        return _parse_deployment_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     if benchmark.profile_kind == "distributed-ydb":
         return _parse_distributed_ydb_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     if benchmark.profile_kind == "local-ydb":

@@ -109,6 +109,7 @@ namespace NKikimr::NHullComp {
             }
 
             Task->SetupAction(ActCompactSsts);
+            Task->SelectStrategy = ESelectStrategy::Explicit;
             auto& compact = Task->CompactSsts;
             compact.TargetLevel = *levelOfInterest;
             if (!*levelOfInterest) {
@@ -154,7 +155,8 @@ namespace NKikimr::NHullComp {
             if (Params.FreeChunksBudget == Max<ui32>()) {
                 return true;
             }
-            return TUtils::EstimateOutputChunks(keepBytes, HullCtx->ChunkSize) <= Params.FreeChunksBudget;
+            return TUtils::EstimateJobOutputChunks(keepBytes, HullCtx->ChunkSize,
+                Params.AppendBlockSize, Params.StripeSstBytes) <= Params.FreeChunksBudget;
         }
     };
 

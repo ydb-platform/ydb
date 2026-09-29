@@ -216,9 +216,12 @@ public:
         : Request_(request)
         , FlowControl_(inflightLimitBytes)
         , Span_(TWilsonGrpc::RequestActor, request->GetWilsonTraceId(),
-                "RequestProxy.RpcOperationRequestActor", NWilson::EFlags::AUTO_END) {
-        if (Span_ && AppData()) {
-            Span_.Attribute("database", AppData()->TenantName);
+                "Execute query request", NWilson::EFlags::AUTO_END) {
+        if (Span_) {
+            Span_.Attribute("ydb.actor.type", TString("TExecuteQueryRPC"));
+            if (AppData()) {
+                Span_.Attribute("database", AppData()->TenantName);
+            }
         }
     }
 

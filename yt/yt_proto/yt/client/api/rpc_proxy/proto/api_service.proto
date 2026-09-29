@@ -2873,6 +2873,7 @@ message TReqPartitionFile
     optional bool fetch_cookie_node_descriptors = 4 [default = true];
 
     optional TTransactionalOptions transactional_options = 100;
+    optional TSuppressableAccessTrackingOptions suppressable_access_tracking_options = 104;
 }
 
 message TFilePartition
@@ -2899,6 +2900,8 @@ message TRspReadFilePartition
 
 message TRspReadFilePartitionMeta
 {
+    required NYT.NProto.TGuid id = 1;
+    required uint64 revision = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

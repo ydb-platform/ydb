@@ -3622,16 +3622,22 @@ Y_UNIT_TEST_F(Deferred_ReadSetAck_From_Silent_Peer_Without_Propose, TPQTabletFix
                              .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
 }
 
-Y_UNIT_TEST_F(Immediate_PlanStepAck_For_Unknown_Without_WriteTx, TPQTabletFixture)
+Y_UNIT_TEST_F(PlanStepAck_For_Unknown_Waits_For_WriteTx, TPQTabletFixture)
 {
-    // All-unknown PlanStep is acked immediately; must not wait for a WRITE_TX cycle.
+    // За шагом, все txId которого неизвестны, наших транзакций нет, и ждать нам нечего. Подтвердить
+    // такой шаг можно только после успешно завершённого цикла записи: он доказывает, что таблетка
+    // всё ещё лидер. Иначе зафенченное поколение подтверждало бы шаги за живое.
     const ui64 unknownTxId = 424301;
 
     PQTabletPrepare({.partitions=1}, {}, *Ctx);
 
     TVector<TAutoPtr<IEventHandle>> heldRequests;
+    size_t acceptedCount = 0;
     bool holdWriteTx = true;
     auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->CastAsLocal<TEvTxProcessing::TEvPlanStepAccepted>()) {
+            ++acceptedCount;
+        }
         if (holdWriteTx) {
             if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
                 if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
@@ -3645,20 +3651,33 @@ Y_UNIT_TEST_F(Immediate_PlanStepAck_For_Unknown_Without_WriteTx, TPQTabletFixtur
 
     SendPlanStep({.Step=100, .TxIds={unknownTxId}});
 
-    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
-    WaitPlanStepAccepted({.Step=100});
+    // Таблетка сама начинает цикл записи, потому что иначе шаг подтверждать нечем
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
 
-    UNIT_ASSERT(heldRequests.empty());
+    UNIT_ASSERT_VALUES_EQUAL(acceptedCount, 0u);
 
     holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
     Ctx->Runtime->SetObserverFunc(prev);
+
+    WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabletFixture)
 {
-    // Mediator contract: PlanStepAccepted must arrive in ascending step order.
-    // Regression: deferred all-unknown ack after an immediate EXECUTED retransmit
-    // inverted the order and stalled the mediator head.
+    // Медиатор ждёт подтверждений в возрастающем порядке шагов. Раньше подтверждение для шага с
+    // неизвестными txId уходило сразу, а для шага с известной транзакцией - в конце транзакции,
+    // из-за чего порядок переворачивался и голова очереди медиатора вставала.
     const ui64 txId = 67890;
     const ui64 unknownTxId = 424302;
     const ui64 mockTabletId = 22222;
@@ -3688,10 +3707,15 @@ Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabl
     WaitPlanStepAck({.Step=200, .TxIds={txId}});
     WaitPlanStepAccepted({.Step=200});
 
-    // Keep tx in Txs (EXECUTED / waiting RS acks) so a retransmit still hits the known path.
+    // Транзакция остаётся в Txs (EXECUTED, ждёт подтверждений readset'ов), поэтому повторный шаг
+    // попадает в ветку известной транзакции.
     TVector<TAutoPtr<IEventHandle>> heldRequests;
+    size_t acceptedCount = 0;
     bool holdWriteTx = true;
     auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->CastAsLocal<TEvTxProcessing::TEvPlanStepAccepted>()) {
+            ++acceptedCount;
+        }
         if (holdWriteTx) {
             if (auto* msg = event->CastAsLocal<TEvKeyValue::TEvRequest>()) {
                 if (msg->Record.HasCookie() && msg->Record.GetCookie() == WRITE_TX_COOKIE) {
@@ -3703,21 +3727,233 @@ Y_UNIT_TEST_F(PlanStepAccepted_Order_Unknown_Before_Executed_Retransmit, TPQTabl
         return TTestActorRuntimeBase::EEventAction::PROCESS;
     });
 
-    // Both steps are in flight before we wait: unknown lower step, then EXECUTED retransmit.
+    // Оба шага отправлены до ожидания: сначала младший с неизвестной транзакцией, потом повторный
+    // шаг выполненной.
     SendPlanStep({.Step=100, .TxIds={unknownTxId}});
     SendPlanStep({.Step=200, .TxIds={txId}});
 
-    // GrabEdgeEvent yields Accepteds in delivery order — 100 must come before 200.
+    // Шаг 200 уже ниже границы выполненного, но он стоит в очереди за шагом 100, поэтому пока не
+    // завершится цикл записи, не уйдёт ни одно подтверждение
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() {
+            return !heldRequests.empty();
+        };
+        UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(acceptedCount, 0u);
+
+    holdWriteTx = false;
+    for (auto& held : heldRequests) {
+        Ctx->Runtime->Send(held.Release());
+    }
+    heldRequests.clear();
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    // GrabEdgeEvent отдаёт события в порядке доставки: 100 должен прийти раньше 200
     WaitPlanStepAccepted({.Step=100});
     WaitPlanStepAccepted({.Step=200});
     WaitPlanStepAck({.Step=100, .TxIds={unknownTxId}});
     WaitPlanStepAck({.Step=200, .TxIds={txId}});
+}
 
-    // Accepteds must arrive without a successful WRITE_TX cycle.
-    UNIT_ASSERT(heldRequests.empty());
+Y_UNIT_TEST_F(PlanStep_Ack_Waits_For_Tx_Reusing_Step_And_TxId, TPQTabletFixture)
+{
+    // Транзакцию с тем же TxId могут пропоузить заново после того, как предыдущая выполнилась и была
+    // удалена, и запланировать тем же шагом. Подтверждать шаг надо по выполнению новой транзакции.
+    // Поэтому ждать нельзя по паре (ExecStep, ExecTxId): она уже стоит на этой паре.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
 
-    holdWriteTx = false;
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitReadSetAck(*tablet, {.Step=100, .TxId=txId, .Source=mockTabletId,
+                             .Target=Ctx->TabletId, .Consumer=Ctx->TabletId});
+    tablet->SendReadSetAck(*Ctx->Runtime, {.Step=100, .TxId=txId, .Source=Ctx->TabletId});
+    WaitForTheTransactionToBeDeleted(txId);
+
+    size_t acceptedCount = 0;
+    auto prev = Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+        if (event->CastAsLocal<TEvTxProcessing::TEvPlanStepAccepted>()) {
+            ++acceptedCount;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    // Та же транзакция и тот же шаг
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    // Транзакция дошла до ожидания readset'а, значит она ещё не выполнена и шаг подтверждать нельзя
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    UNIT_ASSERT_VALUES_EQUAL(acceptedCount, 0u);
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
+
     Ctx->Runtime->SetObserverFunc(prev);
+}
+
+Y_UNIT_TEST_F(PlanStepAccepted_Order_Pending_Tx_Before_Unknown, TPQTabletFixture)
+{
+    // Впереди в очереди шаг с нашей транзакцией, за ним шаг без наших транзакций. Второй отпускается
+    // сразу после цикла записи, но отправить его подтверждение раньше первого нельзя.
+    const ui64 txId = 67890;
+    const ui64 unknownTxId = 424303;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    // Транзакция шага 100 встаёт в ожидание readset'а, поэтому шаг 100 ещё не подтверждён
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+
+    SendPlanStep({.Step=200, .TxIds={unknownTxId}});
+
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAccepted({.Step=100});
+    WaitPlanStepAccepted({.Step=200});
+}
+
+Y_UNIT_TEST_F(PlanStep_Unsorted_TxIds_With_Duplicates, TPQTabletFixture)
+{
+    // Медиатор склеивает в один шаг транзакции разных координаторов и сортирует их без дедупликации,
+    // поэтому список txId может прийти в любом порядке и с дублями. Таблетка не должна от этого умирать.
+    const ui64 txId_1 = 67890;
+    const ui64 txId_2 = 67891;
+    const ui64 mockTabletId = 22222;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {{"consumer-1", true}, {"consumer-2", true}}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId_1,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="consumer-1", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendProposeTransactionRequest({.TxId=txId_2,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="consumer-2", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId_2, txId_1, txId_2}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId_1, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_1, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId_2, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId_2, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    // Транзакции выполняются по возрастанию TxId, а не в порядке из сообщения
+    WaitProposeTransactionResponse({.TxId=txId_1,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+    WaitProposeTransactionResponse({.TxId=txId_2,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    // Подтверждение повторяет список из сообщения: координатор дедуплицирует по (txId, tabletId)
+    WaitPlanStepAck({.Step=100, .TxIds={txId_2, txId_1, txId_2}});
+    WaitPlanStepAccepted({.Step=100});
+}
+
+Y_UNIT_TEST_F(PlanStep_After_MaxStep_Is_Acked_Without_Planning, TPQTabletFixture)
+{
+    // Шаг больше MaxStep транзакции планировать нельзя: транзакция истечёт. Но шаг всё равно надо
+    // подтвердить, иначе очередь медиатора встанет.
+    const ui64 txId = 67890;
+    const ui64 mockTabletId = 22222;
+    const ui64 stepAfterMaxStep = Max<ui64>() - 1;
+
+    NHelpers::TPQTabletMock* tablet = CreatePQTabletMock(mockTabletId);
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                  .TxOps={
+                                  {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=stepAfterMaxStep, .TxIds={txId}});
+
+    WaitPlanStepAck({.Step=stepAfterMaxStep, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=stepAfterMaxStep});
+
+    // Транзакция не запланирована: она выполняется по следующему шагу, попадающему в MaxStep
+    SendPlanStep({.Step=100, .TxIds={txId}});
+
+    WaitReadSet(*tablet, {.Step=100, .TxId=txId, .Source=Ctx->TabletId, .Target=mockTabletId,
+                          .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT, .Producer=Ctx->TabletId});
+    tablet->SendReadSet(*Ctx->Runtime, {.Step=100, .TxId=txId, .Target=Ctx->TabletId,
+                                        .Decision=NKikimrTx::TReadSetData::DECISION_COMMIT});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+    WaitPlanStepAccepted({.Step=100});
 }
 
 Y_UNIT_TEST_F(Kafka_Transaction_Supportive_Partitions_Should_Be_Deleted_After_Timeout, TPQTabletFixture)

@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/blobstorage/ddisk/ddisk_config.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/tools/stress_tool/proto/device_perf_test.pb.h>
@@ -633,7 +634,10 @@ struct TPerfTestConfig {
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap; // SectorMaps[0] alias
     bool DisablePDiskDataEncryption;
     bool DisableDDiskChecksums;
+    ui64 DDiskChecksumsCacheBytes = NDDisk::TDDiskConfig().IntegrityChecksumCacheBytes;
     bool ForcePDiskFallback;
+    // Zero preserves the legacy user-accessible chunk sizing.
+    ui32 PhysicalChunkSize = 0;
     // Used as both the maximum and initial PB chunk count by DDisk-based tests.
     ui32 PersistentBufferChunks = 512;
     NActors::NLog::EPriority LogLevel = NActors::NLog::PRI_WARN;

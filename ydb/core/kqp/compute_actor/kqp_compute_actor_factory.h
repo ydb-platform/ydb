@@ -24,6 +24,8 @@ private:
     YDB_ACCESSOR_DEF(std::vector<NActors::TActorId>, ActorIds);
     YDB_ACCESSOR_DEF(NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta, Meta);
 public:
+    NWilson::TTraceId TraceId;
+
     explicit TMetaScan(const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta)
         : Meta(meta)
     {
@@ -32,10 +34,14 @@ public:
 
 class TComputeStageInfo {
 private:
-    YDB_ACCESSOR_DEF(std::deque<TMetaScan>, MetaInfo);
+    std::deque<TMetaScan> MetaInfo;
     std::map<ui32, TMetaScan*> MetaWithIds;
 public:
     TComputeStageInfo() = default;
+
+    std::deque<TMetaScan>& MutableMetaInfo() {
+        return MetaInfo;
+    }
 
     bool GetMetaById(const ui32 metaId, NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& result) const {
         auto it = MetaWithIds.find(metaId);

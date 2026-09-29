@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/pqtablet/blob/blob.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition_blob_encoder.h>
+#include <ydb/core/persqueue/pqtablet/partition/partition_util.h>
 #include <ydb/core/persqueue/pqtablet/partition/blob_key_filter.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>

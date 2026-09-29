@@ -20,7 +20,7 @@ namespace NKikimr::NSharedCache {
 struct TCollection;
 class TSharedCachePages;
 
-using TPendingInMemoryPages = THashMap<TLogoBlobID, TMap<NTable::NPage::TPageLocation, ui64>>;
+using TPendingInMemoryPages = THashMap<TLogoBlobID, TSet<NTable::NPage::TPageLocation>>;
 
 // One B-tree being walked by the cache itself, one index level at a time in write order.
 struct TCacheBTreeWalk {
@@ -55,14 +55,10 @@ enum class EWalkControllerState {
 };
 
 struct TWalkRun {
-    ui64 Id = 0;
     ui32 FetchesInFlight = 0;
-    // Index/data pages: insert increments; dequeue, cancellation and queue clear decrement.
-    ui64 PendingPages = 0;
     EWalkRunState State = EWalkRunState::Walking;
     bool NeedsAdvance = true;
     TVector<TCacheBTreeWalk> Walks;
-    TSet<TLogoBlobID> PendingCollections;
 };
 
 struct TWalkCollectionState {
@@ -80,11 +76,11 @@ public:
     virtual TPendingInMemoryPages& PendingWalkPages() = 0;
     virtual TSharedCachePages* WalkCachePages() = 0;
     // Regular-mode index reads; in-memory index reads go through PendingWalkPages.
-    virtual void FetchWalkIndexLevel(
-        TCollection& collection, TVector<NTable::NPage::TPageLocation>&& locations, ui64 runId) = 0;
+    virtual void FetchWalkIndexLevel(TCollection& collection, TVector<NTable::NPage::TPageLocation>&& locations,
+        const TLogoBlobID& walkCollectionId) = 0;
     virtual void SendWalkStickyPages(
         TCollection& collection, const TActorId& owner, const TVector<NTable::NPage::TPageLocation>& locations) = 0;
-    virtual void CancelQueuedWalkRequestsAndPump(ui64 runId) = 0;
+    virtual void CancelQueuedWalkRequestsAndPump(const TLogoBlobID& walkCollectionId) = 0;
     virtual void TryDropExpiredCollection(TCollection& collection) = 0;
     virtual void ScheduleWalkContinuation() = 0;
 };
@@ -99,20 +95,18 @@ public:
     void UpdateSeeds(TCollection& collection, const TActorId& owner, TVector<TEvAttach::TBtreeSeed> seeds);
 
     bool HasActiveWalks() const {
-        // Include runs waiting for I/O or draining their pending pages.
-        return !WalkLoads.empty();
+        // Include cancelled runs waiting for dispatched I/O.
+        return ActiveRunCount != 0;
     }
 
     // Any path making a waiting/yielded run runnable must set its NeedsAdvance and the common AdvanceNeeded.
     void Advance();
     void IndexPagesChanged(const TLogoBlobID& collectionId);
     void FinishReady();
-    void FinishFetch(ui64 runId);
-    void FetchStarted(ui64 runId);
-    void PendingPageDequeued(ui64 runId);
-    void ClearPendingCollection(const TLogoBlobID& collectionId);
-    bool IsRunActive(ui64 runId) const;
-    void InvalidateRun(ui64 runId);
+    void FinishFetch(const TLogoBlobID& walkCollectionId);
+    void FetchStarted(const TLogoBlobID& walkCollectionId);
+    void InvalidateRun(const TLogoBlobID& walkCollectionId);
+    void InvalidateDataCollection(const TLogoBlobID& collectionId);
     void DropForIndexCollection(const TLogoBlobID& indexCollectionId);
     void RestartForIndexCollection(const TLogoBlobID& indexCollectionId);
     void DropIndexOnlyWalks(const TLogoBlobID& indexCollectionId);
@@ -126,21 +120,19 @@ private:
     };
 
     TWalkCollectionState& State(const TLogoBlobID& collectionId);
-    const TWalkCollectionState& State(const TLogoBlobID& collectionId) const;
     void UpdateWalkIndex(TCollection& collection);
     TVector<TLogoBlobID> GetWalkCollections(const TLogoBlobID& indexCollectionId) const;
-    void CancelPendingWalkPages(TCollection& collection);
     void StartWalkRun(TCollection& collection);
     void FinishWalkRun(TCollection& collection);
     bool FinishWalkRunIfDrained(TCollection& collection);
     void CancelWalkRun(TCollection& collection);
     void RestartWalkRun(TCollection& collection);
     void InvalidateWalkRun(TCollection& collection);
-    bool QueueInMemoryPages(TCollection& collection, TArrayRef<const TPageLocation> locations, ui64 runId);
-    void AdvanceWalk(TCacheBTreeWalk& walk, ui64 runId);
+    bool QueueInMemoryPages(TCollection& collection, TArrayRef<const TPageLocation> locations);
+    void AdvanceWalk(TCacheBTreeWalk& walk, const TLogoBlobID& walkCollectionId);
     void HandOverIndexLevel(TCacheBTreeWalk& walk, TArrayRef<const NTable::NPage::TPageLocation> locations, ui32 level);
-    EBatchResult FlushDataPageBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 runId);
-    bool AddNodeDataPagesToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 runId);
+    EBatchResult FlushDataPageBatch(TCacheBTreeWalk& walk, TCollection& dataCollection);
+    bool AddNodeDataPagesToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection);
     void AppendPageToNotify(
         TCacheBTreeWalk& walk, const TLogoBlobID& collectionId, const NTable::NPage::TPageLocation& location);
     void FlushPagesToNotify(TCacheBTreeWalk& walk);
@@ -155,8 +147,7 @@ private:
     // Waiting for I/O or cache capacity does not make an ordinary actor message useful to the walk.
     bool AdvanceNeeded = false;
     THashMap<TLogoBlobID, TVector<TLogoBlobID>> WalkCollectionsByIndex;
-    THashMap<ui64, TLogoBlobID> WalkLoads;
-    ui64 NextWalkLoadId = 1;
+    ui64 ActiveRunCount = 0;
     // A queued data-page batch yields; another actor turn must continue discovery.
     bool ContinuationNeeded = false;
     static constexpr ui64 MaxWalkBatchBytes = NTabletFlatExecutor::NBlockIO::BlockSize;

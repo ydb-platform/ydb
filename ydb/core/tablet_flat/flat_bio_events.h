@@ -23,14 +23,12 @@ namespace NBlockIO {
 
     struct TEvFetch : public TEventLocal<TEvFetch, ui32(EEv::Fetch)> {
         TEvFetch(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection,
-                TVector<TPageLocation> pages, ui64 cookie, ui64 loadRunId = 0)
+            TVector<TPageLocation> pages, ui64 cookie)
             : Priority(priority)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
             , Cookie(cookie)
-            , LoadRunId(loadRunId)
         {
-
         }
 
         const EPriority Priority;
@@ -38,18 +36,15 @@ namespace NBlockIO {
         TVector<TPageLocation> Pages;
         NWilson::TTraceId TraceId;
         const ui64 Cookie;
-        const ui64 LoadRunId;
     };
 
     struct TEvData: public TEventLocal<TEvData, ui32(EEv::Data)> {
         using EStatus = NKikimrProto::EReplyStatus;
 
-        TEvData(EStatus status, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ui64 cookie,
-                ui64 loadRunId = 0)
+        TEvData(EStatus status, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ui64 cookie)
             : Status(status)
             , PageCollection(std::move(pageCollection))
             , Cookie(cookie)
-            , LoadRunId(loadRunId)
         {
 
         }
@@ -67,7 +62,6 @@ namespace NBlockIO {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TVector<NPageCollection::TLoadedPageData> Pages;
         const ui64 Cookie;
-        const ui64 LoadRunId;
     };
 
 }

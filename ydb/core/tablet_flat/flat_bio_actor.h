@@ -41,7 +41,6 @@ namespace NBlockIO {
         TVector<TPageLocation> Pages;
         NWilson::TTraceId TraceId;
         ui64 RequestCookie;
-        ui64 LoadRunId = 0;
 
         /*_ request operational state   */
 
@@ -62,10 +61,11 @@ namespace NBlockIO {
         NMetrics::TTabletIopsRawValue GroupOps;
     };
 
-    inline void Start(NActors::IActorOps *ops, TActorId statActorId, ui64 cookie, TEvFetch* fetch)
+    inline TActorId Start(NActors::IActorOps *ops, TActorId statActorId, ui64 cookie, TEvFetch* fetch)
     {
         auto self = ops->Register(new TBlockIO(statActorId, cookie));
         ops->Send(self, fetch);
+        return self;
     }
 
 }

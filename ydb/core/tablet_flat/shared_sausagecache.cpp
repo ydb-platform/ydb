@@ -119,6 +119,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     THashMap<TLogoBlobID, TCollection> Collections;
     TCacheBTreeWalkController Walks{ *this };
+    // Keyed by the per-fetch TBlockIO actor returned by Start; removed when its TEvData arrives.
+    // A fetch that dies without reporting leaves both this entry and its run waiting for completion.
+    THashMap<TActorId, TLogoBlobID> WalkFetches;
     TPendingInMemoryPages PendingInMemoryPages;
     THashMap<TActorId, THashMap<TCollection*, TIntrusiveList<TRequest>>> Owners;
     TRequestQueue AsyncRequests{EBlockIOFetchTypeCookie::AsyncQueue};
@@ -133,7 +136,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     ui64 MemLimitBytes = 0;
     ui64 TargetInMemoryBytes = 0;
-    ui64 AliveInMemoryBytes = 0; // Sum of AliveBytes of all in-memory collections (Active + Passive + InFly)
+    ui64 AliveInMemoryBytes = 0; // Bytes of pages marked in-memory (Active + Passive + InFly)
     ui64 ActiveInMemoryBytes = 0;
     ui64 InFlyInMemoryBytes = 0;
     bool WalkContinuationScheduled = false;
@@ -156,9 +159,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         return SharedCachePages;
     }
 
-    void FetchWalkIndexLevel(TCollection& collection, TVector<TPageLocation>&& locations, ui64 runId) override {
+    void FetchWalkIndexLevel(
+        TCollection& collection, TVector<TPageLocation>&& locations, const TLogoBlobID& walkCollectionId) override {
         Y_DEBUG_ABORT_UNLESS(collection.GetCacheMode() == ECacheMode::Regular);
-        FetchIndexLevelInQueue(collection, std::move(locations), runId);
+        FetchIndexLevelInQueue(collection, std::move(locations), walkCollectionId);
     }
 
     void SendWalkStickyPages(
@@ -166,8 +170,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         SendStickyCollectionPages(collection, owner, locations);
     }
 
-    void CancelQueuedWalkRequestsAndPump(ui64 runId) override {
-        CancelQueuedWalkRequests(runId);
+    void CancelQueuedWalkRequestsAndPump(const TLogoBlobID& walkCollectionId) override {
+        CancelQueuedWalkRequests(walkCollectionId);
         RequestFromQueue(AsyncRequests);
         RequestFromQueue(ScanRequests);
     }
@@ -332,10 +336,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         return collection;
     }
 
-    void CancelQueuedWalkRequests(ui64 loadRunId) {
+    void CancelQueuedWalkRequests(const TLogoBlobID& walkCollectionId) {
         for (auto& [_, requests] : AsyncRequests.Requests) {
             for (auto& request : requests) {
-                if (request->WalkLoadId != loadRunId || request->IsResponded()) {
+                if (request->WalkCollectionId != walkCollectionId || request->IsResponded()) {
                     continue;
                 }
 
@@ -352,7 +356,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                                 });
                             if (!hasLiveRequest) {
                                 RemoveAlivePage(page);
-                                Y_ENSURE(collection->PageSet.ErasePage(offset));
+                                const bool erased = collection->PageSet.ErasePage(offset);
+                                Y_ENSURE(erased);
                             }
                         }
                     }
@@ -448,7 +453,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
             bool wasEvicted = page->State == PageStateEvicted;
             if (wasEvicted) {
-                Y_ENSURE(page->Use()); // still in PageSet, guaranteed to be alive
+                const bool used = page->Use(); // still in PageSet, guaranteed to be alive
+                Y_ENSURE(used);
                 page->State = PageStateLoaded;
                 RemovePassivePage(page);
                 AddActivePage(page);
@@ -809,7 +815,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     void Handle(NBlockIO::TEvData::TPtr &ev, const TActorContext& ctx) {
         auto *msg = ev->Get();
-        const ui64 walkLoadId = msg->LoadRunId;
+        TLogoBlobID walkCollectionId;
+        if (auto it = WalkFetches.find(ev->Sender); it != WalkFetches.end()) {
+            walkCollectionId = it->second;
+            WalkFetches.erase(it);
+        }
 
         LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Receive page collection " << msg->PageCollection->Label()
             << " status " << msg->Status
@@ -845,13 +855,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             if (queue) {
                 RequestFromQueue(*queue);
             }
-            Walks.FinishFetch(walkLoadId);
+            Walks.FinishFetch(walkCollectionId);
             return;
         }
 
         if (msg->Status != NKikimrProto::OK) {
-            if (walkLoadId) {
-                Walks.InvalidateRun(walkLoadId);
+            if (walkCollectionId) {
+                Walks.InvalidateRun(walkCollectionId);
+            } else if (fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload) {
+                // DropCollection also invalidates walks that use this collection for index pages.
+                Walks.InvalidateDataCollection(collection->Id);
             }
             DropCollection(*collection, msg->Status, fetchType);
         } else {
@@ -882,7 +895,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         if (queue) {
             RequestFromQueue(*queue);
         }
-        Walks.FinishFetch(walkLoadId);
+        Walks.FinishFetch(walkCollectionId);
     }
 
     TPage* EnsurePage(TCollection& collection,
@@ -892,7 +905,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         if (!page) {
             Y_ENSURE(collection.PageSet.size() < collection.TotalPages);
             page = new TPage(location.Offset, location.Size, location.Type, location.Crc32, &collection);
-            Y_ENSURE(collection.PageSet.emplace(page).second);
+            const bool inserted = collection.PageSet.emplace(page).second;
+            Y_DEBUG_ABORT_UNLESS(inserted);
             page->CacheMode = initialMode;
             AddAlivePage(page);
         } else {
@@ -904,7 +918,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     void ReloadEvictedPage(TPage* page, bool touched = true) {
         Y_ASSERT(page->State == PageStateEvicted);
-        Y_ENSURE(page->Use()); // still in PageSet, guaranteed to be alive
+        const bool used = page->Use(); // still in PageSet, guaranteed to be alive
+        Y_ENSURE(used);
         page->State = PageStateLoaded;
         RemovePassivePage(page);
         AddActivePage(page);
@@ -1003,7 +1018,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         if (page->TryDrop()) {
             // We have successfully dropped the page
             // We are guaranteed no new uses for this page are possible
-            Y_ENSURE(page->State == PageStateEvicted);
+            Y_DEBUG_ABORT_UNLESS(page->State == PageStateEvicted);
             RemovePassivePage(page);
 
             Y_VERIFY_DEBUG_S(page->Collection, "Evicted pages are expected to have collection");
@@ -1012,10 +1027,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                 Y_DEBUG_ABORT_UNLESS(collection->PageSet.FindPage(page->Offset) == page);
                 if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
                     PendingInMemoryPages[collection->Id].emplace(
-                        TPageLocation(page->Offset, page->Size, page->Type, page->Crc32), 0);
+                        TPageLocation(page->Offset, page->Size, page->Type, page->Crc32));
                 }
                 RemoveAlivePage(page);
-                Y_ENSURE(collection->PageSet.ErasePage(offset));
+                const bool erased = collection->PageSet.ErasePage(offset);
+                Y_ENSURE(erased);
                 // Note: don't use page after erase as it may be deleted
                 if (collection->Owners) {
                     collection->DroppedPages.push_back(offset);
@@ -1076,7 +1092,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             }
 
             auto &readyPage = request->ReadyPages[index];
-            Y_ENSURE(readyPage.Offset == page->Offset);
+            Y_DEBUG_ABORT_UNLESS(readyPage.Offset == page->Offset);
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList, page->Type);
 
             if (--request->PendingBlocks == 0) {
@@ -1164,22 +1180,26 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     }
 
     void SendRequest(TRequest& request, TVector<TPageLocation>&& pages, ui64 bytes, EBlockIOFetchTypeCookie cookie) {
-        if (request.WalkLoadId) {
-            Walks.FetchStarted(request.WalkLoadId);
+        if (request.WalkCollectionId) {
+            Walks.FetchStarted(request.WalkCollectionId);
         }
         AddInFlyPages(pages.size(), bytes);
 
         // fetch cookie -> requested size
         // event cookie -> queue type
         auto *fetch = new NBlockIO::TEvFetch(request.Priority, request.PageCollection,
-            std::move(pages), bytes, request.WalkLoadId);
+            std::move(pages), bytes);
         if (cookie == EBlockIOFetchTypeCookie::AsyncQueue || cookie == EBlockIOFetchTypeCookie::ScanQueue) {
             // Note: queued requests can fetch multiple times, so copy trace id
             fetch->TraceId = NWilson::TTraceId(request.TraceId);
         } else {
             fetch->TraceId = std::move(request.TraceId);            
         }
-        NBlockIO::Start(this, request.Sender, static_cast<ui64>(cookie), fetch);
+        const TActorId bioActor = NBlockIO::Start(this, request.Sender, static_cast<ui64>(cookie), fetch);
+        if (request.WalkCollectionId) {
+            const bool inserted = WalkFetches.emplace(bioActor, request.WalkCollectionId).second;
+            Y_ENSURE(inserted);
+        }
     }
 
     void DropCollection(TCollection &collection, NKikimrProto::EReplyStatus blobStorageError, EBlockIOFetchTypeCookie fetchType) {
@@ -1264,11 +1284,17 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         TargetInMemoryBytes -= collection.TotalSize;
         Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
 
-        Y_ENSURE(AliveInMemoryBytes >= collection.AliveBytes);
-        AliveInMemoryBytes -= collection.AliveBytes;
+        ui64 bytesToMove = 0;
+        for (const auto& ptr : collection.PageSet) {
+            if (ptr->CacheMode == ECacheMode::TryKeepInMemory) {
+                bytesToMove += TPageTraits::GetSize(ptr.Get());
+            }
+        }
+        Y_ENSURE(AliveInMemoryBytes >= bytesToMove);
+        AliveInMemoryBytes -= bytesToMove;
         ActualizeCacheSizeLimit();
 
-        Walks.ClearPendingCollection(collection.Id);
+        PendingInMemoryPages.erase(collection.Id);
         Walks.DropIndexOnlyWalks(collection.Id);
         // TODO: move pages async and batched
         for (const auto& ptr : collection.PageSet) {
@@ -1285,6 +1311,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                 TVector<TPage*> loadedPages;
                 for (const auto& ptr : collection.PageSet) {
                     auto* page = ptr.Get();
+                    if (page->CacheMode != ECacheMode::TryKeepInMemory) {
+                        continue;
+                    }
                     switch (page->State) {
                     case PageStateLoaded:
                         loadedPages.push_back(page);
@@ -1306,7 +1335,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             return;
         }
 
-        Y_ENSURE(collection.InMemoryOwners.insert(owner).second);
+        const bool inserted = collection.InMemoryOwners.insert(owner).second;
+        Y_ENSURE(inserted);
 
         Walks.RestartForIndexCollection(collection.Id);
 
@@ -1314,17 +1344,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             << " to " << ECacheMode::TryKeepInMemory);
         TargetInMemoryBytes += collection.TotalSize;
         Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
-        AliveInMemoryBytes += collection.AliveBytes;
-        ActualizeCacheSizeLimit();
-
-        TVector<TPage*> loadedPages;
-        auto& pagesToLoad = PendingInMemoryPages[collection.Id];
         auto skipBTreeIndexV1Shadow = pageCollection->SkipBTreeIndexV1Shadow();
-
         auto skipPageType = [skipBTreeIndexV1Shadow](NTable::NPage::EPage type) {
             return NPageCollection::IsDeadPage(type, skipBTreeIndexV1Shadow);
         };
 
+        // Reserve only the pages that will change tiers; resident V1 shadows remain regular.
+        for (const auto& ptr : collection.PageSet) {
+            if (ptr->CacheMode != ECacheMode::TryKeepInMemory && !skipPageType(ptr->Type)) {
+                AliveInMemoryBytes += TPageTraits::GetSize(ptr.Get());
+            }
+        }
+        ActualizeCacheSizeLimit();
+
+        TVector<TPage*> loadedPages;
+        auto& pagesToLoad = PendingInMemoryPages[collection.Id];
         auto processPage = [&](TPage* page) {
             TryChangeCacheMode(page, ECacheMode::TryKeepInMemory);
 
@@ -1339,37 +1373,31 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             }
         };
 
-        auto processMetaPages = [&](bool processKnownPages) {
-            for (const auto& pageId : xrange(pageCollection->MetaPages())) {
-                auto type = static_cast<NTable::NPage::EPage>(pageCollection->Page(pageId).Type);
-                if (skipPageType(type)) {
-                    continue;
-                }
-
-                auto location = pageCollection->GetLocation(pageId);
-                if (auto* page = collection.PageSet.FindPage(location.Offset)) {
-                    if (processKnownPages) {
-                        processPage(page);
-                    }
-                } else {
-                    pagesToLoad.emplace(location, 0);
-                }
+        bool hasSkippedPages = false;
+        for (const auto& pageId : xrange(pageCollection->MetaPages())) {
+            auto type = static_cast<NTable::NPage::EPage>(pageCollection->Page(pageId).Type);
+            hasSkippedPages |= type == NTable::NPage::EPage::Skip;
+            if (skipPageType(type)) {
+                continue;
             }
-        };
 
-        if (pageCollection->Total() == pageCollection->MetaPages()) {
-            // V1 and dual-root collections: preserve the original single pass.
-            processMetaPages(true);
-        } else {
-            // V2-only pages may be absent from MetaPages. Change tiers for all
-            // known pages, then queue structural pages that are not known yet.
+            auto location = pageCollection->GetLocation(pageId);
+            if (auto* page = collection.PageSet.FindPage(location.Offset)) {
+                processPage(page);
+            } else {
+                pagesToLoad.emplace(location);
+            }
+        }
+
+        // Hidden pages use Skip entries, including collections where Total() > MetaPages().
+        if (hasSkippedPages) {
+            // A Skip entry can hide even one page, when Total() still equals MetaPages().
             for (const auto& ptr : collection.PageSet) {
                 auto* page = ptr.Get();
-                if (!skipPageType(page->Type)) {
+                if (page->CacheMode != ECacheMode::TryKeepInMemory && !skipPageType(page->Type)) {
                     processPage(page);
                 }
             }
-            processMetaPages(false);
         }
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Try move collection " << collection.Id
@@ -1384,12 +1412,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
     }
 
     // Ordinary background pages of a regular collection, sent through the async queue.
-    void FetchIndexLevelInQueue(TCollection& collection, TVector<TPageLocation>&& locations, ui64 loadRunId) {
+    void FetchIndexLevelInQueue(
+        TCollection& collection, TVector<TPageLocation>&& locations, const TLogoBlobID& walkCollectionId) {
         auto request = MakeIntrusive<TRequest>();
         request->Label = collection.Id;
         request->PageCollection = collection.PageCollection;
         request->Priority = NBlockIO::EPriority::Bkgr;
-        request->WalkLoadId = loadRunId;
+        request->WalkCollectionId = walkCollectionId;
         if (collection.InMemoryOwners) {
             request->Sender = *collection.InMemoryOwners.begin();
         } else if (collection.Owners) {
@@ -1448,34 +1477,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
             auto* collection = Collections.FindPtr(collectionId);
             if (!collection) {
-                Walks.ClearPendingCollection(collectionId);
+                PendingInMemoryPages.erase(it);
                 continue;
             }
 
             // any owner is suitable for reporting BIO stats
             auto ownersIt = collection->InMemoryOwners.begin();
-            Y_DEBUG_ABORT_UNLESS(ownersIt != collection->InMemoryOwners.end());
+            Y_ENSURE(ownersIt != collection->InMemoryOwners.end());
             const auto& owner = *ownersIt;
 
             TVector<TPageLocation> pagesToRequest;
             ui64 pagesToRequestBytes = 0;
-            ui64 walkLoadId = 0;
             while (pagesToLoad) {
                 auto locationIt = pagesToLoad.begin();
-                const auto& location = locationIt->first;
-                const ui64 locationWalkLoadId = locationIt->second;
-
-                if (pagesToRequest && locationWalkLoadId != walkLoadId) {
-                    break;
-                }
-                if (locationWalkLoadId) {
-                    if (!Walks.IsRunActive(locationWalkLoadId)) {
-                        Walks.PendingPageDequeued(locationWalkLoadId);
-                        pagesToLoad.erase(locationIt);
-                        continue;
-                    }
-                }
-                walkLoadId = locationWalkLoadId;
+                const auto& location = *locationIt;
 
                 auto* page = EnsurePage(*collection, location, ECacheMode::TryKeepInMemory);
                 if (page->State == PageStateNo) {
@@ -1491,7 +1506,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                     InFlyInMemoryBytes += TPageTraits::GetSize(page);
                 }
 
-                Walks.PendingPageDequeued(locationWalkLoadId);
                 pagesToLoad.erase(locationIt);
             }
 
@@ -1508,8 +1522,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                 request.PageCollection = collection->PageCollection;
                 request.Sender = owner;
                 request.Priority = NBlockIO::EPriority::Bulk;
-                request.WalkLoadId = walkLoadId;
-
                 LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << request.PageCollection->Label()
                     << " owner " << owner
                     << " class " << request.Priority
@@ -1529,6 +1541,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Remain in-memory collections to load: " << PendingInMemoryPages.size());
     }
 
+    // Callers adjust AliveInMemoryBytes before moving pages to reserve capacity for the new tier.
     void TryChangeCacheMode(TPage* page, ECacheMode targetMode) {
         if (page->CacheMode != targetMode) {
             switch (page->State) {
@@ -1556,7 +1569,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
             page->EnsureNoCacheFlags();
 
-            Y_ENSURE(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
+            Y_DEBUG_ABORT_UNLESS(page->State == PageStateLoaded);
             page->State = PageStateEvicted;
 
             RemoveActivePage(page);
@@ -1577,7 +1590,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         auto pageSize = TPageTraits::GetSize(page);
         page->EnsureNoCacheFlags();
 
-        Y_ENSURE(page->State == PageStateLoaded, "unexpected " << page->State << " page state");
+        Y_DEBUG_ABORT_UNLESS(page->State == PageStateLoaded);
         page->State = PageStateEvicted;
 
         RemoveActivePage(page);
@@ -1633,12 +1646,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     inline void RemoveActivePage(const TPage* page) {
         auto pageSize = TPageTraits::GetSize(page);
-        Y_DEBUG_ABORT_UNLESS(StatActiveBytes >= pageSize);
+        Y_ENSURE(StatActiveBytes >= pageSize);
         StatActiveBytes -= pageSize;
         Counters.ActivePages->Dec();
         Counters.ActiveBytes->Sub(pageSize);
         if (page->CacheMode == ECacheMode::TryKeepInMemory) {
-            Y_DEBUG_ABORT_UNLESS(ActiveInMemoryBytes >= pageSize);
+            Y_ENSURE(ActiveInMemoryBytes >= pageSize);
             ActiveInMemoryBytes -= pageSize;
             Counters.ActiveInMemoryBytes->Sub(pageSize);
         }
@@ -1653,7 +1666,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     inline void RemovePassivePage(const TPage* page) {
         auto pageSize = TPageTraits::GetSize(page);
-        Y_DEBUG_ABORT_UNLESS(StatPassiveBytes >= pageSize);
+        Y_ENSURE(StatPassiveBytes >= pageSize);
         StatPassiveBytes -= pageSize;
         Counters.PassivePages->Dec();
         Counters.PassiveBytes->Sub(pageSize);
@@ -1676,7 +1689,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     inline void AddAlivePage(const TPage* page) {
         auto pageSize = TPageTraits::GetSize(page);
-        Y_DEBUG_ABORT_UNLESS(page->Collection);
+        Y_ENSURE(page->Collection);
         page->Collection->AliveBytes += pageSize;
         if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
             AliveInMemoryBytes += pageSize;
@@ -1685,11 +1698,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
 
     inline void RemoveAlivePage(const TPage* page) {
         auto pageSize = TPageTraits::GetSize(page);
-        Y_DEBUG_ABORT_UNLESS(page->Collection);
-        Y_DEBUG_ABORT_UNLESS(page->Collection->AliveBytes >= pageSize);
+        Y_ENSURE(page->Collection);
+        Y_ENSURE(page->Collection->AliveBytes >= pageSize);
         page->Collection->AliveBytes -= pageSize;
         if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
-            Y_DEBUG_ABORT_UNLESS(AliveInMemoryBytes >= pageSize);
+            Y_ENSURE(AliveInMemoryBytes >= pageSize);
             AliveInMemoryBytes -= pageSize;
         }
     }

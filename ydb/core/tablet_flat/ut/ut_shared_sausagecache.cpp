@@ -1567,26 +1567,29 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_TinyInFlyLimit) {
     bool watchFetches = false;
     bool sawSequentialIndexBatch = false;
     auto fetchObserver = env->AddObserver<NBlockIO::TEvFetch>([&](const auto& ev) {
-        if (!watchFetches || !ev->Get()->LoadRunId) {
+        if (!watchFetches || ev->Get()->Priority != NBlockIO::EPriority::Bulk) {
             return;
         }
 
-        const auto& pages = ev->Get()->Pages;
-        if (pages.size() < 2 || pages.front().Type != NTable::NPage::EPage::BTreeIndexV2) {
-            return;
-        }
-
-        ui64 bytes = 0;
-        for (size_t i = 0; i < pages.size(); ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(pages[i].Type, NTable::NPage::EPage::BTreeIndexV2);
-            UNIT_ASSERT(pages[i].Offset.IsByteOffset());
-            if (i) {
-                UNIT_ASSERT_LT(pages[i - 1].Offset.AsByteOffset(), pages[i].Offset.AsByteOffset());
+        ui64 indexBytes = 0;
+        ui32 indexPages = 0;
+        TPageOffset previous;
+        for (const auto& page : ev->Get()->Pages) {
+            if (page.Type != NTable::NPage::EPage::BTreeIndexV2) {
+                continue;
             }
-            bytes += pages[i].Size;
+            UNIT_ASSERT(page.Offset.IsByteOffset());
+            if (indexPages) {
+                UNIT_ASSERT_LT(previous.AsByteOffset(), page.Offset.AsByteOffset());
+            }
+            previous = page.Offset;
+            indexBytes += page.Size;
+            ++indexPages;
         }
-        UNIT_ASSERT_LE(bytes, NBlockIO::BlockSize);
-        sawSequentialIndexBatch = true;
+        if (indexPages >= 2) {
+            UNIT_ASSERT_LE(indexBytes, NBlockIO::BlockSize);
+            sawSequentialIndexBatch = true;
+        }
     });
 
     env->GetAppData().FeatureFlags.SetEnableLocalDBBtreeIndex(false);

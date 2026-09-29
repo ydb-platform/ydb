@@ -28,7 +28,7 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     TDeque<TPageOffset> QueuePagesToRequest; // FIXME: store first pending page
     TIntrusivePtr<NPageCollection::TPagesWaitPad> WaitPad;
     NWilson::TTraceId TraceId;
-    ui64 WalkLoadId = 0;
+    TLogoBlobID WalkCollectionId;
 };
 
 // pending request, index in ready blocks for page

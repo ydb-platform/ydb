@@ -144,7 +144,6 @@ private:
         const auto maybeDatabaseName = requestBaseCtx->GetDatabaseName();
         requestBaseCtx->CountRequestPaths();
         LogRequest(event);
-
         if (!SchemeCache) {
             const TString error = "Grpc proxy is not ready to accept request, no proxy service";
             YDB_LOG_ERROR_CTX(ctx, error);

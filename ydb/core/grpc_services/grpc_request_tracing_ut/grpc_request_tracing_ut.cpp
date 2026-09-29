@@ -4,6 +4,7 @@
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/grpc_services/grpc_request_check_actor.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -796,6 +797,33 @@ Y_UNIT_TEST_TWIN(PathCountersObserveRawHeadersAfterUseDatabase, relativePathsEna
     for (const auto& group : {ydb->GetSubgroup("api_service", "operation")->GetSubgroup("method", "CancelOperation"),
             ydb->GetSubgroup("api_service", "dummy")->GetSubgroup("method", "biStreamPing")}) {
         UNIT_ASSERT_VALUES_EQUAL(group->GetNamedCounter("name", "api.grpc.request.relative_database_count", true)->Val(), 1);
+    }
+}
+
+Y_UNIT_TEST_TWIN(RelativeDatabaseIsResolvedBeforeAliasing, relativePathsEnabled) {
+    TTestActorRuntime runtime;
+    InitializeDatabaseRuntime(runtime, relativePathsEnabled);
+    NKikimrConfig::TPathRewriteConfig config;
+    auto* rule = config.AddRules();
+    rule->SetSrc("/Root");
+    rule->SetDst("/Alias");
+    rule = config.AddRules();
+    rule->SetSrc("/Alias");
+    rule->SetDst("/MustNotRewriteTwice");
+    auto normalizer = std::make_shared<const NPathAliasing::TPathNormalizer>(config);
+    for (const auto& [database, expected] : TVector<std::pair<TMaybe<TString>, TMaybe<TString>>>{
+        {Nothing(), Nothing()}, {TString(), TString()},
+        {TString("mydb"), TString(relativePathsEnabled ? "/Alias/mydb" : "mydb")},
+        {TString("/Root/mydb"), TString("/Alias/mydb")},
+        {TString("Root/mydb"), TString(relativePathsEnabled ? "/Alias/Root/mydb" : "Root/mydb")},
+    }) {
+        auto ctx = MakeIntrusive<TTestGrpcRequestContext>(Nothing(), database);
+        TTestGrpcRequest request(ctx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
+        request.InitRootPath(&runtime.GetAppData());
+        request.InitializePathNormalization(normalizer);
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
+        request.InitializePathNormalization(normalizer);
+        UNIT_ASSERT(request.GetDatabaseName() == expected);
     }
 }
 

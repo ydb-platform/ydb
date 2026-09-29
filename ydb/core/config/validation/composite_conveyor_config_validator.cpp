@@ -38,7 +38,7 @@ EValidationResult ValidateCompositeConveyorConfig(
         }
     }
 
-    THashSet<TString> poolNames;
+    THashSet<TString> poolNames{"WP::DEFAULT", "WP::DEFAULT_SCHEDULABLE"};
     for (const auto& pool : config.GetWorkerPools()) {
         if (pool.GetLinks().empty()) {
             return Fail(errors, "composite conveyor worker pool has no category links");
@@ -73,7 +73,8 @@ EValidationResult ValidateCompositeConveyorConfig(
 
         TString poolName = pool.GetName();
         if (!poolName || poolName == "WP::DEFAULT") {
-            poolName = "WP::" + JoinSeq("-", linkedCategories);
+            poolName = "WP::" + JoinSeq("-", linkedCategories) + "-"
+                + NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(pool.GetSchedulingMode());
         }
         if (!poolNames.emplace(poolName).second) {
             return Fail(errors, "duplicate composite conveyor worker pool name: " + poolName);

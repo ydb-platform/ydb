@@ -24,6 +24,32 @@ namespace NKikimr::NConfig {
     } // namespace
 
     Y_UNIT_TEST_SUITE(TCompositeConveyorConfigValidationTest) {
+        /* Scenario:
+            Generated pool names include sorted categories and scheduling mode.
+            Same-mode duplicates and the reserved schedulable fallback name are rejected.
+         */
+        Y_UNIT_TEST(SchedulingModeNames) {
+            using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+            auto config = BuildValidConfig();
+            auto* conveyor = config.MutableCompositeConveyorConfig();
+            conveyor->MutableWorkerPools(0)->AddLinks()->SetCategory("insert");
+            *conveyor->AddWorkerPools() = conveyor->GetWorkerPools(0);
+            conveyor->MutableWorkerPools(1)->MutableLinks()->SwapElements(0, 1);
+            conveyor->MutableWorkerPools(1)->SetSchedulingMode(TPool::Schedulable);
+            std::vector<TString> errors;
+            UNIT_ASSERT(ValidateConfig(config, errors) == EValidationResult::Ok);
+            conveyor->MutableWorkerPools(1)->SetSchedulingMode(TPool::NonSchedulable);
+            UNIT_ASSERT(ValidateConfig(config, errors) == EValidationResult::Error);
+            UNIT_ASSERT_STRING_CONTAINS(errors.back(), "WP::insert-scan-NonSchedulable");
+            errors.clear();
+            conveyor->MutableWorkerPools(1)->SetName("WP::DEFAULT_SCHEDULABLE");
+            UNIT_ASSERT(ValidateConfig(config, errors) == EValidationResult::Error);
+            UNIT_ASSERT_STRING_CONTAINS(errors.back(), "WP::DEFAULT_SCHEDULABLE");
+            errors.clear();
+            conveyor->MutableWorkerPools(1)->SetName("explicit");
+            UNIT_ASSERT(ValidateConfig(config, errors) == EValidationResult::Ok);
+        }
+
         Y_UNIT_TEST(AcceptsValidConfig) {
             std::vector<TString> errors;
             UNIT_ASSERT(ValidateConfig(BuildValidConfig(), errors) == EValidationResult::Ok);

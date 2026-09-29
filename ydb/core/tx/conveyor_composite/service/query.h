@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/conveyor_composite/service/work_status.h_serialized.h>
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
 
 #include <ydb/core/kqp/runtime/scheduler/fwd.h>
@@ -9,6 +10,7 @@
 
 #include <util/generic/hash.h>
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -22,14 +24,11 @@ namespace NKikimr::NConveyorComposite {
         TMonotonic AverageWakeUpDeadline;
     };
 
-    enum class ESchedulableWorkStatus {
-        IDLE,
-        THROTTLED,
-        STARTED,
-    };
+    class TSchedulableWorkState;
 
     struct TSchedulableWorkCell {
         std::unique_ptr<NYql::NDq::IDqSchedulableWork> Work;
+        TSchedulableWorkState* Owner;
         ESchedulableWorkStatus Status = ESchedulableWorkStatus::IDLE;
     };
 
@@ -60,8 +59,11 @@ namespace NKikimr::NConveyorComposite {
     class TSchedulableWorkState {
     private:
         friend class TSchedulerQueryState;
+        friend class TSchedulerLease;
         std::vector<std::unique_ptr<TSchedulableWorkCell>> Cells;
+        std::array<ui64, GetEnumItemsCount<ESchedulableWorkStatus>()> StatusCounts{};
 
+        void SetStatus(TSchedulableWorkCell& cell, ESchedulableWorkStatus status);
         void StopThrottled(TSchedulableWorkCell& cell);
         ui64 GetCount(ESchedulableWorkStatus status) const;
         void IncreaseCapacity(ui64 workersCount, NYql::NDq::IDqSchedulableWorkFactory& factory);
@@ -101,6 +103,7 @@ namespace NKikimr::NConveyorComposite {
         void PrepareForRemoval();
 
         bool IsReady() const;
+        bool HasWorksCapacity() const;
         bool IsWaitRelease() const;
         bool IsReadyToRelease() const;
         const std::optional<TMonotonic>& GetWakeUpDeadline() const;

@@ -14,6 +14,17 @@
 
 namespace NKikimr::NConveyorComposite::NConfig {
 
+// Synced with proto TCompositeConveyorConfig::TWorkersPool::ESchedulingMode.
+enum class ESchedulingMode {
+    NonSchedulable = 0,
+    Schedulable = 1,
+    All = 2,
+};
+
+static_assert(static_cast<int>(ESchedulingMode::NonSchedulable) == NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable);
+static_assert(static_cast<int>(ESchedulingMode::Schedulable) == NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable);
+static_assert(static_cast<int>(ESchedulingMode::All) == NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::All);
+
 class TWorkerPoolCategoryUsage {
 private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
@@ -80,7 +91,9 @@ public:
 
 class TWorkersPool {
 private:
+    friend class TConfig;
     TString PoolName;
+    YDB_READONLY(ESchedulingMode, SchedulingMode, ESchedulingMode::NonSchedulable);
     YDB_READONLY(ui64, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);

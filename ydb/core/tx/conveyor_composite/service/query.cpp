@@ -77,27 +77,59 @@ namespace NKikimr::NConveyorComposite {
         }
         Y_ENSURE(Cell->Status == ESchedulableWorkStatus::STARTED, "scheduler lease does not own a started work");
         Cell->Work->StopExecution();
-        Cell->Status = ESchedulableWorkStatus::IDLE;
+        Cell->Owner->SetStatus(*Cell, ESchedulableWorkStatus::IDLE);
         Cell = nullptr;
     }
 
     TSchedulableWorkState::TSchedulableWorkState() = default;
-    TSchedulableWorkState::TSchedulableWorkState(TSchedulableWorkState&&) noexcept = default;
-    TSchedulableWorkState& TSchedulableWorkState::operator=(TSchedulableWorkState&&) noexcept = default;
+    TSchedulableWorkState::TSchedulableWorkState(TSchedulableWorkState&& other) noexcept
+        : Cells(std::exchange(other.Cells, {}))
+        , StatusCounts(std::exchange(other.StatusCounts, {}))
+    {
+        for (auto& cell : Cells) {
+            cell->Owner = this;
+        }
+    }
+
+    TSchedulableWorkState& TSchedulableWorkState::operator=(TSchedulableWorkState&& other) noexcept {
+        if (this != &other) {
+            PrepareForRemoval();
+            Cells = std::exchange(other.Cells, {});
+            StatusCounts = std::exchange(other.StatusCounts, {});
+            for (auto& cell : Cells) {
+                cell->Owner = this;
+            }
+        }
+        return *this;
+    }
 
     TSchedulableWorkState::~TSchedulableWorkState() {
         for (auto& cell : Cells) {
             if (cell->Status != ESchedulableWorkStatus::IDLE) {
                 cell->Work->StopExecution();
-                cell->Status = ESchedulableWorkStatus::IDLE;
             }
         }
+        Cells.clear();
+        StatusCounts.fill(0);
+    }
+
+    void TSchedulableWorkState::SetStatus(TSchedulableWorkCell& cell, const ESchedulableWorkStatus status) {
+        AFL_VERIFY(cell.Owner == this);
+        AFL_VERIFY(static_cast<size_t>(cell.Status) < StatusCounts.size());
+        AFL_VERIFY(static_cast<size_t>(status) < StatusCounts.size());
+        if (cell.Status == status) {
+            return;
+        }
+        auto& oldCount = StatusCounts[static_cast<size_t>(cell.Status)];
+        --oldCount;
+        ++StatusCounts[static_cast<size_t>(status)];
+        cell.Status = status;
     }
 
     void TSchedulableWorkState::StopThrottled(TSchedulableWorkCell& cell) {
         Y_ENSURE(cell.Status == ESchedulableWorkStatus::THROTTLED, "only a throttled work can be stopped by this path");
         cell.Work->StopExecution();
-        cell.Status = ESchedulableWorkStatus::IDLE;
+        SetStatus(cell, ESchedulableWorkStatus::IDLE);
     }
 
     TTryStartResult TSchedulableWorkState::TryStart(const TMonotonic now) {
@@ -112,10 +144,10 @@ namespace NKikimr::NConveyorComposite {
                     cell->Work->NotifyResumed(false);
                 }
                 if (const auto delay = cell->Work->TryStartExecution(now)) {
-                    cell->Status = ESchedulableWorkStatus::THROTTLED;
+                    SetStatus(*cell, ESchedulableWorkStatus::THROTTLED);
                     return now + *delay;
                 }
-                cell->Status = ESchedulableWorkStatus::STARTED;
+                SetStatus(*cell, ESchedulableWorkStatus::STARTED);
                 return TSchedulerLease(*cell);
             }
         }
@@ -129,7 +161,8 @@ namespace NKikimr::NConveyorComposite {
         while (Cells.size() < workersCount) {
             auto work = factory.CreateSchedulableWork();
             Y_ENSURE(work, "schedulable work factory returned null");
-            Cells.emplace_back(std::make_unique<TSchedulableWorkCell>(std::move(work)));
+            Cells.emplace_back(std::make_unique<TSchedulableWorkCell>(std::move(work), this));
+            ++StatusCounts[static_cast<size_t>(ESchedulableWorkStatus::IDLE)];
         }
     }
 
@@ -147,6 +180,7 @@ namespace NKikimr::NConveyorComposite {
             if (cell.Status == ESchedulableWorkStatus::THROTTLED) {
                 StopThrottled(cell);
             }
+            --StatusCounts[static_cast<size_t>(cell.Status)];
             it = Cells.erase(it);
             --toRemove;
         }
@@ -173,10 +207,12 @@ namespace NKikimr::NConveyorComposite {
             }
         }
         Cells.clear();
+        StatusCounts.fill(0);
     }
 
     ui64 TSchedulableWorkState::GetCount(const ESchedulableWorkStatus status) const {
-        return std::count_if(Cells.begin(), Cells.end(), [status](const auto& cell) { return cell->Status == status; });
+        Y_ENSURE(static_cast<size_t>(status) < StatusCounts.size());
+        return StatusCounts[static_cast<size_t>(status)];
     }
 
     void TSchedulerQueryState::RegisterProcess() {
@@ -199,6 +235,10 @@ namespace NKikimr::NConveyorComposite {
 
     bool TSchedulerQueryState::IsReady() const {
         return WorkFactory != nullptr;
+    }
+
+    bool TSchedulerQueryState::HasWorksCapacity() const {
+        return Works.GetCount(ESchedulableWorkStatus::STARTED) < CpuCount;
     }
 
     bool TSchedulerQueryState::IsWaitRelease() const {

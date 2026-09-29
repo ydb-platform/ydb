@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION_WITH_HEADER(work_status.h)
+
 SRCS(
     worker.cpp
     service.cpp

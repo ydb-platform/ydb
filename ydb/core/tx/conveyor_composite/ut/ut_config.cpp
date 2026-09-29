@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <limits>
+#include <algorithm>
 
 namespace NKikimr::NConveyorComposite {
 
@@ -44,7 +45,7 @@ void AssertCPUConfig(const NKikimrConfig::TCompositeConveyorConfig& proto, const
     auto config = NConfig::TConfig::BuildFromProto(proto);
     UNIT_ASSERT_C(!config.IsFail(), config.GetErrorMessage());
     const auto parsedConfig = config.DetachResult();
-    const auto& pool = parsedConfig.GetWorkerPools()[1];
+    const auto& pool = parsedConfig.GetWorkerPools()[2];
     UNIT_ASSERT_VALUES_EQUAL(pool.GetWorkersCount(totalThreadsCount), expectedLimits.size());
     for (ui64 workerIdx = 0; workerIdx < expectedLimits.size(); ++workerIdx) {
         UNIT_ASSERT_C(std::abs(pool.GetWorkerCPUUsage(workerIdx, totalThreadsCount) - expectedLimits[workerIdx]) < 1e-9,
@@ -57,6 +58,117 @@ void AssertInvalid(const NKikimrConfig::TCompositeConveyorConfig& proto) {
 }
 
 Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
+    /* Scenario:
+        Specialized and All pools cover each identity type independently.
+        Both fallback pools always exist, including when every category is covered.
+     */
+    Y_UNIT_TEST(SchedulingModeFallbackMatrix) {
+        using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+        const std::vector<std::vector<TPool::ESchedulingMode>> cases{
+            {}, {TPool::NonSchedulable}, {TPool::Schedulable}, {TPool::All}, {TPool::NonSchedulable, TPool::Schedulable}};
+        for (const auto& modes : cases) {
+            for (const bool allCategories : {false, true}) {
+                NKikimrConfig::TCompositeConveyorConfig proto;
+                bool serviceCovered = false;
+                bool managedCovered = false;
+                for (const auto mode : modes) {
+                    auto* pool = proto.AddWorkerPools();
+                    pool->SetSchedulingMode(mode);
+                    pool->SetWorkersCount(1);
+                    for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
+                        if (allCategories || category == ESpecialTaskCategory::Scan) {
+                            pool->AddLinks()->SetCategory(::ToString(category));
+                        }
+                    }
+                    serviceCovered |= mode != TPool::Schedulable;
+                    managedCovered |= mode != TPool::NonSchedulable;
+                }
+                const auto config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
+                const auto& pools = config.GetWorkerPools();
+                UNIT_ASSERT_VALUES_EQUAL(pools.size(), modes.size() + 2);
+                UNIT_ASSERT_VALUES_EQUAL(pools[0].GetName(), "WP::DEFAULT");
+                UNIT_ASSERT_VALUES_EQUAL(pools[1].GetName(), "WP::DEFAULT_SCHEDULABLE");
+                UNIT_ASSERT(pools[0].GetSchedulingMode() == NConfig::ESchedulingMode::NonSchedulable);
+                UNIT_ASSERT(pools[1].GetSchedulingMode() == NConfig::ESchedulingMode::Schedulable);
+                UNIT_ASSERT_VALUES_EQUAL(*pools[1].GetWorkersCountInfo().GetFraction(), 1);
+                UNIT_ASSERT(pools[0].GetHeavyLimits() == pools[1].GetHeavyLimits());
+                UNIT_ASSERT_VALUES_EQUAL(pools[1].GetMaxBatchSize(),
+                    pools[0].GetMaxBatchSize() * std::max<size_t>(1, pools[1].GetLinks().size()));
+                for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
+                    for (ui64 id : {0, 1}) {
+                        const bool covered = (allCategories || category == ESpecialTaskCategory::Scan)
+                            && (id ? managedCovered : serviceCovered);
+                        const auto& links = pools[id].GetLinks();
+                        UNIT_ASSERT_VALUES_EQUAL(std::ranges::count_if(links, [&](const auto& link) {
+                            return link.GetCategory() == category && link.GetWeight() == 1;
+                        }), !covered);
+                        const auto& reverseLinks = config.GetCategoryConfig(category).GetWorkerPools();
+                        UNIT_ASSERT_VALUES_EQUAL(std::ranges::count(reverseLinks, id), !covered);
+                    }
+                }
+            }
+        }
+    }
+
+    /* Scenario:
+        Generated names include the mode; explicit names are stable and fallback names are reserved.
+        Missing mode is NonSchedulable, including in a full replacement snapshot.
+     */
+    Y_UNIT_TEST(SchedulingModeNamesAndDefaults) {
+        using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+        auto proto = BuildPoolWithCPU(1, std::nullopt);
+        auto config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
+        UNIT_ASSERT(config.GetWorkerPools()[2].GetSchedulingMode() == NConfig::ESchedulingMode::NonSchedulable);
+        for (const auto mode : {TPool::NonSchedulable, TPool::Schedulable, TPool::All}) {
+            proto.MutableWorkerPools(0)->SetSchedulingMode(mode);
+            config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
+            UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[2].GetName(), "pool");
+            UNIT_ASSERT(config.GetWorkerPools()[2].DebugString().Contains(TPool::ESchedulingMode_Name(mode)));
+        }
+        proto.MutableWorkerPools(0)->SetName("WP::DEFAULT_SCHEDULABLE");
+        AssertInvalid(proto);
+        proto.MutableWorkerPools(0)->ClearName();
+        *proto.AddWorkerPools() = proto.GetWorkerPools(0);
+        AssertInvalid(proto);
+        proto.MutableWorkerPools(1)->SetSchedulingMode(TPool::Schedulable);
+        config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[2].GetName(), "WP::scan-All");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[3].GetName(), "WP::scan-Schedulable");
+    }
+
+    /* Scenario:
+        Both partial overlay branches preserve an absent mode and replace an explicit zero value.
+        A full list is a replacement, not a patch.
+     */
+    Y_UNIT_TEST(SchedulingModeOverlayPresence) {
+        using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+        auto defaults = BuildPoolWithCPU(1, std::nullopt);
+        defaults.MutableWorkerPools(0)->SetSchedulingMode(TPool::All);
+        AddPool(defaults, "other", {{ESpecialTaskCategory::Insert, 1}});
+        for (const bool withLinks : {false, true}) {
+            for (const auto mode : {std::optional<TPool::ESchedulingMode>{}, {TPool::NonSchedulable}, {TPool::Schedulable}}) {
+                NKikimrConfig::TCompositeConveyorConfig yaml;
+                auto* pool = yaml.AddWorkerPools();
+                pool->SetName("pool");
+                if (mode) {
+                    pool->SetSchedulingMode(*mode);
+                }
+                if (withLinks) {
+                    pool->AddLinks()->SetCategory("scan");
+                    yaml.AddWorkerPools()->SetName("other"); // Keep the partial-overlay path.
+                }
+                auto merged = NConfig::TConfig::OverlayYamlOnDefaults(defaults, yaml).DetachResult();
+                UNIT_ASSERT_VALUES_EQUAL(merged.GetWorkerPools(0).GetSchedulingMode(), mode.value_or(TPool::All));
+            }
+        }
+        auto snapshot = defaults;
+        snapshot.MutableWorkerPools(0)->ClearSchedulingMode();
+        auto replaced = NConfig::TConfig::OverlayYamlOnDefaults(defaults, snapshot).DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(replaced.GetWorkerPools(0).GetSchedulingMode(), TPool::NonSchedulable);
+        UNIT_ASSERT(NConfig::TConfig::BuildFromProto(replaced).DetachResult().GetWorkerPools()[2].GetSchedulingMode()
+            == NConfig::ESchedulingMode::NonSchedulable);
+    }
+
     Y_UNIT_TEST(NormalizationMatrix) {
         // WorkersCount wins over a simultaneously specified fraction.
         AssertCPUConfig(BuildPoolWithCPU(2.5, 0.1), 10, {1, 1, 0.5});
@@ -83,7 +195,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
             NKikimrConfig::TCompositeConveyorConfig proto;
             AddPool(proto, name, {{ESpecialTaskCategory::Scan, 1}});
             auto config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
-            UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[1].GetName(), "WP::scan");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[2].GetName(), "WP::scan-NonSchedulable");
         }
     }
 

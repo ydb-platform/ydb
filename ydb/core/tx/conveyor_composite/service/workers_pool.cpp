@@ -41,6 +41,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, co
     , Counters(counters)
     , MaxBatchSize(config.GetMaxBatchSize())
     , HeavyLimits(config.GetHeavyLimits())
+    , SchedulingMode(config.GetSchedulingMode())
     , PoolName(poolName)
     , DistributorId(distributorId)
     , WorkersPoolId(workersPoolId)
@@ -221,7 +222,7 @@ std::vector<TWorkersPool::TQueryCandidate> TWorkersPool::BuildQueryCandidates(co
     const auto& queries = *QueryRegistry;
     auto candidatesView = queries.GetIdentitiesView()
         | std::views::filter([&](const auto& identity) {
-              return queries.GetStateVerified(identity).IsReady() && GetMinProcessUsage(identity).has_value();
+              return AcceptsIdentity(identity) && queries.GetStateVerified(identity).IsReady() && GetMinProcessUsage(identity).has_value();
           })
         | std::views::transform([&](const auto& identity) {
               const auto& state = queries.GetStateVerified(identity);
@@ -298,7 +299,11 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui64>& workerIdxs, const std
             if (!GetMinProcessUsage(identity, workerIdx)) {
                 break;
             }
-            auto startResult = QueryRegistry->GetStateVerified(identity).TryStart(context.Now);
+            auto& query = QueryRegistry->GetStateVerified(identity);
+            if (!query.HasWorksCapacity()) [[unlikely]] {
+                break;
+            }
+            auto startResult = query.TryStart(context.Now);
             if (std::holds_alternative<TMonotonic>(startResult)) {
                 throttledQueries.insert(identity);
                 break;
@@ -322,6 +327,9 @@ bool TWorkersPool::DrainTasks(TDrainContext& context) {
     }
 
     const auto candidates = BuildQueryCandidates(context);
+    if (candidates.empty()) {
+        return false;
+    }
     THashSet<TSchedulerQueryIdentity> throttledQueries;
     bool newTask = false;
     if (HeavyLimits.empty()) {
@@ -356,7 +364,16 @@ bool TWorkersPool::DrainTasks(TDrainContext& context) {
     return newTask;
 }
 
+bool TWorkersPool::AcceptsIdentity(const TSchedulerQueryIdentity& identity) const {
+    return SchedulingMode == NConfig::ESchedulingMode::All
+        || (identity.IsServiceQuery ? SchedulingMode == NConfig::ESchedulingMode::NonSchedulable
+                                    : SchedulingMode == NConfig::ESchedulingMode::Schedulable);
+}
+
 bool TWorkersPool::HasProcesses(const TSchedulerQueryIdentity& identity) const {
+    if (!AcceptsIdentity(identity)) {
+        return false;
+    }
     return std::any_of(CategoryLinks.begin(), CategoryLinks.end(), [&](const auto& link) {
         return link.GetCategory()->HasProcesses(identity);
     });
@@ -416,6 +433,7 @@ void TWorkersPool::ApplyTopologyUpdate(
     }
     CategoryLinks = std::move(newProcesses);
     HeavyLimits = config.GetHeavyLimits();
+    SchedulingMode = config.GetSchedulingMode();
 }
 
 void TWorkersPool::ClearTopology() {

@@ -75,6 +75,7 @@ private:
     TAverageCalcer<TDuration> DeliveringDuration;
     ui64 MaxBatchSize = 30;
     std::vector<NConfig::THeavyLimit> HeavyLimits;
+    NConfig::ESchedulingMode SchedulingMode;
     const TString PoolName;
     const NActors::TActorId DistributorId;
     const ui64 WorkersPoolId;
@@ -88,6 +89,7 @@ private:
         const TSchedulerQueryIdentity& identity, ui64 workerIdx);
     TWeightedCategory& FindCategoryLink(const ESpecialTaskCategory category);
     std::optional<TDuration> GetMinProcessUsage(const TSchedulerQueryIdentity& identity, ui64 workerIdx = 0) const;
+    bool AcceptsIdentity(const TSchedulerQueryIdentity& identity) const;
 
     struct TQueryCandidate {
         TSchedulerQueryIdentity Identity;

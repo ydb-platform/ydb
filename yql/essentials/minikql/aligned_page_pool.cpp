@@ -533,11 +533,12 @@ void* GetAlignedPage() {
 
     void* page = AlignUp(unalignedPtr, size);
 
-    // Unmap unaligned prefix before offset and tail after aligned page
     const size_t offset = (intptr_t)page - (intptr_t)unalignedPtr;
     if (Y_UNLIKELY(offset)) {
         globalPool.DoMunmap(unalignedPtr, offset);
         globalPool.DoMunmap((ui8*)page + size, size - offset);
+    } else {
+        globalPool.PushPage(0, static_cast<ui8*>(page) + size);
     }
 
     return page;

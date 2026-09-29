@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actor_helpers.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <ydb/library/actors/helpers/selfping_actor.h>
@@ -360,8 +361,8 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
     Y_UNIT_TEST(BecomeStartingRemovesLockedTabletFromPreviousNode) {
         TTabletStateTest test(2, true);
         auto& hive = test.Hive;
-        auto& ownerNode = hive.Node(1);
-        auto& reportingNode = hive.Node(2);
+        auto& ownerNode = hive.GetNode(1);
+        auto& reportingNode = hive.GetNode(2);
 
         TLeaderTabletInfo tablet(1, hive);
         tablet.SetType(TTabletTypes::Dummy);
@@ -394,7 +395,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
     Y_UNIT_TEST(ConfigChangePreservesDeletingLockedTabletsAndPendingUnlock) {
         TTabletStateTest test(1);
         auto& hive = test.Hive;
-        auto& node = hive.Node(1);
+        auto& node = hive.GetNode(1);
         const TActorId owner(node.Id, "owner");
 
         TLeaderTabletInfo deletingTablet(1, hive);
@@ -438,7 +439,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
                            NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN}) {
             TTabletStateTest test(1);
             auto& hive = test.Hive;
-            auto& node = hive.Node(1);
+            auto& node = hive.GetNode(1);
             auto& tablet = test.CreateStoppedTablet(1);
             node.SetFreeze(true);
             if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
@@ -468,9 +469,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         const auto checkStartingNode = [&](TNodeId nodeId) {
             UNIT_ASSERT_EQUAL(tablet.GetVolatileState(), NKikimrHive::TABLET_VOLATILE_STATE_STARTING);
             UNIT_ASSERT_VALUES_EQUAL(tablet.NodeId, 0);
-            UNIT_ASSERT(tablet.Node == &hive.Node(nodeId));
+            UNIT_ASSERT(tablet.Node == &hive.GetNode(nodeId));
             for (TNodeId id : {1, 2}) {
-                const auto& node = hive.Node(id);
+                const auto& node = hive.GetNode(id);
                 UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsTotal(), id == nodeId ? 1 : 0);
                 UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsScheduled(), id == nodeId ? 1 : 0);
                 UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), id == nodeId ? 100 : 0);
@@ -490,9 +491,9 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         UNIT_ASSERT(tablet.BecomeStopped());
         for (TNodeId id : {1, 2}) {
-            UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsTotal(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(hive.Node(id).GetTabletsScheduled(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(hive.Node(id).ResourceValues), 0);
+            UNIT_ASSERT_VALUES_EQUAL(hive.GetNode(id).GetTabletsTotal(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(hive.GetNode(id).GetTabletsScheduled(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(hive.GetNode(id).ResourceValues), 0);
         }
     }
 
@@ -502,7 +503,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
                            NKikimrHive::TABLET_VOLATILE_STATE_UNKNOWN}) {
             TTabletStateTest test(1);
             auto& hive = test.Hive;
-            auto& node = hive.Node(1);
+            auto& node = hive.GetNode(1);
             auto& firstTablet = test.CreateStoppedTablet(1);
             if (state == NKikimrHive::TABLET_VOLATILE_STATE_STARTING) {
                 UNIT_ASSERT(firstTablet.BecomeStarting(node.Id));

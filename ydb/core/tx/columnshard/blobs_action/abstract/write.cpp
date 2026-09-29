@@ -24,7 +24,12 @@ void IBlobsWritingAction::AddDataForWrite(const TUnifiedBlobId& blobId, const TS
     SumSize += data.size();
 }
 
-void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) {
+void IBlobsWritingAction::NoteApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare) {
+    DoNoteApproximateFreeSpace(blobId, approximateFreeSpaceShare);
+}
+
+void IBlobsWritingAction::OnBlobWriteResult(
+    const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status, float approximateFreeSpaceShare) {
     YDB_LOG_DEBUG("",
         {"event", "WriteBlobResult"},
         {"blobId", blobId.ToStringNew()},
@@ -39,7 +44,7 @@ void IBlobsWritingAction::OnBlobWriteResult(const TUnifiedBlobId& blobId, const 
     }
     WritingStart.erase(it);
     Y_ABORT_UNLESS(BlobsWaiting.erase(blobId));
-    return DoOnBlobWriteResult(blobId, status);
+    return DoOnBlobWriteResult(blobId, status, approximateFreeSpaceShare);
 }
 
 bool IBlobsWritingAction::IsReady() const {

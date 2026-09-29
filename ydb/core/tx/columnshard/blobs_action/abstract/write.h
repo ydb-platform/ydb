@@ -33,7 +33,10 @@ protected:
     virtual void DoOnCompleteTxBeforeWrite(NColumnShard::TColumnShard& self) = 0;
 
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) = 0;
-    virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status) = 0;
+    virtual void DoOnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status, float approximateFreeSpaceShare) = 0;
+
+    virtual void DoNoteApproximateFreeSpace(const TUnifiedBlobId& /*blobId*/, float /*approximateFreeSpaceShare*/) {
+    }
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
@@ -70,7 +73,8 @@ public:
     }
 
     TUnifiedBlobId AddDataForWrite(const TString& data, const std::optional<TUnifiedBlobId>& externalBlobId = {});
-    void OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status);
+    void OnBlobWriteResult(const TUnifiedBlobId& blobId, const NKikimrProto::EReplyStatus status, float approximateFreeSpaceShare);
+    void NoteApproximateFreeSpace(const TUnifiedBlobId& blobId, float approximateFreeSpaceShare);
 
     void OnExecuteTxBeforeWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs) {
         return DoOnExecuteTxBeforeWrite(self, dbBlobs);

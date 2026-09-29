@@ -5,6 +5,10 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 
+namespace NKikimrConfig {
+class TColumnShardConfig;
+}
+
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 
 class TOperator: public IBlobsStorageOperator {
@@ -32,7 +36,8 @@ protected:
 
 public:
     TOperator(const TString& storageId, const NActors::TActorId& tabletActorId, const TIntrusivePtr<TTabletStorageInfo>& tabletInfo,
-        const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs);
+        const ui64 generation, const std::shared_ptr<NDataSharing::TStorageSharedBlobsManager>& sharedBlobs,
+        const NKikimrConfig::TColumnShardConfig* columnShardConfig);
 
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const override {
         return Manager->HasToDelete(blobId, tabletId);

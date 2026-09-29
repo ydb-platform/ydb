@@ -5,6 +5,7 @@
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tablet_flat/flat_executor.h>
+#include <ydb/core/tablet_flat/util_channel.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
@@ -15,6 +16,10 @@
 #include <util/generic/string.h>
 
 #include <map>
+
+namespace NKikimrConfig {
+class TColumnShardConfig;
+}
 
 namespace NKikimr::NOlap::NBlobOperations::NBlobStorage {
 class TGCTask;
@@ -141,6 +146,8 @@ private:
     class TGCContext;
     const TTabletId SelfTabletId;
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
+    const NKikimrConfig::TColumnShardConfig* ColumnShardConfig = nullptr;
+    NUtil::TChannelsShares ChannelsShares;
     const ui32 CurrentGen;
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;
@@ -176,7 +183,12 @@ private:
     [[nodiscard]] bool DrainKeepTo(const TGenStep& dest, TGCContext& gcContext);
 
 public:
-    TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId);
+    TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, const ui32 gen, const TTabletId selfTabletId,
+        const NKikimrConfig::TColumnShardConfig* columnShardConfig = nullptr);
+
+    // Raw ApproximateFreeSpaceShare from TEvPutResult. 0 means unknown. Recorded even while weighted
+    // selection is off, so turning the flag on does not start from an empty map.
+    void NoteApproximateFreeSpace(ui32 channel, float share);
 
     bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId tabletId) const {
         return BlobsToDelete.Contains(tabletId, blobId) || BlobsToDeleteDelayed.Contains(tabletId, blobId);
@@ -248,6 +260,9 @@ private:
     TGenStep EdgeGenStep() const {
         return CollectGenStepInFlight ? *CollectGenStepInFlight : std::max(GCBarrierPreparation, LastCollectedGenStep);
     }
+
+    bool WeightedDataChannelSelection() const;
+    ui32 PickDataChannel() const;
 };
 
 }   // namespace NKikimr::NOlap

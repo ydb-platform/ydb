@@ -2,6 +2,7 @@
 #include "gc.h"
 
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
@@ -136,9 +137,11 @@ TUnifiedBlobId TBlobBatch::AllocateNextBlobId(const TString& blobData) {
     return BatchInfo->NextBlobId(blobData.size());
 }
 
-TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen, const TTabletId selfTabletId)
+TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 gen, const TTabletId selfTabletId,
+    const NKikimrConfig::TColumnShardConfig* columnShardConfig)
     : SelfTabletId(selfTabletId)
     , TabletInfo(tabletInfo)
+    , ColumnShardConfig(columnShardConfig)
     , CurrentGen(gen)
     , CurrentStep(0)
 {
@@ -410,15 +413,38 @@ std::shared_ptr<NBlobOperations::NBlobStorage::TGCTask> TBlobManager::BuildGCTas
     return result;
 }
 
+bool TBlobManager::WeightedDataChannelSelection() const {
+    return ColumnShardConfig && ColumnShardConfig->GetEnableWeightedDataChannelSelection();
+}
+
+ui32 TBlobManager::PickDataChannel() const {
+    AFL_VERIFY(TabletInfo->Channels.size() > 2);
+    if (!WeightedDataChannelSelection()) {
+        return TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2].Channel;
+    }
+
+    TVector<ui8> channels;
+    channels.reserve(TabletInfo->Channels.size() - 2);
+    for (size_t i = 2; i < TabletInfo->Channels.size(); ++i) {
+        const ui32 channel = TabletInfo->Channels[i].Channel;
+        Y_ENSURE(channel <= Max<ui8>());
+        channels.push_back(static_cast<ui8>(channel));
+    }
+    return ChannelsShares.Select(channels);
+}
+
+void TBlobManager::NoteApproximateFreeSpace(ui32 channel, float share) {
+    ChannelsShares.Update(channel, share);
+}
+
 TBlobBatch TBlobManager::StartBlobBatch() {
     AFL_VERIFY(++CurrentStep < Max<ui32>() - 10);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
-    AFL_VERIFY(TabletInfo->Channels.size() > 2);
-    const auto& channel = TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2];
+    const ui32 channel = PickDataChannel();
     ++CountersUpdate.BatchesStarted;
     TAllocatedGenStepConstPtr genStepRef = new TAllocatedGenStep({ CurrentGen, CurrentStep });
     AllocatedGenSteps.push_back(genStepRef);
-    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel.Channel, BlobsManagerCounters);
+    auto batchInfo = std::make_unique<TBlobBatch::TBatchInfo>(TabletInfo, genStepRef, channel, BlobsManagerCounters);
     return TBlobBatch(std::move(batchInfo));
 }
 

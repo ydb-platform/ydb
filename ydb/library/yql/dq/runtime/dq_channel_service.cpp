@@ -213,6 +213,7 @@ void TLocalBuffer::PushDataChunk(TDataChunk&& data) {
         NeedToNotifyOutput.store(true);
     }
 
+    ReadyHook.Mark();
     NotifyInput(Finished.load());
 }
 
@@ -332,6 +333,10 @@ void TLocalBuffer::EarlyFinish() {
     if (!EarlyFinished.exchange(true)) {
         if (OutputBound.load()) {
             if (!Finished.exchange(true)) {
+                {
+                    std::lock_guard lock(Mutex);
+                    ReadyHook.Mark();
+                }
                 NotifyInput(true);
                 NotifyOutput(true);
                 FinishTime = TInstant::Now();
@@ -382,6 +387,7 @@ void TLocalBuffer::StorageWakeupHandler() {
     }
 
     if (chunksLoaded) {
+        ReadyHook.Mark();
         NotifyInput(false);
     }
 }
@@ -396,6 +402,10 @@ void TLocalBuffer::BindOutput() {
     if (!OutputBound.exchange(true)) {
         if (EarlyFinished.load()) {
             if (!Finished.exchange(true)) {
+                {
+                    std::lock_guard lock(Mutex);
+                    ReadyHook.Mark();
+                }
                 NotifyInput(true);
                 NotifyOutput(true);
                 FinishTime = TInstant::Now();
@@ -429,6 +439,11 @@ void TLocalBuffer::NotifyOutput(bool force) {
         );
         LastOutputNotificationTime.store(TInstant::Now());
     }
+}
+
+void TLocalBuffer::SetReadyHook(const TDqInputReadyHook& hook) {
+    std::lock_guard lock(Mutex);
+    ReadyHook = hook;
 }
 
 void TLocalBuffer::ExportPushStats(TDqAsyncStats& stats) {
@@ -868,6 +883,10 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     if (FinishPushed.load()) {
         if (data.ConfirmFinish) {
             Finished.store(true);
+            {
+                std::lock_guard lock(QueueMutex);
+                ReadyHook.Mark();
+            }
             ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
 
@@ -912,11 +931,17 @@ bool TInputDescriptor::PushDataChunk(TDataChunk&& data) {
     QueueBytes += data.Bytes;
     QueueSize++;
     Queue.emplace(std::move(data));
+    ReadyHook.Mark();
     if (NeedToNotifyInput.exchange(false)) {
         ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     }
 
     return false;
+}
+
+void TInputDescriptor::SetReadyHook(const TDqInputReadyHook& hook) {
+    std::lock_guard lock(QueueMutex);
+    ReadyHook = hook;
 }
 
 bool TInputDescriptor::IsFinished() {
@@ -1294,7 +1319,7 @@ void TNodeState::SendDataEvent(THolder<TEvDqCompute::TEvChannelDataV2> ev, const
     }
     Y_ABORT_UNLESS(!item.Descriptor->Leading.load());
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelData);
 #if !defined(NDEBUG)
     if (auto failCount = FailureLossSend.load(); failCount > 0) {
         FailureLossSend.store(failCount - 1);
@@ -1389,7 +1414,7 @@ void TNodeState::FailOutputs(const TString& reason) {
 }
 
 void TNodeState::SendAck(THolder<TEvDqCompute::TEvChannelAckV2>& evAck, ui64 cookie) {
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelControl);
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, cookie));
 }
@@ -1645,7 +1670,7 @@ void TNodeState::HandleDiscovery(TEvDqCompute::TEvChannelDiscoveryV2::TPtr& ev) 
     evAck->Record.SetStatus(record.GetSeqNo() <= confirmedSeqNo ? NYql::NDqProto::TEvChannelAckV2::OK : NYql::NDqProto::TEvChannelAckV2::RESEND);
     evAck->Record.SetSeqNo(confirmedSeqNo);
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelControl);
 
     ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
 
@@ -1699,7 +1724,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
             evAck->Record.SetStatus(NYql::NDqProto::TEvChannelAckV2::RESEND);
             evAck->Record.SetSeqNo(confirmedSeqNo + 1);
 
-            ui32 flags = SendFlags();
+            ui32 flags = SendFlags(DqIcChannelControl);
 
             ActorSystem->Send(new NActors::IEventHandle(OutputNodeActorId, NodeActorId, evAck.Release(), flags, ev->Cookie));
         }
@@ -2101,7 +2126,7 @@ void TNodeState::SendUpdateProgress(std::shared_ptr<TInputDescriptor>& descripto
         evUpdate->Record.SetMemoryPressure(true);
     }
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelControl);
 
     LOG_T(LogPrefix << "SEND UPDATE, ChannelId=" << descriptor->Info.ChannelId
         << ", OA=" << descriptor->Info.OutputActorId << ", IA=" << descriptor->Info.InputActorId
@@ -2429,7 +2454,7 @@ void TNodeState::SendDiscovery() {
     evDiscovery->Record.SetGenMinor(GenMinor);
     evDiscovery->Record.SetSeqNo(SeqNo);
 
-    ui32 flags = SendFlags();
+    ui32 flags = SendFlags(DqIcChannelData);
 
     // the cookie 0 is what the reply echoes, and how HandleAck tells it from a gap RESEND
     ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeId), NodeActorId, evDiscovery.Release(), flags, 0));
@@ -2697,7 +2722,11 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
 
     TDataChunk chunk;
     bool popResult = Buffer->Pop(chunk);
-    PushStats.PopTime = TInstant::Now();
+    // a consumer polls its inputs mostly to find them empty: the time is taken for a pop with data and for the 1st
+    // empty one after it, so that PopTime tells since when an input has been dry without a clock read per poll
+    if (popResult || PushStats.PopResult) {
+        PushStats.PopTime = TInstant::Now();
+    }
     PushStats.PopResult = popResult;
 
     if (popResult && chunk.Checkpoint) {
@@ -2705,6 +2734,8 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
             Callback->TakeCheckpoint(*chunk.Checkpoint, GetChannelId());
         }
         Y_ENSURE(batch.RowCount() == 0);
+        // false, and the buffer may have more: the union must come back, see IDqInput::BindReadySet
+        ReadyHook.Mark();
         return false;
     }
 
@@ -2721,6 +2752,9 @@ bool TFastDqInputChannel::Pop(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMay
         }
         Deserializer->Deserialize(std::move(chunk.Buffer), batch);
         Y_ENSURE(batch.RowCount() > 0);
+    } else if (popResult) {
+        // a chunk without rows (the finish): false, and the buffer may have more
+        ReadyHook.Mark();
     }
 
     return hasData;
@@ -2753,6 +2787,11 @@ void TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     Buffer->Info.InputActorId = inputActorId;
     auto buffer = service->GetInputBuffer(Buffer->Info, ChannelQuotaManager);
     Buffer = buffer;
+    if (ReadyHook) {
+        // the stub held no data: the bound buffer may have some already
+        Buffer->SetReadyHook(ReadyHook);
+        ReadyHook.Mark();
+    }
     Service.reset();
 }
 

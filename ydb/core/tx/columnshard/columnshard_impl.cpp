@@ -2026,7 +2026,7 @@ void TColumnShard::OnTieringModified(const std::optional<TInternalPathId> pathId
 
 const NKikimr::NColumnShard::NTiers::TManager* TColumnShard::GetTierManagerPointer(const TString& tierId) const {
     Y_ABORT_UNLESS(!!Tiers);
-    return Tiers->GetManagerOptional(tierId);
+    return Tiers->GetManagerOptional(NTiers::TExternalStorageId::FromString(tierId));
 }
 
 }   // namespace NKikimr::NColumnShard

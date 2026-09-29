@@ -94,6 +94,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
 
     if (appConfig && appConfig->HasFeatureFlags()) {
         const auto& appFlags = appConfig->GetFeatureFlags();
+        featureFlags.SetEnableNativeYdbProvider(appFlags.GetEnableNativeYdbProvider());
         if (appFlags.GetEnableColumnshardBool()) {
             featureFlags.SetEnableColumnshardBool(true);
         }
@@ -115,6 +116,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
     appConfig->MutableQueryServiceConfig()->MutableS3()->SetAllowLocalFiles(true);
 
     auto settings = TKikimrSettings(*appConfig);
+    settings.SetAuthToken(options.AuthToken);
 
     NYql::IHTTPGateway::TPtr httpGateway;
     const auto& queryServiceConfig = appConfig->GetQueryServiceConfig();

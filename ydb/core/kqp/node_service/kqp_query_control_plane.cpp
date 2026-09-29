@@ -514,6 +514,8 @@ public:
                 .Database = msg.GetDatabase(),
                 .Query = query,
                 .UseBatchPool = msg.GetUseBatchPool(),
+                .SourceDeadline = runtimeSettings.HasSourceDeadlineUs()
+                    ? TInstant::MicroSeconds(runtimeSettings.GetSourceDeadlineUs()) : TInstant::Max(),
                 // TODO: block tracking mode is not set!
             };
             if (msg.HasUserToken() && msg.GetUserToken()) {

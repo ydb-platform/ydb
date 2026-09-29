@@ -22,6 +22,7 @@
 #include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
+#include <ydb/library/yql/providers/ydb_remote/actors/dq_ydb_remote_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_control_plane_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_info_aggregation_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
@@ -198,6 +199,12 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
         if (federatedQuerySetup->ConnectorClient) {
             RegisterGenericProviderFactories(*factory, federatedQuerySetup->CredentialsFactory, federatedQuerySetup->ConnectorClient);
         }
+
+        // Actor registration is independent of the compile-time provider flag:
+        // existing plans must retain their implementation after a flag change.
+        Y_VALIDATE(federatedQuerySetup->NativeYdbDriver, "Missing native YDB driver");
+        NYql::NDq::RegisterYdbRemoteReadActorFactory(
+            *factory, *federatedQuerySetup->NativeYdbDriver, federatedQuerySetup->CredentialsFactory);
 
         static_assert(
             static_cast<ui32>(NYql::NDq::EEventSpaceSolomonProvider::ES_SOLOMON_PROVIDER) == static_cast<ui32>(NKikimr::TKikimrEvents::ES_SOLOMON_PROVIDER),

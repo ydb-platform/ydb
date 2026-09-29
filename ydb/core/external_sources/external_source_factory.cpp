@@ -136,7 +136,8 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
                                                          bool allExternalDataSourcesAreAvailable,
-                                                         const std::set<TString>& availableExternalDataSources) {
+                                                         const std::set<TString>& availableExternalDataSources,
+                                                         bool enableNativeYdbProvider) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
         {
@@ -157,7 +158,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{enableNativeYdbProvider ? NYql::YdbRemoteProviderName : NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),

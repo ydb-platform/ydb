@@ -200,6 +200,9 @@ message TQueryRequest {
     optional Ydb.Formats.ArrowFormatSettings ArrowFormatSettings = 40;
     optional bool IsWarmupCompilation = 41;
     optional bool CollectAffectedRows = 43;
+    // Absolute client RPC deadline; remains unchanged across proxy/node queues.
+    // This is request metadata, never part of a cached query plan.
+    optional uint64 RequestDeadlineUs = 44;
 }
 
 message TVectorIndexKmeansTreeDescription {

@@ -320,6 +320,11 @@ public:
 
         auto timeoutDuration = GetQueryTimeout(GetType(), timeout.MilliSeconds(), tableService, queryService, RequestEv->GetDisableDefaultTimeout());
         QueryDeadlines.TimeoutAt = now + timeoutDuration;
+        if (AppData()->FeatureFlags.GetEnableNativeYdbProvider()) {
+            // Query Service has no operationParams, but its gRPC deadline must
+            // still cover compilation, native metadata and remote execution.
+            QueryDeadlines.TimeoutAt = Min(QueryDeadlines.TimeoutAt, RequestEv->GetRequestDeadline());
+        }
     }
 
     bool HasTopicOperations() const {

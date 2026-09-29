@@ -405,14 +405,6 @@ runs:
             $YA_MAKE_TARGET
         fi
 
-        if [ -z "${CI_CACHE_MODE:-}" ]; then
-          if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-            CI_CACHE_MODE=dist_cache
-          else
-            CI_CACHE_MODE=none
-          fi
-        fi
-        echo "CI_CACHE_MODE=$CI_CACHE_MODE" >> "$GITHUB_ENV"
         export CI_YA_ATTEMPT=1
         analytics start prepare_ya_make
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"

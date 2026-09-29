@@ -222,9 +222,6 @@ def apply_job_defaults(
     target = os.environ.get("CI_BUILD_TARGET")
     if target:
         properties.setdefault("build_target", target)
-    cache = os.environ.get("CI_CACHE_MODE")
-    if cache:
-        properties.setdefault("cache_mode", cache)
     build_span = os.environ.get("CI_BUILD_SPAN")
     if name and build_span and name == build_span:
         if command == "start":

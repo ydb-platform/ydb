@@ -40,7 +40,7 @@ JSONL не кладите в каталог, который `test_ya` выкла
 export ANALYTICS_FILE="$TMP_DIR/analytics.jsonl"
 PY=.github/scripts/utils/analytics/github_actions/ci_metrics.py
 
-python3 "$PY" start compile --source my_workflow --label cache_mode=dist_cache
+python3 "$PY" start compile --source my_workflow --label ya_attempt=1
 # … работа …
 compile
 RC=$?
@@ -103,7 +103,6 @@ WHERE run_id = 123 AND name = "compile";
 | `run_url` | репозиторий + `run_id` | `https://github.com/…/actions/runs/123` |
 | `span_id` | collector | id этой строки (случайный hex) |
 | `labels.parent_span_id` | обёртка | `job-456` (у самой строки job не ставится) |
-| `labels.cache_mode` | `--label` / `$CI_CACHE_MODE` | `dist_cache` |
 
 Первичный ключ:
 `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`.
@@ -126,8 +125,8 @@ analytics end my_new_phase --rc "$RC"
 глотает его ошибку (`|| true`), чтобы сломанная аналитика не валила сборку.
 
 В labels сами допишутся, если переменные заданы: номер попытки `ya make`
-(`$CI_YA_ATTEMPT`), цель сборки (`$CI_BUILD_TARGET`), режим кэша
-(`$CI_CACHE_MODE`). Их не нужно передавать в каждую команду.
+(`$CI_YA_ATTEMPT`) и цель сборки (`$CI_BUILD_TARGET`). Их не нужно
+передавать в каждую команду.
 
 `$CI_BUILD_SPAN` — имя строки, которая измеряет **сам вызов** `./ya make`
 (от запуска команды до её exit code). По умолчанию это `ya_make_try_1`,

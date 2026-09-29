@@ -970,7 +970,7 @@ class JobDefaultsTest(unittest.TestCase):
     def setUp(self):
         self._saved = {
             key: os.environ.get(key)
-            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET", "CI_CACHE_MODE", "CI_BUILD_SPAN", "CI_BUILD_SPAN_SOURCE")
+            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET", "CI_BUILD_SPAN", "CI_BUILD_SPAN_SOURCE")
         }
         for key in self._saved:
             os.environ.pop(key, None)
@@ -985,12 +985,11 @@ class JobDefaultsTest(unittest.TestCase):
     def test_env_labels_and_default_source(self):
         os.environ["CI_YA_ATTEMPT"] = "2"
         os.environ["CI_BUILD_TARGET"] = "ydb"
-        os.environ["CI_CACHE_MODE"] = "dist_cache"
         props, fields = {}, {}
         apply_job_defaults("prepare_ya_make", props, fields, command="start")
         self.assertEqual(props["ya_attempt"], "2")
         self.assertEqual(props["build_target"], "ydb")
-        self.assertEqual(props["cache_mode"], "dist_cache")
+        self.assertNotIn("cache_mode", props)
         self.assertEqual(fields["source"], "ya_phase")
         self.assertNotIn("runner", fields)
 
@@ -1018,14 +1017,13 @@ class JobDefaultsTest(unittest.TestCase):
 
     def test_start_reads_env_into_the_pending_span(self):
         os.environ["CI_YA_ATTEMPT"] = "3"
-        os.environ["CI_CACHE_MODE"] = "none"
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")
             start("prepare_ya_make", file=path)
             pending = read_pending_spans(path)
             self.assertEqual(pending[0]["source"], "ya_phase")
             self.assertEqual(pending[0]["labels"]["ya_attempt"], "3")
-            self.assertEqual(pending[0]["labels"]["cache_mode"], "none")
+            self.assertNotIn("cache_mode", pending[0]["labels"])
 
     def test_cli_end_rc(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -148,6 +148,8 @@ private:
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     const NKikimrConfig::TColumnShardConfig* ColumnShardConfig = nullptr;
     NUtil::TChannelsShares ChannelsShares;
+    // Data channel ids (tablet channels with index >= 2), filled once in the constructor.
+    TVector<ui8> DataChannels;
     const ui32 CurrentGen;
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;

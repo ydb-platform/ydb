@@ -147,6 +147,14 @@ TBlobManager::TBlobManager(TIntrusivePtr<TTabletStorageInfo> tabletInfo, ui32 ge
 {
     BlobsManagerCounters.CurrentGen->Set(CurrentGen);
     BlobsManagerCounters.CurrentStep->Set(CurrentStep);
+    if (TabletInfo && TabletInfo->Channels.size() > 2) {
+        DataChannels.reserve(TabletInfo->Channels.size() - 2);
+        for (size_t i = 2; i < TabletInfo->Channels.size(); ++i) {
+            const ui32 channel = TabletInfo->Channels[i].Channel;
+            Y_ENSURE(channel <= Max<ui8>());
+            DataChannels.push_back(static_cast<ui8>(channel));
+        }
+    }
 }
 
 void TBlobManager::RegisterControls(NKikimr::TControlBoard& /*icb*/) {
@@ -423,14 +431,7 @@ ui32 TBlobManager::PickDataChannel() const {
         return TabletInfo->Channels[(CurrentStep % (TabletInfo->Channels.size() - 2)) + 2].Channel;
     }
 
-    TVector<ui8> channels;
-    channels.reserve(TabletInfo->Channels.size() - 2);
-    for (size_t i = 2; i < TabletInfo->Channels.size(); ++i) {
-        const ui32 channel = TabletInfo->Channels[i].Channel;
-        Y_ENSURE(channel <= Max<ui8>());
-        channels.push_back(static_cast<ui8>(channel));
-    }
-    return ChannelsShares.Select(channels);
+    return ChannelsShares.Select(DataChannels);
 }
 
 void TBlobManager::NoteApproximateFreeSpace(ui32 channel, float share) {

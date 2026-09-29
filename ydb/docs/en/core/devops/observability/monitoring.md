@@ -203,8 +203,6 @@ The composition of panels and recommendations for using dashboards are provided 
 
 After importing, open the **YDB Essential Metrics** dashboard. At the top, select the Prometheus data source (as in [connecting](#grafana-data-source)) and the database name.
 
-![Example of YDB Essential Metrics dashboard in Grafana](../../_assets/grafana.png)
-
 {% endcut %}
 
 After configuration, make sure that the {{ ydb-short-name }} targets in Prometheus are in **UP** state (see [Starting Prometheus with the prepared configuration](#prometheus-start)), and that metrics are displayed on the **YDB Essential Metrics** dashboard.
@@ -231,16 +229,11 @@ If the port is unknown, determine it on the host where the {{ ydb-short-name }} 
 ps aux | grep ydbd
 ```
 
-
-![example output of ps aux with --mon-port parameter for ydbd processes](../../_assets/mon-port.png)
-
 The output may contain several `ydbd` processes with different `--mon-port` values (for example, a static and a dynamic node on the same server). Add to monitoring all ports of the nodes whose metrics you need to collect. The screenshot highlights individual values only as an example — refer to the actual command output on your hosts.
 
 ### Metric groups on the main page {#web-metrics-groups}
 
 The main page lists metric groups by subsystem — `auth`, `compile`, `grpc`, `kqp`, `pdisks`, `vdisks`, and others. Each group is a link to a page with metrics of that subsystem.
-
-![example of YDB monitoring web interface with a list of metric groups](../../_assets/monitoring-UI.png)
 
 ### Viewing metrics of a group (subsystem) {#web-metrics-subgroup}
 

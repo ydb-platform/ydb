@@ -101,6 +101,7 @@ struct TReqId {
         ChangeExpectedSlotCount = 82,
         ChunkReadRaw = 83,
         ChunkWriteRaw = 84,
+        CompactionBidder = 85,
     };
 
     // 56 bit idx, 8 bit source
@@ -174,6 +175,7 @@ enum class ERequestType {
     RequestChangeExpectedSlotCount,
     RequestChunkReadRaw,
     RequestChunkWriteRaw,
+    RequestCompactionBidder,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

@@ -374,13 +374,20 @@ public:
 
                 auto path = Services_->GetTablePath(req.Cluster(), req.Table(), req.Anonymous());
                 const bool exists = (NFs::Exists(path) || NFs::Exists(path + ".part.0")) && !ShouldEmulateOutputForMultirun(req);
+                const bool isLink = TFsPath(path).IsSymlink();
 
                 res.Data.emplace_back();
 
                 res.Data.back().WriteLock = HasModifyIntents(req.Intents());
+                // The file gateway emulates protection; it does not acquire YT locks.
+                res.Data.back().SymlinkLock = !options.ReadOnly()
+                    && HasSymlinkIntents(req.Intents());
+                res.Data.back().ReferenceLock = !options.ReadOnly() && (exists || isLink)
+                    && req.Intents().HasFlags(TYtTableIntent::Referenced);
 
                 TYtTableMetaInfo::TPtr metaData = new TYtTableMetaInfo;
                 metaData->DoesExist = exists;
+                metaData->IsLink = isLink;
                 res.Data.back().Meta = metaData;
 
                 if (exists) {
@@ -679,11 +686,15 @@ public:
                 res.OutTableStats = ExecuteTouch(options.Config(), *session, TYtTouch(node));
                 res.SetSuccess();
             }
+            else if (TYtCreateSymlink::Match(node.Get())) {
+                ExecuteCreateSymlink(TYtCreateSymlink(node));
+                res.SetSuccess();
+            }
             else if (TYtOutputOpBase::Match(node.Get())) {
                 res.OutTableStats = ExecuteOpWithOutput(*session, node, ctx, std::move(options));
                 res.SetSuccess();
             }
-            else if (TYtDropTable::Match(node.Get())) {
+            else if (TYtDropTable::Match(node.Get()) || TYtDropSymlink::Match(node.Get())) {
                 ExecuteDrop(node);
                 res.SetSuccess();
             }
@@ -1026,7 +1037,36 @@ public:
                 }
 
                 if (auto ua = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::UserAttrs)) {
-                    const NYT::TNode mapNode = NYT::NodeFromYsonString(ua->Tail().Content());
+                    TString content;
+                    if (ua->Tail().IsCallable("Nothing")) {
+                        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                            << "Failed to parse user attributes Yson: String evaluated to null";
+                    }
+                    if (ua->Tail().IsCallable("String")) {
+                        YQL_ENSURE(ua->Tail().ChildrenSize() == 1);
+                        YQL_ENSURE(ua->Tail().Head().IsAtom());
+                        content = ua->Tail().Head().Content();
+                    } else if (ua->Tail().IsCallable("Just")) {
+                        YQL_ENSURE(ua->Tail().ChildrenSize() == 1);
+                        YQL_ENSURE(ua->Tail().Head().IsCallable("String"));
+                        YQL_ENSURE(ua->Tail().Head().ChildrenSize() == 1);
+                        YQL_ENSURE(ua->Tail().Head().Head().IsAtom());
+                        content = ua->Tail().Head().Head().Content();
+                    } else {
+                        YQL_ENSURE(ua->Tail().IsAtom());
+                        content = ua->Tail().Content();
+                    }
+                    NYT::TNode mapNode;
+                    try {
+                        mapNode = NYT::NodeFromYsonString(content);
+                    } catch (const ::NYson::TYsonException& e) {
+                        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                            << "Failed to parse user attributes Yson: " << e.what();
+                    }
+                    if (!mapNode.IsMap()) {
+                        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
+                            << "Failed to parse user attributes Yson: Expected Yson map, got " << mapNode.GetType();
+                    }
                     const auto& map = mapNode.AsMap();
                     for (auto it = map.cbegin(); it != map.cend(); ++it) {
                         attrs[it->first] = it->second;
@@ -1062,6 +1102,12 @@ public:
         return MakeFuture(res);
     }
 
+    TFuture<TUnlockTablesResult> UnlockTables(TUnlockTablesOptions&& /*options*/) final {
+        TUnlockTablesResult res;
+        res.SetSuccess();
+        return MakeFuture(res);
+    }
+
     TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) final {
         TDropTrackablesResult res;
         try {
@@ -1072,7 +1118,7 @@ public:
                 return MakeFuture(res);
             }
 
-            for (const auto& i : options.Pathes()) {
+            for (const auto& i : options.Paths()) {
 
                 const TString& cluster = i.Cluster;
                 const TString& path = i.Path;
@@ -1540,13 +1586,34 @@ private:
     }
 
     void ExecuteDrop(const TExprNode::TPtr& node) const {
-        TYtDropTable op(node);
+        TYtIsolatedOpBase op(node);
         auto table = op.Table();
         bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
         auto path = Services_->GetTablePath(op.DataSink().Cluster().Value(), table.Name().Value(), isAnonymous);
 
         NFs::Remove(path);
         NFs::Remove(path + ".attr");
+    }
+
+    void ExecuteCreateSymlink(TYtCreateSymlink op) const {
+        const auto cluster = op.DataSink().Cluster().Value();
+        const auto link = op.Table();
+        const auto target = op.Target();
+        const auto linkPath = Services_->GetTablePath(cluster, link.Name().Value(),
+            NYql::HasSetting(link.Settings().Ref(), EYtSettingType::Anonymous));
+        const auto targetPath = Services_->GetTablePath(cluster, target.Name().Value(),
+            NYql::HasSetting(target.Settings().Ref(), EYtSettingType::Anonymous));
+        const auto mode = NYql::GetSetting(op.Settings().Ref(), EYtSettingType::Mode);
+        const bool ignoreExisting = mode
+            && FromString<EYtWriteMode>(mode->Tail().Content()) == EYtWriteMode::CreateSymlinkIfNotExists;
+        if (TFsPath(linkPath).Exists() || TFsPath(linkPath).IsSymlink()) {
+            YQL_ENSURE(ignoreExisting, "" << link.Name().StringValue().Quote() << " already exists.");
+            return;
+        }
+
+        YQL_ENSURE(NFs::SymLink(targetPath, linkPath), "Failed to create symlink " << linkPath.Quote());
+        YQL_ENSURE(NFs::SymLink(targetPath + ".attr", linkPath + ".attr"),
+            "Failed to create symlink " << (linkPath + ".attr").Quote());
     }
 
     void WriteOutTables(TLambdaBuilder& builder, const TYtSettings::TConstPtr& config, TSession& session, const TString& cluster,

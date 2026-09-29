@@ -463,6 +463,9 @@ struct TShardedTableOptions {
 
     struct TFamily {
         TString Name;
+        TMaybe<ui32> Id;
+        TMaybe<NKikimrSchemeOp::EColumnCodec> ColumnCodec;
+        TMaybe<NKikimrSchemeOp::EColumnCacheMode> ColumnCacheMode;
         TString LogPoolKind;
         TString SysLogPoolKind;
         TString DataPoolKind;
@@ -470,6 +473,7 @@ struct TShardedTableOptions {
         ui64 DataThreshold = 0;
         ui64 ExternalThreshold = 0;
         ui8 ExternalChannelsCount = 1;
+        bool ResetDataPoolKind = false;
     };
 
     using TAttributes = THashMap<TString, TString>;
@@ -669,6 +673,19 @@ ui64 AsyncSetColumnFamily(
         const TString& name,
         const TString& colName,
         TShardedTableOptions::TFamily family);
+
+ui64 AsyncAlterColumnFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        TShardedTableOptions::TFamily family);
+
+ui64 AsyncAlterAddColumnToFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const TString& colName,
+        const TString& familyName);
 
 ui64 AsyncAlterAndDisableShadow(
         Tests::TServer::TPtr server,

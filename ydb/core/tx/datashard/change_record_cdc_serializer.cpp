@@ -372,6 +372,31 @@ protected:
 
         for (const auto& [tag, column] : schema->Columns) {
             table["columns"][column.Name]["type"] = NScheme::TypeName(column.Type, column.TypeMod);
+            if (const auto family = schema->Families.find(column.Family); family != schema->Families.end()) {
+                table["columns"][column.Name]["family"] = family->second.GetName();
+            } else {
+                Y_ENSURE(column.Family == 0, "Unknown column family: " << column.Family);
+                table["columns"][column.Name]["family"] = "default";
+            }
+        }
+
+        auto& families = table["columnFamilies"];
+        families.SetType(NJson::JSON_MAP);
+        if (!schema->Families.contains(0)) {
+            families["default"]["compression"] = "off";
+            families["default"]["cacheMode"] = "regular";
+        }
+        for (const auto& [id, family] : schema->Families) {
+            const auto name = family.GetName();
+            Y_ENSURE(id == 0 || name != "default",
+                "Cannot serialize unnamed non-default column family: " << id);
+            auto& definition = families[name];
+            if (const auto& kind = family.StorageConfig.GetData().GetPreferredPoolKind()) {
+                definition["data"]["media"] = kind;
+            }
+            definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
+            definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular
+                ? "regular" : "in_memory";
         }
 
         SerializeVirtualTimestamp(json["ts"], {record.GetStep(), record.GetTxId()});

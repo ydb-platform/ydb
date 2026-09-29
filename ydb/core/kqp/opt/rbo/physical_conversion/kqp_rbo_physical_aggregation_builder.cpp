@@ -635,6 +635,22 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildVarianceAggregationUpdateState
     // clang-format on
 }
 
+TExprNode::TPtr TPhysicalAggregationBuilder::BuildSomeAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
+                                                                             bool isOptional) {
+    if (!isOptional) {
+        return lambdaArgState;
+    }
+
+    // We just need first not null value.
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("Coalesce")
+            .Add(0, lambdaArgState)
+            .Add(1, lambdaArgField)
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr TPhysicalAggregationBuilder::BuildSumAggregationUpdateState(TExprNode::TPtr lambdaArgState, TExprNode::TPtr lambdaArgField,
                                                                             const TTypeAnnotationNode* itemType) {
     // clang-format off
@@ -973,6 +989,8 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildUpdateHandlerLambda(const TVec
                                      : BuildAvgAggregationUpdateState(lambdaArgState, lambdaArgField, itemType);
         } else if (aggFunction == "sum") {
             updateState = BuildSumAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
+        } else if (aggFunction == "some") {
+            updateState = BuildSomeAggregationUpdateState(lambdaArgState, lambdaArgField, isOptional);
         } else if (aggFunction == "variance_1_1") {
             updateState = isOptional ? BuildVarianceAggregationUpdateStateOptionalType(lambdaArgState, lambdaArgField, aggTraits.InputItemType)
                                      : BuildVarianceAggregationUpdateState(lambdaArgState, lambdaArgField, aggTraits.InputItemType);
@@ -1474,9 +1492,20 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
     // clang-format on
 
     // clang-format off
+    auto wideInput = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx);
+    if (UseBlocks) {
+        wideInput = Build<TCoToFlow>(Ctx, Pos)
+            .Input<TCoWideToBlocks>()
+                .Input<TCoFromFlow>()
+                    .Input(wideInput)
+                .Build()
+            .Build()
+        .Done().Ptr();
+    }
+
     auto wideCombiner = Ctx.Builder(Pos)
         .Callable(PhysicalAggregationName)
-            .Add(0, NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputColumns, Ctx))
+            .Add(0, wideInput)
             .Add(1, memoryLimit)
             .Add(2, BuildKeyExtractorLambda(keyFields, inputColumns))
             .Add(3, BuildInitHandlerLambda(keyFields, inputFields, phyAggregationTraitsList))
@@ -1485,6 +1514,16 @@ TExprNode::TPtr TPhysicalAggregationBuilder::BuildPhysicalOp(TExprNode::TPtr inp
         .Seal()
     .Build();
     // clang-format on
+
+    if (UseBlocks) {
+        wideCombiner = Build<TCoToFlow>(Ctx, Pos)
+            .Input<TCoWideFromBlocks>()
+                .Input<TCoFromFlow>()
+                    .Input(wideCombiner)
+                .Build()
+            .Build()
+        .Done().Ptr();
+    }
 
     auto physicalAggregation =
         BuildNarrowMapForPhysicalAggregationOutput(wideCombiner, keyFields, phyAggregationTraitsList, renameMap, isDistinct, aggregationPhase);

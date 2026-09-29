@@ -338,12 +338,23 @@ class table__g_l_y_f(DefaultTable.DefaultTable):
 
     def __setitem__(self, glyphName, glyph):
         self.glyphs[glyphName] = glyph
-        if glyphName not in self.glyphOrder:
+        # Use the reverse glyph map for O(1) membership so that building a font by
+        # repeatedly assigning glyphs stays linear instead of quadratic. Rebuild
+        # the map if it is missing or no longer matches the length of glyphOrder;
+        # reordering goes through setGlyphOrder, which clears it.
+        rev = getattr(self, "_reverseGlyphOrder", None)
+        if rev is None or len(rev) != len(self.glyphOrder):
+            self._buildReverseGlyphOrderDict()
+            rev = self._reverseGlyphOrder
+        if glyphName not in rev:
+            rev[glyphName] = len(self.glyphOrder)
             self.glyphOrder.append(glyphName)
 
     def __delitem__(self, glyphName):
         del self.glyphs[glyphName]
         self.glyphOrder.remove(glyphName)
+        # glyph ids after the removed one shift down; rebuild lazily on next use.
+        self._reverseGlyphOrder = {}
 
     def __len__(self):
         assert len(self.glyphOrder) == len(self.glyphs)
@@ -1211,7 +1222,13 @@ class Glyph(object):
             g = glyfTable[glyphName]
 
             if boundsDone is None or glyphName not in boundsDone:
-                g.recalcBounds(glyfTable, boundsDone=boundsDone)
+                try:
+                    g.recalcBounds(glyfTable, boundsDone=boundsDone)
+                except RecursionError:
+                    raise ttLib.TTLibError(
+                        "glyph '%s' contains a recursive component reference"
+                        % glyphName
+                    )
                 if boundsDone is not None:
                     boundsDone.add(glyphName)
             # empty components shouldn't update the bounds of the parent glyph
@@ -1802,7 +1819,7 @@ class GlyphComponent(object):
             ]  # fixed 2.14
             data = data[4:]
         elif self.flags & WE_HAVE_A_TWO_BY_TWO:
-            (xscale, scale01, scale10, yscale) = struct.unpack(">hhhh", data[:8])
+            xscale, scale01, scale10, yscale = struct.unpack(">hhhh", data[:8])
             self.transform = [
                 [fi2fl(xscale, 14), fi2fl(scale01, 14)],
                 [fi2fl(scale10, 14), fi2fl(yscale, 14)],

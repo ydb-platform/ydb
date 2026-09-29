@@ -205,4 +205,5 @@ enum ETxTypes {
     TXTYPE_MOVE_DATA_SCAN = 23 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataScan"}];
     TXTYPE_MOVE_DATA_UPDATE_INDEX = 24 [(NKikimr.TxTypeOpts) = {Name: "TTxMoveDataUpdateIndex"}];
     TXTYPE_DELETE_TABLET_DATA = 25 [(NKikimr.TxTypeOpts) = {Name: "TTxDeleteTabletData"}];
+    TXTYPE_QUERY_BLOCKS = 26 [(NKikimr.TxTypeOpts) = {Name: "TTxQueryBlocks"}];
 }

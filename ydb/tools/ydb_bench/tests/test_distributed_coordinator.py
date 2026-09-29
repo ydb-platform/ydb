@@ -209,6 +209,29 @@ class DistributedCoordinatorTest(unittest.TestCase):
         self.assertEqual([], self.cluster.attempted)
         self.assertFalse(any(operation in ("reserve", "release") for _, operation in self.calls))
 
+    def test_port_ranges_require_support_before_any_reservation(self):
+        self.cluster.template['port_ranges'] = {'http': '8765-8799'}
+        self.capability_overrides['a'] = {'port_ranges': True}
+        with self.assertRaisesRegex(BenchmarkError, 'b does not support configured port ranges'):
+            self.cluster.start()
+        self.assertFalse(self.cluster.attempted)
+        self.assertEqual([('a', 'capabilities'), ('b', 'capabilities')], self.calls)
+        self.capability_overrides['b'] = {'port_ranges': True}
+        self.cluster.start()
+        self.assertTrue(self.cluster.ready)
+
+    def test_auto_ports_require_support_before_any_reservation(self):
+        self.cluster.template['port_ranges'] = {'http': '8765-8799, auto'}
+        self.capability_overrides['a'] = {'port_ranges': True, 'port_auto': True}
+        self.capability_overrides['b'] = {'port_ranges': True}
+        with self.assertRaisesRegex(BenchmarkError, 'b does not support auto port fallback'):
+            self.cluster.start()
+        self.assertFalse(self.cluster.attempted)
+        self.assertEqual([('a', 'capabilities'), ('b', 'capabilities')], self.calls)
+        self.capability_overrides['b']['port_auto'] = True
+        self.cluster.start()
+        self.assertTrue(self.cluster.ready)
+
     def test_cancel_does_not_start_next_phase(self):
         def progress(phase, **_fields):
             if phase == "creating-database":

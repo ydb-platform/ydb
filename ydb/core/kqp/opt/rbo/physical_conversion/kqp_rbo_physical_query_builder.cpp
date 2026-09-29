@@ -410,7 +410,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
                 .Args({"arg"})
                 .Body("arg")
             .Build()
-            .Settings(NYql::NDq::TDqStageSettings().BuildNode(ctx, stage->Pos()))
+            .Settings(NYql::NDq::TDqStageSettings().New().BuildNode(ctx, stage->Pos()))
         .Done().Ptr();
     // clang-format on
     } else {
@@ -493,7 +493,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
 
         materializeSize += Materialize[i].size();
 
-        for (ui32 j = 0; j < materializeSize; ++j) {
+        for (ui32 j = 0; j < Materialize[i].size(); ++j) {
             auto param = TExprBase(Materialize[i][j].first).Cast<TCoParameter>();
             auto materializeResult = TExprBase(Materialize[i][j].second).Cast<TDqCnValue>();
 

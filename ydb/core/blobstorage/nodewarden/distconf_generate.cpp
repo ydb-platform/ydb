@@ -603,6 +603,7 @@ namespace NKikimr::NStorage {
         request.MinimumRequiredSpace = params.RequiredSpace.value_or(existingGroup ? Min<i64>() : 0);
         request.ExistingGroup = existingGroup;
         request.TryToRelocateLocallyFirst = params.TryToRelocateBrokenDisksLocallyFirst;
+        request.IgnoreGroupLayoutChecks = params.LayoutPolicy.AllowsRelaxedPlacement();
         request.BridgePileId = params.BridgePileId;
 
         NBsController::TGroupGeometryInfo geometry(params.GroupType.GetErasure(), selfManagementConfig.GetGeometry());
@@ -639,6 +640,10 @@ namespace NKikimr::NStorage {
         if (!outcome.Success) {
             throw TExConfigError() << "group allocation failed Error# " << outcome.Error.ErrorMessage
                 << " groupDefinition# " << dumpGroupDefinition();
+        }
+        if (!params.LayoutPolicy.Accepts(outcome.LayoutCorrect)) {
+            throw TExConfigError() << "Group layout is incorrect GroupId# " << params.GroupId
+                                   << "; set IgnoreGroupLayoutChecks to allow this reassignment";
         }
 
         auto *sSet = bsConfig->MutableServiceSet();

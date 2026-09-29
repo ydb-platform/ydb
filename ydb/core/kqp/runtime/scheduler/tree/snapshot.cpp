@@ -32,21 +32,19 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
     CpuLimit = Min<ui64>(GetCpuLimit(), totalLimit);
 
     if (IsPool()) {
-        Tasks = 0;
         CpuMaxDemand = 0;
         PreciseCpuActualDemand = 0;
         CpuBurstUsage = 0;
         CpuBurstThrottle = 0;
         ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
             child->UpdateBottomUp(totalLimit, period);
-            Tasks += child->Tasks;
             CpuMaxDemand += child->CpuMaxDemand;
             PreciseCpuActualDemand += child->PreciseCpuActualDemand;
             CpuBurstUsage += child->CpuBurstUsage;
             CpuBurstThrottle += child->CpuBurstThrottle;
         });
 
-        if (Tasks > 0) {
+        if (CpuMaxDemand > 0) {
             PreciseCpuActualDemand = Max<ui64>(PreciseCpuActualDemand, MicroCoresPerCore);
         }
     }
@@ -55,6 +53,14 @@ void TTreeElement::UpdateBottomUp(ui64 totalLimit, TDuration period) {
 
     CpuActualDemand = Min<ui64>(CeilToCpu(PreciseCpuActualDemand), GetCpuLimit());
     PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, CpuActualDemand * MicroCoresPerCore);
+
+    // The guarantee is configured for the leaves, an intermediate element reserves what its children reserve.
+    if (!IsLeaf()) {
+        CpuGuarantee = GetChildrenCpuGuarantee();
+    }
+
+    // Nothing is reserved beyond CpuActualDemand - an idle guarantee is left to the others.
+    CpuGuarantee = Min<ui64>(GetCpuGuarantee(), CpuActualDemand);
 }
 
 namespace {
@@ -139,16 +145,37 @@ ui64 FillDemand(const std::vector<TTreeElement*>& children, std::vector<ui64>& u
 } // namespace
 
 void TTreeElement::DistributeFairShare() {
+    const ui64 totalGuaranteedShare = GetChildrenCpuGuarantee();
+
+    // The guarantees overflow FairShare (e.g. of the databases, which are not validated) - split it by them.
+    if (totalGuaranteedShare >= FairShare) {
+        ForEachChild<TTreeElement>([&](TTreeElement* child, size_t) {
+            // TODO: distribute the resources lost cause of integer division.
+            child->FairShare = totalGuaranteedShare > 0 ? child->GetCpuGuarantee() * FairShare / totalGuaranteedShare : 0;
+        });
+        return;
+    }
+
     std::vector<TTreeElement*> children(ChildrenSize());
     std::vector<ui64> unsatisfiedDemand(ChildrenSize());
 
+    // 1st pass: give CpuGuarantee, then split the rest by CpuActualDemand - the contested CPU goes to those who really want it.
     ForEachChild<TTreeElement>([&](TTreeElement* child, size_t i) {
+        Y_ASSERT(child->CpuMaxDemand >= child->CpuActualDemand);
+        Y_ASSERT(child->CpuActualDemand >= child->GetCpuGuarantee());
         children.at(i) = child;
-        child->FairShare = 0;
-        unsatisfiedDemand.at(i) = child->CpuMaxDemand;
+        child->FairShare = child->GetCpuGuarantee();
+        unsatisfiedDemand.at(i) = child->CpuActualDemand - child->GetCpuGuarantee();
     });
 
-    FillDemand(children, unsatisfiedDemand, FairShare);
+    const auto leftFairShare = FillDemand(children, unsatisfiedDemand, FairShare - totalGuaranteedShare);
+
+    // 2nd pass: give leftFairShare as a headroom up to CpuMaxDemand - to grow before the next snapshot.
+    for (size_t i = 0; i < children.size(); ++i) {
+        unsatisfiedDemand.at(i) = children.at(i)->CpuMaxDemand - children.at(i)->FairShare;
+    }
+
+    FillDemand(children, unsatisfiedDemand, leftFairShare);
 }
 
 void TTreeElement::UpdateTopDown() {
@@ -202,7 +229,7 @@ void TQuery::UpdateBottomUp(ui64 totalLimit, TDuration period) {
     PreciseCpuActualDemand = Max(RawCpuActualDemand, PrevRawCpuActualDemand);
 
     // Every task is able to use at most one CPU - and the departed tasks don't want anything anymore.
-    PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, Tasks * MicroCoresPerCore);
+    PreciseCpuActualDemand = Min<ui64>(PreciseCpuActualDemand, CpuMaxDemand * MicroCoresPerCore);
 
     TTreeElement::UpdateBottomUp(totalLimit, period);
 }
@@ -237,6 +264,7 @@ void TPool::AccountSnapshotDuration(TDuration period) {
         Counters->Demand->Set(CpuMaxDemand * 1'000'000);
         Counters->FairShare->Add(fairShare);
         Counters->ActualDemand->Add(CpuActualDemand * period.MicroSeconds());
+        Counters->EffectiveGuarantee->Add(GetCpuGuarantee() * period.MicroSeconds());
 
         const auto wanted = CpuBurstUsage + CpuBurstThrottle;
         float adjustedSatisfaction = 1.0; // nothing was wanted - so nothing is missing

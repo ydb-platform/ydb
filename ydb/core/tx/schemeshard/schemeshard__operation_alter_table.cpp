@@ -703,6 +703,7 @@ public:
 
         bool hasLegacyReplicationStream = false;
         bool hasSchemaReplicationStream = false;
+        bool hasSchemaCdcStream = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -712,12 +713,13 @@ public:
                     continue;
                 }
 
+                Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
+                const auto& stream = context.SS->CdcStreams.at(childPathId);
+                hasSchemaCdcStream |= stream->SchemaChanges;
+
                 if (!childPath->AsyncReplication.IsDefined()) {
                     continue;
                 }
-
-                Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
-                const auto& stream = context.SS->CdcStreams.at(childPathId);
                 if (stream->SchemaChanges) {
                     hasSchemaReplicationStream = true;
                 } else {
@@ -737,6 +739,16 @@ public:
         }
 
         Y_ABORT_UNLESS(alterData->AlterVersion == table->AlterVersion + 1);
+
+        if (hasSchemaCdcStream) {
+            for (const auto& family : alterData->PartitionConfigFull().GetColumnFamilies()) {
+                if (family.GetId() != 0 && family.GetName().empty()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "SCHEMA_CHANGES requires names for non-default column families");
+                    return result;
+                }
+            }
+        }
 
         if (!CheckDroppingColumns(context.SS, alter, path, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);

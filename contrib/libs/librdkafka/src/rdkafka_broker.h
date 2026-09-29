@@ -713,6 +713,10 @@ rd_kafka_broker_t *rd_kafka_broker_add_logical(rd_kafka_t *rk,
 void rd_kafka_broker_set_nodename(rd_kafka_broker_t *rkb,
                                   rd_kafka_broker_t *from_rkb);
 
+void rd_kafka_nodename_to_hostname(const char *nodename,
+                                   char *dest,
+                                   size_t dsize);
+
 void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb);
 void rd_kafka_broker_connect_done(rd_kafka_broker_t *rkb, const char *errstr);
 

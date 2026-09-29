@@ -11,8 +11,6 @@
 #include "type_decl.h"
 #include "type_registry.h"
 
-#include <yt/yt/core/concurrency/fls.h>
-
 #include <library/cpp/yt/misc/static_initializer.h>
 
 #include <concepts>
@@ -21,6 +19,7 @@ namespace NYT::NPhoenix::NDetail {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#undef PHOENIX_DEFINE_EXTERNAL_TYPE
 #undef PHOENIX_DEFINE_TYPE
 #undef PHOENIX_DEFINE_TEMPLATE_TYPE
 #undef PHOENIX_DEFINE_OPAQUE_TYPE
@@ -31,14 +30,14 @@ namespace NYT::NPhoenix::NDetail {
 #define PHOENIX_DEFINE_TYPE(type) \
     const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
-        return descriptor; \
+        static const auto& Descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        return Descriptor; \
     } \
     \
     auto type::GetRuntimeFieldDescriptorMap() -> const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContext>& \
     { \
-        static const auto map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
-        return map; \
+        static const auto Map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<TThis, TLoadContext>(); \
+        return Map; \
     } \
     \
     void type::Save(TSaveContext& context) const \
@@ -74,11 +73,46 @@ namespace NYT::NPhoenix::NDetail {
         }); \
     }
 
+#define PHOENIX_DEFINE_EXTERNAL_TYPE(type) \
+    void ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::Save( \
+        TSaveContextImpl& context, \
+        const type& value) \
+    { \
+        ::NYT::NPhoenix::NDetail::SaveImpl(&value, context); \
+    } \
+    \
+    void ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::Load( \
+        TLoadContextImpl& context, \
+        type& value) \
+    { \
+        ::NYT::NPhoenix::NDetail::LoadImpl(&value, context); \
+    } \
+    \
+    auto ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::GetRuntimeFieldDescriptorMap() \
+        -> const ::NYT::NPhoenix::NDetail::TRuntimeFieldDescriptorMap<type, TLoadContextImpl>& \
+    { \
+        static const auto Map = ::NYT::NPhoenix::NDetail::BuildRuntimeFieldDescriptorMap<type, TLoadContextImpl>(); \
+        return Map; \
+    } \
+    \
+    template <class T> \
+    struct TPhoenixTypeInitializer__; \
+    \
+    template <> \
+    struct TPhoenixTypeInitializer__<type> \
+    { \
+        YT_STATIC_INITIALIZER({ \
+            ::NYT::NPhoenix::NDetail::RegisterTypeDescriptorImpl<type, false>(); \
+        }); \
+    }; \
+    \
+    void ::NYT::NPhoenix::NDetail::TExternalMetadata<type>::RegisterMetadata(auto&& registrar)
+
 #define PHOENIX_DEFINE_OPAQUE_TYPE(type) \
     const ::NYT::NPhoenix::TTypeDescriptor& type::GetTypeDescriptor() \
     { \
-        static const auto& descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
-        return descriptor; \
+        static const auto& Descriptor = ::NYT::NPhoenix::ITypeRegistry::Get()->GetUniverseDescriptor().GetTypeDescriptorByTag(TypeTag); \
+        return Descriptor; \
     } \
     \
     template <class T> \
@@ -93,7 +127,7 @@ namespace NYT::NPhoenix::NDetail {
     }
 
 #define PHOENIX_REGISTER_FIELD(fieldTag, fieldName, ...) \
-    registrar.template Field<fieldTag, &TThis::fieldName>(#fieldName) __VA_ARGS__ ()
+    registrar.template Field<fieldTag, &TAccessor::fieldName>(#fieldName) __VA_ARGS__ ()
 
 #define PHOENIX_REGISTER_DELETED_FIELD(fieldTag, fieldType, fieldName, version, ...) \
     registrar \
@@ -121,16 +155,62 @@ using TFieldSaveHandler = void (*)(const TThis*, TContext&);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+//! Set by PHOENIX_DECLARE_EXTERNAL_TYPE.
+template <class T>
+concept CExternallyRegistered = TExternalMetadata<T>::External;
+
+template <class T>
+struct TMetadataTraits
+{
+    using TMetadata = T;
+
+    //! Qualified: exactly T, never an override from a more derived type.
+    static void Save(const T* this_, auto& context)
+    {
+        this_->T::Save(context);
+    }
+
+    static void Load(T* this_, auto& context)
+    {
+        this_->T::Load(context);
+    }
+};
+
+template <CExternallyRegistered T>
+struct TMetadataTraits<T>
+{
+    using TMetadata = TExternalMetadata<T>;
+
+    static void Save(const T* this_, auto& context)
+    {
+        TExternalMetadata<T>::Save(context, *this_);
+    }
+
+    static void Load(T* this_, auto& context)
+    {
+        TExternalMetadata<T>::Load(context, *this_);
+    }
+};
+
+template <class T>
+using TMetadataOf = typename TMetadataTraits<T>::TMetadata;
+
 template <class TThis>
 struct TTraits
 {
-    using TVersion = decltype(std::declval<typename TThis::TLoadContextImpl>().GetVersion());
+    using TVersion = decltype(std::declval<typename TMetadataOf<TThis>::TLoadContextImpl>().GetVersion());
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TThis>
 using TVersionFilter = bool (*)(typename TTraits<TThis>::TVersion version);
+
+template <class TVersion>
+constexpr TVersion GetPreviousVersion(TVersion version)
+{
+    return static_cast<TVersion>(static_cast<i64>(version) - 1);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -209,17 +289,17 @@ public:
 template <class TThis>
 decltype(auto) RunRegistrar(auto&& registrar)
 {
-    TThis::RegisterMetadata(registrar);
+    TMetadataOf<TThis>::RegisterMetadata(registrar);
     return std::move(registrar)();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TTypeSchemaBuilderRegistar
+class TTypeSchemaBuilderRegistrar
     : public TTypeRegistrarBase
 {
 public:
-    TTypeSchemaBuilderRegistar(
+    TTypeSchemaBuilderRegistrar(
         std::vector<const std::type_info*> typeInfos,
         TTypeTag tag,
         bool isTemplate,
@@ -252,7 +332,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        TypeDescriptor_->BaseTypeTags_.push_back(TBase::TypeTag);
+        TypeDescriptor_->BaseTypeTags_.push_back(TMetadataOf<TBase>::TypeTag);
     }
 
     const TTypeDescriptor& operator()() &&;
@@ -287,9 +367,9 @@ std::vector<const std::type_info*> GetTypeInfos()
 template <class TThis, bool Template>
 auto MakeTypeSchemaBuilderRegistrar()
 {
-    return TTypeSchemaBuilderRegistar(
+    return TTypeSchemaBuilderRegistrar(
         GetTypeInfos<TThis>(),
-        TThis::TypeTag,
+        TMetadataOf<TThis>::TypeTag,
         Template,
         TFactoryTraits<TThis>::TFactory::PolymorphicConstructor,
         TFactoryTraits<TThis>::TFactory::ConcreteConstructor);
@@ -322,7 +402,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        This_->TBase::Save(Context_);
+        TMetadataTraits<TBase>::Save(This_, Context_);
     }
 
 private:
@@ -345,6 +425,8 @@ public:
     TFieldSaveRegistrar(TFieldSaveRegistrar<Member, TThis, TContext, TFieldSerializer_>&& other)
         : This_(other.This_)
         , Context_(other.Context_)
+        , VersionFilter_(other.VersionFilter_)
+        , MaxVersion_(other.MaxVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -354,7 +436,7 @@ public:
 
     auto BeforeVersion(TVersion version) &&
     {
-        BeforeVersion_ = version;
+        MaxVersion_ = GetPreviousVersion(version);
         return TFieldSaveRegistrar(std::move(*this));
     }
 
@@ -377,7 +459,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             TFieldSerializer::Save(Context_, This_->*Member);
         }
     }
@@ -390,13 +472,16 @@ private:
     TContext& Context_;
 
     TVersionFilter<TThis> VersionFilter_ = nullptr;
-    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>
 class PHOENIX_REGISTRAR_NODISCARD TVirtualFieldSaveRegistrar
 {
 public:
+    using TVersion = typename TTraits<TThis>::TVersion;
+
     TVirtualFieldSaveRegistrar(
         const TThis* this_,
         TContext& context,
@@ -410,6 +495,8 @@ public:
         : This_(other.This_)
         , Context_(other.Context_)
         , SaveHandler_(other.SaveHandler_)
+        , VersionFilter_(other.VersionFilter_)
+        , MaxVersion_(other.MaxVersion_)
     { }
 
     auto SinceVersion(auto /*version*/) &&
@@ -417,13 +504,15 @@ public:
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
-    auto BeforeVersion(auto /*version*/) &&
+    auto BeforeVersion(TVersion version) &&
     {
+        MaxVersion_ = GetPreviousVersion(version);
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
-    auto InVersions(auto /*filter*/) &&
+    auto InVersions(TVersionFilter<TThis> filter) &&
     {
+        VersionFilter_ = filter;
         return TVirtualFieldSaveRegistrar(std::move(*this));
     }
 
@@ -434,13 +523,19 @@ public:
 
     void operator()() &&
     {
-        SaveHandler_(This_, Context_);
+        if (auto version = Context_.GetVersion(); version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+            SaveHandler_(This_, Context_);
+        }
     }
 
 private:
     const TThis* const This_;
     TContext& Context_;
     const TFieldSaveHandler<TThis, TContext> SaveHandler_;
+
+    TVersionFilter<TThis> VersionFilter_ = nullptr;
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
 };
 
 template <class TThis, class TContext>
@@ -508,7 +603,7 @@ public:
     template <class TBase>
     void BaseType()
     {
-        This_->TBase::Load(Context_);
+        TMetadataTraits<TBase>::Load(This_, Context_);
     }
 
 private:
@@ -523,7 +618,7 @@ public:
     TFieldLoadRegistrar(
         TThis* this_,
         TContext& context,
-        TStringBuf name)
+        const char* name)
         : This_(this_)
         , Context_(context)
         , Name_(name)
@@ -535,7 +630,7 @@ public:
         , Context_(other.Context_)
         , Name_(other.Name_)
         , MinVersion_(other.MinVersion_)
-        , BeforeVersion_(other.BeforeVersion_)
+        , MaxVersion_(other.MaxVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -550,7 +645,7 @@ public:
 
     auto BeforeVersion(TVersion version) &&
     {
-        BeforeVersion_ = version;
+        MaxVersion_ = GetPreviousVersion(version);
         return TFieldLoadRegistrar(std::move(*this));
     }
 
@@ -566,7 +661,6 @@ public:
         return TFieldLoadRegistrar(std::move(*this));
     }
 
-
     template <class TFieldSerializer_>
     auto Serializer() &&
     {
@@ -575,7 +669,7 @@ public:
 
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             TFieldSerializer::Load(Context_, This_->*Member);
         } else if (MissingHandler_) {
@@ -594,10 +688,11 @@ private:
 
     TThis* const This_;
     TContext& Context_;
-    const TStringBuf Name_;
+    const char* const Name_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
     TVersionFilter<TThis> VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
@@ -609,7 +704,7 @@ public:
     TVirtualFieldLoadRegistrar(
         TThis* this_,
         TContext& context,
-        TStringBuf name,
+        const char* name,
         TFieldLoadHandler<TThis, TContext> loadHandler)
         : This_(this_)
         , Context_(context)
@@ -617,13 +712,13 @@ public:
         , LoadHandler_(loadHandler)
     { }
 
-    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar<TThis, TContext>&& other) noexcept
+    TVirtualFieldLoadRegistrar(TVirtualFieldLoadRegistrar&& other) noexcept
         : This_(other.This_)
         , Context_(other.Context_)
         , Name_(other.Name_)
         , LoadHandler_(other.LoadHandler_)
         , MinVersion_(other.MinVersion_)
-        , BeforeVersion_(other.BeforeVersion_)
+        , MaxVersion_(other.MaxVersion_)
         , VersionFilter_(other.VersionFilter_)
         , MissingHandler_(other.MissingHandler_)
     { }
@@ -638,7 +733,7 @@ public:
 
     auto BeforeVersion(TVersion version) &&
     {
-        BeforeVersion_ = version;
+        MaxVersion_ = GetPreviousVersion(version);
         return TVirtualFieldLoadRegistrar(std::move(*this));
     }
 
@@ -656,10 +751,9 @@ public:
         return TVirtualFieldLoadRegistrar(std::move(*this));
     }
 
-
     void operator()() &&
     {
-        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version < BeforeVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
+        if (auto version = Context_.GetVersion(); version >= MinVersion_ && version <= MaxVersion_ && (!VersionFilter_ || VersionFilter_(version))) {
             Context_.Dumper().SetFieldName(Name_);
             LoadHandler_(This_, Context_);
         } else if (MissingHandler_) {
@@ -670,11 +764,12 @@ public:
 private:
     TThis* const This_;
     TContext& Context_;
-    const TStringBuf Name_;
+    const char* const Name_;
     const TFieldLoadHandler<TThis, TContext> LoadHandler_;
 
     TVersion MinVersion_ = static_cast<TVersion>(std::numeric_limits<int>::min());
-    TVersion BeforeVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
+    //! Inclusive: the default comparison is then a tautology the optimizer drops.
+    TVersion MaxVersion_ = static_cast<TVersion>(std::numeric_limits<int>::max());
     TVersionFilter VersionFilter_ = nullptr;
     TFieldMissingHandler<TThis, TContext> MissingHandler_ = nullptr;
 };
@@ -689,30 +784,30 @@ public:
         , Context_(context)
     { }
 
-    template <TFieldTag::TUnderlying TagValue, auto Member, size_t NameLength>
-    auto Field(const char (&name)[NameLength])
+    template <TFieldTag::TUnderlying TagValue, auto Member>
+    auto Field(const char* name)
     {
         return TFieldLoadRegistrar<Member, TThis, TContext, TDefaultSerializer>(
             This_,
             Context_,
-            TStringBuf(name, NameLength - 1));
+            name);
     }
 
-    template <TFieldTag::TUnderlying TagValue, size_t NameLength>
+    template <TFieldTag::TUnderlying TagValue>
     auto VirtualField(
-        const char (&name)[NameLength],
+        const char* name,
         TFieldLoadHandler<TThis, TContext> loadHandler)
     {
         return TVirtualFieldLoadRegistrar<TThis, TContext>(
             This_,
             Context_,
-            TStringBuf(name, NameLength - 1),
+            name,
             loadHandler);
     }
 
-    template <TFieldTag::TUnderlying TagValue, size_t NameLength>
+    template <TFieldTag::TUnderlying TagValue>
     auto VirtualField(
-        const char (&name)[NameLength],
+        const char* name,
         TFieldLoadHandler<TThis, TContext> loadHandler,
         auto&& /*saveHandler*/)
     {
@@ -750,15 +845,19 @@ template <class TThis, class TContext>
 struct TRuntimeTypeLoadSchedule;
 
 template <class TThis, class TContext>
-const TRuntimeTypeLoadSchedule<TThis, TContext>* FindCachedRuntimeTypeLoadSchedule();
+const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule(TContext& context);
 
-void CompatLoadImpl(auto* this_, auto& context, const auto& schedule);
+Y_NO_INLINE void CompatLoadImpl(auto* this_, auto& context, const auto& schedule);
 
 template <class TThis, class TContext>
 void LoadImpl(TThis* this_, TContext& context)
 {
+    static_assert(
+        std::derived_from<TContext, TLoadContext>,
+        "Phoenix types must be loaded via NPhoenix::TLoadContext or its descendants");
+
     RunRegistrar<TThis>(TLoadBaseTypesRegistrar(this_, context));
-    if (const auto* runtimeSchedule = FindCachedRuntimeTypeLoadSchedule<TThis, TContext>()) {
+    if (const auto* runtimeSchedule = FindRuntimeTypeLoadSchedule<TThis>(context)) [[unlikely]] {
         CompatLoadImpl(this_, context, *runtimeSchedule);
     } else {
         RunRegistrar<TThis>(TLoadFieldsRegistrar<TThis, TContext>(this_, context));
@@ -776,17 +875,17 @@ struct TRuntimeFieldDescriptor
 };
 
 template <auto Member, class TThis, class TContext, class TFieldSerializer>
-class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistar
+class PHOENIX_REGISTRAR_NODISCARD TRuntimeFieldDescriptorBuilderRegistrar
 {
 public:
     using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
-    explicit TRuntimeFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
+    explicit TRuntimeFieldDescriptorBuilderRegistrar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
     { }
 
     template <class TFieldSerializer_>
-    TRuntimeFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TFieldSerializer_>&& other)
+    TRuntimeFieldDescriptorBuilderRegistrar(TRuntimeFieldDescriptorBuilderRegistrar<Member, TThis, TContext, TFieldSerializer_>&& other)
         : Descriptor_(other.Descriptor_)
     { }
 
@@ -814,7 +913,7 @@ public:
     template <class TFieldSerializer_>
     auto Serializer() &&
     {
-        return TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TFieldSerializer_>(std::move(*this));
+        return TRuntimeFieldDescriptorBuilderRegistrar<Member, TThis, TContext, TFieldSerializer_>(std::move(*this));
     }
 
     void operator()() &&
@@ -826,18 +925,18 @@ public:
 
 private:
     template <auto Member_, class TThis_, class TContext_, class TFieldSerializer_>
-    friend class TRuntimeFieldDescriptorBuilderRegistar;
+    friend class TRuntimeFieldDescriptorBuilderRegistrar;
 
     TRuntimeFieldDescriptor* const Descriptor_;
 };
 
 template <class TThis, class TContext>
-class TRuntimeVirtualFieldDescriptorBuilderRegistar
+class TRuntimeVirtualFieldDescriptorBuilderRegistrar
 {
 public:
     using TRuntimeFieldDescriptor = NPhoenix::NDetail::TRuntimeFieldDescriptor<TThis, TContext>;
 
-    TRuntimeVirtualFieldDescriptorBuilderRegistar(TRuntimeFieldDescriptor* descriptor)
+    TRuntimeVirtualFieldDescriptorBuilderRegistrar(TRuntimeFieldDescriptor* descriptor)
         : Descriptor_(descriptor)
     { }
 
@@ -920,7 +1019,7 @@ public:
                 this_->*Member = {};
             }
         };
-        return TRuntimeFieldDescriptorBuilderRegistar<Member, TThis, TContext, TDefaultSerializer>(descriptor);
+        return TRuntimeFieldDescriptorBuilderRegistrar<Member, TThis, TContext, TDefaultSerializer>(descriptor);
     }
 
     template <TFieldTag::TUnderlying TagValue>
@@ -930,7 +1029,7 @@ public:
     {
         auto* descriptor = AddField<TagValue>();
         descriptor->LoadHandler = loadHandler;
-        return TRuntimeVirtualFieldDescriptorBuilderRegistar<TThis, TContext>(descriptor);
+        return TRuntimeVirtualFieldDescriptorBuilderRegistrar<TThis, TContext>(descriptor);
     }
 
     template <TFieldTag::TUnderlying TagValue>
@@ -966,8 +1065,6 @@ auto BuildRuntimeFieldDescriptorMap()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_STRONG_TYPEDEF(TLoadEpoch, ui64);
-
 struct TTypeLoadSchedule
 {
     std::vector<TFieldTag> LoadFieldTags;
@@ -979,16 +1076,6 @@ struct TRuntimeTypeLoadScheduleBase
     virtual ~TRuntimeTypeLoadScheduleBase() = default;
 };
 
-struct TUniverseLoadSchedule
-{
-    const TTypeLoadSchedule* FindTypeLoadSchedule(TTypeTag tag);
-    THashMap<TTypeTag, TTypeLoadSchedule> LoadScheduleMap;
-
-    template <class TThis, class TContext>
-    const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule();
-    THashMap<std::tuple<std::type_index, std::type_index>, std::unique_ptr<TRuntimeTypeLoadScheduleBase>> RuntimeLoadScheduleMap;
-};
-
 template <class TThis, class TContext>
 struct TRuntimeTypeLoadSchedule
     : public TRuntimeTypeLoadScheduleBase
@@ -997,14 +1084,35 @@ struct TRuntimeTypeLoadSchedule
     std::vector<TFieldMissingHandler<TThis, TContext>> MissingFieldHandlers;
 };
 
-struct TUniverseLoadState
+int AllocateRuntimeTypeLoadScheduleIndex();
+
+template <class TThis, class TContext>
+int GetRuntimeTypeLoadScheduleIndex()
 {
-    bool Active = false;
-    TLoadEpoch Epoch = {};
-    std::unique_ptr<TUniverseLoadSchedule> Schedule;
+    static const int Index = AllocateRuntimeTypeLoadScheduleIndex();
+    return Index;
+}
+
+struct TUniverseLoadSchedule
+{
+    struct TRuntimeTypeLoadScheduleSlot
+    {
+        bool Initialized = false;
+        std::unique_ptr<TRuntimeTypeLoadScheduleBase> Schedule;
+    };
+
+    THashMap<TTypeTag, TTypeLoadSchedule> LoadScheduleMap;
+    //! Indexed by #GetRuntimeTypeLoadScheduleIndex.
+    std::vector<TRuntimeTypeLoadScheduleSlot> RuntimeTypeLoadScheduleSlots;
+
+    const TTypeLoadSchedule* FindTypeLoadSchedule(TTypeTag tag);
+
+    template <class TThis, class TContext>
+    const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule();
 };
 
-extern NConcurrency::TFlsSlot<TUniverseLoadState> UniverseLoadState;
+//! Returns null if no type needs compat loading.
+std::unique_ptr<TUniverseLoadSchedule> ComputeUniverseLoadSchedule(const TUniverseSchemaPtr& loadUniverseSchema);
 
 template <class TThis, class TContext>
 std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadSchedule(const TTypeLoadSchedule* schedule)
@@ -1017,7 +1125,7 @@ std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadS
     runtimeSchedule->LoadFieldHandlers.reserve(schedule->LoadFieldTags.size());
     runtimeSchedule->MissingFieldHandlers.reserve(schedule->MissingFieldTags.size());
 
-    const auto& runtimeFieldDescriptorMap = TThis::GetRuntimeFieldDescriptorMap();
+    const auto& runtimeFieldDescriptorMap = TMetadataOf<TThis>::GetRuntimeFieldDescriptorMap();
     for (auto fieldTag : schedule->LoadFieldTags) {
         runtimeSchedule->LoadFieldHandlers.push_back(GetOrCrash(runtimeFieldDescriptorMap, fieldTag).LoadHandler);
     }
@@ -1031,50 +1139,37 @@ std::unique_ptr<TRuntimeTypeLoadSchedule<TThis, TContext>> BuildRuntimeTypeLoadS
 template <class TThis, class TContext>
 const TRuntimeTypeLoadSchedule<TThis, TContext>* TUniverseLoadSchedule::FindRuntimeTypeLoadSchedule()
 {
-    auto runtimeKey = std::tuple(std::type_index(typeid(TThis)), std::type_index(typeid(TContext)));
-    auto it = RuntimeLoadScheduleMap.find(runtimeKey);
-    if (it != RuntimeLoadScheduleMap.end()) {
-        return static_cast<TRuntimeTypeLoadSchedule<TThis, TContext>*>(it->second.get());
+    auto index = GetRuntimeTypeLoadScheduleIndex<TThis, TContext>();
+    if (index >= std::ssize(RuntimeTypeLoadScheduleSlots)) {
+        RuntimeTypeLoadScheduleSlots.resize(index + 1);
     }
 
-    auto* schedule = FindTypeLoadSchedule(TThis::TypeTag);
-    auto runtimeSchedule = BuildRuntimeTypeLoadSchedule<TThis, TContext>(schedule);
-    auto* runtimeSchedulePtr = runtimeSchedule.get();
-    EmplaceOrCrash(RuntimeLoadScheduleMap, runtimeKey, std::move(runtimeSchedule));
-    return runtimeSchedulePtr;
+    auto& slot = RuntimeTypeLoadScheduleSlots[index];
+    if (!slot.Initialized) {
+        slot.Schedule = BuildRuntimeTypeLoadSchedule<TThis, TContext>(FindTypeLoadSchedule(TMetadataOf<TThis>::TypeTag));
+        slot.Initialized = true;
+    }
+
+    return static_cast<const TRuntimeTypeLoadSchedule<TThis, TContext>*>(slot.Schedule.get());
 }
 
 template <class TThis, class TContext>
-const TRuntimeTypeLoadSchedule<TThis, TContext>* FindCachedRuntimeTypeLoadSchedule()
+const TRuntimeTypeLoadSchedule<TThis, TContext>* FindRuntimeTypeLoadSchedule(TContext& context)
 {
-    auto& universeLoadState = *UniverseLoadState;
-    if (!universeLoadState.Schedule) {
+    auto* schedule = context.GetLoadSchedule();
+    if (!schedule) [[likely]] {
         return nullptr;
     }
 
-    struct TTypeLoadState
-    {
-        TLoadEpoch Epoch;
-        const TRuntimeTypeLoadSchedule<TThis, TContext>* RuntimeSchedule;
-    };
-
-    static NConcurrency::TFlsSlot<TTypeLoadState> TypeLoadState;
-    auto& typeLoadState = *TypeLoadState;
-
-    if (typeLoadState.Epoch != universeLoadState.Epoch) {
-        typeLoadState.Epoch = universeLoadState.Epoch;
-        typeLoadState.RuntimeSchedule = universeLoadState.Schedule->FindRuntimeTypeLoadSchedule<TThis, TContext>();
-    }
-
-    return typeLoadState.RuntimeSchedule;
+    return schedule->template FindRuntimeTypeLoadSchedule<TThis, TContext>();
 }
 
-void CompatLoadImpl(auto* this_, auto& context, const auto& runtimeSchedule)
+Y_NO_INLINE void CompatLoadImpl(auto* this_, auto& context, const auto& runtimeSchedule)
 {
-    for (auto handler : runtimeSchedule.LoadFieldHandlers) {
+    for (const auto& handler : runtimeSchedule.LoadFieldHandlers) {
         handler(this_, context);
     }
-    for (auto handler : runtimeSchedule.MissingFieldHandlers) {
+    for (const auto& handler : runtimeSchedule.MissingFieldHandlers) {
         handler(this_, context);
     }
 }
@@ -1135,7 +1230,6 @@ struct TSerializer
         }
         Save(context, *ptr);
     }
-
 
     template <class T, class C>
     static void Load(C& context, TIntrusivePtr<T>& ptr)

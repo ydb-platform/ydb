@@ -195,7 +195,9 @@ void TTxScan::StartScanActor(const TReadMetadataBase::TConstPtr& readMetadataRan
     }
 
     const TVersionedIndex* index = Self->HasIndex() ? &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex() : nullptr;
-    const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
+    // table store sys view scans do not carry internal path id
+    const std::optional<TInternalPathId> pathId = rawPathId ? std::make_optional(TInternalPathId::FromRawValue(rawPathId)) : std::nullopt;
+    const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index, pathId);
     Self->Counters.GetTabletCounters()->OnScanStarted(Self->InFlightReadsTracker.GetSelectStatsDelta());
 
     TComputeShardingPolicy shardingPolicy;

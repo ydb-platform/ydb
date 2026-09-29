@@ -64,8 +64,7 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
     }
 
     if (key.ChildrenSize() < 1) {
-        ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Key must have at least one component - table or tablescheme, "
-            " and may have second tag - view")));
+        ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), TStringBuf("Key must have at least one component")));
         return false;
     }
     else if (const auto maybeWalkFolders = TMaybeNode<TYtWalkFolders>(&key)) {
@@ -132,6 +131,16 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
             ctx.AddError(TIssue(ctx.GetPosition(type.Pos()), TString("Unexpected ") + type.Head().Content()));
             return false;
         }
+    } else if (tag.IsAtom("link")) {
+        if (!isOutput) {
+            ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), "Link key is not supported for input"));
+            return false;
+        }
+        Type = EType::Link;
+        if (key.ChildrenSize() > 2) {
+            ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Too many tags"));
+            return false;
+        }
     } else  {
         ctx.AddError(TIssue(ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag: ") + tag.Content()));
         return false;
@@ -152,8 +161,10 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
         Path = tableName->Content();
     }
     else if (nameNode->IsCallable(MrTableRangeName) || nameNode->IsCallable(MrTableRangeStrictName)) {
-        if (EType::TableScheme == Type) {
-            ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), "MrTableRange[Strict] must not be used with tablescheme tag"));
+        if (EType::TableScheme == Type || EType::Link == Type) {
+            ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
+                << "MrTableRange[Strict] must not be used with "
+                << (EType::Link == Type ? "link" : "tablescheme") << " tag"));
             return false;
         }
 
@@ -192,7 +203,13 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
 
     if (key.ChildrenSize() > 1) {
         for (ui32 i = 1; i < key.ChildrenSize(); ++i) {
-            if (const auto& tag = key.Child(i)->Head(); tag.IsAtom("view")) {
+            const auto& tag = key.Child(i)->Head();
+            if (Type == EType::Link && !tag.IsAtom("target")) {
+                ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), TStringBuilder() << "Unexpected tag: " << tag.Content()));
+                return false;
+            }
+
+            if (tag.IsAtom("view")) {
                 const TExprNode* viewNode = key.Child(i)->Child(1);
                 if (!viewNode->IsCallable("String")) {
                     ctx.AddError(TIssue(ctx.GetPosition(viewNode->Pos()), "Expected String"));
@@ -226,6 +243,20 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
                     return false;
                 }
                 ExtraColumns = value;
+            } else if (tag.IsAtom("target")) {
+                if (Type != EType::Link) {
+                    ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), "Target is only supported for link keys"));
+                    return false;
+                }
+                const auto targetNode = key.Child(i)->Child(1);
+                if (!targetNode->IsCallable("String") || targetNode->ChildrenSize() != 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(targetNode->Pos()), "Expected String"));
+                    return false;
+                }
+                if (!EnsureAtom(*targetNode->Child(0), ctx)) {
+                    return false;
+                }
+                Target = TString(targetNode->Child(0)->Content());
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), TStringBuilder() << "Unexpected tag: " << tag.Content()));
                 return false;
@@ -293,7 +324,7 @@ bool TYtOutputKey::Parse(const TExprNode& keyNode, TExprContext& ctx) {
         return false;
     }
 
-    if (GetType() != TYtKey::EType::Table && GetType() != TYtKey::EType::View) {
+    if (GetType() != TYtKey::EType::Table && GetType() != TYtKey::EType::Link && GetType() != TYtKey::EType::View) {
         ctx.AddError(TIssue(ctx.GetPosition(keyNode.Child(0)->Child(0)->Pos()),
             TStringBuilder() << "Unexpected tag: " << keyNode.Child(0)->Child(0)->Content()));
         return false;

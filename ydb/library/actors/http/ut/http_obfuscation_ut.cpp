@@ -124,6 +124,40 @@ Y_UNIT_TEST_SUITE(HttpObfuscation) {
         UNIT_ASSERT_VALUES_EQUAL(responseRenderer.GetObfuscatedData(), "HTTP/1.1 200 OK\r\n" + expected);
     }
 
+    Y_UNIT_TEST(LfOnlyAndMixedLineEndings) {
+        constexpr TStringBuf lineEndings[] = {"\n", "\r\n"};
+        const TString body = "Authorization: body-value\nCookie: body-cookie\r\n";
+        for (TStringBuf startLineEnding : lineEndings) {
+            for (TStringBuf headerLineEnding : lineEndings) {
+                for (TStringBuf separator : lineEndings) {
+                    const TString prefix = TStringBuilder()
+                        << "Content-Type: text/plain" << headerLineEnding
+                        << "Content-Length: " << body.size() << headerLineEnding;
+                    const TString headers = TStringBuilder()
+                        << prefix
+                        << "X-Ydb-Auth-Ticket: Bearer example-secret-suffix" << headerLineEnding
+                        << "Authorization: Bearer example-secret" << headerLineEnding
+                        << separator << body;
+                    const TString expected = TStringBuilder()
+                        << prefix
+                        << "X-Ydb-Auth-Ticket: <obfuscated>" << headerLineEnding
+                        << "Authorization: <obfuscated>" << headerLineEnding
+                        << separator << body;
+
+                    const TString requestLine = TStringBuilder() << "GET / HTTP/1.1" << startLineEnding;
+                    THttpRequestParser requestParser(requestLine + headers);
+                    UNIT_ASSERT(requestParser.IsReady());
+                    UNIT_ASSERT_VALUES_EQUAL(requestParser.GetObfuscatedData(), requestLine + expected);
+
+                    const TString responseLine = TStringBuilder() << "HTTP/1.1 200 OK" << startLineEnding;
+                    THttpResponseParser responseParser(responseLine + headers);
+                    UNIT_ASSERT(responseParser.IsReady());
+                    UNIT_ASSERT_VALUES_EQUAL(responseParser.GetObfuscatedData(), responseLine + expected);
+                }
+            }
+        }
+    }
+
     Y_UNIT_TEST(TruncationAfterRedaction) {
         const TString raw = "Authorization: " + TString(3000, 's') + "\r\n";
         UNIT_ASSERT_VALUES_EQUAL(GetObfuscatedData(raw), "Authorization: <obfuscated>\r\n");

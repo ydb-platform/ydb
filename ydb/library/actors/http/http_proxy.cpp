@@ -449,8 +449,12 @@ TString GetObfuscatedData(TStringBuf data) {
     TString result;
     result.reserve(data.size());
     while (!data.empty()) {
-        const size_t lineEnd = data.find("\r\n");
-        const TStringBuf line = data.substr(0, lineEnd);
+        const size_t lineEnd = data.find('\n');
+        TStringBuf line = data.substr(0, lineEnd);
+        if (lineEnd != TStringBuf::npos) {
+            // Match the parser's handling of LF and CRLF line endings.
+            line = TrimEnd(line, '\r');
+        }
         if (line.empty()) {
             // The rest is the body and must not be interpreted as headers.
             result += data;
@@ -482,8 +486,8 @@ TString GetObfuscatedData(TStringBuf data) {
             break;
         }
 
-        result += "\r\n";
-        data.Skip(lineEnd + 2);
+        result += data.substr(line.size(), lineEnd + 1 - line.size());
+        data.Skip(lineEnd + 1);
     }
 
     if (result.size() > 2000) {

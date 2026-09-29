@@ -1,4 +1,4 @@
-# Classic SQL constructs not supported yet
+# Unsupported classic SQL constructs
 
 ## \[NOT\] \[EXISTS|INTERSECT\|EXCEPT] {#not-exists}
 

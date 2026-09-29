@@ -926,10 +926,6 @@ public:
             // reported with the batch that completes it.
             UncheckpointedDataBytes += parsedBatch.DataBytes;
             UncheckpointedRows += parsedBatch.Rows;
-            if (UncheckpointedDataBytes >= BufferSizeLimit) {
-                return SetDataError(RowGroupIsTooBig(CurrentRowGroup,
-                    TStringBuilder() << "at least " << UncheckpointedDataBytes << " bytes when decoded"));
-            }
 
             TDataBatch batch;
             batch.Id = NextBatchId++;
@@ -1014,9 +1010,13 @@ public:
         if (started) {
             // Restart() reloads the durable checkpoint even when this live
             // engine is intentionally preserved after FailRange(); it must be
-            // the one this engine last committed.
+            // the one this engine last committed, the place of the checksum
+            // included: a checkpoint of another place would show up only as a
+            // wrong checksum at the end of the import.
             if (processedBytes == CheckpointProcessedBytes
-                && resume.GetCommittedRowGroups() == CheckpointState.GetCommittedRowGroups())
+                && resume.GetCommittedRowGroups() == CheckpointState.GetCommittedRowGroups()
+                && resume.GetChecksumOffset() == CheckpointState.GetChecksumOffset()
+                && resume.GetChecksumComplete() == CheckpointState.GetChecksumComplete())
             {
                 return {};
             }
@@ -1226,7 +1226,7 @@ private:
         if (auto result = Parser->OpenMetadata(SparseFile->MakeRandomAccessFile(SparseFile)); !result) {
             return result;
         }
-        auto ranges = SparseFile->PlanColumnChunkRangesByRowGroup(SparseFile);
+        auto ranges = SparseFile->PlanColumnChunkRangesByRowGroup(SparseFile, Parser->GetColumnIndices());
         if (!ranges) {
             Parser->ResetFile();
             return std::unexpected(std::move(ranges.error()));
@@ -1267,13 +1267,14 @@ private:
     }
 
     // A row group is handled as a whole piece: its bytes are held in the buffer
-    // while its rows are decoded. The exporter keeps its row groups far below
-    // the limit of the buffer, so a bigger one is a file of another origin. It
-    // is rejected, in any of the three forms it has:
-    //  - in the file and uncompressed, by the footer, before any of its bytes
-    //    are downloaded;
-    //  - decoded, while its rows are read, since no file tells that size.
-    // The error is final: a retry would meet the same file.
+    // while its rows are decoded. A row group above the limit of the buffer,
+    // in the file or uncompressed, is rejected by the footer, before any of its
+    // bytes are downloaded. The error is final, since a retry would meet the
+    // same file, but the limit is a setting: the file is imported once it is
+    // raised.
+    //
+    // The rows decoded from a row group are not limited: no file tells that
+    // size, and they are decoded and released in batches.
     TString RowGroupIsTooBig(ui32 rowGroup, const TString& size) const {
         return TStringBuilder() << "Parquet row group " << rowGroup << " takes " << size
             << ", the limit is " << BufferSizeLimit << " bytes (RestoreReadBufferSizeLimit)";

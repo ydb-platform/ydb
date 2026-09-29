@@ -37,6 +37,10 @@ public:
     {
         TParsedData result;
 
+        // kept across lines, so that a line costs no allocation
+        TVector<TCell> keys;
+        TVector<TCell> values;
+
         while (data) {
             TStringBuf line = data.NextTok('\n');
             const TStringBuf origLine = line;
@@ -50,9 +54,9 @@ public:
             }
 
             pool.Clear();
+            keys.clear();
+            values.clear();
 
-            TVector<TCell> keys;
-            TVector<TCell> values;
             TString strError;
 
             if (!NFormats::TYdbDump::ParseLine(

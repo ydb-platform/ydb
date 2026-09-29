@@ -86,6 +86,11 @@ public:
     virtual std::expected<void, TString> OpenMetadata(
         std::shared_ptr<arrow::io::RandomAccessFile> source) = 0;
 
+    // The columns of the file the rows are read from, as the indices of its
+    // leaf columns. A column of the file that the table does not have is not
+    // among them: it is neither decoded nor downloaded.
+    virtual const std::vector<int>& GetColumnIndices() const = 0;
+
     // The row groups of the file whose metadata is open.
     virtual TVector<TRowGroupInfo> GetRowGroups() const = 0;
 

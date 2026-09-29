@@ -512,22 +512,33 @@ TString ValueTypeName(const NKikimrSchemeOp::TTableDescription& scheme) {
 }
 
 // The data file of the table above: keys k0, k1, ... and the given values.
+// With extra, the file has one more column, which the table does not have.
 TString BuildKeyValueParquet(
     const std::shared_ptr<arrow::Array>& values,
     i64 rowGroupSize,
-    parquet::Compression::type compression = parquet::Compression::UNCOMPRESSED)
+    parquet::Compression::type compression = parquet::Compression::UNCOMPRESSED,
+    const std::shared_ptr<arrow::Array>& extra = nullptr)
 {
     TVector<TString> keys;
     for (i64 i = 0; i < values->length(); ++i) {
         keys.push_back(TStringBuilder() << "k" << i);
     }
 
-    auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector{
-        arrow::field("key", arrow::utf8()),
-        arrow::field("value", values->type()),
-    });
+    arrow::FieldVector fields;
+    arrow::ArrayVector columns;
+    if (extra) {
+        fields.push_back(arrow::field("extra", extra->type()));
+        columns.push_back(extra);
+    }
+    fields.push_back(arrow::field("key", arrow::utf8()));
+    columns.push_back(MakeStringArray(keys));
+    fields.push_back(arrow::field("value", values->type()));
+    columns.push_back(values);
+
     return WriteParquetLikeExporter(
-        arrow::Table::Make(schema, {MakeStringArray(keys), values}), rowGroupSize, compression);
+        arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(columns)),
+        rowGroupSize,
+        compression);
 }
 
 // A column type with restrictions on its values that the Arrow type of the
@@ -692,7 +703,7 @@ struct TBatchedImport {
 // Imports a data file the way the downloader does: every batch the engine
 // reports as ready is one upload.
 TBatchedImport ImportInBatches(const TEngineFixture& fixture, const TString& source, ui32 readBatchSize) {
-    // The buffer limit is set to hold any row group of the tests, decoded:
+    // The buffer limit is set to hold any row group of the tests, uncompressed:
     // they are about how a row group is read, not about its size.
     auto engine = fixture.MakeEngine(
         EDataFormat::Parquet,
@@ -2013,9 +2024,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ParquetRejectsARowGroupAboveTheLimit) {
-        // The exporter keeps its row groups far below the limit of the importer,
-        // so a bigger one is a file of another origin. It is rejected with an
-        // error that names it, in any of the forms a row group has.
+        // A row group above the limit of the buffer, in the file or
+        // uncompressed, is rejected by the footer with an error that names it.
         static constexpr ui64 Limit = 128_KB;
         const TString limitText = ", the limit is 131072 bytes (RestoreReadBufferSizeLimit)";
         const TString narrow = "narrow";
@@ -2053,25 +2063,10 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet row group 1 takes ");
             UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, " bytes when uncompressed" + limitText);
             UNIT_ASSERT(outcome.Rows.empty());
+            UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
         }
 
-        // Decoded. A value that repeats is in the file once, as an entry of a
-        // dictionary, so the footer says nothing about the rows it decodes to.
-        {
-            const TString value(64_KB, 'a');
-            const TString source = BuildKeyValueParquet(
-                MakeStringArray({narrow, narrow, value, value, value, value}), /*rowGroupSize=*/4);
-
-            const auto outcome = ImportKeyValueParquet(fixture, source, Limit);
-
-            UNIT_ASSERT_C(outcome.Error, "a row group above the limit when decoded was imported");
-            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet row group 0 takes at least ");
-            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, " bytes when decoded" + limitText);
-            // It is found while its rows are read, before the last of them.
-            UNIT_ASSERT_LT(outcome.Rows.size(), 6);
-        }
-
-        // A row group below the limit in all the forms is imported.
+        // A row group below the limit in both forms is imported.
         {
             const auto outcome = ImportKeyValueParquet(
                 fixture,
@@ -2083,6 +2078,59 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             UNIT_ASSERT_C(!outcome.Error, outcome.Error.GetOrElse(""));
             UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), 4);
         }
+    }
+
+    Y_UNIT_TEST(ParquetDoesNotLimitTheRowsDecodedFromARowGroup) {
+        // A value that repeats is in the file once, as an entry of a
+        // dictionary, so the footer says nothing about the rows it decodes to.
+        // They are not limited: they are decoded and released in batches.
+        static constexpr ui64 Limit = 128_KB;
+        const TEngineFixture fixture;
+
+        // 1 MiB of rows
+        const TVector<TString> values(16, TString(64_KB, 'a'));
+        const TString source = BuildKeyValueParquet(MakeStringArray(values), /*rowGroupSize=*/16);
+        UNIT_ASSERT_LT(source.size(), Limit);
+
+        const auto outcome = ImportKeyValueParquet(fixture, source, Limit);
+
+        UNIT_ASSERT_C(!outcome.Error, outcome.Error.GetOrElse(""));
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), values.size());
+        for (size_t i = 0; i < values.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL_C(outcome.Rows[i].first, TStringBuilder() << "k" << i, "row " << i);
+            UNIT_ASSERT_C(outcome.Rows[i].second == MakeMaybe(values[i]), "row " << i);
+        }
+    }
+
+    Y_UNIT_TEST(ParquetDoesNotDownloadTheColumnsTheTableDoesNotHave) {
+        // A file may have more columns than the table. They are not decoded,
+        // and their bytes are not downloaded or held in the buffer either, so
+        // they cannot make a row group too big for it.
+        static constexpr ui64 Limit = 128_KB;
+        const TEngineFixture fixture;
+
+        TVector<TString> extra;
+        for (ui32 i = 0; i < 4; ++i) {
+            extra.emplace_back(100_KB, static_cast<char>('a' + i));
+        }
+        const TVector<TString> values = {"v0", "v1", "v2", "v3"};
+        const TString source = BuildKeyValueParquet(
+            MakeStringArray(values),
+            /*rowGroupSize=*/4,
+            parquet::Compression::UNCOMPRESSED,
+            MakeStringArray(extra));
+        UNIT_ASSERT_GT(source.size(), 400_KB);
+
+        const auto outcome = ImportKeyValueParquet(fixture, source, Limit);
+
+        UNIT_ASSERT_C(!outcome.Error, outcome.Error.GetOrElse(""));
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), values.size());
+        for (size_t i = 0; i < values.size(); ++i) {
+            UNIT_ASSERT_C(outcome.Rows[i].second == MakeMaybe(values[i]), "row " << i);
+        }
+        // the end of the file, where the footer is looked for, and the two
+        // columns of the table
+        UNIT_ASSERT_LT_C(outcome.RequestedBytes, 64_KB + 1_KB, outcome.RequestedBytes);
     }
 
     Y_UNIT_TEST(ParquetPreservesCachedFooterAcrossRangeRetry) {
@@ -2132,6 +2180,23 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT(prefixRange.Status == IImportS3Engine::ENextRangeStatus::Ready);
         UNIT_ASSERT_VALUES_EQUAL(prefixRange.Range.Offset, 0);
         AssertSuccess(engine->FailRange(prefixRange.Range));
+
+        // The checkpoint of a live engine must be the one it has committed
+        // last, the place of the checksum included.
+        {
+            NKikimrBackup::TS3DownloadState other;
+            other.MutableParquet()->SetChecksumOffset(1);
+            const auto result = engine->RestoreFromState(/*processedBytes=*/0, other);
+            UNIT_ASSERT_C(!result, "a checkpoint of another checksum offset was taken");
+            UNIT_ASSERT_STRING_CONTAINS(result.error(), "cannot replace the checkpoint");
+        }
+        {
+            NKikimrBackup::TS3DownloadState other;
+            other.MutableParquet()->SetChecksumComplete(true);
+            const auto result = engine->RestoreFromState(/*processedBytes=*/0, other);
+            UNIT_ASSERT_C(!result, "a checkpoint of a complete checksum was taken");
+            UNIT_ASSERT_STRING_CONTAINS(result.error(), "cannot replace the checkpoint");
+        }
 
         NKikimrBackup::TS3DownloadState checkpoint;
         AssertSuccess(engine->RestoreFromState(/*processedBytes=*/0, checkpoint));

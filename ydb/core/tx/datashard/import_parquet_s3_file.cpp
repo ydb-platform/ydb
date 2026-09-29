@@ -354,18 +354,26 @@ std::expected<TVector<TParquetFetchRange>, TString> TParquetSparseFile::PlanColu
 
 std::expected<TVector<TVector<TParquetFetchRange>>, TString>
 TParquetSparseFile::PlanColumnChunkRangesByRowGroup(
-    const std::shared_ptr<TParquetSparseFile>& owner) const
+    const std::shared_ptr<TParquetSparseFile>& owner,
+    const std::vector<int>& columns) const
 {
     try {
         auto source = MakeRandomAccessFile(owner);
         const auto metadata = parquet::ReadMetaData(source);
+        for (const int col : columns) {
+            if (col < 0 || col >= metadata->num_columns()) {
+                return std::unexpected(TStringBuilder() << "parquet column " << col
+                    << " is outside a file with " << metadata->num_columns() << " columns");
+            }
+        }
+
         TVector<TVector<TParquetFetchRange>> outRanges;
         outRanges.resize(metadata->num_row_groups());
 
         for (int32_t row = 0; row < metadata->num_row_groups(); ++row) {
             TVector<ReadRange> ranges;
-            ranges.reserve(metadata->num_columns());
-            for (int32_t col = 0; col < metadata->num_columns(); ++col) {
+            ranges.reserve(columns.size());
+            for (const int col : columns) {
                 ranges.push_back(ComputeColumnChunkRange(
                     metadata.get(),
                     static_cast<int64_t>(FileSize),

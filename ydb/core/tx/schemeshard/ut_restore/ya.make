@@ -33,8 +33,14 @@ PEERDIR(
 SRCS(
     ut_restore.cpp
     ut_restore_fs.cpp
-    ut_restore_data_format.cpp
 )
+
+IF (NOT OS_WINDOWS)
+    # calls the Parquet parser of the datashard, which is not built for Windows
+    SRCS(
+        ut_restore_data_format.cpp
+    )
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

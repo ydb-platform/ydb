@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/import_common.h>
 
 #include <ydb/apps/ydbd/export/export.h>
@@ -387,6 +388,54 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
 
     Y_UNIT_TEST(ImportSchemaOrder, EBackupTestDataFormat) {
         ImportSchemaOrder(ToDataFormat(Arg<0>()));
+    }
+
+    // Nothing is stored for an import into a column table: the downloader gets
+    // back what it asks to store. When it starts over after a failed read of a
+    // Parquet file, that is the checkpoint it has reached by then.
+    Y_UNIT_TEST(ImportKeepsTheCheckpointOfTheDownloader) {
+        const TString bucketName = "test-import-checkpoint";
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket(bucketName, s3Client);
+
+        TRuntimePtr runtime(new TTestBasicRuntime());
+        SetupTabletServices(*runtime);
+        runtime->GetAppData().FeatureFlags.SetEnableExportInParquet(true);
+        runtime->GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+
+        const auto edge = runtime->AllocateEdgeActor(0);
+
+        // a backup for the downloader to work on
+        auto exportFactory = std::make_shared<TDataShardExportFactory>();
+        auto actor = NKikimr::NColumnShard::NBackup::CreateExportUploaderActor(
+            edge, MakeBackupTask(bucketName, EDataFormat::Parquet), exportFactory.get(), MakeYdbColumns(), 0);
+        auto exporter = runtime->Register(actor.release());
+
+        TAutoPtr<IEventHandle> handle;
+        runtime->DispatchEvents({}, TDuration::Seconds(1));
+        runtime->Send(new IEventHandle(exporter, edge, new NColumnShard::TEvPrivate::TEvBackupExportRecordBatch(TestRecordBatch(), true)));
+        auto exported = runtime->GrabEdgeEvent<NColumnShard::TEvPrivate::TEvBackupExportRecordBatchResult>(handle);
+        UNIT_ASSERT(exported->IsFinish);
+        runtime->DispatchEvents({}, TDuration::Seconds(5));
+
+        auto restoreTask = MakeRestoreTask(bucketName);
+        auto userTable = MakeIntrusiveConst<NDataShard::TUserTable>(ui32(0), restoreTask.GetTableDescription(), ui32(0));
+        auto importActor = NKikimr::NColumnShard::NBackup::CreateImportDownloader(
+            edge, 0, restoreTask, NKikimr::NDataShard::TTableInfo{ 0, userTable }, MakeYdbSchema());
+        auto importActorId = runtime->Register(importActor.release());
+        runtime->DispatchEvents({}, TDuration::Seconds(1));
+
+        NDataShard::TS3Download info;
+        info.DataETag = "etag";
+        info.DownloadState.MutableParquet()->SetCommittedRowGroups(1);
+        info.DownloadState.MutableParquet()->SetChecksumOffset(100);
+        runtime->Send(new IEventHandle(importActorId, edge, new TEvDataShard::TEvStoreS3DownloadInfo(0, info)));
+
+        const auto stored = runtime->GrabEdgeEvent<TEvDataShard::TEvS3DownloadInfo>(handle);
+        UNIT_ASSERT(stored->Info.DataETag);
+        UNIT_ASSERT_VALUES_EQUAL(*stored->Info.DataETag, "etag");
+        UNIT_ASSERT_VALUES_EQUAL(stored->Info.DownloadState.GetParquet().GetCommittedRowGroups(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stored->Info.DownloadState.GetParquet().GetChecksumOffset(), 100);
     }
 }
 

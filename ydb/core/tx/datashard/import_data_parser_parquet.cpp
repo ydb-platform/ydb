@@ -75,6 +75,7 @@ public:
         , ColumnMeta(columnMeta)
         , KeyCount(keyCount)
     {
+        Values.reserve(ColumnMeta.size() - KeyCount);
     }
 
     void AddRow(const TConstArrayRef<TCell>& cells) override {
@@ -93,23 +94,22 @@ public:
             }
         }
 
-        TVector<TCell> keys;
-        keys.resize(KeyCount);
-        TVector<TCell> values;
-        values.reserve(cells.size() - KeyCount);
+        // kept across rows, so that a row costs no allocation
+        Keys.assign(KeyCount, TCell());
+        Values.clear();
 
         ui64 rowBytes = 0;
         for (size_t i = 0; i < cells.size(); ++i) {
             const auto& cell = cells[i];
             rowBytes += cell.Size();
             if (ColumnMeta[i].KeyOrder != Max<ui32>()) {
-                keys[ColumnMeta[i].KeyOrder] = cell;
+                Keys[ColumnMeta[i].KeyOrder] = cell;
             } else {
-                values.push_back(cell);
+                Values.push_back(cell);
             }
         }
 
-        if (auto added = AddRowFn(keys, values); !added) {
+        if (auto added = AddRowFn(Keys, Values); !added) {
             Error = std::move(added.error());
             return;
         }
@@ -134,6 +134,8 @@ private:
     const IDataParser::TAddRowFn& AddRowFn;
     const TVector<TColumnMeta>& ColumnMeta;
     const ui32 KeyCount;
+    TVector<TCell> Keys;
+    TVector<TCell> Values;
     ui64 PendingBytes = 0;
     ui64 PendingRows = 0;
     TMaybe<TString> Error;
@@ -396,6 +398,11 @@ public:
 
         Session = std::move(session);
         return {};
+    }
+
+    const std::vector<int>& GetColumnIndices() const override {
+        static const std::vector<int> none;
+        return Session ? Session->ColumnIndices : none;
     }
 
     TVector<TRowGroupInfo> GetRowGroups() const override {

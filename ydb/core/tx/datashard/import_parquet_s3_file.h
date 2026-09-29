@@ -50,8 +50,11 @@ public:
     std::expected<TVector<TParquetFetchRange>, TString> PlanColumnChunkRanges(
         const std::shared_ptr<TParquetSparseFile>& owner) const;
 
+    // The ranges of the file that hold the given columns, for every row group.
+    // The other columns are not read, so they are not downloaded either.
     std::expected<TVector<TVector<TParquetFetchRange>>, TString> PlanColumnChunkRangesByRowGroup(
-        const std::shared_ptr<TParquetSparseFile>& owner) const;
+        const std::shared_ptr<TParquetSparseFile>& owner,
+        const std::vector<int>& columns) const;
 
     void Clear();
 

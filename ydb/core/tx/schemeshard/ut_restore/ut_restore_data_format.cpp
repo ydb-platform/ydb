@@ -611,6 +611,55 @@ TString NotNullValueSchemePb() {
     )";
 }
 
+// The columns are in an order that is neither the order of the key nor the
+// order of the values.
+TString NotNullKeySchemePb() {
+    return R"(
+        columns {
+          name: "value"
+          type { optional_type { item { type_id: UTF8 } } }
+        }
+        columns {
+          name: "k2"
+          type { type_id: UTF8 }
+          not_null: true
+        }
+        columns {
+          name: "k1"
+          type { optional_type { item { type_id: UTF8 } } }
+        }
+        primary_key: "k1"
+        primary_key: "k2"
+    )";
+}
+
+// A file of columns of strings, any of which may be NULL.
+TString BuildParquetUtf8Columns(const TVector<std::pair<TString, TVector<TMaybe<TString>>>>& columns) {
+    arrow::FieldVector fields;
+    arrow::ArrayVector arrays;
+    for (const auto& [name, values] : columns) {
+        arrow::StringBuilder builder;
+        for (const auto& value : values) {
+            if (value) {
+                UNIT_ASSERT(builder.Append(value->data(), value->size()).ok());
+            } else {
+                UNIT_ASSERT(builder.AppendNull().ok());
+            }
+        }
+
+        std::shared_ptr<arrow::Array> array;
+        UNIT_ASSERT(builder.Finish(&array).ok());
+        fields.push_back(arrow::field(std::string(name), arrow::utf8()));
+        arrays.push_back(std::move(array));
+    }
+
+    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(arrays));
+    auto sink = arrow::io::BufferOutputStream::Create(0).ValueOrDie();
+    UNIT_ASSERT(parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), sink, /*chunk_size*/ 16).ok());
+    auto buffer = sink->Finish().ValueOrDie();
+    return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
+}
+
 void ApplyParquetFeatureFlag(TTestBasicRuntime& runtime, ERestoreDataFormat format, bool enable = true) {
     if (format == ERestoreDataFormat::Parquet && enable) {
         runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
@@ -1084,8 +1133,6 @@ Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
     Y_UNIT_TEST(ShouldFailOnNullInNotNullColumn, EBackupTestDataFormat) {
         const auto format = ToDataFormat(Arg<0>());
 
-        TTestBasicRuntime runtime;
-
         THashMap<TString, TString> s3Data;
         TString place;
         if (format == ERestoreDataFormat::Parquet) {
@@ -1099,13 +1146,52 @@ Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
             place = " on line: \"k1\",null";
         }
 
-        DoImport(
-            runtime,
-            s3Data,
-            format,
-            Ydb::StatusIds::CANCELLED,
-            /*enableParquetFeatureFlag=*/true,
-            "column 'value' has a NULL value but is NOT NULL" + place);
+        for (const bool directPartImport : {false, true}) {
+            TTestBasicRuntime runtime;
+            DoImport(
+                runtime,
+                s3Data,
+                format,
+                Ydb::StatusIds::CANCELLED,
+                /*enableParquetFeatureFlag=*/true,
+                "column 'value' has a NULL value but is NOT NULL" + place,
+                directPartImport);
+        }
+    }
+
+    // The cells of a row come to the check by their place: the keys in the
+    // order of the key, the values in the order of the scheme. Here the order
+    // of the columns is neither.
+    Y_UNIT_TEST(ShouldFailOnNullInNotNullKey, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
+
+        THashMap<TString, TString> s3Data;
+        TString place;
+        if (format == ERestoreDataFormat::Parquet) {
+            s3Data = MakeParquetS3Data(NotNullKeySchemePb(), {BuildParquetUtf8Columns({
+                {"value", {"v1", "v2"}},
+                {"k2", {"x", Nothing()}},
+                {"k1", {"a", "b"}},
+            })});
+            place = " in row 1 of row group 0";
+        } else {
+            s3Data = ConvertTableTestData(TTestDataWithScheme(
+                NotNullKeySchemePb(),
+                {TTestData("\"v1\",\"x\",\"a\"\n\"v2\",null,\"b\"\n", "")}));
+            place = " on line: \"v2\",null,\"b\"";
+        }
+
+        for (const bool directPartImport : {false, true}) {
+            TTestBasicRuntime runtime;
+            DoImport(
+                runtime,
+                s3Data,
+                format,
+                Ydb::StatusIds::CANCELLED,
+                /*enableParquetFeatureFlag=*/true,
+                "column 'k2' has a NULL value but is NOT NULL" + place,
+                directPartImport);
+        }
     }
 
     Y_UNIT_TEST(ShouldFailWhenFeatureFlagDisabled) {

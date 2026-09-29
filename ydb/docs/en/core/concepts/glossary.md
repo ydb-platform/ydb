@@ -659,7 +659,15 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 #### Node Broker {#node-broker}
 
+<<<<<<< HEAD
 **NodeBroker** is a system tablet that is responsible for registering [dynamic nodes](#dynamic) in the cluster.
+=======
+[**SelfHeal**](../devops/concepts/selfheal.md) is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../devops/concepts/selfheal-storage.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) relocates [State Storage](#state-storage), [Board](#board), and [SchemeBoard](#scheme-board) replicas after failures and can add replicas when new nodes appear.
+
+#### NodeBroker {#node-broker}
+
+**NodeBroker** is a system tablet responsible for registering [dynamic nodes](#dynamic) in the cluster.
+>>>>>>> a8191fbd90e ([YDBDOCS-2805] Рефакторинг self heal (#52358))
 
 #### BSController {#ds-controller}
 

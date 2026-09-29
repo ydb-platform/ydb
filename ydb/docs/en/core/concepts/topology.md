@@ -105,4 +105,10 @@ To survive an entire data center outage at the database level, assuming a cluste
 * [Example Cluster Configuration Files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
 * [{#T}](../contributor/distributed-storage.md)
 
+<<<<<<< HEAD
 [*recommended-node-count]: Using fewer than this number of nodes will limit the cluster's ability to [self-heal](../maintenance/manual/selfheal.md).
+=======
+{% endif %}
+
+[*recommended-node-count]: Using fewer nodes will limit the cluster's ability to [automatically recover](../devops/concepts/selfheal-storage.md).
+>>>>>>> a8191fbd90e ([YDBDOCS-2805] Рефакторинг self heal (#52358))

@@ -1,5 +1,6 @@
-# Working with SelfHeal
+# Storage SelfHeal
 
+<<<<<<< HEAD:ydb/docs/en/core/maintenance/manual/selfheal.md
 During cluster operation, entire nodes or individual block devices on which {{ ydb-short-name }} runs may fail.
 
 SelfHeal is used to maintain cluster availability and fault tolerance if failed nodes or devices cannot be quickly restored.
@@ -12,6 +13,19 @@ SelfHeal allows you to:
 SelfHeal is enabled by default.
 
 The {{ ydb-short-name }} component responsible for SelfHeal is called Sentinel.
+=======
+Storage SelfHeal is a mechanism for automatically restoring {{ ydb-short-name }} storage fault tolerance.
+
+For an overview of the mechanisms and their operating conditions, see [SelfHeal](selfheal.md). Recovery of State Storage, Board, and SchemeBoard replicas is described in [Metadata Distribution SelfHeal](selfheal-metadata-distribution.md).
+
+## How storage SelfHeal works {#how-it-works}
+
+Sentinel, a component of [CMS](../../concepts/glossary.md#cms), continuously monitors the state of [PDisks](../../concepts/glossary.md#pdisk) and nodes. If a fault persists long enough (about one hour by default), Sentinel initiates relocation of the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so that the [failure model](../../concepts/topology.md#cluster-config) is satisfied again.
+
+The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The relocation itself can take from minutes to a day, depending on the data volume and the hardware. Once the command has been accepted, CMS treats the task as issued; distributed storage is responsible for completing replication.
+
+Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
+>>>>>>> a8191fbd90e ([YDBDOCS-2805] Рефакторинг self heal (#52358)):ydb/docs/en/core/devops/concepts/selfheal-storage.md
 
 ## Enabling and disabling SelfHeal {#on-off}
 

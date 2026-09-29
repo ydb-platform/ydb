@@ -10,10 +10,12 @@
 #include <util/system/sysstat.h>
 
 #include <atomic>
+#include <exception>
 #include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 using namespace NYdb;
 using namespace NYdb::NOidc;
@@ -122,6 +124,54 @@ Y_UNIT_TEST_SUITE(TOidcFileTokenCache) {
         UNIT_ASSERT_VALUES_EQUAL(CreateFileTokenCacher(path, "identity-a")->Read()->AccessToken.Token, "access-a");
     }
 
+    Y_UNIT_TEST(ReportsWriteFailureBeforeRethrowingWithoutTokens) {
+        TTempDir dir;
+        std::vector<std::string> diagnostics;
+        auto cacher = CreateFileTokenCacher(
+            (dir.Path() / "missing" / "tokens.json").GetPath(), "identity-a",
+            [&](const std::string& message) { diagnostics.push_back(message); });
+        UNIT_ASSERT(!cacher->Read().has_value());
+        UNIT_ASSERT(diagnostics.empty());
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            cacher->Write(MakeCache("secret-access", "secret-refresh")),
+            std::runtime_error, "parent directory");
+        UNIT_ASSERT_VALUES_EQUAL(diagnostics.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(diagnostics.front(), "parent directory");
+        UNIT_ASSERT(diagnostics.front().find("secret-access") == std::string::npos);
+        UNIT_ASSERT(diagnostics.front().find("secret-refresh") == std::string::npos);
+    }
+
+    Y_UNIT_TEST(ReportsReadFailureBeforeRethrowing) {
+        TTempDir dir;
+        std::vector<std::string> diagnostics;
+        auto cacher = CreateFileTokenCacher(
+            dir.Path().GetPath(), "identity-a",
+            [&](const std::string& message) { diagnostics.push_back(message); });
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(cacher->Read(), std::runtime_error, "regular file");
+        UNIT_ASSERT_VALUES_EQUAL(diagnostics.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(diagnostics.front(), "regular file");
+    }
+
+    Y_UNIT_TEST(ReportsIdentityCollisionWithoutIdentityOrTokens) {
+        TTempDir dir;
+        const auto path = (dir.Path() / "tokens.json").GetPath();
+        CreateFileTokenCacher(path, "private-identity-a")->Write(MakeCache("secret-access-a", "secret-refresh-a"));
+        std::vector<std::string> diagnostics;
+        auto cacher = CreateFileTokenCacher(
+            path, "private-identity-b",
+            [&](const std::string& message) { diagnostics.push_back(message); });
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            cacher->Write(MakeCache("secret-access-b", "secret-refresh-b")), std::runtime_error, "identity");
+        UNIT_ASSERT_VALUES_EQUAL(diagnostics.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(diagnostics.front(), "separate cache path");
+        UNIT_ASSERT(diagnostics.front().find("private-identity") == std::string::npos);
+        UNIT_ASSERT(diagnostics.front().find("secret-access") == std::string::npos);
+        UNIT_ASSERT(diagnostics.front().find("secret-refresh") == std::string::npos);
+    }
+
     Y_UNIT_TEST(AtomicReplacementNeverExposesPartialJson) {
         TTempDir dir;
         const auto path = (dir.Path() / "tokens.json").GetPath();
@@ -172,6 +222,47 @@ Y_UNIT_TEST_SUITE(TOidcFileTokenCache) {
         const TFileStat stat(path);
         UNIT_ASSERT_VALUES_EQUAL(stat.Mode & (S_IRWXU | S_IRWXG | S_IRWXO), S_IRUSR | S_IWUSR);
         UNIT_ASSERT_VALUES_EQUAL(cacher->Read()->AccessToken.Token, "new-access");
+    }
+
+    Y_UNIT_TEST(ConcurrentReplacementNeverFollowsSymlink) {
+        TTempDir dir;
+        const auto path = dir.Path() / "tokens.json";
+        const auto target = dir.Path() / "target.json";
+        const auto replacement = dir.Path() / "replacement";
+        const auto temporary = dir.Path() / "swapping";
+        CreateFileTokenCacher(path.GetPath(), "identity-a")->Write(MakeCache("regular-access", {}));
+        CreateFileTokenCacher(target.GetPath(), "identity-a")->Write(MakeCache("symlink-access", {}));
+        UNIT_ASSERT(NFs::SymLink(target.GetPath(), replacement.GetPath()));
+        auto cacher = CreateFileTokenCacher(path.GetPath(), "identity-a", [](const std::string&) {});
+
+        std::exception_ptr replacementError;
+        std::jthread replacing([&](std::stop_token stop) {
+            try {
+                while (!stop.stop_requested()) {
+                    path.RenameTo(temporary);
+                    replacement.RenameTo(path);
+                    temporary.RenameTo(replacement);
+                }
+            } catch (...) {
+                replacementError = std::current_exception();
+            }
+        });
+        for (size_t i = 0; i < 10000; ++i) {
+            std::optional<TTokenCache> cached;
+            try {
+                cached = cacher->Read();
+            } catch (const std::runtime_error& error) {
+                UNIT_ASSERT_STRING_CONTAINS(error.what(), "symlink");
+            }
+            if (cached.has_value()) {
+                UNIT_ASSERT_VALUES_EQUAL(cached->AccessToken.Token, "regular-access");
+            }
+        }
+        replacing.request_stop();
+        replacing.join();
+        if (replacementError != nullptr) {
+            std::rethrow_exception(replacementError);
+        }
     }
 
     Y_UNIT_TEST(RejectsDanglingCacheSymlink) {

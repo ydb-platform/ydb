@@ -19,11 +19,13 @@ struct TOidcCliOptions {
     TString Issuer;
     TString Flow;
     TString ClientId;
-    TString ClientSecret;
     TString ClientSecretFile;
     TString AccessTokenFile;
     TString Scope;
     TString CachePath;
+
+    // Prepared after source resolution and reused when the driver creates credentials.
+    std::optional<NOidc::TOidcConfig> ResolvedConfig;
 
     bool IsConfigured() const;
     bool HasOptions() const;

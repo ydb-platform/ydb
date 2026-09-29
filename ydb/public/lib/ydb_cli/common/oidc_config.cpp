@@ -176,7 +176,7 @@ std::string ReadSecret(const YAML::Node& node, std::string_view key, const char*
 
 NOidc::TStaticOidcConfig ReadStaticGrant(const YAML::Node& node, const std::string& configFilePath) {
     CheckKeys(node, StaticGrant, {"access_token_file", "expires_at"});
-    auto token = ReadSecret(node, "access_token_file", "YDB_TOKEN", configFilePath);
+    auto token = ReadSecret(node, "access_token_file", "YDB_OIDC_ACCESS_TOKEN", configFilePath);
     // The SDK adds Bearer itself; accept either raw or prefixed tokens.
     if (token.starts_with("Bearer ")) {
         token.erase(0, 7);

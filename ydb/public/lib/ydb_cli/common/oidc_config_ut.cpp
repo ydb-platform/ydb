@@ -1,6 +1,7 @@
 #include <ydb/public/lib/ydb_cli/common/oidc_config.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/common/scope.h>
 
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
@@ -47,6 +48,19 @@ Y_UNIT_TEST_SUITE(TOidcConfigFile) {
             "issuer: https://issuer.example\nclient_credentials_grant:\n  client_id: client\n  client_secret_file: secret\n");
         UNIT_ASSERT_VALUES_EQUAL(CreateOidcFileCredentialsProviderFactory(tokenConfig, nullptr)->CreateProvider()->GetAuthInfo(), "Bearer file-token");
         UNIT_ASSERT_VALUES_EQUAL(std::get<TClientOidcConfig>(LoadOidcConfig(clientConfig).FlowConfig).ClientSecret, "file-secret");
+    }
+
+    Y_UNIT_TEST(EnvironmentSecretsAreNotFilePaths) {
+        TTempDir dir;
+        const auto secretPath = WriteFile(dir.Path() / "secret", "must-not-read-this-file");
+        const NTesting::TScopedEnvironment secret("YDB_OIDC_CLIENT_SECRET", TString(secretPath));
+        const NTesting::TScopedEnvironment token("YDB_OIDC_ACCESS_TOKEN", TString(secretPath));
+        const auto tokenConfig = WriteFile(dir.Path() / "token.yaml",
+            "issuer: https://issuer.example\nstatic_credentials: {}\n");
+        const auto clientConfig = WriteFile(dir.Path() / "client.yaml",
+            "issuer: https://issuer.example\nclient_credentials_grant:\n  client_id: client\n");
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TStaticOidcConfig>(LoadOidcConfig(tokenConfig).FlowConfig).AccessToken, secretPath);
+        UNIT_ASSERT_VALUES_EQUAL(std::get<TClientOidcConfig>(LoadOidcConfig(clientConfig).FlowConfig).ClientSecret, secretPath);
     }
 
     Y_UNIT_TEST(RejectsInlineSecrets) {

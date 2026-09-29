@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         const auto file = EnvFile("raw-oidc-token\n", "token");
         ExpectToken("Bearer raw-oidc-token");
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example",
-            "--oidc-token-file", file, "scheme", "ls"}, {{"YDB_TOKEN", "ignored-env-token"}});
+            "--oidc-access-token-file", file, "scheme", "ls"}, {{"YDB_TOKEN", "ignored-env-token"}});
     }
 
     Y_UNIT_TEST_F(CreatesAndUsesOidcTokenFileProfile, TCliTestFixture) {
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         const auto profileFile = EnvFile("", "profiles.yaml");
         RunCliWithInput({"--profile-file", profileFile, "config", "profile", "create", "oidc-static",
             "-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example",
-            "--oidc-token-file", tokenFile}, "");
+            "--oidc-access-token-file", tokenFile}, "");
         const auto stored = TFileInput(profileFile).ReadAll();
         UNIT_ASSERT_STRING_CONTAINS(stored, "access_token_file:");
         UNIT_ASSERT_STRING_CONTAINS(stored, tokenFile);
@@ -57,10 +57,59 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         UNIT_ASSERT(!output.Contains("private-profile-token"));
     }
 
-    Y_UNIT_TEST_F(StaticOidcFlowUsesYdbTokenEnvironment, TCliTestFixture) {
+    Y_UNIT_TEST_F(StaticOidcFlowUsesOidcTokenEnvironment, TCliTestFixture) {
         ExpectToken("Bearer environment-token");
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example",
-            "--oidc-flow", "static", "scheme", "ls"}, {{"YDB_TOKEN", "environment-token"}});
+            "--oidc-flow", "static", "scheme", "ls"}, {{"YDB_OIDC_ACCESS_TOKEN", "environment-token"}});
+    }
+
+    Y_UNIT_TEST_F(StaticOidcEnvironmentTokenIsLiteralAndMasked, TCliTestFixture) {
+        const auto token = EnvFile("must-not-read-file", "token");
+        ExpectToken("Bearer " + token);
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example", "scheme", "ls"},
+            {{"YDB_OIDC_ACCESS_TOKEN", token}});
+        const auto output = RunCli({"-v", "-e", GetEndpoint(), "-d", GetDatabase(),
+            "--oidc-issuer", "https://issuer.example", "config", "info"},
+            {{"YDB_OIDC_ACCESS_TOKEN", token}});
+        UNIT_ASSERT_STRING_CONTAINS(output, "YDB_OIDC_ACCESS_TOKEN: ***");
+        UNIT_ASSERT_STRING_CONTAINS(output, "Value: ***. Got from: YDB_OIDC_ACCESS_TOKEN");
+        UNIT_ASSERT(!output.Contains(token));
+    }
+
+    Y_UNIT_TEST_F(StaticProfileIgnoresEnvironmentFieldsForOtherFlows, TCliTestFixture) {
+        const auto tokenFile = EnvFile("profile-token", "token");
+        const TString profile = TStringBuilder()
+            << "profiles:\n  oidc:\n    authentication:\n      method: oidc\n      data:\n"
+            << "        issuer: https://issuer.example\n        flow: static\n"
+            << "        access_token_file: " << tokenFile << "\nactive_profile: oidc\n";
+        for (const bool explicitProfile : {false, true}) {
+            TList<TString> args = {"-e", GetEndpoint(), "-d", GetDatabase()};
+            if (explicitProfile) {
+                args.insert(args.end(), {"--profile", "oidc"});
+            }
+            args.insert(args.end(), {"scheme", "ls"});
+            ExpectToken("Bearer profile-token");
+            RunCli(args, {{"YDB_OIDC_SCOPE", "read"}, {"YDB_OIDC_CLIENT_ID", "other-client"},
+                {"YDB_OIDC_CLIENT_SECRET", "unused-secret"}}, profile);
+        }
+        ExpectFail();
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-scope", "read", "config", "info"}, {}, profile);
+    }
+
+    Y_UNIT_TEST_F(OidcTokenSourcesFollowAuthenticationPriority, TCliTestFixture) {
+        const auto tokenFile = EnvFile("profile-token", "token");
+        const TString profile = TStringBuilder()
+            << "profiles:\n  oidc:\n    authentication:\n      method: oidc\n      data:\n"
+            << "        issuer: https://issuer.example\n        flow: static\n"
+            << "        access_token_file: " << tokenFile << "\nactive_profile: oidc\n";
+        const THashMap<TString, TString> env = {{"YDB_OIDC_ACCESS_TOKEN", "environment-token"}};
+        ExpectToken("Bearer environment-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "scheme", "ls"}, env, profile);
+        ExpectToken("Bearer profile-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--profile", "oidc", "scheme", "ls"}, env, profile);
+        const auto cliFile = EnvFile("cli-token", "token");
+        ExpectToken("Bearer cli-token");
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--profile", "oidc", "--oidc-access-token-file", cliFile, "scheme", "ls"}, env, profile);
     }
 
     Y_UNIT_TEST_F(RejectsMissingOrEmptyOidcTokenFile, TCliTestFixture) {
@@ -68,7 +117,7 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         for (const TString& file : {TString("/nonexistent/token"), empty}) {
             ExpectFail();
             RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", "https://issuer.example",
-                "--oidc-token-file", file, "scheme", "ls"}, {{"YDB_TOKEN", "must-not-fall-back"}});
+                "--oidc-access-token-file", file, "scheme", "ls"}, {{"YDB_OIDC_ACCESS_TOKEN", "must-not-fall-back"}});
         }
     }
 
@@ -78,7 +127,7 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
             "        access_token_file: /nonexistent/old-token\nactive_profile: oidc\n";
         const auto file = EnvFile("fresh-token", "token");
         ExpectToken("Bearer fresh-token");
-        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-token-file", file, "scheme", "ls"}, {}, profile);
+        RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-access-token-file", file, "scheme", "ls"}, {}, profile);
         ExpectToken("Bearer fresh-token");
         RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "scheme", "ls"}, {{"YDB_TOKEN", "Bearer fresh-token"}}, profile);
     }
@@ -112,16 +161,16 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         RunCliWithInput({"config", "profile", "create", "oidc-file", "--oidc-key-file", file}, "");
         const auto help = RunCli({"--help"});
         UNIT_ASSERT(!help.Contains("--oidc-key-file"));
-        UNIT_ASSERT_STRING_CONTAINS(help, "--oidc-token-file");
-        UNIT_ASSERT(!help.Contains("--oidc-access-token-file"));
+        UNIT_ASSERT_STRING_CONTAINS(help, "--oidc-access-token-file");
+        UNIT_ASSERT(!help.Contains("--oidc-token-file"));
+        UNIT_ASSERT_STRING_CONTAINS(help, "Device flow requires browser sign-in");
         UNIT_ASSERT(!help.Contains("For OIDC, include the Bearer prefix"));
         UNIT_ASSERT_STRING_CONTAINS(help, "--oidc-client-secret-file");
     }
 
-    Y_UNIT_TEST_F(RemovedEnvironmentVariablesAreIgnored, TCliTestFixture) {
+    Y_UNIT_TEST_F(RemovedConfigEnvironmentVariableIsIgnored, TCliTestFixture) {
         const auto output = RunCli({"-e", GetEndpoint(), "-d", GetDatabase(), "config", "info"}, {
             {"YDB_OIDC_CONFIG", "/nonexistent/oidc.yaml"},
-            {"YDB_OIDC_ACCESS_TOKEN", "must-not-be-used"},
         });
         UNIT_ASSERT(!output.Contains("oidc-key-file:"));
         UNIT_ASSERT(!output.Contains("must-not-be-used"));

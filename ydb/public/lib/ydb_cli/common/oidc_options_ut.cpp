@@ -1,7 +1,9 @@
 #include "oidc.h"
+#include "client_command_options.h"
 #include "oidc_options.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/testing/common/scope.h>
 
 #include <util/folder/tempdir.h>
 #include <util/stream/file.h>
@@ -48,6 +50,35 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         UNIT_ASSERT(!output.Str().Contains("private-token"));
     }
 
+    Y_UNIT_TEST(EnvironmentCredentialsAreLiteralValues) {
+        TTempDir dir;
+        const auto path = (dir.Path() / "secret").GetPath();
+        TFileOutput(path).Write("must-not-read-this-file");
+        const NTesting::TScopedEnvironment secret("YDB_OIDC_CLIENT_SECRET", path);
+        const NTesting::TScopedEnvironment token("YDB_OIDC_ACCESS_TOKEN", path);
+        TOidcCliOptions options;
+        options.Issuer = "https://issuer.example";
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NOidc::TStaticOidcConfig>(options.MakeConfig().FlowConfig).AccessToken, path);
+        options.Flow = "client";
+        options.ClientId = "client";
+        UNIT_ASSERT_VALUES_EQUAL(std::get<NOidc::TClientOidcConfig>(options.MakeConfig().FlowConfig).ClientSecret, path);
+    }
+
+    Y_UNIT_TEST(ResolvedConfigDoesNotReadTokenFileAgain) {
+        TTempDir dir;
+        const auto path = dir.Path() / "token";
+        TFileOutput(path.GetPath()).Write("original-token");
+        TOidcCliOptions values;
+        TClientCommandOptions options;
+        AddOidcOptions(options, values, false);
+        const char* args[] = {"ydb", "--oidc-issuer", "https://issuer.example", "--oidc-access-token-file", path.GetPath().c_str()};
+        TOptionsParseResult parsed(&options, std::size(args), args);
+        UNIT_ASSERT(parsed.ParseFromProfilesAndEnv(nullptr, nullptr).empty());
+        ResolveOidcOptions(values, parsed);
+        path.DeleteIfExists();
+        UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(values)->CreateProvider()->GetAuthInfo(), "Bearer original-token");
+    }
+
     Y_UNIT_TEST(RejectsTokenFileForOtherFlows) {
         auto options = DeviceOptions();
         options.AccessTokenFile = "/nonexistent/token";
@@ -62,7 +93,7 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
     Y_UNIT_TEST(ClientFlowAndScopes) {
         auto options = DeviceOptions();
         options.Flow = "client";
-        options.ClientSecret = "secret";
+        const NTesting::TScopedEnvironment secret("YDB_OIDC_CLIENT_SECRET", "secret");
         options.Scope = "openid  user-context\toffline_access";
         const auto config = options.MakeConfig();
         const auto& client = std::get<NOidc::TClientOidcConfig>(config.FlowConfig);
@@ -84,7 +115,7 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
 
     Y_UNIT_TEST(RejectsWrongFlowFields) {
         auto options = DeviceOptions();
-        options.ClientSecret = "do-not-print-this";
+        options.ClientSecretFile = "/nonexistent/secret";
         UNIT_ASSERT_EXCEPTION_CONTAINS(options.MakeConfig(), std::invalid_argument, "Client secret requires client OIDC flow");
     }
 
@@ -115,7 +146,8 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
 
     Y_UNIT_TEST(MasksSecretsInConnectionInfo) {
         auto options = DeviceOptions();
-        options.ClientSecret = "private-client-secret";
+        options.Flow = "client";
+        const NTesting::TScopedEnvironment secret("YDB_OIDC_CLIENT_SECRET", "private-client-secret");
         TStringStream output;
         options.Print(output);
         UNIT_ASSERT_STRING_CONTAINS(output.Str(), "oidc-client-id: ydb-cli");
@@ -128,7 +160,7 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         auto options = DeviceOptions();
         options.Scope = "openid user-context";
         options.ClientSecretFile = "/tmp/secret";
-        options.ClientSecret = "never-persist-this";
+        const NTesting::TScopedEnvironment secret("YDB_OIDC_CLIENT_SECRET", "never-persist-this");
         const auto auth = options.MakeProfileAuth();
         UNIT_ASSERT_VALUES_EQUAL(auth["method"].as<std::string>(), "oidc");
         UNIT_ASSERT_VALUES_EQUAL(auth["data"]["client_id"].as<std::string>(), "ydb-cli");

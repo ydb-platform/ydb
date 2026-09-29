@@ -62,7 +62,7 @@ std::shared_ptr<ICredentialsProviderFactory> CreateCliOidcCredentialsProviderFac
 }
 
 std::shared_ptr<ICredentialsProviderFactory> CreateCliOidcCredentialsProviderFactory(const TOidcCliOptions& options) {
-    auto config = options.MakeConfig();
+    auto config = options.ResolvedConfig.has_value() ? options.ResolvedConfig.value() : options.MakeConfig();
     config.Acceptor(CreateCliAuthAcceptor(Cerr));
     return NOidc::CreateOidcProviderFactory(config);
 }

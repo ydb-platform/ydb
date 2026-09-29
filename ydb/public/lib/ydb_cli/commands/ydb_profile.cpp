@@ -402,7 +402,7 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"oidc-flow", Oidc.Flow},
         {"oidc-client-id", Oidc.ClientId},
         {"oidc-client-secret-file", Oidc.ClientSecretFile},
-        {"oidc-token-file", Oidc.AccessTokenFile},
+        {"oidc-access-token-file", Oidc.AccessTokenFile},
         {"oidc-scope", Oidc.Scope},
         {"oidc-cache-path", Oidc.CachePath},
         {"yc-token-file", YcTokenFile},

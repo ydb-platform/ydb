@@ -5,6 +5,7 @@
 
 #include <util/folder/path.h>
 #include <util/generic/guid.h>
+#include <util/stream/output.h>
 #include <util/system/error.h>
 #include <util/system/file.h>
 #include <util/system/mutex.h>
@@ -16,14 +17,19 @@
 #include <filesystem>
 #include <optional>
 #include <stdexcept>
+#include <system_error>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #if defined(_win_)
+    #include <util/system/fs_win.h>
+
     #include <aclapi.h>
     #include <windows.h>
+#else
+    #include <fcntl.h>
 #endif
 
 namespace NYdb::NConsoleClient {
@@ -33,6 +39,13 @@ constexpr ui64 CacheVersion = 1;
 constexpr i64 MaxCacheSize = 1024 * 1024;
 constexpr ui64 MaxJsonDepth = 8;
 
+// Only these errors are safe to include in CLI diagnostics. Other exceptions
+// can originate in JSON or I/O helpers and must not expose their messages.
+class TCacheError: public std::runtime_error {
+public:
+    explicit TCacheError(const std::string& message);
+};
+
 struct TCacheDocument {
     std::string Identity;
     NOidc::TTokenCache Cache;
@@ -41,8 +54,10 @@ struct TCacheDocument {
 [[noreturn]] void ThrowCacheError(const std::string& path, const std::string& problem);
 void RejectSymlink(const TFsPath& path);
 bool IsNotFoundError(int error);
+TFileHandle OpenCacheHandle(const TFsPath& path);
 void ValidateRegularFile(const TFileStat& stat, const std::string& path);
 TFile CreateOwnerOnlyFile(const TFsPath& path);
+std::optional<TFile> OpenCacheFile(const TFsPath& path);
 std::optional<std::string> ReadCacheFile(const TFsPath& path);
 std::optional<ui64> ReadUnsigned(const NJson::TJsonValue& value);
 std::optional<NOidc::TOAuthToken> ParseToken(const NJson::TJsonValue& value);
@@ -50,12 +65,13 @@ std::optional<TCacheDocument> ParseDocument(const std::string& data);
 NJson::TJsonValue SerializeToken(const NOidc::TOAuthToken& token);
 std::string SerializeDocument(const std::string& identity, const NOidc::TTokenCache& cache);
 
-#if defined(_win_)
-std::filesystem::path ToWindowsPath(const std::string& path);
-#endif
+TCacheError::TCacheError(const std::string& message)
+    : std::runtime_error(message)
+{
+}
 
 [[noreturn]] void ThrowCacheError(const std::string& path, const std::string& problem) {
-    throw std::runtime_error("OIDC token cache '" + path + "': " + problem);
+    throw TCacheError("OIDC token cache '" + path + "': " + problem);
 }
 
 void RejectSymlink(const TFsPath& path) {
@@ -64,19 +80,22 @@ void RejectSymlink(const TFsPath& path) {
     }
 }
 
-bool IsNotFoundError(int error) {
-#if defined(_win_)
-    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
-#else
-    return error == ENOENT;
-#endif
+void ValidateRegularFile(const TFileStat& stat, const std::string& path) {
+    if (stat.IsNull()) {
+        ThrowCacheError(path, "failed to inspect opened file");
+    }
+    if (stat.IsSymlink()) {
+        ThrowCacheError(path, "refusing to access a symlink");
+    }
+    if (!stat.IsFile()) {
+        ThrowCacheError(path, "path is not a regular file");
+    }
 }
 
+// TFile does not expose no-follow/nonblocking open modes or owner-only Windows
+// ACLs. Keep only these operations platform-specific; use util for file ownership,
+// metadata, I/O, temporary-file cleanup and atomic replacement.
 #if defined(_win_)
-struct TLocalFree {
-    void operator()(void* value) const noexcept;
-};
-
 class TOwnerOnlySecurity {
 public:
     explicit TOwnerOnlySecurity(const std::string& path);
@@ -85,16 +104,10 @@ public:
 private:
     TFileHandle ProcessToken_;
     std::vector<unsigned char> TokenInfo_;
-    std::unique_ptr<void, TLocalFree> Acl_;
+    std::unique_ptr<void, decltype(&LocalFree)> Acl_{nullptr, &LocalFree};
     SECURITY_DESCRIPTOR Descriptor_{};
     SECURITY_ATTRIBUTES Attributes_{};
 };
-
-void TLocalFree::operator()(void* value) const noexcept {
-    if (value != nullptr) {
-        LocalFree(value);
-    }
-}
 
 TOwnerOnlySecurity::TOwnerOnlySecurity(const std::string& path) {
     HANDLE processToken = nullptr;
@@ -143,26 +156,37 @@ SECURITY_ATTRIBUTES* TOwnerOnlySecurity::GetAttributes() {
     return &Attributes_;
 }
 
-std::filesystem::path ToWindowsPath(const std::string& path) {
-    return std::filesystem::path(
-        std::u8string_view(reinterpret_cast<const char8_t*>(path.data()), path.size()));
+bool IsNotFoundError(int error) {
+    return error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND;
 }
-#endif
 
-void ValidateRegularFile(const TFileStat& stat, const std::string& path) {
-    if (stat.IsSymlink()) {
-        ThrowCacheError(path, "refusing to access a symlink");
+TFileHandle OpenCacheHandle(const TFsPath& path) {
+    TFileHandle handle(NFsPrivate::CreateFileWithUtf8Name(
+        path.GetPath(), GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, false));
+    if (!handle.IsOpen()) {
+        return handle;
     }
-    if (!stat.IsFile()) {
-        ThrowCacheError(path, "path is not a regular file");
+    BY_HANDLE_FILE_INFORMATION information{};
+    if (!GetFileInformationByHandle(handle, &information)) {
+        ThrowCacheError(path.GetPath(), "failed to inspect opened file");
     }
+    if (information.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+        ThrowCacheError(path.GetPath(), "refusing to access a symlink or reparse point");
+    }
+    if (GetFileType(handle) != FILE_TYPE_DISK) {
+        ThrowCacheError(path.GetPath(), "path is not a regular file");
+    }
+    return handle;
 }
 
 TFile CreateOwnerOnlyFile(const TFsPath& path) {
-#if defined(_win_)
     // TFile's ARUser/AWUser flags do not restrict the Windows DACL.
     TOwnerOnlySecurity security(path.GetPath());
-    const auto windowsPath = ToWindowsPath(path.GetPath());
+    const auto& utf8Path = path.GetPath();
+    const std::filesystem::path windowsPath(
+        std::u8string_view(reinterpret_cast<const char8_t*>(utf8Path.data()), utf8Path.size()));
     TFileHandle handle(CreateFileW(
         windowsPath.c_str(),
         GENERIC_WRITE | WRITE_DAC,
@@ -175,29 +199,53 @@ TFile CreateOwnerOnlyFile(const TFsPath& path) {
         ThrowCacheError(path.GetPath(), "failed to create temporary file");
     }
     return TFile(handle.Release(), path.GetPath());
+}
 #else
-    return TFile(path.GetPath(), CreateNew | WrOnly | CloseOnExec | ARUser | AWUser);
-#endif
+bool IsNotFoundError(int error) {
+    return error == ENOENT;
 }
 
-std::optional<std::string> ReadCacheFile(const TFsPath& path) {
-    ClearLastSystemError();
-    const TFileStat stat(path, true);
-    if (stat.IsNull()) {
+TFileHandle OpenCacheHandle(const TFsPath& path) {
+    int descriptor;
+    do {
+        descriptor = open(path.GetPath().c_str(), O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
+    } while (descriptor < 0 && errno == EINTR);
+    if (descriptor < 0 && errno == ELOOP) {
+        ThrowCacheError(path.GetPath(), "refusing to access a symlink");
+    }
+    return TFileHandle(descriptor);
+}
+
+TFile CreateOwnerOnlyFile(const TFsPath& path) {
+    return TFile(path.GetPath(), CreateNew | WrOnly | CloseOnExec | ARUser | AWUser);
+}
+#endif
+
+std::optional<TFile> OpenCacheFile(const TFsPath& path) {
+    auto handle = OpenCacheHandle(path);
+    if (!handle.IsOpen()) {
         const int error = LastSystemError();
         if (IsNotFoundError(error)) {
             return std::nullopt;
         }
-        ThrowCacheError(path.GetPath(), "failed to inspect file");
+        const std::error_code code(error, std::system_category());
+        if (code == std::errc::permission_denied || code == std::errc::operation_not_permitted) {
+            ThrowCacheError(path.GetPath(), "permission denied when opening file");
+        }
+        ThrowCacheError(path.GetPath(), "failed to open file");
     }
-    // A single process owns the cache. Check before opening to reject FIFOs
-    // without blocking; concurrent replacement is limited to regular files.
-    ValidateRegularFile(stat, path.GetPath());
+    TFile file(handle.Release(), path.GetPath());
+    ValidateRegularFile(TFileStat(file), path.GetPath());
+    return file;
+}
 
+std::optional<std::string> ReadCacheFile(const TFsPath& path) {
     try {
-        TFile file(path.GetPath(), OpenExisting | RdOnly | CloseOnExec | Seq);
-        ValidateRegularFile(TFileStat(file), path.GetPath());
-        const i64 size = file.GetLength();
+        auto file = OpenCacheFile(path);
+        if (!file.has_value()) {
+            return std::nullopt;
+        }
+        const i64 size = file->GetLength();
         if (size < 0) {
             ThrowCacheError(path.GetPath(), "failed to determine file size");
         }
@@ -206,10 +254,10 @@ std::optional<std::string> ReadCacheFile(const TFsPath& path) {
         }
         std::string data(static_cast<size_t>(size), '\0');
         if (size) {
-            file.Load(data.data(), data.size());
+            file->Load(data.data(), data.size());
         }
         return data;
-    } catch (const std::runtime_error&) {
+    } catch (const TCacheError&) {
         throw;
     } catch (const std::exception&) {
         ThrowCacheError(path.GetPath(), "failed to read file");
@@ -309,78 +357,106 @@ std::string SerializeDocument(const std::string& identity, const NOidc::TTokenCa
 
 class TFileTokenCacher final: public NOidc::ITokenCacher {
 public:
-    TFileTokenCacher(std::string path, std::string identity);
+    TFileTokenCacher(std::string path, std::string identity, std::function<void(const std::string&)> diagnostic);
 
     std::optional<NOidc::TTokenCache> Read() const override;
     void Write(const NOidc::TTokenCache& cache) override;
 
 private:
+    void ReportError(const std::string& message) const noexcept;
+
     TFsPath Path_;
     std::string Identity_;
+    std::function<void(const std::string&)> Diagnostic_;
     mutable TMutex Mutex_;
 };
 
-TFileTokenCacher::TFileTokenCacher(std::string path, std::string identity)
+TFileTokenCacher::TFileTokenCacher(std::string path, std::string identity, std::function<void(const std::string&)> diagnostic)
     : Path_(std::move(path))
     , Identity_(std::move(identity))
+    , Diagnostic_(std::move(diagnostic))
 {
 }
 
 std::optional<NOidc::TTokenCache> TFileTokenCacher::Read() const {
-    with_lock (Mutex_) {
-        const auto data = ReadCacheFile(Path_);
-        if (!data.has_value()) {
-            return std::nullopt;
+    try {
+        with_lock (Mutex_) {
+            const auto data = ReadCacheFile(Path_);
+            if (!data.has_value()) {
+                return std::nullopt;
+            }
+            const auto document = ParseDocument(*data);
+            if (!document.has_value() || document->Identity != Identity_) {
+                return std::nullopt;
+            }
+            return document->Cache;
         }
-        const auto document = ParseDocument(*data);
-        if (!document.has_value() || document->Identity != Identity_) {
-            return std::nullopt;
-        }
-        return document->Cache;
+    } catch (const TCacheError& error) {
+        ReportError(error.what());
+        throw;
+    } catch (const std::exception&) {
+        ReportError("OIDC token cache '" + Path_.GetPath() + "': failed to read file");
+        throw;
     }
 }
 
 void TFileTokenCacher::Write(const NOidc::TTokenCache& cache) {
-    with_lock (Mutex_) {
-        if (cache.AccessToken.Token.empty()) {
-            throw std::invalid_argument("OIDC token cache access token must not be empty");
-        }
-        if (cache.RefreshToken.has_value() && cache.RefreshToken->Token.empty()) {
-            throw std::invalid_argument("OIDC token cache refresh token must not be empty");
-        }
-
-        const auto current = ReadCacheFile(Path_);
-        if (current.has_value()) {
-            const auto document = ParseDocument(*current);
-            if (document.has_value() && document->Identity != Identity_) {
-                ThrowCacheError(Path_.GetPath(), "identity differs; use a separate cache path");
+    try {
+        with_lock (Mutex_) {
+            if (cache.AccessToken.Token.empty()) {
+                throw std::invalid_argument("OIDC token cache access token must not be empty");
             }
-        }
-
-        const auto parent = Path_.Parent();
-        if (!parent.IsDirectory()) {
-            ThrowCacheError(Path_.GetPath(), "parent directory does not exist");
-        }
-        RejectSymlink(Path_);
-
-        const TFsPath temporary = parent / (".oidc-token-cache-" + CreateGuidAsString());
-        TTempFile cleanup(temporary.GetPath());
-        try {
-            const auto data = SerializeDocument(Identity_, cache);
-            if (data.size() > static_cast<size_t>(MaxCacheSize)) {
-                ThrowCacheError(Path_.GetPath(), "serialized data exceeds maximum size");
+            if (cache.RefreshToken.has_value() && cache.RefreshToken->Token.empty()) {
+                throw std::invalid_argument("OIDC token cache refresh token must not be empty");
             }
-            TFile file = CreateOwnerOnlyFile(temporary);
-            file.Write(data.data(), data.size());
-            file.Flush();
-            file.Close();
+
+            const auto current = ReadCacheFile(Path_);
+            if (current.has_value()) {
+                const auto document = ParseDocument(*current);
+                if (document.has_value() && document->Identity != Identity_) {
+                    ThrowCacheError(Path_.GetPath(), "identity differs; use a separate cache path");
+                }
+            }
+
+            const auto parent = Path_.Parent();
+            if (!parent.IsDirectory()) {
+                ThrowCacheError(Path_.GetPath(), "parent directory does not exist");
+            }
             RejectSymlink(Path_);
-            temporary.RenameTo(Path_);
-        } catch (const std::runtime_error&) {
-            throw;
-        } catch (const std::exception&) {
-            ThrowCacheError(Path_.GetPath(), "failed to write file");
+
+            const TFsPath temporary = parent / (".oidc-token-cache-" + CreateGuidAsString());
+            TTempFile cleanup(temporary.GetPath());
+            try {
+                const auto data = SerializeDocument(Identity_, cache);
+                if (data.size() > static_cast<size_t>(MaxCacheSize)) {
+                    ThrowCacheError(Path_.GetPath(), "serialized data exceeds maximum size");
+                }
+                TFile file = CreateOwnerOnlyFile(temporary);
+                file.Write(data.data(), data.size());
+                file.Flush();
+                file.Close();
+                RejectSymlink(Path_);
+                temporary.RenameTo(Path_);
+            } catch (const TCacheError&) {
+                throw;
+            } catch (const std::exception&) {
+                ThrowCacheError(Path_.GetPath(), "failed to write file");
+            }
         }
+    } catch (const TCacheError& error) {
+        ReportError(error.what());
+        throw;
+    } catch (const std::exception&) {
+        ReportError("OIDC token cache '" + Path_.GetPath() + "': failed to write file");
+        throw;
+    }
+}
+
+void TFileTokenCacher::ReportError(const std::string& message) const noexcept {
+    try {
+        Diagnostic_(message);
+    } catch (...) {
+        // A diagnostic sink must not replace the original cache error.
     }
 }
 
@@ -390,13 +466,23 @@ std::shared_ptr<NOidc::ITokenCacher> CreateFileTokenCacher(
     const std::string& cacheFilePath,
     const std::string& identity)
 {
+    return CreateFileTokenCacher(cacheFilePath, identity, [](const std::string& message) {
+        Cerr << "Warning: " << message << Endl;
+    });
+}
+
+std::shared_ptr<NOidc::ITokenCacher> CreateFileTokenCacher(
+    const std::string& cacheFilePath,
+    const std::string& identity,
+    std::function<void(const std::string&)> diagnostic)
+{
     if (cacheFilePath.empty()) {
         throw std::invalid_argument("OIDC token cache path must not be empty");
     }
     if (identity.empty()) {
         throw std::invalid_argument("OIDC token cache identity must not be empty");
     }
-    return std::make_shared<TFileTokenCacher>(cacheFilePath, identity);
+    return std::make_shared<TFileTokenCacher>(cacheFilePath, identity, std::move(diagnostic));
 }
 
 } // namespace NYdb::NConsoleClient

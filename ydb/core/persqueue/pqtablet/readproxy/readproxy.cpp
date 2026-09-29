@@ -276,12 +276,7 @@ private:
 
         for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
             const auto& currentReadResult = readResult.GetResult(i);
-            if (currentReadResult.GetData().empty()) { // This is empty parted removed by compactification
-                if (!InitialRequest) {
-                    // The tail we asked for was removed. Publish instead of asking again.
-                    dropIncompleteTail(currentReadResult.GetOffset());
-                    break;
-                }
+            if (currentReadResult.GetData().empty() && InitialRequest) { // This is empty parted removed by compactification
                 LastSkipOffset = currentReadResult.GetOffset();
                 continue; // Skip the empty part;
             }
@@ -289,25 +284,24 @@ private:
                 continue; // This is part of the message which is already being skipped due to empty parts or timestamp filtering. Skip all other parts as well;
             }
             if (!InitialRequest) {
-                // This is follow-up request to read missing parts;
-                // There must be some data in response already.
-                if (partResp->ResultSize() == 0) {
-                    makeErrorResponse("Internal error - got message part on followup read request with empty current response");
-                    LOG_C(
-                        "Handle TEvRead got message part on followup read request with empty current response. Readed now full",
-                        {"seqNo", currentReadResult.GetSeqNo()},
-                        {"partNo", currentReadResult.GetPartNo()},
-                        {"requestNow", Request}
-                    );
-                    break;
+                // Follow-up must continue the incomplete message. Anything else means the tail is gone.
+                bool continues = false;
+                if (partResp->ResultSize() > 0 && !currentReadResult.GetData().empty() && currentReadResult.GetPartNo() != 0) {
+                    const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
+                    continues = lastReadResult.GetSeqNo() == currentReadResult.GetSeqNo()
+                        && lastReadResult.GetPartNo() + 1 == currentReadResult.GetPartNo();
                 }
-                if (currentReadResult.GetPartNo() == 0) {
-                    // New message: the previous tail was deleted by retention or compaction.
-                    dropIncompleteTail(currentReadResult.GetOffset());
-                    break;
-                }
-                const auto& lastReadResult = partResp->GetResult(partResp->ResultSize() - 1);
-                if (lastReadResult.GetSeqNo() != currentReadResult.GetSeqNo() || lastReadResult.GetPartNo() + 1 != currentReadResult.GetPartNo()) {
+                if (!continues) {
+                    if (partResp->ResultSize() == 0 && !currentReadResult.GetData().empty()) {
+                        makeErrorResponse("Internal error - got message part on followup read request with empty current response");
+                        LOG_C(
+                            "Handle TEvRead got message part on followup read request with empty current response. Readed now full",
+                            {"seqNo", currentReadResult.GetSeqNo()},
+                            {"partNo", currentReadResult.GetPartNo()},
+                            {"requestNow", Request}
+                        );
+                        break;
+                    }
                     dropIncompleteTail(currentReadResult.GetOffset());
                     break;
                 }

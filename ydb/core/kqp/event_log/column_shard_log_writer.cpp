@@ -158,8 +158,6 @@ void TColumnShardLogWriter::CreateOrUpdateStorage() {
 }
 
 void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) {
-    auto* runtime = GetRunner().GetTestServer().GetRuntime();
-
     auto data = NKikimr::NArrow::SerializeBatchNoCompression(batch);
     TString serializedSchema = NKikimr::NArrow::SerializeSchema(*batch->schema());
 
@@ -168,11 +166,12 @@ void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch
     request.set_data(data);
     request.set_table(Sprintf("/Root/%s/%s", Settings.StoreName.c_str(), Settings.TableName.c_str()));
 
-    std::atomic<size_t> responses = 0;
+    // std::atomic<size_t> responses = 0;
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
-    auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", runtime->GetActorSystem(0));
+    auto future = NRpcService::DoLocalRpc<TEvBulkUpsertRequest>(std::move(request), "", "", TActivationContext::ActorSystem());
     future.Subscribe([&](const NThreading::TFuture<Ydb::Table::BulkUpsertResponse> f) {
-        auto op = f.GetValueSync().operation();
+        Y_UNUSED(f);
+        /* auto op = f.GetValueSync().operation();
         TStringBuilder issues;
         if (op.status() != Ydb::StatusIds::SUCCESS) {
             for (auto& issue : op.issues()) {
@@ -180,15 +179,8 @@ void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch
             }
             issues << "\n";
         }
-        responses.fetch_add(1);
+        responses.fetch_add(1); */
     });
-
-    TDispatchOptions options;
-    options.CustomFinalCondition = [&]() {
-        return responses.load() >= 1;
-    };
-
-    runtime->DispatchEvents(options);
 }
 
 } // namespace NKikimr::NKqp::NSchematizedLog

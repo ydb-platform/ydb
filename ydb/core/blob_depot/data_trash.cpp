@@ -297,6 +297,11 @@ namespace NKikimr::NBlobDepot {
                 record.OnSuccessfulCollect(this);
                 ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}), 0,
                     record.LastConfirmedGenStep);
+
+                if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                        Self->MoveData.Groups.contains(groupId)) {
+                    Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
+                }
             }
         } else {
             if (!info.Hard) {
@@ -317,6 +322,11 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         for (auto it = record.Trash.begin(); it != record.Trash.end() && TGenStep(*it) <= hardGenStep && callback(*it); ) {
             record.DeleteTrashRecord(this, it);
+        }
+
+        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                Self->MoveData.Groups.contains(groupId)) {
+            Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
         }
     }
 

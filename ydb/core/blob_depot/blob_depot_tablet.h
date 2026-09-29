@@ -43,6 +43,7 @@ namespace NKikimr::NBlobDepot {
                 EvPutThrottleWakeup,
                 EvMoveDataContinue,
                 EvMoveDataBlobCopied,
+                EvMoveDataCheckTrash,
             };
         };
 
@@ -72,6 +73,16 @@ namespace NKikimr::NBlobDepot {
                 , NewLocator(std::move(newLocator))
                 , YellowMoveChannels(std::move(yellowMoveChannels))
                 , YellowStopChannels(std::move(yellowStopChannels))
+            {}
+        };
+
+        struct TEvMoveDataCheckTrash
+            : TEventLocal<TEvMoveDataCheckTrash, TEvPrivate::EvMoveDataCheckTrash>
+        {
+            const ui64 MoveDataOperationId;
+
+            explicit TEvMoveDataCheckTrash(ui64 moveDataOperationId)
+                : MoveDataOperationId(moveDataOperationId)
             {}
         };
 
@@ -326,6 +337,8 @@ namespace NKikimr::NBlobDepot {
             TSet<ui32> Groups;
             TActorId RequestSender;
 
+            static constexpr ui32 MaxMoveDataKeysPerTx = 10'000;
+
             std::optional<TString> Key;
             ui32 ValueChainIndex = 0;
             ui32 ValueVersion = 0;
@@ -341,22 +354,34 @@ namespace NKikimr::NBlobDepot {
             TSet<TBlobSeqId> ProtectedBlobSeqIds;
             bool ApplyingIndexUpdate = false;
 
+            enum class ETrashStatus {
+                NeedsIndexRescan,
+                WaitingForGC,
+                Finished,
+            };
+            std::unordered_set<std::tuple<ui8, ui32>> ChannelGroups;
+
             bool IsInProgress() const {
                 return Phase != EPhase::Idle;
             }
         };
 
+        ui64 MoveDataOperationId = 0;
         TMoveDataState MoveData;
         TDeque<TEvTablet::TEvMoveData::TPtr> MoveDataRequestsQueue;
         TActorId CopyBlobActorId;
 
         void Handle(TEvTablet::TEvMoveData::TPtr ev);
         void Handle(TEvMoveDataBlobCopied::TPtr ev);
+        void Handle(TEvMoveDataCheckTrash::TPtr ev);
+
         bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const;
         bool NeedMoveBlob(const NKikimrBlobDepot::TBlobLocator& locator) const;
         void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender);
         void ContinueMoveData();
-        void StartMoveDataBlobCopy();
+        TMoveDataState::ETrashStatus GetTrashStatus();
+        void CheckTrash();
+        bool StartMoveDataBlobCopy();
         void ReleaseMoveDataBlobSeqId(const TBlobSeqId& blobSeqId);
         void RestartMoveDataScan();
         void ProcessMoveDataQueue();

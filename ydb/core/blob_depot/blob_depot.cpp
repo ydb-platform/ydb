@@ -147,6 +147,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvTablet::TEvMoveData, Handle);
                 cFunc(TEvPrivate::EvMoveDataContinue, ContinueMoveData);
                 hFunc(TEvMoveDataBlobCopied, Handle);
+                hFunc(TEvMoveDataCheckTrash, Handle);
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);

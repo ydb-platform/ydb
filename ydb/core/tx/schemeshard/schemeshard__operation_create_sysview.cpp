@@ -61,10 +61,10 @@ public:
     }
 };
 
-TSysViewInfo::TPtr CreateSysView(const NKikimrSchemeOp::TSysViewDescription& desc) {
+TSysViewInfo::TPtr CreateSysView(NKikimrSysView::ESysViewType type) {
     TSysViewInfo::TPtr sysViewInfo = new TSysViewInfo;
     sysViewInfo->AlterVersion = 1;
-    sysViewInfo->Type = desc.GetType();
+    sysViewInfo->Type = type;
     return sysViewInfo;
 }
 
@@ -177,11 +177,13 @@ public:
             return result;
         }
 
-        if (!NKikimrSysView::ESysViewType_IsValid(sysViewDescription.GetType())) {
+        const auto sysViewType = sysViewDescription.GetType();
+        if (!NKikimrSysView::ESysViewType_IsValid(sysViewType)) {
             errStr = TStringBuilder()
                 << "error: unsupported system view type "
-                << static_cast<uint32_t>(sysViewDescription.GetType());
+                << sysViewDescription.GetType();
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
         }
 
         auto guard = context.DbGuard();
@@ -211,7 +213,7 @@ public:
             sysViewPath->ApplyACL(acl);
         }
 
-        TSysViewInfo::TPtr sysViewInfo = CreateSysView(sysViewDescription);
+        TSysViewInfo::TPtr sysViewInfo = CreateSysView(static_cast<NKikimrSysView::ESysViewType>(sysViewType));
         context.SS->SysViews.Set(sysViewPathId, sysViewInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSysView, sysViewPathId);

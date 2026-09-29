@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""What `source` and `name` values the CI metrics table can contain.
-
-The single source of truth for the taxonomy. A test compares it against both the
-code that emits the spans and the README table, so a renamed phase cannot quietly
-leave a stale name in the docs and an undocumented one in the data.
-"""
+"""Allowed `source` / `name` values in analytics/ci_metrics."""
 
 from __future__ import annotations
 
@@ -51,12 +46,11 @@ SOURCES = {
     NIGHTLY_SOURCE: NIGHTLY_NAMES,
 }
 
-# `ya_make_try_1`, `ya_make_try_2`, ... are one span per attempt.
+# `ya_make_try_1`, `ya_make_try_2`, ... are one row per attempt.
 ATTEMPT_SUFFIXED_NAMES = ("ya_make_try_N",)
 
 
 def canonical_name(name: str) -> str:
-    """Collapse per-attempt span names onto their documented form."""
     if name.startswith("ya_make_try_"):
         return "ya_make_try_N"
     return name

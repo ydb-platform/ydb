@@ -516,7 +516,7 @@ class BufferIntegrityTest(unittest.TestCase):
             with contextlib.redirect_stderr(stderr):
                 spans = read_pending_spans(path)
             self.assertEqual([span["name"] for span in spans], ["ok"])
-            self.assertIn("unreadable open span", stderr.getvalue())
+            self.assertIn("unreadable open start", stderr.getvalue())
 
     def test_concurrent_appends_and_enrich_lose_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -557,24 +557,20 @@ class BufferIntegrityTest(unittest.TestCase):
 
 
 class MetricsFileEnvTest(unittest.TestCase):
-    def test_analytics_file_wins_over_the_legacy_name(self):
+    def test_analytics_file_or_default(self):
         from collector.schema import default_metrics_file
 
-        saved = {key: os.environ.get(key) for key in ("ANALYTICS_FILE", "CI_METRICS_FILE")}
+        saved = os.environ.get("ANALYTICS_FILE")
         try:
             os.environ["ANALYTICS_FILE"] = "/tmp/analytics.jsonl"
-            os.environ["CI_METRICS_FILE"] = "/tmp/legacy.jsonl"
             self.assertEqual(default_metrics_file(), "/tmp/analytics.jsonl")
             os.environ.pop("ANALYTICS_FILE")
-            self.assertEqual(default_metrics_file(), "/tmp/legacy.jsonl")
-            os.environ.pop("CI_METRICS_FILE")
             self.assertEqual(default_metrics_file(), "analytics.jsonl")
         finally:
-            for key, value in saved.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+            if saved is None:
+                os.environ.pop("ANALYTICS_FILE", None)
+            else:
+                os.environ["ANALYTICS_FILE"] = saved
 
 
 if __name__ == "__main__":

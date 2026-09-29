@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""GitHub Actions wrapper around collector: job/PR columns, --runner/--usage, CI table.
-
-    python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start ydbd_cached_build \\
-        --source nightly_build --label cache_mode=dist_cache --runner
-    python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py send --conclusion success --usage
-"""
+"""GitHub Actions wrapper around collector: job/PR columns and analytics/ci_metrics."""
 
 from __future__ import annotations
 
@@ -218,7 +213,7 @@ def apply_job_defaults(
     *,
     command: str,
 ) -> None:
-    """Labels and flags that used to live in the test_ya record_ci_* wrappers."""
+    """Fill labels and --runner/--usage from the job env."""
     attempt = fields.pop("ya_attempt", None)
     if attempt in (None, ""):
         attempt = os.environ.get("CI_YA_ATTEMPT")
@@ -404,8 +399,8 @@ def flush_file(
 
 
 def _add_runner_flags(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--runner", action="store_true", default=False, help="Attach cached cpu/ram/disk inventory")
-    parser.add_argument("--usage", action="store_true", default=False, help="Attach a fresh cpu/ram/disk snapshot")
+    parser.add_argument("--runner", action="store_true", default=False, help="cpu/ram/disk of the machine")
+    parser.add_argument("--usage", action="store_true", default=False, help="cpu/ram/disk used after the work")
     parser.add_argument("--ya-attempt", default=None, help="Attempt number; also read from $CI_YA_ATTEMPT")
     parser.add_argument("--rc", default=None, help="Command exit code: 0=success, else failure")
 

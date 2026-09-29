@@ -1,18 +1,5 @@
 #!/usr/bin/env python3
-"""Repair and rebuild analytics/ci_metrics.
-
-Every write needs --apply. Without it the command only prints what it would do.
-
-    python3 .github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py inventory
-    python3 .github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py resolve-prs --checkpoint /tmp/pr-map.json
-    python3 .github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py copy --dest analytics/ci_metrics_migration --checkpoint /tmp/copy.json --apply
-    python3 .github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py backfill-window --from 2026-08-30 --to 2026-09-01 --dest analytics/ci_metrics_migration --apply
-    python3 .github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py verify --dest analytics/ci_metrics_migration
-    python3 .github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py test-rename
-    python3 .github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py swap --dest analytics/ci_metrics_migration --apply
-
-Runbook: github_actions/README.md, section «Миграция».
-"""
+"""One-shot repair of analytics/ci_metrics. Writes only with --apply."""
 
 from __future__ import annotations
 

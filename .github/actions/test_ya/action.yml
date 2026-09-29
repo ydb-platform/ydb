@@ -155,13 +155,13 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
-        if [ -z "${CI_METRICS_FILE:-}" ]; then
-          CI_METRICS_FILE=$TMP_DIR/ci_metrics.jsonl
-          export CI_METRICS_FILE
-          echo "CI_METRICS_FILE=$CI_METRICS_FILE" >> $GITHUB_ENV
+        if [ -z "${ANALYTICS_FILE:-}" ]; then
+          ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
+          export ANALYTICS_FILE
+          echo "ANALYTICS_FILE=$ANALYTICS_FILE" >> $GITHUB_ENV
         fi
-        mkdir -p "$(dirname "$CI_METRICS_FILE")"
-        touch "$CI_METRICS_FILE"
+        mkdir -p "$(dirname "$ANALYTICS_FILE")"
+        touch "$ANALYTICS_FILE"
         python3 .github/scripts/utils/analytics/github_actions/ci_metrics.py start --name init --source ya_phase || true
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
@@ -211,8 +211,6 @@ runs:
         set -ex
         CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
         ci() { python3 "$CI_METRICS_PY" "$@" || true; }
-        # Labels (ya_attempt, cache_mode, build_target) and runner/usage come
-        # from env / --rc in ci_metrics.py. Traps stay here: only bash sees set -e.
         trap 'trap - EXIT; ci send --conclusion cancelled' TERM INT
         trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
 
@@ -570,8 +568,8 @@ runs:
             ci end "$YA_MAKE_NAME" --rc "$RC" --error "ya make rc=${RC}"
           fi
           ci start postprocess_try
-          # Every optional sub-step below runs under `|| true`; remember whether
-          # any of them failed so the span is not reported as a clean success.
+          # Optional sub-steps use || true so they don't abort the step.
+          # Remember if any failed so we don't write conclusion=success.
           POSTPROCESS_RC=0
           if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
             python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \

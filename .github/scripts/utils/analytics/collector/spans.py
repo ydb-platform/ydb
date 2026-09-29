@@ -1,4 +1,4 @@
-"""Open/close spans and rewrite unsent completed records."""
+"""Open/close timed records and rewrite unsent completed ones."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ def start(
     enrich: Optional[EnrichFn] = None,
     **_ignored: Any,
 ) -> str:
-    """Open a span. Duration is computed later by end()/send()."""
+    """Remember start time. Duration is computed later by end()/send()."""
     path = file or default_metrics_file()
     merged = _record_kwargs(properties, labels)
     epoch = started_epoch or _now_epoch()
@@ -125,7 +125,7 @@ def end(
     enrich: Optional[EnrichFn] = None,
     **fields: Any,
 ) -> int:
-    """Close matching open span (LIFO by name) or every open span if name is omitted."""
+    """Close the last matching start, or every open start if name is omitted."""
     path = file or default_metrics_file()
     extras = _record_kwargs(properties, None)
     extras.update({key: value for key, value in fields.items() if value is not None})
@@ -296,7 +296,7 @@ def track(
     attach: Optional[AttachFn] = None,
     enrich: Optional[EnrichFn] = None,
 ) -> None:
-    """Queue a completed event. Does not open a span and does not export."""
+    """Write a finished number. Does not open a start and does not flush."""
     path = file or default_metrics_file()
     merged = _record_kwargs(properties, labels)
     resolved_kind = kind
@@ -331,7 +331,7 @@ def send(
     table_path: Optional[str] = None,
     **fields: Any,
 ) -> int:
-    """End leftover spans and export the batch. Does not invent a new event."""
+    """Close leftover starts and flush. Does not invent a new event."""
     path = file or default_metrics_file()
     extras = _record_kwargs(properties, None)
     extras.update({key: value for key, value in fields.items() if value is not None})

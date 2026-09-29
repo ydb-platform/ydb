@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Guard against doc drift in the source/name taxonomy.
-
-`ya_rebuild` was documented in a PR description, renamed in the code, and left
-behind in the production table. These tests make the three views agree:
-taxonomy.py, the code that emits spans, and the README table.
-"""
+"""taxonomy.py, emitters, and the README tables must list the same names."""
 
 from __future__ import annotations
 
@@ -28,7 +23,7 @@ _EXPORT = _ANALYTICS / "github_actions" / "export_github_job_metrics.py"
 
 
 def _table_rows(header_starts_with: str) -> list:
-    """Body rows of the markdown table whose header row starts with this text."""
+    """Rows of the README table whose header starts with this text."""
     rows = []
     inside = False
     for line in _GH_README.read_text(encoding="utf-8").splitlines():
@@ -73,9 +68,7 @@ def _documented_phase_names() -> set:
 def _span_names_from_action() -> set:
     text = _ACTION_YML.read_text(encoding="utf-8")
     names = set()
-    for match in re.finditer(r"record_ci_start\s+\"?([A-Za-z_][\w${}]*)\"?", text):
-        names.add(match.group(1))
-    # Direct CLI calls: full path, $CI_METRICS_PY, or the test_ya `ci` wrapper.
+    # CLI calls: full path, $CI_METRICS_PY, or the test_ya `ci` wrapper.
     for match in re.finditer(
         r"(?:ci_metrics\.py|\"\$CI_METRICS_PY\"|\bci)\s+(?:start|track)\s+"
         r"(?:--name\s+)?\"?([A-Za-z_][\w-]*)",
@@ -100,7 +93,7 @@ class TaxonomyMatchesCodeTest(unittest.TestCase):
         emitted = _span_names_from_action()
         self.assertTrue(
             emitted <= known,
-            f"spans emitted by test_ya but missing from taxonomy.py: {sorted(emitted - known)}",
+            f"names emitted by test_ya but missing from taxonomy.py: {sorted(emitted - known)}",
         )
 
     def test_taxonomy_has_no_phase_that_nothing_emits(self):
@@ -142,7 +135,6 @@ class TaxonomyMatchesDocsTest(unittest.TestCase):
             self.assertIn(name, documented, f"{name} is not in the README source/name table")
 
     def test_readme_phase_table_matches_the_taxonomy_exactly(self):
-        """Catches both an undocumented phase and a renamed one left in the docs."""
         documented = _documented_phase_names()
         known = set(taxonomy.YA_PHASE_NAMES)
         self.assertEqual(
@@ -157,7 +149,6 @@ class TaxonomyMatchesDocsTest(unittest.TestCase):
         )
 
     def test_ya_rebuild_is_gone_everywhere(self):
-        """The specific drift this guard exists for."""
         for path in (_GH_README, _ACTION_YML, _EVLOG):
             self.assertNotIn("ya_rebuild", path.read_text(encoding="utf-8"), f"in {path.name}")
         self.assertNotIn("ya_rebuild", str(taxonomy.YA_PHASE_NAMES))

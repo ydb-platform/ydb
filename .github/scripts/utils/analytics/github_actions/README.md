@@ -29,7 +29,7 @@ GitHub API, сколько шли job и step.
 повторный прогон не затёр первый: оба числа входят в первичный ключ.
 
 Нет любого из двух — строка не попадёт в таблицу, уйдёт в файл
-`$CI_METRICS_FILE.skipped` рядом с JSONL. Сборка не упадёт.
+`$ANALYTICS_FILE.skipped` рядом с JSONL. Сборка не упадёт.
 
 JSONL не кладите в каталог, который `test_ya` выкладывает на публичный S3
 (`PUBLIC_DIR`) — иначе файл с метриками уедет в интернет.
@@ -37,7 +37,7 @@ JSONL не кладите в каталог, который `test_ya` выкла
 ### Своё измерение в workflow
 
 ```bash
-export CI_METRICS_FILE="$TMP_DIR/ci_metrics.jsonl"
+export ANALYTICS_FILE="$TMP_DIR/analytics.jsonl"
 PY=.github/scripts/utils/analytics/github_actions/ci_metrics.py
 
 python3 "$PY" start compile --source my_workflow --label cache_mode=dist_cache
@@ -223,8 +223,8 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
 ## Миграция живой таблицы
 
 Разовый ремонт уже записанных строк: `migrate_ci_metrics.py`. Без `--apply`
-ничего не пишет. Команды — в docstring скрипта. Живую таблицу этот PR не
-переписывает.
+ничего не пишет. Список команд — `python3 …/migrate_ci_metrics.py --help`.
+Живую таблицу этот PR не переписывает.
 
 ## Тесты
 

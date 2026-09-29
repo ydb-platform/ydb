@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""Create the CI analytics tables. Idempotent: CREATE TABLE IF NOT EXISTS.
-
-The metrics writers run with ensure_table=False so a hot path never issues DDL,
-which means the tables have to be provisioned here.
-
-    python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
-    python3 .github/scripts/utils/analytics/github_actions/provision_tables.py \\
-        --metrics-table analytics/ci_metrics_migration --skip-state
-"""
+"""CREATE TABLE IF NOT EXISTS for analytics/ci_metrics and ci_metrics_state."""
 
 from __future__ import annotations
 

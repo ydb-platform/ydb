@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Export bookkeeping for the job/step exporter, kept out of the metrics table.
-
-Keys: `export_watermark` (how far the export got), `open_runs` (runs still
-running, to be read again once they finish), `failed_runs` (completed runs whose
-job listing failed, with an attempt counter so they are retried and eventually
-given up on).
-"""
+"""Watermark / open_runs / failed_runs for the job/step exporter."""
 
 from __future__ import annotations
 
@@ -49,7 +43,6 @@ def resolve_state_table_path(ydb_wrapper=None) -> str:
 
 
 def build_create_state_table_sql(table_path: str) -> str:
-    """Row-oriented: a handful of rows read and rewritten on every export."""
     return f"""
         CREATE TABLE IF NOT EXISTS `{table_path}` (
             `name` Utf8 NOT NULL,
@@ -67,7 +60,6 @@ def _check_key(name: str) -> str:
 
 
 def read_state(name: str, table_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    """Return the stored payload, or None when it is absent or unreadable."""
     _check_key(name)
     if not has_send_credentials():
         return None
@@ -172,7 +164,6 @@ def save_open_runs(refs: List[RunRef], table_path: Optional[str] = None) -> bool
 
 
 def load_failed_runs(table_path: Optional[str] = None) -> Dict[RunRef, int]:
-    """Map (run_id, attempt) to how many times exporting it has already failed."""
     payload = read_state(FAILED_RUNS_KEY, table_path)
     failed: Dict[RunRef, int] = {}
     for item in (payload or {}).get("runs") or []:

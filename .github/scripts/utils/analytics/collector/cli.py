@@ -80,7 +80,7 @@ def run_cli(
     name = resolve_track_name(args)
     if args.command == "start":
         if not name:
-            print("Warning: start requires a span name", file=sys.stderr)
+            print("Warning: start requires a name", file=sys.stderr)
             return 1
         start_fn(
             name,
@@ -194,14 +194,14 @@ def build_parser(
             track_extra(command)
         return command
 
-    add_track("start", "Open a span (auto start time)", kind_default="duration")
-    add_track("end", "Close open span(s); duration is computed")
-    add_track("track", "Queue a completed event (no open span)")
+    add_track("start", "Remember start time", kind_default="duration")
+    add_track("end", "Close matching start; duration is computed")
+    add_track("track", "Write a finished number, without start/end")
     enrich_p = sub.add_parser("enrich", help="Add labels to last unsent record; duration stays")
     add_enrich_cli_args(enrich_p)
     if enrich_extra:
         enrich_extra(enrich_p)
-    send_p = add_track("send", "End leftover spans and export the batch")
+    send_p = add_track("send", "Close leftover starts and flush")
     send_p.add_argument("--table-path", default=None)
     flush_p = sub.add_parser("flush", help="Export completed events only")
     flush_p.add_argument("--file", default=None, help="JSONL path")

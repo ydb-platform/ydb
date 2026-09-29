@@ -33,7 +33,7 @@ class RateLimitExhausted(RuntimeError):
 
 
 class NotFound(RuntimeError):
-    """A 404 from the GitHub API. Definitive: the resource is gone."""
+    """GitHub 404: the run or job is gone, not a retryable miss."""
 
 
 def _int_header(headers: Any, name: str) -> Optional[int]:

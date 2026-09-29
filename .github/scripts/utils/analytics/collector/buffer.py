@@ -1,4 +1,4 @@
-"""JSONL file buffer, send offset, and pending spans."""
+"""JSONL file buffer, send offset, and pending starts."""
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def pending_file(metrics_path: Optional[str] = None) -> str:
 
 
 def read_pending_spans(metrics_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Open spans. A line that cannot be parsed is reported, not swallowed."""
+    """Unclosed starts. A line that cannot be parsed is reported, not swallowed."""
     path = pending_file(metrics_path)
     if not os.path.exists(path):
         return []
@@ -156,7 +156,7 @@ def read_pending_spans(metrics_path: Optional[str] = None) -> List[Dict[str, Any
         else:
             dropped += 1
     if dropped:
-        print(f"Warning: {dropped} unreadable open span(s) in {path}", file=sys.stderr)
+        print(f"Warning: {dropped} unreadable open start(s) in {path}", file=sys.stderr)
     return spans
 
 

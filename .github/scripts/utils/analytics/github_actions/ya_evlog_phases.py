@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Intervals inside one ya_make_try, from evlog node-finished events.
-
-Same nodes `ya analyze-make timeline --evlog` draws.
-Local compile and link are Compile/Link nodes and Run nodes whose path is an
-object or archive (.o, .a, .obj, .so, .dylib). Run of a source, header, plugin
-or *.context is build as well, not a test. All of that work is ya_build.
-ya_tests is every other Run, with those build intervals cut out.
-FromDistCache is ya_cache_download and PutInDistCache is ya_cache_upload.
-Cache intervals stay beside build and tests, so a parallel fetch is visible.
-"""
+"""Split one ya_make_try into ya_build / ya_tests / ya_cache_* from evlog."""
 
 from __future__ import annotations
 
@@ -212,9 +203,9 @@ def record(path: str, parent_name: str, ya_attempt: str, found: Sequence[Phase])
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Record ya_build, ya_tests and dist-cache phases inside a try")
     parser.add_argument("--evlog", required=True)
-    parser.add_argument("--parent", required=True, help="ya_make_try span name")
+    parser.add_argument("--parent", required=True, help="ya_make_try name this split belongs to")
     parser.add_argument("--ya-attempt", default="")
-    parser.add_argument("--file", default=None, help="metrics JSONL; default is ANALYTICS_FILE / CI_METRICS_FILE")
+    parser.add_argument("--file", default=None, help="JSONL path; default is ANALYTICS_FILE")
     args = parser.parse_args(argv)
     try:
         found = phases_from_path(args.evlog)

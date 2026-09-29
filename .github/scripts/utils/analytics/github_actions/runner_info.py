@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runner inventory (cached) and a small CPU/RAM/disk usage snapshot."""
+"""cpu/ram/disk of the machine, plus how much is used after the work."""
 
 from __future__ import annotations
 

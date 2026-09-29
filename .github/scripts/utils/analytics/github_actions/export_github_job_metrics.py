@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""Export GitHub Actions job/step timings as generic CI metrics.
-
-Writes into analytics/ci_metrics via ci_metrics.upsert_metrics.
-"""
+"""Export GitHub Actions job/step timings into analytics/ci_metrics."""
 
 from __future__ import annotations
 

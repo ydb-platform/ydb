@@ -42,7 +42,7 @@ python3 -m collector end compile --conclusion success
 python3 -m collector flush
 ```
 
-`--file` перекрывает `ANALYTICS_FILE`. Старое имя `CI_METRICS_FILE` ещё читается.
+`--file` перекрывает `ANALYTICS_FILE`.
 
 То же из Python:
 
@@ -126,7 +126,8 @@ WHERE run_id = 42 AND name = "compile";
 Первый `flush` создаёт таблицу сам, если её ещё нет.
 
 Ключ сервисного аккаунта — `ANALYTICS_YDB_CREDENTIALS` (путь к json). В этом
-репозитории ещё подходит `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`.
+репозитории тот же файл уже лежит в
+`CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` — его выставляет setup action.
 
 Нет ключа или нет пакета `ydb` — `flush` пишет warning и выходит 0. Сборка
 зелёная, в базу ничего не попало.

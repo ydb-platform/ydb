@@ -16,11 +16,12 @@ from datetime import datetime, timedelta, timezone
 
 from github_actions import ci_metrics
 from github_actions import export_github_job_metrics
+from github_actions import state
+from github_actions.github_api import NotFound, RateLimitExhausted
 from github_actions.export_github_job_metrics import (
     already_exported,
     attach_pull_requests,
     completed_since,
-    last_export_at,
     metrics_from_workflow_run,
     open_runs_to_save,
     pull_refs_from_commit_pulls,
@@ -92,27 +93,18 @@ class CompletedSinceTest(unittest.TestCase):
         since = completed_since(2, last)
         self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
 
-    def test_unreadable_credentials_stay_a_cold_start(self):
-        class Wrapper:
-            def __enter__(self):
-                return self
+    def test_watermark_older_than_twelve_hours_is_honoured(self):
+        """No lookback floor: an export that was down for days resumes where it stopped."""
+        last = datetime.now(timezone.utc) - timedelta(days=3)
+        since = completed_since(2, last)
+        self.assertLess(abs((since - (last - timedelta(minutes=30))).total_seconds()), 2)
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def check_credentials(self):
-                return False
-
-        with patch.object(export_github_job_metrics, "has_send_credentials", return_value=True), patch.object(
-            export_github_job_metrics, "_open_ydb_wrapper", return_value=Wrapper()
-        ):
-            self.assertEqual(last_export_at(), (None, True))
-
-    def test_failed_watermark_uses_twelve_hours(self):
-        since = completed_since(2, None, watermark_ok=False)
-        delta = datetime.now(timezone.utc) - since
-        self.assertGreater(delta.total_seconds(), 12 * 3600 - 5)
-        self.assertLess(delta.total_seconds(), 12 * 3600 + 5)
+    def test_unreadable_watermark_refuses_to_export(self):
+        with patch.object(export_github_job_metrics, "load_watermark", return_value=(None, False)), patch.object(
+            export_github_job_metrics, "workflows_to_export", return_value=["pr_check.yml"]
+        ), patch.object(export_github_job_metrics, "save_watermark") as save:
+            self.assertEqual(export_github_job_metrics.main([]), 1)
+        save.assert_not_called()
 
 
 class OpenRunsToSaveTest(unittest.TestCase):
@@ -178,7 +170,7 @@ class AlreadyExportedTest(unittest.TestCase):
 
 
 class UpsertMissingColumnsTest(unittest.TestCase):
-    def test_open_run_state_gets_workflow_column(self):
+    def test_absent_dimensions_become_explicit_nulls(self):
         seen = {}
         original = ci_metrics.collector_upsert_metrics
 
@@ -193,13 +185,13 @@ class UpsertMissingColumnsTest(unittest.TestCase):
                 [{
                     "date": datetime.now(timezone.utc).date(),
                     "event_ts": datetime.now(timezone.utc),
-                    "run_id": 0,
-                    "github_job_id": 0,
-                    "run_attempt": 0,
-                    "source": "export_state",
-                    "name": "open_runs",
-                    "kind": "event",
-                    "span_id": "export-state-1",
+                    "run_id": 7,
+                    "github_job_id": 70,
+                    "run_attempt": 1,
+                    "source": "ya_phase",
+                    "name": "ya_make_try_1",
+                    "kind": "duration",
+                    "span_id": "abc",
                     "labels": "{}",
                     "exported_at": datetime.now(timezone.utc),
                 }],
@@ -210,6 +202,164 @@ class UpsertMissingColumnsTest(unittest.TestCase):
         self.assertIsNone(row["workflow"])
         self.assertIsNone(row["job_name"])
         self.assertIsNone(row["run_url"])
+
+
+class HeldRunTest(unittest.TestCase):
+    """A run that finished while it was held must be read at its stored attempt."""
+
+    def _run(self, attempt, status="completed"):
+        return {
+            "id": 10,
+            "run_attempt": attempt,
+            "status": status,
+            "event": "push",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "main",
+            "html_url": "https://example.test/run/10",
+        }
+
+    def test_fetches_the_stored_attempt_not_the_latest(self):
+        calls = []
+
+        def fake_fetch(org, repo, run_id, attempt=None):
+            calls.append(("run", run_id, attempt))
+            return self._run(attempt or 9)
+
+        def fake_jobs(org, repo, run_id, per_page=100, attempt=None):
+            calls.append(("jobs", run_id, attempt))
+            return []
+
+        with patch.object(export_github_job_metrics, "fetch_run", fake_fetch), patch.object(
+            export_github_job_metrics, "list_run_jobs", fake_jobs
+        ):
+            rows, held = export_github_job_metrics.export_held_runs(
+                "ydb-platform", "ydb", [(10, 2)], [], set(), {}
+            )
+        self.assertEqual(rows, [])
+        self.assertEqual(held, [])
+        self.assertEqual(calls, [("run", 10, 2), ("jobs", 10, 2)])
+
+    def test_missing_run_is_dropped_not_retried_forever(self):
+        failed = {(10, 1): 1}
+        with patch.object(
+            export_github_job_metrics, "fetch_run", side_effect=NotFound("gone")
+        ):
+            rows, held = export_github_job_metrics.export_held_runs(
+                "ydb-platform", "ydb", [(10, 1)], [], set(), failed
+            )
+        self.assertEqual((rows, held), ([], []))
+        self.assertEqual(failed, {})
+
+    def test_transient_failure_is_queued_for_retry(self):
+        failed = {}
+        with patch.object(
+            export_github_job_metrics, "fetch_run", side_effect=RuntimeError("502")
+        ):
+            _rows, held = export_github_job_metrics.export_held_runs(
+                "ydb-platform", "ydb", [(10, 1)], [], set(), failed
+            )
+        self.assertEqual(held, [(10, 1)])
+        self.assertEqual(failed, {(10, 1): 1})
+
+    def test_retry_budget_is_bounded(self):
+        failed = {(10, 1): state.MAX_RETRY_ATTEMPTS - 1}
+        with patch.object(
+            export_github_job_metrics, "fetch_run", side_effect=RuntimeError("502")
+        ):
+            _rows, held = export_github_job_metrics.export_held_runs(
+                "ydb-platform", "ydb", [(10, 1)], [], set(), failed
+            )
+        self.assertEqual(held, [])
+        self.assertEqual(failed, {})
+
+
+class CollectRowsFailureTest(unittest.TestCase):
+    def test_unlistable_run_is_queued_instead_of_dropped(self):
+        failed = {}
+        with patch.object(
+            export_github_job_metrics,
+            "iter_workflow_runs",
+            return_value=[{"id": 5, "run_attempt": 1}],
+        ), patch.object(
+            export_github_job_metrics, "list_run_jobs", side_effect=RuntimeError("503")
+        ):
+            rows = export_github_job_metrics.collect_rows(
+                "ydb-platform", "ydb", "pr_check.yml", datetime.now(timezone.utc), set(), failed
+            )
+        self.assertEqual(rows, [])
+        self.assertEqual(failed, {(5, 1): 1})
+
+
+class WatermarkDisciplineTest(unittest.TestCase):
+    def _patch_main(self, *, collect_raises=None, uploaded=1):
+        run = {
+            "id": 1,
+            "run_attempt": 1,
+            "event": "push",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "main",
+            "html_url": "https://example.test/run/1",
+        }
+        rows = metrics_from_workflow_run(run, [
+            {
+                "id": 11,
+                "name": "build",
+                "started_at": "2026-09-28T10:00:00Z",
+                "completed_at": "2026-09-28T10:05:00Z",
+                "conclusion": "success",
+                "steps": [],
+            }
+        ])
+
+        def collect(*_args, **_kwargs):
+            if collect_raises:
+                raise collect_raises
+            return rows
+
+        return patch.multiple(
+            export_github_job_metrics,
+            workflows_to_export=lambda *a, **k: ["pr_check.yml"],
+            load_watermark=lambda *a, **k: (None, True),
+            exported_run_ids=lambda *a, **k: set(),
+            exported_job_ids=lambda *a, **k: set(),
+            load_failed_runs=lambda *a, **k: {},
+            load_open_runs=lambda *a, **k: [],
+            iter_workflow_runs=lambda *a, **k: [],
+            collect_rows=collect,
+            upload_rows=lambda *a, **k: uploaded,
+            save_open_runs=lambda *a, **k: True,
+            save_failed_runs=lambda *a, **k: True,
+        )
+
+    def test_clean_window_advances_the_watermark(self):
+        with self._patch_main(), patch.object(
+            export_github_job_metrics, "save_watermark", return_value=True
+        ) as save:
+            self.assertEqual(export_github_job_metrics.main([]), 0)
+        save.assert_called_once()
+
+    def test_listing_failure_keeps_the_watermark(self):
+        with self._patch_main(collect_raises=RuntimeError("boom")), patch.object(
+            export_github_job_metrics, "save_watermark"
+        ) as save:
+            export_github_job_metrics.main([])
+        save.assert_not_called()
+
+    def test_rate_limit_keeps_the_watermark(self):
+        with self._patch_main(collect_raises=RateLimitExhausted(0, None)), patch.object(
+            export_github_job_metrics, "save_watermark"
+        ) as save:
+            self.assertEqual(export_github_job_metrics.main([]), 0)
+        save.assert_not_called()
+
+    def test_failed_upload_keeps_the_watermark_and_reports(self):
+        with self._patch_main(uploaded=0), patch.object(
+            export_github_job_metrics, "save_watermark"
+        ) as save:
+            self.assertEqual(export_github_job_metrics.main([]), 1)
+        save.assert_not_called()
 
 
 if __name__ == "__main__":

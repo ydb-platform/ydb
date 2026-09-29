@@ -7,7 +7,6 @@ Writes into analytics/ci_metrics via ci_metrics.upsert_metrics.
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
@@ -25,7 +24,17 @@ from collector.flush import has_send_credentials
 from collector.schema import _open_ydb_wrapper
 from collector.values import _as_uint, duration_ms_between, parse_datetime
 from github_actions.ci_metrics import normalize_metric, resolve_table_path, upsert_metrics
-from github_actions.github_api import github_get
+from github_actions.github_api import NotFound, RateLimitExhausted, github_get
+from github_actions.state import (
+    MAX_RETRY_ATTEMPTS,
+    load_failed_runs,
+    load_open_runs,
+    load_watermark,
+    record_failure,
+    save_failed_runs,
+    save_open_runs,
+    save_watermark,
+)
 
 BUILD_PRESET_RE = re.compile(
     r"(relwithdebinfo|release-asan|release-tsan|release-msan|release|debug)"
@@ -166,61 +175,22 @@ def metrics_from_workflow_run(
 
 
 OVERLAP = timedelta(minutes=30)
-MAX_LOOKBACK = timedelta(hours=12)
-STATE_SOURCE = "export_state"
-STATE_NAME = "open_runs"
+OPEN_RUN_LOOKBACK = timedelta(hours=12)
 
 
-def completed_since(
-    hours: int,
-    last_export: Optional[datetime] = None,
-    *,
-    watermark_ok: bool = True,
-) -> datetime:
-    """Short GitHub `created` window.
+def completed_since(hours: int, last_export: Optional[datetime] = None) -> datetime:
+    """Short GitHub `created` window for runs that have already finished.
 
-    Cold start uses `--hours`. After a successful export the window starts at
-    that timestamp minus 30 minutes. A failed watermark query uses the 12h
-    lookback so completed runs are not dropped. Runs that were already running
-    are tracked separately, so this window does not have to cover the longest job.
+    Cold start uses `--hours`. Afterwards the window starts at the stored
+    watermark minus 30 minutes. The watermark comes from the state table and has
+    no lookback floor, so an export that was down for a day resumes where it
+    stopped. Runs that were still running are tracked by id, so this window does
+    not have to cover the longest job.
     """
     now = datetime.now(timezone.utc)
-    if not watermark_ok:
-        return now - MAX_LOOKBACK
     if last_export is None:
         return now - timedelta(hours=hours)
     return last_export - OVERLAP
-
-
-def last_export_at(table_path: Optional[str] = None) -> tuple[Optional[datetime], bool]:
-    """Return (timestamp, query_ok). query_ok is false when the read failed."""
-    if not has_send_credentials():
-        return None, True
-    floor = datetime.now(timezone.utc) - MAX_LOOKBACK
-    ts = floor.strftime("%Y-%m-%dT%H:%M:%SZ")
-    try:
-        with _open_ydb_wrapper() as wrapper:
-            if not wrapper.check_credentials():
-                return None, True
-            path = table_path or resolve_table_path(wrapper)
-            rows = wrapper.execute_scan_query(
-                f"""
-                SELECT MAX(exported_at) AS last_export
-                FROM `{path}`
-                WHERE event_ts >= Timestamp("{ts}")
-                  AND source IN ("github_job", "github_step")
-                """
-            )
-    except Exception as exc:  # noqa: BLE001 — use the 12h lookback
-        print(f"Warning: export watermark query failed: {exc}")
-        return None, False
-    if not rows or not isinstance(rows[0], dict):
-        return None, True
-    try:
-        return parse_datetime(rows[0].get("last_export")), True
-    except (OverflowError, OSError, ValueError) as exc:
-        print(f"Warning: export watermark is not a timestamp: {exc}")
-        return None, False
 
 
 def already_exported(run_id: Any, run_attempt: Any, exported: set) -> bool:
@@ -344,11 +314,19 @@ def selected_workflows(explicit: Optional[List[str]] = None) -> List[str]:
     return names or ["all"]
 
 
+MAX_WORKFLOW_PAGES = 10
+
+
 def active_workflow_files(org: str, repo: str) -> List[str]:
     names: List[str] = []
     seen = set()
     page = 1
-    while page <= 10:
+    while True:
+        if page > MAX_WORKFLOW_PAGES:
+            raise RuntimeError(
+                f"more than {MAX_WORKFLOW_PAGES * 100} workflows in {org}/{repo}; "
+                "raise MAX_WORKFLOW_PAGES instead of exporting a truncated list"
+            )
         payload = github_get(
             f"https://api.github.com/repos/{org}/{repo}/actions/workflows",
             params={"per_page": 100, "page": page},
@@ -408,8 +386,15 @@ def iter_workflow_runs(
         time.sleep(0.2)
 
 
-def list_run_jobs(org: str, repo: str, run_id: int, per_page: int = 100) -> List[Dict[str, Any]]:
-    url = f"https://api.github.com/repos/{org}/{repo}/actions/runs/{run_id}/jobs"
+def list_run_jobs(
+    org: str,
+    repo: str,
+    run_id: int,
+    per_page: int = 100,
+    attempt: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    base = f"https://api.github.com/repos/{org}/{repo}/actions/runs/{run_id}"
+    url = f"{base}/attempts/{attempt}/jobs" if attempt else f"{base}/jobs"
     jobs: List[Dict[str, Any]] = []
     page = 1
     while True:
@@ -476,18 +461,33 @@ def collect_rows(
     workflow: str,
     created_since: datetime,
     skip_job_ids: Optional[set] = None,
+    failed: Optional[Dict[tuple, int]] = None,
 ) -> List[Dict[str, Any]]:
+    """Rows for completed runs in the window.
+
+    A run whose jobs cannot be listed is recorded in `failed` so the next export
+    retries it by id. Previously it was logged and dropped while the watermark
+    moved past it, which lost the run permanently.
+    """
     rows: List[Dict[str, Any]] = []
     run_count = 0
     skip_job_ids = skip_job_ids or set()
     for run in iter_workflow_runs(org, repo, workflow, created_since):
-        run_id = run.get("id")
-        if run_id is None:
+        ref = run_ref(run)
+        if ref is None:
             continue
+        run_id, attempt = ref
         try:
-            jobs = list_run_jobs(org, repo, int(run_id))
+            jobs = list_run_jobs(org, repo, run_id)
+        except RateLimitExhausted:
+            raise
+        except NotFound:
+            print(f"Run {run_id} is gone, not retrying")
+            continue
         except Exception as exc:  # noqa: BLE001 — keep exporting other runs
-            print(f"Warning: failed to list jobs for run {run_id}: {exc}")
+            print(f"Warning: failed to list jobs for run {run_id}, queued for retry: {exc}")
+            if failed is not None and not record_failure(failed, ref):
+                print(f"Run {run_id} attempt {attempt} gave up after {MAX_RETRY_ATTEMPTS} tries")
             continue
         rows.extend(
             metrics_from_workflow_run(
@@ -496,6 +496,8 @@ def collect_rows(
                 skip_job_ids=skip_job_ids,
             )
         )
+        if failed is not None:
+            failed.pop(ref, None)
         run_count += 1
         if run_count % 20 == 0:
             print(f"Collected {len(rows)} metric rows from {run_count} runs...")
@@ -511,78 +513,17 @@ def run_ref(run: Dict[str, Any]) -> Optional[tuple]:
         return None
 
 
-def load_open_runs(table_path: Optional[str] = None) -> List[tuple]:
-    if not has_send_credentials():
-        return []
-    floor = (datetime.now(timezone.utc) - MAX_LOOKBACK).strftime("%Y-%m-%dT%H:%M:%SZ")
-    try:
-        with _open_ydb_wrapper() as wrapper:
-            if not wrapper.check_credentials():
-                return []
-            path = table_path or resolve_table_path(wrapper)
-            rows = wrapper.execute_scan_query(
-                f"""
-                SELECT event_ts, labels
-                FROM `{path}`
-                WHERE event_ts >= Timestamp("{floor}")
-                  AND source = "{STATE_SOURCE}"
-                  AND name = "{STATE_NAME}"
-                """
-            )
-    except Exception as exc:  # noqa: BLE001
-        print(f"Warning: open-run watermark read failed: {exc}")
-        return []
-    latest = None
-    latest_ts = None
-    for row in rows or []:
-        if not isinstance(row, dict):
-            continue
-        ts = parse_datetime(row.get("event_ts"))
-        if latest_ts is None or (ts is not None and ts >= latest_ts):
-            latest_ts = ts
-            latest = row.get("labels")
-    if isinstance(latest, str):
-        try:
-            latest = json.loads(latest)
-        except json.JSONDecodeError:
-            return []
-    runs = latest.get("runs") if isinstance(latest, dict) else None
-    refs = []
-    for item in runs or []:
-        if isinstance(item, dict):
-            ref = run_ref({"id": item.get("id"), "run_attempt": item.get("attempt")})
-            if ref:
-                refs.append(ref)
-    return refs
+def fetch_run(org: str, repo: str, run_id: int, attempt: Optional[int] = None) -> Dict[str, Any]:
+    """Fetch the stored attempt, not just the latest one.
 
-
-def save_open_runs(refs: List[tuple], table_path: Optional[str] = None) -> bool:
-    now = datetime.now(timezone.utc)
-    row = {
-        "date": now.date(),
-        "event_ts": now,
-        "run_id": 0,
-        "github_job_id": 0,
-        "run_attempt": 0,
-        "source": STATE_SOURCE,
-        "name": STATE_NAME,
-        "kind": "event",
-        "span_id": f"export-state-{int(now.timestamp())}",
-        "labels": json.dumps(
-            {"runs": [{"id": run_id, "attempt": attempt} for run_id, attempt in refs]},
-            separators=(",", ":"),
-        ),
-        "exported_at": now,
-    }
-    uploaded = upload_rows([row], table_path=table_path)
-    if uploaded <= 0:
-        print("Warning: open-run list was not saved")
-        return False
-    return True
-
-
-def fetch_run(org: str, repo: str, run_id: int) -> Dict[str, Any]:
-    return github_get(f"https://api.github.com/repos/{org}/{repo}/actions/runs/{run_id}")
+    `GET /runs/{id}` returns whatever attempt is current, so a run that was
+    re-run while held would have its old attempt's jobs dropped and its rows
+    labelled with the new attempt.
+    """
+    base = f"https://api.github.com/repos/{org}/{repo}/actions/runs/{run_id}"
+    if attempt:
+        return github_get(f"{base}/attempts/{attempt}")
+    return github_get(base)
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -624,75 +565,156 @@ def open_runs_to_save(
     return pending
 
 
+def export_held_runs(
+    org: str,
+    repo: str,
+    previous: List[tuple],
+    still_open: List[tuple],
+    known_jobs: set,
+    failed: Dict[tuple, int],
+) -> tuple:
+    """Read runs that were open last time and have finished since.
+
+    Returns (rows, held). `held` refs go back on the open list; a 404 run is
+    dropped instead of being retried forever.
+    """
+    rows: List[Dict[str, Any]] = []
+    held: List[tuple] = []
+    for run_id, attempt in previous:
+        ref = (run_id, attempt)
+        if ref in still_open:
+            continue
+        try:
+            run = fetch_run(org, repo, run_id, attempt)
+        except RateLimitExhausted:
+            raise
+        except NotFound:
+            print(f"Held run {run_id} attempt {attempt} is gone, dropping it")
+            failed.pop(ref, None)
+            continue
+        except Exception as exc:  # noqa: BLE001
+            print(f"Warning: failed to refresh run {run_id}: {exc}")
+            if record_failure(failed, ref):
+                remember_ref(held, ref)
+            else:
+                print(f"Held run {run_id} attempt {attempt} gave up after {MAX_RETRY_ATTEMPTS} tries")
+            continue
+        if run.get("status") != "completed":
+            remember_ref(still_open, run_ref(run) or ref)
+            continue
+        try:
+            jobs = list_run_jobs(org, repo, run_id, attempt=attempt)
+            rows.extend(
+                metrics_from_workflow_run(
+                    attach_pull_requests(org, repo, run),
+                    jobs,
+                    skip_job_ids=known_jobs,
+                )
+            )
+            failed.pop(ref, None)
+        except RateLimitExhausted:
+            raise
+        except NotFound:
+            print(f"Held run {run_id} attempt {attempt} has no jobs any more, dropping it")
+            failed.pop(ref, None)
+        except Exception as exc:  # noqa: BLE001
+            print(f"Warning: failed to export finished run {run_id}: {exc}")
+            if record_failure(failed, ref):
+                remember_ref(held, ref)
+            else:
+                print(f"Held run {run_id} attempt {attempt} gave up after {MAX_RETRY_ATTEMPTS} tries")
+    return rows, held
+
+
 def main(argv=None) -> int:
+    started_at = datetime.now(timezone.utc)
     try:
         args = parse_args(argv)
         workflows = workflows_to_export(args.org, args.repo, args.workflow)
-        last_export, watermark_ok = last_export_at(args.table_path)
-        since = completed_since(args.hours, last_export, watermark_ok=watermark_ok)
+        last_export, watermark_ok = load_watermark()
+        if not watermark_ok:
+            print(
+                "Error: export watermark is unreadable; refusing to export a guessed "
+                "window and overwrite it",
+                file=sys.stderr,
+            )
+            return 1
+        since = completed_since(args.hours, last_export)
         exported = exported_run_ids(since, table_path=args.table_path)
         known_jobs = exported_job_ids(since, table_path=args.table_path)
+        failed = load_failed_runs()
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "
-            f"since {since.isoformat()} skip_jobs={len(known_jobs)}"
+            f"since {since.isoformat()} skip_jobs={len(known_jobs)} retry={len(failed)}"
         )
         rows: List[Dict[str, Any]] = []
         still_open: List[tuple] = []
-        held: List[tuple] = []
         list_failed = False
-        open_since = datetime.now(timezone.utc) - MAX_LOOKBACK
-        for workflow in workflows:
-            try:
-                rows.extend(collect_rows(args.org, args.repo, workflow, since, known_jobs))
-            except Exception as exc:  # noqa: BLE001 — keep other workflows
-                print(f"Warning: failed to export workflow {workflow}: {exc}")
-            for status in ("in_progress", "queued"):
+        rate_limited = False
+        open_since = started_at - OPEN_RUN_LOOKBACK
+        # Runs queued for retry are read again by id, alongside the open ones.
+        previous = load_open_runs() + [ref for ref in failed if ref not in still_open]
+        try:
+            for workflow in workflows:
                 try:
-                    for run in iter_workflow_runs(args.org, args.repo, workflow, open_since, status=status):
-                        remember_ref(still_open, run_ref(run))
-                except Exception as exc:  # noqa: BLE001
-                    list_failed = True
-                    print(f"Warning: failed to list {status} runs for {workflow}: {exc}")
-        previous = load_open_runs(args.table_path)
-        for run_id, attempt in previous:
-            ref = (run_id, attempt)
-            if ref in still_open:
-                continue
-            try:
-                run = fetch_run(args.org, args.repo, run_id)
-            except Exception as exc:  # noqa: BLE001
-                print(f"Warning: failed to refresh run {run_id}: {exc}")
-                remember_ref(held, ref)
-                continue
-            if run.get("status") != "completed":
-                remember_ref(still_open, run_ref(run) or ref)
-                continue
-            try:
-                jobs = list_run_jobs(args.org, args.repo, run_id)
-                rows.extend(
-                    metrics_from_workflow_run(
-                        attach_pull_requests(args.org, args.repo, run),
-                        jobs,
-                        skip_job_ids=known_jobs,
+                    rows.extend(
+                        collect_rows(args.org, args.repo, workflow, since, known_jobs, failed)
                     )
-                )
-            except Exception as exc:  # noqa: BLE001
-                print(f"Warning: failed to export finished run {run_id}: {exc}")
-                remember_ref(held, ref)
-        pending = open_runs_to_save(still_open, held, previous, list_failed, exported)
+                except RateLimitExhausted:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — keep other workflows
+                    list_failed = True
+                    print(f"Warning: failed to export workflow {workflow}: {exc}")
+                for status in ("in_progress", "queued"):
+                    try:
+                        for run in iter_workflow_runs(
+                            args.org, args.repo, workflow, open_since, status=status
+                        ):
+                            remember_ref(still_open, run_ref(run))
+                    except RateLimitExhausted:
+                        raise
+                    except Exception as exc:  # noqa: BLE001
+                        list_failed = True
+                        print(f"Warning: failed to list {status} runs for {workflow}: {exc}")
+            held_rows, held = export_held_runs(
+                args.org, args.repo, previous, still_open, known_jobs, failed
+            )
+            rows.extend(held_rows)
+        except RateLimitExhausted as exc:
+            # Stop here and keep the watermark: the window is only partly read.
+            rate_limited = True
+            held = [ref for ref in previous if ref not in still_open]
+            print(f"Warning: {exc}; stopping early and keeping the watermark")
+        pending = open_runs_to_save(still_open, held, previous, list_failed or rate_limited, exported)
+        uploaded = 0
         if rows:
             uploaded = upload_rows(rows, table_path=args.table_path)
             if uploaded <= 0:
-                print("Warning: metrics were not uploaded, keeping the previous open-run list")
-                return 0
+                print(
+                    "Error: metrics were not uploaded, keeping the watermark and open-run list",
+                    file=sys.stderr,
+                )
+                return 1
         else:
             print("No GitHub job metric rows to upload")
-        if not save_open_runs(pending, args.table_path) and pending:
+        state_ok = save_open_runs(pending)
+        if not state_ok and pending:
             print("Warning: in-progress runs stay on the previous open-run list")
+        if not save_failed_runs(failed):
+            state_ok = False
+        # Only move the watermark when the whole window was actually read and the
+        # carry-over lists were persisted. Otherwise the next run re-reads it.
+        if not (list_failed or rate_limited) and state_ok:
+            if not save_watermark(started_at):
+                print("Warning: watermark was not saved, the next export repeats this window")
+        else:
+            print("Watermark left in place: this window was not fully exported")
+        if list_failed and uploaded == 0 and not rows:
+            return 1
         return 0
-    except Exception as exc:  # noqa: BLE001 — collector must not fail the analytics job
-        print(f"Warning: GitHub job metrics export failed: {exc}")
-        return 0
+    except Exception as exc:  # noqa: BLE001 — report, but never hide the failure
+        print(f"Error: GitHub job metrics export failed: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""GitHub REST GET with retry. No YDB imports."""
+"""GitHub REST GET with retry and a rate-limit budget. No YDB imports."""
 
 from __future__ import annotations
 
@@ -12,12 +12,57 @@ from urllib.request import Request, urlopen
 
 RETRYABLE_STATUS = frozenset({429, 502, 503, 504})
 
+# Stop while there is still headroom, so a caller that has to finish a few more
+# requests to leave its state consistent can do so.
+RATE_LIMIT_RESERVE = 50
+
+
+class RateLimitExhausted(RuntimeError):
+    """Raised when the token's remaining request budget hits the reserve.
+
+    Callers must treat this as "stop and keep the watermark", not as a per-request
+    failure: continuing would silently export a partial window.
+    """
+
+    def __init__(self, remaining: int, reset_at: Optional[int]) -> None:
+        super().__init__(
+            f"GitHub rate limit budget exhausted (remaining={remaining}, reset_at={reset_at})"
+        )
+        self.remaining = remaining
+        self.reset_at = reset_at
+
+
+class NotFound(RuntimeError):
+    """A 404 from the GitHub API. Definitive: the resource is gone."""
+
+
+def _int_header(headers: Any, name: str) -> Optional[int]:
+    if not headers:
+        return None
+    raw = headers.get(name)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
 
 def _error_snippet(exc: HTTPError) -> str:
     try:
         return exc.read()[:300].decode("utf-8", errors="replace")
     except Exception:  # noqa: BLE001
         return str(exc)
+
+
+def _is_rate_limited(exc: HTTPError, snippet: str) -> bool:
+    """True only for a primary rate limit, where the budget really is zero.
+
+    Secondary (abuse) limits keep a non-zero remaining count and carry
+    Retry-After, so they stay on the ordinary retry path.
+    """
+    if exc.code not in (403, 429):
+        return False
+    remaining = _int_header(exc.headers, "x-ratelimit-remaining")
+    return remaining is not None and remaining <= 0
 
 
 def _should_retry(exc: HTTPError, snippet: str) -> bool:
@@ -55,10 +100,21 @@ def github_get(
         try:
             request = Request(full, headers=headers)
             with urlopen(request, timeout=timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
+                payload = json.loads(response.read().decode("utf-8"))
+            remaining = _int_header(response.headers, "x-ratelimit-remaining")
+            if remaining is not None and remaining <= RATE_LIMIT_RESERVE:
+                raise RateLimitExhausted(remaining, _int_header(response.headers, "x-ratelimit-reset"))
+            return payload
         except HTTPError as exc:
             last_error = exc
             snippet = _error_snippet(exc)
+            if exc.code == 404:
+                raise NotFound(f"GitHub API 404 for {url}: {snippet}") from exc
+            if _is_rate_limited(exc, snippet):
+                raise RateLimitExhausted(
+                    _int_header(exc.headers, "x-ratelimit-remaining") or 0,
+                    _int_header(exc.headers, "x-ratelimit-reset"),
+                ) from exc
             if _should_retry(exc, snippet) and attempt < retries:
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
                 sleep_for = float(retry_after) if retry_after and str(retry_after).isdigit() else backoff

@@ -709,8 +709,9 @@ namespace NYql {
                 const auto& value = typedValue.value();
                 switch (value.value_case()) {
                 case Ydb::Value::kInt64Value: {
-                    const auto duration = TDuration::MicroSeconds(value.int64_value());
-                    return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << ToIso8601(duration) << "\")";
+                    auto intValue = value.int64_value();
+                    const auto duration = TDuration::MicroSeconds(intValue < 0 ? -static_cast<ui64>(intValue): static_cast<ui64>(intValue)); // c++20, avoid signed overflow, handles Min<i64>() (though it's outside of Timestamp range)
+                    return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << (intValue < 0 ? "-" : "") << ToIso8601(duration) << "\")";
                 }
                 default:
                     throw yexception() << "Failed to format ydb typed value, " << value.DebugString() << " is not supported for " << Type_PrimitiveTypeId_Name(typeId) << " type";

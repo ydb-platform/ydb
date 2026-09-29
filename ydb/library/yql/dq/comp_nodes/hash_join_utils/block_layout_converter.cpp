@@ -805,10 +805,6 @@ public:
         return TupleLayout_.get();
     }
 
-    const TVector<ui32>& PackedColumnIndexes(size_t userColumn) const override {
-        return InnerMapping_[userColumn];
-    }
-
     void ApplyEqualNulls(const TVector<ui32>& equalNullsJoinKeys) override {
         TupleLayout_->ApplyEqualNulls(equalNullsJoinKeys);
     }

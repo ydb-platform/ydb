@@ -400,6 +400,12 @@ message TFeatureFlags {
     optional bool EnableStreamingAggregationAdvanced = 344 [default = false];
     optional bool EnableTieringObjectKeyTree = 345 [default = false];
     // Bumps GROUP BY HOP state version to 3
+<<<<<<< HEAD
     optional bool EnableHoppingWindowStartCheck = 346 [default = false];
 >>>>>>> 123295662e9 (YQ-5726 added feature flag for new hopping state version (#54355))
+=======
+    optional bool EnableHoppingWindowStartCheck = 346 [default = true];
+    optional bool EnableBackgroundAnalyzeChangeRatio = 347 [default = true];
+    optional bool EnableAnalyzeSampling = 348 [default = true];
+>>>>>>> 8aebecf63af (YQ-5726 enabled min hopping window start check (#54299))
 }

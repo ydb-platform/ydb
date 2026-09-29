@@ -17,7 +17,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         Y_UNUSED(txc);
         YDB_LOG_DEBUG("TTxNotifyTxCompletion.Execute at tablet",
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         const ui64 txId = Ev->Get()->Record.GetTxId();
         auto txOperator = Self->ProgressTxController->GetTxOperator(txId, ETxOperatorStatus::Any, /*optional*/ true);

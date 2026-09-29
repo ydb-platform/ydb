@@ -78,9 +78,9 @@ TBlobBatch::~TBlobBatch() = default;
 void TBlobBatch::SendWriteRequest(
     const TActorContext& ctx, ui32 groupId, const TLogoBlobID& logoBlobId, const TString& data, ui64 cookie, TInstant deadline) {
     YDB_LOG_TRACE_COMP(TX_COLUMNSHARD, "EvPut bytes to group at tablet",
-        {"#_data.size", data.size()},
+        {"dataSize", data.size()},
         {"groupId", groupId},
-        {"#_BatchInfo->TabletInfo->TabletID", BatchInfo->TabletInfo->TabletID});
+        {"tabletID", BatchInfo->TabletInfo->TabletID});
 
     auto handleClass = NKikimrBlobStorage::UserData;
     //auto handleClass = NKikimrBlobStorage::AsyncBlob; // TODO: what's the difference?
@@ -431,9 +431,9 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
     CountersUpdate.BlobsWritten += blobBatch.GetBlobCount();
 
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet Save Batch Blob",
-        {"#_TabletInfo->TabletID", TabletInfo->TabletID},
+        {"tabletID", TabletInfo->TabletID},
         {"genStep", blobBatch.BatchInfo->Gen},
-        {"#_blobBatch.BatchInfo->Step", blobBatch.BatchInfo->Step},
+        {"step", blobBatch.BatchInfo->Step},
         {"count", blobBatch.BatchInfo->GetBlobIds().size()});
 
     // Add this batch to KeepQueue
@@ -455,9 +455,9 @@ void TBlobManager::DoSaveBlobBatchOnComplete(TBlobBatch&& blobBatch) {
 void TBlobManager::DoSaveBlobBatchOnExecute(const TBlobBatch& blobBatch, IBlobManagerDb& db) {
     Y_ABORT_UNLESS(blobBatch.BatchInfo);
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager on execute at tablet Save Batch Blob",
-        {"#_TabletInfo->TabletID", TabletInfo->TabletID},
+        {"tabletID", TabletInfo->TabletID},
         {"genStep", blobBatch.BatchInfo->Gen},
-        {"#_blobBatch.BatchInfo->Step", blobBatch.BatchInfo->Step},
+        {"step", blobBatch.BatchInfo->Step},
         {"count", blobBatch.BatchInfo->GetBlobIds().size()});
 
     TGenStep edgeGenStep = EdgeGenStep();
@@ -489,13 +489,13 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
     // used by in-flight requests
     if (!IsBlobInUsage(blobId)) {
         YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet Delete Blob",
-            {"#_TabletInfo->TabletID", TabletInfo->TabletID},
+            {"tabletId", TabletInfo->TabletID},
             {"blobId", blobId});
         AFL_VERIFY(BlobsToDelete.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDelete(BlobsToDelete);
     } else {
         YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "BlobManager at tablet Delay Delete Blob",
-            {"#_TabletInfo->TabletID", TabletInfo->TabletID},
+            {"tabletId", TabletInfo->TabletID},
             {"blobId", blobId});
         AFL_VERIFY(BlobsToDeleteDelayed.Add(tabletId, blobId));
         BlobsManagerCounters.OnBlobsToDeleteDelayed(BlobsToDeleteDelayed);

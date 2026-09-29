@@ -448,13 +448,13 @@ void TColumnShard::UpdateIndexCounters() {
     counters->SetCounter(COUNTER_EVICTED_RAW_BYTES, evictedStats.GetRawBytes());
 
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "Index: tables inserted compacted s-compacted inactive evicted at tablet",
-        {"#_Counters.GetPortionIndexCounters()->GetTablesCount", Counters.GetPortionIndexCounters()->GetTablesCount()},
-        {"#_insertedStats.DebugString", insertedStats.DebugString()},
-        {"#_compactedStats.DebugString", compactedStats.DebugString()},
-        {"#_splitCompactedStats.DebugString", splitCompactedStats.DebugString()},
-        {"#_inactiveStats.DebugString", inactiveStats.DebugString()},
-        {"#_evictedStats.DebugString", evictedStats.DebugString()},
-        {"tabletID", TabletID()});
+        {"tablesCount", Counters.GetPortionIndexCounters()->GetTablesCount()},
+        {"insertedStats", insertedStats.DebugString()},
+        {"compactedStats", compactedStats.DebugString()},
+        {"splitCompactedStats", splitCompactedStats.DebugString()},
+        {"inactiveStats", inactiveStats.DebugString()},
+        {"evictedStats", evictedStats.DebugString()},
+        {"tabletId", TabletID()});
 }
 
 ui64 TColumnShard::MemoryUsage() const {

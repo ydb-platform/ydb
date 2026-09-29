@@ -250,7 +250,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TTxScan prepare at tablet",
         {"txId", request.GetTxId()},
         {"scanId", request.GetScanId()},
-        {"#_Self->TabletID", Self->TabletID()});
+        {"tabletId", Self->TabletID()});
 
     auto accessorConclusion = MakeTableAccessor(ssPathId, snapshot);
     if (accessorConclusion.IsFail()) {

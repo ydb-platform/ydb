@@ -31,7 +31,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         AFL_VERIFY(Self->TablesManager.MutablePrimaryIndex().ApplyChangesOnExecute(dbWrap, changes, Self->GetLastTxSnapshot()));
         YDB_LOG_DEBUG("apply",
             {"txPrefix", TxPrefix()},
-            {"#_changes->TypeString", changes->TypeString()},
+            {"changes", changes->TypeString()},
             {"txSuffix", TxSuffix()});
         NOlap::TWriteIndexContext context(&txc.DB, dbWrap, Self->MutableIndexAs<NOlap::TColumnEngineForLogs>(), CurrentSnapshot);
         changes->WriteIndexOnExecute(Self, context);
@@ -48,8 +48,8 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
             const auto* portion = changes->GetWritePortionInfo(i);
             YDB_LOG_WARN("blob cannot apply",
                 {"txPrefix", TxPrefix()},
-                {"#_changes->TypeString", changes->TypeString()},
-                {"#_portion->DebugString", portion->DebugString()},
+                {"changes", changes->TypeString()},
+                {"portion", portion->DebugString()},
                 {"changes", TxSuffix()});
         }
         NOlap::TChangesFinishContext context(
@@ -57,7 +57,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
         changes->Abort(*Self, context);
         YDB_LOG_ERROR("cannot write index blobs",
             {"txPrefix", TxPrefix()},
-            {"#_changes->TypeString", changes->TypeString()},
+            {"changes", changes->TypeString()},
             {"txSuffix", TxSuffix()});
     }
 

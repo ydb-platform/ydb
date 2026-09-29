@@ -836,16 +836,12 @@ private:
                 break;
             }
 
-<<<<<<< HEAD
             YDB_LOG_DEBUG("",
-                {"evict", it.Key()},
+                {"evict", victim},
                 {"cacheDataSize", CacheDataSize},
                 {"inFlightDataSize", (i64)InFlightDataSize},
-                {"maxCacheDataSize", (i64)MaxCacheDataSize});
-=======
-            LOG_S_DEBUG("Evict: " << victim << " CacheDataSize: " << CacheDataSize << " InFlightDataSize: " << (i64)InFlightDataSize
-                                  << " MaxCacheDataSize: " << (i64)MaxCacheDataSize << " sticky: " << stickyVictim);
->>>>>>> main
+                {"maxCacheDataSize", (i64)MaxCacheDataSize},
+                {"sicky", (i64)stickyVictim});
 
             Evictions->Inc();
             EvictedBytes->Add(victim.Size);

@@ -17,7 +17,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         YDB_LOG_DEBUG("TTxTxAbort.Execute at tablet",
-            {"#_Self->TabletID", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         auto txOperator = Self->ProgressTxController->GetTxOperator(TxId, ETxOperatorStatus::InProgress, /*optional*/ true);
         if (txOperator) {

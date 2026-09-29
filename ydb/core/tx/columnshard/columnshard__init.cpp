@@ -80,7 +80,7 @@ bool TTxInit::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         {"tabletId", Self->TabletID()},
         {"event", "initialize_shard"});
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TTxInit.Execute at tablet",
-        {"#_Self->TabletID", Self->TabletID()});
+        {"tabletId", Self->TabletID()});
 
     try {
         if (!StartReader) {
@@ -293,7 +293,7 @@ bool TTxInitSchema::Execute(TTransactionContext& txc, const TActorContext&) {
         {"tabletId", Self->TabletID()},
         {"process", "TTxInitSchema::Execute"});
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TxInitSchema.Execute at tablet",
-        {"#_Self->TabletID", Self->TabletID()});
+        {"tabletId", Self->TabletID()});
 
     const bool isFirstRun = txc.DB.GetScheme().IsEmpty();
     NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
@@ -344,7 +344,7 @@ void TTxInitSchema::Complete(const TActorContext& ctx) {
         {"process", "TTxInitSchema::Complete"});
     Self->Counters.GetCSCounters().Initialization.OnTxInitSchemaFinished(TMonotonic::Now() - StartInstant);
     YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TxInitSchema.Complete at tablet",
-        {"#_Self->TabletID();", Self->TabletID()});
+        {"tabletId", Self->TabletID()});
     Self->Execute(new TTxUpdateSchema(Self), ctx);
 }
 

@@ -90,7 +90,6 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
                         {"txPrefix", TxPrefix()},
                         {"step", step},
                         {"txId", txId},
-                        {"#_dup_step", step},
                         {"txSuffix", TxSuffix()});
                     break;
                 }
@@ -109,9 +108,9 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     } else {
         YDB_LOG_ERROR("Ignore old txIds for step last planned step",
             {"txPrefix", TxPrefix()},
-            {"#_num_0", JoinStrings(txIds.begin(), txIds.end(), ", ")},
+            {"txIds", JoinStrings(txIds.begin(), txIds.end(), ", ")},
             {"step", step},
-            {"#_Self->LastPlannedStep", Self->LastPlannedStep},
+            {"lastPlannedStep", Self->LastPlannedStep},
             {"txSuffix", TxSuffix()});
     }
 

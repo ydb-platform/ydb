@@ -59,7 +59,7 @@ class THoppingWindowTestFixture : public TStreamingTestFixture {
 public:
     void Init(bool enabled, bool watermarks = false) {
         auto& config = SetupAppConfig();
-        config.MutableFeatureFlags()->SetEnableStreamingQueryStateRecompute(enabled);
+        config.MutableFeatureFlags()->SetEnableHoppingWindowStartCheck(enabled);
         config.MutableTableServiceConfig()->SetEnableWatermarks(watermarks);
         config.MutableTableServiceConfig()->SetEnableWatermarksAdvanced(watermarks);
         CreateTopic("hoppingInput");

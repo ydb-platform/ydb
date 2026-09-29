@@ -245,15 +245,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(ev->Get()->Record.GetRuntimeSettings().GetStatsMode()),
                     static_cast<int>(NYql::NDqProto::DQ_STATS_MODE_BASIC));
             });
-<<<<<<< HEAD
-        auto request = MakeSQLRequest("SELECT SUM(value) FROM `/Root/table-1`;", true);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
-        request->Record.MutableRequest()->ClearTxControl();
-        ExecRequest(runtime, sender, std::move(request));
-=======
         ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1`;", 15, Ydb::StatusIds::SUCCESS,
             {}, 0, NKikimrKqp::QUERY_TYPE_SQL_SCAN);
->>>>>>> main
         UNIT_ASSERT(requests);
         UNIT_ASSERT(FindSpan(*uploader, "Task: "));
     }

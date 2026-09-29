@@ -16,6 +16,7 @@
 
 #include <arrow/api.h>
 #include <arrow/io/memory.h>
+#include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/file_reader.h>
 #include <contrib/libs/zstd/include/zstd.h>
@@ -654,6 +655,114 @@ TImportOutcome ImportKeyValueParquet(const TEngineFixture& fixture, const TStrin
     return outcome;
 }
 
+struct TBatchedImport {
+    TVector<TString> Keys;     // the keys of the imported rows, in the order they came
+    TVector<ui64> BatchBytes;  // the cell bytes of the rows of every batch that has rows
+    ui64 PeakArrowBytes = 0;   // the most memory Arrow held while rows were emitted
+};
+
+// Imports a data file the way the downloader does: every batch the engine
+// reports as ready is one upload.
+TBatchedImport ImportInBatches(const TEngineFixture& fixture, const TString& source, ui32 readBatchSize) {
+    // The buffer limit is set to hold any row group of the tests: they are
+    // about the rows decoded from a row group, not about its bytes.
+    auto engine = fixture.MakeEngine(
+        EDataFormat::Parquet,
+        source,
+        readBatchSize,
+        /*validateChecksum=*/false,
+        ECompressionCodec::None,
+        /*bufferSizeLimit=*/16_MB);
+
+    auto* arrowPool = arrow::default_memory_pool();
+    const i64 arrowBytesBefore = arrowPool->bytes_allocated();
+
+    TMemoryPool pool(256);
+    TBatchedImport result;
+    ui64 batchBytes = 0;
+    const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) {
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
+        result.Keys.emplace_back(keys.front().AsBuf());
+        for (const auto& cell : keys) {
+            batchBytes += cell.Size();
+        }
+        for (const auto& cell : values) {
+            batchBytes += cell.Size();
+        }
+
+        const i64 arrowBytes = arrowPool->bytes_allocated() - arrowBytesBefore;
+        result.PeakArrowBytes = Max<ui64>(result.PeakArrowBytes, Max<i64>(arrowBytes, 0));
+    };
+    const auto unexpectedChecksum = [](TStringBuf) {
+        UNIT_FAIL("checksum callback was called with validation disabled");
+    };
+
+    for (ui32 step = 0; step < 1024 * 1024; ++step) {
+        auto data = ExtractValue(engine->GetData(pool, addRow, unexpectedChecksum));
+        switch (data.Status) {
+        case IImportS3Engine::EDataStatus::NeedInput: {
+            const auto range = ExtractValue(engine->NextRange());
+            UNIT_ASSERT(range.Status == IImportS3Engine::ENextRangeStatus::Ready);
+            AssertSuccess(engine->PutRange(range.Range, Slice(source, range.Range)));
+            break;
+        }
+        case IImportS3Engine::EDataStatus::Ready:
+            if (batchBytes) {
+                result.BatchBytes.push_back(std::exchange(batchBytes, 0));
+            }
+            AssertSuccess(engine->Commit(data.Batch.Id));
+            break;
+        case IImportS3Engine::EDataStatus::Finished:
+            return result;
+        case IImportS3Engine::EDataStatus::WaitingForCommit:
+            UNIT_FAIL("unexpected batch waiting for commit");
+        }
+    }
+
+    UNIT_FAIL("Parquet import engine did not finish");
+    return result;
+}
+
+// What the batches of a row group must be: every batch takes the rows that
+// fit into the byte budget, and a row that does not fit into an empty batch is
+// taken alone.
+TVector<ui64> FillBatches(const TVector<ui64>& rowBytes, ui64 budget) {
+    TVector<ui64> batches;
+    ui64 batch = 0;
+    bool empty = true;
+    for (const ui64 bytes : rowBytes) {
+        if (!empty && bytes > budget - Min(batch, budget)) {
+            batches.push_back(std::exchange(batch, 0));
+            empty = true;
+        }
+        batch += bytes;
+        empty = false;
+    }
+    if (!empty) {
+        batches.push_back(batch);
+    }
+    return batches;
+}
+
+// Imports the values as one row group of a table with a Utf8 key and a Utf8
+// value, and checks that its batches are filled to the byte budget.
+void CheckBatchesAreFilledToTheBudget(const TVector<TString>& values, ui32 budget) {
+    const TString source = BuildKeyValueParquet(MakeStringArray(values), /*rowGroupSize=*/values.size());
+
+    TVector<TString> keys;
+    TVector<ui64> rowBytes;
+    for (size_t i = 0; i < values.size(); ++i) {
+        keys.push_back(TStringBuilder() << "k" << i);
+        rowBytes.push_back(keys.back().size() + values[i].size());
+    }
+
+    const TEngineFixture fixture;
+    const auto imported = ImportInBatches(fixture, source, budget);
+
+    UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", imported.Keys), JoinSeq(",", keys));
+    UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", imported.BatchBytes), JoinSeq(",", FillBatches(rowBytes, budget)));
+}
+
 Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     Y_UNIT_TEST(CsvSplitsRangesAndWaitsForCommit) {
         const TString source = "\"k1\",\"v1\"\n\"k2\",\"v2\"\n";
@@ -1131,6 +1240,88 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
                     typeName << ": the value of row " << i << " differs from the one in the file");
             }
         }
+    }
+
+    Y_UNIT_TEST(ParquetFillsBatchesToTheByteBudget) {
+        // A batch is one upload, which is one transaction of the shard, so it
+        // must stay within the byte budget whatever the file says about the
+        // size of its rows.
+        static constexpr ui32 Budget = 256_KB;
+
+        // Repeated values are written as a dictionary: the sizes in the
+        // metadata of the file are far below the sizes of the decoded rows.
+        CheckBatchesAreFilledToTheBudget(TVector<TString>(64, TString(64_KB, 'a')), Budget);
+
+        // Narrow rows followed by wide ones: the rows read so far say nothing
+        // about the rows that follow.
+        {
+            TVector<TString> values(200, TString(16, 'n'));
+            for (ui32 i = 0; i < 32; ++i) {
+                values.emplace_back(64_KB, static_cast<char>('a' + i % 26));
+            }
+            CheckBatchesAreFilledToTheBudget(values, Budget);
+        }
+
+        // A row wider than the budget is a batch of its own.
+        CheckBatchesAreFilledToTheBudget({
+            TString(16, 'n'),
+            TString(300_KB, 'w'),
+            TString(16, 'n'),
+            TString(16, 'n'),
+            TString(300_KB, 'w'),
+        }, Budget);
+    }
+
+    Y_UNIT_TEST(ParquetBoundsTheMemoryOfDecodedRows) {
+        // The buffer limit of the engine covers the bytes of the file only. The
+        // rows decoded from them can take far more: here 64 MiB of rows are in
+        // a file of less than 1 MiB.
+        static constexpr ui32 Rows = 1024;
+        static constexpr ui32 Budget = 256_KB;
+
+        const TString source = BuildKeyValueParquet(
+            MakeStringArray(TVector<TString>(Rows, TString(64_KB, 'a'))), /*rowGroupSize=*/Rows);
+        UNIT_ASSERT_LT(source.size(), 1_MB);
+
+        const TEngineFixture fixture;
+        const auto imported = ImportInBatches(fixture, source, Budget);
+
+        UNIT_ASSERT_VALUES_EQUAL(imported.Keys.size(), Rows);
+        UNIT_ASSERT_LT_C(imported.PeakArrowBytes, 8_MB,
+            "decoding held " << imported.PeakArrowBytes << " bytes with a budget of " << Budget);
+    }
+
+    Y_UNIT_TEST(ArrowAppliesANewBatchSizeToTheNextBatch) {
+        // The parser sizes every decoded batch anew. That relies on the reader
+        // taking the batch size for each batch, not once when it is opened.
+        static constexpr i64 Rows = 100;
+
+        const TString source = BuildKeyValueParquet(
+            MakeStringArray(TVector<TString>(Rows, "value")), /*rowGroupSize=*/Rows);
+        const auto buffer = std::make_shared<arrow::Buffer>(
+            reinterpret_cast<const uint8_t*>(source.data()), source.size());
+
+        std::unique_ptr<parquet::arrow::FileReader> fileReader;
+        const auto openStatus = parquet::arrow::OpenFile(
+            std::make_shared<arrow::io::BufferReader>(buffer), arrow::default_memory_pool(), &fileReader);
+        UNIT_ASSERT_C(openStatus.ok(), openStatus.ToString());
+
+        std::unique_ptr<arrow::RecordBatchReader> batchReader;
+        const auto readerStatus = fileReader->GetRecordBatchReader({0}, &batchReader);
+        UNIT_ASSERT_C(readerStatus.ok(), readerStatus.ToString());
+
+        i64 left = Rows;
+        for (const i64 batchSize : {1, 7, 3, 1000}) {
+            fileReader->set_batch_size(batchSize);
+
+            std::shared_ptr<arrow::RecordBatch> batch;
+            const auto readStatus = batchReader->ReadNext(&batch);
+            UNIT_ASSERT_C(readStatus.ok(), readStatus.ToString());
+            UNIT_ASSERT(batch);
+            UNIT_ASSERT_VALUES_EQUAL(batch->num_rows(), Min(batchSize, left));
+            left -= batch->num_rows();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(left, 0);
     }
 
     Y_UNIT_TEST(ParquetResumesFromCommittedRowGroup) {

@@ -17,6 +17,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
 
+#include <util/generic/size_literals.h>
 #include <util/string/builder.h>
 
 #include <numeric>
@@ -142,6 +143,66 @@ bool IsWriterCoercion(const arrow::DataType& fileType, const arrow::DataType& ex
     return fileType.id() == arrow::Type::INT64 && expectedType.id() == arrow::Type::UINT32;
 }
 
+// The cell bytes of the rows of a decoded batch, that is what the converter
+// emits for them. Conversions are off, so a cell is the Arrow value as it is:
+// the width of the type for a fixed-width column, the length of the value for
+// a string or a binary one, and nothing for a null.
+class TRowSizes {
+public:
+    explicit TRowSizes(const arrow::RecordBatch& batch) {
+        Columns.reserve(batch.num_columns());
+        for (int i = 0; i < batch.num_columns(); ++i) {
+            TColumn column{.Array = batch.column(i)};
+            switch (column.Array->type_id()) {
+            case arrow::Type::STRING:
+            case arrow::Type::BINARY:
+                column.Binary = static_cast<const arrow::BinaryArray*>(column.Array.get());
+                break;
+            default: {
+                const auto* type = dynamic_cast<const arrow::FixedWidthType*>(column.Array->type().get());
+                Y_ENSURE(type, "parquet column has an unexpected type " << column.Array->type()->ToString());
+                column.Width = type->bit_width() / 8;
+                break;
+            }
+            }
+            Columns.push_back(std::move(column));
+        }
+    }
+
+    ui64 RowBytes(i64 row) const {
+        ui64 bytes = 0;
+        for (const auto& column : Columns) {
+            if (column.Array->IsNull(row)) {
+                continue;
+            }
+            bytes += column.Binary ? column.Binary->value_length(row) : column.Width;
+        }
+        return bytes;
+    }
+
+private:
+    struct TColumn {
+        std::shared_ptr<arrow::Array> Array;
+        const arrow::BinaryArray* Binary = nullptr; // set for a variable-width column
+        ui64 Width = 0; // the cell bytes of a fixed-width column
+    };
+
+    TVector<TColumn> Columns;
+};
+
+// The memory the arrays of a decoded batch hold.
+ui64 DecodedBytes(const arrow::RecordBatch& batch) {
+    ui64 bytes = 0;
+    for (int i = 0; i < batch.num_columns(); ++i) {
+        for (const auto& buffer : batch.column_data(i)->buffers) {
+            if (buffer) {
+                bytes += buffer->capacity();
+            }
+        }
+    }
+    return bytes;
+}
+
 struct TParquetFileSession {
     std::shared_ptr<arrow::io::RandomAccessFile> Source;
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
@@ -150,21 +211,47 @@ struct TParquetFileSession {
     std::vector<int> RowGroups; // the row groups BatchReader reads, in that order
     std::unique_ptr<arrow::RecordBatchReader> BatchReader;
     std::shared_ptr<arrow::RecordBatch> HeldBatch; // rows [HeldOffset, num_rows) not yet emitted
+    TMaybe<TRowSizes> HeldSizes; // the sizes of the rows of HeldBatch
     i64 HeldOffset = 0;
     ui64 RowsRead = 0; // rows of the open row groups that have been emitted
-    ui64 RowBytesEstimate = 1; // average cell bytes per row of the open row groups
+    i64 BatchRows = 1; // the rows the next batch is decoded with, see NextBatchRows()
 };
 
 class TParquetDataParser final : public IParquetStreamParser {
-    // Rows are converted in slices (zero-copy views of a record batch) sized
-    // from the estimated row width so that a byte budget is checked before it
-    // is exceeded by much, without giving up the converter's row batching.
-    static constexpr i64 MaxSliceRows = 1024;
+    // A row group is decoded in batches, so that the memory of the decoded
+    // rows does not depend on how many rows it has or how well they are
+    // packed. Nothing in the file tells the size of the decoded rows (the
+    // sizes in its metadata are those of the encoded pages), so every batch is
+    // sized to a byte target by the rows of the one before it:
+    //  - the first batch of a row group is a single row;
+    //  - a batch is at most twice as long as the one before it, so a run of
+    //    wider rows is met by a batch of a limited length.
+    static constexpr i64 MaxBatchRows = 64 * 1024;
+    // The byte target of a batch when the caller sets no byte budget.
+    static constexpr ui64 DefaultDecodeBytes = 8_MB;
 
-    static i64 SliceRowsFor(ui64 maxDataBytes, ui64 emittedBytes, ui64 rowBytesEstimate) {
-        const ui64 budgetLeft = maxDataBytes > emittedBytes ? maxDataBytes - emittedBytes : 0;
-        const ui64 rows = budgetLeft / Max<ui64>(rowBytesEstimate, 1);
-        return static_cast<i64>(Min<ui64>(Max<ui64>(rows, 1), MaxSliceRows));
+    static i64 NextBatchRows(ui64 targetBytes, ui64 decodedBytes, i64 decodedRows) {
+        const ui64 rows = static_cast<ui64>(decodedRows);
+        const ui64 rowBytes = Max<ui64>((decodedBytes + rows - 1) / rows, 1);
+        const ui64 fitting = Max<ui64>(targetBytes / rowBytes, 1);
+        return static_cast<i64>(Min<ui64>(fitting, Min<ui64>(2 * rows, MaxBatchRows)));
+    }
+
+    // The number of rows, out of count rows starting at offset, whose cells
+    // fit into the byte budget. A row that does not fit into an empty batch is
+    // taken alone: that is the only way for a batch to exceed the budget.
+    static i64 RowsWithinBudget(const TRowSizes& sizes, i64 offset, i64 count, ui64 budget, bool emptyBatch) {
+        i64 rows = 0;
+        ui64 bytes = 0;
+        while (rows < count) {
+            const ui64 rowBytes = sizes.RowBytes(offset + rows);
+            if (rowBytes > budget - bytes) {
+                break;
+            }
+            bytes += rowBytes;
+            ++rows;
+        }
+        return rows == 0 && emptyBatch ? 1 : rows;
     }
 
 public:
@@ -327,8 +414,10 @@ public:
         Session->RowGroups.clear();
         Session->BatchReader.reset();
         Session->HeldBatch.reset();
+        Session->HeldSizes.Clear();
         Session->HeldOffset = 0;
         Session->RowsRead = 0;
+        Session->BatchRows = 1;
     }
 
     std::expected<TParsedBatch, TString> ProcessNextBatch(
@@ -351,10 +440,14 @@ public:
         NArrow::TArrowToYdbConverter converter(
             YdbSchema, rowWriter, /*allowInfDouble=*/false, /*withConversion=*/false);
         const ui64 firstRow = Session->RowsRead;
+        const ui64 decodeBytes = maxDataBytes ? maxDataBytes : DefaultDecodeBytes;
 
         // Makes sure HeldBatch holds unread rows; false once the row group is exhausted.
-        const auto fetch = [this]() -> std::expected<bool, TString> {
+        const auto fetch = [this, decodeBytes]() -> std::expected<bool, TString> {
             while (!Session->HeldBatch) {
+                // The reader takes the batch size for every batch it decodes.
+                Session->FileReader->set_batch_size(Session->BatchRows);
+
                 std::shared_ptr<arrow::RecordBatch> batch;
                 if (auto st = Session->BatchReader->ReadNext(&batch); !st.ok()) {
                     return std::unexpected(TStringBuilder()
@@ -364,11 +457,14 @@ public:
                     return false;
                 }
                 if (batch->num_rows() > 0) {
+                    Session->BatchRows = NextBatchRows(decodeBytes, DecodedBytes(*batch), batch->num_rows());
+
                     auto casted = CastCoercedColumns(std::move(batch));
                     if (!casted) {
                         return std::unexpected(std::move(casted.error()));
                     }
                     Session->HeldBatch = std::move(*casted);
+                    Session->HeldSizes.ConstructInPlace(*Session->HeldBatch);
                     Session->HeldOffset = 0;
                 }
             }
@@ -399,9 +495,18 @@ public:
 
             auto& held = Session->HeldBatch;
             const i64 remaining = held->num_rows() - Session->HeldOffset;
-            const i64 take = maxDataBytes
-                ? Min(remaining, SliceRowsFor(maxDataBytes, rowWriter.GetParsedData().DataBytes, Session->RowBytesEstimate))
-                : remaining;
+            i64 take = remaining;
+            if (maxDataBytes) {
+                const auto emitted = rowWriter.GetParsedData();
+                take = RowsWithinBudget(
+                    *Session->HeldSizes, Session->HeldOffset, remaining,
+                    maxDataBytes > emitted.DataBytes ? maxDataBytes - emitted.DataBytes : 0,
+                    /*emptyBatch=*/emitted.Rows == 0);
+                if (take == 0) {
+                    return makeResult(true); // the rows that are left go to the next batch
+                }
+            }
+
             const auto slice = take == held->num_rows()
                 ? held
                 : held->Slice(Session->HeldOffset, take);
@@ -420,23 +525,16 @@ public:
 
             Session->RowsRead += take;
             Session->HeldOffset += take;
-            if (Session->HeldOffset >= held->num_rows()) {
-                held.reset();
-                Session->HeldOffset = 0;
+            if (Session->HeldOffset < held->num_rows()) {
+                return makeResult(true); // the byte budget is used up
             }
 
-            if (const auto parsed = rowWriter.GetParsedData(); parsed.Rows) {
-                Session->RowBytesEstimate = Max<ui64>(parsed.DataBytes / parsed.Rows, 1);
-            }
-
-            if (maxDataBytes && rowWriter.GetParsedData().DataBytes >= maxDataBytes) {
-                auto more = fetch();
-                if (!more) {
-                    ResetRowGroup();
-                    return std::unexpected(std::move(more.error()));
-                }
-                return makeResult(*more);
-            }
+            // The batch is emitted and the budget is not used up: go on with
+            // the next one. If there is none, the rows emitted so far are the
+            // last ones of the row group.
+            held.reset();
+            Session->HeldSizes.Clear();
+            Session->HeldOffset = 0;
         }
     }
 
@@ -516,17 +614,6 @@ private:
 
     std::expected<void, TString> OpenRowGroups(std::vector<int> rowGroupIndices) {
         ResetRowGroup();
-
-        // Initial row-width estimate from the metadata (uncompressed bytes / rows).
-        const auto metadata = Session->FileReader->parquet_reader()->metadata();
-        ui64 totalBytes = 0;
-        ui64 totalRows = 0;
-        for (const int index : rowGroupIndices) {
-            const auto rowGroup = metadata->RowGroup(index);
-            totalBytes += static_cast<ui64>(Max<int64_t>(rowGroup->total_byte_size(), 0));
-            totalRows += static_cast<ui64>(Max<int64_t>(rowGroup->num_rows(), 0));
-        }
-        Session->RowBytesEstimate = totalRows ? Max<ui64>(totalBytes / totalRows, 1) : 1;
 
         if (auto st = Session->FileReader->GetRecordBatchReader(
                 rowGroupIndices, Session->ColumnIndices, &Session->BatchReader); !st.ok())

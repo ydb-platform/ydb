@@ -42,7 +42,13 @@ namespace NActors::NDetail {
             auto selfId = this->GetActor().SelfId();
             Bridge.Reset(new TBridge(this));
             Bridge->Ref(); // extra reference used by the event
-            selfId.Schedule(When, new TEvents::TEvResumeRunnable(Bridge.Get()));
+            TActivationContext::Schedule(
+                When,
+                new IEventHandle(
+                    selfId,
+                    {},
+                    new TEvents::TEvResumeRunnable(Bridge.Get()),
+                    TEvents::TEvResumeRunnable::EventFlags));
 
             return TBase::Start();
         }

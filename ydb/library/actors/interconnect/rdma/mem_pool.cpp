@@ -338,6 +338,10 @@ namespace NInterconnect::NRdma {
         return Size;
     }
 
+    const TMemRegion* TMemRegionSlice::GetMemRegion() const noexcept {
+        return MemRegion.Get();
+    }
+
     uint32_t TMemRegionSlice::GetLKey(size_t deviceIndex) const {
         return MemRegion->GetLKey(deviceIndex);
     }

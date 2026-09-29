@@ -47,6 +47,7 @@ SRCS(
     interconnect_tcp_session.h
     interconnect_tcp_session_v2.cpp
     interconnect_tcp_session_v2.h
+    interconnect_uring_engine.h
     interconnect_zc_processor.cpp
     interconnect_zc_processor.h
     load.cpp
@@ -55,12 +56,18 @@ SRCS(
     packet.h
     profiler.h
     slowpoke_actor.h
+    subscriber_liveness_checker.cpp
+    subscriber_liveness_checker.h
     subscription_manager.cpp
     subscription_manager.h
     types.cpp
     types.h
+    v2_probes.cpp
     v2_event_serializer.cpp
     v2_event_serializer.h
+    xdc_limits.h
+    v2_io_buffers.h
+    v2_serialize_window.h
     watchdog_timer.h
 )
 
@@ -72,7 +79,11 @@ IF (OS_LINUX)
     SRCS(
         uring_context.cpp
         uring_context.h
-        uring_recv_buffer_pool.h
+        interconnect_uring_engine.cpp
+    )
+ELSE()
+    SRCS(
+        interconnect_uring_engine_stub.cpp
     )
 ENDIF()
 
@@ -117,7 +128,12 @@ IF (OS_LINUX)
     )
 ENDIF()
 
+RECURSE(
+    bench
+)
+
 RECURSE_FOR_TESTS(
+    benchmark
     ut
     ut_fat
     ut_huge_cluster

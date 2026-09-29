@@ -1,6 +1,7 @@
 #include "interconnect_channel.h"
 #include "interconnect_zc_processor.h"
 #include "rdma/mem_pool.h"
+#include "xdc_limits.h"
 
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_thread.h>
@@ -174,7 +175,7 @@ namespace NActors {
                         State = EState::BODY;
                         IEventBase *base = event.Event.Get();
                         if (event.EventSerializedSize) {
-                            Chunker.SetSerializingEvent(base);
+                            Chunker.SetSerializingEvent(base, /*withCachedSizes=*/ true, /*withCord=*/ false);
                         }
                         SerializationInfoContainer = base->CreateSerializationInfo(Params.UseExternalDataChannel);
                         SerializationInfo = &SerializationInfoContainer;
@@ -188,6 +189,10 @@ namespace NActors {
                     if (!event.EventSerializedSize) {
                         State = EState::DESCRIPTOR;
                     } else if (Params.UseExternalDataChannel && !SerializationInfo->Sections.empty()) {
+                        if (!IsXdcDeclareWithinLimit(*SerializationInfo, event.EventSerializedSize,
+                                MaxSerializedEventSize)) {
+                            throw TExSerializedEventTooLarge(event.Descr.Type);
+                        }
                         State = EState::SECTIONS;
                         SectionIndex = 0;
                         XXH3_64bits_reset(&RdmaCumulativeChecksumState);
@@ -310,12 +315,19 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
+                Y_ABORT_UNLESS(event.EventActuallySerialized <= MaxSerializedEventSize);
+                const size_t limitRemain = MaxSerializedEventSize - event.EventActuallySerialized;
+                if (!limitRemain) {
+                    throw TExSerializedEventTooLarge(event.Descr.Type);
+                }
+
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>()
+                    .SubSpan(0, Min(PartLenRemain, limitRemain));
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
+                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size())) {
+                    addChunk(chunk.Buf, chunk.Size, false);
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {
@@ -545,7 +557,7 @@ namespace NActors {
 
         // For backwards compatibility use of _NO_CHECKSUMS cmd is gated by Params.AllowDisablingPayloadChecksums
         //  \todo replace with checksumsDisabled
-        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ);
+        *ptr++ = static_cast<ui8>(checksumsDisabledForEvent ? EXdcCommand::RDMA_READ_NO_CHECKSUMS : EXdcCommand::RDMA_READ); 
         WriteUnaligned<ui16>(ptr, credsSerializedSize);
         ptr += sizeof(ui16);
 
@@ -580,7 +592,7 @@ namespace NActors {
     }
 
     std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
-        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums
+        const bool disableChecksumsForEvent = Params.AllowDisablingPayloadChecksums 
             && (event.Descr.Flags & IEventHandle::FlagDisablePayloadChecksums);
         const bool disableChecksums = Params.Encryption || disableChecksumsForEvent;
 
@@ -636,7 +648,7 @@ namespace NActors {
     }
 
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
-        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notifying about Undelivered messages!",
+        YDB_LOG_DEBUG_COMP(::NActorsServices::INTERCONNECT_SESSION, "Notyfying about Undelivered messages!",
             {"marker", "ICOCH89"},
             {"notYetConfirmed", NotYetConfirmed.size()},
             {"queue", Queue.size()});

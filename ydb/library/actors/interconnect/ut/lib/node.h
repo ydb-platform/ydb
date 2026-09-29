@@ -11,11 +11,14 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
 #include <library/cpp/logger/backend.h>
+
+#include <util/string/cast.h>
+#include <util/system/env.h>
 
 #include "tls/tls.h"
 
@@ -71,6 +74,25 @@ public:
         }
         setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
+        if (common->Settings.V2.Threads) {
+            // Mirror production: the engine is created up front whenever Threads is non-zero (regardless of
+            // Settings.V2.Enable, which only gates handshake negotiation and may be flipped at runtime) and
+            // published in Common; the proxy binds it to the actor system on start (SetActorSystem). Shard
+            // count is overridable via YDB_IC_V2_SHARDS so tests can force many connections onto one ring.
+            if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
+                common->Settings.V2.Threads = FromString<ui32>(s);
+            }
+            if (const TString s = GetEnv("YDB_IC_V2_RINGS_PER_SHARD"); !s.empty()) {
+                common->Settings.V2.RingsPerShard = FromString<ui32>(s);
+            }
+            common->UringEngineV2 = CreateUringEngine(common);
+            setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
+                if (engine) {
+                    engine->SetActorSystem(actorSystem);
+                }
+            });
+        }
+
         #if !defined(_msan_enabled_)
         if (withRdma) {
             common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
@@ -110,10 +132,6 @@ public:
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(counters),
             TMailboxType::ReadAsFilled, 0));
-        if (common->Settings.UseUring && TUringContext::IsSupported()) {
-            setup.LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(CreateUringPollerActor(common->Settings.EnableUringSQPOLL),
-                TMailboxType::ReadAsFilled, 0));
-        }
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
             TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(NInterconnect::NRdma::TRdmaRuntimeParams{-1, 1024, 0, 0}, rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
@@ -174,6 +192,9 @@ public:
         auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
         ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));
         ActorSystem->Start();
+        // The v2 io_uring engine (shared, off-actor, with its own reaper threads) was created above and
+        // published in Common; the interconnect proxy binds it to the actor system on start and it is
+        // stopped via the actor system's DeferPreStop hook.
     }
 
     ~TNode() {
@@ -183,6 +204,8 @@ public:
 
     void Stop() {
         if (ActorSystem) {
+            // The v2 engine (if created) is stopped via the actor system's DeferPreStop hook during
+            // Stop(), so its reaper threads are joined before the executors shut down.
             ActorSystem->Stop();
             ActorSystem.Reset();
         }

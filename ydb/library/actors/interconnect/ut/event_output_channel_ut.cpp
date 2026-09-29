@@ -15,6 +15,20 @@ namespace {
 
 struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
 
+struct TEvLyingXdcSection
+    : TEventPB<TEvLyingXdcSection, NInterconnectTest::TEvTestSerialization, 124>
+{
+    TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+        if (!allowExternalDataChannel) {
+            return {};
+        }
+        TEventSerializationInfo info;
+        info.IsExtendedFormat = true;
+        info.Sections.push_back(TEventSectionInfo{0, EventMaxByteSize + 1, 0, 0, false, false});
+        return info;
+    }
+};
+
 struct TXdcPushData {
     EXdcCommand Command = EXdcCommand::PUSH_DATA;
     ui16 Size = 0;
@@ -265,6 +279,32 @@ void AssertChecksumsWhenDisablingIsNotNegotiated(bool useXxhash) {
     UNIT_ASSERT_VALUES_EQUAL(*pushData.Checksum, CalculateExpectedChecksum(event.XdcPayloadData, useXxhash));
 }
 
+void AssertXdcDeclareNotSerialized(IEventBase* ev, ui32 maxSerializedEventSize) {
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+    std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+    metrics->SetPeerInfo("peer", "1", "peer");
+
+    auto releaseCallback = [](THolder<IEventBase>) {};
+    TEventHolderPool pool(common, releaseCallback);
+
+    TSessionParams params;
+    params.UseExternalDataChannel = true;
+
+    TEventOutputChannel channel(1, 1, maxSerializedEventSize, metrics, params, nullptr);
+    auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+    channel.Push(*evHandle, pool, TInstant::Zero());
+
+    NInterconnect::TOutgoingStream mainStream;
+    NInterconnect::TOutgoingStream xdcStream;
+    TTcpPacketOutTask task(params, mainStream, xdcStream);
+
+    UNIT_ASSERT_EXCEPTION(channel.FeedBuf(task, 1), TExSerializedEventTooLarge);
+    UNIT_ASSERT(channel.State == TEventOutputChannel::EState::BODY);
+    UNIT_ASSERT(ProduceString(xdcStream).empty());
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(EventOutputChannel) {
@@ -281,5 +321,20 @@ Y_UNIT_TEST_SUITE(EventOutputChannel) {
     Y_UNIT_TEST(DisablingChecksumsNotNegotiated) {
         AssertChecksumsWhenDisablingIsNotNegotiated(false);
         AssertChecksumsWhenDisablingIsNotNegotiated(true);
+    }
+
+    Y_UNIT_TEST(RejectsOversizedXdcDeclare) {
+        auto* ev = new TEvTestSerialization;
+        ev->AddPayload(TRope(TString(8192, 'x')));
+        UNIT_ASSERT(ev->AllowExternalDataChannel());
+        UNIT_ASSERT_GT(ev->CalculateSerializedSize(), 1024u);
+        AssertXdcDeclareNotSerialized(ev, 1024);
+    }
+
+    Y_UNIT_TEST(RejectsXdcDeclareWhenSectionExceedsEventMaxByteSize) {
+        auto* ev = new TEvLyingXdcSection;
+        ev->Record.SetBlobID(1);
+        UNIT_ASSERT_GT(ev->CalculateSerializedSize(), 0u);
+        AssertXdcDeclareNotSerialized(ev, EventMaxByteSize);
     }
 }

@@ -55,8 +55,4 @@ Use `--stale-ro` to distribute reads across configured read replicas, or omit it
 for snapshot-consistent reads. Warm the graphs before measuring steady-state
 throughput. The existing index can be reused after upgrading the server.
 
-`--hnsw-full-range --stale-ro` remains available to read the internal posting table
-directly for comparisons with older servers. It is no longer needed for fast
-`distributed_hnsw` index views. This diagnostic mode applies only to unprefixed,
-non-overlapping indexes and requires explicit stale reads. `--non-indexed` still
-searches the base table.
+Use `--non-indexed` to search the base table for a brute-force comparison.

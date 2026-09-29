@@ -75,8 +75,6 @@ public:
     bool NonIndexedSearch = false;
     bool StaleRO = false;
     bool DistributedHnsw = false;
-    bool HasOverlappingPostings = false;
-    bool HnswFullRange = false;
     bool KeyIsInt = false;
 };
 

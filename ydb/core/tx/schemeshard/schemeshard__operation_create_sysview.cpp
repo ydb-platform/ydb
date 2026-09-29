@@ -217,13 +217,8 @@ public:
             sysViewPath->ApplyACL(acl);
         }
 
-<<<<<<< HEAD
-        TSysViewInfo::TPtr sysViewInfo = CreateSysView(sysViewDescription);
-        context.SS->SysViews[sysViewPathId] = sysViewInfo;
-=======
         TSysViewInfo::TPtr sysViewInfo = CreateSysView(static_cast<NKikimrSysView::ESysViewType>(sysViewType));
-        context.SS->SysViews.Set(sysViewPathId, sysViewInfo);
->>>>>>> 51c35c967b0 (Fix SchemeShard describe for unknown system view types (#54332))
+        context.SS->SysViews[sysViewPathId] = sysViewInfo;
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSysView, sysViewPathId);
         txState.State = TTxState::Propose;

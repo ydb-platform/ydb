@@ -147,6 +147,16 @@ bool TOidcCliOptions::IsConfigured() const {
     return !ConfigFile.empty() || !Issuer.empty();
 }
 
+bool TOidcCliOptions::IsDeviceFlow() const {
+    if (!IsConfigured()) {
+        return false;
+    }
+    if (ResolvedConfig.has_value()) {
+        return std::holds_alternative<NOidc::TDeviceOidcConfig>(ResolvedConfig->FlowConfig);
+    }
+    return std::holds_alternative<NOidc::TDeviceOidcConfig>(MakeConfig().FlowConfig);
+}
+
 bool TOidcCliOptions::HasOptions() const {
     if (!ConfigFile.empty()) {
         return true;

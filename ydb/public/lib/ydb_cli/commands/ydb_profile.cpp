@@ -407,7 +407,6 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"oidc-client-id", Oidc.ClientId},
         {"oidc-client-secret-file", Oidc.ClientSecretFile},
         {"oidc-access-token-file", Oidc.AccessTokenFile},
-        {"oidc-scope", Oidc.Scope},
         {"oidc-cache-path", Oidc.CachePath},
         {"yc-token-file", YcTokenFile},
         {"iam-token-file", IamTokenFile},
@@ -439,6 +438,19 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
                 throw TMisuseException() << "You entered too many \"anonymous-auth\" options.";
             }
             AnonymousAuth = true;
+            continue;
+        }
+
+        if (trimmedLine.StartsWith("oidc-scope:")) {
+            TString scope;
+            Strip(trimmedLine.substr(TStringBuf("oidc-scope:").size()), scope);
+            if (scope.empty()) {
+                throw TMisuseException() << "oidc-scope must not be empty";
+            }
+            if (!Oidc.Scope.empty()) {
+                Oidc.Scope += ' ';
+            }
+            Oidc.Scope += scope;
             continue;
         }
 

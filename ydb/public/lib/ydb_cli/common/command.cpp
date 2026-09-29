@@ -203,7 +203,7 @@ TDriverConfig TClientCommand::TConfig::CreateDriverConfig() {
 
     if (SkipDiscovery) {
         driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
-    } else if (Oidc.IsConfigured()) {
+    } else if (Oidc.IsDeviceFlow()) {
         driverConfig.SetDiscoveryMode(EDiscoveryMode::Async);
     }
 

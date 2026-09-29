@@ -29,6 +29,7 @@ struct TOidcCliOptions {
     std::optional<NOidc::TOidcConfig> ResolvedConfig;
 
     bool IsConfigured() const;
+    bool IsDeviceFlow() const;
     bool HasOptions() const;
     NOidc::TOidcConfig MakeConfig() const;
     YAML::Node MakeProfileAuth() const;

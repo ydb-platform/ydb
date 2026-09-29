@@ -1,5 +1,6 @@
 #include "oidc.h"
 #include "client_command_options.h"
+#include "command.h"
 #include "oidc_options.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -32,6 +33,64 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::get<NOidc::TDeviceOidcConfig>(config.FlowConfig).ClientId, "ydb-cli");
     }
 
+    Y_UNIT_TEST(DetectsDeviceFlowFromDirectOptions) {
+        UNIT_ASSERT(!TOidcCliOptions().IsDeviceFlow());
+        auto options = DeviceOptions();
+        UNIT_ASSERT(options.IsDeviceFlow());
+        options.Flow = "device";
+        UNIT_ASSERT(options.IsDeviceFlow());
+        const NTesting::TScopedEnvironment secret("YDB_OIDC_CLIENT_SECRET", "secret");
+        options.Flow = "client";
+        UNIT_ASSERT(!options.IsDeviceFlow());
+    }
+
+    Y_UNIT_TEST(DetectsDeviceFlowFromResolvedFileConfig) {
+        TTempDir dir;
+        const auto path = dir.Path() / "oidc.yaml";
+        TOidcCliOptions options;
+        options.ConfigFile = path.GetPath();
+        for (const TString& flow : {
+                TString("static_credentials:\n  access_token_file: token\n"),
+                TString("client_credentials_grant:\n  client_id: client\n  client_secret_file: secret\n"),
+                TString("device_authorization_grant:\n  client_id: cli\n")})
+        {
+            TFileOutput((dir.Path() / "token").GetPath()).Write("token");
+            TFileOutput((dir.Path() / "secret").GetPath()).Write("secret");
+            TFileOutput(path.GetPath()).Write("issuer: https://issuer.example\n" + flow);
+            options.ResolvedConfig.reset();
+            const bool device = flow.StartsWith("device_authorization_grant:");
+            UNIT_ASSERT_VALUES_EQUAL(options.IsDeviceFlow(), device);
+            options.ResolvedConfig = options.MakeConfig();
+            path.DeleteIfExists();
+            UNIT_ASSERT_VALUES_EQUAL(options.IsDeviceFlow(), device);
+        }
+    }
+
+    Y_UNIT_TEST(OidcSelectionPrecedesCustomCredentialsGetterAndReusesProvider) {
+        char name[] = "ydb";
+        char* args[] = {name};
+        TClientCommand::TConfig config(1, args);
+        config.Oidc.Issuer = "https://issuer.example";
+        config.Oidc.ResolvedConfig = NOidc::TOidcConfig{
+            .Issuer = "https://issuer.example",
+            .FlowConfig = NOidc::TStaticOidcConfig{.AccessToken = "oidc-token", .ExpiresAt = std::nullopt},
+        };
+        bool fallbackCalled = false;
+        config.CredentialsGetter = [&fallbackCalled](const TClientCommand::TConfig&) {
+            fallbackCalled = true;
+            return CreateOAuthCredentialsProviderFactory("fallback-token");
+        };
+        const auto factory = config.GetSingletonCredentialsProviderFactory();
+        UNIT_ASSERT_VALUES_EQUAL(factory->CreateProvider()->GetAuthInfo(), "Bearer oidc-token");
+        UNIT_ASSERT(!fallbackCalled);
+        UNIT_ASSERT(factory == config.GetSingletonCredentialsProviderFactory());
+        UNIT_ASSERT(factory->CreateProvider() == factory->CreateProvider());
+        config.Oidc = {};
+        config.SingletonCredentialsProviderFactory = nullptr;
+        UNIT_ASSERT_VALUES_EQUAL(config.GetSingletonCredentialsProviderFactory()->CreateProvider()->GetAuthInfo(), "fallback-token");
+        UNIT_ASSERT(fallbackCalled);
+    }
+
     Y_UNIT_TEST(StaticTokenFileAndProfileContainOnlyPath) {
         TTempDir dir;
         TOidcCliOptions options;
@@ -39,6 +98,7 @@ Y_UNIT_TEST_SUITE(TOidcCliOptionsTest) {
         options.AccessTokenFile = (dir.Path() / "token").GetPath();
         for (const char* contents : {"private-token\n", "Bearer private-token\n"}) {
             TFileOutput(options.AccessTokenFile).Write(contents);
+            UNIT_ASSERT(!options.IsDeviceFlow());
             UNIT_ASSERT_VALUES_EQUAL(CreateCliOidcCredentialsProviderFactory(options)->CreateProvider()->GetAuthInfo(), "Bearer private-token");
         }
         const auto auth = options.MakeProfileAuth();

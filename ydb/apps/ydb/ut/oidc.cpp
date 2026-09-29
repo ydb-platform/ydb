@@ -469,6 +469,23 @@ Y_UNIT_TEST_SUITE(ParseOidcOptionsTest) {
         UNIT_ASSERT(!output.Contains("profile-secret"));
     }
 
+    Y_UNIT_TEST_F(AccumulatesOidcScopesFromStdin, TCliTestFixture) {
+        TOidcTestServer idp;
+        idp.Enqueue(R"({"access_token":"scoped-token","token_type":"Bearer","expires_in":600})", HTTP_OK);
+        const auto secretFile = EnvFile("secret", "secret");
+        const auto profileFile = EnvFile("", "profiles.yaml");
+        RunCliWithInput({"--profile-file", profileFile, "config", "profile", "create", "scoped",
+            "-e", GetEndpoint(), "-d", GetDatabase(), "--oidc-issuer", TString(idp.Issuer()),
+            "--oidc-flow", "client", "--oidc-client-id", "client", "--oidc-client-secret-file", secretFile,
+            "--oidc-scope", "read"}, "oidc-scope: write\noidc-scope: offline_access\n");
+        UNIT_ASSERT_STRING_CONTAINS(TFileInput(profileFile).ReadAll(), "scope: write offline_access read");
+        ExpectToken("Bearer scoped-token");
+        RunCli({"--profile-file", profileFile, "--profile", "scoped", "scheme", "ls"});
+        const auto requests = idp.Requests();
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(requests[0].Form.Get("scope"), "write offline_access read openid");
+    }
+
     Y_UNIT_TEST_F(ClientCredentialsGrantFromFlagsAndEnvironment, TCliTestFixture) {
         TOidcTestServer idp;
         idp.Enqueue(R"({"access_token":"client-token","token_type":"Bearer","expires_in":600})", HTTP_OK);

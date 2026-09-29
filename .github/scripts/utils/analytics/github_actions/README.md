@@ -42,7 +42,9 @@ PY=.github/scripts/utils/analytics/github_actions/ci_metrics.py
 
 python3 "$PY" start compile --source my_workflow --label cache_mode=dist_cache
 # … работа …
-python3 "$PY" end compile --rc "$?"          # 0 → success, иначе failure
+compile
+RC=$?
+python3 "$PY" end compile --rc "$RC"         # exit code той команды: 0 → success
 python3 "$PY" enrich compile --label report_url="$URL"
 python3 "$PY" flush
 ```
@@ -53,12 +55,22 @@ python3 "$PY" flush
 
 Дополнительно к collector:
 
-- `--runner` — один раз записать в labels, какая машина: cpu, ram, диск
-- `--usage` — то же в конце: сколько из этого реально занято
-- `--report <ya report.json>` на `enrich` — `labels.tests` (`passed`, `failed`,
-  `errors`, `skipped`, `muted`, `not_launched`, `other`, `total`)
-- `--rc N` — `success`, если 0, иначе `failure`
-- `--ya-attempt N` или `$CI_YA_ATTEMPT` — номер попытки `ya make` в labels
+- `--runner` на `start` — какая машина: сколько ядер, сколько RAM, сколько
+  диска. Спецификация железа, один раз за job.
+- `--usage` на `end` — сколько из этого занято **после** работы: загрузка
+  CPU, сколько RAM и диска осталось свободным. Чтобы на дашборде видеть
+  «бокс на 64 ГБ, а мы сожрали 60».
+- `--report <ya report.json>` на `enrich` — из отчёта `ya` в labels
+  (`passed`, `failed`, `errors`, `skipped`, `muted`, `not_launched`,
+  `other`, `total`)
+- `--rc N` — exit code той команды, которую вы только что измерили
+  (в bash это `$?`). `0` → в колонку `conclusion` пишем `success`, любое
+  другое число → `failure` и в labels `error` вроде `compile rc=1`. Без
+  `--rc` пришлось бы руками писать `--conclusion success` и забывать, когда
+  команда упала.
+- `--ya-attempt N` или `$CI_YA_ATTEMPT` — какая это попытка `ya make`
+  (1, 2, 3…), если job ретраит сборку. Не путать с `$GITHUB_RUN_ATTEMPT`
+  (это повтор всего workflow).
 
 ### Что окажется в `analytics/ci_metrics`
 

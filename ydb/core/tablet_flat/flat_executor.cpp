@@ -781,7 +781,7 @@ TVector<NSharedCache::TEvAttach::TBtreeSeed> MakeBtreeSeeds(const NTable::TPartS
             .DataCollectionId = partStore.PageCollections[groupIndex]->Id,
             .Root = meta.RootV2,
             .LevelCount = meta.LevelCount(),
-            .QueueLeaves = keepDataPages || sticky,
+            .QueueDataPages = keepDataPages || sticky,
             .Sticky = sticky,
             .IndexCollectionSticky = stickyGroups[0],
         });

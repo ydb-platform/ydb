@@ -73,13 +73,15 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
-        // One B-tree: index pages belong to IndexCollectionId, leaves to DataCollectionId.
+        // One B-tree per group: index nodes always live in the main group's collection
+        // (IndexCollectionId), while the data pages they point at live in that group's
+        // collection (DataCollectionId) — the same collection for group 0.
         struct TBtreeSeed {
             TLogoBlobID IndexCollectionId;
             TLogoBlobID DataCollectionId;
             NTable::NPage::TPageLocation Root;
             ui32 LevelCount = 0;
-            bool QueueLeaves = true;
+            bool QueueDataPages = true;
             bool Sticky = false;
             bool IndexCollectionSticky = false;
 

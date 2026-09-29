@@ -1445,7 +1445,7 @@ Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_AltRoom) {
 
 Y_UNIT_TEST(TryKeepInMemoryMode_BTreeIndex_V2_IndexOnly) {
     // The in-memory group is the main one, so the B-trees of all groups live in the in-memory
-    // collection: the tree of the regular group must be preloaded as well, without its leaves.
+    // collection: the tree of the regular group must be preloaded as well, without its data pages.
     TMyEnvBase env;
     env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
     env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);

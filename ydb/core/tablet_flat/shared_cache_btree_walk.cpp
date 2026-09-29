@@ -303,15 +303,15 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, ui64 loadRunI
     }
 
     while (true) {
-        if (walk.PendingLeaves) {
-            if (!AddLeafNodeToBatch(walk, *dataCollection, loadRunId)) {
+        if (walk.PendingDataPages) {
+            if (!AddNodeDataPagesToBatch(walk, *dataCollection, loadRunId)) {
                 return;
             }
         }
 
         if (walk.Next >= walk.CurrentLevel.size()) {
             if (!walk.NextLevel) {
-                if (FlushLeafBatch(walk, *dataCollection, loadRunId) != EBatchResult::Flushed) {
+                if (FlushDataPageBatch(walk, *dataCollection, loadRunId) != EBatchResult::Flushed) {
                     return;
                 }
                 break;
@@ -326,7 +326,7 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, ui64 loadRunI
 
         // A zero-level tree has its data page as the root.
         if (walk.Level >= walk.Seed.LevelCount) {
-            walk.PendingLeaves = std::move(walk.CurrentLevel);
+            walk.PendingDataPages = std::move(walk.CurrentLevel);
             walk.CurrentLevel.clear();
             walk.Next = 0;
             walk.BatchEnd = 0;
@@ -378,8 +378,8 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, ui64 loadRunI
         ++walk.Next;
 
         const bool childrenAreData = (walk.Level + 1 >= walk.Seed.LevelCount);
-        if (childrenAreData && !walk.Seed.QueueLeaves && !walk.Seed.Sticky) {
-            // This walk only keeps the index level resident, its leaves are of no use.
+        if (childrenAreData && !walk.Seed.QueueDataPages && !walk.Seed.Sticky) {
+            // This walk only keeps the index level resident, its data pages are of no use.
             continue;
         }
 
@@ -394,7 +394,7 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, ui64 loadRunI
         }
 
         if (childrenAreData) {
-            walk.PendingLeaves = std::move(children);
+            walk.PendingDataPages = std::move(children);
         } else {
             HandOverIndexLevel(walk, children, walk.Level + 1);
             for (auto& child : children) {
@@ -410,7 +410,7 @@ void TCacheBTreeWalkController::AdvanceWalk(TCacheBTreeWalk& walk, ui64 loadRunI
 void TCacheBTreeWalkController::HandOverIndexLevel(
     TCacheBTreeWalk& walk, TArrayRef<const TPageLocation> locations, ui32 level) {
     if ((!walk.Seed.Sticky && !walk.Seed.IndexCollectionSticky) || level >= walk.Seed.LevelCount) {
-        return; // not sticky, or these are the leaves
+        return; // not sticky, or these are the data pages
     }
 
     for (const auto& location : locations) {
@@ -440,24 +440,25 @@ bool TCacheBTreeWalkController::QueueInMemoryPages(
     return queued;
 }
 
-TCacheBTreeWalkController::EBatchResult TCacheBTreeWalkController::FlushLeafBatch(
+TCacheBTreeWalkController::EBatchResult TCacheBTreeWalkController::FlushDataPageBatch(
     TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
-    if (!walk.LeafBatch) {
+    if (!walk.DataPageBatch) {
         return EBatchResult::Flushed;
     }
 
-    const bool queueLeaves = walk.Seed.QueueLeaves && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
+    const bool queueDataPages =
+        walk.Seed.QueueDataPages && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
     // Like V1's mode-switch scan, keep discovering locations while the loader is out of cache budget.
-    const bool queued = queueLeaves && QueueInMemoryPages(dataCollection, walk.LeafBatch, loadRunId);
+    const bool queued = queueDataPages && QueueInMemoryPages(dataCollection, walk.DataPageBatch, loadRunId);
 
     if (walk.Seed.Sticky) {
         // Index notifications are parents-first; flush them before handing over data pages.
         FlushPagesToNotify(walk);
-        Host.SendWalkStickyPages(dataCollection, walk.Owner, walk.LeafBatch);
+        Host.SendWalkStickyPages(dataCollection, walk.Owner, walk.DataPageBatch);
     }
 
-    walk.LeafBatch.clear();
-    walk.LeafBatchBytes = 0;
+    walk.DataPageBatch.clear();
+    walk.DataPageBatchBytes = 0;
     ContinuationNeeded |= queued;
     if (queued) {
         State(dataCollection.Id).Run->NeedsAdvance = true;
@@ -465,35 +466,37 @@ TCacheBTreeWalkController::EBatchResult TCacheBTreeWalkController::FlushLeafBatc
     return queued ? EBatchResult::Queued : EBatchResult::Flushed;
 }
 
-bool TCacheBTreeWalkController::AddLeafNodeToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
-    const bool queueLeaves = walk.Seed.QueueLeaves && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
-    if (!walk.Seed.Sticky && !queueLeaves) {
-        walk.PendingLeaves.clear();
+bool TCacheBTreeWalkController::AddNodeDataPagesToBatch(
+    TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 loadRunId) {
+    const bool queueDataPages =
+        walk.Seed.QueueDataPages && dataCollection.GetCacheMode() == ECacheMode::TryKeepInMemory;
+    if (!walk.Seed.Sticky && !queueDataPages) {
+        walk.PendingDataPages.clear();
         return true;
     }
 
     ui64 nodeBytes = 0;
-    for (const auto& location : walk.PendingLeaves) {
+    for (const auto& location : walk.PendingDataPages) {
         nodeBytes += location.Size;
     }
 
-    if (walk.LeafBatch &&
-        (walk.LeafBatchBytes >= MaxWalkBatchBytes || nodeBytes > MaxWalkBatchBytes - walk.LeafBatchBytes))
+    if (walk.DataPageBatch &&
+        (walk.DataPageBatchBytes >= MaxWalkBatchBytes || nodeBytes > MaxWalkBatchBytes - walk.DataPageBatchBytes))
     {
-        if (FlushLeafBatch(walk, dataCollection, loadRunId) != EBatchResult::Flushed) {
+        if (FlushDataPageBatch(walk, dataCollection, loadRunId) != EBatchResult::Flushed) {
             return false;
         }
     }
 
-    walk.LeafBatch.reserve(walk.LeafBatch.size() + walk.PendingLeaves.size());
-    for (auto& location : walk.PendingLeaves) {
-        walk.LeafBatch.push_back(std::move(location));
+    walk.DataPageBatch.reserve(walk.DataPageBatch.size() + walk.PendingDataPages.size());
+    for (auto& location : walk.PendingDataPages) {
+        walk.DataPageBatch.push_back(std::move(location));
     }
-    walk.LeafBatchBytes += nodeBytes;
-    walk.PendingLeaves.clear();
+    walk.DataPageBatchBytes += nodeBytes;
+    walk.PendingDataPages.clear();
 
-    if (walk.LeafBatchBytes >= MaxWalkBatchBytes) {
-        return FlushLeafBatch(walk, dataCollection, loadRunId) == EBatchResult::Flushed;
+    if (walk.DataPageBatchBytes >= MaxWalkBatchBytes) {
+        return FlushDataPageBatch(walk, dataCollection, loadRunId) == EBatchResult::Flushed;
     }
     return true;
 }
@@ -594,7 +597,7 @@ void TCacheBTreeWalkController::DropIndexOnlyWalks(const TLogoBlobID& indexColle
         Y_ENSURE(collection);
         const bool hasIndexOnlyWalk = AnyOf(State(collection->Id).SeedsByOwner, [&](const auto& item) {
             return AnyOf(item.second, [&](const auto& seed) {
-                return !seed.QueueLeaves && !seed.Sticky && !seed.IndexCollectionSticky &&
+                return !seed.QueueDataPages && !seed.Sticky && !seed.IndexCollectionSticky &&
                        seed.IndexCollectionId == indexCollectionId;
             });
         });

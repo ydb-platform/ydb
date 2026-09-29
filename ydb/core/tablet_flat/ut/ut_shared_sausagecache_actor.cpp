@@ -1647,12 +1647,12 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         regularSeed.DataCollectionId = sharedCache.Collection1->Label();
         regularSeed.Root = _P(0, EPage::DataPage);
         regularSeed.LevelCount = 0;
-        regularSeed.QueueLeaves = false;
+        regularSeed.QueueDataPages = false;
 
         sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection1, ECacheMode::Regular, { regularSeed });
 
         auto stickySeed = regularSeed;
-        stickySeed.QueueLeaves = true;
+        stickySeed.QueueDataPages = true;
         stickySeed.Sticky = true;
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { stickySeed });
 
@@ -1687,12 +1687,12 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         indexOnlySeed.DataCollectionId = sharedCache.Collection2->Label();
         indexOnlySeed.Root = _P(0, EPage::DataPage);
         indexOnlySeed.LevelCount = 0;
-        indexOnlySeed.QueueLeaves = false;
+        indexOnlySeed.QueueDataPages = false;
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2, ECacheMode::Regular, { indexOnlySeed });
 
         auto stickySeed = indexOnlySeed;
         stickySeed.Root = _P(1, EPage::DataPage);
-        stickySeed.QueueLeaves = true;
+        stickySeed.QueueDataPages = true;
         stickySeed.Sticky = true;
         sharedCache.Attach(sharedCache.Sender2, sharedCache.Collection2, ECacheMode::Regular, { stickySeed });
         sharedCache.Runtime.WaitFor("first sticky walk", [&] {
@@ -1725,7 +1725,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             seed.DataCollectionId = sharedCache.Collection1->Label();
             seed.Root = _P(root, EPage::BTreeIndexV2);
             seed.LevelCount = 1;
-            seed.QueueLeaves = false;
+            seed.QueueDataPages = false;
             return seed;
         };
 
@@ -1791,7 +1791,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         seed.DataCollectionId = sharedCache.Collection1->Label();
         seed.Root = _P(0, EPage::BTreeIndexV2);
         seed.LevelCount = 1;
-        seed.QueueLeaves = false;
+        seed.QueueDataPages = false;
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { seed });
         sharedCache.CheckFetches({});
@@ -1856,7 +1856,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         seed.DataCollectionId = collection->Label();
         seed.Root = _P(4, EPage::BTreeIndexV2);
         seed.LevelCount = 1;
-        seed.QueueLeaves = false;
+        seed.QueueDataPages = false;
         sharedCache.Attach(sharedCache.Sender1, collection, ECacheMode::TryKeepInMemory, { seed });
         sharedCache.CheckFetches({});
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
@@ -1888,7 +1888,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         seed.DataCollectionId = sharedCache.Collection1->Label();
         seed.Root = _P(0, EPage::BTreeIndexV2);
         seed.LevelCount = 1;
-        seed.QueueLeaves = false;
+        seed.QueueDataPages = false;
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory, { seed });
         sharedCache.CheckFetches({});
@@ -1899,7 +1899,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 0);
     }
 
-    Y_UNIT_TEST(InMemory_DrainingWalkWaitsForQueuedLeaves) {
+    Y_UNIT_TEST(InMemory_DrainingWalkWaitsForQueuedDataPages) {
         auto config = TSharedPageCacheMock::DefaultConfig();
         config.SetInMemoryInFlyLimit(PAGE_TOTAL_SIZE - 1);
         TSharedPageCacheMock sharedCache(config);
@@ -1913,9 +1913,9 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         seed.DataCollectionId = sharedCache.Collection1->Label();
         seed.Root = _P(0, EPage::DataPage);
         seed.LevelCount = 0;
-        seed.QueueLeaves = true;
+        seed.QueueDataPages = true;
 
-        // The walk finishes traversal, but its leaf cannot be submitted under the initial limit.
+        // The walk finishes traversal, but its data page cannot be submitted under the initial limit.
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory, { seed });
         sharedCache.CheckFetches({});
 
@@ -1964,7 +1964,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         seed.DataCollectionId = sharedCache.Collection1->Label();
         seed.Root = _P(0, EPage::DataPage);
         seed.LevelCount = 0;
-        seed.QueueLeaves = true;
+        seed.QueueDataPages = true;
 
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory, { seed });
         sharedCache.CheckFetches({

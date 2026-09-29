@@ -29,9 +29,9 @@ struct TCacheBTreeWalk {
 
     TVector<TPageLocation> CurrentLevel;
     TVector<TPageLocation> NextLevel;
-    TVector<TPageLocation> PendingLeaves;
-    TVector<TPageLocation> LeafBatch;
-    ui64 LeafBatchBytes = 0;
+    TVector<TPageLocation> PendingDataPages;
+    TVector<TPageLocation> DataPageBatch;
+    ui64 DataPageBatchBytes = 0;
     size_t Next = 0;
     size_t BatchEnd = 0;
     ui32 Level = 0;
@@ -139,8 +139,8 @@ private:
     bool QueueInMemoryPages(TCollection& collection, TArrayRef<const TPageLocation> locations, ui64 runId);
     void AdvanceWalk(TCacheBTreeWalk& walk, ui64 runId);
     void HandOverIndexLevel(TCacheBTreeWalk& walk, TArrayRef<const NTable::NPage::TPageLocation> locations, ui32 level);
-    EBatchResult FlushLeafBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 runId);
-    bool AddLeafNodeToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 runId);
+    EBatchResult FlushDataPageBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 runId);
+    bool AddNodeDataPagesToBatch(TCacheBTreeWalk& walk, TCollection& dataCollection, ui64 runId);
     void AppendPageToNotify(
         TCacheBTreeWalk& walk, const TLogoBlobID& collectionId, const NTable::NPage::TPageLocation& location);
     void FlushPagesToNotify(TCacheBTreeWalk& walk);
@@ -157,7 +157,7 @@ private:
     THashMap<TLogoBlobID, TVector<TLogoBlobID>> WalkCollectionsByIndex;
     THashMap<ui64, TLogoBlobID> WalkLoads;
     ui64 NextWalkLoadId = 1;
-    // A queued leaf batch yields; another actor turn must continue discovery.
+    // A queued data-page batch yields; another actor turn must continue discovery.
     bool ContinuationNeeded = false;
     static constexpr ui64 MaxWalkBatchBytes = NTabletFlatExecutor::NBlockIO::BlockSize;
 };

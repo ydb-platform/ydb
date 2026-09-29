@@ -209,18 +209,18 @@ Y_UNIT_TEST_SUITE(TCacheBTreeWalkController) {
         UNIT_ASSERT_VALUES_EQUAL(host.CancelledRequests, 1);
     }
 
-    Y_UNIT_TEST(MultiLevelWalkSplitsLeafBatches) {
+    Y_UNIT_TEST(MultiLevelWalkSplitsDataPageBatches) {
         TWalkHostMock host;
         TCacheBTreeWalkController walks(host);
         const TActorId owner(1, TStringBuf("owner"));
-        constexpr ui64 leafSize = 3 * 1024 * 1024;
-        const auto leaf1 = TPageLocation::FromByteOffset(4000, leafSize, EPage::DataPage, 1);
-        const auto leaf2 = TPageLocation::FromByteOffset(5000, leafSize, EPage::DataPage, 2);
-        const auto leaf3 = TPageLocation::FromByteOffset(6000, leafSize, EPage::DataPage, 3);
-        const auto leaf4 = TPageLocation::FromByteOffset(7000, leafSize, EPage::DataPage, 4);
+        constexpr ui64 dataPageSize = 3 * 1024 * 1024;
+        const auto dataPage1 = TPageLocation::FromByteOffset(4000, dataPageSize, EPage::DataPage, 1);
+        const auto dataPage2 = TPageLocation::FromByteOffset(5000, dataPageSize, EPage::DataPage, 2);
+        const auto dataPage3 = TPageLocation::FromByteOffset(6000, dataPageSize, EPage::DataPage, 3);
+        const auto dataPage4 = TPageLocation::FromByteOffset(7000, dataPageSize, EPage::DataPage, 4);
 
-        auto firstBody = MakeNode(leaf1, leaf2);
-        auto secondBody = MakeNode(leaf3, leaf4);
+        auto firstBody = MakeNode(dataPage1, dataPage2);
+        auto secondBody = MakeNode(dataPage3, dataPage4);
         const auto first = TPageLocation::FromByteOffset(2000, firstBody.size(), EPage::BTreeIndexV2, 5);
         const auto second = TPageLocation::FromByteOffset(3000, secondBody.size(), EPage::BTreeIndexV2, 6);
         auto rootBody = MakeNode(first, second);
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TCacheBTreeWalkController) {
         seed.IndexCollectionId = host.Collection.Id;
         seed.Root = root;
         seed.LevelCount = 2;
-        seed.QueueLeaves = true;
+        seed.QueueDataPages = true;
         seed.Sticky = true;
         host.Collection.InMemoryOwners.insert(owner);
         const auto blocker = TPageLocation::FromByteOffset(8000, 10, EPage::DataPage, 8);
@@ -247,22 +247,22 @@ Y_UNIT_TEST_SUITE(TCacheBTreeWalkController) {
 
         UNIT_ASSERT_VALUES_EQUAL(host.StickyBatches.size(), 3);
         UNIT_ASSERT(host.StickyBatches[0] == TVector<TPageLocation>({ root, first, second }));
-        UNIT_ASSERT(host.StickyBatches[1] == TVector<TPageLocation>({ leaf1, leaf2 }));
-        UNIT_ASSERT(host.StickyBatches[2] == TVector<TPageLocation>({ leaf3, leaf4 }));
+        UNIT_ASSERT(host.StickyBatches[1] == TVector<TPageLocation>({ dataPage1, dataPage2 }));
+        UNIT_ASSERT(host.StickyBatches[2] == TVector<TPageLocation>({ dataPage3, dataPage4 }));
         UNIT_ASSERT_VALUES_EQUAL(pending.size(), 5);
-        UNIT_ASSERT(pending.contains(leaf1) && pending.contains(leaf2));
-        UNIT_ASSERT(pending.contains(leaf3) && pending.contains(leaf4));
+        UNIT_ASSERT(pending.contains(dataPage1) && pending.contains(dataPage2));
+        UNIT_ASSERT(pending.contains(dataPage3) && pending.contains(dataPage4));
         UNIT_ASSERT_VALUES_EQUAL(host.ScheduledContinuations, 2);
         UNIT_ASSERT_VALUES_EQUAL(host.ExpiredChecks, 0);
 
-        // Cancelling the walk withdraws only its leaves; the unrelated pending page survives.
+        // Cancelling the walk withdraws only its data pages; the unrelated pending page survives.
         walks.UpdateSeeds(host.Collection, owner, {});
         UNIT_ASSERT_VALUES_EQUAL(pending.size(), 1);
         UNIT_ASSERT(pending.contains(blocker));
         UNIT_ASSERT_VALUES_EQUAL(host.ExpiredChecks, 1);
     }
 
-    Y_UNIT_TEST(QueuedLeavesIgnoreExistingInMemoryPages) {
+    Y_UNIT_TEST(QueuedDataPagesIgnoreExistingInMemoryPages) {
         TWalkHostMock host;
         TCacheBTreeWalkController walks(host);
         const TActorId owner(1, TStringBuf("owner"));
@@ -299,7 +299,7 @@ Y_UNIT_TEST_SUITE(TCacheBTreeWalkController) {
             seed.IndexCollectionId = host.Collection.Id;
             seed.Root = TPageLocation::FromByteOffset(3000, 10, EPage::DataPage, 2);
             seed.LevelCount = 0;
-            seed.QueueLeaves = true;
+            seed.QueueDataPages = true;
             host.Collection.InMemoryOwners.insert(owner);
 
             walks.UpdateSeeds(host.Collection, owner, { seed });

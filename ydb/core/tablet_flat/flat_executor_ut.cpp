@@ -7198,7 +7198,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
 
         // A single row: the group has one data page and no index level, so the tree's root is that page
-        // and the walk has to hand it over as a leaf.
+        // and the walk has to hand over that data page.
         env.SendSync(rows.VersionTo(TRowVersion(1, 1)).RowTo(0).MakeRows(1, 950));
 
         env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));

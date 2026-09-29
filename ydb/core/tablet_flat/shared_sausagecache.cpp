@@ -1743,7 +1743,7 @@ public:
 
         // Advance is a no-op without new work; FinishReady only checks runs whose state changed.
         // This ordering is load-bearing: walks parse arrivals before GC and may become Draining
-        // after queueing leaves; the loader must submit those leaves before completion is checked.
+        // after queueing data pages; the loader must submit those pages before completion is checked.
         if (Walks.HasActiveWalks()) {
             Walks.Advance();
         }

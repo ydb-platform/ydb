@@ -10,7 +10,7 @@
 #include <ydb/core/cms/console/console.h>
 
 #include <ydb/services/workload_manager/actors/actors.h>
-#include <ydb/services/workload_manager/actors/resource_pools_cache_actor.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/common/helpers.h>
 #include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
@@ -85,9 +85,7 @@ public:
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
         EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
-        if (EnabledResourcePools) {
-            InitializeWorkloadService();
-        }
+        InitializeWorkloadService();
     }
 
     void HandlePoison() {
@@ -107,8 +105,8 @@ public:
             }
         }
 
-        if (CacheActor) {
-            Send(CacheActor, new TEvents::TEvPoison());
+        if (StateActor) {
+            Send(StateActor, new TEvents::TEvPoison());
         }
 
         PassAway();
@@ -189,6 +187,8 @@ public:
         }
 
         const TString& databaseId = ev->Get()->DatabaseId;
+        Y_ENSURE(EnabledResourcePoolsOnServerless || !IsServerlessInSnapshot(databaseId),
+                 "TEvPlaceRequestIntoPool for serverless DB with resource pools disabled — classifier gate is broken");
         LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         GetOrCreateDatabaseState(databaseId)->DoPlaceRequest(std::move(ev));
     }
@@ -231,8 +231,8 @@ public:
 
     // Test-only: WaitForClassifierPropagation injects TEvRefreshSubscriberData via this well-known service id; forward to cache actor.
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        if (CacheActor) {
-            TActivationContext::Send(ev->Forward(CacheActor));
+        if (StateActor) {
+            TActivationContext::Send(ev->Forward(StateActor));
         }
     }
 
@@ -555,7 +555,7 @@ private:
         ServiceInitialized = true;
 
         LOG_I("Started workload service initialization");
-        CacheActor = Register(CreateResourcePoolsCacheActor(Gateway));
+        StateActor = Register(CreateWorkloadManagerStateActor(Gateway));
         Register(CreateCleanupTablesActor());
         RunNodeInfoRequest();
     }
@@ -679,7 +679,7 @@ private:
         }
 
         LOG_I("Creating new database state for id " << databaseId);
-        return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .CacheActor = CacheActor, .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
+        return &DatabaseToState.insert({databaseId, TDatabaseState{.SelfId = SelfId(), .EnabledResourcePoolsOnServerless = EnabledResourcePoolsOnServerless, .WorkloadManagerConfig = WorkloadManagerConfig}}).first->second;
     }
 
     TPoolState* GetOrCreatePoolState(const TString& databaseId, const TString& poolId, const NResourcePool::TPoolSettings& poolConfig) {
@@ -715,6 +715,18 @@ private:
         return "[Service] ";
     }
 
+    bool IsServerlessInSnapshot(const TString& databaseId) const {
+        if (!Gateway) {
+            return false;
+        }
+        auto snapshot = Gateway->GetSnapshot();
+        if (!snapshot) {
+            return false;
+        }
+        const auto it = snapshot->Databases.find(databaseId);
+        return it != snapshot->Databases.end() && it->second.Serverless;
+    }
+
 private:
     TCounters Counters;
 
@@ -732,7 +744,7 @@ private:
     std::unordered_map<TString, TPoolState> PoolIdToState;  // DatabaseID/PoolID to state
     std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
     ui32 NodeCount = 0;
-    TActorId CacheActor;
+    TActorId StateActor;
     std::shared_ptr<NPrivate::TWorkloadManagerGateway> Gateway;
 };
 

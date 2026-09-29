@@ -784,6 +784,108 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
     }
 
+    Y_UNIT_TEST(DevNullSharedRouterRejectsBothMismatchOrders) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        for (const bool firstMode : {false, true}) {
+            TActorTestContext::TSettings settings;
+            settings.UseSectorMap = false;
+            settings.SmallDisk = true;
+            settings.ChunkSize = 16 << 20;
+            settings.DiskSize = ui64{16} << 30;
+            TActorTestContext ctx(settings);
+            auto first = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+                2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+                true, 10, firstMode), NKikimrProto::OK);
+            UNIT_ASSERT(first->UringRouter);
+            UNIT_ASSERT_VALUES_EQUAL(first->UringRouter->GetConfig().DevNullMode, firstMode);
+
+            auto rejected = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+                3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+                true, 10, !firstMode), NKikimrProto::ERROR);
+            UNIT_ASSERT(rejected->ErrorReason.find("DevNullMode conflicts") != TString::npos);
+            auto second = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+                3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+                true, 10, firstMode), NKikimrProto::OK);
+            UNIT_ASSERT(second->UringRouter);
+            UNIT_ASSERT_VALUES_EQUAL(second->UringRouter->GetConfig().DevNullMode, firstMode);
+        }
+    }
+
+    Y_UNIT_TEST(RejectedStaleInitCannotSelectSharedDevNullMode) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        const TVDiskID firstDisk(0, 1, 0, 0, 0);
+        ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, firstDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            false), NKikimrProto::OK);
+        auto stale = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, firstDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, true), NKikimrProto::ERROR);
+        UNIT_ASSERT(stale->ErrorReason.find("OwnerRound") != TString::npos);
+        auto normal = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+            true, 10, false), NKikimrProto::OK);
+        UNIT_ASSERT(normal->UringRouter);
+        UNIT_ASSERT(!normal->UringRouter->GetConfig().DevNullMode);
+    }
+
+    Y_UNIT_TEST(RejectedReadOnlyNewOwnerCannotSelectSharedDevNullMode) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        const TVDiskID knownDisk(0, 1, 0, 0, 0);
+        ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, knownDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            false), NKikimrProto::OK);
+        ctx.SafeRunOnPDisk([](auto* pdisk) { pdisk->Cfg->ReadOnly = true; });
+        auto rejected = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+            true, 10, true), NKikimrProto::CORRUPTED);
+        UNIT_ASSERT(rejected->ErrorReason.find("ReadOnly") != TString::npos);
+        ctx.SafeRunOnPDisk([](auto* pdisk) { pdisk->Cfg->ReadOnly = false; });
+        auto normal = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            3, knownDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, false), NKikimrProto::OK);
+        UNIT_ASSERT(normal->UringRouter);
+        UNIT_ASSERT(!normal->UringRouter->GetConfig().DevNullMode);
+    }
+
+    Y_UNIT_TEST(DevNullRequiresRouterAndCannotFallBackToRawPDiskIo) {
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = true; // no duplicable device fd
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        auto unavailable = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, true), NKikimrProto::ERROR);
+        UNIT_ASSERT(unavailable->ErrorReason.find("requires an available shared io_uring router") != TString::npos);
+        auto incompatible = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            false, 10, true), NKikimrProto::ERROR);
+        UNIT_ASSERT(incompatible->ErrorReason.find("ForcePDiskFallback") != TString::npos);
+        auto normal = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, false), NKikimrProto::OK);
+        UNIT_ASSERT(!normal->UringRouter);
+    }
+
     Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
         auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());

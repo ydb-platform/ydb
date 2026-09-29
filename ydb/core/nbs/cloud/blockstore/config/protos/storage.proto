@@ -189,6 +189,10 @@ message TStorageServiceConfig
     // Defaults to 64 MiB per DDisk.
     optional uint64 IntegrityChecksumCacheBytes = 38;
 
+    // Overrides GlobalDDiskConfig.DevNullMode when set. Data reads return
+    // zeroes and data writes are discarded; this is a benchmark-only mode.
+    optional bool DevNullMode = 39;
+
     // Maximum aggregate bandwidth in megabytes per second for copying ranges
     // within a DirectBlockGroup. 0 disables throttling.
     optional uint32 CopyRangeBandwidthMbs = 33;

@@ -1,3 +1,5 @@
 items:
 - name: Блум-индекс — быстрый старт
   href: ../bloom-skip-indexes/bloom-skip-index-quickstart.md
+- name: min_max-индекс — быстрый старт
+  href: ../min_max-skip-index/min_max-skip-index-quickstart.md

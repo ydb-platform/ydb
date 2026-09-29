@@ -1,6 +1,8 @@
-# Выставление и сброс ограничения `NOT NULL`
+# Изменение ограничения `NOT NULL`
 
-Ограничение целостности данных на уровне колонки, которое запрещает запись `NULL` в качестве значений. Это ограничение гарантирует, что колонка всегда содержит действительное значение.
+`NOT NULL` — ограничение целостности данных на уровне колонки, запрещающее запись значений `NULL`. Оно гарантирует, что колонка всегда содержит действительное значение.
+
+{% if feature_alter_column_not_null == true %}
 
 В YDB операция `SET NOT NULL` выполняется как синхронная SQL-операция, ожидающая применения изменения схемы. При этом создаётся фоновая операция для проверки таблицы на наличие `NULL`-значений в существующих данных.
 
@@ -23,6 +25,8 @@ ALTER TABLE table_name ALTER COLUMN column_name SET NOT NULL;
 * После запуска операции `SET NOT NULL` и до её завершения в указанную колонку нельзя записывать `NULL`-значения. При попытке записать такие значения, вы получите ошибку вида ``Can't set NULL or optional value to column: <column>. `SET NOT NULL` operation is currently in progress for this column``.
 * Если валидация не пройдена, операция `SET NOT NULL` завершится с ошибкой `Validation failed for SET NOT NULL on table ...: one or more columns contain NULL values`.
 
+{% endif %}
+
 ## Сброс `NOT NULL`
 
 `DROP NOT NULL` снимает ограничение `NOT NULL` с указанной колонки.
@@ -33,11 +37,8 @@ ALTER TABLE table_name ALTER COLUMN column_name SET NOT NULL;
 ALTER TABLE table_name ALTER COLUMN column_name DROP NOT NULL;
 ```
 
-Примечание:
-
-* `DROP NOT NULL` поддерживается только для [строковых таблиц](../../../../concepts/datamodel/table.md#row-oriented-tables).
+`DROP NOT NULL` можно применить к неключевым колонкам как строковых, так и колоночных таблиц.
 
 ## См. также
 
 * [ALTER COLUMN](columns.md)
-

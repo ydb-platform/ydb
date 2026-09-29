@@ -142,13 +142,18 @@ private:
             return NotifiedStrongly;
         }
 
-        bool EnqueueSyncRequest(ui64 cookie) {
+        bool EnqueueSyncRequest(ui64 cookie, NWilson::TTraceId traceId) {
             if (cookie <= SyncRequestCookie) {
                 return false;
             }
 
             SyncRequestCookie = cookie;
+            SyncTraceId = std::move(traceId);
             return true;
+        }
+
+        NWilson::TTraceId TakeSyncTraceId() {
+            return std::exchange(SyncTraceId, NWilson::TTraceId());
         }
 
         TMaybe<ui64> ProcessSyncRequest() {
@@ -171,6 +176,7 @@ private:
 
         ui64 SyncRequestCookie;
         ui64 SyncResponseCookie;
+        NWilson::TTraceId SyncTraceId;
     };
 
 public:
@@ -1153,7 +1159,7 @@ private:
         }
 
         if (auto cookie = info.ProcessSyncRequest()) {
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie, info.TakeSyncTraceId());
         }
     }
 
@@ -1177,7 +1183,7 @@ private:
                 version = GetVersion(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
             }
 
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, TClusterState(Info.Get())), 0, ev->Cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, TClusterState(Info.Get())), 0, ev->Cookie, std::move(ev->TraceId));
             return;
         }
 
@@ -1192,14 +1198,14 @@ private:
         Y_ABORT_UNLESS(desc);
         auto& info = desc->GetSubscriberInfo(ev->Sender);
 
-        if (!info.EnqueueSyncRequest(ev->Cookie) || info.IsWaitForAck()) {
+        if (!info.EnqueueSyncRequest(ev->Cookie, std::move(ev->TraceId)) || info.IsWaitForAck()) {
             return;
         }
 
         auto cookie = info.ProcessSyncRequest();
         Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
-        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
+        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie, info.TakeSyncTraceId());
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {

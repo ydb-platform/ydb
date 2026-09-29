@@ -10,6 +10,8 @@ PEERDIR(
     ydb/core/tx/scheme_cache
     ydb/core/util
     ydb/library/aclib
+    ydb/library/actors/wilson
+    ydb/library/wilson_ids
 )
 
 SRCS(

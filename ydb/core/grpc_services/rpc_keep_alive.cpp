@@ -58,7 +58,7 @@ private:
         }
 
         ev->Record.MutableRequest()->SetTimeoutMs(GetOperationTimeout().MilliSeconds());
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, 0, Span_.GetTraceId());
     }
 
     void Handle(NKqp::TEvKqp::TEvPingSessionResponse::TPtr& ev, const TActorContext& ctx) {

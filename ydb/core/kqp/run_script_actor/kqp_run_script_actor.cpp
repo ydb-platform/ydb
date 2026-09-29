@@ -42,14 +42,14 @@ class TRunScriptActor final : public TActorBootstrapped<TRunScriptActor>, IActor
         bool WaitCreation = false;
         bool SessionOpen = false;
 
-        void Close(const TActorIdentity& actor, const TScriptExecutionContext& ctx) {
+        void Close(const TActorIdentity& actor, const TScriptExecutionContext& ctx, NWilson::TTraceId traceId) {
             if (!SessionOpen) {
                 return;
             }
 
             auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(ctx.UserRequestContext->SessionId);
-            actor.Send(MakeKqpProxyID(actor.NodeId()), ev.release());
+            actor.Send(MakeKqpProxyID(actor.NodeId()), ev.release(), 0, 0, std::move(traceId));
             SessionOpen = false;
         }
     };
@@ -75,6 +75,7 @@ public:
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
         , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
         , QueryServiceConfig(std::move(queryServiceConfig))
+        , TraceId(std::move(settings.TraceId))
     {}
 
     void Bootstrap() {
@@ -166,7 +167,7 @@ private:
         auto ev = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
         ev->Record.SetTraceId(Ctx->UserRequestContext->TraceId);
         ev->Record.MutableRequest()->SetDatabase(Ctx->UserRequestContext->Database);
-        Send(MakeKqpProxyID(SelfId().NodeId()), ev.release());
+        Send(MakeKqpProxyID(SelfId().NodeId()), ev.release(), 0, 0, NWilson::TTraceId(TraceId));
         SessionState.WaitCreation = true;
     }
 
@@ -262,7 +263,7 @@ private:
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
         QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
-        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
+        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release(), 0, 0, NWilson::TTraceId(TraceId));
     }
 
     void HandleLeaseWatcherFinished(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished::TPtr& ev) {
@@ -419,7 +420,7 @@ private:
         if (SessionState.SessionOpen) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Close session",
                 {"logPrefix", LogPrefix()});
-            SessionState.Close(SelfId(), *Ctx);
+            SessionState.Close(SelfId(), *Ctx, NWilson::TTraceId(TraceId));
         }
 
         if (ScriptLeaseWatcherActor.Id) {
@@ -477,6 +478,7 @@ private:
     const TScriptExecutionContext::TPtr Ctx;
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const NWilson::TTraceId TraceId;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
     TSessionState SessionState;

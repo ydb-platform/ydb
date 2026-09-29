@@ -373,7 +373,7 @@ private:
                 QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
                 CompileActorSpan.GetTraceId());
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
-            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId());
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 

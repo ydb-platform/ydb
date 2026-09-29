@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/vector.h>
@@ -175,12 +176,14 @@ namespace NLongTxService {
             ui64 Cookie;
             TVector<::NKikimr::TTableId> TableIds;
             NLWTrace::TOrbit Orbit;
+            NWilson::TSpan Span;
         };
 
         struct TAcquireSnapshotBeginTxRequest {
             TLongTxId TxId;
             TActorId Sender;
             ui64 Cookie;
+            NWilson::TSpan Span;
         };
 
         struct TAcquireSnapshotState {

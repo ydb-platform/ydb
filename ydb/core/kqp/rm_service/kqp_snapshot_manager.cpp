@@ -56,6 +56,7 @@ private:
         MvccSnapshot = ev->Get()->MvccSnapshot;
         Orbit = std::move(ev->Get()->Orbit);
         Cookie = ev->Get()->Cookie;
+        TraceId = std::move(ev->TraceId);
 
         YDB_LOG_DEBUG("KqpSnapshotManager: got snapshot request",
             {"clientActorId", ClientActorId});
@@ -63,7 +64,8 @@ private:
         if (MvccSnapshot) {
             AFL_ENSURE(ev->Get()->Tables.empty());
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, std::move(ev->Get()->TableIds), std::move(Orbit)),
+                0, 0, NWilson::TTraceId(TraceId));
 
             Become(&TThis::StateAwaitAcquireResult);
         } else {
@@ -78,7 +80,7 @@ private:
             createSnapshot->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
             createSnapshot->SetIgnoreSystemViews(true);
 
-            Send(MakeTxProxyID(), req.Release());
+            Send(MakeTxProxyID(), req.Release(), 0, 0, NWilson::TTraceId(TraceId));
             Become(&TThis::StateAwaitCreation);
         }
     }
@@ -223,7 +225,7 @@ private:
 
         YDB_LOG_DEBUG("KqpSnapshotManager: refreshing snapshot");
 
-        Send(MakeTxProxyID(), req.Release());
+        Send(MakeTxProxyID(), req.Release(), 0, 0, NWilson::TTraceId(TraceId));
         ScheduleRefresh();
     }
 
@@ -273,7 +275,7 @@ private:
         discardSnapshot->SetSnapshotStep(Snapshot.Step);
         discardSnapshot->SetSnapshotTxId(Snapshot.TxId);
 
-        Send(MakeTxProxyID(), req.Release());
+        Send(MakeTxProxyID(), req.Release(), 0, 0, NWilson::TTraceId(TraceId));
     }
 
     void ScheduleRefresh() {
@@ -308,6 +310,7 @@ private:
     TActorId ClientActorId;
     IKqpGateway::TKqpSnapshot Snapshot;
     NLWTrace::TOrbit Orbit;
+    NWilson::TTraceId TraceId;
     ui64 Cookie = 0;
 
     bool MvccSnapshot = false;

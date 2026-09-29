@@ -5,6 +5,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/random/random.h>
 
@@ -15,13 +16,14 @@ namespace NLongTxService {
 
     class TLongTxServiceActor::TAcquireSnapshotActor : public TActorBootstrapped<TAcquireSnapshotActor> {
     public:
-        TAcquireSnapshotActor(const TActorId& parent, ui64 cookie, const TString& databaseName)
+        TAcquireSnapshotActor(const TActorId& parent, ui64 cookie, const TString& databaseName, NWilson::TSpan span)
             : Parent(parent)
             , Cookie(cookie)
             , DatabaseName(databaseName)
             , SchemeCache(MakeSchemeCacheID())
             , LeaderPipeCache(MakePipePerNodeCacheID(false))
             , LogPrefix("LongTxService.AcquireSnapshot ")
+            , Span(std::move(span))
         { }
 
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -50,7 +52,7 @@ namespace NLongTxService {
             entry.Path = ::NKikimr::SplitPath(DatabaseName);
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()),
-                IEventHandle::FlagTrackDelivery);
+                IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
             Become(&TThis::StateNavigate);
         }
 
@@ -175,7 +177,8 @@ namespace NLongTxService {
 
     private:
         void ReplySuccess(const TRowVersion& snapshot) {
-            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(snapshot), 0, Cookie);
+            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(snapshot), 0, Cookie, Span.GetTraceId());
+            Span.EndOk();
             PassAway();
         }
 
@@ -186,14 +189,15 @@ namespace NLongTxService {
                 {"message", message});
             NYql::TIssues issues;
             issues.AddIssue(message);
-            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(status, std::move(issues)), 0, Cookie);
+            Send(Parent, new TEvPrivate::TEvAcquireSnapshotFinished(status, std::move(issues)), 0, Cookie, Span.GetTraceId());
+            Span.EndError(message);
             PassAway();
         }
 
     private:
         void SendToTablet(ui64 tabletId, THolder<IEventBase> event, bool subscribe = true) {
             Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, subscribe),
-                IEventHandle::FlagTrackDelivery);
+                IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
         }
 
     private:
@@ -203,6 +207,7 @@ namespace NLongTxService {
         const TActorId SchemeCache;
         const TActorId LeaderPipeCache;
         TString LogPrefix;
+        NWilson::TSpan Span;
         THashSet<ui64> WaitingCoordinators;
         THashSet<ui64> BackupCoordinators;
     };
@@ -213,7 +218,36 @@ namespace NLongTxService {
         req.DatabaseName = databaseName;
         req.UserRequests.swap(state.PendingUserRequests);
         req.BeginTxRequests.swap(state.PendingBeginTxRequests);
-        Register(new TAcquireSnapshotActor(SelfId(), reqId, databaseName));
+        // A snapshot acquisition serves several callers. Keep each caller's wait
+        // in its own trace and link the shared work to every traced participant.
+        NWilson::TTraceId parent;
+        auto selectParent = [&parent](const auto& requests) {
+            for (const auto& request : requests) {
+                auto traceId = request.Span.GetTraceId();
+                if (traceId && (!parent || traceId.GetVerbosity() > parent.GetVerbosity())) {
+                    parent = std::move(traceId);
+                }
+            }
+        };
+        selectParent(req.UserRequests);
+        selectParent(req.BeginTxRequests);
+        NWilson::TSpan span(TComponentTracingLevels::TDistributedTransactions::Detailed,
+            std::move(parent), "LongTx.AcquireSnapshotBatch", NWilson::EFlags::AUTO_END);
+        span.Attribute("ydb.snapshot.batch_size", static_cast<i64>(req.UserRequests.size() + req.BeginTxRequests.size()));
+        auto linkRequests = [&span](auto& requests) {
+            if (!span) {
+                return;
+            }
+            for (auto& request : requests) {
+                if (auto traceId = request.Span.GetTraceId()) {
+                    span.Link(traceId);
+                    request.Span.Link(span.GetTraceId());
+                }
+            }
+        };
+        linkRequests(req.UserRequests);
+        linkRequests(req.BeginTxRequests);
+        Register(new TAcquireSnapshotActor(SelfId(), reqId, databaseName, std::move(span)));
         state.ActiveRequests.insert(reqId);
 
         if (Settings.Counters) {

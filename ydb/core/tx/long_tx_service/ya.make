@@ -16,7 +16,9 @@ PEERDIR(
     ydb/core/base
     ydb/core/tx/columnshard
     ydb/core/tx/long_tx_service/public
+    ydb/library/actors/wilson
     ydb/library/services
+    ydb/library/wilson_ids
 )
 
 YQL_LAST_ABI_VERSION()

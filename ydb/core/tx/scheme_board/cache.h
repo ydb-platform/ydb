@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 
@@ -15,6 +16,7 @@ namespace NSchemeCache {
         ui64 WaitCounter;
         TAutoPtr<TSchemeCacheNavigate> Request;
         const TInstant CreatedAt;
+        NWilson::TSpan Span;
         TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
 
         struct TEntryFallbackInfo {
@@ -45,6 +47,7 @@ namespace NSchemeCache {
         ui64 WaitCounter;
         TAutoPtr<TSchemeCacheRequest> Request;
         const TInstant CreatedAt;
+        NWilson::TSpan Span;
         TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
 
         TSchemeCacheRequestContext(const TActorId& sender, ui64 cookie, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())

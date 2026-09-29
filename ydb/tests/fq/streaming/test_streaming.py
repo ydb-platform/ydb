@@ -2007,6 +2007,7 @@ FROM `{table_name}`"""
                 WHERE COALESCE(str1, str2) IS DISTINCT FROM "DONE"
                   AND CAST(str1 AS Utf8) NOT REGEXP "foobar" -- YQ-5727
                   AND (CAST(CAST(d AS String) AS Date) = Date("1984-01-01"))
+                  AND (i > Interval("PT61S"))
                   AND (ts = Timestamp("1991-08-19T05:00:00.123456Z"))
                   AND (str1??"x" <= MAX_OF(str1??"x", str2??"x"))
                   AND (str2??"y" >= MIN_OF(str2??"y", str1??"y"))
@@ -2033,11 +2034,11 @@ FROM `{table_name}`"""
         self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
 
         data = [
-            '{"str1":null,"str2":"DONE","ev":"skipped","d":"1990-01-01","ts":"2012-01-01T12:13:14Z"}',
-            '{"str1":"xop","str2":"DONE","ev":"xep","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
-            '{"str1":"foobar","str2":"DONE","ev":"xin","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
-            '{"str1":null,"str2":null,"ev":"xap","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
-            '{"str1":"xep","str2":"xip","ev":"xup","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z"}',
+            '{"str1":null,"str2":"DONE","ev":"skipped","d":"1990-01-01","ts":"2012-01-01T12:13:14Z","i":"PT10S"}',
+            '{"str1":"xop","str2":"DONE","ev":"xep","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT360S"}',
+            '{"str1":"foobar","str2":"DONE","ev":"xin","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT102S"}',
+            '{"str1":null,"str2":null,"ev":"xap","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT104S"}',
+            '{"str1":"xep","str2":"xip","ev":"xup","d":"1984-01-01","ts":"1991-08-19T05:00:00.123456Z","i":"PT1055S"}',
         ]
         expected_data = [
             '{"ev":"xep","str1":"xop","str2":"DONE"}',
@@ -2077,6 +2078,7 @@ FROM `{table_name}`"""
                     assert "<= MAX_OF(" in filter
                     assert "1984-01-01" in filter
                     assert "1991-08-19" in filter
+                    assert '"PT61S"' in filter
                     # validate simplified LIKE
                     assert "EndsWith(" in filter
                     assert "StartsWith(" in filter

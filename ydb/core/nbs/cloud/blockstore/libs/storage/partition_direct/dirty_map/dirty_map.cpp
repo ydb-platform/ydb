@@ -104,7 +104,9 @@ void TBlocksDirtyMap::UpdateConfig(
         {
             TInflightInfo& inflightItem = item.Value;
             inflightItem.UpdateHosts(added, removed, DisabledHosts);
-            if (inflightItem.GetState() == TInflightInfo::EState::PBufferErased)
+            if (inflightItem.GetState() ==
+                    TInflightInfo::EState::PBufferErased ||
+                MaybeCoverByRestoreBarrier(item.Key, inflightItem))
             {
                 erased.push_back(item.Key);
             }
@@ -436,7 +438,9 @@ void TBlocksDirtyMap::EraseFinished(
         }
         auto& inflight = item->Value;
         inflight.ConfirmErase(host);
-        if (inflight.GetState() == TInflightInfo::EState::PBufferErased) {
+        if (inflight.GetState() == TInflightInfo::EState::PBufferErased ||
+            MaybeCoverByRestoreBarrier(pBufferKey, inflight))
+        {
             ReadyToErase.erase(pBufferKey);
             RemovePBuffer(pBufferKey);
         }
@@ -616,6 +620,10 @@ void TBlocksDirtyMap::UnlockPBuffer(TPBufferKey pBufferKey)
     auto item = Inflight.GetValue(pBufferKey);
     Y_ABORT_UNLESS(item.has_value());
     item->Value.UnlockPBuffer();
+    if (MaybeCoverByRestoreBarrier(pBufferKey, item->Value)) {
+        ReadyToErase.erase(pBufferKey);
+        RemovePBuffer(pBufferKey);
+    }
     MaybeAdvanceRestoreBarrier();
 }
 
@@ -1272,7 +1280,7 @@ void TBlocksDirtyMap::RemovePBuffer(TPBufferKey pBufferKey)
 void TBlocksDirtyMap::MaybeAdvanceRestoreBarrier()
 {
     std::optional<TPBufferKey> minUnflushed;
-    TPBufferKey target;
+    TVector<TPBufferKey> coverable;
     Inflight.Enumerate(
         [&](TInflightMap::TFindItem& item)
         {
@@ -1281,23 +1289,39 @@ void TBlocksDirtyMap::MaybeAdvanceRestoreBarrier()
                 if (!minUnflushed || item.Key < *minUnflushed) {
                     minUnflushed = item.Key;
                 }
-            } else if (
-                inflight.CanBeCoveredByRestoreBarrier() && item.Key > target) {
-                target = item.Key;
+            } else if (inflight.CanBeCoveredByRestoreBarrier()) {
+                coverable.push_back(item.Key);
             }
             return TInflightMap::EEnumerateContinuation::Continue;
         });
 
-    if (minUnflushed && target >= *minUnflushed) {
+    TPBufferKey target;
+    for (const auto pBufferKey: coverable) {
         // The barrier stays below every record not yet flushed.
-        return;
-    }
-    if (target <= TargetRestoreBarrier) {
-        return;
+        if ((!minUnflushed || pBufferKey < *minUnflushed) &&
+            pBufferKey > target)
+        {
+            target = pBufferKey;
+        }
     }
 
-    TargetRestoreBarrier = target;
-    ++StateGeneration;
+    if (target > TargetRestoreBarrier) {
+        TargetRestoreBarrier = target;
+        ++StateGeneration;
+    }
+}
+
+bool TBlocksDirtyMap::MaybeCoverByRestoreBarrier(
+    TPBufferKey pBufferKey,
+    TInflightInfo& inflight)
+{
+    if (pBufferKey > RestoreBarrier || !inflight.CanBeCoveredByRestoreBarrier())
+    {
+        return false;
+    }
+
+    inflight.MarkCoveredByRestoreBarrier();
+    return true;
 }
 
 void TBlocksDirtyMap::ForgetBelowRestoreBarrier()
@@ -1306,10 +1330,7 @@ void TBlocksDirtyMap::ForgetBelowRestoreBarrier()
     Inflight.Enumerate(
         [&](TInflightMap::TFindItem& item)
         {
-            if (item.Key <= RestoreBarrier &&
-                item.Value.CanBeCoveredByRestoreBarrier())
-            {
-                item.Value.MarkCoveredByRestoreBarrier();
+            if (MaybeCoverByRestoreBarrier(item.Key, item.Value)) {
                 forgotten.push_back(item.Key);
             }
             return TInflightMap::EEnumerateContinuation::Continue;

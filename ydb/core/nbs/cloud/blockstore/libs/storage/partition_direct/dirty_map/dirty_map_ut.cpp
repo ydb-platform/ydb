@@ -2240,6 +2240,81 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
 
+    Y_UNIT_TEST(ShouldForgetRecordCoveredByPersistedRestoreBarrier)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+        const auto otherRange = TBlockRange16::WithLength(100, 10);
+
+        for (const auto [lsn, r]: {std::pair{5, range}, {7, otherRange}}) {
+            dirtyMap->RegisterInflightWrite(MakeKey(lsn), r);
+            dirtyMap->WriteFinished(
+                MakeKey(lsn),
+                r,
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
+        }
+        FlushAll(dirtyMap->MakeFlushHint(2), *dirtyMap);
+
+        // A read holds lsn 5, the barrier goes over it and covers lsn 7 only.
+        dirtyMap->LockPBuffer(MakeKey(5));
+        vchunkConfig.DisableHost(2);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        EraseAll(dirtyMap->MakeEraseHint(1), *dirtyMap);
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(7).Print(),
+            dirtyMap->GetTargetRestoreBarrier().Print());
+        dirtyMap->StatePersisted(
+            dirtyMap->GetCurrentGeneration(),
+            dirtyMap->GetTargetRestoreBarrier());
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // lsn 5 becomes coverable under the persisted barrier and leaves.
+        dirtyMap->UnlockPBuffer(MakeKey(5));
+        EraseAll(dirtyMap->MakeEraseHint(1), *dirtyMap);
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+    }
+
+    Y_UNIT_TEST(ShouldRaiseRestoreBarrierUpToUnflushedRecord)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        auto dirtyMap = MakeDirtyMap(vchunkConfig);
+
+        const auto range = TBlockRange16::WithLength(10, 10);
+        const auto otherRange = TBlockRange16::WithLength(100, 10);
+
+        for (const auto [lsn, r]: {std::pair{3, range}, {7, otherRange}}) {
+            dirtyMap->RegisterInflightWrite(MakeKey(lsn), r);
+            dirtyMap->WriteFinished(
+                MakeKey(lsn),
+                r,
+                MakePrimaryHosts(),
+                MakePrimaryHosts());
+        }
+        FlushAll(dirtyMap->MakeFlushHint(2), *dirtyMap);
+
+        // lsn 5 is pending: its data may live only in PBuffers.
+        dirtyMap->RegisterInflightWrite(
+            MakeKey(5),
+            TBlockRange16::WithLength(200, 10));
+
+        vchunkConfig.DisableHost(2);
+        dirtyMap->UpdateConfig(vchunkConfig, true);
+        EraseAll(dirtyMap->MakeEraseHint(1), *dirtyMap);
+
+        // lsn 7 waits for lsn 5, lsn 3 goes under the target.
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeKey(3).Print(),
+            dirtyMap->GetTargetRestoreBarrier().Print());
+        dirtyMap->StatePersisted(
+            dirtyMap->GetCurrentGeneration(),
+            dirtyMap->GetTargetRestoreBarrier());
+        UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap->GetInflightCount());
+    }
+
     Y_UNIT_TEST(ShouldHandleSafeBarrierWithPendingWrite)
     {
         const auto vchunkConfig = MakeTestVChunkConfig();

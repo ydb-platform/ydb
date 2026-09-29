@@ -966,6 +966,9 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     }
 
     UpdatePendingCounters();
+    DoErase(
+        false,   // force
+        TBlocksDirtyMap::EEraseType::Standard);
     // EraseFinished may have raised the restore barrier target.
     MaybeStartPersist();
     ScheduleCleaningUp();
@@ -1072,11 +1075,11 @@ void TVChunk::OnDirtyMapPersisted(
     Persisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration, restoreBarrier);
     PersistedFreshDDisks = freshDDisks;
-    MaybeStartPersist();
     // Covered records left the map and no longer block newer overlapping ones.
     DoErase(
         false,   // force
         TBlocksDirtyMap::EEraseType::Standard);
+    MaybeStartPersist();
     DemoteIfNeeded();
     ScheduleCleaningUp();
 }
@@ -1312,6 +1315,9 @@ void TVChunk::OnConfigPersisted(
     PersistedFreshDDisks = freshDDisks;
     ApplyConfig(config, message);
     DirectBlockGroup->CommitDDiskPromotion(config);
+    DoErase(
+        false,   // force
+        TBlocksDirtyMap::EEraseType::Standard);
     MaybeStartPersist();
     DemoteIfNeeded();
 }

@@ -248,6 +248,10 @@ private:
     void RemovePBuffer(TPBufferKey pBufferKey);
     // Raises the restore barrier target, keeping it below unflushed records.
     void MaybeAdvanceRestoreBarrier();
+    // Returns whether the persisted restore barrier covers the record.
+    [[nodiscard]] bool MaybeCoverByRestoreBarrier(
+        TPBufferKey pBufferKey,
+        TInflightInfo& inflight);
     // Removes the waiting records covered by the persisted restore barrier.
     void ForgetBelowRestoreBarrier();
 

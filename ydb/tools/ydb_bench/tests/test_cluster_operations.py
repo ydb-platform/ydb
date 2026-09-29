@@ -182,6 +182,58 @@ class ClusterOperationsTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 operations.invoke('host:1', 'Root', request)
 
+    def test_create_ambiguous_status_is_persisted_and_not_replayed(self):
+        with mock.patch.object(operations.grpc, 'insecure_channel'), mock.patch.object(
+            nbs_grpc, 'NbsServiceStub'
+        ) as stub:
+            response = nbs.CreatePartitionResponse()
+            response.operation.ready = True
+            stub.return_value.CreatePartition.return_value = response
+            for status, expected in [
+                (StatusIds.UNAVAILABLE, 'unknown'),
+                (StatusIds.GENERIC_ERROR, 'unknown'),
+                (StatusIds.TIMEOUT, 'unknown'),
+                (StatusIds.NOT_FOUND, 'unknown'),
+                (StatusIds.BAD_REQUEST, 'failed'),
+                (StatusIds.UNAUTHORIZED, 'failed'),
+                (StatusIds.UNSUPPORTED, 'failed'),
+                (StatusIds.ALREADY_EXISTS, 'failed'),
+            ]:
+                with self.subTest(status=status):
+                    response.operation.status = status
+                    request = self.request(
+                        'create-partition',
+                        disk_id='test',
+                        pool='pool',
+                        block_size=4096,
+                        blocks_count=100,
+                        media='ssd',
+                        batch_size=100,
+                    )
+                    row = self.manager.execute(request)
+                    self.assertEqual(expected, row['status'])
+                    count = stub.return_value.CreatePartition.call_count
+                    restored = operations.ClusterOperations(self.root, self.cluster)
+                    self.assertEqual(row, restored.execute(request))
+                    self.assertEqual(count, stub.return_value.CreatePartition.call_count)
+
+    def test_read_rpc_error_is_not_success(self):
+        with mock.patch.object(operations.grpc, 'insecure_channel'), mock.patch.object(
+            nbs_grpc, 'NbsServiceStub'
+        ) as stub:
+            resolved = nbs.GetLoadActorAdapterActorIdResponse()
+            resolved.operation.ready, resolved.operation.status = True, StatusIds.SUCCESS
+            resolved.operation.result.Pack(nbs.GetLoadActorAdapterActorIdResult(ActorId='[50000:123:456]'))
+            stub.return_value.GetLoadActorAdapterActorId.return_value = resolved
+            response = nbs.ReadBlocksResponse()
+            response.operation.ready, response.operation.status = True, StatusIds.GENERIC_ERROR
+            response.operation.issues.add().message = 'cross-stripe read'
+            stub.return_value.ReadBlocks.return_value = response
+            row = self.manager.execute(self.request(disk_id='test', start=127, blocks_count=2))
+            self.assertEqual('failed', row['status'])
+            self.assertIn('cross-stripe read', row['error'])
+            self.assertNotIn('response', row)
+
     def test_release_rejects_new_requests_but_keeps_history(self):
         root = self.root / 'run'
         root.mkdir()

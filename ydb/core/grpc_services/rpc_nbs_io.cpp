@@ -4,6 +4,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/public/api/protos/draft/ydb_nbs.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NBS_PARTITION
@@ -115,6 +116,13 @@ private:
     void Handle(NYdb::NBS::NBlockStore::TEvService::TEvReadBlocksResponse::TPtr& ev) {
         YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Grpc service: received ReadBlocksResponse from partition",
             {"partition", ev->Sender});
+
+        const auto& error = ev->Get()->Record.GetError();
+        if (NYdb::NBS::HasError(error)) {
+            Request_->RaiseIssue(NYql::TIssue(NYdb::NBS::FormatError(error)));
+            Reply(Ydb::StatusIds::GENERIC_ERROR, ActorContext());
+            return;
+        }
 
         // Convert from NYdb::NBS::NProto::TReadBlocksResponse to Ydb::Nbs::ReadBlocksResult
         Ydb::Nbs::ReadBlocksResult result;

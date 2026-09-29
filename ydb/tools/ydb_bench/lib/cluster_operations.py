@@ -185,11 +185,19 @@ def invoke(endpoint, domain, operation):
         if not response.operation.ready:
             raise RuntimeError('Operation is not ready; outcome is unknown. No automatic retry.')
         if response.operation.status != StatusIds.SUCCESS:
-            raise BenchmarkError(
-                '{}: {}'.format(
-                    StatusIds.StatusCode.Name(response.operation.status), str(response.operation.issues)[:1024]
-                )
+            error = '{}: {}'.format(
+                StatusIds.StatusCode.Name(response.operation.status), str(response.operation.issues)[:1024]
             )
+            # CreatePartition includes a describe after creation. A failure there
+            # does not prove that the volume was not created.
+            if command == 'create-partition' and response.operation.status not in (
+                StatusIds.BAD_REQUEST,
+                StatusIds.UNAUTHORIZED,
+                StatusIds.UNSUPPORTED,
+                StatusIds.ALREADY_EXISTS,
+            ):
+                raise RuntimeError('Creation outcome is unknown; no automatic retry. ' + error)
+            raise BenchmarkError(error)
         if command == 'write' and response.operation.result.Is(nbs_io.TWriteBlocksResponse.DESCRIPTOR):
             result = nbs_io.TWriteBlocksResponse()
             response.operation.result.Unpack(result)

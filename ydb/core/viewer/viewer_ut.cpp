@@ -3826,4 +3826,65 @@ Y_UNIT_TEST_SUITE(Viewer) {
             0));
         runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(10));
     }
+
+    Y_UNIT_TEST(GetAclRejectsMutations) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .InitKikimrRunConfig();
+
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto sendAclRequest = [&](HTTP_METHOD method, const TString& body = TString(), bool listPermissions = false) {
+            TActorId sender = runtime.AllocateEdgeActor();
+            THttpRequest httpReq(method);
+            httpReq.CgiParameters.emplace("path", "/Root");
+            if (listPermissions) {
+                httpReq.CgiParameters.emplace("list_permissions", "true");
+            }
+            if (!body.empty()) {
+                httpReq.HttpHeaders.AddHeader("Content-Type", "application/json");
+                httpReq.PostContent = body;
+            }
+
+            auto page = MakeHolder<TMonPage>("viewer", "title");
+            TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/acl", nullptr);
+
+            auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender, request.Release()));
+
+            TAutoPtr<IEventHandle> handle;
+            return runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle)->Answer;
+        };
+
+        const TString getAclResponse = sendAclRequest(HTTP_METHOD_GET);
+        UNIT_ASSERT_STRING_CONTAINS(getAclResponse, "HTTP/1.1 200 ");
+        UNIT_ASSERT_STRING_CONTAINS(getAclResponse, "\"Path\":\"/Root\"");
+
+        const TString addAccessBody = R"({"AddAccess":[{"Subject":"test-user","AccessRights":["Read"]}]})";
+        const TString removeAccessBody = R"({"RemoveAccess":[{"Subject":"test-user","AccessRights":["Read"]}]})";
+        for (const TString& body : {addAccessBody, removeAccessBody,
+                                    TString(R"({"ChangeOwnership":{"Subject":"test-user"}})"),
+                                    TString(R"({"AddAccess":[]})"), TString(R"({"RemoveAccess":null})"),
+                                    TString(R"({"ChangeOwnership":null})")})
+        {
+            for (bool listPermissions : {false, true}) {
+                const TString response = sendAclRequest(HTTP_METHOD_GET, body, listPermissions);
+                UNIT_ASSERT_STRING_CONTAINS(response, "400 Bad Request");
+                UNIT_ASSERT_STRING_CONTAINS(response, "ACL changes are not allowed in GET requests");
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(sendAclRequest(HTTP_METHOD_GET), getAclResponse);
+        UNIT_ASSERT_STRING_CONTAINS(sendAclRequest(HTTP_METHOD_GET, {}, true), "HTTP/1.1 200 ");
+
+        UNIT_ASSERT_STRING_CONTAINS(sendAclRequest(HTTP_METHOD_POST, addAccessBody), "HTTP/1.1 200 ");
+        UNIT_ASSERT_STRING_CONTAINS(sendAclRequest(HTTP_METHOD_GET), "test-user");
+        UNIT_ASSERT_STRING_CONTAINS(sendAclRequest(HTTP_METHOD_POST, removeAccessBody), "HTTP/1.1 200 ");
+        UNIT_ASSERT_VALUES_EQUAL(sendAclRequest(HTTP_METHOD_GET), getAclResponse);
+    }
+
 }

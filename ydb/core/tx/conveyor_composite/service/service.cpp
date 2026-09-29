@@ -190,7 +190,9 @@ void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr ev) {
     const auto& schedulerPool = event.GetSchedulerPool();
     const auto scheduler = HasAppData() ? AppData()->KqpComputeScheduler : nullptr;
     const bool schedulerDisabled = scheduler && !scheduler->IsEnabled();
-    const auto identity = schedulerPool && !schedulerDisabled ? TSchedulerQueryIdentity{event.GetTxId()} : kServiceQueryIdentity;
+    const bool useScheduler = HasAppData() && AppData()->FeatureFlags.GetEnableCompositeConveyorScheduling()
+        && schedulerPool && !schedulerDisabled;
+    const auto identity = useScheduler ? TSchedulerQueryIdentity{event.GetTxId()} : kServiceQueryIdentity;
     LWPROBE(RegisterProcess, ConveyorName, ToString(event.GetCategory()), event.GetScopeId(), event.GetInternalProcessId());
     const bool isNewIdentity = Manager->RegisterProcess(event.GetCategory(), event.GetScopeId(), event.GetInternalProcessId(),
         event.GetCPULimits(), identity);

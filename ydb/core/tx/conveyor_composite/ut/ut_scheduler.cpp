@@ -1,6 +1,7 @@
 #include <ydb/core/kqp/runtime/scheduler/tree/dynamic.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/runtime/scheduler/tree/snapshot.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -125,8 +126,12 @@ namespace NKikimr::NConveyorComposite {
             NActors::TActorId Distributor;
             NActors::TActorId Scheduler;
 
-            explicit TSchedulerRuntimeFixture(const NKikimrConfig::TCompositeConveyorConfig& proto) {
+            explicit TSchedulerRuntimeFixture(const NKikimrConfig::TCompositeConveyorConfig& proto,
+                                              std::optional<bool> enableScheduling = true) {
                 Runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+                if (enableScheduling) {
+                    Runtime.GetAppData().FeatureFlags.SetEnableCompositeConveyorScheduling(*enableScheduling);
+                }
                 Runtime.SetEventFilter([this](NActors::TTestActorRuntimeBase&, TAutoPtr<NActors::IEventHandle>& ev) {
                     using namespace NKqp::NScheduler;
                     const auto type = ev->GetTypeRewrite();
@@ -195,6 +200,13 @@ namespace NKikimr::NConveyorComposite {
                 scheduler->ToggleEnabled(enabled);
             }
 
+            void UpdateSchedulingFlag(bool enabled) {
+                NKikimrConfig::TFeatureFlags flags = Runtime.GetAppData().FeatureFlags;
+                flags.SetEnableCompositeConveyorScheduling(enabled);
+                Runtime.GetAppData().UpdateRuntimeFlags(flags);
+                UNIT_ASSERT_VALUES_EQUAL(Runtime.GetAppData().FeatureFlags.GetEnableCompositeConveyorScheduling(), enabled);
+            }
+
             void UpdateConfig(const NKikimrConfig::TCompositeConveyorConfig& config) {
                 auto update = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
                 update->Record.MutableConfig()->MutableCompositeConveyorConfig()->CopyFrom(config);
@@ -217,6 +229,155 @@ namespace NKikimr::NConveyorComposite {
     } // namespace
 
     Y_UNIT_TEST_SUITE(CompositeConveyorScheduler) {
+        /* Scenario:
+            - An unset or false flag bypasses HDRF even with an enabled scheduler and valid pool credentials.
+            - Processes share service identity, but preserve their scopes, queues and accounting.
+            - Unregister with a held lease and subsequent registrations never remove the service state.
+         */
+        Y_UNIT_TEST_TWIN(DisabledSchedulingKeepsSharedServiceIdentity, ExplicitFalse) {
+            TSchedulerRuntimeFixture fixture(
+                BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}}),
+                ExplicitFalse ? std::make_optional(false) : std::nullopt);
+            UNIT_ASSERT(!fixture.Runtime.GetAppData().FeatureFlags.GetEnableCompositeConveyorScheduling());
+            fixture.SetLocalSchedulerEnabled(true);
+            TAtomicCounter executed;
+            NActors::TBlockEvents<TEvInternal::TEvTaskProcessedResult> results(fixture.Runtime);
+            fixture.RegisterProcess(1, MakeIdentity(0));
+            fixture.Submit(executed, 1);
+            fixture.WaitFor([&] { return results.size() == 1; });
+            UNIT_ASSERT(results.front()->Get()->GetQueryIdentity() == kServiceQueryIdentity);
+            const auto scope = results.front()->Get()->GetResults().front().GetScope();
+            UNIT_ASSERT_VALUES_EQUAL(scope->GetCountInFlight(), 1);
+
+            fixture.RegisterProcess(2, MakeIdentity(7));
+            fixture.RegisterProcess(3, MakeIdentity(42), ESpecialTaskCategory::Insert, "insert");
+            fixture.Submit(executed, 2);
+            fixture.Submit(executed, 3, ESpecialTaskCategory::Insert);
+            fixture.UnregisterProcess(1);
+            UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 0);
+
+            ui64 processed = 0;
+            auto observer = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
+                UNIT_ASSERT(ev->Get()->GetQueryIdentity() == kServiceQueryIdentity);
+                for (const auto& task : ev->Get()->GetResults()) {
+                    if (task.GetProcessId() == 2) {
+                        UNIT_ASSERT(task.GetScope() == scope);
+                    }
+                    ++processed;
+                }
+            });
+            results.Stop().Unblock();
+            fixture.WaitFor([&] { return executed.Val() == 3 && processed == 3 && scope->GetCountInFlight() == 0; });
+            fixture.UnregisterProcess(2);
+            fixture.UnregisterProcess(3, ESpecialTaskCategory::Insert);
+
+            fixture.Submit(executed, 0);
+            fixture.RegisterProcess(4, MakeIdentity(0));
+            fixture.Submit(executed, 4);
+            fixture.WaitFor([&] { return executed.Val() == 5 && processed == 5; });
+            fixture.UnregisterProcess(4);
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 0);
+        }
+
+        /* Scenario:
+            - Runtime flag changes affect new processes only, even for the same TxId and scope.
+            - Existing processes retain their mode and leases across both switching directions.
+            - Removing the managed process does not affect the service process, or vice versa.
+         */
+        Y_UNIT_TEST_TWIN(RuntimeSchedulingFlagAffectsNewProcessesOnly, InitiallyEnabled) {
+            const auto identity = MakeIdentity(0);
+            auto query = MakeSchedulerQuery(identity, TDuration::MicroSeconds(10), 2);
+            TSchedulerRuntimeFixture fixture(BuildConfig({2}, {{{ESpecialTaskCategory::Scan, 1}}}), InitiallyEnabled);
+            fixture.SetLocalSchedulerEnabled(true);
+            TAtomicCounter executed;
+            NActors::TBlockEvents<TEvInternal::TEvTaskProcessedResult> results(fixture.Runtime);
+            fixture.RegisterProcess(1, identity);
+            if (InitiallyEnabled) {
+                fixture.SendQueryResponse(query.Query);
+            }
+            fixture.Submit(executed, 1);
+            fixture.WaitFor([&] { return results.size() == 1; });
+            const auto scope = results.front()->Get()->GetResults().front().GetScope();
+
+            fixture.UpdateSchedulingFlag(!InitiallyEnabled);
+            fixture.RegisterProcess(2, identity);
+            if (!InitiallyEnabled) {
+                fixture.SendQueryResponse(query.Query);
+            }
+            fixture.Submit(executed, 2);
+            fixture.WaitFor([&] { return results.size() == 2; });
+            fixture.Submit(executed, 1);
+
+            const ui64 managedProcess = InitiallyEnabled ? 1 : 2;
+            const ui64 serviceProcess = InitiallyEnabled ? 2 : 1;
+            ui64 processed = 0;
+            auto observer = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
+                for (const auto& task : ev->Get()->GetResults()) {
+                    UNIT_ASSERT(task.GetScope() == scope);
+                    UNIT_ASSERT(ev->Get()->GetQueryIdentity() == (task.GetProcessId() == managedProcess ? identity : kServiceQueryIdentity));
+                    ++processed;
+                }
+            });
+            results.Stop().Unblock();
+            fixture.WaitFor([&] { return processed == 3 && scope->GetCountInFlight() == 0 && query.Query->GetParent()->CpuUsage.load() == 0; });
+            fixture.UnregisterProcess(managedProcess);
+            fixture.WaitFor([&] { return fixture.Removes[0] == 1; });
+            fixture.Submit(executed, serviceProcess);
+            fixture.WaitFor([&] { return processed == 4 && scope->GetCountInFlight() == 0; });
+            fixture.UnregisterProcess(serviceProcess);
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 4);
+        }
+
+        /* Scenario:
+            - Disable scheduling while a managed registration is waiting for QueryResponse.
+            - New processes use service; the pending registration still completes as managed.
+            - Re-enabling reuses the existing managed query without another HDRF Add.
+         */
+        Y_UNIT_TEST(RuntimeFlagChangePreservesPendingRegistration) {
+            const auto identity = MakeIdentity(0);
+            auto query = MakeSchedulerQuery(identity);
+            TSchedulerRuntimeFixture fixture(BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}}}));
+            fixture.SetLocalSchedulerEnabled(true);
+            TAtomicCounter executed;
+            ui64 processed = 0;
+            auto observer = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
+                for (const auto& task : ev->Get()->GetResults()) {
+                    UNIT_ASSERT(ev->Get()->GetQueryIdentity() == (task.GetProcessId() == 2 ? kServiceQueryIdentity : identity));
+                    ++processed;
+                }
+            });
+            fixture.RegisterProcess(1, identity);
+            fixture.Submit(executed, 1);
+            fixture.UpdateSchedulingFlag(false);
+            fixture.RegisterProcess(2, identity);
+            fixture.Submit(executed, 2);
+            fixture.WaitFor([&] { return processed == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 1);
+            fixture.SendQueryResponse(query.Query);
+            fixture.WaitFor([&] { return processed == 2 && query.Query->GetParent()->CpuUsage.load() == 0; });
+            fixture.UpdateSchedulingFlag(true);
+            fixture.RegisterProcess(3, identity);
+            fixture.Submit(executed, 3);
+            fixture.WaitFor([&] { return processed == 3 && query.Query->GetParent()->CpuUsage.load() == 0; });
+            fixture.UnregisterProcess(1);
+            fixture.UnregisterProcess(2);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[0], 0);
+            fixture.UnregisterProcess(3);
+            fixture.WaitFor([&] { return fixture.Removes[0] == 1; });
+            UNIT_ASSERT_VALUES_EQUAL(fixture.Adds[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 4);
+        }
+
+        /* Scenario:
+            - Retry a throttled query at different times.
+            - Each retry replaces its deadline, both forwards and backwards.
+         */
         Y_UNIT_TEST(QueryDeadlineIsReplacedAcrossRetries) {
             const auto identity = MakeIdentity(1);
             auto query = MakeSchedulerQuery(identity, TDuration::MicroSeconds(20), 0);
@@ -233,6 +394,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(state.GetWakeUpDeadline()->GetValue(), TMonotonic::MicroSeconds(110).GetValue());
         }
 
+        /* Scenario:
+            - Release the last process of a throttled query.
+            - Cleanup clears throttle demand and allows a fresh registration of the same identity.
+         */
         Y_UNIT_TEST(UnregisterStopsThrottledWorks) {
             TQueryRegistry registry;
             const auto identity = MakeIdentity(1);
@@ -249,6 +414,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT(registry.RegisterProcess(identity));
         }
 
+        /* Scenario:
+            - Grow and shrink a pool while a worker holds a lease and another task is throttled.
+            - Preserve the running work, clear removed throttle demand and follow the updated pool topology.
+         */
         Y_UNIT_TEST(TopologyChangesKeepStartedLeasesAndReconcileCapacity) {
             const auto identity = MakeIdentity(1);
             auto query = MakeSchedulerQuery(identity, TDuration::Seconds(1));
@@ -286,6 +455,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 3);
         }
 
+        /* Scenario:
+            - Tasks wait for QueryResponse, then occupy one or several workers.
+            - Rehash the query registry with leases held; accounting and final release remain valid.
+         */
         Y_UNIT_TEST_TWIN(FactoryGatesBatchesAndLeasesSurviveRehash, SeveralWorkers) {
             const ui64 workers = SeveralWorkers ? 3 : 1;
             const auto identity = MakeIdentity(0);
@@ -318,6 +491,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), 0);
         }
 
+        /* Scenario:
+            - Shut down with a held lease and queued tasks in service, ready and pending queries.
+            - Destroy queued tasks without execution and release scheduler usage and demand.
+         */
         Y_UNIT_TEST(ShutdownWithPendingTasks) {
             const auto identity = MakeIdentity(1);
             auto query = MakeSchedulerQuery(identity);
@@ -353,6 +530,11 @@ namespace NKikimr::NConveyorComposite {
             }
         }
 
+        /* Scenario:
+            - Two Distributors and an external owner share one canonical scheduler query.
+            - Each Distributor acquires one registration, regardless of its process count.
+            - Releasing both Distributors preserves the external owner's registration.
+         */
         Y_UNIT_TEST(RegistrationsAreSharedPerDistributorNotPerProcess) {
             const auto proto = BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}}});
             TSchedulerRuntimeFixture fixture(proto);
@@ -410,6 +592,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT(!scheduler->RemoveQuery(identity.QueryId));
         }
 
+        /* Scenario:
+            - Reject SetQuery(nullptr) and move a pending query's references to service instead.
+            - Remove the old key, preserve AlwaysReady execution and balance the transferred references.
+         */
         Y_UNIT_TEST(PendingQueryMovesProcessReferencesToService) {
             TQueryRegistry registry;
             const auto identity = MakeIdentity(0);
@@ -434,6 +620,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT(registry.TryReleaseQuery(kServiceQueryIdentity));
         }
 
+        /* Scenario:
+            - Attempt to migrate a ready query with a live lease to service.
+            - Reject the migration without changing readiness or scheduler usage.
+         */
         Y_UNIT_TEST(ReadyQueryCannotMoveToService) {
             const auto identity = MakeIdentity(1);
             auto query = MakeSchedulerQuery(identity);
@@ -448,6 +638,11 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(query.Query->GetParent()->CpuUsage.load(), 1);
         }
 
+        /* Scenario:
+            - A nullptr response moves pending processes across categories to service, including TxId 0.
+            - Preserve queued tasks, shared scope limits and CPU accounting while another batch is held.
+            - Later registrations and default processes still work without HDRF Remove.
+         */
         Y_UNIT_TEST_TWIN(NullResponsePreservesProcessesScopesAndAccounting, ZeroTxId) {
             TSchedulerRuntimeFixture fixture(BuildConfig({2, 1},
                                                          {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}}));
@@ -512,6 +707,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(fixture.Removes[identity.QueryId], 0);
         }
 
+        /* Scenario:
+            - Disable the local scheduler after a managed query is ready.
+            - Keep its process managed, register the next process as service and remove only the managed query.
+         */
         Y_UNIT_TEST(RuntimeDisableDoesNotMigrateReadyQueries) {
             TSchedulerRuntimeFixture fixture(BuildConfig({2}, {{{ESpecialTaskCategory::Scan, 1}}}));
             fixture.SetLocalSchedulerEnabled(true);
@@ -539,6 +738,10 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT(!remove->Get()->IsForceRemove);
         }
 
+        /* Scenario:
+            - Use Now when no deadlines exist and ignore states without a deadline.
+            - Compute the average and minimum of throttled deadlines, including values near ui64's maximum.
+         */
         Y_UNIT_TEST(AverageDeadlineHandlesEmptyMissingAndOverflowCases) {
             for (const auto now : {TMonotonic::MicroSeconds(100), TMonotonic::FromValue(Max<ui64>() - 1000)}) {
                 auto first = MakeSchedulerQuery(MakeIdentity(1), TDuration::MicroSeconds(100), 0);
@@ -561,6 +764,10 @@ namespace NKikimr::NConveyorComposite {
             }
         }
 
+        /* Scenario:
+            - Prepare a shrink while all works are leased; apply waits for enough leases to return.
+            - Retry the shrink, then grow with a live lease, without changing another query's capacity.
+         */
         Y_UNIT_TEST(PrepareAndApplyCapacityArePersonalAndRetryDeferredShrink) {
             TQueryRegistry registry;
             auto first = MakeSchedulerQuery(MakeIdentity(1), TDuration::MicroSeconds(10), 3);
@@ -593,6 +800,11 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(first.Query->GetParent()->CpuUsage.load(), 0);
         }
 
+        /* Scenario:
+            - Unregister processes after execution but before batch accounting; discard their queued tasks.
+            - Keep the query until the lease returns, or reuse it if a process re-registers before cleanup.
+            - Send exactly one final Remove and reconcile the old scope's in-flight accounting.
+         */
         Y_UNIT_TEST_TWIN(QueryReleaseWaitsForBatchAccounting, ReRegister) {
             for (const ui64 processes : {1, 2}) {
                 const auto identity = MakeIdentity(0);
@@ -658,6 +870,11 @@ namespace NKikimr::NConveyorComposite {
             }
         }
 
+        /* Scenario:
+            - Unregister some or all processes, optionally re-registering one, before QueryResponse.
+            - A query response balances its HDRF registration; nullptr migrates survivors without Remove.
+            - Cancelled tasks never execute, and cleanup permits a fresh registration of the same identity.
+         */
         Y_UNIT_TEST_TWIN(LateQueryResponsePreservesRegistrationLifecycle, NullResponse) {
             // At response time: no processes, one survivor, or a new process after count reached zero.
             for (const ui64 stateAtReply : {0, 1, 2}) {
@@ -719,6 +936,10 @@ namespace NKikimr::NConveyorComposite {
             }
         }
 
+        /* Scenario:
+            - Queue tasks for two managed queries sharing one scope.
+            - Build separate multi-task batches per identity and balance scope accounting and both registrations.
+         */
         Y_UNIT_TEST(BatchesDoNotMixQueriesSharingScope) {
             const auto first = MakeIdentity(0);
             const auto second = MakeIdentity(1);
@@ -760,6 +981,11 @@ namespace NKikimr::NConveyorComposite {
             fixture.WaitFor([&] { return fixture.Removes[first.QueryId] == 1 && fixture.Removes[second.QueryId] == 1; });
         }
 
+        /* Scenario:
+            - Hold a query's lease during a pool shrink or removal.
+            - An independent query initializes and runs while the topology update is pending.
+            - Returning the lease applies the new capacity to the first query.
+         */
         Y_UNIT_TEST_TWIN(PendingPoolUpdateDoesNotBlockIndependentQuery, RemovePool) {
             const auto initial = RemovePool
                 ? BuildConfig({2, 3, 1}, {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}})
@@ -795,6 +1021,10 @@ namespace NKikimr::NConveyorComposite {
             fixture.WaitFor([&] { return counter1.Val() == 1 && query1.Query->CpuMaxDemand.load() == 3 && query1.Query->GetParent()->CpuUsage.load() == 0; });
         }
 
+        /* Scenario:
+            - Throttle two queries and schedule one wakeup at their minimum deadline after a full drain.
+            - Drain again with scope capacity exhausted; schedule the unchanged minimum without another TryStart.
+         */
         Y_UNIT_TEST(DrainSchedulesOneMinimumWakeupEvenWithoutNewAttempts) {
             NActors::TTestActorRuntime runtime;
             runtime.Initialize(NKikimr::TAppPrepare().Unwrap());

@@ -247,13 +247,39 @@ runs:
           shift
           python3 "$CI_METRICS_PY" enrich --name "$name" "$@" || true
         }
+        # Close a span with the real exit code of a command that ran under `|| true`.
+        record_ci_end_rc() {
+          local name="$1"
+          local rc="${2:-0}"
+          local what="${3:-$name}"
+          if [ "$rc" -eq 0 ]; then
+            record_ci_end "$name" success
+          else
+            record_ci_end "$name" failure "${what} rc=${rc}"
+          fi
+        }
         record_ci_flush() {
           python3 "$CI_METRICS_PY" flush || true
         }
         record_ci_send_cancelled() {
+          trap - EXIT
           python3 "$CI_METRICS_PY" send --conclusion cancelled || true
         }
+        # `set -e` can abort between start and end, which would leave the span
+        # open and its rows unsent. Close whatever is still open with the real
+        # outcome of the step.
+        record_ci_on_exit() {
+          local rc=$?
+          trap - EXIT
+          if [ "$rc" -eq 0 ]; then
+            python3 "$CI_METRICS_PY" send --conclusion success || true
+          else
+            python3 "$CI_METRICS_PY" send --conclusion failure --error "step exited rc=${rc}" || true
+          fi
+          return $rc
+        }
         trap 'record_ci_send_cancelled' TERM INT
+        trap 'record_ci_on_exit' EXIT
 
         if [ "${COLLECT_COREDUMPS}" = "true" ]; then
           # Bounded loop volume so a flaky suite cannot fill the runner root FS.
@@ -612,11 +638,14 @@ runs:
             record_ci_end "$YA_MAKE_NAME" failure "ya make rc=${RC}"
           fi
           record_ci_start postprocess_try "$RETRY"
+          # Every optional sub-step below runs under `|| true`; remember whether
+          # any of them failed so the span is not reported as a clean success.
+          POSTPROCESS_RC=0
           if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
             python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
               --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
               --parent "$YA_MAKE_NAME" \
-              --ya-attempt "$RETRY" || true
+              --ya-attempt "$RETRY" || POSTPROCESS_RC=$?
           fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
@@ -629,7 +658,7 @@ runs:
 
           kill $MONITOR_PID
 
-          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
+          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || POSTPROCESS_RC=$?
 
           GH_ALERTS_TG_LOGINS='${{ inputs.telegram_alert_logins }}' \
           .github/scripts/report_ram_analyzer.py \
@@ -639,7 +668,7 @@ runs:
             --ram-usage-file ram_usage.txt \
             --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
             --chat-id '${{ inputs.telegram_alert_chat }}' \
-            --memory-threshold 97 || true
+            --memory-threshold 97 || POSTPROCESS_RC=$?
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
@@ -647,9 +676,9 @@ runs:
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           # generate test_bloat
-          ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
-          record_ci_end postprocess_try success
+          record_ci_end_rc postprocess_try "$POSTPROCESS_RC" postprocess
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
@@ -675,6 +704,7 @@ runs:
 
           # postprocess build results report (add links, logs, mute tests etc)
           record_ci_start transform_build_results "$RETRY"
+          TRANSFORM_RC=0
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
             --test_dir="$TEST_META_INFO" \
@@ -683,8 +713,8 @@ runs:
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || true
-          record_ci_end transform_build_results success
+            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || TRANSFORM_RC=$?
+          record_ci_end_rc transform_build_results "$TRANSFORM_RC" transform_build_results
           cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0

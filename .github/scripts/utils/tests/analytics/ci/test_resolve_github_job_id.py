@@ -58,6 +58,81 @@ class PickJobTest(unittest.TestCase):
         ]
         self.assertEqual(pick_job(jobs, "same")["id"], 2)
 
+    def test_a_finished_job_on_the_same_runner_never_wins(self):
+        """Runner names are reused; a completed job is a previous tenant."""
+        jobs = [
+            {
+                "id": 1,
+                "runner_name": "same",
+                "status": "completed",
+                "started_at": "2026-09-25T10:00:00Z",
+            }
+        ]
+        self.assertIsNone(pick_job(jobs, "same"))
+
+
+class ResolveRetryTest(unittest.TestCase):
+    def test_retries_until_the_job_becomes_visible(self):
+        pages = [
+            {"jobs": []},
+            {"jobs": [{"id": 5, "runner_name": "mine", "status": "completed"}]},
+            {"jobs": [{"id": 6, "runner_name": "mine", "status": "in_progress"}]},
+        ]
+        calls = {"n": 0}
+
+        def get_json(url, params, *, token=None):
+            payload = pages[min(calls["n"], len(pages) - 1)]
+            calls["n"] += 1
+            return payload
+
+        slept = []
+        job = resolve_github_job(
+            "mine",
+            repository="ydb-platform/ydb",
+            run_id="5",
+            token="t",
+            get_json=get_json,
+            sleep=slept.append,
+        )
+        self.assertEqual(job["id"], 6)
+        self.assertEqual(len(slept), 2, "slept once per miss")
+
+    def test_gives_up_after_the_attempt_budget(self):
+        def get_json(url, params, *, token=None):
+            return {"jobs": [{"id": 1, "runner_name": "mine", "status": "completed"}]}
+
+        slept = []
+        job = resolve_github_job(
+            "mine",
+            repository="ydb-platform/ydb",
+            run_id="5",
+            token="t",
+            get_json=get_json,
+            attempts=3,
+            sleep=slept.append,
+        )
+        self.assertIsNone(job)
+        self.assertEqual(len(slept), 2)
+
+    def test_listing_error_is_retried(self):
+        calls = {"n": 0}
+
+        def get_json(url, params, *, token=None):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("GitHub API 502")
+            return {"jobs": [{"id": 7, "runner_name": "mine", "status": "in_progress"}]}
+
+        job = resolve_github_job(
+            "mine",
+            repository="ydb-platform/ydb",
+            run_id="5",
+            token="t",
+            get_json=get_json,
+            sleep=lambda _seconds: None,
+        )
+        self.assertEqual(job["id"], 7)
+
 
 class PaginationTest(unittest.TestCase):
     def test_lists_two_pages_and_picks_runner(self):
@@ -83,6 +158,7 @@ class PaginationTest(unittest.TestCase):
             run_id="5",
             token="t",
             get_json=get_json,
+            sleep=lambda _seconds: None,
         )
         self.assertEqual(job["id"], 77)
 

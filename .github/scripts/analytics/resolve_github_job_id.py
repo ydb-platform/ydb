@@ -19,6 +19,11 @@ from github_actions.github_api import github_get
 
 PER_PAGE = 100
 
+# The jobs API lags behind the runner by a few seconds. Without a retry a single
+# miss drops every metric row of this job.
+RESOLVE_ATTEMPTS = 5
+RESOLVE_BACKOFF_SEC = 3.0
+
 
 def _job_rank(job: Dict[str, Any]) -> tuple:
     steps = job.get("steps") or []
@@ -32,13 +37,44 @@ def _job_rank(job: Dict[str, Any]) -> tuple:
     return (tier, str(job.get("started_at") or ""))
 
 
+def _describe(job: Dict[str, Any]) -> str:
+    return (
+        f"id={job.get('id')} name={job.get('name')!r} status={job.get('status')} "
+        f"started_at={job.get('started_at')}"
+    )
+
+
 def pick_job(jobs: List[Dict[str, Any]], runner_name: str) -> Optional[Dict[str, Any]]:
+    """The job currently running on this runner.
+
+    Runner names are reused on self-hosted fleets, so a completed job with the
+    same runner_name belongs to an earlier job and must not win. Only a running
+    job can be the caller.
+    """
     if not runner_name:
         return None
     matches = [job for job in jobs if str(job.get("runner_name") or "") == runner_name]
     if not matches:
         return None
-    return max(matches, key=_job_rank)
+    live = [job for job in matches if job.get("status") != "completed"]
+    if not live:
+        # Every job on this runner has finished, so none of them is the caller.
+        # The API has not caught up yet: let the caller retry instead of
+        # attributing this job's rows to an earlier one.
+        print(
+            f"Only completed jobs on runner {runner_name} so far; "
+            f"candidates: {'; '.join(_describe(job) for job in matches)}",
+            file=sys.stderr,
+        )
+        return None
+    if len(live) > 1:
+        print(
+            f"Ambiguous runner {runner_name}: {len(live)} unfinished jobs; "
+            f"picking the most recent. Candidates: "
+            f"{'; '.join(_describe(job) for job in live)}",
+            file=sys.stderr,
+        )
+    return max(live, key=_job_rank)
 
 
 def list_run_jobs(
@@ -71,6 +107,9 @@ def resolve_github_job(
     run_id: Optional[str] = None,
     token: Optional[str] = None,
     get_json: Optional[Callable[..., Any]] = None,
+    attempts: int = RESOLVE_ATTEMPTS,
+    backoff: float = RESOLVE_BACKOFF_SEC,
+    sleep: Optional[Callable[[float], None]] = None,
 ) -> Optional[Dict[str, Any]]:
     runner_name = runner_name if runner_name is not None else (os.environ.get("RUNNER_NAME") or "")
     repository = repository or os.environ.get("GITHUB_REPOSITORY") or ""
@@ -78,11 +117,21 @@ def resolve_github_job(
     token = token or os.environ.get("GITHUB_TOKEN") or ""
     if not runner_name or not repository or not run_id or not token:
         return None
-    try:
-        jobs = list_run_jobs(repository, run_id, token, get_json=get_json)
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError, RuntimeError):
-        return None
-    return pick_job(jobs, runner_name)
+    wait = sleep or time.sleep
+    delay = backoff
+    for attempt in range(1, max(attempts, 1) + 1):
+        try:
+            jobs = list_run_jobs(repository, run_id, token, get_json=get_json)
+        except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, OSError, RuntimeError) as exc:
+            print(f"Attempt {attempt}: jobs listing failed: {exc}", file=sys.stderr)
+            jobs = []
+        job = pick_job(jobs, runner_name) if jobs else None
+        if job is not None:
+            return job
+        if attempt < max(attempts, 1):
+            wait(delay)
+            delay = min(delay * 2, 30.0)
+    return None
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -93,7 +142,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     runner = os.environ.get("RUNNER_NAME") or ""
     job = resolve_github_job(runner)
     if job is None:
-        print(f"failed to resolve GITHUB_NUMERIC_JOB_ID for runner {runner}; metrics will be dropped", file=sys.stderr)
+        # An annotation, because the whole job's metrics are lost without this id
+        # and a stderr line in a long log is not noticed.
+        print(
+            "::warning title=CI analytics::Could not resolve GITHUB_NUMERIC_JOB_ID for runner "
+            f"{runner}; every metric row of this job will be dropped"
+        )
+        print(
+            f"failed to resolve GITHUB_NUMERIC_JOB_ID for runner {runner}; metrics will be dropped",
+            file=sys.stderr,
+        )
         return 0
     print(f"{job.get('id')}\t{job.get('name') or ''}")
     return 0

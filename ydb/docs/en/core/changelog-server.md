@@ -14,7 +14,7 @@ Release date: 18.09.26
 * Added [decommissioning of storage groups using virtual groups](./maintenance/manual/virtual_storage_groups_decommit.md?version=v26.3). Data is moved to virtual groups in the background, while applications continue reading and writing.
 * Added [authentication via external OpenID Connect identity providers](./security/authentication.md?version=v26.3#external-idp). {{ ydb-short-name }} validates JWT tokens against the provider's JSON Web Key Set (JWKS) and periodically refreshes authentication data.
 * Kafka API supports [mutual TLS authentication](./reference/kafka-api/auth.md?version=v26.3). The client certificate is mapped to a security identifier; SASL authentication is not required.
-* Columnar table engine optimization: an updated compaction strategy is used for columnar tables, which organizes data more efficiently, and a new data merge strategy for reads, which speeds up queries on constantly changing data
+* Columnar table engine optimization: an updated compaction strategy is used for columnar tables, which organizes data more efficiently, and a new data merge strategy for reads, which speeds up queries on constantly changing data.
 * Authentication/authorization subsystem optimization: batched authorization requests in AccessService are enabled by default, reducing overhead.
 * System virtual attributes such as `__ydb_create_time`, `__ydb_write_time`, etc., as well as user attributes `__ydb_user_attributes`, became available to streaming YQL queries. [Link to functionality](./concepts/query_execution/topics.md?version=v26.3#system-metadata).
 * Distributed Storage subsystem optimization: full VDisk synchronization became faster by removing processed SyncLog data.
@@ -474,7 +474,7 @@ Release date: April 15, 2025.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15933) a rare error that allowed a user to write to a topic bypassing account quota limits.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16288) an issue where the system returned "OK" after deleting a topic, but its tablets continued to run. To delete such tablets, follow the instructions in the [pull request](https://github.com/ydb-platform/ydb/pull/16288).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16418) a rare error where a backup of a large table with a secondary index could not be restored.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15862) an issue that caused an error when inserting data using `UPSERT` into string tables with default values.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15862) an issue that caused an error when inserting data using `UPSERT` into row tables with default values.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15334) an error that caused a crash when executing queries to tables with secondary indexes that return result lists using the `RETURNING *` expression.
 
 ## Version 24.3 {#24-3}

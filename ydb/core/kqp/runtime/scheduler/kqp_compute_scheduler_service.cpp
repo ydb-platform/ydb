@@ -341,7 +341,7 @@ void TComputeScheduler::SetTotalCpuLimit(ui64 cpu) {
 }
 
 ui64 TComputeScheduler::GetTotalCpuLimit() const {
-    return Root->TotalLimit;
+    return Root->TotalLimit.load();
 }
 
 void TComputeScheduler::SetDefaultDatabaseGuarantee(NHdrf::TStaticAttributes& attrs) const {

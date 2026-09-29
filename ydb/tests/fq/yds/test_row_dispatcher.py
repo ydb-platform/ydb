@@ -464,7 +464,7 @@ class TestPqRowDispatcher(TestYdsBase):
         filter = ' CAST(`time` AS Timestamp) - Interval("-PT0.000001S") > Timestamp("1970-01-01T00:00:00.000102Z")'
         self.run_and_check(
             kikimr, client, sql + filter, data, expected,
-            R'predicate: (CAST(`time` AS Timestamp) - Interval(\"-PT0.000001S\") > Timestamp(\"1970-01-01T00:00:00.000102Z\"))')
+            R'predicate: ((CAST(`time` AS Timestamp?) - Interval(\"-PT0.000001S\")) > Timestamp(\"1970-01-01T00:00:00.000102Z\"))')
 
     @yq_v1
     def test_filters_optional_field(self, kikimr, client):

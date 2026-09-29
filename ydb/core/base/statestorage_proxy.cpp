@@ -79,6 +79,10 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     const ui32 RingGroupIndex;
     bool NotifyRingGroupProxy;
 
+    ui32 Majority() const {
+        return Replicas / 2 + 1;
+    }
+
     void SelectRequestReplicas(TStateStorageInfo *info) {
         THolder<TStateStorageInfo::TSelection> selection(new TStateStorageInfo::TSelection());
         info->SelectReplicas(TabletID, selection.Get(), RingGroupIndex);
@@ -434,7 +438,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             ReplyAndDie(NKikimrProto::OK);
             return;
         case TStateStorageInfo::TSelection::StatusNoInfo:
-            ReplyAndDie(NoDataReplies >= Replicas / 2 + 1 ? NKikimrProto::NODATA : NKikimrProto::TIMEOUT);
+            ReplyAndDie(NoDataReplies >= Majority() ? NKikimrProto::NODATA : NKikimrProto::TIMEOUT);
             return;
         case TStateStorageInfo::TSelection::StatusOutdated:
             ReplyAndDie(NKikimrProto::RACE);
@@ -448,9 +452,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void CheckLookupReply() {
-        const ui32 majority = (Replicas / 2 + 1);
         const bool allowReply = ProxyOptions.SigWaitMode == ProxyOptions.SigNone
-            || (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && SignaturesMerged >= majority)
+            || (ProxyOptions.SigWaitMode == ProxyOptions.SigAsync && SignaturesMerged >= Majority())
             || RepliesMerged == Replicas;
 
         if (allowReply) {
@@ -463,7 +466,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
             case TStateStorageInfo::TSelection::StatusNoInfo:
                 // StatusNoInfo may include delivery failures. Only actual empty
                 // replica replies count towards a negative lookup quorum.
-                if (NoDataReplies >= majority) {
+                if (NoDataReplies >= Majority()) {
                     ReplyAndSig(NKikimrProto::NODATA);
                 } else if (RepliesMerged == Replicas) {
                     ReplyAndSig(NKikimrProto::ERROR);

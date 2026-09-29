@@ -361,8 +361,13 @@ def iter_workflow_runs(
     created_since: datetime,
     per_page: int = 50,
     status: str = "completed",
+    created_until: Optional[datetime] = None,
 ) -> Iterable[Dict[str, Any]]:
-    created = f">={created_since.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    start = created_since.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if created_until is not None:
+        created = f"{start}..{created_until.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    else:
+        created = f">={start}"
     url = f"https://api.github.com/repos/{org}/{repo}/actions/workflows/{quote(workflow)}/runs"
     page = 1
     while True:
@@ -462,6 +467,7 @@ def collect_rows(
     created_since: datetime,
     skip_job_ids: Optional[set] = None,
     failed: Optional[Dict[tuple, int]] = None,
+    created_until: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
     """Rows for completed runs in the window.
 
@@ -472,7 +478,9 @@ def collect_rows(
     rows: List[Dict[str, Any]] = []
     run_count = 0
     skip_job_ids = skip_job_ids or set()
-    for run in iter_workflow_runs(org, repo, workflow, created_since):
+    for run in iter_workflow_runs(
+        org, repo, workflow, created_since, created_until=created_until
+    ):
         ref = run_ref(run)
         if ref is None:
             continue

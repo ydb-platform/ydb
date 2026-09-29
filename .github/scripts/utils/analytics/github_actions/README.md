@@ -184,6 +184,38 @@ python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics
   запуск перечитает то же окно. Выгрузка при этом возвращает ненулевой код,
   чтобы падение было видно.
 
+## Миграция
+
+`migrate_ci_metrics.py` чинит уже записанные данные. Без `--apply` ничего не
+пишет.
+
+Что чинится: строки `export_state` / `run_id = 0`, устаревшие имена
+rebuild-фазы и `tests_*`, пустой `pr_number` у PR-событий (через
+`GET /commits/{sha}/pulls`), дыра покрытия, отсутствующий
+`labels.parent_span_id` у фаз.
+
+```bash
+MIG=.github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py
+python3 $MIG inventory --out /tmp/ci_metrics_before.json
+python3 .github/scripts/utils/analytics/github_actions/provision_tables.py \
+  --metrics-table analytics/ci_metrics_migration
+python3 $MIG resolve-prs --checkpoint /tmp/ci_metrics_pr_map.json --apply
+python3 $MIG copy --dest analytics/ci_metrics_migration \
+  --pr-map /tmp/ci_metrics_pr_map.json --checkpoint /tmp/ci_metrics_copy.json --apply
+python3 $MIG backfill-window --from 2026-08-30 --to 2026-09-01 \
+  --dest analytics/ci_metrics_migration --apply
+python3 $MIG verify --dest analytics/ci_metrics_migration --require-pr
+python3 $MIG test-rename          # 0 = ALTER TABLE RENAME работает
+python3 $MIG swap --dest analytics/ci_metrics_migration --apply
+python3 $MIG verify --table analytics/ci_metrics --dest analytics/ci_metrics --require-pr
+```
+
+До шага `swap` живая таблица не трогается. После него `analytics/ci_metrics_old`
+(или `analytics/ci_metrics_migration`, если пришлось копировать обратно) держим
+неделю и потом дропаем.
+
+`ya_phase` нельзя восстановить из GitHub API — `copy` обязан их сохранить.
+
 ## Тесты
 
 ```bash

@@ -81,6 +81,29 @@ class PullRefsTest(unittest.TestCase):
         self.assertIs(attach_pull_requests("ydb-platform", "ydb", run), run)
 
 
+class CreatedUntilTest(unittest.TestCase):
+    def test_iter_workflow_runs_builds_a_closed_created_range(self):
+        seen = {}
+
+        def fake_get(_url, params=None, **_kwargs):
+            seen["params"] = params
+            return {"workflow_runs": []}
+
+        start = datetime(2026, 8, 29, tzinfo=timezone.utc)
+        end = datetime(2026, 9, 3, tzinfo=timezone.utc)
+        with patch.object(export_github_job_metrics, "github_get", fake_get):
+            list(
+                export_github_job_metrics.iter_workflow_runs(
+                    "ydb-platform",
+                    "ydb",
+                    "pr_check.yml",
+                    start,
+                    created_until=end,
+                )
+            )
+        self.assertEqual(seen["params"]["created"], "2026-08-29T00:00:00Z..2026-09-03T00:00:00Z")
+
+
 class CompletedSinceTest(unittest.TestCase):
     def test_cold_start_uses_hours(self):
         since = completed_since(2, None)

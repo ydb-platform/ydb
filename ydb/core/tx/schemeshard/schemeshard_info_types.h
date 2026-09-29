@@ -5,7 +5,6 @@
 #include "schemeshard_identificators.h"
 #include "schemeshard_info_types_helpers.h"
 #include "schemeshard_path_element.h"
-#include "schemeshard_schema.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
@@ -40,7 +39,6 @@
 #include <ydb/core/protos/test_shard_control.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
 #include <ydb/core/tx/datashard/datashard.h>

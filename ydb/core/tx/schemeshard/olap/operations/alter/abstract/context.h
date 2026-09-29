@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
 
 namespace NKikimr::NSchemeShard::NOlap::NAlter {
 

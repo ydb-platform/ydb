@@ -67,6 +67,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
         desc.SetOmitIndexes(!exportInfo.IncludeIndexData);
         desc.SetOmitFollowers(true);
         desc.SetIsBackup(true);
+        if (exportInfo.EnableTableBackupAsSql) {
+            desc.SetCaptureBackupSchemeSnapshot(true);
+        }
     }
 
     return propose;
@@ -99,6 +102,32 @@ static const NKikimrSchemeOp::TBackupTask* FindBackupSchemeSnapshot(TSchemeShard
         return &ss->Tables.at(pathId)->BackupSettings;
     }
     return nullptr;
+}
+
+bool FillExportTableSchemePaths(
+    TSchemeShard* ss,
+    const TString& sourcePathName,
+    TExportTableSchemeContext& context,
+    TString& error)
+{
+    error.clear();
+    context.TablePath.clear();
+
+    if (!sourcePathName) {
+        error = "Source table path is empty";
+        return false;
+    }
+
+    const TString sourcePath = CanonizePath(sourcePathName);
+    std::pair<TString, TString> paths;
+    const TString database = CanonizePath(ss->RootPathElements);
+    if (!TrySplitPathByDb(sourcePath, database, paths, error)) {
+        return false;
+    }
+
+    context.SourcePath = sourcePath;
+    context.TablePath = paths.second;
+    return true;
 }
 
 TString ComputeIndexItemSuffix(
@@ -284,6 +313,7 @@ bool PrepareExportTableSchemeContext(
 ) {
     error.clear();
     context.SourcePath.clear();
+    context.TablePath.clear();
     context.PathDescription.Clear();
     context.ChangefeedUnderlyingTopics.Clear();
 
@@ -331,6 +361,7 @@ bool PrepareExportTableSchemeContext(
 ) {
     error.clear();
     context.SourcePath.clear();
+    context.TablePath.clear();
     context.PathDescription.Clear();
     context.ChangefeedUnderlyingTopics.Clear();
 

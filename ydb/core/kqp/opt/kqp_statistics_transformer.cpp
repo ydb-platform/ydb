@@ -44,6 +44,9 @@ static TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> FromYqlColumnStatMap(
         cs.Type = s.Type;
         result->Data[name] = std::move(cs);
     }
+    for (const auto& [key, s] : src->MultiData) {
+        result->MultiData[key] = TMultiColumnStatistics(s);
+    }
     return result;
 }
 

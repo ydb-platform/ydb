@@ -2,6 +2,8 @@
 #include "kqp_operator.h"
 #include <ydb/core/kqp/common/kqp_yql.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -93,18 +95,28 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
 
     THashMap<TString, TColumnStatistics> columnStatsMap;
 
+    THashMap<TString, TMultiColumnStatistics> multiColumnStatsMap;
+
     if (attributes.size() && typeCtx.ColumnStatisticsByTableName.contains(table)) {
-        const auto& globalMap = typeCtx.ColumnStatisticsByTableName.at(table)->Data;
+        const auto& globalStats = *typeCtx.ColumnStatisticsByTableName.at(table);
+        const auto& globalMap = globalStats.Data;
 
         for (const auto& columnName : attributes) {
             if (globalMap.contains(columnName)) {
                 columnStatsMap.insert({columnName, globalMap.at(columnName)});
-            }    
+            }
         }
 
-        if (columnStatsMap.size()) {
+        for (const auto& [tupleKey, multiColumnStats] : globalStats.MultiData) {
+            if (AllOf(multiColumnStats.Columns, [&](const TString& column) { return attributes.contains(column); })) {
+                multiColumnStatsMap.insert({tupleKey, TMultiColumnStatistics(multiColumnStats)});
+            }
+        }
+
+        if (columnStatsMap.size() || multiColumnStatsMap.size()) {
             ColumnStatistics = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>(
                 TOptimizerStatistics::TColumnStatMap(columnStatsMap));
+            ColumnStatistics->MultiData = std::move(multiColumnStatsMap);
         }
     }
 

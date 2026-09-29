@@ -1370,6 +1370,27 @@ namespace {
             return NKikimr::NClient::TValue::Create(result)[0]["List"].Size();
         }
 
+        ui8 GetPersistedExportItemState(ui64 exportId, ui32 itemIdx = 0) {
+            const auto result = LocalMiniKQL(Runtime(), TTestTxConfig::SchemeShard, Sprintf(R"(
+                (
+                    (let key '(
+                        '('ExportId (Uint64 '%s))
+                        '('Index (Uint32 '%u))
+                    ))
+                    (let fields '('State))
+                    (return (AsList
+                        (SetResult 'Result (SelectRow 'ExportItems key fields))
+                    ))
+                )
+            )", ToString(exportId).c_str(), itemIdx));
+            const auto row = NKikimr::NClient::TValue::Create(result)["Result"];
+            UNIT_ASSERT_C(row.HaveValue() && !row.IsNull(), "Export item " << exportId << ':' << itemIdx << " is not persisted");
+
+            const auto state = row["State"];
+            UNIT_ASSERT_C(state.HaveValue() && !state.IsNull(), "Export item " << exportId << ':' << itemIdx << " has no persisted state");
+            return static_cast<ui8>(state);
+        }
+
         void CancelColumnTableExportWithReboot(bool rebootCS, bool rebootSS, bool rebootBeforeCancel) {
             auto ctx = SetupColumnTableSlowS3Export();
             ui64 txId = ctx.TxId;
@@ -1601,6 +1622,57 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
 
         UNIT_ASSERT_VALUES_EQUAL(metadata.GetVersion(), 1);
         UNIT_ASSERT(metadata.GetEnablePermissions());
+    }
+
+    Y_UNIT_TEST_TWIN(TableBackupWithoutSqlDoesNotCaptureSchemeSnapshot, IsColumn) {
+        ui64 txId = 100;
+        CreateTableForSqlBackup(txId, IsColumn);
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(false);
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> backupProposals(Runtime(), [](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1 && record.GetTransaction(0).HasBackup();
+        });
+        TBlockEvents<NWrappers::NExternalStorage::TEvPutObjectRequest> sqlUploads(Runtime(), [](const auto& ev) {
+            return ev->Get()->Request.GetKey() == "legacy/create_table.sql";
+        });
+
+        const auto exportId = StartTableSqlExport(txId, "legacy");
+        Runtime().WaitFor("legacy export reaches data backup or SQL upload", [&] {
+            return !backupProposals.empty() || !sqlUploads.empty();
+        });
+        UNIT_ASSERT_C(sqlUploads.empty(), "legacy export must not upload CREATE TABLE SQL");
+        UNIT_ASSERT_C(!backupProposals.empty(), "legacy export must proceed directly to data backup");
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPersistedExportItemState(exportId),
+            static_cast<ui8>(NKikimr::NSchemeShard::TExportInfo::EState::Transferring));
+        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
+
+        backupProposals.clear();
+        RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
+        Runtime().WaitFor("legacy export resumes data backup after reboot", [&] {
+            return !backupProposals.empty() || !sqlUploads.empty();
+        });
+        UNIT_ASSERT_C(sqlUploads.empty(), "legacy export must not enter SQL upload state after reboot");
+        UNIT_ASSERT_C(!backupProposals.empty(), "legacy export must resume directly from data transfer state");
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPersistedExportItemState(exportId),
+            static_cast<ui8>(NKikimr::NSchemeShard::TExportInfo::EState::Transferring));
+        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
+
+        sqlUploads.Stop();
+        backupProposals.Stop().Unblock();
+        WaitTableSqlExport(exportId);
+
+        UNIT_ASSERT(HasS3File("/legacy/scheme.pb"));
+        UNIT_ASSERT(!HasS3File("/legacy/create_table.sql"));
+        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
+
+        TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(CountBackupSchemeSnapshotsRows(), 0u);
     }
 
     Y_UNIT_TEST_TWIN(TableBackupAsSqlWithoutChecksums, IsColumn) {
@@ -1910,14 +1982,16 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT_C(backupProposals.empty(), "backup must not start while CREATE TABLE is uploading");
 
         TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
-        sqlUploads.Stop();
-        sqlUploads.clear();
+        Runtime().SimulateSleep(TDuration::MilliSeconds(100));
+        sqlUploads.Stop().Unblock();
+        Runtime().SimulateSleep(TDuration::MilliSeconds(100));
 
         WaitTableSqlExport(exportId, Ydb::StatusIds::CANCELLED);
         auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
-        UNIT_ASSERT_VALUES_EQUAL(
-            desc.GetResponse().GetEntry().GetProgress(),
-            Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
+        UNIT_ASSERT_C(entry.IssuesSize() > 0, entry.DebugString());
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Cancelled manually");
         UNIT_ASSERT_C(backupProposals.empty(), "backup must not start after export cancellation");
         CheckNoS3Prefix({"/sql/"});
 
@@ -2768,6 +2842,62 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         UNIT_ASSERT(HasS3File("/sql/feed/topic_description.pb"));
         UNIT_ASSERT(HasS3File("/sql/feed/changefeed_description.pb.sha256"));
         UNIT_ASSERT(HasS3File("/sql/feed/topic_description.pb.sha256"));
+    }
+
+    Y_UNIT_TEST(TableBackupAsSqlUsesDatabaseRelativePath) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        ui64 txId = 100;
+
+        TestMkDir(Runtime(), ++txId, "/MyRoot", "Dir");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot/Dir", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint64" DefaultFromSequence: "seq" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            SequenceDescription {
+                Name: "seq"
+                StartValue: 2
+                Increment: 3
+                SetVal { NextValue: 100 NextUsed: false }
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+        TestCreateCdcStream(Runtime(), ++txId, "/MyRoot/Dir", R"(
+            TableName: "Table"
+            StreamDescription {
+                Name: "feed"
+                Mode: ECdcStreamModeUpdate
+                Format: ECdcStreamFormatJson
+                State: ECdcStreamStateReady
+            }
+            RetentionPeriodSeconds: 172800
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const auto exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Dir/Table"
+                    destination_prefix: "nested"
+                }
+            }
+        )", S3Port()));
+        WaitTableSqlExport(exportId);
+
+        const auto sql = GetS3FileContent("/nested/create_table.sql");
+        UNIT_ASSERT_C(sql.Contains("CREATE TABLE `Dir/Table`"), sql);
+        UNIT_ASSERT_C(sql.Contains("ALTER TABLE `Dir/Table`"), sql);
+        UNIT_ASSERT_C(sql.Contains("ALTER SEQUENCE `/MyRoot/Dir/Table/seq`"), sql);
+        UNIT_ASSERT_C(!sql.Contains("CREATE TABLE `Table`"), sql);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {

@@ -1051,6 +1051,7 @@ public:
             Counters->WriteActorRemoteShardWrites->Inc();
         }
 
+        AFL_ENSURE(!TxId || !ev->Get()->Record.HasTxId() || ev->Get()->Record.GetTxId() == *TxId);
         if (!(Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId) // not commit response
                 && IsSupersededWriteResult(ev->Cookie, metadata)
                 && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {

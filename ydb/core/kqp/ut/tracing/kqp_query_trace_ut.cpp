@@ -907,7 +907,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 auto error = NEvents::TDataEvents::TEvWriteResult::BuildError(result->Record.GetOrigin(),
                     result->Record.GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
                     "injected commit failure");
-                runtime.Send(ev->Recipient, ev->Sender, error.release());
+                runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, error.release(), 0, ev->Cookie));
                 injected = true;
                 return true;
             }

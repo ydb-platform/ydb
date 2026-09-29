@@ -186,7 +186,8 @@ protected:
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
                 KqpCtx.Config->GetEnableWatermarks(),
-                defaultLatePolicy
+                defaultLatePolicy,
+                KqpCtx.Config->FeatureFlags.GetEnableHoppingWindowStartCheck()
             );
         } else if (KqpCtx.Config->FeatureFlags.GetEnableStreamingAggregation() && KqpCtx.Config->EnableStreamingAggregation.Get().GetOrElse(false)) {
             output = RewriteAsStreamingAggregation(aggregate, ctx, getParents);

@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/kqp_runtime_settings.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
@@ -84,6 +85,9 @@ public:
 
     TActorId CreateKqpComputeActor(TCreateArgs&& args) override {
         args.TraceId = GetTaskTraceParent(*args.Task, args.TraceId);
+        // Programs compiled by stable-26-3 do not carry RuntimeSettings, but their
+        // DateTime2::Format signature already matches the 2025.01 threshold.
+        EnsureKqpDefaultRuntimeSettings(*args.Task->MutableProgram()->MutableRuntimeSettings());
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();

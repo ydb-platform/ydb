@@ -12,6 +12,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/kqp_runtime_settings.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/rm_service/kqp_snapshot_manager.h>
@@ -112,6 +113,7 @@ void PrepareLiteralRequest(IKqpGateway::TExecPhysicalRequest& literalRequest, ui
     stageProgram.SetRaw(program);
     YQL_ENSURE(langVer > 0);
     stageProgram.SetLangVer(langVer);
+    EnsureKqpDefaultRuntimeSettings(*stageProgram.MutableRuntimeSettings());
     stage.SetOutputsCount(1);
 
     auto& taskResult = *transaction.AddResults();

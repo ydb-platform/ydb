@@ -19,6 +19,7 @@ PEERDIR(
     ydb/library/yql/dq/type_ann
     ydb/library/yql/dq/tasks
     yql/essentials/minikql
+    yql/essentials/minikql/runtime_settings
     yql/essentials/providers/common/mkql
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes

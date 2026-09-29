@@ -24,6 +24,7 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/minikql/mkql_node_serialization.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
@@ -1170,6 +1171,9 @@ private:
         programProto.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         programProto.SetRaw(programBytecode);
         programProto.SetLangVer(Config->GetDefaultLangVer());
+        if (TypesCtx.RuntimeSettings) {
+            *programProto.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*TypesCtx.RuntimeSettings);
+        }
 
         stagePredictor.SerializeToKqpSettings(*programProto.MutableSettings());
         for (const auto& module : stagePredictor.GetWasmUdfModules()) {

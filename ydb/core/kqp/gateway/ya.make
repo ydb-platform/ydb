@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/kqp/common
+    yql/essentials/minikql/runtime_settings
     ydb/core/kqp/federated_query
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/actors

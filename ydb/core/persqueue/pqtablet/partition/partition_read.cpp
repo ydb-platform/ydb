@@ -957,6 +957,17 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
     userInfo->ReadsInQuotaQueue--;
+    const auto* consumerConfig = GetConsumer(Config, user);
+    if (consumerConfig
+        && consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP
+        && read->MaxTimeLagMs > 0)
+    {
+        ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
+            TStringBuilder() << "reading only messages from the last " << read->MaxTimeLagMs
+            << " ms is not supported for shared consumer '" << user << "'",
+            read->ReplyTo);
+        return;
+    }
     ui64 offset = read->Offset;
 
     auto readTimestamp = GetReadFrom(read->MaxTimeLagMs, read->ReadTimestampMs, userInfo->ReadFromTimestamp, ctx);

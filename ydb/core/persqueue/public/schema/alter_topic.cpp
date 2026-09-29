@@ -17,6 +17,10 @@ TResult ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::A
         consumer.set_important(alter.set_important());
     }
     if (alter.has_set_read_from()) {
+        if (consumer.has_shared_consumer_type()) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "read_from cannot be changed for shared consumer '" << consumer.name() << "'"};
+        }
         consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
     }
     if (alter.has_set_supported_codecs()) {

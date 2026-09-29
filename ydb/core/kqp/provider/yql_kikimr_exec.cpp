@@ -542,6 +542,10 @@ namespace {
                 protoConsumer->mutable_availability_period()->set_seconds(period.Seconds());
                 protoConsumer->mutable_availability_period()->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "setReadFromTs"sv) {
+                if (setting.Value().Maybe<TCoInterval>()) {
+                    return TStringBuilder() << "reading only messages from the last N seconds is not supported for consumer "
+                        << consumer.Name().StringValue();
+                }
                 auto tsValue = GetTimestampValue(setting);
                 if (!tsValue) {
                     return GetConsumerTimestampParseError(consumer, "read_from");
@@ -672,6 +676,10 @@ namespace {
             } else if (name == "resetAvailabilityPeriod"sv) {
                 protoConsumer->mutable_reset_availability_period();
             } else if (name == "setReadFromTs") {
+                if (setting.Value().Maybe<TCoInterval>()) {
+                    return TStringBuilder() << "reading only messages from the last N seconds is not supported for consumer "
+                        << consumer.Name().StringValue();
+                }
                 auto tsValue = GetTimestampValue(setting);
                 if (!tsValue) {
                     return GetConsumerTimestampParseError(consumer, "read_from");

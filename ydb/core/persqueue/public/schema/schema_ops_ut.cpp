@@ -83,6 +83,216 @@ Y_UNIT_TEST(AddAndRemoveConsumerActors) {
     AssertStatus(DoRemoveConsumer(runtime, path, "missing"), Ydb::StatusIds::NOT_FOUND);
 }
 
+Y_UNIT_TEST(CannotAlterSharedConsumerReadFrom) {
+    auto setup = CreateSetup("CoreSharedReadFrom");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_shared_read_from";
+    CreateTopic(runtime, path);
+
+    {
+        Ydb::Topic::Consumer consumer;
+        consumer.set_name("shared_c");
+        consumer.mutable_shared_consumer_type();
+        consumer.mutable_read_from()->set_seconds(10);
+        AssertStatus(DoAddConsumer(runtime, path, consumer), Ydb::StatusIds::SUCCESS);
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* c = NPQ::GetConsumer(config, "shared_c");
+        UNIT_ASSERT(c);
+        UNIT_ASSERT_VALUES_EQUAL(c->GetReadFromTimestampsMs(), 10000u);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name("shared_c");
+        alter->mutable_set_read_from()->set_seconds(20);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "read_from cannot be changed");
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* c = NPQ::GetConsumer(config, "shared_c");
+        UNIT_ASSERT(c);
+        UNIT_ASSERT_VALUES_EQUAL(c->GetReadFromTimestampsMs(), 10000u);
+        UNIT_ASSERT(!c->GetImportant());
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name("shared_c");
+        alter->mutable_set_read_from()->set_seconds(20);
+        alter->set_set_important(true);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::BAD_REQUEST, "read_from cannot be changed");
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* c = NPQ::GetConsumer(config, "shared_c");
+        UNIT_ASSERT(c);
+        UNIT_ASSERT_VALUES_EQUAL(c->GetReadFromTimestampsMs(), 10000u);
+        UNIT_ASSERT(!c->GetImportant());
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name("shared_c");
+        alter->mutable_alter_shared_consumer_type()->mutable_set_default_processing_timeout()->set_seconds(40);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* c = NPQ::GetConsumer(config, "shared_c");
+        UNIT_ASSERT(c);
+        UNIT_ASSERT_VALUES_EQUAL(c->GetReadFromTimestampsMs(), 10000u);
+        UNIT_ASSERT_VALUES_EQUAL(c->GetDefaultProcessingTimeoutSeconds(), 40u);
+    }
+
+    {
+        Ydb::Topic::AlterTopicRequest request;
+        request.set_path(path);
+        auto* alter = request.add_alter_consumers();
+        alter->set_name("user");
+        alter->mutable_set_read_from()->set_seconds(15);
+        AssertStatus(DoAlter(runtime, request), Ydb::StatusIds::SUCCESS);
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* user = NPQ::GetConsumer(config, "user");
+        const auto* shared = NPQ::GetConsumer(config, "shared_c");
+        UNIT_ASSERT(user);
+        UNIT_ASSERT(shared);
+        UNIT_ASSERT_VALUES_EQUAL(user->GetReadFromTimestampsMs(), 15000u);
+        UNIT_ASSERT_VALUES_EQUAL(shared->GetReadFromTimestampsMs(), 10000u);
+    }
+}
+
+struct TDdlResult {
+    bool Success = false;
+    TString Issues;
+};
+
+TDdlResult RunDDL(TTopicSdkTestSetup& setup, const TString& query) {
+    NYdb::TDriver driver(setup.MakeDriverConfig());
+    NYdb::NQuery::TQueryClient client(driver);
+    auto sessionResult = client.GetSession().GetValueSync();
+    UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+    auto res = sessionResult.GetSession().ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+    TDdlResult out{res.IsSuccess(), res.GetIssues().ToString()};
+    driver.Stop(true);
+    return out;
+}
+
+Y_UNIT_TEST(SharedConsumerReadFromYqlBans) {
+    auto setup = CreateSetup("CoreMlpReadFromYql");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_mlp_read_from";
+
+    {
+        auto res = RunDDL(*setup, R"(
+            CREATE TOPIC topic_mlp_read_from (
+                CONSUMER shared_c WITH (
+                    type = 'shared',
+                    read_from = 100
+                ),
+                CONSUMER stream_c WITH (
+                    read_from = 50
+                )
+            );
+        )");
+        UNIT_ASSERT_C(res.Success, res.Issues);
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* shared = NPQ::GetConsumer(config, "shared_c");
+        const auto* stream = NPQ::GetConsumer(config, "stream_c");
+        UNIT_ASSERT(shared);
+        UNIT_ASSERT(stream);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NKikimrPQ::TPQTabletConfig::EConsumerType_Name(shared->GetType()),
+            NKikimrPQ::TPQTabletConfig::EConsumerType_Name(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP));
+        UNIT_ASSERT_VALUES_EQUAL(shared->GetReadFromTimestampsMs(), 100000u);
+        UNIT_ASSERT_VALUES_EQUAL(stream->GetReadFromTimestampsMs(), 50000u);
+    }
+
+    {
+        auto res = RunDDL(*setup, R"(
+            ALTER TOPIC topic_mlp_read_from
+                ALTER CONSUMER shared_c SET (read_from = 200);
+        )");
+        UNIT_ASSERT(!res.Success);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues, "read_from cannot be changed");
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(NPQ::GetConsumer(config, "shared_c")->GetReadFromTimestampsMs(), 100000u);
+    }
+
+    {
+        auto res = RunDDL(*setup, R"(
+            ALTER TOPIC topic_mlp_read_from
+                ALTER CONSUMER shared_c SET (
+                    read_from = 200,
+                    default_processing_timeout = Interval('PT40S')
+                );
+        )");
+        UNIT_ASSERT(!res.Success);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues, "read_from cannot be changed");
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* shared = NPQ::GetConsumer(config, "shared_c");
+        UNIT_ASSERT_VALUES_EQUAL(shared->GetReadFromTimestampsMs(), 100000u);
+        UNIT_ASSERT_VALUES_EQUAL(shared->GetDefaultProcessingTimeoutSeconds(), 30u);
+    }
+
+    {
+        auto res = RunDDL(*setup, R"(
+            ALTER TOPIC topic_mlp_read_from
+                ALTER CONSUMER shared_c SET (default_processing_timeout = Interval('PT40S'));
+        )");
+        UNIT_ASSERT_C(res.Success, res.Issues);
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* shared = NPQ::GetConsumer(config, "shared_c");
+        UNIT_ASSERT_VALUES_EQUAL(shared->GetReadFromTimestampsMs(), 100000u);
+        UNIT_ASSERT_VALUES_EQUAL(shared->GetDefaultProcessingTimeoutSeconds(), 40u);
+    }
+
+    {
+        auto res = RunDDL(*setup, R"(
+            ALTER TOPIC topic_mlp_read_from
+                ALTER CONSUMER stream_c SET (read_from = 70);
+        )");
+        UNIT_ASSERT_C(res.Success, res.Issues);
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(NPQ::GetConsumer(config, "stream_c")->GetReadFromTimestampsMs(), 70000u);
+        UNIT_ASSERT_VALUES_EQUAL(NPQ::GetConsumer(config, "shared_c")->GetReadFromTimestampsMs(), 100000u);
+    }
+
+    {
+        auto res = RunDDL(*setup, R"(
+            CREATE TOPIC topic_mlp_read_from_window (
+                CONSUMER shared_c WITH (
+                    type = 'shared',
+                    read_from = Interval('PT30S')
+                )
+            );
+        )");
+        UNIT_ASSERT(!res.Success);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues, "reading only messages from the last N seconds is not supported");
+    }
+
+    {
+        auto res = RunDDL(*setup, R"(
+            ALTER TOPIC topic_mlp_read_from
+                ALTER CONSUMER shared_c SET (read_from = Interval('PT30S'));
+        )");
+        UNIT_ASSERT(!res.Success);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues, "reading only messages from the last N seconds is not supported");
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(NPQ::GetConsumer(config, "shared_c")->GetReadFromTimestampsMs(), 100000u);
+    }
+
+    {
+        auto res = RunDDL(*setup, R"(
+            ALTER TOPIC topic_mlp_read_from
+                ALTER CONSUMER stream_c SET (read_from = Interval('PT30S'));
+        )");
+        UNIT_ASSERT(!res.Success);
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues, "reading only messages from the last N seconds is not supported");
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT_VALUES_EQUAL(NPQ::GetConsumer(config, "stream_c")->GetReadFromTimestampsMs(), 70000u);
+    }
+}
+
 Y_UNIT_TEST(CannotChangeConsumerType) {
     auto setup = CreateSetup("CoreConsumerType");
     auto& runtime = setup->GetRuntime();

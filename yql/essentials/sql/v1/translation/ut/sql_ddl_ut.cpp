@@ -1110,6 +1110,27 @@ Y_UNIT_TEST(TopicBadRequests) {
               {"4:69: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
 }
 
+Y_UNIT_TEST(RejectReadFromLastSeconds) {
+    TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1 WITH (read_from = Interval('PT30S')));
+        )", /*expectOk=*/false,
+              {"reading only messages from the last N seconds is not supported"});
+    TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1 WITH (type = 'shared', read_from = Interval('PT30S')));
+        )", /*expectOk=*/false,
+              {"reading only messages from the last N seconds is not supported"});
+    TestQuery(R"(
+            ALTER TOPIC topic1 ALTER CONSUMER cons1 SET (read_from = Interval('PT30S'));
+        )", /*expectOk=*/false,
+              {"reading only messages from the last N seconds is not supported"});
+    TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1 WITH (type = 'shared', read_from = 100));
+        )");
+    TestQuery(R"(
+            ALTER TOPIC topic1 ALTER CONSUMER cons1 SET (read_from = Datetime('2026-09-25T13:48:10Z'));
+        )");
+}
+
 Y_UNIT_TEST(TopicWithPrefix) {
     NYql::TAstParseResult res = SqlToYql(R"(
                 USE plato;

@@ -36,8 +36,7 @@ namespace NKikimr::NGRpcService {
         }
 
         const TString method = GetRpcMethodName();
-        if (method.StartsWith("Ydb.PersQueue.V1.") ||
-            method.StartsWith("Ydb.Cms.V1.CmsService/")) {
+        if (method.StartsWith("Ydb.Cms.V1.CmsService/")) {
             DisablePathNormalization();
             return;
         }
@@ -46,6 +45,9 @@ namespace NKikimr::NGRpcService {
         SetPathNormalizer(std::move(normalizer));
         if (database) {
             database = NormalizePath(*database);
+        }
+        if (method.StartsWith("Ydb.PersQueue.V1.") && database == GetDatabaseNameFromRequest()) {
+            return;
         }
 
         EffectiveDatabaseName_ = std::move(database);

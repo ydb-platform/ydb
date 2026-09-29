@@ -71,10 +71,39 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/rewritten");
         }
 
-        Y_UNIT_TEST(LegacyServicesKeepRawDatabaseAndIdentityPaths) {
+        Y_UNIT_TEST(LegacyPersQueueWithEmptyMappingKeepsLiveDatabase) {
+            TNamedRequest request("Ydb.PersQueue.V1.PersQueueService/StreamingWrite");
+            request.EnablePathNormalization();
+            request.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>());
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/raw");
+            request.UseDatabase("/resolved");
+            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/resolved");
+        }
+
+        Y_UNIT_TEST(LegacyPersQueueDatabaseIsRewritten) {
+            TNamedRequest request("Ydb.PersQueue.V1.PersQueueService/StreamingWrite");
+            request.EnablePathNormalization();
+            request.InitializePathNormalization(MakeNormalizer());
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/rewritten");
+            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/rewritten");
+        }
+
+        Y_UNIT_TEST(LegacyPersQueueRewritesPathWithoutDatabaseRewrite) {
+            NKikimrConfig::TPathRewriteConfig config;
+            auto* rule = config.AddRules();
+            rule->SetSrc("/other");
+            rule->SetDst("/rewritten");
+
+            TNamedRequest request("Ydb.PersQueue.V1.PersQueueService/StreamingWrite");
+            request.EnablePathNormalization();
+            request.InitializePathNormalization(std::make_shared<const NPathAliasing::TPathNormalizer>(config));
+            UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/other/topic"), "/rewritten/topic");
+            request.UseDatabase("/resolved");
+            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/resolved");
+        }
+
+        Y_UNIT_TEST(CmsServiceKeepsRawDatabaseAndIdentityPaths) {
             const TString methods[] = {
-                "Ydb.PersQueue.V1.PersQueueService/CreateTopic",
-                "Ydb.PersQueue.V1.ClusterDiscoveryService/DiscoverClusters",
                 "Ydb.Cms.V1.CmsService/CreateDatabase",
             };
             for (const auto& method : methods) {

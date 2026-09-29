@@ -1,4 +1,4 @@
-# Classic SQL constructs not supported yet
+# Unsupported classic SQL constructs
 
 ## Correlated EXISTS and NOT EXISTS {#not-exists}
 

@@ -317,6 +317,7 @@ namespace {
                 // we must receive reply and delete session first
                 return;
             }
+            Y_DEBUG_ABORT_UNLESS(AttachingSessions.empty());
             Free();
             TBase::PassAway();
         }
@@ -506,8 +507,12 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
-            state->StreamProcessor->Read([actorSystem, selfId, state = std::move(state)](Ydb::Query::ExecuteQueryResponsePart&& response) mutable {
-                actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
+            // The stream processor owns this callback and the state owns the stream processor,
+            // so capture a weak reference: a strong one makes a cycle that outlives the actor
+            state->StreamProcessor->Read([actorSystem, selfId, weakState = std::weak_ptr(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
+                if (auto state = weakState.lock()) {
+                    actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
+                }
             });
         }
 
@@ -565,14 +570,19 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
-            session->StreamProcessor->Read([actorSystem, selfId, session = std::move(session)](Ydb::Query::SessionState&& response) mutable {
-                actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
+            // Weak for the same reason as in ReadNextResponsePart; the session is owned by
+            // AttachingSessions, Sessions or the lookup state using it
+            session->StreamProcessor->Read([actorSystem, selfId, weakSession = std::weak_ptr(session)](Ydb::Query::SessionState&& response) {
+                if (auto session = weakSession.lock()) {
+                    actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
+                }
             });
         }
 
         void Handle(TEvQuerySessionState::TPtr ev) {
             auto session = std::move(ev->Get()->State);
             if (session->PendingLookup) {
+                AttachingSessions.erase(session);
                 --InflightCreateSession;
                 if (Y_UNLIKELY(PendingPassAway)) {
                     SendDeleteSession(session->SessionId);
@@ -702,6 +712,7 @@ namespace {
             auto sessionState = std::make_shared<TSessionState>();
             sessionState->SessionId = std::move(*response.mutable_session_id());
             sessionState->PendingLookup = std::move(state);
+            AttachingSessions.insert(sessionState);
             SendAttachSession(std::move(sessionState));
         }
 
@@ -1023,6 +1034,7 @@ namespace {
         const TString SelectWithKeys;
         TVector<TSessionState::TPtr> Sessions;
         TSet<TLookupState::TPtr> InflightRequests;
+        TSet<TSessionState::TPtr> AttachingSessions; // created, waiting for the first AttachSession reply
         ui64 InflightCreateSession = 0;
         bool PendingPassAway = false;
 

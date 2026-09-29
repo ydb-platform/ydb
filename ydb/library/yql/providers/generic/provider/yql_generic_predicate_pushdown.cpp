@@ -720,7 +720,9 @@ namespace NYql {
                 const auto& value = typedValue.value();
                 switch (value.value_case()) {
                 case Ydb::Value::kInt64Value: {
-                    const auto instant = TInstant::MicroSeconds(value.int64_value());
+                    auto intValue = value.int64_value();
+                    Y_ENSURE(intValue >= 0 && static_cast<ui64>(intValue) < NYql::NUdf::MAX_TIMESTAMP);
+                    const auto instant = TInstant::MicroSeconds(static_cast<ui64>(intValue));
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << instant << "\")";
                 }
                 default:

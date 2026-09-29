@@ -1,9 +1,3 @@
-* Fixed vector workload initialization with `--executer data` when sampling query vectors or measuring recall.
-* Removed `--hnsw-full-range` from `ydb workload vector run select`. Indexed searches use `VIEW`; the server searches partition-local HNSW graphs automatically for unprefixed `distributed_hnsw` indexes.
-
-* Fixed `ydb workload vector run select` to use read-only snapshots for `distributed_hnsw` indexes by default, avoiding transaction locks that disable HNSW acceleration. `--stale-ro` still selects stale reads. Fixed concurrent query-vector selection in the vector workload.
-
-* Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.
 * Fixed a memory leak when closing producers in `ydb workload topic run write|full`.
 * Sped up local YAML selector validation in `ydb admin cluster config replace` and `ydb admin database config replace` by resolving independent sections separately and merging equivalent states.
 * Added support for column-oriented (OLAP) tables to the `ydb tools dump` and `ydb tools restore` commands. `--import-data` is not supported for column tables and automatically falls back to `--bulk-upsert`.

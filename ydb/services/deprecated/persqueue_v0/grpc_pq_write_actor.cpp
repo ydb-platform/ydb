@@ -1,7 +1,6 @@
 #include "grpc_pq_actor.h"
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 
@@ -199,9 +198,6 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
         //answer error
         CloseSession("got second init request",  NPersQueue::NErrorCode::BAD_REQUEST, ctx);
         return;
-    }
-    if (!event->Database.empty() && !event->Database.StartsWith('/')) {
-        NGRpcService::CreateCounterCb(Counters, nullptr)("persqueue_v0", "WriteSession", true)->CountRelativeDatabase();
     }
     const auto& init = event->Request.GetInit();
 

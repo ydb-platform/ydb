@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/client/server/msgbus_server_persqueue.h>
-#include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/persqueue/public/counters/percentile_counter.h>
 #include <ydb/core/persqueue/public/pq_database.h>
@@ -670,10 +669,6 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
         //answer error
         CloseSession("got second init request", NPersQueue::NErrorCode::BAD_REQUEST, ctx);
         return;
-    }
-
-    if (!event->Database.empty() && !event->Database.StartsWith('/')) {
-        NGRpcService::CreateCounterCb(Counters, nullptr)("persqueue_v0", "ReadSession", true)->CountRelativeDatabase();
     }
 
     const auto& init = event->Request.GetInit();

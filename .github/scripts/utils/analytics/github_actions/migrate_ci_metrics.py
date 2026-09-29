@@ -643,37 +643,39 @@ def cmd_swap(args: argparse.Namespace) -> int:
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--table", default=DEFAULT_TABLE_PATH, help="Source / live metrics table")
+    common.add_argument("--dest", default=DEFAULT_MIGRATION_TABLE, help="Destination table")
+    common.add_argument("--org", default=os.environ.get("CI_METRICS_ORG", DEFAULT_ORG))
+    common.add_argument("--repo", default=os.environ.get("CI_METRICS_REPO", DEFAULT_REPO))
+    common.add_argument("--apply", action="store_true", help="Write. Default is dry-run.")
+
     parser = argparse.ArgumentParser(description="Repair and rebuild analytics/ci_metrics")
-    parser.add_argument("--table", default=DEFAULT_TABLE_PATH, help="Source / live metrics table")
-    parser.add_argument("--dest", default=DEFAULT_MIGRATION_TABLE, help="Destination table")
-    parser.add_argument("--org", default=os.environ.get("CI_METRICS_ORG", DEFAULT_ORG))
-    parser.add_argument("--repo", default=os.environ.get("CI_METRICS_REPO", DEFAULT_REPO))
-    parser.add_argument("--apply", action="store_true", help="Write. Default is dry-run.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    inv = sub.add_parser("inventory", help="Row counts, holes, NULL rates, legacy names")
+    inv = sub.add_parser("inventory", parents=[common], help="Row counts, holes, NULL rates, legacy names")
     inv.add_argument("--out", default=None, help="Write the JSON report here")
 
-    resolve = sub.add_parser("resolve-prs", help="Fill a SHA -> PR map for NULL pr_number rows")
+    resolve = sub.add_parser("resolve-prs", parents=[common], help="Fill a SHA -> PR map for NULL pr_number rows")
     resolve.add_argument("--checkpoint", required=True, help="JSON file, resumed on rerun")
 
-    copy = sub.add_parser("copy", help="Copy source -> dest with repairs, one day at a time")
+    copy = sub.add_parser("copy", parents=[common], help="Copy source -> dest with repairs, one day at a time")
     copy.add_argument("--pr-map", default=None, help="Checkpoint from resolve-prs")
     copy.add_argument("--checkpoint", default=None, help="JSON of already-copied dates")
     copy.add_argument("--from", dest="from_date", default=None)
     copy.add_argument("--to", dest="to_date", default=None)
 
-    backfill = sub.add_parser("backfill-window", help="Re-export a created-date window from GitHub")
+    backfill = sub.add_parser("backfill-window", parents=[common], help="Re-export a created-date window from GitHub")
     backfill.add_argument("--from", dest="from_date", required=True)
     backfill.add_argument("--to", dest="to_date", required=True)
     backfill.add_argument("--workflow", action="append", default=None)
 
-    verify = sub.add_parser("verify", help="Assert dest has no junk and did not lose ya_phase")
+    verify = sub.add_parser("verify", parents=[common], help="Assert dest has no junk and did not lose ya_phase")
     verify.add_argument("--require-pr", action="store_true", help="Fail if any PR row still lacks pr_number")
 
-    sub.add_parser("test-rename", help="Try ALTER TABLE RENAME on a scratch table")
+    sub.add_parser("test-rename", parents=[common], help="Try ALTER TABLE RENAME on a scratch table")
 
-    swap = sub.add_parser("swap", help="Make dest the live table (rename, or drop+copy)")
+    swap = sub.add_parser("swap", parents=[common], help="Make dest the live table (rename, or drop+copy)")
     swap.add_argument("--backup", default=None)
     swap.add_argument("--pr-map", default=None)
     swap.add_argument("--checkpoint", default=None)

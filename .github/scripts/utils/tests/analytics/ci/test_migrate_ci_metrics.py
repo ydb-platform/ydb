@@ -14,6 +14,7 @@ import unittest
 from github_actions.migrate_ci_metrics import (
     apply_repairs,
     drop_reason,
+    parse_args,
     repair_row,
     row_for_upsert,
 )
@@ -93,6 +94,14 @@ class ApplyRepairsTest(unittest.TestCase):
         self.assertEqual(stats["patched_parent"], 1)
         self.assertEqual(kept[0]["pr_number"], 7)
         self.assertEqual(kept[0]["date"], date(2026, 8, 31))
+
+
+class ParseArgsTest(unittest.TestCase):
+    def test_apply_is_accepted_after_the_subcommand(self):
+        args = parse_args(["resolve-prs", "--checkpoint", "/tmp/map.json", "--apply"])
+        self.assertTrue(args.apply)
+        args = parse_args(["copy", "--dest", "analytics/ci_metrics_migration"])
+        self.assertFalse(args.apply)
 
 
 class RowForUpsertTest(unittest.TestCase):

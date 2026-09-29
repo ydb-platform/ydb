@@ -59,22 +59,23 @@ def _check_key(name: str) -> str:
     return name
 
 
-def read_state(name: str, table_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def read_state(name: str, table_path: Optional[str] = None) -> Tuple[Optional[Dict[str, Any]], bool]:
+    """Return (payload, read_ok). No row is (None, True); a failed read is (None, False)."""
     _check_key(name)
     if not has_send_credentials():
-        return None
+        return None, False
     try:
         with _open_ydb_wrapper() as wrapper:
             if not wrapper.check_credentials():
-                return None
+                return None, False
             path = table_path or resolve_state_table_path(wrapper)
             rows = wrapper.execute_scan_query(
                 f'SELECT payload FROM `{path}` WHERE name = "{name}"',
                 query_name=f"ci_metrics_state_read_{name}",
             )
-    except Exception as exc:  # noqa: BLE001 — a missing watermark is not fatal
+    except Exception as exc:  # noqa: BLE001
         print(f"Warning: state read for {name} failed: {exc}")
-        return None
+        return None, False
     for row in rows or []:
         payload = row.get("payload") if isinstance(row, dict) else None
         if isinstance(payload, (bytes, bytearray)):
@@ -84,10 +85,13 @@ def read_state(name: str, table_path: Optional[str] = None) -> Optional[Dict[str
                 payload = json.loads(payload)
             except json.JSONDecodeError:
                 print(f"Warning: state payload for {name} is not JSON")
-                return None
+                return None, False
         if isinstance(payload, dict):
-            return payload
-    return None
+            return payload, True
+        if payload is not None:
+            print(f"Warning: state payload for {name} is not a JSON object")
+            return None, False
+    return None, True
 
 
 def write_state(name: str, payload: Dict[str, Any], table_path: Optional[str] = None) -> bool:
@@ -123,9 +127,11 @@ def load_watermark(table_path: Optional[str] = None) -> Tuple[Optional[datetime]
     Unlike a MAX(exported_at) scan over the metrics table, this has no lookback
     floor, so a watermark of any age is visible.
     """
-    payload = read_state(WATERMARK_KEY, table_path)
-    if payload is None:
+    payload, ok = read_state(WATERMARK_KEY, table_path)
+    if not ok:
         return None, False
+    if payload is None:
+        return None, True
     return parse_datetime(payload.get("exported_until")), True
 
 
@@ -151,8 +157,11 @@ def _refs_from_payload(payload: Optional[Dict[str, Any]]) -> List[RunRef]:
     return refs
 
 
-def load_open_runs(table_path: Optional[str] = None) -> List[RunRef]:
-    return _refs_from_payload(read_state(OPEN_RUNS_KEY, table_path))
+def load_open_runs(table_path: Optional[str] = None) -> Tuple[List[RunRef], bool]:
+    payload, ok = read_state(OPEN_RUNS_KEY, table_path)
+    if not ok:
+        return [], False
+    return _refs_from_payload(payload), True
 
 
 def save_open_runs(refs: List[RunRef], table_path: Optional[str] = None) -> bool:
@@ -163,8 +172,10 @@ def save_open_runs(refs: List[RunRef], table_path: Optional[str] = None) -> bool
     )
 
 
-def load_failed_runs(table_path: Optional[str] = None) -> Dict[RunRef, int]:
-    payload = read_state(FAILED_RUNS_KEY, table_path)
+def load_failed_runs(table_path: Optional[str] = None) -> Tuple[Dict[RunRef, int], bool]:
+    payload, ok = read_state(FAILED_RUNS_KEY, table_path)
+    if not ok:
+        return {}, False
     failed: Dict[RunRef, int] = {}
     for item in (payload or {}).get("runs") or []:
         if not isinstance(item, dict):
@@ -178,7 +189,7 @@ def load_failed_runs(table_path: Optional[str] = None) -> Dict[RunRef, int]:
         except (TypeError, ValueError):
             tries = 1
         failed[ref] = max(tries, failed.get(ref, 0))
-    return failed
+    return failed, True
 
 
 def save_failed_runs(failed: Dict[RunRef, int], table_path: Optional[str] = None) -> bool:

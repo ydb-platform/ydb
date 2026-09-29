@@ -647,7 +647,14 @@ def main(argv=None) -> int:
         since = completed_since(args.hours, last_export)
         exported = exported_run_ids(since, table_path=args.table_path)
         known_jobs = exported_job_ids(since, table_path=args.table_path)
-        failed = load_failed_runs()
+        failed, failed_ok = load_failed_runs()
+        open_runs, open_ok = load_open_runs()
+        if not failed_ok or not open_ok:
+            print(
+                "Error: export state is unreadable; refusing to overwrite open/failed run lists",
+                file=sys.stderr,
+            )
+            return 1
         print(
             f"Exporting {args.org}/{args.repo} workflows={workflows} "
             f"since {since.isoformat()} skip_jobs={len(known_jobs)} retry={len(failed)}"
@@ -658,7 +665,7 @@ def main(argv=None) -> int:
         rate_limited = False
         open_since = started_at - OPEN_RUN_LOOKBACK
         # Runs queued for retry are read again by id, alongside the open ones.
-        previous = load_open_runs() + [ref for ref in failed if ref not in still_open]
+        previous = open_runs + list(failed)
         try:
             for workflow in workflows:
                 try:

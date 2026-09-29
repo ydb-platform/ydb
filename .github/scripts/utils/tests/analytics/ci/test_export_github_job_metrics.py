@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "analytics"))
 
 import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from datetime import datetime, timedelta, timezone
 
@@ -128,6 +128,27 @@ class CompletedSinceTest(unittest.TestCase):
         ), patch.object(export_github_job_metrics, "save_watermark") as save:
             self.assertEqual(export_github_job_metrics.main([]), 1)
         save.assert_not_called()
+
+    def test_unreadable_open_runs_refuse_to_export(self):
+        with self._missing_state_patch(open_ok=False), patch.object(
+            export_github_job_metrics, "save_open_runs"
+        ) as save_open, patch.object(
+            export_github_job_metrics, "save_watermark"
+        ) as save_wm:
+            self.assertEqual(export_github_job_metrics.main([]), 1)
+        save_open.assert_not_called()
+        save_wm.assert_not_called()
+
+    def _missing_state_patch(self, *, open_ok=True, failed_ok=True):
+        return patch.multiple(
+            export_github_job_metrics,
+            workflows_to_export=lambda *a, **k: ["pr_check.yml"],
+            load_watermark=lambda *a, **k: (None, True),
+            exported_run_ids=lambda *a, **k: set(),
+            exported_job_ids=lambda *a, **k: set(),
+            load_failed_runs=lambda *a, **k: ({}, failed_ok),
+            load_open_runs=lambda *a, **k: ([], open_ok),
+        )
 
 
 class OpenRunsToSaveTest(unittest.TestCase):
@@ -347,8 +368,8 @@ class WatermarkDisciplineTest(unittest.TestCase):
             load_watermark=lambda *a, **k: (None, True),
             exported_run_ids=lambda *a, **k: set(),
             exported_job_ids=lambda *a, **k: set(),
-            load_failed_runs=lambda *a, **k: {},
-            load_open_runs=lambda *a, **k: [],
+            load_failed_runs=lambda *a, **k: ({}, True),
+            load_open_runs=lambda *a, **k: ([], True),
             iter_workflow_runs=lambda *a, **k: [],
             collect_rows=collect,
             upload_rows=lambda *a, **k: uploaded,
@@ -383,6 +404,64 @@ class WatermarkDisciplineTest(unittest.TestCase):
         ) as save:
             self.assertEqual(export_github_job_metrics.main([]), 1)
         save.assert_not_called()
+
+
+class ReadStateTest(unittest.TestCase):
+    def test_missing_credentials_are_a_failed_read(self):
+        with patch.object(state, "has_send_credentials", return_value=False):
+            payload, ok = state.read_state("export_watermark")
+        self.assertIsNone(payload)
+        self.assertFalse(ok)
+
+    def test_empty_result_is_absent_not_failed(self):
+        wrapper = MagicMock()
+        wrapper.check_credentials.return_value = True
+        wrapper.execute_scan_query.return_value = []
+        wrapper.__enter__.return_value = wrapper
+        wrapper.__exit__.return_value = False
+        with patch.object(state, "has_send_credentials", return_value=True), patch.object(
+            state, "_open_ydb_wrapper", return_value=wrapper
+        ):
+            payload, ok = state.read_state("export_watermark")
+        self.assertIsNone(payload)
+        self.assertTrue(ok)
+
+    def test_query_error_is_a_failed_read(self):
+        wrapper = MagicMock()
+        wrapper.check_credentials.return_value = True
+        wrapper.execute_scan_query.side_effect = RuntimeError("ydb down")
+        wrapper.__enter__.return_value = wrapper
+        wrapper.__exit__.return_value = False
+        with patch.object(state, "has_send_credentials", return_value=True), patch.object(
+            state, "_open_ydb_wrapper", return_value=wrapper
+        ):
+            payload, ok = state.read_state("export_watermark")
+        self.assertIsNone(payload)
+        self.assertFalse(ok)
+
+
+class LoadWatermarkTest(unittest.TestCase):
+    def test_absent_row_is_cold_start(self):
+        with patch.object(state, "read_state", return_value=(None, True)):
+            moment, ok = state.load_watermark()
+        self.assertIsNone(moment)
+        self.assertTrue(ok)
+
+    def test_read_failure_is_unreadable(self):
+        with patch.object(state, "read_state", return_value=(None, False)):
+            moment, ok = state.load_watermark()
+        self.assertIsNone(moment)
+        self.assertFalse(ok)
+
+    def test_payload_returns_exported_until(self):
+        with patch.object(
+            state,
+            "read_state",
+            return_value=({"exported_until": "2026-09-01T12:00:00Z"}, True),
+        ):
+            moment, ok = state.load_watermark()
+        self.assertTrue(ok)
+        self.assertEqual(moment, datetime(2026, 9, 1, 12, 0, tzinfo=timezone.utc))
 
 
 if __name__ == "__main__":

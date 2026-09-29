@@ -84,26 +84,6 @@ bool IsRboTraceLogEnabled() {
     return htmlTracePath.Defined() && !htmlTracePath->empty();
 }
 
-void CollectMemberEqualityPairs(const TExprNode::TPtr& node, TVector<std::pair<TString, TString>>& result) {
-    if (!node) {
-        return;
-    }
-
-    if (TCoCmpEqual::Match(node.Get())) {
-        const auto equal = TCoCmpEqual(node);
-        const auto left = equal.Left().Maybe<TCoMember>();
-        const auto right = equal.Right().Maybe<TCoMember>();
-        if (left && right) {
-            result.emplace_back(left.Cast().Name().StringValue(), right.Cast().Name().StringValue());
-            return;
-        }
-    }
-
-    for (const auto& child : node->ChildrenList()) {
-        CollectMemberEqualityPairs(child, result);
-    }
-}
-
 } // anonymous namespace
 
 IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -264,7 +244,8 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
     // Request only the statistic each filter predicate actually consumes during selectivity estimation: 
     // equality predicates probe the count-min sketch, while 
     // range/inequality predicates use the equi-width histogram.
-    TPredicateSelectivityComputer computer(nullptr, true);
+    TPredicateSelectivityComputer computer(nullptr, /*collectColumnsStatUsedMembers=*/true,
+        /*collectMemberEqualities=*/true);
     computer.Compute(lambda.Body());
 
     using TUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
@@ -285,26 +266,13 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
         }
     }
 
-    auto requestHistogram = [&](const TInfoUnit& column) {
-        const auto it = mapping.find(TInfoUnit(column.GetFullName()));
-        if (it == mapping.end() || it->second.TableName == "") {
-            return;
-        }
-        HistColumnsByTableName[it->second.TableName].insert(it->second.ColumnName);
-    };
-
-    TVector<std::pair<TString, TString>> memberEqualities;
-    CollectMemberEqualityPairs(lambda.Body().Ptr(), memberEqualities);
-
     THashMap<TString, std::pair<TVector<TInfoUnit>, TVector<TInfoUnit>>> keysByTablePair;
-    for (const auto& [lhs, rhs] : memberEqualities) {
-        const TInfoUnit lhsUnit(lhs);
-        const TInfoUnit rhsUnit(rhs);
-        requestHistogram(lhsUnit);
-        requestHistogram(rhsUnit);
+    for (const auto& [lhsMember, rhsMember] : computer.GetMemberEqualities()) {
+        const TInfoUnit lhsUnit(lhsMember.Name().StringValue());
+        const TInfoUnit rhsUnit(rhsMember.Name().StringValue());
 
-        const auto lhsIt = mapping.find(TInfoUnit(lhsUnit.GetFullName()));
-        const auto rhsIt = mapping.find(TInfoUnit(rhsUnit.GetFullName()));
+        const auto lhsIt = mapping.find(lhsUnit);
+        const auto rhsIt = mapping.find(rhsUnit);
         if (lhsIt == mapping.end() || rhsIt == mapping.end()) {
             continue;
         }
@@ -313,6 +281,9 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
         if (lhsTable.empty() || rhsTable.empty() || lhsTable == rhsTable) {
             continue;
         }
+
+        HistColumnsByTableName[lhsTable].insert(lhsIt->second.ColumnName);
+        HistColumnsByTableName[rhsTable].insert(rhsIt->second.ColumnName);
 
         auto& keys = keysByTablePair[TStringBuilder() << lhsTable << '\0' << rhsTable];
         keys.first.push_back(lhsUnit);
@@ -330,7 +301,7 @@ void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>&
 
     // For join cardinality correction, only the equi-width histogram of both join-key columns are needed.
     auto requestHistogram = [&](const TInfoUnit& key) {
-        const auto it = mapping.find(TInfoUnit(key.GetFullName()));
+        const auto it = mapping.find(key);
         if (it == mapping.end() || it->second.TableName == "") {
             return;
         }
@@ -362,7 +333,7 @@ void TKqpNewRBOTransformer::CollectJoinKeysTuple(const TVector<TInfoUnit>& joinK
     TString tableName;
     THashSet<TString> columns;
     for (const auto& key : joinKeys) {
-        const auto it = mapping.find(TInfoUnit(key.GetFullName()));
+        const auto it = mapping.find(key);
         if (it == mapping.end() || it->second.TableName == "") {
             return;
         }

@@ -19,6 +19,17 @@ const NYql::TRuntimeSettings::TConstPtr& TKqpRuntimeSettings::Get() const {
     return Settings_;
 }
 
+bool TKqpRuntimeSettings::HasRequiredSettings(const NYql::TRuntimeSettings& settings) const {
+    for (const auto& [module, moduleSettings] : Settings_->GetUdfSettings()) {
+        for (const auto& setting : moduleSettings) {
+            if (settings.GetUdfSetting(module, setting.first).empty()) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 void TKqpRuntimeSettings::ApplyTo(NYql::NProto::TRuntimeSettings& proto) const {
     for (const auto& [module, moduleSettings] : Settings_->GetUdfSettings()) {
         NYql::NProto::TUdfSettings* targetModule = nullptr;

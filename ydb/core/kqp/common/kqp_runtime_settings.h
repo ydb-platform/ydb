@@ -10,6 +10,7 @@ public:
     TKqpRuntimeSettings();
 
     const NYql::TRuntimeSettings::TConstPtr& Get() const;
+    bool HasRequiredSettings(const NYql::TRuntimeSettings& settings) const;
     void ApplyTo(NYql::NProto::TRuntimeSettings& proto) const;
 
 private:

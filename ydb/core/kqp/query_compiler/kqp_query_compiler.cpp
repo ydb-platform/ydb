@@ -1,6 +1,7 @@
 #include "kqp_query_compiler.h"
 
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp_runtime_settings.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
@@ -747,6 +748,9 @@ public:
         NKqpProto::TKqpPhyQuery& queryProto, TExprContext& ctx) final
     {
         TGuard<TScopedAlloc> allocGuard(Alloc);
+
+        YQL_ENSURE(TypesCtx.RuntimeSettings && KqpRuntimeSettings.HasRequiredSettings(*TypesCtx.RuntimeSettings),
+            "KQP runtime settings must be initialized before type annotation");
 
         auto querySettings = TKqpPhyQuerySettings::Parse(query);
         YQL_ENSURE(querySettings.Type);
@@ -3390,6 +3394,7 @@ private:
     TKqlCompileContext KqlCtx;
     TIntrusivePtr<NCommon::IMkqlCallableCompiler> KqlCompiler;
     TTypeAnnotationContext& TypesCtx;
+    TKqpRuntimeSettings KqpRuntimeSettings;
     NOpt::TKqpOptimizeContext& OptimizeCtx;
     TKikimrConfiguration::TPtr Config;
     TSet<TString> SecretNames;

@@ -21,7 +21,7 @@ It is worth noting once again that from the moment writes to the physical group 
 
 ## How to run
 
-To start decommissioning, run the BS\_CONTROLLER command, in which you need to specify the list of decommissioned groups, as well as the number of the Hive tablet that will manage the blob storages of the decommissioned groups. You can also specify a list of pools in which the blob storage will store its data. If this list is not specified, BS\_CONTROLLER automatically selects for data storage the same pools in which the decommissioned groups are located, and the number of data channels is made equal to the number of physical groups in these pools (but no more than 250).
+To start decommissioning, run the BS\_CONTROLLER command, in which you need to specify the list of groups to be decommissioned, as well as the number of the Hive tablet that will manage the blob storages of the decommissioned groups. You can also specify a list of pools in which the blob storage will store its data. If this list is not specified, BS\_CONTROLLER automatically selects for data storage the same pools in which the decommissioned groups are located, and the number of data channels is made equal to the number of physical groups in these pools (but no more than 250).
 
 ```bash
 dstool -e ... --direct group decommit --group-ids 2181038080 --database=/Root/db1 --wait

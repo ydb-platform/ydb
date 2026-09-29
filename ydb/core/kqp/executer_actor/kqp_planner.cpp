@@ -277,6 +277,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (Deadline) {
         TDuration timeout = Deadline - TAppData::TimeProvider->Now();
         request.MutableRuntimeSettings()->SetTimeoutMs(timeout.MilliSeconds());
+        request.MutableRuntimeSettings()->SetSourceDeadlineUs(Deadline.MicroSeconds());
     }
 
     for (ui64 taskId : requestData.TaskIds) {
@@ -635,6 +636,7 @@ std::unique_ptr<IEventHandle> TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, u
             .Database = Database,
             .Query = Query,
             .UseBatchPool = UserRequestContext->UseBatchPool,
+            .SourceDeadline = Deadline ? Deadline : TInstant::Max(),
         });
     } catch (...) {
         const TString message = TStringBuilder() << "Failed to create compute actor for task " << taskId

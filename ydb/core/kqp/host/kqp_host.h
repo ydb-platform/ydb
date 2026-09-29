@@ -48,6 +48,7 @@ public:
     };
 
     struct TPrepareSettings: public TExecSettings {
+        TInstant Deadline = TInstant::Max();
         TMaybe<bool> IsInternalCall;
         TMaybe<bool> ConcurrentResults;
         bool UsePessimisticLocks = false;

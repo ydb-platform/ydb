@@ -164,6 +164,9 @@ message TComputeRuntimeSettings {
     optional bool WithProgressStats = 9 [default = false];
     optional uint64 MinStatsSendIntervalMs = 10; // Min interval between stats messages
     optional uint64 MaxStatsSendIntervalMs = 11; // Max interval to sent stats in case of no activity
+    // Per-execution absolute deadline for source RPCs and memory admission.
+    // Does not arm the compute actor's timeout timer or enter a cached source plan.
+    optional uint64 SourceDeadlineUs = 12;
 }
 
 message TEvNewCheckpointCoordinator {

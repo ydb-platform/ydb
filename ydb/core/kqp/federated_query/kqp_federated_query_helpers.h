@@ -42,6 +42,9 @@ namespace NKikimr::NKqp {
     ///
     std::shared_ptr<NYdb::TDriver> MakeSharedYdbDriverWithStop(std::unique_ptr<NYdb::TDriver> driver);
 
+    // Separate from the topic driver: the read source requires a bounded gRPC response.
+    std::shared_ptr<NYdb::TDriver> MakeNativeYdbDriver();
+
     NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
 
     struct TScriptExecutionSettings {
@@ -55,6 +58,7 @@ namespace NKikimr::NKqp {
         // it outlives all other objects here that might hold
         // gRPC contexts, preventing deadlocks during graceful shutdown.
         std::shared_ptr<NYdb::TDriver> Driver;
+        std::shared_ptr<NYdb::TDriver> NativeYdbDriver;
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
@@ -122,6 +126,7 @@ namespace NKikimr::NKqp {
         NYql::TPqGatewayConfig PqGatewayConfig;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
+        std::shared_ptr<NYdb::TDriver> NativeYdbDriver;
         std::optional<TLocalTopicClientSettings> LocalTopicClientSettings;
         TScriptExecutionSettings ScriptExecutionSettings;
     };
@@ -162,6 +167,7 @@ namespace NKikimr::NKqp {
             , PqGatewayFactory(pqGatewayFactory)
             , ActorSystemPtr(actorSystemPtr)
             , Driver(driver)
+            , NativeYdbDriver(MakeNativeYdbDriver())
         {
         }
 
@@ -171,7 +177,7 @@ namespace NKikimr::NKqp {
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                Driver, HttpGateway, ConnectorClient, CredentialsFactory,
+                Driver, NativeYdbDriver, HttpGateway, ConnectorClient, CredentialsFactory,
                 DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
                 ComputationFactory, S3ReadActorFactoryConfig,
@@ -201,6 +207,7 @@ namespace NKikimr::NKqp {
         NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
+        std::shared_ptr<NYdb::TDriver> NativeYdbDriver;
         TScriptExecutionSettings ScriptExecutionSettings;
     };
 

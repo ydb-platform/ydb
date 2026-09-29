@@ -69,7 +69,7 @@ public:
         ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst,
         std::shared_ptr<NYql::TExprContext> splitCtx,
         NYql::TExprNode::TPtr splitExpr,
-        bool usePessimisticLocks)
+        bool usePessimisticLocks, TInstant deadline, std::shared_ptr<std::atomic<bool>> interestedInResult)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -86,6 +86,8 @@ public:
         , TableServiceConfig(tableServiceConfig)
         , QueryServiceConfig(queryServiceConfig)
         , CompilationTimeout(TDuration::MilliSeconds(tableServiceConfig.GetCompileTimeoutMs()))
+        , RequestDeadline(deadline)
+        , InterestedInResult(std::move(interestedInResult))
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UserRequestContext(userRequestContext)
@@ -147,6 +149,13 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        CompilationDeadline = ctx.Now() + CompilationTimeout;
+        if (AppData(ctx)->FeatureFlags.GetEnableNativeYdbProvider()) {
+            CompilationDeadline = Min(CompilationDeadline, RequestDeadline);
+        }
+        if (InterestedInResult && AppData(ctx)->FeatureFlags.GetEnableNativeYdbProvider() && CompileAction != ECompileActorAction::PARSE) {
+            Schedule(TDuration::MilliSeconds(50), new TEvents::TEvWakeup(1));
+        }
         switch(CompileAction) {
             case ECompileActorAction::PARSE:
                 StartParsing(ctx);
@@ -173,7 +182,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvContinueProcess, HandleCompile);
-                cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+                hFunc(TEvents::TEvWakeup, HandleWakeup);
             default:
                 UnexpectedEvent("CompileState", ev->GetTypeRewrite());
             }
@@ -186,7 +195,7 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKqp::TEvContinueProcess, HandleSplit);
-                cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+                hFunc(TEvents::TEvWakeup, HandleWakeup);
             default:
                 UnexpectedEvent("SplitState", ev->GetTypeRewrite());
             }
@@ -235,7 +244,7 @@ private:
             NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
-        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
+        TimeoutTimerActorId = CreateLongTimer(ctx, RemainingCompilationTime(ctx), new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
 
         const auto prepareSettings = PrepareCompilationSettings(ctx);
@@ -289,7 +298,7 @@ private:
             {"queryText", GetQueryTextForLog(QueryId.Text)},
             {"startTime", StartTime});
 
-        TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
+        TimeoutTimerActorId = CreateLongTimer(ctx, RemainingCompilationTime(ctx), new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
 
         TYqlLogScope logScope(ctx, NKikimrServices::KQP_YQL, YqlName, UserRequestContext->TraceId);
@@ -386,6 +395,7 @@ private:
             false, false, std::move(TempTablesState), nullptr, SplitCtx.get(), UserRequestContext, UsePessimisticLocks);
 
         IKqpHost::TPrepareSettings prepareSettings;
+        prepareSettings.Deadline = CompilationDeadline;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
         prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
@@ -663,6 +673,23 @@ private:
         Reply();
     }
 
+    TDuration RemainingCompilationTime(const TActorContext& ctx) const {
+        const auto now = ctx.Now();
+        return CompilationDeadline > now ? CompilationDeadline - now : TDuration::Zero();
+    }
+
+    void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == 1) {
+            if (!InterestedInResult->load()) {
+                // Destroying the host rewinds native metadata and cancels its RPCs.
+                return ReplyError(Ydb::StatusIds::CANCELLED, {NYql::TIssue("Query compilation cancelled.")});
+            }
+            Schedule(TDuration::MilliSeconds(50), new TEvents::TEvWakeup(1));
+            return;
+        }
+        HandleTimeout();
+    }
+
     void HandleTimeout() {
         YDB_LOG_NOTICE("Query compilation timed out",
             {"self", SelfId()},
@@ -768,6 +795,9 @@ private:
     TTableServiceConfig TableServiceConfig;
     TQueryServiceConfig QueryServiceConfig;
     TDuration CompilationTimeout;
+    const TInstant RequestDeadline;
+    const std::shared_ptr<std::atomic<bool>> InterestedInResult;
+    TInstant CompilationDeadline;
     TInstant StartTime;
     TDuration CompileCpuTime;
     TInstant RecompileStartTime;
@@ -807,7 +837,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     NWilson::TTraceId traceId, TKqpTempTablesState::TConstPtr tempTablesState,
     ECompileActorAction compileAction, TMaybe<TQueryAst> queryAst, bool collectFullDiagnostics,
     bool perStatementResult, std::shared_ptr<NYql::TExprContext> splitCtx, NYql::TExprNode::TPtr splitExpr,
-    bool usePessimisticLocks)
+    bool usePessimisticLocks, TInstant deadline, std::shared_ptr<std::atomic<bool>> interestedInResult)
 {
     return new TKqpCompileActor(owner, kqpSettings, tableServiceConfig, queryServiceConfig,
                                 moduleResolverState, counters, gUCSettings, applicationName,
@@ -815,7 +845,7 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
                                 federatedQuerySetup, userRequestContext,
                                 std::move(traceId), std::move(tempTablesState), collectFullDiagnostics,
                                 perStatementResult, compileAction, std::move(queryAst),
-                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks);
+                                std::move(splitCtx), std::move(splitExpr), usePessimisticLocks, deadline, std::move(interestedInResult));
 }
 
 } // namespace NKikimr::NKqp

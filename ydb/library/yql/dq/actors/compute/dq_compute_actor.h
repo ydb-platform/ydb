@@ -244,6 +244,7 @@ inline TCollectStatsLevel StatsModeToCollectStatsLevel(NDqProto::EDqStatsMode st
 
 struct TComputeRuntimeSettings {
     TMaybe<TDuration> Timeout;
+    TInstant Deadline = TInstant::Max();
     NDqProto::EDqStatsMode StatsMode = NDqProto::DQ_STATS_MODE_NONE;
     TMaybe<TReportStatsSettings> ReportStatsSettings;
 

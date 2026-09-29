@@ -983,7 +983,8 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), request.CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks,
+            request.CompileSettings.Deadline ? request.CompileSettings.Deadline : TInstant::Max(), request.IntrestedInResult);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

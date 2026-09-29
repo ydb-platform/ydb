@@ -310,6 +310,8 @@ public:
         NWilson::TTraceId TraceId;
         NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
         IDqSchedulableWorkFactoryPtr SchedulableWorkFactory;
+        // Per-execution deadline; never serialized into a cached source plan.
+        TInstant Deadline = TInstant::Max();
     };
 
     struct TLookupSourceArguments {

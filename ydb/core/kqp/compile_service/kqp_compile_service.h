@@ -276,7 +276,9 @@ IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstP
     bool perStatementResult = false,
     std::shared_ptr<NYql::TExprContext> ctx = nullptr,
     NYql::TExprNode::TPtr expr = nullptr,
-    bool usePessimisticLocks = false);
+    bool usePessimisticLocks = false,
+    TInstant deadline = TInstant::Max(),
+    std::shared_ptr<std::atomic<bool>> interestedInResult = nullptr);
 
 IActor* CreateKqpCompileRequestActor(const TActorId& owner, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TMaybe<TString>& uid,
     TMaybe<TKqpQueryId>&& query, bool keepInCache, const TInstant& deadline, TKqpDbCountersPtr dbCounters,

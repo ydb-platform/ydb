@@ -135,7 +135,9 @@ public:
             args.Task->SetEnableSpilling(runtimeSettings.UseSpilling);
         }
 
+        runtimeSettings.Deadline = args.SourceDeadline;
         if (args.Deadline) {
+            runtimeSettings.Deadline = Min(runtimeSettings.Deadline, args.Deadline);
             runtimeSettings.Timeout = args.Deadline - TAppData::TimeProvider->Now();
         }
 

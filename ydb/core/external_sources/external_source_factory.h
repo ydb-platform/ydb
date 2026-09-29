@@ -22,6 +22,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          bool enableInfer = false,
                                                          bool allowLocalFiles = false,
                                                          bool allExternalDataSourcesAreAvailable = true,
-                                                         const std::set<NYql::EDatabaseType>& availableExternalDataSources = {});
+                                                         const std::set<NYql::EDatabaseType>& availableExternalDataSources = {},
+                                                         bool enableNativeYdbProvider = false);
 
 }

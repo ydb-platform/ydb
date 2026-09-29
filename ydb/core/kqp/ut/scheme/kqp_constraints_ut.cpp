@@ -71,6 +71,37 @@ void TestCompileTimeDefaultsPlan(const std::string& operation, bool enabled) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpConstraints) {
+    Y_UNIT_TEST(DropNotNullWithSecondaryIndexes) {
+        TKikimrRunner kikimr(TKikimrSettings().SetWithSampleTables(false));
+        auto client = kikimr.GetQueryClient();
+        auto execute = [&](const TString& query, bool ddl = false) {
+            auto result = client.ExecuteQuery(query,
+                ddl ? TTxControl::NoTx() : TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            return result;
+        };
+
+        execute(R"(
+            CREATE TABLE TestTable (
+                Key Int32 NOT NULL,
+                Value Int32 NOT NULL,
+                Other Int32 NOT NULL,
+                PRIMARY KEY (Key),
+                INDEX ByValue GLOBAL ON (Value) COVER (Other),
+                INDEX ByOther GLOBAL ON (Other) COVER (Value),
+                INDEX ByOtherKey GLOBAL ON (Other, Key)
+            );
+        )", true);
+        execute("UPSERT INTO TestTable (Key, Value, Other) VALUES (1, 10, 20);");
+        execute("ALTER TABLE TestTable ALTER COLUMN Value DROP NOT NULL;", true);
+        execute("UPSERT INTO TestTable (Key, Value, Other) VALUES (1, NULL, 20), (2, NULL, 30);");
+
+        for (const TString& source : {TString("TestTable"), TString("TestTable VIEW ByValue"), TString("TestTable VIEW ByOther")}) {
+            auto result = execute("SELECT Key, Value, Other FROM " + source + " ORDER BY Key;");
+            CompareYson("[[1;#;20];[2;#;30]]", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(SerialTypeNegative1) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetWithSampleTables(false));

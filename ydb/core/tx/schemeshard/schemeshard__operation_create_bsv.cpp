@@ -82,16 +82,14 @@ void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volum
         part->PartitionId = i;
         part->AlterVersion = 1;
         volume->Shards[shardIdx] = std::move(part);
+
+        if (volume->VolumeConfig.GetTabletVersion() == 3 && i == 0) {
+            // there is no volume tablet, the first partition plays its role
+            volume->VolumeShardIdx = shardIdx;
+        }
     }
 
-    if (volume->VolumeConfig.GetTabletVersion() == 3) {
-        const auto shardIdx = context.SS->RegisterShardInfo(
-            TShardInfo::BlockStoreVolumeDirectInfo(txId, pathId)
-                .WithBindedChannels(volumeChannels));
-        context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_DIRECT_SHARD_COUNT].Add(1);
-        txState.Shards.emplace_back(shardIdx, ETabletType::BlockStoreVolumeDirect, TTxState::CreateParts);
-        volume->VolumeShardIdx = shardIdx;
-    } else {
+    if (volume->VolumeConfig.GetTabletVersion() != 3) {
         const auto shardIdx = context.SS->RegisterShardInfo(
             TShardInfo::BlockStoreVolumeInfo(txId, pathId)
                 .WithBindedChannels(volumeChannels));
@@ -213,7 +211,8 @@ public:
         const auto defaultPartitionCount =
             TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(
                 operation.GetVolumeConfig());
-        const ui64 shardsToCreate = defaultPartitionCount + 1;
+        const bool hasVolumeTablet = operation.GetVolumeConfig().GetTabletVersion() != 3;
+        const ui64 shardsToCreate = defaultPartitionCount + (hasVolumeTablet ? 1 : 0);
 
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
             {"path", TStringBuilder() << parentPathStr << "/" << name},
@@ -304,6 +303,12 @@ public:
                 dstPath.GetPathIdForDomain(),
                 binding);
         };
+
+        if (!hasVolumeTablet && !defaultPartitionCount) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter,
+                            "Volume with tablet version 3 requires a default partition");
+            return result;
+        }
 
         TChannelsBindings partitionChannelsBinding;
         if (defaultPartitionCount) {

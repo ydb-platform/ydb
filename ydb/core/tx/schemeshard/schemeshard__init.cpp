@@ -3755,6 +3755,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (part->AlterVersion <= volume->AlterVersion)
                     ++volume->DefaultPartitionCount; // visible partition
 
+                const auto* shard = Self->ShardInfos.FindPtr(shardIdx);
+                if (shard
+                    && shard->TabletType == ETabletType::BlockStorePartitionDirect
+                    && part->PartitionId == 0
+                    && !volume->VolumeShardIdx)
+                {
+                    // there is no volume tablet, the first partition plays its role
+                    volume->VolumeTabletId = shard->TabletID;
+                    volume->VolumeShardIdx = shardIdx;
+                }
+
                 if (!rowset.Next())
                     return false;
             }

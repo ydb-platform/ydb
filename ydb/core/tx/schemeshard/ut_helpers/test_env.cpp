@@ -123,7 +123,22 @@ public:
     }
 
     STFUNC(StateWork) {
-        HandleDefaultEvents(ev, SelfId());
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvBlockStore::TEvUpdateVolumeConfig, Handle);
+        default:
+            HandleDefaultEvents(ev, SelfId());
+        }
+    }
+
+private:
+    void Handle(TEvBlockStore::TEvUpdateVolumeConfig::TPtr& ev, const TActorContext& ctx) {
+        const auto& request = ev->Get()->Record;
+        TAutoPtr<TEvBlockStore::TEvUpdateVolumeConfigResponse> response =
+            new TEvBlockStore::TEvUpdateVolumeConfigResponse();
+        response->Record.SetTxId(request.GetTxId());
+        response->Record.SetOrigin(TabletID());
+        response->Record.SetStatus(NKikimrBlockStore::OK);
+        ctx.Send(ev->Sender, response.Release());
     }
 };
 

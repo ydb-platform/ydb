@@ -76,15 +76,25 @@ bool TConfigureParts::ProgressState(TOperationContext& context) {
         volumeConfig = &volume->AlterData->VolumeConfig;
     }
 
+    const TShardIdx volumeShardIdx = volume->AlterData
+        ? volume->AlterData->VolumeShardIdx
+        : volume->VolumeShardIdx;
+
     for (auto shard : txState->Shards) {
         if (shard.TabletType == ETabletType::BlockStorePartition ||
-            shard.TabletType == ETabletType::BlockStorePartition2 ||
-            shard.TabletType == ETabletType::BlockStorePartitionDirect) {
+            shard.TabletType == ETabletType::BlockStorePartition2) {
+            continue;
+        }
+
+        // BlockStorePartitionDirect gets the config when it plays the volume role
+        if (shard.TabletType == ETabletType::BlockStorePartitionDirect
+            && shard.Idx != volumeShardIdx) {
             continue;
         }
 
         Y_ABORT_UNLESS(shard.TabletType == ETabletType::BlockStoreVolume
-            || shard.TabletType == ETabletType::BlockStoreVolumeDirect);
+            || shard.TabletType == ETabletType::BlockStoreVolumeDirect
+            || shard.TabletType == ETabletType::BlockStorePartitionDirect);
         TShardIdx shardIdx = shard.Idx;
         TTabletId tabletId = context.SS->ShardInfos[shardIdx].TabletID;
 

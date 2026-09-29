@@ -241,7 +241,9 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
 
         TVector<TShardIdx> shards;
-        shards.push_back(volume->VolumeShardIdx);
+        if (!volume->Shards.contains(volume->VolumeShardIdx)) {
+            shards.push_back(volume->VolumeShardIdx);
+        }
 
         for (const auto& kv : volume->Shards) {
             shards.push_back(kv.first);

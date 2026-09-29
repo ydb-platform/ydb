@@ -5,6 +5,33 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
+namespace {
+
+auto& InitVolumeDirectConfig(
+    const TString& name,
+    NKikimrSchemeOp::TBlockStoreVolumeDescription& vdescr)
+{
+    vdescr.SetName(name);
+    auto& vc = *vdescr.MutableVolumeConfig();
+    vc.SetTabletVersion(3);
+    vc.SetBlockSize(4096);
+    vc.AddPartitions()->SetBlockCount(16);
+    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+    vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+    return vc;
+}
+
+NKikimrSchemeOp::TBlockStoreVolumeDescription DescribeVolume(
+    TTestActorRuntime& runtime,
+    const TString& path)
+{
+    return DescribePath(runtime, path)
+        .GetPathDescription()
+        .GetBlockStoreVolumeDescription();
+}
+
+}   // namespace
+
 Y_UNIT_TEST_SUITE(TBSV) {
     Y_UNIT_TEST(CleanupDroppedVolumesOnRestart) {
         TTestBasicRuntime runtime;
@@ -226,7 +253,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
         vdescr.SetName("BSVolumeDirect");
         auto& vc = *vdescr.MutableVolumeConfig();
 
-        // Set TabletVersion = 3 for BlockStoreVolumeDirect
+        // Set TabletVersion = 3 for NBS 2.0 direct volume
         vc.SetTabletVersion(3);
         vc.SetBlockSize(4096);
         vc.AddPartitions()->SetBlockCount(16);
@@ -235,7 +262,7 @@ Y_UNIT_TEST_SUITE(TBSV) {
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
 
-        // Add volume channel profiles for BlockStoreVolumeDirect
+        // Volume channel profiles are accepted and ignored
         vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
         vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
         vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
@@ -246,28 +273,132 @@ Y_UNIT_TEST_SUITE(TBSV) {
         // Wait for the operation to complete
         env.TestWaitNotification(runtime, txId);
 
-        // Verify that the schemeshard created shards for the volume
-        // With TabletVersion=3 and 1 partition, we should have 2 shards:
-        // - 1 BlockStorePartitionDirect shard
-        // - 1 BlockStoreVolumeDirect shard
+        // With TabletVersion=3 there is no volume tablet:
+        // the only shard is BlockStorePartitionDirect
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect"),
                            {NLs::PathExist, NLs::Finished});
 
-        // Also verify the partition exists and shard count
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect", true, true, true),
-                           {NLs::PathExist, NLs::ShardsInsideDomain(2)});
+                           {NLs::PathExist, NLs::ShardsInsideDomain(1)});
 
-        // Verify that the actual tablet types are BlockStoreVolumeDirect and BlockStorePartitionDirect
         ui32 volumeDirectCount = 0;
         ui32 partitionDirectCount = 0;
+        ui64 partitionTabletId = 0;
         for (const auto& kv : env.GetHiveState()->Tablets) {
             if (kv.second.Type == TTabletTypes::BlockStoreVolumeDirect) {
                 ++volumeDirectCount;
             } else if (kv.second.Type == TTabletTypes::BlockStorePartitionDirect) {
                 ++partitionDirectCount;
+                partitionTabletId = kv.second.TabletId;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(volumeDirectCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(volumeDirectCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(partitionDirectCount, 1);
+
+        const auto volume = DescribeVolume(runtime, "/MyRoot/BSVolumeDirect");
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetVolumeTabletId(), partitionTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(volume.PartitionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetPartitions(0).GetTabletId(), partitionTabletId);
+    }
+
+    Y_UNIT_TEST(AlterBlockStoreVolumeDirect) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        auto& vc = InitVolumeDirectConfig("BSVolumeDirect", vdescr);
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        const auto volumeTabletId =
+            DescribeVolume(runtime, "/MyRoot/BSVolumeDirect").GetVolumeTabletId();
+        UNIT_ASSERT_VALUES_UNEQUAL(volumeTabletId, 0);
+
+        vc.Clear();
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(32);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect"),
+                           {NLs::Finished, NLs::ShardsInsideDomain(1)});
+
+        const auto volume = DescribeVolume(runtime, "/MyRoot/BSVolumeDirect");
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetVolumeTabletId(), volumeTabletId);
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetVolumeConfig().GetVersion(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetVolumeConfig().PartitionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetVolumeConfig().GetPartitions(0).GetBlockCount(), 32);
+        UNIT_ASSERT_VALUES_EQUAL(volume.PartitionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(volume.GetPartitions(0).GetTabletId(), volumeTabletId);
+    }
+
+    Y_UNIT_TEST(DropBlockStoreVolumeDirect) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        InitVolumeDirectConfig("BSVolumeDirect", vdescr);
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect"),
+                           {NLs::Finished, NLs::ShardsInsideDomain(1)});
+
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolumeDirect");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolumeDirect"),
+                           {NLs::PathNotExist});
+
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::Finished, NLs::ShardsInsideDomain(0)});
+    }
+
+    Y_UNIT_TEST(RebootKeepsVolumeTabletIdOfBlockStoreVolumeDirect) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
+        auto& vc = InitVolumeDirectConfig("BSVolumeDirect", vdescr);
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        const auto volumeTabletId =
+            DescribeVolume(runtime, "/MyRoot/BSVolumeDirect").GetVolumeTabletId();
+        UNIT_ASSERT_VALUES_UNEQUAL(volumeTabletId, 0);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DescribeVolume(runtime, "/MyRoot/BSVolumeDirect").GetVolumeTabletId(),
+            volumeTabletId);
+
+        // the restored volume shard is usable by alter and drop
+        vc.Clear();
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(32);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DescribeVolume(runtime, "/MyRoot/BSVolumeDirect").GetVolumeTabletId(),
+            volumeTabletId);
+
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolumeDirect");
+        env.TestWaitNotification(runtime, txId);
+
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::Finished, NLs::ShardsInsideDomain(0)});
     }
 }

@@ -193,6 +193,11 @@ public:
             volume->Shards[shardIdx] = std::move(part);
         }
 
+        if (volume->Shards.contains(volume->VolumeShardIdx)) {
+            // the partition plays the volume role and is already in txState.Shards
+            return shardsToCreate > 0;
+        }
+
         // update the volume shard if needed
         auto volumeOp = TTxState::ConfigureParts;
         auto shardIdx = volume->VolumeShardIdx;

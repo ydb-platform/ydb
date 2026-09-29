@@ -112,15 +112,16 @@ void SubmitPhysicalExprTrace(TRBOContext& rboCtx, const std::string& title, cons
 
 } // anonymous namespace
 
-TPhysicalQueryBuilder::TPhysicalQueryBuilder(TVector<TIntrusivePtr<TOpRoot>> roots, 
+TPhysicalQueryBuilder::TPhysicalQueryBuilder(const TVector<TIntrusivePtr<TOpRoot>>& roots,
     TVector<TStageGraph>&& graphs, TVector<THashMap<ui32, TExprNode::TPtr>>&& stages, 
     TVector<THashMap<ui32, TVector<TExprNode::TPtr>>>&& stageArgs,
-    TVector<THashMap<ui32, TPositionHandle>>&& stagePos, TRBOContext& rboCtx)
+    TVector<THashMap<ui32, TPositionHandle>>&& stagePos, TVector<TPhysicalNames>&& names, TRBOContext& rboCtx)
     : Roots(roots)
     , Graphs(std::move(graphs))
     , Stages(std::move(stages))
     , StageArgs(std::move(stageArgs))
     , StagePos(std::move(stagePos))
+    , Names(std::move(names))
     , RBOCtx(rboCtx)
 {
     Materialize.resize(roots.size());
@@ -211,7 +212,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
             const auto connections = graph.GetConnections(inputStageId, id);
             for (const auto& connection : connections) {
                 YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << connection->Type;
-                auto dqConnection = connection->BuildConnection(inputStage, StagePos[rootIdx].at(inputStageId), ctx);
+                auto dqConnection = connection->BuildConnection(inputStage, StagePos[rootIdx].at(inputStageId), ctx, Names[rootIdx]);
                 YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << connection->Type;
                 inputConnections.push_back(dqConnection);
             }
@@ -293,7 +294,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph(int root
     Y_ENSURE(!stageIds.empty());
     const auto maybeFinalStage = finalizedStages.at(stageIds.back());
     const auto finalStage = GetFinalStage(maybeFinalStage);
-    const bool needFinalNarrowing = NeedFinalNarrowing(*Roots[rootIdx]);
+    const bool needFinalNarrowing = NeedFinalNarrowing(rootIdx);
     const auto finalResultStage = needFinalNarrowing ? BuildFinalNarrowStage(rootIdx, finalStage) : finalStage;
     if (finalStage.Get() != maybeFinalStage.Get()) {
         phyStages.push_back(finalResultStage);
@@ -359,14 +360,15 @@ bool TPhysicalQueryBuilder::IsSingleTaskConnection(const TExprBase& input) const
     return input.Maybe<TDqCnUnionAll>() || input.Maybe<TDqCnMerge>();
 }
 
-bool TPhysicalQueryBuilder::NeedFinalNarrowing(TOpRoot& root) {
-    const auto outputIUs = root.GetInput()->GetOutputIUs();
-    if (outputIUs.size() != root.ColumnOrder.size()) {
+bool TPhysicalQueryBuilder::NeedFinalNarrowing(int rootIdx) {
+    auto& root = *Roots[rootIdx];
+    const auto& outputIUs = root.GetInput()->GetOutputIUs();
+    if (outputIUs.Size() != root.GetColumns().Items().size()) {
         return true;
     }
 
-    for (ui32 i = 0; i < root.ColumnOrder.size(); ++i) {
-        if (outputIUs[i] != TInfoUnit(root.ColumnOrder[i])) {
+    for (const auto& [id, label] : root.GetColumns().Items()) {
+        if (!outputIUs.Contains(id) || Names[rootIdx].Get(id) != label) {
             return true;
         }
     }
@@ -423,14 +425,13 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(int rootIdx, const 
     auto& ctx = RBOCtx.ExprCtx;
     const auto dqStage = TDqPhyStage(stage);
 
-    TVector<TInfoUnit> finalColumns;
-    finalColumns.reserve(Roots[rootIdx]->ColumnOrder.size());
-    for (const auto& column : Roots[rootIdx]->ColumnOrder) {
-        finalColumns.emplace_back(column);
+    TVector<std::pair<TString, TString>> finalColumns;
+    for (const auto& [id, label] : Roots[rootIdx]->GetColumns().Items()) {
+        finalColumns.emplace_back(Names[rootIdx].Get(id), label);
     }
 
     const auto narrowBody =
-        NPhysicalConvertionUtils::ExtractMembers(dqStage.Program().Body().Ptr(), ctx, std::move(finalColumns));
+        NPhysicalConvertionUtils::BuildRenameMap(dqStage.Program().Body().Ptr(), finalColumns, ctx, /*ordered=*/true);
 
     // clang-format off
     return Build<TDqPhyStage>(ctx, stage->Pos())
@@ -556,8 +557,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
     for (size_t i=0; i<Roots.size(); i++) {
         TVector<TCoAtom> columnAtomList;
 
-        for (const auto& column : Roots[i]->ColumnOrder) {
-            columnAtomList.push_back(Build<TCoAtom>(ctx, Roots[i]->Pos).Value(column).Done());
+        for (const auto& [id, label] : Roots[i]->GetColumns().Items()) {
+            columnAtomList.push_back(Build<TCoAtom>(ctx, Roots[i]->Pos).Value(label).Done());
         }
         columnOrder = Build<TCoAtomList>(ctx, Roots[i]->Pos).Add(columnAtomList).Done().Ptr();
 
@@ -661,8 +662,8 @@ TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery(TVector<TVector<TExprN
 
     TVector<TCoAtom> queryColumnAtomList;
 
-    for (const auto& column : Roots[Roots.size()-1]->QueryColumns) {
-        queryColumnAtomList.push_back(Build<TCoAtom>(ctx, Roots[Roots.size()-1]->Pos).Value(column).Done());
+    for (const auto& name : Roots.back()->GetQueryColumns()) {
+        queryColumnAtomList.push_back(Build<TCoAtom>(ctx, Roots.back()->Pos).Value(name).Done());
     }
     auto queryColumns = Build<TCoAtomList>(ctx, Roots[Roots.size()-1]->Pos).Add(queryColumnAtomList).Done().Ptr();
 

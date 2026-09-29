@@ -6225,10 +6225,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         }
     }
 
-    Y_UNIT_TEST_F(StreamingQueryPlaningErrorRetry, TStreamingTestFixture) {
+    Y_UNIT_TEST_TWIN_F(StreamingQueryPlanningFailure, DisableCheckpoints, TStreamingTestFixture) {
         auto& appConfig = SetupAppConfig();
         appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetComputeActorsCount(500);
         appConfig.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMethod("zstd_6");
+        appConfig.MutableQueryServiceConfig()->SetQueryArtifactsCompressionMinSize(0);
 
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
@@ -6246,6 +6247,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
                 PRAGMA ydb.MaxTasksPerStage = "1000";
+                PRAGMA ydb.DisableCheckpoints = "{disable_checkpoints}";
                 PRAGMA ydb.OverridePlanner = @@ [
                     {{ "tx": 0, "stage": 0, "tasks": 1000 }}
                 ] @@;
@@ -6257,8 +6259,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "query_name"_a = queryName,
             "pq_source"_a = pqSourceName,
             "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            "output_topic"_a = outputTopicName,
+            "disable_checkpoints"_a = DisableCheckpoints ? "TRUE" : "FALSE"
+        ), DisableCheckpoints ? EStatus::SUCCESS : EStatus::PRECONDITION_FAILED,
+            DisableCheckpoints ? "" : "Not enough resources to execute query");
+
+        if (!DisableCheckpoints) {
+            const auto& result = ExecQuery("SELECT Status, RetryCount, SuspendedUntil FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 3, 1, [&](TResultSetParser& resultSet) {
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("RetryCount").GetOptionalUint64(), 0);
+                UNIT_ASSERT(!resultSet.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+            });
+            return;
+        }
 
         WaitFor(TDuration::Seconds(60), "wait streaming query issues", [&](TString& error) {
             const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");

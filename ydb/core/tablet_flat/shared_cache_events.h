@@ -19,6 +19,7 @@ namespace NKikimr::NSharedCache {
         DoGCScheduled = 1,
         DoGCManual = 2,
         DoLimitDecrease = 3,
+        ContinueBTreeWalk = 4,
     };
 
     enum EEv {

@@ -1803,6 +1803,78 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
     }
 
+    Y_UNIT_TEST(InMemory_LastOwnerRemovalCancelsQueuedWalk) {
+        for (bool unregister : { false, true }) {
+            auto config = TSharedPageCacheMock::DefaultConfig();
+            config.SetAsyncQueueInFlyLimit(0);
+            TSharedPageCacheMock sharedCache(config);
+            sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 1u);
+
+            // Keep the walk root queued with no fetch in flight for its collection.
+            sharedCache.Request(sharedCache.Sender2, sharedCache.Collection2, { _P(0) }, EPriority::Bkgr);
+            sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection2, { _P(0) } } });
+
+            TEvAttach::TBtreeSeed seed;
+            seed.IndexCollectionId = sharedCache.Collection1->Label();
+            seed.DataCollectionId = sharedCache.Collection1->Label();
+            seed.Root = _P(0, EPage::BTreeIndexV2);
+            seed.LevelCount = 1;
+            seed.Sticky = true;
+            sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { seed });
+            sharedCache.CheckFetches({});
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+
+            // Remove the owner directly: cancellation expires the collection inside UpdateSeeds.
+            if (unregister) {
+                sharedCache.Unregister(sharedCache.Sender1);
+            } else {
+                sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 1);
+
+            sharedCache.Provide(sharedCache.Collection2, { _P(0) }, ASYNC_QUEUE_COOKIE);
+            sharedCache.CheckFetches({});
+        }
+    }
+
+    Y_UNIT_TEST(InMemory_IndexWalkWaitsForCacheCapacity) {
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        TSharedPageCacheMock sharedCache(config);
+        auto collection = MakeIntrusive<TPageCollectionMock>(1ul, 5u);
+        collection->PageTypes = { EPage::Undef, EPage::Undef, EPage::Undef, EPage::Undef, EPage::Skip };
+        sharedCache.Collection1 = collection;
+
+        // Fill the cache without exposing the V2 index root through metadata preload.
+        sharedCache.Attach(sharedCache.Sender1, collection, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({ TFetch{ 40, sharedCache.Collection1, { _P(0), _P(1), _P(2), _P(3) } } });
+        sharedCache.Provide(collection, { _P(0), _P(1), _P(2), _P(3) }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({ TFetch{ 0, sharedCache.Collection1, { _P(0), _P(1), _P(2), _P(3) } } });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveBytes->Val(), DefaultMemoryLimit);
+
+        TEvAttach::TBtreeSeed seed;
+        seed.IndexCollectionId = collection->Label();
+        seed.DataCollectionId = collection->Label();
+        seed.Root = _P(4, EPage::BTreeIndexV2);
+        seed.LevelCount = 1;
+        seed.QueueLeaves = false;
+        sharedCache.Attach(sharedCache.Sender1, collection, ECacheMode::TryKeepInMemory, { seed });
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 0);
+
+        sharedCache.SetLimit(5 * PAGE_TOTAL_SIZE);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetMemoryLimit(5 * PAGE_TOTAL_SIZE);
+        sharedCache.UpdateConfig(appConfig);
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection1, { seed.Root } } });
+        sharedCache.Provide(collection, { seed.Root }, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({ TFetch{ 0, sharedCache.Collection1, { _P(4) } } });
+        sharedCache.CheckFetches({});
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->EvictedPages->Val(), 0);
+    }
+
     Y_UNIT_TEST(InMemory_CancelledPreloadDropsUnsentIndexPage) {
         auto config = TSharedPageCacheMock::DefaultConfig();
         config.SetInMemoryInFlyLimit(PAGE_TOTAL_SIZE - 1);

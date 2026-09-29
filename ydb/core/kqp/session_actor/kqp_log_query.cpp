@@ -228,7 +228,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
         {"poolId", poolId},
         {"sessionId", sessionId},
         {"userSID", userSID},
-        {"requestissuesStr", requestText},
+        {"request", requestText},
         {"issues", issuesStr},
         {"isStreamingQuery", fields.IsStreamingQuery},
         {"durationUs", fields.DurationUs},
@@ -277,7 +277,7 @@ void WriteJsonChunks(NActors::NLog::EPriority prio,
             {"compileTimeUs", fields.CompileTimeUs});
     }
 
-    YDB_LOG((prio), "KQP Request processed", message);
+    YDB_LOG((prio), "KQP request processed", message);
 }
 
 TString GetRequestId(const TKqpQueryState& state) {

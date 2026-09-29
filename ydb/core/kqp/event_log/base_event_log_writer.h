@@ -13,7 +13,7 @@ namespace NKikimr::NKqp::NSchematizedLog {
 
 class TBaseEventLogWriter : public NActors::NStructuredLog::ILogSink {
 public:
-    using TLogMessageFilter = std::function<bool(NActors::NStructuredLog::TLogMessage)>;
+    using TLogMessageFilter = std::function<bool(const NActors::NStructuredLog::TLogMessage&)>;
 
     TBaseEventLogWriter(TLogMessageFilter filter, TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
 
@@ -25,7 +25,10 @@ public:
     void Flush() override;
 
 protected:
-    virtual void CreateOrUpdateStorage() = 0;
+    bool WriteImpl(const NActors::NStructuredLog::TLogMessage&);
+
+    using TAfterFunc = std::function<void()>;
+    virtual void CreateOrUpdateStorage(TAfterFunc afterFunc = {}) = 0;
     virtual void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) = 0;
 
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;

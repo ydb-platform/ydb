@@ -47,9 +47,10 @@ protected:
     TString GetCreateStoreQuery();
     TString GetCreateTableQuery();
 
-    void CreateStorage();
+    void CreateStorage(TAfterFunc afterFunc);
+    bool ExecuteSchemeQuery(const TString& sessionId, const TString& query);
     bool CheckStorageExists() const;
-    void CreateOrUpdateStorage() override;
+    void CreateOrUpdateStorage(TAfterFunc afterFunc) override;
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;
 
     const TDatabaseSettings Settings;

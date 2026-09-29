@@ -27,12 +27,16 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
         return false;
     }
     if (!StorageExists) {
-        CreateOrUpdateStorage();
-        if (!StorageExists) {
-            return false;
-        }
+        auto after = [this, message]() {
+            WriteImpl(message);
+        };
+        CreateOrUpdateStorage(after);
+        return true; // @todo
     }
+    return WriteImpl(message);
+}
 
+bool TBaseEventLogWriter::WriteImpl(const NActors::NStructuredLog::TLogMessage& message) {
     TStringBuilder columnWriteErrors;
     for (std::size_t i = 0; i < Columns.size(); ++i) {
         if (ErrorColumnIndex.has_value() && ErrorColumnIndex.value() == i) {

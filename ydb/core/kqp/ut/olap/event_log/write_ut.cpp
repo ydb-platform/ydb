@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/event_log/column_shard_log_writer.h>
+#include <ydb/core/kqp/event_log/kqp_event_log_writer.h>
 #include <ydb/core/kqp/event_log/log_column.h>
 
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
@@ -24,30 +25,7 @@ namespace NKikimr::NKqp {
 
 using namespace NKikimr::NKqp::NSchematizedLog;
 
-class TBaseTestExampleLogWriter : public TColumnShardLogWriter {
-public:
-    unsigned WrittenCount{0};
-
-    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
-            std::optional<ui32> maxBatchSize = {})
-        : TColumnShardLogWriter(runner, [component](NActors::NStructuredLog::TLogMessage message) {
-            return message.Component == component;
-        }, TColumnShardLogWriter::TDatabaseSettings {
-            .TableName = "olapTable",
-            .StoreName = "olapStore",
-            .MaxBatchSize = maxBatchSize
-        }, columns)
-    {
-        Y_UNUSED(component);
-    }
-
-    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
-        if (!TColumnShardLogWriter::Write(message)) {
-            return false;
-        }
-        WrittenCount++;
-        return true;
-    }
+namespace {
 
     TString FormatLogColumnValueYson(const NYdb::TValue& value) {
         NYdb::TValueParser parser(value);
@@ -73,33 +51,97 @@ public:
     }
 
     using TQueryResult = std::vector<std::vector<std::string>>;
-    TQueryResult FetchStreamData(NYdb::NTable::TScanQueryPartIterator& it) {
-        TQueryResult rows;
+    std::optional<TQueryResult> FetchStreamData(NYdb::NTable::TScanQueryPartIterator& it, bool unitAssert) {
+        if (unitAssert) {
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+        if (!it.IsSuccess()) {
+            return {};
+        }
 
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
+        auto streamPart = it.ReadNext().GetValueSync();
+        if (!streamPart.IsSuccess()) {
+            if (unitAssert) {
                 UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
             }
-
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-                auto columns = resultSet.GetColumnsMeta();
-                NYdb::TResultSetParser parser(resultSet);
-                while (parser.TryNextRow()) {
-                    std::vector<std::string> row;
-                    row.reserve(columns.size());
-                    for (ui32 i = 0; i < columns.size(); ++i) {
-                        const TString value = FormatLogColumnValueYson(parser.GetValue(i));
-                        row.emplace_back(value.data(), value.size());
-                    }
-                    rows.push_back(std::move(row));
-                }
+            if (!streamPart.EOS()) {
+                return {};
             }
         }
 
+        TQueryResult rows;
+        if (streamPart.HasResultSet()) {
+            auto resultSet = streamPart.ExtractResultSet();
+            auto columns = resultSet.GetColumnsMeta();
+            NYdb::TResultSetParser parser(resultSet);
+            while (parser.TryNextRow()) {
+                std::vector<std::string> row;
+                row.reserve(columns.size());
+                for (ui32 i = 0; i < columns.size(); ++i) {
+                    const TString value = FormatLogColumnValueYson(parser.GetValue(i));
+                    row.emplace_back(value.data(), value.size());
+                }
+                rows.push_back(std::move(row));
+            }
+        }
         return rows;
+    }
+
+    std::optional<TQueryResult> ExecuteQueryAndFetchData(TKikimrRunner& kikimr, const TString& query) {
+        for(unsigned i = 10;i > 0;i--) {
+            auto client = kikimr.GetTableClient();
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            if (!it.IsSuccess()) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            auto result = FetchStreamData(it, i == 1);
+            if (!result.has_value()) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            return result.value();
+        }
+        return {};
+    }
+
+
+    void Dump(const TQueryResult& result) {
+        for (const auto& row : result) {
+            for (size_t i = 0; i < row.size(); ++i) {
+                if (i) {
+                    Cerr << "; ";
+                }
+                Cerr << row[i];
+            }
+            Cerr << Endl;
+        }
+    }
+}
+
+class TBaseTestExampleLogWriter : public TColumnShardLogWriter {
+public:
+    unsigned WrittenCount{0};
+
+    TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
+            std::optional<ui32> maxBatchSize = {})
+        : TColumnShardLogWriter(runner, [component](const NActors::NStructuredLog::TLogMessage& message) {
+            return message.Component == component;
+        }, TColumnShardLogWriter::TDatabaseSettings {
+            .TableName = "olapTable",
+            .StoreName = "olapStore",
+            .MaxBatchSize = maxBatchSize
+        }, columns)
+    {
+        Y_UNUSED(component);
+    }
+
+    bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
+        if (!TColumnShardLogWriter::Write(message)) {
+            return false;
+        }
+        WrittenCount++;
+        return true;
     }
 
     TString GetFetchQuery() {
@@ -129,18 +171,6 @@ public:
         return query;
     }
 
-    void Dump(const TQueryResult& result) {
-        for (const auto& row : result) {
-            for (size_t i = 0; i < row.size(); ++i) {
-                if (i) {
-                    Cerr << "; ";
-                }
-                Cerr << row[i];
-            }
-            Cerr << Endl;
-        }
-    }
-
     void CheckWrittenLogContent(const TQueryResult& requiredResult, unsigned existedRecordCount = 0) {
         // Wait log completely written
         for(unsigned i=0; WrittenCount + existedRecordCount < requiredResult.size() && i < 100; i++) {
@@ -151,12 +181,7 @@ public:
         auto query = GetFetchQuery();
 
         // Execute query
-        auto client = GetRunner().GetTableClient();
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-
-        // Fetch result
-        auto result = FetchStreamData(it);
+        auto result = ExecuteQueryAndFetchData(GetRunner(), query);
 
         // Dump on error
         if (true /*result != requiredResult*/) {
@@ -165,7 +190,7 @@ public:
 
             Cerr << " " << Endl;
             Cerr << "RESULT:" << Endl;
-            Dump(result);
+            Dump(result.value());
 
             Cerr << " " << Endl;
             Cerr << "REQUIRED:" << Endl;
@@ -196,6 +221,7 @@ struct TEnvironment {
 
     TKikimrRunner Kikimr;
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
+    std::vector<NStructuredLog::ILogSinkSPtr> AddSinks;
 
     TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = {})
         : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
@@ -206,15 +232,29 @@ struct TEnvironment {
         Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
     }
 
-    void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
+    void UpdateSinks() {
         auto* runtime = Kikimr.GetTestServer().GetRuntime();
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
             runtime->GetLogSettings(i)->FlushSinksTimeout = (Writer->GetDatabaseSettings().MaxBatchSize.has_value())?1000000:0;
             runtime->GetLogSettings(i)->Sinks = {Writer};
+            std::copy(begin(AddSinks), end(AddSinks), std::back_inserter(runtime->GetLogSettings(i)->Sinks));
         }
         runtime->SetLogPriority(TEnvironment::Component, NActors::NLog::PRI_TRACE);
+    }
 
+    void WriteLog(const TEmitTestLog::TLogWriteFunc& writeFunc) {
+        UpdateSinks();
+
+        auto* runtime = Kikimr.GetTestServer().GetRuntime();
         runtime->Register(new TEmitTestLog(writeFunc));
+    }
+
+    void ExecuteQuery(const TString& query) {
+        auto kikimrPtr = &Kikimr;
+        WriteLog([query, kikimrPtr](){
+            auto client = kikimrPtr->GetTableClient();
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        });
     }
 };
 
@@ -241,10 +281,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:234")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:236")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:238")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:239")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:274")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:276")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:278")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:279")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -452,6 +492,20 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"3u", "3u"},
             {"4u", "4u"},
             {"5u", "5u"}});
+    }
+
+    Y_UNIT_TEST(KqpRequestLog) {
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1)
+        });
+
+        env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>(env.Kikimr));
+        env.ExecuteQuery("SELECT 1;");
+
+        // Dump
+        auto result = ExecuteQueryAndFetchData(env.Kikimr, "SELECT * FROM `/Root/kqp_requests/kqp_requests`");
+        Cerr << "RESULT:" << Endl;
+        Dump(result.value());
     }
 }
 

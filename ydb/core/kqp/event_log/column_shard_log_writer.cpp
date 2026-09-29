@@ -23,6 +23,24 @@
 
 namespace NKikimr::NKqp::NSchematizedLog {
 
+namespace {
+
+using TEvCreateSessionRequest = NGRpcService::TGrpcRequestOperationCall<
+    Ydb::Table::CreateSessionRequest,
+    Ydb::Table::CreateSessionResponse>;
+using TEvExecuteSchemeQueryRequest = NGRpcService::TGrpcRequestOperationCall<
+    Ydb::Table::ExecuteSchemeQueryRequest,
+    Ydb::Table::ExecuteSchemeQueryResponse>;
+
+constexpr TStringBuf DatabasePath = "/Root";
+
+template<typename TResponse>
+TResponse WaitLocalRpc(TKikimrRunner& runner, NThreading::TFuture<TResponse> future) {
+    return runner.GetTestServer().GetRuntime()->WaitFuture(std::move(future));
+}
+
+} // namespace
+
 TColumnShardLogWriter::TColumnShardLogWriter(
     TKikimrRunner& runner,
     TLogMessageFilter filter,
@@ -131,30 +149,66 @@ bool TColumnShardLogWriter::CheckStorageExists() const {
     return table.IsSuccess() && table.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::ColumnTable;
 }
 
-void TColumnShardLogWriter::CreateStorage() {
-    auto session = GetRunner().GetTableClient().CreateSession().GetValueSync().GetSession();
+bool TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const TString& query) {
+    Ydb::Table::ExecuteSchemeQueryRequest request;
+    request.set_session_id(sessionId);
+    request.set_yql_text(query);
 
-    auto storeQuery = GetCreateStoreQuery();
-    Cerr << "QUERY: " << storeQuery << Endl;
-    auto storeResult = session.ExecuteSchemeQuery(storeQuery).GetValueSync();
-
-    // @todo UNIT_ASSERT(storeResult.IsSuccess());
-
-    auto tableQuery = GetCreateTableQuery();
-    Cerr << "QUERY: " << tableQuery << Endl;
-
-    auto tableResult = session.ExecuteSchemeQuery(tableQuery).GetValueSync();
-    if (!tableResult.IsSuccess()) {
-        Cerr << "FAILED: " << tableResult.GetIssues().ToOneLineString() << Endl;
-    }
-    // @todo UNIT_ASSERT(tableResult.IsSuccess());
+    const auto response = WaitLocalRpc(
+        Runner,
+        NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
+            std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem()));
+    return response.operation().status() == Ydb::StatusIds::SUCCESS;
 }
 
-void TColumnShardLogWriter::CreateOrUpdateStorage() {
-    if (!CheckStorageExists()) {
-        CreateStorage();
+void TColumnShardLogWriter::CreateStorage(TAfterFunc afterFunc) {
+    Ydb::Table::CreateSessionRequest request;
+
+    const auto response = WaitLocalRpc(
+        GetRunner(),
+        NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
+            std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem()));
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        Cerr << "FAILED to create session" << Endl;
     }
-    StorageExists = true;
+
+    Ydb::Table::CreateSessionResult result;
+    if (!response.operation().result().UnpackTo(&result)) {
+        Cerr << "FAILED to create session" << Endl;
+    }
+    const TString sessionId = result.session_id();
+    if (sessionId.empty()) {
+        Cerr << "FAILED to create session" << Endl;
+        return ;
+    }
+
+    const auto storeQuery = GetCreateStoreQuery();
+    Cerr << "QUERY: " << storeQuery << Endl;
+    if (!ExecuteSchemeQuery(sessionId, storeQuery)) {
+        Cerr << "FAILED to create table store" << Endl;
+        return;
+    }
+
+    const auto tableQuery = GetCreateTableQuery();
+    Cerr << "QUERY: " << tableQuery << Endl;
+    if (!ExecuteSchemeQuery(sessionId, tableQuery)) {
+        Cerr << "FAILED to create table" << Endl;
+    }
+
+    if (afterFunc) {
+        afterFunc();
+    }
+}
+
+void TColumnShardLogWriter::CreateOrUpdateStorage(TAfterFunc afterFunc) {
+    if (!CheckStorageExists()) {
+        CreateStorage(afterFunc);
+        StorageExists = true;
+    } else {
+        if (afterFunc) {
+            afterFunc();
+        }
+    }
 }
 
 void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) {

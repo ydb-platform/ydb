@@ -266,8 +266,8 @@ public:
 
     std::vector<TKeyName> KeyName;
 
-    TDBLogMessageStringValueColumn(const TString& columnName, const std::vector<TKeyName>& keyName) :
-        TBase(columnName, TDatabaseSettings()),
+    TDBLogMessageStringValueColumn(const TString& columnName, const std::vector<TKeyName>& keyName, const TBase::TDatabaseSettings& settings = {}) :
+        TBase(columnName, settings),
         KeyName(keyName) {
     }
 

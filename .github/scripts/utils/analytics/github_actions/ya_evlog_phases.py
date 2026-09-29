@@ -214,7 +214,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--evlog", required=True)
     parser.add_argument("--parent", required=True, help="ya_make_try span name")
     parser.add_argument("--ya-attempt", default="")
-    parser.add_argument("--file", default=None, help="metrics JSONL; default is CI_METRICS_FILE")
+    parser.add_argument("--file", default=None, help="metrics JSONL; default is ANALYTICS_FILE / CI_METRICS_FILE")
     args = parser.parse_args(argv)
     try:
         found = phases_from_path(args.evlog)

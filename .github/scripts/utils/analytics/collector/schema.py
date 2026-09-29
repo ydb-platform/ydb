@@ -48,7 +48,11 @@ INTERNAL_FIELD_KEYS = ("file", "attach", "enrich", "flush", "table_path")
 
 
 def default_metrics_file() -> str:
-    return os.environ.get("CI_METRICS_FILE") or "ci_metrics.jsonl"
+    return (
+        os.environ.get("ANALYTICS_FILE")
+        or os.environ.get("CI_METRICS_FILE")
+        or "analytics.jsonl"
+    )
 
 
 def resolve_table_path(ydb_wrapper=None, *, table_config_key: str = TABLE_CONFIG_KEY, default: str = DEFAULT_TABLE_PATH) -> str:

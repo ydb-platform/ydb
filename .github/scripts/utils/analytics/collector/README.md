@@ -1,139 +1,131 @@
 # collector
 
-JSONL-буфер и заливка в YDB. Про GitHub ничего не знает: в другой проект
-копируется эта папка целиком.
+JSONL-буфер и заливка в YDB. Про GitHub, `ya` и CI ничего не знает: в другой
+проект копируется эта папка.
 
-## Модель
+## Как подключить
 
-- `start` / `end` — открыть и закрыть span, длительность считается по разнице.
-- `track` — записать уже готовое событие, span не открывается.
-- `enrich` — дописать labels в последнюю неотправленную строку с этим именем.
-  Длительность, `event_ts` и `conclusion` не меняет, поэтому ссылку на отчёт
-  можно приклеить после измерения.
-- `flush` — залить в YDB только закрытые строки.
-- `send` — закрыть незакрытые span и залить всё.
-
-`flush` и `send` идемпотентны: заливать можно сколько угодно раз, отправленное
-не поедет второй раз.
-
-## Обязательные поля
-
-Строка без любого из этих полей молча не доедет до YDB — попадёт в
-`$CI_METRICS_FILE.skipped` с причиной:
-
-| Поле | Откуда берётся |
-| --- | --- |
-| `name` | первый аргумент команды |
-| `source` | `--source`; без него строка отбрасывается |
-| `run_id` | `--run-id` или `$ANALYTICS_RUN_ID` |
-| `event_ts` | ставится автоматически при `start` / `track` |
-| `span_id` | генерируется автоматически |
-
-То есть на практике надо помнить про `--source` и `ANALYTICS_RUN_ID`, остальное
-collector заполняет сам.
-
-## CLI
+1. Скопируйте `collector/` и положите на `PYTHONPATH` каталог, в котором она лежит.
+2. Рядом должен импортироваться `ydb_wrapper` (см. ниже) и стоять SDK `ydb`.
+3. Задайте `ANALYTICS_RUN_ID` (кто измеряет) и `ANALYTICS_FILE` (куда писать JSONL).
+4. Вызовите `start` → работа → `end` → `flush`.
 
 ```bash
-export PYTHONPATH=/path/to/analytics   # каталог, в котором лежит collector/
-export CI_METRICS_FILE=/tmp/ci_metrics.jsonl
+export PYTHONPATH=/opt/analytics          # здесь лежит пакет collector/
+export ANALYTICS_FILE=/tmp/analytics.jsonl
 export ANALYTICS_RUN_ID=42
+export ANALYTICS_YDB_CREDENTIALS=/path/to/sa.json
 
-python3 -m collector start my_step --source my_job --label k=v
-python3 -m collector end my_step --conclusion success
-python3 -m collector enrich my_step --label report_url="$URL"
-python3 -m collector track my_gauge --kind gauge --unit bytes --value 123 --source my_job
+python3 -m collector start compile --source my_pipeline --label cache=hit
+# … работа …
+python3 -m collector end compile --conclusion success
 python3 -m collector flush
-python3 -m collector send --conclusion cancelled   # если остались открытые span
 ```
 
-`--file` перекрывает `$CI_METRICS_FILE`.
+`--file` перекрывает `ANALYTICS_FILE`. Старое имя `CI_METRICS_FILE` ещё читается.
 
-Остальные флаги: `--kind duration|gauge|count|event|info`, `--value`, `--unit`,
-`--duration-ms`, `--started-epoch`, `--finished-epoch`, `--conclusion`,
-`--error`, `--label key=value` (можно несколько), `--run-id`.
-
-## Python
+То же из Python:
 
 ```python
-from collector import start, end, track, enrich, flush_file, send
+from collector import start, end, flush_file
 
-start("my_step", source="my_job", labels={"k": "v"})
-end("my_step", conclusion="success")
-enrich("my_step", labels={"report_url": url})
-track("my_gauge", kind="gauge", unit="bytes", value=123, source="my_job")
+start("compile", source="my_pipeline", labels={"cache": "hit"})
+end("compile", conclusion="success")
 flush_file()
 ```
 
-## Файлы на диске
+## Что окажется в таблице
 
-Рядом с `$CI_METRICS_FILE` появляются ещё четыре:
+По умолчанию `analytics/events`. Одна закрытая span — одна строка:
+
+| Колонка | В примере | Кто заполняет |
+| --- | --- | --- |
+| `date` | `2026-09-21` | из `event_ts` |
+| `event_ts` | момент `start` | collector |
+| `run_id` | `42` | `ANALYTICS_RUN_ID` / `--run-id` |
+| `name` | `compile` | первый аргумент |
+| `kind` | `duration` | `--kind`, по умолчанию duration |
+| `source` | `my_pipeline` | `--source`, без него строка не пишется |
+| `span_id` | случайный hex | collector |
+| `value` | `15000` | длительность в мс; для gauge/count — `--value` |
+| `unit` | `ms` | из `kind`, либо `--unit` |
+| `conclusion` | `success` | `--conclusion` на `end` / `send` |
+| `labels` | `{"cache":"hit"}` | `--label` / `enrich` |
+| `exported_at` | время `flush` | collector |
+
+Других колонок нет. Job, PR, workflow — это уже обёртка
+[`github_actions/`](../github_actions/README.md).
+
+```sql
+SELECT name, source, value, unit, conclusion, labels
+FROM `analytics/events`
+WHERE run_id = 42 AND name = "compile";
+```
+
+Строка без `name`, `source`, `run_id`, `event_ts` или `span_id` в таблицу не
+пойдёт: она окажется в `$ANALYTICS_FILE.skipped` с полем `reason`. Сборка при
+этом не падает.
+
+## Команды
+
+| Команда | Что делает |
+| --- | --- |
+| `start NAME --source S` | открыть span, запомнить время |
+| `end NAME --conclusion …` | закрыть, посчитать `value` |
+| `track NAME --source S --value N` | записать готовое событие, span не открывается |
+| `enrich NAME --label k=v` | дописать labels в последнюю незалитую строку с этим именем. Длительность, `event_ts`, `conclusion` не трогает |
+| `flush` | залить только закрытые строки |
+| `send` | закрыть оставшиеся span и залить всё |
+
+`flush` и `send` идемпотентны: повторно уже залитое не едет.
+
+Флаги: `--kind duration\|gauge\|count\|event\|info`, `--value`, `--unit`,
+`--duration-ms`, `--started-epoch`, `--finished-epoch`, `--conclusion`,
+`--error`, `--label key=value` (повторяемый), `--run-id`, `--file`.
+
+## Файлы рядом с буфером
 
 | Файл | Зачем |
 | --- | --- |
-| `$CI_METRICS_FILE` | сам буфер, по строке на событие |
-| `.offset` | сколько байт уже залито; поэтому повторный `flush` не дублирует |
-| `.pending` | открытые span; именно из-за него `flush` пишет только закрытые строки |
-| `.skipped` | строки, которые YDB не примет, с полем `reason` |
-| `.lock` | flock, чтобы `enrich` и параллельный append не потеряли запись |
+| `$ANALYTICS_FILE` | буфер, по строке на событие |
+| `.offset` | сколько байт уже залито |
+| `.pending` | открытые span; поэтому `flush` не трогает незакрытые |
+| `.skipped` | отвергнутые строки + `reason` |
+| `.lock` | flock на `enrich` / append |
 
-Если складываете артефакты или чистите temp — это весь список. Кладите буфер
-туда, откуда он не уедет в публичный бакет.
+Незакрытый хвост файла (обрыв записи) offset не перешагивает; следующий append
+его завершает, чтобы не склеиться с новой строкой.
 
-Незакрытая строка (обрыв записи) остаётся в буфере: offset до неё не двигается,
-а следующий append её завершает, чтобы не склеиться с ней и не испортить и свою
-запись тоже.
+## Заливка в YDB
 
-## Таблица
+Креды — `ANALYTICS_YDB_CREDENTIALS` (путь к ключу). В этом репозитории ещё
+читается `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`.
 
-По умолчанию `analytics/events`, ключ в `ydb_qa_config.json` —
-`analytics_events`.
+Без кредов или без SDK `flush` печатает warning и выходит 0: процесс зелёный,
+данных нет.
 
-PK `(event_ts, date, run_id, source, name, kind, span_id)`, TTL 1 год на
-`event_ts`. Колонка под TTL должна быть первой в PK. `flush` создаёт таблицу сам
-(`ensure_table=True`); обёртки могут это отключить и создавать её отдельным
-шагом.
+Таблица: PK `(event_ts, date, run_id, source, name, kind, span_id)`, TTL 1 год
+на `event_ts`. `flush` создаёт её сам (`ensure_table=True`). Обёртка может
+выключить это и создать таблицу отдельно.
 
-## Что нужно для заливки
+Путь по умолчанию `analytics/events`. Логический ключ для
+`ydb_wrapper.get_table_path` — `analytics_events`.
 
-Креды — одна из переменных:
-
-- `ANALYTICS_YDB_CREDENTIALS`
-- `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`
-
-Плюс SDK `ydb` и модуль `ydb_wrapper`. Без них `flush` печатает warning и
-выходит с кодом 0 — то есть сборка зелёная, а данных нет. Если переносите
-collector в другой проект, это первое, на что стоит посмотреть.
-
-`ydb_wrapper` ищется так: сначала обычным `import ydb_wrapper` из
-`PYTHONPATH`, потом по пути `../../../analytics/ydb_wrapper.py` относительно
-`collector/` (в этом репозитории это `.github/scripts/analytics/ydb_wrapper.py`).
-
-Контракт, который должен реализовать класс `YDBWrapper`:
+`YDBWrapper` сначала ищется обычным `import`, затем (только в этом репозитории)
+по `../../../analytics/ydb_wrapper.py` относительно `collector/`. Класс должен
+уметь:
 
 ```python
 class YDBWrapper:
     def __enter__(self) -> "YDBWrapper": ...
     def __exit__(self, exc_type, exc, tb) -> bool: ...
-
-    def check_credentials(self) -> bool:
-        """False — кредов нет; flush тихо оставит батч на диске."""
-
-    def get_table_path(self, table_name: str) -> str:
-        """Логический ключ -> путь таблицы. KeyError, если ключа нет."""
-
+    def check_credentials(self) -> bool: ...
+    def get_table_path(self, table_name: str) -> str: ...
     def create_table(self, table_path: str, create_sql: str) -> None: ...
-
-    def bulk_upsert_batches(
-        self,
-        table_path: str,
-        rows: list[dict],
-        column_types: "ydb.BulkUpsertColumns",
-        batch_size: int = 1000,
-    ) -> None: ...
+    def bulk_upsert_batches(self, table_path, rows, column_types, batch_size=1000) -> None: ...
 ```
 
-Больше от него ничего не требуется.
+Больше от него ничего не нужно.
 
 ## Тесты
 

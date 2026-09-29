@@ -1,17 +1,110 @@
 # github_actions
 
-Колонки GitHub Actions поверх [`collector/`](../collector/README.md): workflow,
-job, PR, commit, инвентарь раннера, плюс выгрузка длительностей job и step из
-GitHub API после того как run завершился.
+Обёртка над [`collector/`](../collector/README.md) для GitHub Actions: колонки
+workflow / job / PR / commit, инвентарь раннера, выгрузка длительностей job и
+step из GitHub API.
 
-Таблица данных — `analytics/ci_metrics`. Служебное состояние выгрузки —
-`analytics/ci_metrics_state`, отдельно, чтобы в таблице с данными были только
-измерения.
+Таблица — `analytics/ci_metrics`. Служебное состояние выгрузки —
+`analytics/ci_metrics_state` (не смешивать с измерениями).
 
-## Что лежит в таблице
+## Добавить измерение
 
-Это то, что нужно знать, чтобы написать запрос. `source` говорит, кто написал
-строку, `name` — что именно измерено.
+Нужны `GITHUB_NUMERIC_JOB_ID` и `GITHUB_RUN_ATTEMPT`. Без них строка уйдёт в
+`.skipped`, сборка не упадёт. В `test_ya` id выставляет
+[`resolve_github_job_id.py`](../../analytics/resolve_github_job_id.py).
+
+Буфер не кладите в `PUBLIC_DIR`: JSONL не должен уехать на публичный S3.
+
+### Свой span в workflow
+
+```bash
+export CI_METRICS_FILE="$TMP_DIR/ci_metrics.jsonl"
+PY=.github/scripts/utils/analytics/github_actions/ci_metrics.py
+
+python3 "$PY" start compile --source my_workflow --label cache_mode=dist_cache
+# … работа …
+python3 "$PY" end compile --rc "$?"          # 0 → success, иначе failure
+python3 "$PY" enrich compile --label report_url="$URL"
+python3 "$PY" flush
+```
+
+`--source` — кто пишет (ваш workflow или `ya_phase`). `--name` (`compile`) — что
+измерено. Новые значения сначала внесите в [`taxonomy.py`](taxonomy.py) и в
+таблицы ниже, иначе drift-тест не пройдёт.
+
+Дополнительно к collector:
+
+- `--runner` — кэш cpu/ram/disk хоста, ключи `runner.inventory.*`
+- `--usage` — свежий замер, ключи `runner.usage.*`
+- `--report <ya report.json>` на `enrich` — `labels.tests` (`passed`, `failed`,
+  `errors`, `skipped`, `muted`, `not_launched`, `other`, `total`)
+- `--rc N` — conclusion по коду возврата
+- `--ya-attempt N` или `$CI_YA_ATTEMPT` — `labels.ya_attempt`
+
+### Что окажется в `analytics/ci_metrics`
+
+Вы передаёте `name`, `source`, labels, rc. Остальное collector и обёртка
+дописывают сами.
+
+```sql
+SELECT name, source, kind, value, unit, conclusion,
+       workflow, job_name, github_job_id, run_attempt, pr_number, labels
+FROM `analytics/ci_metrics`
+WHERE run_id = 123 AND name = "compile";
+```
+
+| Колонка | Откуда | Пример |
+| --- | --- | --- |
+| `name` | аргумент | `compile` |
+| `source` | `--source` | `my_workflow` |
+| `kind` / `value` / `unit` | collector | `duration` / `18400` / `ms` |
+| `conclusion` | `--rc` / `--conclusion` | `success` |
+| `run_id` | `$GITHUB_RUN_ID` | `123` |
+| `github_job_id` | `$GITHUB_NUMERIC_JOB_ID` | `456` |
+| `run_attempt` | `$GITHUB_RUN_ATTEMPT` | `1` |
+| `workflow` | `$GITHUB_WORKFLOW` | `PR-check` |
+| `job_name` | `$CI_JOB_TITLE` или `$GITHUB_JOB` | `build-relwithdebinfo` |
+| `event_name` | `$GITHUB_EVENT_NAME` | `pull_request` |
+| `branch` | `$BRANCH_NAME` / `$GITHUB_BASE_REF` / event | `main` |
+| `commit` | `$ORIGINAL_HEAD` / `$GITHUB_SHA` | `abc…` |
+| `pr_number` | `$PR_NUMBER` или event | `54142` |
+| `build_preset` | `$BUILD_PRESET` | `relwithdebinfo` |
+| `run_url` | репозиторий + `run_id` | `https://github.com/…/actions/runs/123` |
+| `span_id` | collector | случайный hex |
+| `labels.parent_span_id` | обёртка | `job-456` (у самой строки job не ставится) |
+| `labels.cache_mode` | `--label` / `$CI_CACHE_MODE` | `dist_cache` |
+
+PK `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`,
+TTL 1 год. У выгрузки `span_id` фиксированный: `job-{id}`, `queue-{id}`,
+`step-{id}-{N}` — по нему фазу джойнят с job.
+
+### Новая фаза в `test_ya`
+
+1. Имя в `YA_PHASE_NAMES` в [`taxonomy.py`](taxonomy.py).
+2. Строка в таблице фаз ниже (тот же `name`).
+3. В action:
+
+```bash
+ci start my_new_phase
+# …
+ci end my_new_phase --rc "$RC"
+```
+
+`$CI_YA_ATTEMPT`, `$CI_BUILD_TARGET`, `$CI_CACHE_MODE` подмешаются сами. Если
+`name == $CI_BUILD_SPAN`, на start добавится `--runner`, на end — `--usage`.
+
+В `test_ya` bash только обёртка и trap (Python не видит `set -e`):
+
+```bash
+CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
+ci() { python3 "$CI_METRICS_PY" "$@" || true; }
+trap 'trap - EXIT; ci send --conclusion cancelled' TERM INT
+trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
+```
+
+## Что уже пишется
+
+`source` — кто написал строку, `name` — что измерено.
 
 | `source` | `name` | Кто пишет | Что это |
 | --- | --- | --- | --- |
@@ -20,8 +113,6 @@ GitHub API после того как run завершился.
 | `github_step` | имя шага | выгрузка | сколько шёл шаг GitHub Actions |
 | `ya_phase` | см. ниже | `test_ya` | фазы внутри job |
 | `nightly_build` | `ydbd_cached_build`, `ydbd_size` | `nightly_build.yml` | сборка ydbd и размер бинаря |
-
-Имена при `source = ya_phase`:
 
 | `name` | Что измеряет |
 | --- | --- |
@@ -42,184 +133,35 @@ GitHub API после того как run завершился.
 
 `ya_build` / `ya_tests` / `ya_cache_*` считает
 [`ya_evlog_phases.py`](ya_evlog_phases.py) по `ya_evlog.jsonl` — те же узлы,
-что рисует `ya analyze-make timeline`. Компиляция и линковка это узлы
-`Compile`/`Link` и `Run` по объектным файлам; `ya_tests` — все остальные `Run` с
-вырезанными интервалами сборки. Попадание в кэш и заливка в кэш сборкой не
-считаются, они идут отдельными интервалами, поэтому параллельный fetch виден.
-
-Связь фазы с job: у фаз `labels.parent_span_id = job-{github_job_id}`, а у строки
-job `span_id = job-{github_job_id}`. У `queue` `span_id = queue-{job_id}`, у шага
-`span_id = step-{job_id}-{N}`.
-
-Схема: PK `(event_ts, date, run_id, github_job_id, run_attempt, source, name, kind, span_id)`,
-TTL 1 год на `event_ts`. Без `github_job_id`, `run_attempt` или `span_id` строка в
-YDB не уйдёт — сборка при этом не падает, но данные теряются.
-
-## Интеграция в свой workflow
-
-Внутри job — три вызова на span:
-
-```bash
-export CI_METRICS_FILE="$TMP_DIR/ci_metrics.jsonl"   # не PUBLIC_DIR: JSONL не должен уехать на публичный S3
-CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
-
-python3 "$CI_METRICS_PY" start my_step --source my_job --label cache_mode=dist_cache
-python3 "$CI_METRICS_PY" end my_step --conclusion success
-python3 "$CI_METRICS_PY" enrich my_step --label report_url="$S3_URL"   # labels, длительность не меняется
-python3 "$CI_METRICS_PY" flush                                        # залить закрытые строки
-python3 "$CI_METRICS_PY" send --conclusion cancelled                  # закрыть открытые и залить
-```
-
-Нужны: `GITHUB_NUMERIC_JOB_ID` в env (см. ниже) и креды YDB как у collector.
-
-Дополнительно к флагам collector:
-
-- `--runner` — приложить закэшированный инвентарь хоста, в labels появляются
-  ключи с префиксом `runner.inventory`.
-- `--usage` — свежий замер cpu/ram/disk на это событие, префикс `runner.usage`.
-  Кэш инвентаря лежит в `$CI_RUNNER_INFO_FILE`.
-- `--report <ya report.json>` у `enrich` — посчитать тесты и положить в
-  `labels.tests` (`passed`, `failed`, `errors`, `skipped`, `muted`,
-  `not_launched`, `other`, `total`).
-
-### В `test_ya`
-
-Там только тонкая обёртка и trap. Labels и `--runner`/`--usage` добавляет
-`ci_metrics.py` из env.
-
-```bash
-CI_METRICS_PY=".github/scripts/utils/analytics/github_actions/ci_metrics.py"
-ci() { python3 "$CI_METRICS_PY" "$@" || true; }
-trap 'trap - EXIT; ci send --conclusion cancelled' TERM INT
-trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
-
-export CI_YA_ATTEMPT=1
-ci start prepare_ya_make
-ci end postprocess_try --rc "$RC"
-ci enrich ya_make_try_1 --report "$CURRENT_REPORT"
-ci flush
-```
-
-Из env: `CI_YA_ATTEMPT` → `ya_attempt`, `CI_BUILD_TARGET`, `CI_CACHE_MODE`.
-Если `name` равен `$CI_BUILD_SPAN`, на start добавляется `--runner`, на end —
-`--usage`. `--rc 0` это success, иначе failure.
-
-Команда под `|| true` закрывается через `--rc`, иначе span запишется как
-success при упавшей команде:
-
-```bash
-RC=0
-some_command || RC=$?
-ci end my_step --rc "$RC"
-```
-
-Спаны, оставшиеся открытыми из-за `set -e` или отмены job, закрывают
-`trap ... EXIT` и `trap ... TERM INT`.
-
-Частые labels: `cache_mode`, `ya_attempt`, `build_target`, `report_url`,
-`ya_make_log_url`, `artifacts_url`, `tests`, `tests_status`, `failed_tests`,
-`error`, `parent_span_id`.
-
-## Env → колонки
-
-Заполняет шаг `Resolve analytics job name` в `test_ya` либо сам workflow.
-
-| Колонка | Откуда |
-| --- | --- |
-| `run_id` | `GITHUB_RUN_ID` |
-| `github_job_id` | `GITHUB_NUMERIC_JOB_ID` |
-| `run_attempt` | `GITHUB_RUN_ATTEMPT` |
-| `job_name` | `CI_JOB_TITLE` или `GITHUB_JOB` |
-| `workflow` | `GITHUB_WORKFLOW` |
-| `event_name` | `GITHUB_EVENT_NAME` |
-| `branch` | `BRANCH_NAME` / `GITHUB_BASE_REF` / event / `GITHUB_REF_NAME` |
-| `commit` | `ORIGINAL_HEAD` / event / `GITHUB_SHA` |
-| `pr_number` | `PR_NUMBER` или event |
-| `build_preset` | `BUILD_PRESET`; в выгрузке — regex по имени job |
-| `run_url` | `GITHUB_REPOSITORY` + `GITHUB_RUN_ID` |
-
-`GITHUB_NUMERIC_JOB_ID` в `test_ya` получает
-[`resolve_github_job_id.py`](../../analytics/resolve_github_job_id.py): берёт
-строку jobs API с `runner_name` равным `$RUNNER_NAME`. Завершённые job не
-рассматриваются — имена раннеров переиспользуются, и завершённый job это
-предыдущий арендатор. Если API ещё не догнал, скрипт повторяет попытку с
-backoff; когда не получилось совсем, печатает annotation, потому что без этого
-id теряются все строки job.
-
-Файл буфера — `CI_METRICS_FILE`, остальное про буфер и креды в
-[collector](../collector/README.md#файлы-на-диске).
-
-## Таблицы
-
-Создаются один раз, не на записи:
-
-```bash
-python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
-```
-
-`analytics/ci_metrics_state` — три строки с JSON:
-
-| `name` | Что внутри |
-| --- | --- |
-| `export_watermark` | докуда выгрузка дошла, `exported_until` |
-| `open_runs` | run, которые ещё шли, их надо перечитать когда завершатся |
-| `failed_runs` | run, у которых не удалось получить список job, со счётчиком попыток |
+что рисует `ya analyze-make timeline`.
 
 ## Выгрузка job и step
 
-Отдельный job в `collect_analytics_fast.yml` (не на раннере сборки):
+Отдельный job в `collect_analytics_fast.yml`, не на раннере сборки. Таблицы
+создаёт `provision_tables.py` (не hot path записи).
 
 ```bash
 export GITHUB_TOKEN=...
+python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
 python3 .github/scripts/utils/analytics/github_actions/export_github_job_metrics.py --hours 2
 ```
 
-- По умолчанию все активные workflow; `--workflow` или `CI_METRICS_WORKFLOW`
-  сужает список (можно через запятую), `--org` / `CI_METRICS_ORG`,
-  `--repo` / `CI_METRICS_REPO`, `--table-path` — по желанию.
-- Окно `created` для завершённых run: на холодном старте `--hours`, дальше от
-  `export_watermark` минус 30 минут. Ограничения по глубине нет: если выгрузка
-  стояла сутки, она продолжит с того места, где встала.
-- Run, которые ещё идут, запоминаются в `open_runs` и дочитываются по id при
-  завершении — по сохранённой попытке, а не по текущей.
-- Уже записанные `github_job_id` пропускаются, поэтому re-run failed jobs не
-  теряется.
-- Watermark двигается только когда окно прочитано целиком. Упёрлись в
-  rate limit или не смогли получить список run — watermark остаётся, следующий
-  запуск перечитает то же окно. Выгрузка при этом возвращает ненулевой код,
-  чтобы падение было видно.
+- По умолчанию все активные workflow; `--workflow` / `CI_METRICS_WORKFLOW`
+  сужает список.
+- Окно `created`: холодный старт — `--hours`, дальше от `export_watermark`
+  минус 30 минут, без пола.
+- Идущие run пишутся в `open_runs` и дочитываются по сохранённой попытке.
+- Уже записанный `github_job_id` пропускается (re-run failed jobs не теряется).
+- Watermark двигается только если окно прочитано целиком. Rate limit или сбой
+  списка — ненулевой код, следующее окно то же.
 
-## Миграция
+`analytics/ci_metrics_state`: `export_watermark`, `open_runs`, `failed_runs`.
 
-`migrate_ci_metrics.py` чинит уже записанные данные. Без `--apply` ничего не
-пишет.
+## Миграция живой таблицы
 
-Что чинится: строки `export_state` / `run_id = 0`, устаревшие имена
-rebuild-фазы и `tests_*`, пустой `pr_number` у PR-событий (через
-`GET /commits/{sha}/pulls`), дыра покрытия, отсутствующий
-`labels.parent_span_id` у фаз.
-
-```bash
-MIG=.github/scripts/utils/analytics/github_actions/migrate_ci_metrics.py
-python3 $MIG inventory --out /tmp/ci_metrics_before.json
-python3 .github/scripts/utils/analytics/github_actions/provision_tables.py \
-  --metrics-table analytics/ci_metrics_migration
-python3 $MIG resolve-prs --checkpoint /tmp/ci_metrics_pr_map.json --apply
-python3 $MIG copy --dest analytics/ci_metrics_migration \
-  --pr-map /tmp/ci_metrics_pr_map.json --checkpoint /tmp/ci_metrics_copy.json --apply
-python3 $MIG backfill-window --from 2026-08-30 --to 2026-09-01 \
-  --dest analytics/ci_metrics_migration --apply
-python3 $MIG verify --dest analytics/ci_metrics_migration --require-pr
-python3 $MIG test-rename          # 0 = ALTER TABLE RENAME работает
-python3 $MIG swap --dest analytics/ci_metrics_migration --apply
-python3 $MIG verify --table analytics/ci_metrics --dest analytics/ci_metrics --require-pr
-```
-
-До шага `swap` живая таблица не трогается. После него `analytics/ci_metrics_old`
-(или `analytics/ci_metrics_migration`, если пришлось копировать обратно) держим
-неделю и потом дропаем.
-
-`ya_phase` нельзя восстановить из GitHub API — `copy` обязан их сохранить.
+Разовый ремонт уже записанных строк: `migrate_ci_metrics.py`. Без `--apply`
+ничего не пишет. Команды — в docstring скрипта и в комментарии «Миграция» git
+history; живую таблицу этот PR не переписывает.
 
 ## Тесты
 

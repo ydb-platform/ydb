@@ -53,11 +53,12 @@ class RunnerCacheTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.saved = {
-            key: os.environ.get(key) for key in ("CI_RUNNER_INFO_FILE", "RUNNER_TEMP", "CI_METRICS_FILE")
+            key: os.environ.get(key) for key in ("CI_RUNNER_INFO_FILE", "RUNNER_TEMP", "CI_METRICS_FILE", "ANALYTICS_FILE")
         }
         os.environ.pop("CI_RUNNER_INFO_FILE", None)
         os.environ.pop("RUNNER_TEMP", None)
         os.environ.pop("CI_METRICS_FILE", None)
+        os.environ.pop("ANALYTICS_FILE", None)
 
     def tearDown(self):
         for key, value in self.saved.items():

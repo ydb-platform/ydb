@@ -556,5 +556,26 @@ class BufferIntegrityTest(unittest.TestCase):
             self.assertTrue(expected <= names, f"lost appends: {sorted(expected - names)}")
 
 
+class MetricsFileEnvTest(unittest.TestCase):
+    def test_analytics_file_wins_over_the_legacy_name(self):
+        from collector.schema import default_metrics_file
+
+        saved = {key: os.environ.get(key) for key in ("ANALYTICS_FILE", "CI_METRICS_FILE")}
+        try:
+            os.environ["ANALYTICS_FILE"] = "/tmp/analytics.jsonl"
+            os.environ["CI_METRICS_FILE"] = "/tmp/legacy.jsonl"
+            self.assertEqual(default_metrics_file(), "/tmp/analytics.jsonl")
+            os.environ.pop("ANALYTICS_FILE")
+            self.assertEqual(default_metrics_file(), "/tmp/legacy.jsonl")
+            os.environ.pop("CI_METRICS_FILE")
+            self.assertEqual(default_metrics_file(), "analytics.jsonl")
+        finally:
+            for key, value in saved.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+
 if __name__ == "__main__":
     unittest.main()

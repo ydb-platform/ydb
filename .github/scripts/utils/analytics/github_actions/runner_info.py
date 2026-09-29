@@ -8,6 +8,8 @@ import os
 import shutil
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from collector.schema import default_metrics_file
+
 INVENTORY_LABEL = "runner.inventory"
 USAGE_LABEL = "runner.usage"
 CACHE_ENV = "CI_RUNNER_INFO_FILE"
@@ -37,8 +39,9 @@ def runner_cache_path(metrics_path: Optional[str] = None) -> str:
     runner_temp = os.environ.get("RUNNER_TEMP")
     if runner_temp:
         return os.path.join(runner_temp, "ci_runner_info.json")
-    base = metrics_path or os.environ.get("CI_METRICS_FILE") or "ci_metrics.jsonl"
-    return f"{base}.runner.json"
+    if metrics_path:
+        return f"{metrics_path}.runner.json"
+    return f"{default_metrics_file()}.runner.json"
 
 
 def _read_cache(path: str) -> Dict[str, Any]:

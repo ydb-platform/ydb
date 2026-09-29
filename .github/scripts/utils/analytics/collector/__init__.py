@@ -1,4 +1,4 @@
-"""JSONL buffer and YDB flush. Copy this package to reuse outside GitHub Actions."""
+"""JSONL buffer and YDB flush. No GitHub or CI dependency; copy the folder to reuse."""
 
 from .cli import main, run_cli
 from .flush import flush_file

@@ -1,14 +1,20 @@
 # CI analytics
 
-Тайминги CI в YDB: сколько шла каждая фаза сборки, каждый job и каждый step.
-Данные лежат в одной таблице `analytics/ci_metrics`, дашборд —
+Тайминги CI в YDB: фазы сборки, job и step. Одна таблица
+`analytics/ci_metrics`, дашборд —
 [DataLens](https://datalens.yandex/135ob2ntmr0ok?_share_link=public&state=37b19302682&tab=citab01).
 
 Профили компиляции сюда не входят.
 
+| Задача | Куда |
+| --- | --- |
+| Скопировать буфер в другой проект | [`collector/`](collector/README.md) |
+| Добавить span / фазу / колонку в YDB CI | [`github_actions/`](github_actions/README.md#добавить-измерение) |
+| Что уже лежит в таблице | [`github_actions/`](github_actions/README.md#что-уже-пишется) |
+
 ## Как это работает
 
-В таблицу ведут два независимых пути.
+Два независимых пути в одну таблицу.
 
 ```mermaid
 flowchart LR
@@ -27,37 +33,24 @@ flowchart LR
   ydb[("analytics/ci_metrics")] --> dl["DataLens"]
 ```
 
-1. **Внутри job.** Шаги пишут события в локальный JSONL и периодически
-   заливают закрытые строки в YDB. Так измеряются фазы `ya make` — то, что
-   GitHub про себя не знает.
-2. **После завершения run.** Отдельный job раз в 30 минут читает GitHub API и
-   пишет длительности самих job и step. Своё состояние (докуда дошёл, какие run
-   ещё идут, какие надо перечитать) он держит в `analytics/ci_metrics_state`, а
-   не в таблице с данными.
+1. **Внутри job.** Шаги пишут JSONL и заливают закрытые строки. Так измеряются
+   фазы `ya make` — того, чего нет в GitHub API.
+2. **После run.** Отдельный job раз в 30 минут выгружает длительности job и
+   step. Watermark / open / failed держит в `analytics/ci_metrics_state`.
 
-Сшиваются пути через labels: у каждой фазы внутри job
-`labels.parent_span_id = job-{github_job_id}`, а у строки самого job
-`span_id = job-{github_job_id}`. То есть фазу можно сопоставить с job и
-посмотреть, сколько времени job потратил вне `ya make`.
+Сшивка: у фазы `labels.parent_span_id = job-{github_job_id}`, у строки job
+`span_id = job-{github_job_id}`.
 
-## Пакеты
+`collector/` про GitHub не знает. `github_actions/` добавляет колонки Actions и
+выгрузку.
 
-- [`collector/`](collector/README.md) — JSONL-буфер и заливка в YDB. Ничего не
-  знает про GitHub, копируется в другой проект как есть.
-- [`github_actions/`](github_actions/README.md) — колонки GitHub Actions поверх
-  collector, выгрузка job/step, таксономия `source` / `name`, инструкции по
-  интеграции.
-
-## Первый запуск
-
-Таблицы не создаются на горячем пути записи, их надо создать один раз:
+## Первый запуск таблиц
 
 ```bash
 python3 .github/scripts/utils/analytics/github_actions/provision_tables.py
 ```
 
-Идемпотентно (`CREATE TABLE IF NOT EXISTS`), в `collect_analytics_fast.yml`
-вызывается перед каждой выгрузкой.
+Идемпотентно. В `collect_analytics_fast.yml` вызывается перед выгрузкой.
 
 ## Тесты
 

@@ -1610,6 +1610,9 @@ public:
                 GroupData.reserve(GetGroupsResponse->Get()->Record.EntriesSize());
                 for (const NKikimrSysView::TGroupEntry& entry : GetGroupsResponse->Get()->Record.GetEntries()) {
                     const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
+                    if (info.GetDDisk()) {
+                        continue;
+                    }
                     TGroup& group = GroupData.emplace_back();
                     group.GroupId = entry.GetKey().GetGroupId();
                     group.GroupGeneration = info.GetGeneration();

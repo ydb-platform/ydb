@@ -58,7 +58,8 @@ namespace NYql::NDqs {
                 exprRoot,
                 [](const TExprNode::TPtr& exprNode) {
                     const auto& node = TExprBase(exprNode);
-                    return !node.Maybe<TCoLambda>();
+                    return !node.Maybe<TCoLambda>()
+                        && !node.Maybe<TDqSource>();
                 },
                 [&stages](const TExprNode::TPtr& exprNode) {
                     const auto& node = TExprBase(exprNode);

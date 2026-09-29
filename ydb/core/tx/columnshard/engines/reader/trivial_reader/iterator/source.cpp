@@ -13,6 +13,8 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -240,19 +242,46 @@ THashMap<IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>>
 // Re-runs the same resolution as DoStartFetchIndex. They agree only while the stage-data index
 // collection is still empty: reserve runs before the index fetch, FindIndexFor misses, and the schema
 // FindSkipIndexes path decides. A reserve after fetched index data has landed can pick a different meta.
+//
+// Addresses match TIndexFetcherLogic: one per distinct category. An in-place chunk is copied once per
+// address, and an ordinary bloom header names the whole chunk for every category. A blob chunk is read
+// by unique ranges, so its stored size stays the upper bound.
 ui64 TPortionDataSource::GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchIndexContext>& indexes) const {
-    THashSet<ui32> indexIds;
+    struct TSelected {
+        std::shared_ptr<NIndexes::IIndexMeta> Meta;
+        THashSet<NIndexes::TIndexDataAddress> Addresses;
+    };
+
+    THashMap<ui32, TSelected> selected;
     for (auto&& [_, indexContext] : indexes) {
-        for (auto&& [_, indexMeta] : SelectIndexesForFetch(indexContext)) {
-            if (indexMeta) {
-                indexIds.emplace(indexMeta->GetIndexId());
+        for (auto&& [check, indexMeta] : SelectIndexesForFetch(indexContext)) {
+            if (!indexMeta) {
+                continue;
             }
+            auto& item = selected[indexMeta->GetIndexId()];
+            item.Meta = indexMeta;
+            item.Addresses.emplace(NIndexes::TIndexDataAddress(indexMeta->GetIndexId(), indexMeta->CalcCategory(check.GetSubColumnName())));
         }
     }
     ui64 result = 0;
-    for (const ui32 indexId : indexIds) {
+    for (auto&& [indexId, item] : selected) {
+        AFL_VERIFY(item.Meta);
+        AFL_VERIFY(!item.Addresses.empty());
         for (const auto* chunk : GetPortionAccessor().GetIndexChunksPointers(indexId)) {
-            result += chunk->GetDataSize();
+            if (!chunk->HasBlobData()) {
+                result += chunk->GetDataSize();
+                continue;
+            }
+            const auto header = item.Meta->BuildHeader(NIndexes::TChunkOriginalData(chunk->GetBlobDataVerified()));
+            if (header.IsFail() || !(*header)) {
+                result += chunk->GetDataSize() * item.Addresses.size();
+                continue;
+            }
+            for (auto&& address : item.Addresses) {
+                if (const auto range = (*header)->GetAddressForCategory(address.GetCategory())) {
+                    result += range->GetSize();
+                }
+            }
         }
     }
     return result;

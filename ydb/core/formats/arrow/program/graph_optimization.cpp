@@ -75,8 +75,9 @@ void TGraph::RemoveNode(const ui32 idenitifier) {
     Nodes.erase(it);
 }
 
-TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver)
-    : Resolver(resolver) {
+TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory)
+    : ReserveIndexMemory(reserveIndexMemory)
+    , Resolver(resolver) {
     NextResourceId = 0;
     for (auto&& i : processors) {
         for (auto&& input : i->GetInput()) {

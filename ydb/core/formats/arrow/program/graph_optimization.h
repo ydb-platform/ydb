@@ -219,7 +219,7 @@ private:
         return ++NextResourceId;
     }
 
-    TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver);
+    TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory);
 
 public:
     const std::map<ui64, std::shared_ptr<TGraphNode>>& GetNodes() const {
@@ -251,8 +251,7 @@ public:
         TConclusion<std::shared_ptr<NExecution::TCompiledGraph>> Finish() {
             AFL_VERIFY(!Finished);
             Finished = true;
-            TGraph graph(std::move(Processors), Resolver);
-            graph.ReserveIndexMemory = ReserveIndexMemory;
+            TGraph graph(std::move(Processors), Resolver, ReserveIndexMemory);
             graph.Collapse();
             return graph.Compile();
         }

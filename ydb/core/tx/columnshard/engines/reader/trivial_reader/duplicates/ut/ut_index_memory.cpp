@@ -107,6 +107,14 @@ NArrow::NSSA::IDataSource::TFetchIndexContext IndexFetch(const NArrow::NSSA::TIn
     return NArrow::NSSA::IDataSource::TFetchIndexContext(PkColumnId, operations);
 }
 
+NArrow::NSSA::IDataSource::TFetchIndexContext IndexFetchPaths(const std::vector<TString>& paths) {
+    NArrow::NSSA::IDataSource::TFetchIndexContext::TOperationsBySubColumn operations;
+    for (const auto& path : paths) {
+        operations.Add(path, NArrow::NSSA::TIndexCheckOperation(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals, true));
+    }
+    return NArrow::NSSA::IDataSource::TFetchIndexContext(PkColumnId, operations);
+}
+
 class TReserveProbe: public NActors::TActorBootstrapped<TReserveProbe> {
 private:
     std::shared_ptr<TReadContext> ReadContext;
@@ -116,12 +124,13 @@ private:
     ui64* EqualsMemory = nullptr;
     ui64* GreaterMemory = nullptr;
     ui64* EmptyMemory = nullptr;
+    ui64* TwoPathsMemory = nullptr;
     bool* Finished = nullptr;
 
 public:
     TReserveProbe(std::shared_ptr<TReadContext> readContext, std::shared_ptr<TPortionInfo> portion,
         std::shared_ptr<TPortionDataAccessor> accessor, ISnapshotSchema::TPtr schema, ui64* equalsMemory, ui64* greaterMemory, ui64* emptyMemory,
-        bool* finished)
+        ui64* twoPathsMemory, bool* finished)
         : ReadContext(std::move(readContext))
         , Portion(std::move(portion))
         , Accessor(std::move(accessor))
@@ -129,6 +138,7 @@ public:
         , EqualsMemory(equalsMemory)
         , GreaterMemory(greaterMemory)
         , EmptyMemory(emptyMemory)
+        , TwoPathsMemory(twoPathsMemory)
         , Finished(finished)
     {
     }
@@ -146,6 +156,7 @@ public:
         *EqualsMemory = ReservedMemory(*source, { { PkColumnId, IndexFetch(NArrow::NSSA::TIndexCheckOperation::EOperation::Equals) } });
         *GreaterMemory = ReservedMemory(*source, { { PkColumnId, IndexFetch(NArrow::NSSA::TIndexCheckOperation::EOperation::Greater) } });
         *EmptyMemory = ReservedMemory(*source, {});
+        *TwoPathsMemory = ReservedMemory(*source, { { PkColumnId, IndexFetchPaths({ "a", "b" }) } });
         *Finished = true;
         PassAway();
     }
@@ -192,8 +203,10 @@ Y_UNIT_TEST_SUITE(TIndexReadMemoryTracking) {
         ui64 equalsMemory = 0;
         ui64 greaterMemory = 0;
         ui64 emptyMemory = 0;
+        ui64 twoPathsMemory = 0;
         bool finished = false;
-        runtime.Register(new TReserveProbe(readContext, portion, accessor, schema, &equalsMemory, &greaterMemory, &emptyMemory, &finished));
+        runtime.Register(
+            new TReserveProbe(readContext, portion, accessor, schema, &equalsMemory, &greaterMemory, &emptyMemory, &twoPathsMemory, &finished));
         NActors::TDispatchOptions options;
         options.CustomFinalCondition = [&finished]() {
             return finished;
@@ -204,5 +217,6 @@ Y_UNIT_TEST_SUITE(TIndexReadMemoryTracking) {
         UNIT_ASSERT_VALUES_EQUAL(equalsMemory, BloomPayloadBytes);
         UNIT_ASSERT_VALUES_EQUAL(greaterMemory, 0);
         UNIT_ASSERT_VALUES_EQUAL(emptyMemory, 0);
+        UNIT_ASSERT_VALUES_EQUAL(twoPathsMemory, BloomPayloadBytes * 2);
     }
 }

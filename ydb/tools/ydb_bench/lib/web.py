@@ -400,7 +400,7 @@ async function refreshEditorActivity(){
   try{
     const value=await editorApi('/api/activity-status');
     if(host===editorHost&&button===document.querySelector('#start-run')){
-      button.textContent=value.active_run_id||value.queued?'Add to queue':editor.model?.profiles?.some(p=>p.distributed_config?.mode==='deploy')?'Deploy cluster':'Start run'
+      button.textContent=value.active_run_id||value.queued?'Add to queue':editor.model?.profiles?.some(deploymentProfile)?'Deploy cluster':'Start run'
     }
   }catch{}
 }
@@ -701,7 +701,7 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     'function serializeConfig(model){let lines=[];for(const benchmark of model.benchmarks||[]){const entries=(model.profiles|'
     "|[]).filter(profile=>profile.benchmark===benchmark.name);if(!entries.length)continue;lines.push(benchmark.name+':');for("
     "const profile of entries){lines.push('  '+profile.name+':');"
-    "if(benchmark.profile_kind==='distributed-ydb'){serializeDistributedYdb(lines,profile);continue}"
+    "if(['distributed-ydb','dedicated-ydb'].includes(benchmark.profile_kind)){serializeDistributedYdb(lines,profile);continue}"
     "if(benchmark.profile_kind==='local-ydb'){serializeLocalYdb"
     "(lines,profile);continue}lines.push('    threads: '+yamlArray(profile.threads));for(c"
     "onst parameter of benchmark.parameters)lines.push('    '+parameter.name+': '+yamlArray(profile.parameters[parameter.name"
@@ -722,9 +722,10 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "length*(profile.background_load||['none']).length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou"
     'nt,seconds}}\n'
     "function editorControls(){return '<div class=toolbar><label>Host <select id=run-host>'+editorHostOptions+'</select></label><button id=validate>Validate</button><button id=download-yaml>Downl"
-    "oad YAML</button><button id=save-host>Save YAML on host</button><button class=primary id=start-run>Start run</button></div>'}\n"
+    "oad YAML</button><button id=save-host>Save YAML on host</button><button class=primary id=start-run>'+"
+    "(editor.model?.profiles?.some(deploymentProfile)?'Deploy cluster':'Start run')+'</button></div>'}\n"
     "function editorRunOptions(){return '<div class=toolbar><label><input id=perf type=checkbox '+(editor.perf?'chec"
-    "ked':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on e"
+    "ked':'')+' '+(editor.model?.profiles?.some(deploymentProfile)?'disabled':'')+'> perf</label><label><input id=continue type=checkbox '+(editor.continueOnError?'checked':'')+'> continue on e"
     "rror</label></div><div id=editor-message></div>'}\n"
     'function parameterCases(benchmark,profile){let cases=[[]];for(const parameter of benchmark.parameters.filter(item=>item.'
     'matrix)){const values=profile.parameters[parameter.name]||parameter.default;cases=cases.flatMap(parts=>values.map(value='
@@ -741,7 +742,8 @@ function localYdbLoadForWorkload(load,parameters,definition=null,workload=null){
     "  if(editor.model&&document.querySelector('.profile-list')){\n"
     '    const queue=[];\n'
     '    for(const profile of editor.model.profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.b'
-    "enchmark);if(profile.local_ydb){const local=profile.local_ydb;queue.push(profile.benchmark+' / '+profile.name+' / '+"
+    "enchmark);if(deploymentProfile(profile)){queue.push(profile.name+' / Deploy cluster / Held until Release cluster');continue}"
+    "if(profile.local_ydb){const local=profile.local_ydb;queue.push(profile.benchmark+' / '+profile.name+' / '+"
     "local.workload.type+' '+local.workload.operation+' / '+(local.load.values?'fixed load points':'adaptive load search'));continue}"
     "for(const affinity of profile.affinity)for(const backgroundLoad of (profile.background_load||['none']))"
     "for(const threads of profile.threads)for(const parameters of parameterC"
@@ -782,7 +784,7 @@ function localField(id,label,value,help='',attributes=''){
 }
 function localSelect(id,label,value,choices,help=''){
   return '<div class=field><label for="'+id+'">'+esc(label)+'</label><select id="'+id+'">'+
-    choices.map(choice=>'<option value="'+esc(choice)+'" '+(choice===value?'selected':'')+'>'+esc(choice)+'</option>').join('')+
+    choices.map(choice=>'<option value="'+esc(choice.value??choice)+'" '+((choice.value??choice)===value?'selected':'')+'>'+esc(choice.label??choice)+'</option>').join('')+
     '</select><small class=muted>'+esc(help)+'</small></div>'
 }
 function localCheck(id,label,checked,help=''){
@@ -958,7 +960,7 @@ function localYdbProfileEditor(profile){
     )+'</div>';
   const selected=localEditorViews.get(profile.key)||'Cluster';
   return '<div id=local-editor><div class=form-grid>'+localSelect(
-    'benchmark','Benchmark',profile.benchmark,editor.model.benchmarks.map(item=>item.name)
+    'benchmark','Type',profile.benchmark,editor.model.benchmarks.map(item=>({value:item.name,label:item.label||item.name}))
   )+'</div><div class=tabs aria-label="Local YDB settings">'+Object.keys(panels).map(name=>
     '<button type=button data-local-view="'+name+'" class="'+(name===selected?'active':'')+'" aria-pressed="'+
     (name===selected)+'">'+name+'</button>').join('')+'</div>'+Object.entries(panels).map(([name,html])=>
@@ -1002,7 +1004,7 @@ function bindLocalYdbEditor(profile){
     ))throw Error('A profile with this benchmark and name already exists.');
     if(benchmarkName!==profile.benchmark){
       const benchmark=editor.model.benchmarks.find(item=>item.name===benchmarkName);
-      if(benchmark.profile_kind==='distributed-ydb'){chooseDistributedProfile(profile,name);return}
+      if(['distributed-ydb','dedicated-ydb'].includes(benchmark.profile_kind)){chooseDistributedProfile(profile,name,benchmarkName);return}
       profile.benchmark=benchmarkName;profile.name=name;profile.key=benchmarkName+'/'+name;
       delete profile.local_ydb;
       profile.parameters=Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default]));
@@ -1173,7 +1175,7 @@ function bindLocalYdbEditor(profile){
 """
     'function profileEditor(profile){\n'
     '  const benchmark=(editor.model.benchmarks||[]).find(item=>item.name===profile.benchmark);\n'
-    "  if(benchmark.profile_kind==='distributed-ydb')return distributedProfileEditor(profile);\n"
+    "  if(['distributed-ydb','dedicated-ydb'].includes(benchmark.profile_kind))return distributedProfileEditor(profile);\n"
     "  if(benchmark.profile_kind==='local-ydb')return localYdbProfileEditor(profile);\n"
     "  if(!benchmark.builder_supported)return '<h2 class=page-title>'+esc(profile.benchmark)+' / '+esc(profile.name)+"
     "'</h2><div class=notice>Edit this benchmark in the YAML tab; its nested cluster, workload, load controller, and role "
@@ -1190,8 +1192,8 @@ function bindLocalYdbEditor(profile){
     "rs['buffer-size-mb']||[0])):0;\n"
     "  return (memoryMb?'<div class=notice>Max"
     "imum private-buffer footprint per process: <strong>'+esc(memoryMb)+' MiB</strong>.</div>':'')+'<div class=form-grid><div"
-    ' class=field><label>Benchmark</label><select id=benchmark>\'+editor.model.benchmarks.map(item=>\'<option value="\'+esc(item'
-    '.name)+\'" \'+(item.name===profile.benchmark?\'selected\':\'\')+\'>\'+esc(item.name)+\'</option>\').join(\'\')+\'</select></div>\'+'
+    ' class=field><label>Type</label><select id=benchmark>\'+editor.model.benchmarks.map(item=>\'<option value="\'+esc(item'
+    '.name)+\'" \'+(item.name===profile.benchmark?\'selected\':\'\')+\'>\'+esc(item.label||item.name)+\'</option>\').join(\'\')+\'</select></div>\'+'
     "field('threads','Threads',compactIntegerRang"
     "es(profile.threads),'values and ranges, for example 1-16')+parameterFields+field('duration','Duration (seconds)',profile"
     ".duration)+field('repetitions','Repetitions',profile.repetitions)+'</div><div class=field><label>Affinity modes</label><"
@@ -1230,7 +1232,7 @@ function bindProfileEditor(profile){
     if(editor.model.profiles.some(item=>
       item.key!==profile.key&&item.benchmark===benchmarkName&&item.name===name
     ))throw Error('A profile with this benchmark and name already exists.');
-    if(benchmarkChanged&&benchmark.profile_kind==='distributed-ydb'){chooseDistributedProfile(profile,name);return}
+    if(benchmarkChanged&&['distributed-ydb','dedicated-ydb'].includes(benchmark.profile_kind)){chooseDistributedProfile(profile,name,benchmarkName);return}
     updateProfile(profile.key,item=>{
       item.benchmark=benchmarkName;item.name=name;item.key=benchmarkName+'/'+name;
       if(benchmarkChanged&&benchmark.profile_kind==='local-ydb'){
@@ -1271,6 +1273,7 @@ function bindProfileEditor(profile){
 """
     """
 function addProfile(){
+  if(editor.model.profiles.some(deploymentProfile))return;
   if(editor.model.profiles.some(profile=>!editor.model.benchmarks.find(item=>item.name===profile.benchmark)?.builder_supported)){
     location.hash='#new/yaml';return
   }
@@ -1278,7 +1281,7 @@ function addProfile(){
   const benchmark=editor.model.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];
   let suffix=1,name='profile';
   while((editor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;
-  if(benchmark.profile_kind==='distributed-ydb'){chooseDistributedProfile(null,name);return}
+  if(['distributed-ydb','dedicated-ydb'].includes(benchmark.profile_kind)){chooseDistributedProfile(null,name,benchmark.name);return}
   const profile={
     key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],
     parameters:Object.fromEntries(benchmark.parameters.map(item=>[item.name,item.default])),
@@ -1301,6 +1304,7 @@ function renameEditorProfile(profile,name){
   editor.selected=profile.key;editor.yaml=serializeConfig(editor.model);saveDraft();
 }
 function duplicateEditorProfile(profile){
+  if(editor.model.profiles.some(deploymentProfile))return;
   const copy=JSON.parse(JSON.stringify(profile)),base=profile.name.slice(0,52);let suffix=1;
   copy.name=base+'-copy';
   while(editor.model.profiles.some(p=>p.benchmark===copy.benchmark&&p.name===copy.name))copy.name=base+'-copy-'+suffix++;
@@ -1316,7 +1320,8 @@ function removeEditorProfile(profile){
 }
 function editorProfileTabs(selected){
   const action=(id,label,symbol,extra='')=>'<button type=button class="profile-action '+extra+'" id="'+id+
-    '" aria-label="'+label+'" title="'+label+'" '+(id==='delete-profile'&&editor.model.profiles.length===1?'disabled':'')+'>'+symbol+'</button>';
+    '" aria-label="'+label+'" title="'+label+'" '+((id==='delete-profile'&&editor.model.profiles.length===1)||
+      (id==='duplicate-profile'&&editor.model.profiles.some(deploymentProfile))?'disabled':'')+'>'+symbol+'</button>';
   return editor.model.profiles.map(profile=>'<div class="profile-tab '+(profile.key===selected?.key?'selected':'')+'">'+
     '<button type=button data-profile="'+esc(profile.key)+'" aria-pressed="'+(profile.key===selected?.key)+'">'+
     esc(profile.benchmark)+' / '+esc(profile.name)+'</button>'+(profile.key===selected?.key?
@@ -1378,15 +1383,17 @@ async function renderNew(tab){
     "s();return}if(editor.error){content+=displayError(editor.error)+'<p>Fix the YAML in the YAML tab before editing with Bui"
     "lder.</p>'+editorRunOptions();app.innerHTML=shell('new',content+'</div>');bindEditorControls();return}const selected=profileByKey(editor.selected)||"
     "editor.model.profiles[0];content+='<div class=editor-plan>'+editor.model.profiles.length+' profiles · '+summary.count+' executions'+"
-    "(editor.model.profiles.some(profile=>profile.local_ydb&&!profile.local_ydb.load.values)?' · Duration depends on load search and verification':"
+    "(editor.model.profiles.some(deploymentProfile)?' · Held until Release cluster':"
+    "editor.model.profiles.some(profile=>profile.local_ydb&&!profile.local_ydb.load.values)?' · Duration depends on load search and verification':"
     "editor.model.profiles.some(profile=>profile.local_ydb)?' · Per-point measurement; startup and verification are additional':"
     "' · '+Math.ceil(summary.seconds)+' s measurement')+'</div>'"
     '+\'<section class=profile-list>\'+editorProfileTabs(selected)+'
-    "'<button id=add-profile>+ Add profile</button></section><section>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
+    "'<button id=add-profile '+(editor.model.profiles.some(deploymentProfile)?'disabled title=\"A dedicated cluster uses one profile\"':'')+"
+    "'>+ Add profile</button></section><section>'+ (selected?profileEditor(selected):'<div class=empty>Add a benchmark profile to begin.</div>')+"
     "'</section>'+editorRunOptions()+'</div>';app.innerHTML=shell('new',content);restoreEditorDetails();bindEditorControls();document.querySelector('#add-profile').onclic"
     "k=addProfile;for(const button of document.querySelectorAll('[data-profile]'))button.onclick=()=>{editor.selected=button."
     "dataset.profile;renderNew()};if(selected){bindEditorProfileActions(selected);const benchmark=editor.model.benchmarks.find(item=>item.name===selected.bench"
-    "mark);if(benchmark?.profile_kind==='distributed-ydb')bindDistributedEditor(selected);"
+    "mark);if(['distributed-ydb','dedicated-ydb'].includes(benchmark?.profile_kind))bindDistributedEditor(selected);"
     "else if(benchmark?.profile_kind==='local-ydb')bindLocalYdbEditor(selected);else if(benchmark?.builder_supported)bindPro"
     "fileEditor(selected)}}\n"
     'function clearRefresh(){if(refreshTimer){clearInterval(refreshTimer);refreshTimer=null}editorToolbarObserver?.disconnect();editorToolbarObserver=null}\n'
@@ -2709,9 +2716,12 @@ function renderLocalYdbProfile(container,data){
         try{await api('/api/runs/'+enc(container.dataset.localYdbRunId)+'/release-cluster',jsonOptions({}));release.textContent='Releasing…'}
         catch(error){release.disabled=false;alert(error.message)}};
     }else release?.remove();
-    container.innerHTML='<div class=runs-toolbar><h3>Cluster reservation · '+
-      esc(progress.phase==='cluster-ready'?'Ready':String(progress.phase||data.state).replaceAll('-',' '))+'</h3><span data-reservation-grafana></span></div>'+
-      (data.error?displayError(Error(data.error)):'')+
+    if(!container.querySelector('[data-reservation-body]'))container.innerHTML=
+      '<div class=runs-toolbar><h3 data-reservation-status></h3><span data-reservation-grafana></span></div>'+
+      '<div data-reservation-body></div>';
+    container.querySelector('[data-reservation-status]').textContent='Cluster reservation · '+
+      (progress.phase==='cluster-ready'?'Ready':String(progress.phase||data.state).replaceAll('-',' '));
+    container.querySelector('[data-reservation-body]').innerHTML=(data.error?displayError(Error(data.error)):'')+
       '<p class=muted>'+esc(telemetry?'Metrics: '+telemetry.status+' · '+telemetry.segments+' saved intervals':'Metrics were not recorded for this reservation.')+'</p>'+
       (telemetry?.error?displayError(Error(telemetry.error)):'')+
       (endpoints.length?localReportTable('Endpoints',endpoints.map(e=>[e.node,e.tenant,e.host+':'+e.port]),['Node','Tenant','Host:port']):'')+
@@ -3222,7 +3232,7 @@ async function renderLocalYdbAttempt(runId,profile,attempt,requestedView='summar
     """
 function parseLocalYdbProfileSelection(groups,selected){
   if(groups[selected])return {profile:selected,view:''};
-  const match=new RegExp('^((?:local-ydb|distributed-ydb)/.+)/view/(result|discovery)$').exec(selected);
+  const match=new RegExp('^((?:local-ydb|distributed-ydb|dedicated-ydb)/.+)/view/(result|discovery)$').exec(selected);
   return match&&groups[match[1]]?{profile:match[1],view:match[2]}:{profile:'',view:''}
 }
     """
@@ -3442,7 +3452,8 @@ function bindRunConfiguration(container,id){
     "ter(step=>!['pending','running'].includes(step.state)).length,affinities=new Set(steps.map(step=>step.affinity)).size;re"
     "turn '<tr><td><a href=\"#run/'+enc(id)+'/profile/'+enc(key)+'\">'+esc(key)+'</a></td><td>'+done+' / '+steps.length+'</td"
     "><td>'+status(aggregateState(steps))+'</td><td>'+affinities+'</td></tr>'}).join('')+'</table></section>';\n"
-    "    if(activeProfile)content+=['local-ydb','distributed-ydb'].includes(activeBenchmark)?'<section class=\"card local-result-container\"><div id=local-ydb-result>Loading profile data…</div>"
+    "    if(activeProfile)content+=['local-ydb','distributed-ydb','dedicated-ydb'].includes(activeBenchmark)?"
+    "'<section class=\"card local-result-container\"><div id=local-ydb-result>Loading profile data…</div>"
     "</section>':'<section class=card><div class=run-section-title><h2>Results</h2><strong>'+esc(activeProfile)+'</strong>"
     "</div><p class=muted>Affinity variants are lines. Choose a common X axis, one or more Y metrics, and fixed values for "
     "the remaining dimensions.</p><div id=run-chart>Loading summary data…</div></section>';\n"
@@ -3450,7 +3461,7 @@ function bindRunConfiguration(container,id){
     "card run-tree\"><details'+open+'><summary><strong>Execution details</strong> — affinity, cases and artifacts</summary><"
     "table><tr><th>Affinity</th><th>Runs</th><th>State</th></tr>'+affinityRows(id,steps)+'</table></details></section>'}\n"
     "    const running=(run.steps||[]).find(step=>step.state==='running'),live=['running','queued','failed','recovery_requir"
-    "ed'].includes(run.state),showLiveOutput=!['local-ydb','distributed-ydb'].includes(activeBenchmark);\n"
+    "ed'].includes(run.state),showLiveOutput=!['local-ydb','distributed-ydb','dedicated-ydb'].includes(activeBenchmark);\n"
     "    if(live&&!runView&&showLiveOutput)content+='<section class=card><h2>Current step</h2>'+ (running?'<p><strong>'+esc(running.benchmark)+' / '+e"
     "sc(running.profile)+'</strong>, '+esc(running.affinity)+', '+esc(running.threads??'—')+' threads, repeat '+running.repe"
     "at+', elapsed '+esc(stepDuration(running))+'</p>':'<p class=muted>No step is currently running.</p>')+(showLiveOutput"
@@ -3459,7 +3470,7 @@ function bindRunConfiguration(container,id){
     "    app.innerHTML=shell('runs',content);\n"
     "    mountMetricsExport(document.querySelector('#run-export'),id);\n"
     "    if(runView==='configuration')bindRunConfiguration(document.querySelector('#run-configuration-view'),id);\n"
-    "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return ['local-ydb','distributed-ydb'].includes(activeBenchmark)&&"
+    "    const selectedRoute=()=>{const local=document.querySelector('#local-ydb-result');return ['local-ydb','distributed-ydb','dedicated-ydb'].includes(activeBenchmark)&&"
     "local?.dataset.localYdbViewExplicit==='true'?activeProfile+'/view/'+local.dataset.localYdbView:activeProfile};\n"
     "    document.querySelector('#refresh-run').onclick=()=>renderRun(id,selectedRoute(),runView);\n"
     "    document.querySelector('#repeat-run').onclick=()=>reuseRun(id);\n"
@@ -3471,7 +3482,7 @@ function bindRunConfiguration(container,id){
     "    if(cancel)cancel.onclick=async()=>{try{await api('/api/runs/'+enc(id)+'/cancel',jsonOptions({}));renderRun(id,sele"
     'ctedRoute(),runView)}catch(error){alert(error.message)}};\n'
     "    if(activeProfile){const pieces=activeProfile.split('/'),benchmark=pieces.shift(),profile=pieces.join('/');if("
-    "['local-ydb','distributed-ydb'].includes(benchmark))await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),"
+    "['local-ydb','distributed-ydb','dedicated-ydb'].includes(benchmark))await mountLocalYdbProfile(document.querySelector('#local-ydb-result'),"
     "id,profile,run.state,requestedLocalView,benchmark,()=>{const clock=document.querySelector('#run-duration');"
     "if(clock)clock.textContent=duration(run)});"
     "else try{mountChartBuilder(document.querySelector('#run-chart'),await loadChartData([id]),{benchmark,profile,"
@@ -4029,6 +4040,7 @@ def benchmark_catalog():
             "description": item.description,
             "builder_supported": item.builder_supported,
             "profile_kind": item.profile_kind,
+            "label": "Dedicated YDB cluster" if item.name == "dedicated-ydb" else item.name,
             "parameter_name": item.parameter_name,
             "parameter_description": item.parameter_description,
             "parameters": [
@@ -4068,9 +4080,9 @@ def editor_model(loaded, output, source=None):
             "affinity": list(configuration.affinity_modes),
             "background_load": list(configuration.background_load_modes),
         }
-        if benchmark.profile_kind in ("local-ydb", "distributed-ydb"):
+        if benchmark.profile_kind in ("local-ydb", "distributed-ydb", "dedicated-ydb"):
             profile["local_ydb"] = configuration.parameters["local_ydb"]
-            if benchmark.profile_kind == "distributed-ydb":
+            if benchmark.profile_kind in ("distributed-ydb", "dedicated-ydb"):
                 if source is None:
                     source = yaml.safe_load(loaded.path.read_text())
                 profile["distributed_config"] = source[benchmark.name][configuration.profile]
@@ -5310,7 +5322,7 @@ class RunService:
                 profile_yaml = {}
         configurations = {}
         for record in manifest.get("runs", []):
-            if record.get("benchmark") not in ("local-ydb", "distributed-ydb"):
+            if record.get("benchmark") not in ("local-ydb", "distributed-ydb", "dedicated-ydb"):
                 continue
             relative = record.get("manifest") or str(Path(record.get("directory", "")) / "run.json")
             configurations[record["benchmark"] + "/" + record["profile"]] = _saved_ydb_configurations(
@@ -5399,7 +5411,7 @@ class RunService:
             raise BenchmarkError("cannot read local-ydb metrics: {}".format(error)) from error
 
     def local_ydb_profile(self, run_id, profile, benchmark="local-ydb"):
-        if benchmark not in ("local-ydb", "distributed-ydb"):
+        if benchmark not in ("local-ydb", "distributed-ydb", "dedicated-ydb"):
             raise BenchmarkError("unsupported YDB profile benchmark")
         root = _run_directory(self.output, run_id)
         manifest = load_manifest(root / "run.json")
@@ -5475,7 +5487,8 @@ class RunService:
         if candidate.stat().st_size > 16 * 1024 * 1024:
             raise BenchmarkError("local-ydb profile manifest is too large")
         value = load_manifest(candidate, allow_legacy_deployment=True)
-        value["workload_result_schema"] = _resolved_local_ydb_result_schema(value)
+        if value.get("parameters", {}).get("mode") != "deploy":
+            value["workload_result_schema"] = _resolved_local_ydb_result_schema(value)
         top_state = manifest.get("state")
         if value.get("state") in ("preparing", "running") and top_state not in ("pending", "queued", "running"):
             value["state"] = top_state or "failed"
@@ -5514,7 +5527,7 @@ class RunService:
         return result
 
     def local_ydb_activity(self, run_id, profile, after=0, benchmark="local-ydb"):
-        if benchmark not in ("local-ydb", "distributed-ydb"):
+        if benchmark not in ("local-ydb", "distributed-ydb", "dedicated-ydb"):
             raise BenchmarkError("unsupported YDB profile benchmark")
         if not isinstance(profile, str) or not profile:
             raise BenchmarkError("local-ydb profile is required")

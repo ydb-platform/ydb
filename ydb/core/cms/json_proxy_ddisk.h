@@ -103,6 +103,10 @@ public:
                     const auto& sortBy = params.Get("sort_by");
                     if (sortBy == "tablets_count") {
                         event->Record.SetSortBy(NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT);
+                    } else if (sortBy == "ddisk_occupancy") {
+                        event->Record.SetSortBy(NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY);
+                    } else if (sortBy == "persistent_buffer_occupancy") {
+                        event->Record.SetSortBy(NKikimrCms::DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY);
                     } else {
                         event->Record.SetSortBy(NKikimrCms::DDISK_DISK_SORT_BY_DISK_ID);
                     }

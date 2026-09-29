@@ -87,7 +87,16 @@ dstool
 │  ├─ get                               Get cluster wide settings
 │  ├─ set                               Set cluster wide settings
 │  ├─ workload
-│  │  └─ run                            Create workload to stress failure model
+│  │  ├─ run                            Create workload to stress failure model
+│  │  └─ nbs-dbg-like                   Manage dedicated NbsDbgLike load tablets
+│  │                                     and recoverable gRPC runs
+│  │     ├─ create
+│  │     ├─ list
+│  │     ├─ describe
+│  │     ├─ delete
+│  │     ├─ run
+│  │     ├─ results
+│  │     └─ stop
 │  └─ list                              List cluster
 └─ nbs
    └─ partition

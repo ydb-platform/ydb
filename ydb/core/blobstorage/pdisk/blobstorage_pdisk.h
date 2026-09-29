@@ -1,4 +1,5 @@
 #pragma once
+#include "blobstorage_pdisk_allocation.h"
 #include "defs.h"
 
 #include "blobstorage_pdisk_defs.h"
@@ -953,6 +954,7 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     // compaction is the only thing that can free anything, so refusing it leaves the
     // owner stuck for good. It still stops at black.
     bool ForHousekeeping;
+    EAllocationPurpose Purpose;
     // DDisk waits for a terminal reply even when PDisk stops with this request queued.
     bool IsDDisk = false;
     // Refuse the reservation unless the owner's colour after it stays strictly better
@@ -964,11 +966,13 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
     NKikimrBlobStorage::TPDiskSpaceColor::E RefuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK;
 
     TEvChunkReserve(TOwner owner, TOwnerRound ownerRound, ui32 sizeChunks, bool forHousekeeping = false,
-            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK)
+            NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
+            EAllocationPurpose purpose = EAllocationPurpose::Recovery)
         : Owner(owner)
         , OwnerRound(ownerRound)
         , SizeChunks(sizeChunks)
         , ForHousekeeping(forHousekeeping)
+        , Purpose(forHousekeeping ? EAllocationPurpose::Maintenance : purpose)
         , RefuseAtColor(refuseAtColor)
     {}
 
@@ -982,6 +986,7 @@ struct TEvChunkReserve : TEventLocal<TEvChunkReserve, TEvBlobStorage::EvChunkRes
         str << " ownerRound# " << record.OwnerRound;
         str << " SizeChunks# " << record.SizeChunks;
         str << " ForHousekeeping# " << record.ForHousekeeping;
+        str << " Purpose# " << AllocationPurposeName(record.Purpose);
         str << " RefuseAtColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(record.RefuseAtColor);
         str << "}";
         return str.Str();

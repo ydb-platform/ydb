@@ -1051,7 +1051,7 @@ public:
             Counters->WriteActorRemoteShardWrites->Inc();
         }
 
-        if (Mode != EMode::COMMIT
+        if (!(Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId) // not commit response
                 && IsSupersededWriteResult(ev->Cookie, metadata)
                 && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
             YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",

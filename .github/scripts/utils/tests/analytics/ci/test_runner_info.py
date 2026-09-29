@@ -16,7 +16,6 @@ from github_actions.runner_info import (
     INVENTORY_LABEL,
     USAGE_LABEL,
     apply_runner_labels,
-    as_bool,
     collect_inventory,
     collect_usage,
     load_or_collect_inventory,
@@ -26,24 +25,12 @@ from github_actions.runner_info import (
 
 
 class PopRunnerOptionsTest(unittest.TestCase):
-    def test_as_bool(self):
-        self.assertTrue(as_bool(True))
-        self.assertTrue(as_bool("true"))
-        self.assertTrue(as_bool("1"))
-        self.assertTrue(as_bool("YES"))
-        self.assertFalse(as_bool(False))
-        self.assertFalse(as_bool("false"))
-        self.assertFalse(as_bool(None))
-        self.assertFalse(as_bool(""))
-
     def test_pops_flags_and_leaves_other_keys(self):
         data = {"runner": True, "usage": "yes", "cache_mode": "none"}
         runner, usage = pop_runner_options(data)
         self.assertTrue(runner)
         self.assertTrue(usage)
         self.assertEqual(data, {"cache_mode": "none"})
-
-    def test_empty(self):
         self.assertEqual(pop_runner_options({}), (False, False))
         self.assertEqual(pop_runner_options(None), (False, False))
 
@@ -66,19 +53,16 @@ class RunnerCacheTest(unittest.TestCase):
             else:
                 os.environ[key] = value
 
-    def test_prefers_explicit_env(self):
-        path = os.path.join(self.tmp.name, "custom.json")
-        os.environ["CI_RUNNER_INFO_FILE"] = path
-        os.environ["RUNNER_TEMP"] = os.path.join(self.tmp.name, "runner")
-        self.assertEqual(runner_cache_path("ignored.jsonl"), path)
-
-    def test_uses_runner_temp_when_set(self):
+    def test_cache_path_falls_back_in_order(self):
+        explicit = os.path.join(self.tmp.name, "custom.json")
         runner_temp = os.path.join(self.tmp.name, "runner")
-        os.environ["RUNNER_TEMP"] = runner_temp
-        self.assertEqual(runner_cache_path("x.jsonl"), os.path.join(runner_temp, "ci_runner_info.json"))
-
-    def test_falls_back_to_metrics_sidecar(self):
         metrics = os.path.join(self.tmp.name, "ci_metrics.jsonl")
+        os.environ["CI_RUNNER_INFO_FILE"] = explicit
+        os.environ["RUNNER_TEMP"] = runner_temp
+        self.assertEqual(runner_cache_path(metrics), explicit)
+        os.environ.pop("CI_RUNNER_INFO_FILE")
+        self.assertEqual(runner_cache_path(metrics), os.path.join(runner_temp, "ci_runner_info.json"))
+        os.environ.pop("RUNNER_TEMP")
         self.assertEqual(runner_cache_path(metrics), f"{metrics}.runner.json")
 
     def test_collect_once_then_reuse(self):

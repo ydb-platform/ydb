@@ -183,7 +183,7 @@ VALUES (1, "Alice", CurrentUtcDatetime());
 
 ### EXPLAIN and Execution Plan {#explain}
 
-Click **Explain** (or `Ctrl+Shift+E`) to get the [query execution plan](../../dev/query-execution-optimization/query-plans-optimization.md). The plugin displays:
+Click **Explain** (or `Ctrl+Shift+E`) to get the [query execution plan](../../dev/optimization/plans.md). The plugin displays:
 
 - **Text plan** — a tree of operations in text form.
 - **Diagram** — a graphical representation as a DAG.

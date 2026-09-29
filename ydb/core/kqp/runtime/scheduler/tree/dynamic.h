@@ -40,8 +40,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         std::atomic<ui64> CpuBurstThrottle = 0;
         std::atomic<ui64> ReadBurstUsage = 0;
 
-        std::atomic<ui64> CpuPeakDemand = 0;
-
         // TODO: implement Read resource - for now it's only per datashard.
 
         explicit TTreeElement(const TId& id, const TStaticAttributes& attrs = {}) : TTreeElementBase(id, attrs) {}
@@ -62,8 +60,6 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);
         ui32 ResumeTasks(ui32 count);
-
-        void UpdatePeakDemand();
 
     public:
         std::atomic<ui64> CurrentTasksTime = 0; // sum of average execution time for all active tasks

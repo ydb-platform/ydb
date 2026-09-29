@@ -8,6 +8,7 @@ from ydb.tools.ydb_bench.lib.common import atomic_write_json, atomic_write_text
 from ydb.tools.ydb_bench.lib.distributed_artifacts import copy_results
 from ydb.tools.ydb_bench.lib.distributed_runtime import DistributedRuntime
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION
+from ydb.tools.ydb_bench.lib.cluster_operations import ClusterOperations
 
 
 class DeploymentTelemetry:
@@ -104,6 +105,9 @@ def run_deployment(run, configuration, directory, emit, cancelled):
                 if node["role"] != "cli"
             ]
             telemetry.start()
+            if configuration.benchmark.name == 'dedicated-ydb':
+                with run['lock']:
+                    run['cluster_operations'] = ClusterOperations(run['root'], cluster)
             progress("cluster-ready", endpoints=endpoints)
             while not run["release_cluster"].wait(1):
                 cluster._check()
@@ -114,6 +118,8 @@ def run_deployment(run, configuration, directory, emit, cancelled):
                     progress("cluster-ready", endpoints=endpoints)
             cluster._check()
         finally:
+            with run['lock']:
+                run.pop('cluster_operations', None)
             try:
                 try:
                     telemetry.finish()

@@ -918,6 +918,34 @@ bool TSqlTranslation::ParseDatabaseSetting(const TRule_database_setting& in, THa
     return true;
 }
 
+bool TSqlTranslation::ParseTruncateTableSettings(const TRule_truncate_table_settings& in, THashMap<TString, TNodePtr>& out) {
+    if (!ParseTruncateTableSetting(in.GetRule_truncate_table_setting_is_unsafe1(), out)) {
+        return false;
+    }
+    for (const auto& setting : in.GetBlock2()) {
+        if (!ParseTruncateTableSetting(setting.GetRule_truncate_table_setting_is_unsafe2(), out)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool TSqlTranslation::ParseTruncateTableSetting(const TRule_truncate_table_setting_is_unsafe& in, THashMap<TString, TNodePtr>& out) {
+    const auto setting = to_upper(Id(in.GetRule_an_id1(), *this));
+
+    if (out.contains(setting)) {
+        Ctx_.Error() << "Duplicate setting: " << setting;
+        return false;
+    }
+
+    const auto value = ParseBool(Ctx_, in.GetRule_bool_value3());
+    if (!value) {
+        return false;
+    }
+    out[setting] = BuildLiteralBool(Ctx_.Pos(), *value);
+    return true;
+}
+
 bool TSqlTranslation::FillIndexSettings(const TRule_with_index_settings& settingsNode,
                                         TIndexDescription::TIndexSettings& indexSettings) {
     const auto& firstEntry = settingsNode.GetRule_index_setting_entry3();
@@ -3415,38 +3443,49 @@ TNodePtr TSqlTranslation::IntegerOrBind(const TRule_integer_or_bind& node) {
     }
 }
 
-TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
+namespace {
+template <auto F>
+TNodePtr TypeNameTagImpl(TSqlTranslation* self, TContext& ctx, const TRule_type_name_tag& node) {
     switch (node.Alt_case()) {
         case TRule_type_name_tag::kAltTypeNameTag1: {
-            auto content = Id(node.GetAlt_type_name_tag1().GetRule_id1(), *this);
-            auto atom = TDeferredAtom(Ctx_.Pos(), content);
+            auto content = Id(node.GetAlt_type_name_tag1().GetRule_id1(), *self);
+            auto atom = TDeferredAtom(ctx.Pos(), content);
             return atom.Build();
         }
         case TRule_type_name_tag::kAltTypeNameTag2: {
-            auto value = Token(node.GetAlt_type_name_tag2().GetToken1());
-            auto parsed = StringContentOrIdContent(Ctx_, Ctx_.Pos(), value);
+            auto value = self->Token(node.GetAlt_type_name_tag2().GetToken1());
+            auto parsed = StringContentOrIdContent(ctx, ctx.Pos(), value);
             if (!parsed) {
                 return {};
             }
-            auto atom = TDeferredAtom(Ctx_.Pos(), parsed->Content);
+            auto atom = TDeferredAtom(ctx.Pos(), parsed->Content);
             return atom.Build();
         }
         case TRule_type_name_tag::kAltTypeNameTag3: {
             TString bindName;
-            if (!NamedNodeImpl(node.GetAlt_type_name_tag3().GetRule_bind_parameter1(), bindName, *this)) {
+            if (!NamedNodeImpl(node.GetAlt_type_name_tag3().GetRule_bind_parameter1(), bindName, *self)) {
                 return {};
             }
-            auto namedNode = GetNamedNode(bindName);
+            auto namedNode = self->GetNamedNode(bindName);
             if (!namedNode) {
                 return {};
             }
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx_.Pos(), Ctx_, namedNode, atom);
+            F(ctx.Pos(), ctx, namedNode, atom, {});
             return atom.Build();
         }
         case TRule_type_name_tag::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }
+}
+} // namespace
+
+TNodePtr TSqlTranslation::TypeNameTag(const TRule_type_name_tag& node) {
+    return TypeNameTagImpl<MakeTableFromExpression>(this, Ctx_, node);
+}
+
+TNodePtr TSqlTranslation::RuntimeTypeNameTag(const TRule_type_name_tag& node) {
+    return TypeNameTagImpl<MakeRuntimeTableFromExpression>(this, Ctx_, node);
 }
 
 TNodePtr TSqlTranslation::TypeSimple(const TRule_type_name_simple& node, bool onlyDataAllowed) {
@@ -4051,15 +4090,21 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             }
             TVector<TNodePtr> hint_val;
             if (alt.HasBlock2()) {
+                std::function<TNodePtr(const TRule_type_name_tag& node)> mapper;
+                if (idLower == "user_attrs" && Ctx_.RuntimeUserAttrs) {
+                    mapper = [this](auto& node) { return this->RuntimeTypeNameTag(node); };
+                } else {
+                    mapper = [this](auto& node) { return this->TypeNameTag(node); };
+                }
                 auto& tags = alt.GetBlock2().GetBlock2();
                 switch (tags.Alt_case()) {
                     case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt1:
-                        hint_val.push_back(TypeNameTag(tags.GetAlt1().GetRule_type_name_tag1()));
+                        hint_val.push_back(mapper(tags.GetAlt1().GetRule_type_name_tag1()));
                         break;
                     case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt2: {
-                        hint_val.push_back(TypeNameTag(tags.GetAlt2().GetRule_type_name_tag2()));
+                        hint_val.push_back(mapper(tags.GetAlt2().GetRule_type_name_tag2()));
                         for (auto& tag : tags.GetAlt2().GetBlock3()) {
-                            hint_val.push_back(TypeNameTag(tag.GetRule_type_name_tag2()));
+                            hint_val.push_back(mapper(tag.GetRule_type_name_tag2()));
                         }
                         break;
                     }
@@ -4498,294 +4543,6 @@ bool TSqlTranslation::RoleNameClause(const TRule_role_name& node, TDeferredAtom&
         }
     }
 
-    return true;
-}
-
-bool TSqlTranslation::PasswordParameter(const TRule_password_option& passwordOption, TUserParameters& result) {
-    // password_option: ENCRYPTED? PASSWORD password_value;
-    // password_value: STRING_VALUE | NULL;
-
-    const auto& token = passwordOption.GetRule_password_value3().GetToken1();
-    TString stringValue(Ctx_.Token(token));
-
-    if (to_lower(stringValue) == "null") {
-        result.IsPasswordNull = true;
-    } else {
-        auto password = StringContent(Ctx_, Ctx_.Pos(), stringValue);
-
-        if (!password) {
-            Error() << "Password should be enclosed into quotation marks.";
-            return false;
-        }
-
-        result.Password = TDeferredAtom(Ctx_.Pos(), password->Content);
-    }
-
-    result.IsPasswordEncrypted = passwordOption.HasBlock1();
-
-    return true;
-}
-
-bool TSqlTranslation::HashParameter(const TRule_hash_option& hashOption, TUserParameters& result) {
-    // hash_option: HASH STRING_VALUE;
-
-    const auto& token = hashOption.GetToken2();
-    TString stringValue(Ctx_.Token(token));
-
-    auto hash = StringContent(Ctx_, Ctx_.Pos(), stringValue);
-
-    if (!hash) {
-        Error() << "Hash should be enclosed into quotation marks.";
-        return false;
-    }
-
-    result.Hash = TDeferredAtom(Ctx_.Pos(), hash->Content);
-
-    return true;
-}
-
-void TSqlTranslation::LoginParameter(const TRule_login_option& loginOption, std::optional<bool>& canLogin) {
-    // login_option: LOGIN | NOLOGIN;
-
-    auto token = loginOption.GetToken1().GetId();
-    if (IS_TOKEN(token, LOGIN)) {
-        canLogin = true;
-    } else if (IS_TOKEN(token, NOLOGIN)) {
-        canLogin = false;
-    } else {
-        YQL_ENSURE(false, "Unreachable");
-    }
-}
-
-bool TSqlTranslation::UserParameters(const std::vector<TRule_user_option>& optionsList, TUserParameters& result, bool isCreateUser) {
-    enum class EUserOption {
-        Login,
-        Authentication
-    };
-
-    std::set<EUserOption> used;
-
-    auto ParseUserOption = [&used, this](const TRule_user_option& option, TUserParameters& result) -> bool {
-        // user_option: authentication_option | login_option;
-        //      authentication_option: password_option | hash_option;
-
-        switch (option.Alt_case()) {
-            case TRule_user_option::kAltUserOption1: {
-                if (used.contains(EUserOption::Authentication)) {
-                    Error() << "Conflicting or redundant options";
-                    return false;
-                }
-
-                used.insert(EUserOption::Authentication);
-
-                const auto& authenticationOption = option.GetAlt_user_option1().GetRule_authentication_option1();
-
-                switch (authenticationOption.Alt_case()) {
-                    case TRule_authentication_option::kAltAuthenticationOption1: {
-                        if (!PasswordParameter(authenticationOption.GetAlt_authentication_option1().GetRule_password_option1(), result)) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                    case TRule_authentication_option::kAltAuthenticationOption2: {
-                        if (!HashParameter(authenticationOption.GetAlt_authentication_option2().GetRule_hash_option1(), result)) {
-                            return false;
-                        }
-
-                        break;
-                    }
-                    case TRule_authentication_option::ALT_NOT_SET:
-                        YQL_ENSURE(false, "Unreachable");
-                }
-
-                break;
-            }
-            case TRule_user_option::kAltUserOption2: {
-                if (used.contains(EUserOption::Login)) {
-                    Error() << "Conflicting or redundant options";
-                    return false;
-                }
-
-                used.insert(EUserOption::Login);
-
-                LoginParameter(option.GetAlt_user_option2().GetRule_login_option1(), result.CanLogin);
-
-                break;
-            }
-            case TRule_user_option::ALT_NOT_SET:
-                YQL_ENSURE(false, "Unreachable");
-        }
-
-        return true;
-    };
-
-    if (isCreateUser) {
-        result.CanLogin = true;
-        result.IsPasswordNull = true;
-    }
-
-    for (const auto& option : optionsList) {
-        if (!ParseUserOption(option, result)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-bool TSqlTranslation::PermissionNameClause(const TRule_permission_id& node, TDeferredAtom& result) {
-    // permission_id:
-    //   CONNECT
-    // | LIST
-    // | INSERT
-    // | MANAGE
-    // | DROP
-    // | GRANT
-    // | MODIFY (TABLES | ATTRIBUTES)
-    // | (UPDATE | ERASE) ROW
-    // | (REMOVE | DESCRIBE | ALTER) SCHEMA
-    // | SELECT (TABLES | ATTRIBUTES | ROW)?
-    // | (USE | FULL) LEGACY?
-    // | CREATE (DIRECTORY | TABLE | QUEUE)?
-
-    auto handleOneIdentifier = [&result, this](const auto& permissionNameKeyword) {
-        result = TDeferredAtom(Ctx_.Pos(), GetIdentifier(*this, permissionNameKeyword).Name);
-    };
-
-    auto handleTwoIdentifiers = [&result, this](const auto& permissionNameKeyword) {
-        const auto& token1 = permissionNameKeyword.GetToken1();
-        const auto& token2 = permissionNameKeyword.GetToken2();
-        TString identifierName = TIdentifier(TPosition(token1.GetColumn(), token1.GetLine()), Identifier(token1)).Name +
-                                 "_" +
-                                 TIdentifier(TPosition(token2.GetColumn(), token2.GetLine()), Identifier(token2)).Name;
-        result = TDeferredAtom(Ctx_.Pos(), identifierName);
-    };
-
-    auto handleOneOrTwoIdentifiers = [&result, this](const auto& permissionNameKeyword) {
-        TString identifierName = GetIdentifier(*this, permissionNameKeyword).Name;
-        if (permissionNameKeyword.HasBlock2()) {
-            identifierName += "_" + GetIdentifier(*this, permissionNameKeyword.GetBlock2()).Name;
-        }
-        result = TDeferredAtom(Ctx_.Pos(), identifierName);
-    };
-
-    switch (node.GetAltCase()) {
-        case TRule_permission_id::kAltPermissionId1: {
-            // CONNECT
-            handleOneIdentifier(node.GetAlt_permission_id1());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId2: {
-            // LIST
-            handleOneIdentifier(node.GetAlt_permission_id2());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId3: {
-            // INSERT
-            handleOneIdentifier(node.GetAlt_permission_id3());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId4: {
-            // MANAGE
-            handleOneIdentifier(node.GetAlt_permission_id4());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId5: {
-            // DROP
-            handleOneIdentifier(node.GetAlt_permission_id5());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId6: {
-            // GRANT
-            handleOneIdentifier(node.GetAlt_permission_id6());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId7: {
-            // MODIFY (TABLES | ATTRIBUTES)
-            handleTwoIdentifiers(node.GetAlt_permission_id7());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId8: {
-            // (UPDATE | ERASE) ROW
-            handleTwoIdentifiers(node.GetAlt_permission_id8());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId9: {
-            // (REMOVE | DESCRIBE | ALTER) SCHEMA
-            handleTwoIdentifiers(node.GetAlt_permission_id9());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId10: {
-            // SELECT (TABLES | ATTRIBUTES | ROW)?
-            handleOneOrTwoIdentifiers(node.GetAlt_permission_id10());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId11: {
-            // (USE | FULL) LEGACY?
-            handleOneOrTwoIdentifiers(node.GetAlt_permission_id11());
-            break;
-        }
-        case TRule_permission_id::kAltPermissionId12: {
-            // CREATE (DIRECTORY | TABLE | QUEUE)?
-            handleOneOrTwoIdentifiers(node.GetAlt_permission_id12());
-            break;
-        }
-        case TRule_permission_id::ALT_NOT_SET:
-            YQL_ENSURE(false, "Unreachable");
-    }
-    return true;
-}
-
-bool TSqlTranslation::PermissionNameClause(const TRule_permission_name& node, TDeferredAtom& result) {
-    // permission_name: permission_id | STRING_VALUE;
-    switch (node.Alt_case()) {
-        case TRule_permission_name::kAltPermissionName1: {
-            return PermissionNameClause(node.GetAlt_permission_name1().GetRule_permission_id1(), result);
-            break;
-        }
-        case TRule_permission_name::kAltPermissionName2: {
-            const TString stringValue(Ctx_.Token(node.GetAlt_permission_name2().GetToken1()));
-            auto unescaped = StringContent(Ctx_, Ctx_.Pos(), stringValue);
-            if (!unescaped) {
-                return false;
-            }
-            result = TDeferredAtom(Ctx_.Pos(), unescaped->Content);
-            break;
-        }
-        case TRule_permission_name::ALT_NOT_SET:
-            YQL_ENSURE(false, "Unreachable");
-    }
-    return true;
-}
-
-bool TSqlTranslation::PermissionNameClause(const TRule_permission_name_target& node, TVector<TDeferredAtom>& result, bool withGrantOption) {
-    // permission_name_target: permission_name (COMMA permission_name)* COMMA? | ALL PRIVILEGES?;
-    switch (node.Alt_case()) {
-        case TRule_permission_name_target::kAltPermissionNameTarget1: {
-            const auto& permissionNameRule = node.GetAlt_permission_name_target1();
-            result.emplace_back();
-            if (!PermissionNameClause(permissionNameRule.GetRule_permission_name1(), result.back())) {
-                return false;
-            }
-            for (const auto& item : permissionNameRule.GetBlock2()) {
-                result.emplace_back();
-                if (!PermissionNameClause(item.GetRule_permission_name2(), result.back())) {
-                    return false;
-                }
-            }
-            break;
-        }
-        case TRule_permission_name_target::kAltPermissionNameTarget2: {
-            result.emplace_back(Ctx_.Pos(), "all_privileges");
-            break;
-        }
-        case TRule_permission_name_target::ALT_NOT_SET:
-            YQL_ENSURE(false, "Unreachable");
-    }
-    if (withGrantOption) {
-        result.emplace_back(Ctx_.Pos(), "grant");
-    }
     return true;
 }
 

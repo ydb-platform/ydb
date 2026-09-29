@@ -46,6 +46,7 @@ private:
             .ClusterMode = ::NYql::NFastCheck::Unknown,
             .LangVer = ::NYql::GetMaxReleasedLangVersion(),
             .SuppressPrerequisiteIssues = true,
+            .LimitStrictnessFactor = 10,
         };
     }
 

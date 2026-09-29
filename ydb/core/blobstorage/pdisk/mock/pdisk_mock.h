@@ -43,6 +43,7 @@ namespace NKikimr {
         void TrimQuery();
         void SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor);
         void SetStatusFlags(NPDisk::TStatusFlags flags);
+        void SetAllocationReserves(ui64 system, ui64 maintenance);
         TString& GetStateErrorReason();
         ui32 GetNumActiveSlots() const;
 

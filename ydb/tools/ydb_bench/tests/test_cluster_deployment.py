@@ -18,6 +18,7 @@ class ClusterDeploymentTest(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name)
         self.run = {
+            "root": self.directory,
             "lock": threading.RLock(),
             "store": SimpleNamespace(manifest={}),
             "release_cluster": threading.Event(),
@@ -35,6 +36,7 @@ class ClusterDeploymentTest(unittest.TestCase):
             )
 
     def test_release_waits_for_confirmed_cleanup(self):
+        self.configuration.benchmark.name = "dedicated-ydb"
         self.run["release_cluster"].set()
         result = self.execute()
         self.cluster.start.assert_called_once()
@@ -45,6 +47,7 @@ class ClusterDeploymentTest(unittest.TestCase):
         self.assertEqual("passed", self.events[-1]["state"])
         saved = load_manifest(self.directory / "run.json")
         self.assertEqual(SCHEMA_VERSION, saved["schema_version"])
+        self.assertEqual("dedicated-ydb", saved["benchmark"])
         self.assertEqual("saved", saved["telemetry"]["status"])
 
     def test_legacy_deployment_read_is_explicit_and_does_not_rewrite(self):

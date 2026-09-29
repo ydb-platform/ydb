@@ -142,6 +142,10 @@ TEvLoad::TEvLoadTestFinished* BuildNbsDbgLikeFinishEvent(
     const TString& errorReason,
     TNbsDbgLikeFinishStats stats)
 {
+    NKikimr::TEvNodeFinishResponse::TNbsDbgLikeNodeStats tabletStats;
+    FillNbsDbgLikeLoadStats(stats, tabletStats);
+    tabletStats.SetTabletId(tabletId);
+    tabletStats.SetNodeId(TActivationContext::AsActorContext().SelfID.NodeId());
     const ui64 durationMs = stats.RunningMs;
     const ui64 measuredMs = stats.MeasuredMs;
     const double measuredSec = measuredMs > 0 ? measuredMs / 1000.0 : 1.0;
@@ -183,6 +187,8 @@ TEvLoad::TEvLoadTestFinished* BuildNbsDbgLikeFinishEvent(
         tag,
         report,
         errorReason.empty() ? TString{} : errorReason);
+
+    if (tabletId) { finishEv->NbsDbgLikeLoadTablets.push_back(std::move(tabletStats)); }
 
     // Build a minimal JsonResult compatible with service_actor's aggregation.
     // The service actor will further enrich this from WorkerStats below.
@@ -831,6 +837,7 @@ private:
         stats.ReadPbUs         = std::move(MeasuredReadLatencyUs);
 
         auto* finishEv = BuildNbsDbgLikeFinishEvent(Tag, TabletId, ErrorReason, std::move(stats));
+        finishEv->TerminationConfirmed = WriteInFlight + ReadInFlight == 0;
 
         Send(Parent, finishEv);
 
@@ -997,7 +1004,7 @@ public:
         auto req = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummary>();
         NTabletPipe::SendData(SelfId(), ProxyPipeClient, req.release());
 
-        Schedule(kInitTimeout, new TEvents::TEvWakeup(kWakeupInitTimeoutTag));
+        Schedule(Cmd.GetRequireReady() ? TDuration::Seconds(Cmd.GetStartupTimeoutSeconds()) : kInitTimeout, new TEvents::TEvWakeup(kWakeupInitTimeoutTag));
         Become(&TNbsDbgLikeLoadActorProxy::StateInit);
     }
 
@@ -1037,6 +1044,20 @@ private:
         const ui32 mDbg = config.GetNumDirectBlockGroupsToUse();
         if (mDbg > 0 && mDbg < effectiveDbgCount) {
             effectiveDbgCount = mDbg;
+        }
+
+        if (Cmd.GetRequireReady()) {
+            if (rec.GetAutomationProtocolVersion() < 1) {
+                return EmitError("tablet does not support automation configuration acknowledgements");
+            }
+            effectiveDbgCount = mDbg ? mDbg : totalDbgs;
+            if (mDbg > totalDbgs) {
+                return EmitError("requested DBG prefix exceeds allocation");
+            }
+            if (!effectiveDbgCount || readyDbgs < effectiveDbgCount) {
+                Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup(100));
+                return;
+            }
         }
 
         // Validate everything the workers would have validated.
@@ -1124,6 +1145,7 @@ private:
             << " TotalMaxInFlight# " << TotalMaxInFlight
             << " TotalStopOnWritesDoneCount# " << totalStopCount);
 
+        ConfigurationSent = true;
         // Send a single ConfigureTablet. The proxy's pipe stays open until
         // PassAway() to ensure delivery.
         {
@@ -1131,12 +1153,36 @@ private:
             cfg->Record = config.GetTabletConfig();
             cfg->Record.SetNumDirectBlockGroupsToUse(effectiveDbgCount);
             cfg->Record.SetIoSizeBytes(ioSizeBytes);
+            if (Cmd.GetRequireReady()) {
+                cfg->Record.SetConfigurationId(Tag);
+            }
             NTabletPipe::SendData(SelfId(), ProxyPipeClient, cfg.release());
         }
 
-        // Spawn workers and switch to StateWork.
-        const TResolvedTabletInfo resolved{effectiveDbgCount, vChunkSizeBytes,
-                                           targetNumVChunks, ioSizeBytes};
+        PendingResolved = {effectiveDbgCount, vChunkSizeBytes, targetNumVChunks, ioSizeBytes};
+        PendingNumWorkers = numWorkers;
+        if (!Cmd.GetRequireReady()) {
+            SpawnWorkers();
+        }
+    }
+
+    void HandleConfigured(TEvLoad::TEvConfigureTabletResult::TPtr& ev) {
+        if (ev->Get()->Record.GetConfigurationId() != Tag) {
+            return;
+        }
+        ConfigurationSent = false;
+        if (!ev->Get()->Record.GetSuccess()) {
+            return EmitError(ev->Get()->Record.GetError());
+        }
+        if (InitStopping) { return EmitError("stopped before start"); }
+        SpawnWorkers();
+    }
+
+    void SpawnWorkers() {
+        const auto& config = Cmd.GetWorkloadConfig();
+        const ui32 totalStopCount = config.GetStopOnWritesDoneCount();
+        const ui32 numWorkers = PendingNumWorkers;
+        const auto& resolved = PendingResolved;
         for (ui32 i = 0; i < numWorkers; ++i) {
             auto workerCmd = Cmd;
             auto& wc = *workerCmd.MutableWorkloadConfig();
@@ -1180,16 +1226,24 @@ private:
     }
 
     void HandleInitPoison(TEvents::TEvPoisonPill::TPtr&) {
+        if (Cmd.GetRequireReady() && ConfigurationSent) {
+            InitStopping = true;
+            return;
+        }
         EmitError("stopped before start");
     }
 
     void HandleInitWakeup(TEvents::TEvWakeup::TPtr& ev) {
+        if (ev->Get()->Tag == 100) {
+            NTabletPipe::SendData(SelfId(), ProxyPipeClient, new TEvLoad::TEvNbsLoadTabletGetSummary);
+        }
         if (ev->Get()->Tag == kWakeupInitTimeoutTag) {
-            LOG_N("Proxy GetSummary timeout after " << kInitTimeout
+            const TDuration budget = Cmd.GetRequireReady() ? TDuration::Seconds(Cmd.GetStartupTimeoutSeconds()) : kInitTimeout;
+            LOG_N("Proxy initialization timeout after " << budget
                 << " Tag# " << Tag
                 << " TabletId# " << TabletId);
             EmitError(TStringBuilder()
-                << "GetSummary timed out after " << kInitTimeout
+                << "readiness/configuration timed out after " << budget
                 << " (TabletId " << TabletId << ")");
         }
     }
@@ -1202,6 +1256,7 @@ private:
             return;
         }
 
+        TerminationConfirmed = TerminationConfirmed && ev->Get()->TerminationConfirmed;
         if (!ev->Get()->ErrorReason.empty()) {
             if (!CombinedError.empty()) {
                 CombinedError += "; ";
@@ -1295,6 +1350,7 @@ private:
         Merged.MaxInFlight = TotalMaxInFlight;
         auto* finishEv = BuildNbsDbgLikeFinishEvent(
             Tag, TabletId, CombinedError, std::move(Merged));
+        finishEv->TerminationConfirmed = TerminationConfirmed && (!Cmd.GetRequireReady() || !ConfigurationSent);
         Send(Parent, finishEv);
         PassAway();
     }
@@ -1308,12 +1364,14 @@ private:
         TNbsDbgLikeFinishStats stats;
         stats.MaxInFlight = TotalMaxInFlight;
         auto* finishEv = BuildNbsDbgLikeFinishEvent(Tag, TabletId, reason, std::move(stats));
+        finishEv->TerminationConfirmed = TerminationConfirmed && (!Cmd.GetRequireReady() || !ConfigurationSent);
         Send(Parent, finishEv);
         PassAway();
     }
 
     STRICT_STFUNC(StateInit,
         hFunc(TEvLoad::TEvNbsLoadTabletGetSummaryResult, HandleProxySummaryResult)
+        hFunc(TEvLoad::TEvConfigureTabletResult, HandleConfigured)
         hFunc(TEvTabletPipe::TEvClientConnected, HandleInitPipeConnected)
         hFunc(TEvTabletPipe::TEvClientDestroyed, HandleInitPipeDestroyed)
         hFunc(TEvents::TEvPoisonPill, HandleInitPoison)
@@ -1335,10 +1393,15 @@ private:
     const ui64 TabletId;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
+    TResolvedTabletInfo PendingResolved{};
+    ui32 PendingNumWorkers = 0;
     TActorId ProxyPipeClient;
     ui32 TotalMaxInFlight = 0;
     THashSet<TActorId> Workers;
 
+    bool ConfigurationSent = false;
+    bool InitStopping = false;
+    bool TerminationConfirmed = true;
     bool HasMerged = false;
     TNbsDbgLikeFinishStats Merged;
     TString CombinedError;
@@ -1490,6 +1553,7 @@ public:
         // Safety timeout: children stop on DurationSeconds; allow generous slack
         // (warmup + drain) before forcing a finish with whatever has arrived.
         const TDuration timeout = TDuration::Seconds(maxDurationSeconds)
+            + (Cmd.GetRequireReady() ? TDuration::Seconds(Cmd.GetStartupTimeoutSeconds()) : kInitTimeout)
             + kInitTimeout + kDrainTimeout + TDuration::Seconds(60);
         Schedule(timeout, new TEvents::TEvWakeup(kWakeupDrainTimeoutTag));
 
@@ -1533,6 +1597,7 @@ private:
                 << " Sender# " << ev->Sender);
             return;
         }
+        TerminationConfirmed = TerminationConfirmed && ev->Get()->TerminationConfirmed;
         child->ErrorReason = ev->Get()->ErrorReason;
         if (auto* s = GetNbsDbgLikeFinishStats(*ev->Get())) {
             child->Stats = std::move(*s);
@@ -1555,6 +1620,9 @@ private:
                 << " Uuid# " << rec.GetUuid());
             return;
         }
+        if (Cmd.GetRequireReady()) {
+            TerminationConfirmed = TerminationConfirmed && rec.GetNbsTerminationConfirmed();
+        }
         child->ErrorReason = rec.GetErrorReason();
         if (rec.HasNbsDbgLikeStats()) {
             child->Stats = StatsFromNodeProto(rec.GetNbsDbgLikeStats());
@@ -1566,6 +1634,11 @@ private:
     void HandleLoadTestResponse(TEvLoad::TEvLoadTestResponse::TPtr& ev) {
         // Ack from a remote load service that it accepted (or rejected) the run.
         const auto& rec = ev->Get()->Record;
+        // Start requests carry a node cookie; scoped stop requests do not.
+        // A stop acknowledgement must never stand in for a drained child result.
+        if (!rec.HasCookie()) {
+            return;
+        }
         if (rec.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
             LOG_E("Multi remote rejected child Tag# " << Tag
                 << " Cookie# " << rec.GetCookie()
@@ -1589,6 +1662,11 @@ private:
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
         LOG_I("Multi poison Tag# " << Tag << " forwarding to children");
+        StopUnfinishedChildren();
+        // Children will report their results; EmitCombined fires when all done.
+    }
+
+    void StopUnfinishedChildren() {
         for (size_t i = 0; i < Children.size(); ++i) {
             const TChild& c = Children[i];
             if (c.Finished) {
@@ -1602,28 +1680,26 @@ private:
                 // DurationSeconds, and the safety timeout backstops either way.
                 auto req = std::make_unique<TEvLoad::TEvLoadTestRequest>();
                 auto& rec = req->Record;
-                // Stop.Tag selects the child load actor to kill on the remote
-                // node. The request's own Tag must be distinct from the child
-                // tag (still in the remote's RequestSender map) to pass its
-                // duplicate-tag guard; set the top bit so it never collides
-                // with any MakeChildTag value (which uses at most 64 bits with
-                // top bit clear since node ids fit in 20 bits in practice).
+                // Stop requests do not occupy the remote sender map.
                 rec.MutableStop()->SetTag(c.ChildTag);
-                rec.SetTag(c.ChildTag | (1ULL << 63));
+                rec.SetTag(c.ChildTag);
                 rec.SetUuid(CreateGuidAsString());
                 rec.SetTimestamp(TInstant::Now().Seconds());
                 Send(MakeLoadServiceID(c.NodeId), req.release());
             }
         }
-        // Children will report their results; EmitCombined fires when all done.
     }
 
     void HandleWakeup(TEvents::TEvWakeup::TPtr& ev) {
         if (ev->Get()->Tag != kWakeupDrainTimeoutTag) {
             return;
         }
+        TerminationConfirmed = false;
         LOG_E("Multi timeout Tag# " << Tag << " Pending# " << Pending
             << " — forcing finish");
+        // This actor dies below, so children must be stopped here; otherwise
+        // local children keep generating load with no one to report to.
+        StopUnfinishedChildren();
         for (auto& c : Children) {
             if (!c.Finished) {
                 if (c.ErrorReason.empty()) {
@@ -1727,6 +1803,13 @@ private:
 
         auto* finishEv = BuildNbsDbgLikeFinishEvent(
             Tag, /*tabletId=*/0, combinedError, std::move(Merged));
+        finishEv->TerminationConfirmed = TerminationConfirmed;
+        for (const auto& child : Children) {
+            auto& stats = finishEv->NbsDbgLikeLoadTablets.emplace_back();
+            FillNbsDbgLikeLoadStats(child.Stats, stats);
+            stats.SetTabletId(child.TabletId);
+            stats.SetNodeId(child.NodeId);
+        }
         finishEv->JsonResult["tablets"] = std::move(tablets);
         Send(Parent, finishEv);
         PassAway();
@@ -1759,6 +1842,7 @@ private:
     const ui64 Tag;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
+    bool TerminationConfirmed = true;
     TVector<TChild> Children;
     size_t Pending = 0;
     bool HasMerged = false;

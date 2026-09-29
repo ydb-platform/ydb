@@ -240,6 +240,9 @@ namespace NKikimr::NStorage {
                     ddiskConfig.IntegrityChecksumCacheBytes =
                         Cfg->DDiskConfig->GetIntegrityChecksumCacheBytes();
                 }
+                if (Cfg->DDiskConfig->HasDevNullMode()) {
+                    ddiskConfig.DevNullMode = Cfg->DDiskConfig->GetDevNullMode();
+                }
             }
             if (Cfg->PBufferConfig) {
                 if (Cfg->PBufferConfig->HasInitChunks()) {
@@ -388,6 +391,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnableChecksumReadValidationOnVDisk = EnableChecksumReadValidationOnVDisk;
             vdiskConfig->EnableChecksumWriteValidationOnVDisk = EnableChecksumWriteValidationOnVDisk;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
+            vdiskConfig->SpaceReportPeriodSeconds = SpaceReportPeriodSeconds;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 

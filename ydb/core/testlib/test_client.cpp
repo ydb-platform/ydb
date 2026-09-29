@@ -1461,6 +1461,7 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
+                FederatedQuerySetupActorSystems_.push_back(actorSystemPtr);
 
                 if (FederatedQuerySetupDriver_) {
                     FederatedQuerySetupDriver_.reset();
@@ -1947,6 +1948,13 @@ namespace Tests {
         if (Settings->FederatedQuerySetupFactory) {
             Settings->FederatedQuerySetupFactory->Cleanup();
         }
+
+        for (const auto& actorSystem : FederatedQuerySetupActorSystems_) {
+            if (actorSystem) {
+                actorSystem->store(nullptr, std::memory_order_release);
+            }
+        }
+        FederatedQuerySetupActorSystems_.clear();
 
         if (Runtime) {
             WaitFinalization();

@@ -293,7 +293,7 @@ public:
 
         auto* rowType = TYqlRowSpecInfo(table.RowSpec()).GetType();
 
-        NYtflow::NProto::TQYTSourceMessage sourceSettings;
+        NYtflow::NProto::TYtQueueSourceMessage sourceSettings;
         sourceSettings.SetCluster(table.Cluster().StringValue());
         sourceSettings.SetPath(table.Name().StringValue());
         sourceSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
@@ -307,19 +307,10 @@ public:
         auto maybeWriteTable = TMaybeNode<TYtWriteTable>(&sink);
         YQL_ENSURE(maybeWriteTable);
 
-        NYtflow::NProto::TQYTSinkMessage sinkSettings;
+        bool doesExist = false;
+        bool truncate = false;
 
-        {
-            auto table = maybeWriteTable.Cast().Table().Cast<TYtTable>();
-
-            sinkSettings.SetCluster(table.Cluster().StringValue());
-            sinkSettings.SetPath(table.Name().StringValue());
-
-            auto* rowType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn()
-                ->Cast<TListExprType>()->GetItemType();
-
-            sinkSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
-        }
+        TVector<TString> keyColumns;
 
         {
             auto ytState = State_.lock();
@@ -329,8 +320,8 @@ public:
             auto tableDesc = ytState->TablesData->GetTable(
                 tableInfo.Cluster, tableInfo.Name, 0);
 
-            sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
-            sinkSettings.SetTruncate(tableDesc.Intents & TYtTableIntent::Override);
+            doesExist = tableDesc.Meta->DoesExist;
+            truncate = tableDesc.Intents & TYtTableIntent::Override;
 
             const auto& originalRowSpec = tableDesc.RowSpec;
             const auto& resultRowSpec = tableInfo.RowSpec;
@@ -338,13 +329,45 @@ public:
                 for (const auto& [column, _] : resultRowSpec->GetForeignSort()) {
                     bool skipExpressionColumn = originalRowSpec && originalRowSpec->ExpressionColumns.contains(column);
                     if (!skipExpressionColumn) {
-                        sinkSettings.AddKeyColumns(column);
+                        keyColumns.push_back(column);
                     }
                 }
             }
         }
 
-        settings.PackFrom(sinkSettings);
+        auto table = maybeWriteTable.Cast().Table().Cast<TYtTable>();
+        auto* rowType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn()
+            ->Cast<TListExprType>()->GetItemType();
+
+        auto cluster = table.Cluster().StringValue();
+        auto path = table.Name().StringValue();
+        auto rowTypeYson = NCommon::WriteTypeToYson(rowType);
+
+        if (!keyColumns.empty()) {
+            NYtflow::NProto::TYtSortedTableSinkMessage sortedSettings;
+
+            sortedSettings.SetCluster(cluster);
+            sortedSettings.SetPath(path);
+            sortedSettings.SetDoesExist(doesExist);
+            sortedSettings.SetTruncate(truncate);
+            sortedSettings.SetRowType(rowTypeYson);
+
+            for (const auto& keyColumn : keyColumns) {
+                sortedSettings.AddKeyColumns(keyColumn);
+            }
+
+            settings.PackFrom(sortedSettings);
+        } else {
+            NYtflow::NProto::TYtQueueSinkMessage queueSettings;
+
+            queueSettings.SetCluster(cluster);
+            queueSettings.SetPath(path);
+            queueSettings.SetDoesExist(doesExist);
+            queueSettings.SetTruncate(truncate);
+            queueSettings.SetRowType(rowTypeYson);
+
+            settings.PackFrom(queueSettings);
+        }
     }
 
     NKikimr::NMiniKQL::TRuntimeNode BuildLookupSourceArgs(

@@ -24,8 +24,8 @@ std::pair<TIntrusivePtr<IOperator>, TInfoUnit> MakeAtMostOneRowPerGroup(const TI
 
     TVector<TOpAggregationTraits> traits;
     traits.emplace_back(rowIU, "count", countIU);
-    // This is need to get the actual value, since we have one value we can use min/max.
-    traits.emplace_back(valueIU, "min", valueStateIU);
+    // This is need to get the actual value, we emit ensure that we get only one row, so can take any.
+    traits.emplace_back(valueIU, "some", valueStateIU);
     auto aggregate = MakeIntrusive<TOpAggregate>(rowMap, traits, groupKeys, EOpPhase::Undefined, /*distinctAll=*/false, pos);
 
     auto atMostOne =

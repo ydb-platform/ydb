@@ -9,10 +9,9 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NSnapshot {
     struct TTreeElement : public virtual TTreeElementBase<ETreeType::SNAPSHOT> {
         ui64 FairShare = 0;
 
-        ui64 Tasks = 0; // TODO: merge with CpuMaxDemand once it's not averaged with the peak demand anymore - then it's just the number of tasks.
         std::atomic<ui64> CpuMaxDemand = 0;
 
-        ui64 CpuActualDemand = 0; // not used in the distribution of the fair-share yet
+        ui64 CpuActualDemand = 0;
         ui64 PreciseCpuActualDemand = 0; // in micro-cores
 
         ui64 CpuBurstUsage = 0;

@@ -67,6 +67,26 @@ public:                                                                         
 
 
         ///////////////////////////////////////////////////////////////////////////////////
+        // TLsmCompactionRankGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TLsmCompactionRankGroup : public TBase {
+        public:
+            // Gauges are expressed in percent: a rank of 1.0 is reported as 100.
+            static constexpr ui64 RankScale = 100;
+
+            GROUP_CONSTRUCTOR(TLsmCompactionRankGroup)
+            {
+                COUNTER_INIT(Rank0, false);
+                COUNTER_INIT(Rank1_16, false);
+                Rank17Plus_ = GroupCounters->GetCounter("Rank17_", false);
+            }
+
+            COUNTER_DEF(Rank0);
+            COUNTER_DEF(Rank1_16);
+            COUNTER_DEF(Rank17Plus);
+        };
+
+        ///////////////////////////////////////////////////////////////////////////////////
         // TLsmHullGroup
         ///////////////////////////////////////////////////////////////////////////////////
         class TLsmHullGroup : public TBase {

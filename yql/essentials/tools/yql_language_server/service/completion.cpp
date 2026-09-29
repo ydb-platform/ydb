@@ -65,6 +65,8 @@ ECompletionItemKind TCompletionService::ToMessage(NSQLComplete::ECandidateKind k
             return ECompletionItemKind::Folder;
         case ECandidateKind::TableName:
             return ECompletionItemKind::File;
+        case ECandidateKind::ViewName:
+            return ECompletionItemKind::File;
         case ECandidateKind::ClusterName:
             return ECompletionItemKind::Module;
         case ECandidateKind::ColumnName:

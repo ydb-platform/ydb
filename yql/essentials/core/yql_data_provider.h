@@ -62,6 +62,9 @@ public:
     virtual void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual void WritePinDetails(const TExprNode& node, NYson::TYsonWriter& writer) = 0;
     virtual TString GetOperationDisplayName(const TExprNode& node) = 0;
+    // returns display name for a link between two operation nodes in the basic plan graph
+    // (empty string means no name should be shown)
+    virtual TString GetLinkDisplayName(const TExprNode& source, const TExprNode& dest) = 0;
     // returns false if provider schemas aren't supported
     virtual bool WriteSchemaHeader(NYson::TYsonWriter& writer) = 0;
     virtual void WriteTypeDetails(NYson::TYsonWriter& writer, const TTypeAnnotationNode& type) = 0;
@@ -76,8 +79,8 @@ public:
         TString Id;
     };
 
-    virtual void GetUsedNodes(const TExprNode& node, TVector<TString>& usedNodeIds) = 0;
-    virtual void GetCreatedNodes(const TExprNode& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0;
+    virtual void GetUsedNodes(const TExprNode::TPtr& node, TVector<TString>& usedNodeIds) = 0;
+    virtual void GetCreatedNodes(const TExprNode::TPtr& node, TVector<TExprNodeAndId>& createdNodes, TExprContext& ctx) = 0;
     virtual IGraphTransformer& GetCleanupTransformer() = 0;
 };
 

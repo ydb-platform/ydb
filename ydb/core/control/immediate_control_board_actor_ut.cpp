@@ -387,15 +387,16 @@ class TTestHttpPostReaction : public TBaseTest {
                 [[fallthrough]];
             }
             case 40:
-                // Submit the bulk restore command.
+                // Submit bulk restore with a value that must not override it.
                 VERBOSE_COUT("Test of restoreDefaults POST request");
                 HttpRequest->CgiParameters.clear();
                 HttpRequest->CgiParameters.emplace("restoreDefaults", "");
+                HttpRequest->CgiParameters.emplace("existentParameter", "15");
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             case 50:
             {
-                // Verify that bulk restore returned the control to its default.
+                // Verify that bulk restore returned the control to its default and was recorded.
                 ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
                         "Unexpected response message type, expected is HttpInfoRes");
                 bool isControlExists;
@@ -403,6 +404,8 @@ class TTestHttpPostReaction : public TBaseTest {
                 Dcb->GetValue("existentParameter", value, isControlExists);
                 ASSERT_YTHROW(isControlExists, "Error in control creation and registration");
                 ASSERT_YTHROW(value == 10, "Parameter haven't restored default value");
+                ASSERT_YTHROW(LastResponse.HttpResult->Answer.find("<td>RestoreDefaults</td><td>0</td><td>0</td><td>Restore defaults</td>") != TString::npos,
+                        "Bulk restore was not recorded with its action");
                 TestStep += 10;
                 [[fallthrough]];
             }
@@ -458,12 +461,14 @@ class TTestHttpPostReaction : public TBaseTest {
                 break;
             case 100:
             {
-                // Verify the changed value and the named action in the response.
+                // Verify the changed value, its history action, and the named button.
                 ASSERT_YTHROW(LastResponse.HttpResult && LastResponse.HttpResult->Type() == NActors::NMon::HttpInfoRes,
                         "Unexpected response message type, expected is HttpInfoRes");
                 ASSERT_YTHROW(static_cast<i64>(Control) == 15, "POST did not change the control");
                 ASSERT_YTHROW(LastResponse.HttpResult->Answer.find("name='restoreDefault' value='restoreParameter'") != TString::npos,
                         "Named restore button is missing");
+                ASSERT_YTHROW(LastResponse.HttpResult->Answer.find("<td>restoreParameter</td><td>10</td><td>15</td><td>Set value</td>") != TString::npos,
+                        "Value assignment was not recorded with its action");
                 TestStep += 10;
                 [[fallthrough]];
             }
@@ -476,13 +481,21 @@ class TTestHttpPostReaction : public TBaseTest {
                 break;
             case 120:
             {
-                // Verify that named restore also clears the changed-control gauges.
+                // Verify that named restore clears the gauges and records its action.
                 ASSERT_YTHROW(static_cast<i64>(Control) == 10, "Named restore did not recover the default");
                 auto counters = GetServiceCounters(Counters, "utils");
                 ASSERT_YTHROW(counters->GetCounter("Icb/ChangedControlsCount")->Val() == 0,
                         "Named restore did not clear the changed-control count");
                 ASSERT_YTHROW(counters->GetCounter("Icb/HasChangedContol")->Val() == 0,
                         "Named restore did not clear the changed-control indicator");
+
+                const TString& answer = LastResponse.HttpResult->Answer;
+                const size_t historyPos = answer.find("<h3>History</h3>");
+                ASSERT_YTHROW(historyPos != TString::npos, "History section is missing");
+                ASSERT_YTHROW(answer.find("<th>Action</th>", historyPos) != TString::npos,
+                        "History action column is missing");
+                ASSERT_YTHROW(answer.find("<td>restoreParameter</td><td>15</td><td>10</td><td>Restore default</td>", historyPos) != TString::npos,
+                        "Dynamic restore was not recorded with its values and action");
                 TestStep += 10;
                 [[fallthrough]];
             }
@@ -516,10 +529,14 @@ class TTestHttpPostReaction : public TBaseTest {
                 break;
             case 160:
             {
-                // Verify that named restore selected the static control first.
+                // Verify that named restore selected and recorded the static control.
                 const auto control = Icb->DataShardControls.MaxTxInFly.AtomicLoad();
                 ASSERT_YTHROW(control->Get() == 10, "Restore did not select the static control");
                 ASSERT_YTHROW(static_cast<i64>(Control) == 15, "Restore modified the dynamic control");
+                const TString& answer = LastResponse.HttpResult->Answer;
+                const size_t historyPos = answer.find("<h3>History</h3>");
+                ASSERT_YTHROW(answer.find("<td>DataShardControls.MaxTxInFly</td><td>12</td><td>10</td><td>Restore default</td>", historyPos) != TString::npos,
+                        "Static restore was not recorded with its values and action");
                 TestStep += 10;
                 [[fallthrough]];
             }
@@ -530,9 +547,11 @@ class TTestHttpPostReaction : public TBaseTest {
                 ctx.Send(IcbActor, new NMon::TEvHttpInfo(MonService2HttpRequest));
                 break;
             case 180:
-                // Verify that an unknown restore leaves registered controls intact.
+                // Verify that an unknown restore leaves controls and history intact.
                 ASSERT_YTHROW(static_cast<i64>(Control) == 15,
                         "Restore of an unknown name modified another control");
+                ASSERT_YTHROW(LastResponse.HttpResult->Answer.find("<td>unknown</td>") == TString::npos,
+                        "Restore of an unknown name was recorded in history");
                 TestStep += 10;
                 [[fallthrough]];
             case 190:

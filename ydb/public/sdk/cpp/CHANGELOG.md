@@ -1,5 +1,7 @@
 * Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.
 
+* Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state and optional timestamps, and incremental `UploadModuleFromFile` on a dedicated I/O executor. Upload futures include the final gRPC status.
+
 * Added an optional S3 object key prefix to TTL eviction settings for column tables.
 
 * Added `TTopicClient::ResetOffset` / `TResetOffsetSettings` to rewind a consumer's committed offsets on all topic partitions.

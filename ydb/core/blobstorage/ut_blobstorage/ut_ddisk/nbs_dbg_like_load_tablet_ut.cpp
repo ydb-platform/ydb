@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/load_test/events.h>
+#include <ydb/core/load_test/service_actor.h>
 #include <ydb/core/load_test/nbs_dbg_like_load.h>
 #include <ydb/core/load_test/nbs_dbg_like_load_tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
@@ -13,6 +14,23 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
+
+namespace {
+struct TResultsHttpRequest : NMonitoring::IHttpRequest {
+    TCgiParameters Params;
+    THttpHeaders Headers;
+
+    const char* GetURI() const override { return "/?mode=results"; }
+    const char* GetPath() const override { return "/"; }
+    const TCgiParameters& GetParams() const override { return Params; }
+    const TCgiParameters& GetPostParams() const override { return Params; }
+    TStringBuf GetPostContent() const override { return {}; }
+    HTTP_METHOD GetMethod() const override { return HTTP_METHOD_GET; }
+    const THttpHeaders& GetHeaders() const override { return Headers; }
+    TString GetRemoteAddr() const override { return {}; }
+};
+}
 
 Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
@@ -197,9 +215,12 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             ui64 tabletId,
             ui64 tag = 1,
             ui32 numDirectBlockGroupsToUse = 0,
-            bool enableChecksums = true)
+            bool enableChecksums = true,
+            bool automation = false)
         {
             TEvLoadTestRequest::TNbsDbgLikeLoad cmd;
+            cmd.SetRequireReady(automation);
+            cmd.SetStartupTimeoutSeconds(1);
             cmd.SetNbsDbgLikeTabletId(tabletId);
             cmd.SetTag(tag);
             auto& wc = *cmd.MutableWorkloadConfig();
@@ -531,6 +552,223 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         UNIT_ASSERT(fin.FinishedReceived);
         UNIT_ASSERT_C(!fin.ErrorReason.empty(),
             "expected error when tablet has no DBGs allocated");
+    }
+
+    Y_UNIT_TEST(AutomationWaitsForEntirePrefixAndConfiguration) {
+        for (bool blockConfiguration : {false, true}) {
+            TFixture f;
+            const ui64 tabletId = f.CreateNbsLoadTabletViaHive(1);
+            const auto pipe = f.OpenTabletPipe(tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, 2), NBSLT_OK);
+            f.Env.Sim(TDuration::Seconds(5));
+            ui32 writes = 0;
+            auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+            f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+                if (event->GetTypeRewrite() == TEvLoad::TEvNbsWrite::EventType) { ++writes; }
+                if (blockConfiguration && event->GetTypeRewrite() == TEvLoad::TEvConfigureTabletResult::EventType) {
+                    return false;
+                }
+                if (!blockConfiguration && event->GetTypeRewrite() == TEvLoad::TEvNbsLoadTabletGetSummaryResult::EventType) {
+                    event->Get<TEvLoad::TEvNbsLoadTabletGetSummaryResult>()->Record.SetNumReadyDirectBlockGroups(1);
+                }
+                return previousFilter ? previousFilter(node, event) : true;
+            };
+            const auto result = f.RunViaLoadActor(tabletId, 1, 0, true, true);
+            f.Env.Runtime->FilterFunction = std::move(previousFilter);
+            UNIT_ASSERT(result.FinishedReceived);
+            UNIT_ASSERT(!result.ErrorReason.empty());
+            UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+            f.ClosePipe(pipe);
+        }
+    }
+
+    Y_UNIT_TEST(AutomationControlAcrossNodes) {
+        TFixture f;
+        using TControl = NKikimrClient::TNbsDbgLikeLoadControl;
+        using TResult = NKikimrClient::TNbsDbgLikeLoadResult;
+        for (ui32 node = 1; node <= 8; ++node) {
+            f.Env.Runtime->RegisterService(MakeLoadServiceID(node),
+                f.Env.Runtime->Register(CreateLoadTestActor(MakeIntrusive<::NMonitoring::TDynamicCounters>()), node));
+        }
+        auto call = [&](const TControl& request) {
+            auto event = std::make_unique<TEvLoad::TEvNbsDbgLikeLoadControl>();
+            event->Record = request;
+            f.Env.Runtime->Send(new IEventHandle(MakeLoadServiceID(2), f.Edge, event.release()), f.Edge.NodeId());
+            auto response = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsDbgLikeLoadControlResponse>(
+                f.Edge, false, f.Deadline(TDuration::Seconds(90)));
+            UNIT_ASSERT(response);
+            return response->Get()->Record;
+        };
+        TControl request;
+        request.SetDatabase("/Root");
+        request.SetOperation(TControl::CAPABILITIES);
+        auto capabilities = call(request);
+        UNIT_ASSERT_VALUES_EQUAL(capabilities.GetStatus(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(capabilities.GetCoordinatorNodeId(), 2);
+        request.SetDatabase("/Other");
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        request.SetDatabase("/Root");
+        request.SetCoordinatorNodeId(2);
+        request.SetIncarnation(capabilities.GetIncarnation());
+        request.SetOperation(TControl::CREATE);
+        request.SetOwnerIndex(123);
+        auto* allocation = request.MutableAllocation();
+        allocation->SetDDiskPoolName("ddisk_pool");
+        allocation->SetPersistentBufferDDiskPoolName("ddisk_pool");
+        for (ui32 i = 0; i < 3; ++i) { allocation->AddTabletStoragePools(f.Env.StoragePoolName); }
+        allocation->SetNumDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        auto list = request;
+        list.SetOperation(TControl::LIST);
+        UNIT_ASSERT_VALUES_EQUAL(call(list).TabletsSize(), 0); // validation precedes Hive creation
+        allocation->ClearNumDirectBlockGroups();
+        auto created = call(request);
+        UNIT_ASSERT_VALUES_EQUAL_C(created.GetStatus(), 1, created.GetError());
+        UNIT_ASSERT_VALUES_EQUAL(created.TabletsSize(), 1);
+        const ui64 tabletId = created.GetTablets(0).GetTabletId();
+        auto listed = call(list);
+        UNIT_ASSERT_VALUES_EQUAL(listed.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetTablets(0).ChannelPoolsSize(), 3);
+        for (const auto& pool : listed.GetTablets(0).GetChannelPools()) {
+            UNIT_ASSERT_VALUES_EQUAL(pool, f.Env.StoragePoolName);
+        }
+        bool incompleteOnce = true;
+        auto previousStorageFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (incompleteOnce && event->GetTypeRewrite() == TEvHive::TEvGetTabletStorageInfoResult::EventType) {
+                auto& result = event->Get<TEvHive::TEvGetTabletStorageInfoResult>()->Record;
+                if (result.GetTabletID() == tabletId) {
+                    result.MutableInfo()->ClearChannels();
+                    incompleteOnce = false;
+                }
+            }
+            return previousStorageFilter ? previousStorageFilter(node, event) : true;
+        };
+        auto retry = call(request);
+        UNIT_ASSERT_VALUES_EQUAL_C(retry.GetStatus(), 1, retry.GetError());
+        UNIT_ASSERT(!incompleteOnce);
+        f.Env.Runtime->FilterFunction = std::move(previousStorageFilter);
+        auto previousTimeoutFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvHive::TEvGetTabletStorageInfoResult::EventType) {
+                auto& result = event->Get<TEvHive::TEvGetTabletStorageInfoResult>()->Record;
+                if (result.GetTabletID() == tabletId) { result.MutableInfo()->ClearChannels(); }
+            }
+            return previousTimeoutFilter ? previousTimeoutFilter(node, event) : true;
+        };
+        auto assignmentTimeout = call(request);
+        UNIT_ASSERT_VALUES_EQUAL(assignmentTimeout.GetStatus(), 128);
+        UNIT_ASSERT_VALUES_EQUAL(assignmentTimeout.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(assignmentTimeout.GetTablets(0).GetTabletId(), tabletId);
+        UNIT_ASSERT_STRING_CONTAINS(assignmentTimeout.GetError(), "channel assignment deadline expired");
+        f.Env.Runtime->FilterFunction = std::move(previousTimeoutFilter);
+        allocation->SetTabletStoragePools(1, "different-pool");
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        allocation->SetTabletStoragePools(1, f.Env.StoragePoolName);
+        allocation->SetNumDirectBlockGroups(2);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        const ui64 unrelatedTabletId = f.CreateNbsLoadTabletViaHive(124);
+        ui32 unrelatedStorageRequests = 0;
+        auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvHive::TEvGetTabletStorageInfo::EventType
+                && event->Get<TEvHive::TEvGetTabletStorageInfo>()->Record.GetTabletID() == unrelatedTabletId) {
+                ++unrelatedStorageRequests;
+            }
+            return previousFilter ? previousFilter(node, event) : true;
+        };
+        auto describe = request;
+        describe.ClearAllocation();
+        describe.SetOperation(TControl::DESCRIBE);
+        UNIT_ASSERT_VALUES_EQUAL_C(call(describe).GetStatus(), 1, "describe healthy tablet");
+        request.ClearAllocation();
+        request.SetOperation(TControl::START);
+        request.SetRequestId("original");
+        auto* cmd = request.MutableLoad()->MutableNbsDbgLikeLoad();
+        auto* target = cmd->AddTargets();
+        target->SetTabletId(tabletId);
+        target->SetNodeId(3); // force remote generation; exercises full-width child tags
+        auto* workload = cmd->MutableWorkloadConfig();
+        workload->SetDurationSeconds(1);
+        workload->SetDelayBeforeMeasurementsSeconds(0);
+        workload->SetMaxInFlight(0);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        workload->SetMaxInFlight(1);
+        workload->SetStopOnWritesDoneCount(50);
+        request.SetStartupTimeoutSeconds(3601);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128); // startup budget is bounded
+        request.ClearStartupTimeoutSeconds();
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1); // lost reply retry
+        workload->SetMaxInFlight(2);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        workload->SetMaxInFlight(1);
+        const auto originalStart = request;
+        request.ClearLoad();
+        request.SetOperation(TControl::GET);
+        NKikimrClient::TNbsDbgLikeLoadControlResponse finished;
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            finished = call(request);
+            UNIT_ASSERT_VALUES_EQUAL_C(finished.GetStatus(), 1, finished.GetError());
+            if (finished.GetRun().HasFinishedAtMs()) { break; }
+            f.Env.Sim(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(finished.GetRun().GetState()), static_cast<int>(TResult::SUCCEEDED), finished.GetRun().GetExecutionError());
+        UNIT_ASSERT(finished.GetRun().GetTerminationConfirmed());
+        UNIT_ASSERT_VALUES_EQUAL(finished.GetRun().GetEffectiveConfig().GetNbsDbgLikeLoad().GetTargets(0).GetNodeId(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(finished.GetRun().TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finished.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(call(originalStart).GetRun().GetStartedAtMs(), finished.GetRun().GetStartedAtMs());
+
+        // A later trial resolves current placement, whereas retrying the old ID
+        // keeps the original explicit generator node.
+        auto next = originalStart;
+        next.SetRequestId("cancel-running");
+        next.MutableLoad()->MutableNbsDbgLikeLoad()->MutableTargets(0)->ClearNodeId();
+        next.MutableLoad()->MutableNbsDbgLikeLoad()->MutableWorkloadConfig()->SetDurationSeconds(60);
+        next.MutableLoad()->MutableNbsDbgLikeLoad()->MutableWorkloadConfig()->SetStopOnWritesDoneCount(0);
+        UNIT_ASSERT_VALUES_EQUAL(call(next).GetStatus(), 1);
+        ui32 writes = 0;
+        const auto deadline = f.Deadline(TDuration::Seconds(90));
+        f.Env.Runtime->Sim([&] { return !writes && f.Env.Runtime->GetClock() < deadline; },
+            [&](IEventHandle& event) { writes += event.GetTypeRewrite() == TEvLoad::TEvNbsWrite::EventType; });
+        UNIT_ASSERT(writes);
+        TResultsHttpRequest httpRequest;
+        httpRequest.Params.emplace("mode", "results");
+        httpRequest.Params.emplace("uuid", "cancel-running");
+        NMonitoring::TMonService2HttpRequest monRequest(nullptr, &httpRequest, nullptr, nullptr, "", nullptr);
+        const TActorId htmlEdge = f.Env.Runtime->AllocateEdgeActor(2);
+        f.Env.Runtime->Send(new IEventHandle(MakeLoadServiceID(2), htmlEdge,
+            new NMon::TEvHttpInfo(monRequest)), 2);
+        auto htmlResult = f.Env.WaitForEdgeActorEvent<NMon::TEvHttpInfoRes>(
+            htmlEdge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(htmlResult);
+        UNIT_ASSERT_STRING_CONTAINS(htmlResult->Get()->Answer,
+            "No load actor result found for requested UUID");
+        request.SetOperation(TControl::DELETE);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        request.SetRequestId(next.GetRequestId());
+        request.SetOperation(TControl::STOP);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        request.SetOperation(TControl::GET);
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            finished = call(request);
+            UNIT_ASSERT_VALUES_EQUAL_C(finished.GetStatus(), 1, finished.GetError());
+            if (finished.GetRun().HasFinishedAtMs()) { break; }
+            f.Env.Sim(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(finished.GetRun().GetState()), static_cast<int>(TResult::CANCELLED), finished.GetRun().GetExecutionError());
+        UNIT_ASSERT(finished.GetRun().GetTerminationConfirmed());
+        UNIT_ASSERT_VALUES_EQUAL(finished.GetRun().GetEffectiveConfig().GetNbsDbgLikeLoad().GetTargets(0).GetNodeId(), finished.GetTablets(0).GetNodeId());
+        request.SetOperation(TControl::DELETE);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        request.SetOperation(TControl::GET);
+        request.SetIncarnation("old");
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        f.Env.Runtime->FilterFunction = std::move(previousFilter);
+        UNIT_ASSERT_VALUES_EQUAL(unrelatedStorageRequests, 0);
     }
 
     // Issuing a second Create after a successful Create must be rejected.

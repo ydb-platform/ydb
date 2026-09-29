@@ -171,20 +171,24 @@ trap 'rc=$?; trap - EXIT; ci send --rc "$rc"; exit $rc' EXIT
 
 | `name` | Что измеряет |
 | --- | --- |
-| `init` | подготовка окружения шага Init |
-| `clean_ya_cache`, `setup_cache` | работа с кэшем `ya` |
+| `init` | шаг Init: каталоги, креды, S3, `GITHUB_NUMERIC_JOB_ID` |
+| `clean_ya_cache` | чистка локального кэша `ya` |
+| `setup_cache` | подключение dist-кэша / bazel-remote |
 | `graph_compare` | сравнение графа сборки с базовым коммитом |
-| `checkout_head` | переключение на тестируемый коммит |
-| `prepare_ya_make` | подготовка перед запуском `ya make` |
-| `ya_make_try_N` | вся стена `ya make` попытки N; в `labels.tests` счётчики тестов |
-| `ya_build` | локальная компиляция и линковка внутри попытки |
-| `ya_tests` | прогон тестов внутри попытки, без интервалов сборки |
-| `ya_cache_download`, `ya_cache_upload` | обмен с dist-кэшем, рядом со сборкой |
-| `postprocess_try` | постобработка отчёта попытки |
-| `transform_build_results`, `fail_checker`, `generate_summary` | обработка отчёта |
-| `s3_sync_try` | выгрузка артефактов в S3 |
-| `upload_tests_results` | заливка результатов тестов в YDB |
-| `runner_info` | разовый снимок cpu/ram/disk раннера, `kind = info` |
+| `checkout_head` | `git checkout` на коммит, который тестируем |
+| `prepare_ya_make` | флаги, mute-лист, каталоги — всё сразу перед `ya make` |
+| `ya_make_try_N` | весь `ya make` попытки N (сборка + тесты). Счётчики тестов — в `labels.tests` |
+| `ya_build` | из evlog: локальная компиляция и линковка внутри этой попытки |
+| `ya_tests` | из evlog: прогон тестов внутри попытки, без интервалов сборки |
+| `ya_cache_download` | из evlog: скачивание из dist-кэша во время сборки |
+| `ya_cache_upload` | из evlog: заливка в dist-кэш во время сборки |
+| `postprocess_try` | сразу после `ya make`, ещё до «сборка красная / зелёная»: разобрать evlog на `ya_build`/`ya_tests`, вытащить OOM из dmesg, timeline, отчёт по RAM, test_bloat |
+| `transform_build_results` | дописать в `report.json` ссылки на логи, мьюты, артефакты — чтобы HTML-отчёт был читаемый |
+| `fail_checker` | посчитать упавшие тесты и решить, ретраить ли попытку |
+| `generate_summary` | собрать текст комментария в PR («Tests passed/failed» и ссылки) |
+| `s3_sync_try` | залить `PUBLIC_DIR` на публичный S3, чтобы ссылки из комментария открывались |
+| `upload_tests_results` | залить результаты тестов в таблицу `test_results` (это не `ci_metrics`) |
+| `runner_info` | одна строка на весь job, **до** цикла `ya make`: сколько ядер, RAM и диска у машины. Не длительность (`kind = info`), потому что железо за job не меняется. На дашборде: отфильтровать «медленно на 8 ядрах» от «медленно на 64». Не путать с `--runner`/`--usage` на фазе сборки — те пишутся в labels той фазы (спека на старте, занятость в конце) |
 
 `ya_build` / `ya_tests` / `ya_cache_*` считает
 [`ya_evlog_phases.py`](ya_evlog_phases.py) по `ya_evlog.jsonl` — те же узлы,

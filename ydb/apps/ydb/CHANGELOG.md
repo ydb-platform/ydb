@@ -1,8 +1,4 @@
 * Added OIDC authentication with static tokens, client credentials and device authorization, configurable through `--oidc-config` YAML files, direct `--oidc-*` options, environment variables and connection profiles.
-* Fixed vector workload initialization with `--executer data` when sampling query vectors or measuring recall.
-* Removed `--hnsw-full-range` from `ydb workload vector run select`. Indexed searches use `VIEW`; the server searches partition-local HNSW graphs automatically for unprefixed `distributed_hnsw` indexes.
-
-* Fixed `ydb workload vector run select` to use read-only snapshots for `distributed_hnsw` indexes by default, avoiding transaction locks that disable HNSW acceleration. `--stale-ro` still selects stale reads. Fixed concurrent query-vector selection in the vector workload.
 
 * Fixed incorrect progress, speed, ETA, and final read statistics in `ydb import file parquet`.
 * Fixed false canonical result mismatches for empty optional `String` and `Utf8` values in `ydb workload ... run --check-canonical`.

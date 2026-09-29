@@ -94,6 +94,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.AlterAddCoveringIndexOverGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.AlterAddNotNullDefaultColumn
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsAlterDependencySetAndDrop
 ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsNonKeySerialDependency
+ydb/core/kqp/ut/scheme GeneratedStored.CompileTimeDefaultsPartialUpsertAndReplace
 ydb/core/kqp/ut/scheme GeneratedStored.CopyTablePreservesGeneratedColumn
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteAllByGeneratedPredicate
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteByGeneratedColumnIn
@@ -106,6 +107,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningMultipleRows
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.DropGeneratedUnlocksDependencyAlterAndDrop
+ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionPrimaryKeyConflictIsAtomic
 ydb/core/kqp/ut/scheme GeneratedStored.GeneratedInPrimaryKeyRejected
 ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
 ydb/core/kqp/ut/scheme GeneratedStored.InsertReturningGeneratedWithoutDependencies
@@ -429,6 +431,7 @@ ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_ByKeyFilter
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Columns
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families
 ydb/core/tx/datashard/ut_stats unittest.sole chunk
+ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_validate_row_condition unittest.sole chunk
 ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
 ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[PipeResets]
@@ -569,6 +572,7 @@ ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_a
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
+ydb/tests/functional/sdk/cpp/sdk_credprovider SdkCredProvider.PingFromProviderAsyncDiscovery
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_fifo_groups_with_dlq_in_cloud[tables_format_v1]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor
 ydb/tests/functional/sqs/migration/compatibility/cloud ydb.tests.functional.sqs.cloud.test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor

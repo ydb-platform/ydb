@@ -688,6 +688,7 @@ public:
             HFunc(TEvLoad::TEvNbsWrite, HandleNbsWrite);
             HFunc(TEvLoad::TEvNbsRead, HandleNbsRead);
             HFunc(TEvLoad::TEvConfigureTablet, HandleConfigureTablet);
+            HFunc(TEvLoad::TEvConfigureTabletResult, HandleConfigurationResult);
 
             case TEvents::TEvWakeup::EventType: {
                 auto* msg = ev->Get<TEvents::TEvWakeup>();
@@ -873,6 +874,35 @@ private:
 
     void HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TActorContext& ctx);
     void HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev, const TActorContext& ctx);
+    TActorId ConfigurationRequester;
+    ui64 ConfigurationCookie = 0;
+    ui64 ConfigurationId = 0;
+    ui64 ConfigurationGeneration = 0;
+    THashSet<TActorId> ConfigurationPending;
+
+    void ReplyConfiguration(bool success, const TString& error, const TActorContext& ctx) {
+        if (ConfigurationRequester) {
+            auto reply = std::make_unique<TEvLoad::TEvConfigureTabletResult>();
+            reply->Record.SetConfigurationId(ConfigurationId);
+            reply->Record.SetSuccess(success);
+            reply->Record.SetError(error);
+            ctx.Send(ConfigurationRequester, reply.release(), 0, ConfigurationCookie);
+            ConfigurationRequester = {};
+            ConfigurationPending.clear();
+        }
+    }
+
+    void HandleConfigurationResult(TEvLoad::TEvConfigureTabletResult::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Cookie != ConfigurationGeneration || !ConfigurationPending.erase(ev->Sender)) {
+            return;
+        }
+        if (!ev->Get()->Record.GetSuccess()) {
+            ReplyConfiguration(false, "DBG rejected configuration", ctx);
+        } else if (ConfigurationPending.empty()) {
+            ReplyConfiguration(true, {}, ctx);
+        }
+    }
+
     void HandleConfigureTablet(TEvLoad::TEvConfigureTablet::TPtr& ev, const TActorContext& ctx);
 
     void SendBscAllocate(const TActorContext& ctx, bool dealloc);
@@ -1465,10 +1495,10 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletDelete::TPtr& ev,
     if (Phase == ETabletPhase::Allocating || Phase == ETabletPhase::Deleting) {
         return reply(NBSLT_BUSY);
     }
-    if (Phase == ETabletPhase::Uninitialized) {
+    if (Phase == ETabletPhase::Uninitialized && AllocConfigSerialized.empty()) {
         return reply(NBSLT_OK);
     }
-    Y_DEBUG_ABORT_UNLESS(Phase == ETabletPhase::Ready);
+    Y_DEBUG_ABORT_UNLESS(Phase == ETabletPhase::Ready || Phase == ETabletPhase::Uninitialized);
 
     PendingDeleteReplyTo = ev->Sender;
     PendingDeleteCookie  = ev->Cookie;
@@ -1482,6 +1512,8 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletGetSummary::TPtr& ev
     const TActorContext& ctx)
 {
     auto r = std::make_unique<TEvLoad::TEvNbsLoadTabletGetSummaryResult>();
+    r->Record.SetAutomationProtocolVersion(1);
+    if (!AllocConfigSerialized.empty()) { *r->Record.MutableAllocation() = AllocConfig; }
     if (Phase == ETabletPhase::Uninitialized) {
         r->Record.SetStatus(NBSLT_NOT_INITIALIZED);
         r->Record.SetErrorReason("not initialized");
@@ -1650,6 +1682,25 @@ void TNbsDbgLikeLoadTablet::HandleConfigureTablet(
         << " IoSizeBytes# " << cfg.GetIoSizeBytes()
         << " Dbgs# " << Dbgs.size());
 
+    ReplyConfiguration(false, "configuration superseded", ctx);
+    ++ConfigurationGeneration;
+    if (cfg.GetConfigurationId()) {
+        ConfigurationRequester = ev->Sender;
+        ConfigurationCookie = ev->Cookie;
+        ConfigurationId = cfg.GetConfigurationId();
+        const ui32 count = cfg.GetNumDirectBlockGroupsToUse();
+        if (!count || count > DbgActors.size() || !ComputeRoutingParams(cfg, AllocConfig, Dbgs.size()).IoValid) {
+            ReplyConfiguration(false, "invalid configuration", ctx);
+            return;
+        }
+        for (ui32 i = 0; i < count; ++i) {
+            if (!DbgActors[i]) {
+                ReplyConfiguration(false, "DBG actor is unavailable", ctx);
+                return;
+            }
+            ConfigurationPending.insert(DbgActors[i]);
+        }
+    }
     EnsureCounters(ctx);
     RecomputeRouting(cfg);
 
@@ -1661,7 +1712,7 @@ void TNbsDbgLikeLoadTablet::HandleConfigureTablet(
         }
         auto fwd = std::make_unique<TEvLoad::TEvConfigureTablet>();
         fwd->Record = cfg;
-        ctx.Send(actorId, fwd.release());
+        ctx.Send(actorId, fwd.release(), 0, ConfigurationGeneration);
     }
 
     // Tablet owns the aggregate (shared) root gauges that are constant across
@@ -3442,7 +3493,7 @@ void TNbsDbgLikeActor::HandleDDiskReadResult(
     }
 }
 void TNbsDbgLikeActor::HandleConfigureTablet(
-    TEvLoad::TEvConfigureTablet::TPtr& ev, const TActorContext& /*ctx*/)
+    TEvLoad::TEvConfigureTablet::TPtr& ev, const TActorContext& ctx)
 {
     const auto& cfg = ev->Get()->Record;
     LOG_I("Worker HandleConfigureTablet DBG# " << MyDbgIndex
@@ -3499,6 +3550,13 @@ void TNbsDbgLikeActor::HandleConfigureTablet(
     if (Dbg.Counters.Lsns.SyncGateThreshold) {
         Dbg.Counters.Lsns.SyncGateThreshold->Set(SyncGateThreshold());
     }
+    if (cfg.GetConfigurationId()) {
+        auto reply = std::make_unique<TEvLoad::TEvConfigureTabletResult>();
+        reply->Record.SetConfigurationId(cfg.GetConfigurationId());
+        reply->Record.SetSuccess(params.IoValid);
+        ctx.Send(ev->Sender, reply.release(), 0, ev->Cookie);
+    }
+
 }
 
 void TNbsDbgLikeActor::HandleUpdateMonitoring(

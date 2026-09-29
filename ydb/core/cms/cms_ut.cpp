@@ -16,6 +16,8 @@
 #include <library/cpp/svnversion/svnversion.h>
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <limits>
+
 #include <util/stream/null.h>
 #include <util/system/hostname.h>
 
@@ -690,6 +692,121 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             const auto resp = env.RequestDDiskTabletList(request);
             UNIT_ASSERT_VALUES_EQUAL(resp.GetTotalCount(), 0);
             UNIT_ASSERT_VALUES_EQUAL(resp.TabletsSize(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(DDiskOccupancyCollectionAndValidation)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+        THashMap<ui32, ui32> pdiskIds;
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            const auto& config = TFakeNodeWhiteboardService::Config.GetResponse().GetStatus(0).GetBaseConfig();
+            for (const auto& pdisk : config.GetPDisk()) {
+                pdiskIds.emplace(pdisk.GetNodeId(), pdisk.GetPDiskId());
+            }
+            for (ui32 i = 0; i < 8; ++i) {
+                const auto nodeId = env.GetNodeId(i);
+                auto& node = TFakeNodeWhiteboardService::Info.at(nodeId);
+                node.PDiskStateInfo.at(pdiskIds.at(nodeId)).SetState(i == 3
+                    ? NKikimrBlobStorage::TPDiskState::DeviceIoError : NKikimrBlobStorage::TPDiskState::Normal);
+                auto& sample = node.DDiskStateInfo.emplace_back();
+                sample.SetPDiskId(pdiskIds.at(nodeId));
+                sample.SetDDiskSlotId(1);
+                if (i < 4) {
+                    sample.SetDDiskOccupancy(i == 0 ? 1.2 : 0.4);
+                    sample.SetPersistentBufferOccupancy(0.2);
+                } else if (i == 4) {
+                    sample.SetDDiskOccupancy(std::numeric_limits<double>::quiet_NaN());
+                    sample.SetPersistentBufferOccupancy(std::numeric_limits<double>::infinity());
+                } else if (i == 5) {
+                    sample.SetDDiskOccupancy(-0.1);
+                    sample.SetPersistentBufferOccupancy(-0.1);
+                } else if (i == 6) {
+                    sample.SetPersistentBufferOccupancy(1.1);
+                }
+            }
+        }
+        TTestActorRuntime::TEventObserver prev = env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult) {
+                auto& record = ev->Get<TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult>()->Record;
+                if (record.GetTabletId() == 3101) {
+                    record.ClearGroups();
+                    auto* group = record.AddGroups();
+                    group->SetDirectBlockGroupId(1);
+                    for (ui32 i = 0; i < 8; ++i) {
+                        auto fill = [&](auto* id) {
+                            id->SetNodeId(env.GetNodeId(i));
+                            id->SetPDiskId(pdiskIds.at(env.GetNodeId(i)));
+                            id->SetDDiskSlotId(1);
+                        };
+                        if (i != 2) {
+                            fill(group->AddDDiskId());
+                        }
+                        if (i != 1) {
+                            fill(group->AddPersistentBufferDDiskId());
+                        }
+                    }
+                }
+            }
+            return prev(ev);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(env.AllocateDDiskBlockGroup(3101, 1).GetStatus(), NKikimrProto::OK);
+        env.WaitForDDiskInfo(3101, 1);
+        NKikimrCms::TDDiskDiskListRequest request;
+        request.SetLimit(0);
+        request.SetSortBy(NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY);
+        request.SetSortDescending(true);
+        const auto response = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(response.DisksSize(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(response.GetDisks(0).GetDDiskOccupancy(), 1.2);
+        for (const auto& disk : response.GetDisks()) {
+            const ui32 nodeId = disk.GetDiskId().GetNodeId();
+            UNIT_ASSERT_VALUES_EQUAL(disk.HasDDiskOccupancy(), nodeId == env.GetNodeId(0) || nodeId == env.GetNodeId(1));
+            UNIT_ASSERT_VALUES_EQUAL(disk.HasPersistentBufferOccupancy(), nodeId == env.GetNodeId(0) || nodeId == env.GetNodeId(2));
+            UNIT_ASSERT_VALUES_EQUAL(disk.GetAvailable(), nodeId != env.GetNodeId(3));
+        }
+        for (const auto sort : {NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY,
+                                NKikimrCms::DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY}) {
+            for (bool descending : {false, true}) {
+                auto sortedRequest = request;
+                sortedRequest.SetSortBy(sort);
+                sortedRequest.SetSortDescending(descending);
+                const auto sorted = env.RequestDDiskDiskList(sortedRequest);
+                UNIT_ASSERT_VALUES_EQUAL(sorted.GetTotalCount(), 8);
+                UNIT_ASSERT_VALUES_EQUAL(sorted.DisksSize(), 8);
+                const bool ddisk = sort == NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY;
+                UNIT_ASSERT_VALUES_EQUAL(sorted.GetDisks(0).GetDiskId().GetNodeId(), env.GetNodeId(ddisk && !descending ? 1 : 0));
+                UNIT_ASSERT_VALUES_EQUAL(sorted.GetDisks(1).GetDiskId().GetNodeId(), env.GetNodeId(ddisk ? (descending ? 1 : 0) : 2));
+                for (ui32 i = 2; i < 8; ++i) {
+                    const auto& disk = sorted.GetDisks(i);
+                    UNIT_ASSERT(!(ddisk ? disk.HasDDiskOccupancy() : disk.HasPersistentBufferOccupancy()));
+                }
+                sortedRequest.SetOffset(1);
+                sortedRequest.SetLimit(2);
+                const auto page = env.RequestDDiskDiskList(sortedRequest);
+                UNIT_ASSERT_VALUES_EQUAL(page.GetTotalCount(), 8);
+                UNIT_ASSERT_VALUES_EQUAL(page.DisksSize(), 2);
+                for (ui32 i = 0; i < 2; ++i) {
+                    UNIT_ASSERT_VALUES_EQUAL(page.GetDisks(i).SerializeAsString(), sorted.GetDisks(i + 1).SerializeAsString());
+                }
+            }
+        }
+        // Each collection builds a new snapshot: absent whiteboard samples must vanish.
+        {
+            TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+            for (ui32 i = 0; i < 8; ++i) {
+                TFakeNodeWhiteboardService::Info.at(env.GetNodeId(i)).DDiskStateInfo.clear();
+            }
+        }
+        const auto empty = env.RequestDDiskDiskList(request);
+        UNIT_ASSERT_VALUES_EQUAL(empty.GetStatus().GetCode(), NKikimrCms::TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(empty.DisksSize(), 8);
+        for (const auto& disk : empty.GetDisks()) {
+            UNIT_ASSERT(!disk.HasDDiskOccupancy());
+            UNIT_ASSERT(!disk.HasPersistentBufferOccupancy());
         }
     }
 

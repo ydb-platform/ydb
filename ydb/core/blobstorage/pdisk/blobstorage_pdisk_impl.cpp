@@ -87,6 +87,14 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     ForcedPDiskSpaceColor = TControlWrapper(0, 0, 60);
     CompactionAdmissionColor = TControlWrapper(NKikimrBlobStorage::TPDiskSpaceColor::YELLOW, 0, 60);
     CompactionAdmissionColorCached = CompactionAdmissionColor;
+    SystemReserveChunks = TControlWrapper(0, 0, 1000000);
+    MaintenanceReserveChunks = TControlWrapper(0, 0, 1000000);
+    for (size_t i = 0; i < size_t(EAllocationPurpose::Count); ++i) {
+        auto group = Mon.CounterGroup->GetSubgroup("allocationPurpose", AllocationPurposeName(EAllocationPurpose(i)));
+        AllocatedByPurpose[i] = group->GetCounter("AllocatedChunks", true);
+        RefusedByPurpose[i] = group->GetCounter("RefusedChunks", true);
+        HeadroomByPurpose[i] = group->GetCounter("AvailableChunks", false);
+    }
     if (Cfg->FeatureFlags.GetEnableVDiskPlannedCompaction()) {
         CompactionArbiter = std::make_unique<TCompactionArbiter>(
             static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(CompactionAdmissionColorCached));
@@ -1484,13 +1492,15 @@ void TPDisk::ChunkUnlock(TChunkUnlock &evChunkUnlock) {
 
 TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
         bool forHousekeeping, NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor,
-        NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor) {
+        NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor, EAllocationPurpose purpose) {
     // chunkIdx = 0 is deprecated and will not be soon removed
     TGuard<TMutex> guard(StateMutex);
     Y_VERIFY_DEBUG_S(IsOwnerUser(req->Owner), PCtx->PDiskLogPrefix);
 
     const ui32 sharedFree = Keeper.GetFreeChunkCount() - 1;
     i64 ownerFree = Keeper.GetOwnerFree(req->Owner, false);
+    Keeper.SetAllocationReserves(SystemReserveChunks, MaintenanceReserveChunks);
+    const ui64 purposeHeadroom = Keeper.GetAllocationHeadroom(req->Owner, purpose);
     double occupancy;
     auto color = Keeper.EstimateAllocationColor(req->Owner, count, forHousekeeping, &occupancy);
     if (estimatedColor) {
@@ -1506,6 +1516,8 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             << " sharedFree# " << sharedFree
             << " ownerFree# " << ownerFree
             << " forHousekeeping# " << forHousekeeping
+            << " purpose# " << AllocationPurposeName(purpose)
+            << " purposeHeadroom# " << purposeHeadroom
             << " refuseAtColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(refuseAtColor)
             << " estimatedColor after allocation# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(color)
             << " occupancy after allocation# " << occupancy
@@ -1519,18 +1531,21 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
     // The colour has to stay strictly better than the caller's bound. With the default
     // BLACK this is exactly the historical `color == BLACK` test, since no colour is
     // worse than BLACK.
-    if (sharedFree <= count || color >= refuseAtColor) {
+    if (sharedFree <= count || color >= refuseAtColor || count > purposeHeadroom) {
+        *RefusedByPurpose[size_t(purpose)] += count;
         makeError("");
         return {};
     }
 
     TVector<TChunkIdx> chunks = Keeper.PopOwnerFreeChunks(req->Owner, count, errorReason);
     if (chunks.empty()) {
+        *RefusedByPurpose[size_t(purpose)] += count;
         makeError("PopOwnerFreeChunks failed");
         return {};
     }
 
     const ui32 dataChunkSizeSectors = Format.ChunkSize / Format.SectorSize;
+    *AllocatedByPurpose[size_t(purpose)] += count;
     for (TChunkIdx chunkIdx : chunks) {
         ui64 chunkNonce = SysLogRecord.Nonces.Value[NonceData];
         SysLogRecord.Nonces.Value[NonceData] += dataChunkSizeSectors;
@@ -1549,7 +1564,9 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
             {"marker", "BPD01"},
             {"chunkIdx", chunkIdx},
             {"oldOwnerId", state.OwnerId},
-            {"newOwnerId", req->Owner});
+            {"newOwnerId", req->Owner},
+            {"purpose", AllocationPurposeName(purpose)},
+            {"refuseAtColor", NKikimrBlobStorage::TPDiskSpaceColor::E_Name(refuseAtColor)});
         state.OwnerId = req->Owner;
         state.CommitState = TChunkState::DATA_RESERVED;
         Mon.UncommitedDataChunks->Inc();
@@ -1565,7 +1582,7 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
     TString allocateError;
     NKikimrBlobStorage::TPDiskSpaceColor::E estimatedColor = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
     TVector<TChunkIdx> chunks = AllocateChunkForOwner(&evChunkReserve, evChunkReserve.SizeChunks, allocateError,
-        evChunkReserve.ForHousekeeping, evChunkReserve.RefuseAtColor, &estimatedColor);
+        evChunkReserve.ForHousekeeping, evChunkReserve.RefuseAtColor, &estimatedColor, evChunkReserve.Purpose);
     errorReason << allocateError;
 
     if (chunks.empty()) {
@@ -1947,7 +1964,7 @@ struct TPDisk::TCompactionArbiterSpace : TCompactionArbiter::ISpace {
         if (PDisk.CompactionArbiterForcedColor) {
             return *PDisk.CompactionArbiterForcedColor;
         }
-        return PDisk.Keeper.GetSharedPoolColor();
+        return PDisk.Keeper.GetCompactionPressureColor();
     }
 
     bool Fits(TOwner owner, ui32 chunks) const override {
@@ -1955,6 +1972,7 @@ struct TPDisk::TCompactionArbiterSpace : TCompactionArbiter::ISpace {
         const ui32 sharedFree = PDisk.Keeper.GetFreeChunkCount() - 1;
         double occupancy;
         const TColor::E color = PDisk.Keeper.EstimateAllocationColor(owner, chunks, true, &occupancy);
+        // Housekeeping is Maintenance, which the allocation reserves do not hold back.
         return sharedFree > chunks && color < TColor::BLACK;
     }
 };
@@ -1975,10 +1993,14 @@ void TPDisk::ProcessCompactionBidder(TCompactionBidder& req) {
 }
 
 void TPDisk::UpdateCompactionArbiter() {
+    Keeper.SetAllocationReserves(SystemReserveChunks, MaintenanceReserveChunks);
+    for (size_t i = 0; i < size_t(EAllocationPurpose::Count); ++i) {
+        *HeadroomByPurpose[i] = Min<ui64>(Keeper.GetFreeChunkCount(),
+            Keeper.GetWorstAllocationHeadroom(EAllocationPurpose(i)));
+    }
     if (!CompactionArbiter) {
         return;
     }
-    TGuard<TMutex> guard(StateMutex);
     TCompactionArbiter::TOutbox out;
     TCompactionArbiterSpace space(*this);
     if (i64 color = CompactionAdmissionColor; color != CompactionAdmissionColorCached
@@ -1986,13 +2008,10 @@ void TPDisk::UpdateCompactionArbiter() {
         CompactionAdmissionColorCached = color;
         CompactionArbiter->SetAdmissionColor(static_cast<NKikimrBlobStorage::TPDiskSpaceColor::E>(color), space, out);
     }
-    const ui32 freeChunks = Keeper.GetFreeChunkCount();
-    const auto forcedColor = GetForcedPDiskSpaceColorIcb();
-    if (freeChunks != CompactionArbiterFreeChunks || forcedColor != CompactionArbiterForcedColor) {
-        CompactionArbiterFreeChunks = freeChunks;
-        CompactionArbiterForcedColor = forcedColor;
-        CompactionArbiter->OnSpaceChanged(space, out);
-    }
+    // Owner registration, removal and quota/reserve changes can alter effective
+    // headroom without changing the number of free physical chunks.
+    CompactionArbiterForcedColor = GetForcedPDiskSpaceColorIcb();
+    CompactionArbiter->OnSpaceChanged(space, out);
     SendCompactionArbiterOutbox(out);
 }
 
@@ -2260,7 +2279,7 @@ TOwner TPDisk::FindNextOwnerId() {
     return LastOwnerId;
 }
 
-void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
+void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode) {
     if (SharedUringCreateAttempted) {
         return;
     }
@@ -2269,6 +2288,7 @@ void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
 #if defined(__linux__)
     TUringRouterConfig config;
     config.IdleSpinUs = idleSpinUs;
+    config.DevNullMode = devNullMode;
 
     TFileHandle fd = BlockDevice->DuplicateFd();
     if (!fd.IsOpen()) {
@@ -2331,6 +2351,7 @@ void TPDisk::EnsureSharedUringRouter(ui32 idleSpinUs) {
     SharedUringRouter = std::move(router);
 #else
     Y_UNUSED(idleSpinUs);
+    Y_UNUSED(devNullMode);
     Mon.FallbackPDiskCount->Inc();
 #endif
 }
@@ -2365,7 +2386,7 @@ void TPDisk::AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitRes
         return;
     }
 
-    EnsureSharedUringRouter(evYardInit.UringIdleSpinUs);
+    EnsureSharedUringRouter(evYardInit.UringIdleSpinUs, evYardInit.UringDevNullMode);
 #if defined(__linux__)
     result.UringRouter = SharedUringRouter;
 #else
@@ -2535,6 +2556,14 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     TVDiskID vDiskId = evYardInit.VDiskIdWOGeneration();
 
     TGuard<TMutex> guard(StateMutex);
+    // StateMutex is not held while an error travels back to the requester.
+    auto reject = [&](const TString& reason,
+            NKikimrProto::EReplyStatus status = NKikimrProto::ERROR) {
+        guard.Release();
+        ReplyErrorYardInitResult(evYardInit, reason, status);
+        return false;
+    };
+
     auto it = VDiskOwners.find(vDiskId);
     if (it != VDiskOwners.end()) {
         // Owner is already known, but use next ownerRound to decrease probability of errors
@@ -2554,13 +2583,41 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     TOwnerData &ownerData = OwnerData[owner];
     ui64 prevOwnerRound = ownerData.OwnerRound;
     if (prevOwnerRound >= evYardInit.OwnerRound) {
-        guard.Release();
         TStringStream str;
         str << "requested OwnerRound# " << evYardInit.OwnerRound
             << " <= prevoiuslyUsedOwnerRound# " << prevOwnerRound
             << " OwnerRound may never decrease and can only be used once for YardInit. Marker# BPD13";
-        ReplyErrorYardInitResult(evYardInit, str.Str());
-        return false;
+        return reject(str.Str());
+    }
+
+    // A new owner cannot be installed on a read-only PDisk. Reject it before
+    // selecting the shared router's semantic mode, while known owners may
+    // still reconnect for read-only access.
+    if (it == VDiskOwners.end() && Cfg->ReadOnly) {
+        return reject("PDisk is in ReadOnly mode. Marker# BPD47", NKikimrProto::CORRUPTED);
+    }
+
+    // A rejected stale owner round must not choose the shared router's mode.
+    // Resolve the mode before changing the accepted owner's state so another
+    // slot can still choose its intended mode after a rejected initialization.
+    if (evYardInit.UringDevNullMode && !evYardInit.GetUringRouterClient) {
+        return reject("DevNullMode cannot be combined with ForcePDiskFallback");
+    }
+    if (evYardInit.GetUringRouterClient) {
+        EnsureSharedUringRouter(evYardInit.UringIdleSpinUs, evYardInit.UringDevNullMode);
+#if defined(__linux__)
+        if (SharedUringRouter
+                && SharedUringRouter->GetConfig().DevNullMode != evYardInit.UringDevNullMode) {
+            return reject("shared io_uring router DevNullMode conflicts with this DDisk slot");
+        }
+        if (evYardInit.UringDevNullMode && !SharedUringRouter) {
+            return reject("DevNullMode requires an available shared io_uring router");
+        }
+#else
+        if (evYardInit.UringDevNullMode) {
+            return reject("DevNullMode requires Linux io_uring");
+        }
+#endif
     }
 
     YDB_LOG_P_LOG(PRI_INFO, "YardInitStart",
@@ -2590,10 +2647,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
             return;
         }
 
-        if (Cfg->ReadOnly) {
-            ReplyErrorYardInitResult(evYardInit, "PDisk is in ReadOnly mode. Marker# BPD47", NKikimrProto::CORRUPTED);
-            return;
-        }
+        // A new owner on a read-only PDisk was already rejected by YardInitStart.
 
         // Allocate quota for the owner
         Keeper.AddOwner(owner, vDiskId, GetOwnerWeight(evYardInit.GroupSizeInUnits));
@@ -3513,6 +3567,8 @@ bool TPDisk::Initialize() {
                     icb->PDiskControls.StaticGroupChunkReservePerMille);
             TControlBoard::RegisterSharedControl(CompactionAdmissionColor,
                     icb->PDiskControls.CompactionAdmissionColor);
+            TControlBoard::RegisterSharedControl(SystemReserveChunks, icb->PDiskControls.SystemReserveChunks);
+            TControlBoard::RegisterSharedControl(MaintenanceReserveChunks, icb->PDiskControls.MaintenanceReserveChunks);
             if (Cfg->FeatureFlags.GetEnablePDiskSpaceColorOverride()) {
                 REGISTER_LOCAL_CONTROL(ForcedPDiskSpaceColor);
             }
@@ -3864,7 +3920,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             }
             if (ev.ChunkIdx == 0) {
                 TString allocError;
-                TVector<TChunkIdx> chunks = AllocateChunkForOwner(request, 1, allocError);
+                // A chunk allocated by writing to it is VDisk metadata -- the sync log swapping to disk -- that every
+                // write, SYSTEM ones included, depends on; so it may spend the system reserve.
+                TVector<TChunkIdx> chunks = AllocateChunkForOwner(request, 1, allocError, false,
+                    NKikimrBlobStorage::TPDiskSpaceColor::BLACK, nullptr, EAllocationPurpose::System);
                  if (chunks.empty()) {
                      err << allocError;
                      SendChunkWriteError(ev, err.Str(), NKikimrProto::OUT_OF_SPACE);

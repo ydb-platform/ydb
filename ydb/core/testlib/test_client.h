@@ -431,7 +431,10 @@ namespace Tests {
         // actors are gone; otherwise, lingering gRPC contexts or
         // background operations can cause the gRPC client to hang
         // or trigger use-after-free during its destruction.
+        // Slots below are cleared before Runtime is destroyed, so those
+        // callbacks log to stderr instead of a freed TActorSystem.
         std::shared_ptr<NYdb::TDriver> FederatedQuerySetupDriver_;
+        TVector<NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr> FederatedQuerySetupActorSystems_;
         THolder<TTestActorRuntime> Runtime;
         THolder<NYdb::TDriver> Driver;
         TIntrusivePtr<NBus::TBusMessageQueue> Bus;

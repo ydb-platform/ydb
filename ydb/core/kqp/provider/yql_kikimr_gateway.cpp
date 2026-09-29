@@ -472,6 +472,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                 auto tierNode = listNode.Item(i);
 
                 std::optional<TString> storageName;
+                std::optional<TString> objectKeyPrefix;
                 TDuration evictionDelay;
                 YQL_ENSURE(tierNode.Maybe<TCoNameValueTupleList>());
                 for (const auto& tierField : tierNode.Cast<TCoNameValueTupleList>()) {
@@ -479,6 +480,9 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                     if (tierFieldName == "storageName") {
                         YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
                         storageName = tierField.Value().Cast<TCoAtom>().StringValue();
+                    } else if (tierFieldName == "objectKeyPrefix") {
+                        YQL_ENSURE(tierField.Value().Maybe<TCoAtom>());
+                        objectKeyPrefix = tierField.Value().Cast<TCoAtom>().StringValue();
                     } else if (tierFieldName == "evictionDelay") {
                         YQL_ENSURE(tierField.Value().Maybe<TCoInterval>());
                         auto value = FromString<i64>(tierField.Value().Cast<TCoInterval>().Literal().Value());
@@ -493,7 +497,7 @@ bool TTtlSettings::TryParse(const NNodes::TCoNameValueTupleList& node, TTtlSetti
                     }
                 }
 
-                settings.Tiers.emplace_back(evictionDelay, storageName);
+                settings.Tiers.emplace_back(evictionDelay, storageName, objectKeyPrefix);
             }
         } else if (name == "columnUnit") {
             YQL_ENSURE(field.Value().Maybe<TCoAtom>());
@@ -523,7 +527,7 @@ bool TTableSettings::IsSet() const {
     return CompactionPolicy || PartitionBy || AutoPartitioningBySize || UniformPartitions || PartitionAtKeys
         || PartitionSizeMb || AutoPartitioningByLoad || MinPartitions || MaxPartitions || KeyBloomFilter
         || ReadReplicasSettings || TtlSettings || DataSourcePath || Location || ExternalSourceParameters
-        || StoreExternalBlobs || ExternalDataChannelsCount;
+        || StoreExternalBlobs || ExternalDataChannelsCount || MetricsLevel;
 }
 
 EYqlIssueCode YqlStatusFromYdbStatus(ui32 ydbStatus) {
@@ -681,10 +685,62 @@ void ConvertTtlSettingsToProto(const NYql::TTtlSettings& settings, Ydb::Table::T
         }
         if (tier.StorageName) {
             outTier->mutable_evict_to_external_storage()->set_storage(*tier.StorageName);
+            if (tier.ObjectKeyPrefix) {
+                outTier->mutable_evict_to_external_storage()->set_object_key_prefix(*tier.ObjectKeyPrefix);
+            }
         } else {
             outTier->mutable_delete_();
         }
     }
+}
+
+bool ParseTablesMetricsLevel(TStringBuf raw, Ydb::Table::MetricsSettings::MetricsLevel& out, TString& error) {
+    static constexpr Ydb::Table::MetricsSettings::MetricsLevel numericLevels[] = {
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE,
+        Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION,
+    };
+
+    const TString value = to_lower(TString(raw));
+    ui64 numericVal = 0;
+    if (TryFromString<ui64>(value, numericVal) && numericVal >= 1 && numericVal <= std::size(numericLevels)) {
+        out = numericLevels[numericVal - 1];
+    } else if (value == "database") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE;
+    } else if (value == "table") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE;
+    } else if (value == "partition") {
+        out = Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION;
+    } else {
+        error = TStringBuilder() << "METRICS_LEVEL is invalid: " << raw;
+        return false;
+    }
+
+    return true;
+}
+
+bool ParseDatabaseTablesMetricsLevel(TStringBuf raw,
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel& out, TString& error)
+{
+    Ydb::Table::MetricsSettings::MetricsLevel level;
+    if (ParseTablesMetricsLevel(raw, level, error)) {
+        switch (level) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+            return true;
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+            out = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+            return true;
+        default:
+            break;
+        }
+    }
+
+    error = TStringBuilder() << "TABLES_METRICS_LEVEL is invalid: " << raw;
+    return false;
 }
 
 Ydb::FeatureFlag::Status GetFlagValue(const TMaybe<bool>& value) {

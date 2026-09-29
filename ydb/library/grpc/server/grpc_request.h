@@ -41,480 +41,80 @@ public:
 IStreamAdaptor::TPtr CreateStreamAdaptor();
 
 ///////////////////////////////////////////////////////////////////////////////
-template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter, typename TOutProtoPrinter>
-class TGRpcRequestImpl
-    : public TBaseAsyncContext<TService>
+//! Type-independent part of the grpc server request. Holds the whole request
+//! state machine; the typed TGRpcRequestImpl only issues the typed grpc request
+//! call and creates the next request object.
+class TGRpcRequestImplBase
+    : public TBaseAsyncContextCommon
     , public IQueueEvent
     , public IRequestContextBase
 {
-    using TThis = TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
-
 public:
     using TOnRequest = std::function<void (IRequestContextBase* ctx)>;
-    using TRequestCallback = void (TService::TCurrentGRpcService::AsyncService::*)(grpc::ServerContext*, TIn*,
-        grpc::ServerAsyncResponseWriter<TOut>*, grpc::CompletionQueue*, grpc::ServerCompletionQueue*, void*);
-    using TStreamRequestCallback = void (TService::TCurrentGRpcService::AsyncService::*)(grpc::ServerContext*, TIn*,
-        grpc::ServerAsyncWriter<TOut>*, grpc::CompletionQueue*, grpc::ServerCompletionQueue*, void*);
 
-    TGRpcRequestImpl(TService* server,
-                 typename TService::TCurrentGRpcService::AsyncService* service,
-                 grpc::ServerCompletionQueue* cq,
-                 TOnRequest cb,
-                 TRequestCallback requestCallback,
-                 const char* name,
-                 TLoggerPtr logger,
-                 ICounterBlockPtr counters,
-                 IGRpcRequestLimiterPtr limiter)
-        : TBaseAsyncContext<TService>(service, cq)
-        , Server_(server)
-        , Cb_(cb)
-        , RequestCallback_(requestCallback)
-        , StreamRequestCallback_(nullptr)
-        , Name_(name)
-        , Logger_(std::move(logger))
-        , Counters_(std::move(counters))
-        , RequestLimiter_(std::move(limiter))
-        , Writer_(new grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>(&this->Context))
-        , StateFunc_(&TThis::SetRequestDone)
-        , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(server->NeedAuth())
-    {
-        Y_ABORT_UNLESS(Request_);
-        GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, GetRpcMethodName().c_str());
-    }
+    TAsyncFinishResult GetFinishFuture() override;
+    bool IsClientLost() const override;
+    bool IsStreamCall() const override;
+    bool SslServer() const override;
+    TString GetRpcMethodName() const override;
 
-    TGRpcRequestImpl(TService* server,
-                 typename TService::TCurrentGRpcService::AsyncService* service,
-                 grpc::ServerCompletionQueue* cq,
-                 TOnRequest cb,
-                 TStreamRequestCallback requestCallback,
-                 const char* name,
-                 TLoggerPtr logger,
-                 ICounterBlockPtr counters,
-                 IGRpcRequestLimiterPtr limiter)
-        : TBaseAsyncContext<TService>(service, cq)
-        , Server_(server)
-        , Cb_(cb)
-        , RequestCallback_(nullptr)
-        , StreamRequestCallback_(requestCallback)
-        , Name_(name)
-        , Logger_(std::move(logger))
-        , Counters_(std::move(counters))
-        , RequestLimiter_(std::move(limiter))
-        , StreamWriter_(new grpc::ServerAsyncWriter<TUniversalResponse<TOut>>(&this->Context))
-        , StateFunc_(&TThis::SetRequestDone)
-        , Request_(google::protobuf::Arena::CreateMessage<TIn>(&Arena_))
-        , AuthState_(server->NeedAuth())
-        , StreamAdaptor_(CreateStreamAdaptor())
-    {
-        Y_ABORT_UNLESS(Request_);
-        GRPC_LOG_DEBUG(Logger_, "[%p] created streaming request Name# %s", this, GetRpcMethodName().c_str());
-    }
+    //! Start waiting for the request unless server is shutting down
+    void Run();
 
-    TAsyncFinishResult GetFinishFuture() override {
-        return FinishPromise_.GetFuture();
-    }
+    bool Execute(bool ok) override;
+    void DestroyRequest() override;
 
-    bool IsClientLost() const override {
-        return ClientLost_.load();
-    }
-
-    bool IsStreamCall() const override {
-        return bool(StreamAdaptor_);
-    }
-
-    bool SslServer() const override {
-        return Server_->SslServer();
-    }
-
-    TString GetRpcMethodName() const override {
-        return TStringBuilder() << TService::TCurrentGRpcService::service_full_name() << '/' << Name_;
-    }
-
-    void Run() {
-        // Start request unless server is shutting down
-        if (auto guard = Server_->ProtectShutdown()) {
-            Ref(); //For grpc c runtime
-            this->Context.AsyncNotifyWhenDone(OnFinishTag.Prepare());
-            OnBeforeCall();
-            if (RequestCallback_) {
-                (this->Service->*RequestCallback_)
-                        (&this->Context, Request_,
-                        reinterpret_cast<grpc::ServerAsyncResponseWriter<TOut>*>(Writer_.Get()), this->CQ, this->CQ, GetGRpcTag());
-            } else {
-                (this->Service->*StreamRequestCallback_)
-                        (&this->Context, Request_,
-                        reinterpret_cast<grpc::ServerAsyncWriter<TOut>*>(StreamWriter_.Get()), this->CQ, this->CQ, GetGRpcTag());
-            }
-        }
-    }
-
-    ~TGRpcRequestImpl() {
-        // No direct dtor call allowed
-        Y_ASSERT(RefCount() == 0);
-    }
-
-    bool Execute(bool ok) override {
-        return (this->*StateFunc_)(ok);
-    }
-
-    void DestroyRequest() override {
-        Y_ABORT_UNLESS(!CallInProgress_, "Unexpected DestroyRequest while another grpc call is still in progress");
-        RequestDestroyed_ = true;
-        if (RequestRegistered_) {
-            Server_->DeregisterRequestCtx(this);
-            RequestRegistered_ = false;
-        }
-        UnRef();
-    }
-
-    TString GetPeer() const override {
-        return TBaseAsyncContext<TService>::GetPeer();
-    }
-
-    TString GetAuthority() const override {
-        return TBaseAsyncContext<TService>::GetAuthority();
-    }
-
-    TInstant Deadline() const override {
-        return TBaseAsyncContext<TService>::Deadline();
-    }
-
-    TSet<TStringBuf> GetPeerMetaKeys() const override {
-        return TBaseAsyncContext<TService>::GetPeerMetaKeys();
-    }
-
-    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override {
-        return TBaseAsyncContext<TService>::GetPeerMetaValues(key);
-    }
-
-    TVector<TStringBuf> FindClientCert() const override {
-        return TBaseAsyncContext<TService>::FindClientCert();
-    }
-
-    grpc_compression_level GetCompressionLevel() const override {
-        return TBaseAsyncContext<TService>::GetCompressionLevel();
-    }
-
-    TString GetEndpointId() const override {
-        return Server_->GetEndpointId();
-    }
+    TString GetPeer() const override;
+    TString GetAuthority() const override;
+    TInstant Deadline() const override;
+    TSet<TStringBuf> GetPeerMetaKeys() const override;
+    TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const override;
+    TVector<TStringBuf> FindClientCert() const override;
+    grpc_compression_level GetCompressionLevel() const override;
+    TString GetEndpointId() const override;
 
     //! Get pointer to the request's message.
-    const NProtoBuf::Message* GetRequest() const override {
-        return Request_;
-    }
+    const NProtoBuf::Message* GetRequest() const override;
+    TAuthState& GetAuthState() override;
 
-    TAuthState& GetAuthState() override {
-        return AuthState_;
-    }
+    void Reply(NProtoBuf::Message* resp, ui32 status) override;
+    void Reply(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) override;
+    void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) override;
+    void ReplyUnauthenticated(const TString& in) override;
+    void SetNextReplyCallback(TOnNextReply&& cb) override;
+    void AddTrailingMetadata(const TString& key, const TString& value) override;
+    void FinishStreamingOk() override;
+    google::protobuf::Arena* GetArena() override;
+    void UseDatabase(const TString& database) override;
 
-    void Reply(NProtoBuf::Message* resp, ui32 status) override {
-        WriteDataOk(resp, status);
-    }
+protected:
+    // Writer types do not depend on the response type: the unary writer
+    // serializes either a message or a byte buffer by reference, the
+    // streaming writer always writes already serialized byte buffers.
+    using TUnaryWriter = grpc::ServerAsyncResponseWriter<TUniversalResponseRef<NProtoBuf::Message>>;
+    using TStreamWriter = grpc::ServerAsyncWriter<grpc::ByteBuffer>;
 
-    void Reply(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) override {
-        WriteByteDataOk(resp, status, ctrl);
-    }
+    TGRpcRequestImplBase(TGrpcServiceProtectiable* server,
+                         grpc::ServerCompletionQueue* cq,
+                         TOnRequest&& cb,
+                         const char* serviceName,
+                         const char* name,
+                         TLoggerPtr&& logger,
+                         ICounterBlockPtr&& counters,
+                         IGRpcRequestLimiterPtr&& limiter,
+                         const NProtoBuf::Message& requestPrototype,
+                         bool streaming,
+                         bool needAuth);
 
-    void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) override {
-        FinishGrpcStatus(code, msg, details, false);
-    }
+public:
+    ~TGRpcRequestImplBase();
 
-    void ReplyUnauthenticated(const TString& in) override {
-        const TString message = in.empty() ? TString("unauthenticated") : TString("unauthenticated, ") + in;
-        FinishGrpcStatus(grpc::StatusCode::UNAUTHENTICATED, message, "", false);
-    }
+protected:
+    //! Issue the typed grpc Request<Method> call (called once per request)
+    virtual void RequestCall() = 0;
 
-    void SetNextReplyCallback(TOnNextReply&& cb) override {
-        NextReplyCb_ = cb;
-    }
-
-    void AddTrailingMetadata(const TString& key, const TString& value) override {
-        this->Context.AddTrailingMetadata(key, value);
-    }
-
-    void FinishStreamingOk() override {
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (enqueued)", this, GetRpcMethodName().c_str(),
-                  this->Context.peer().c_str());
-        auto cb = [this]() {
-            StateFunc_ = &TThis::SetFinishDone;
-            GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (pushed to grpc)", this, GetRpcMethodName().c_str(),
-                      this->Context.peer().c_str());
-
-            OnBeforeCall();
-            Finished_ = true;
-            StreamWriter_->Finish(grpc::Status::OK, GetGRpcTag());
-        };
-        StreamAdaptor_->Enqueue(std::move(cb), false);
-    }
-
-    google::protobuf::Arena* GetArena() override {
-        return &Arena_;
-    }
-
-    void UseDatabase(const TString& database) override {
-        Counters_->UseDatabase(database);
-    }
-
-private:
-    void Clone() {
-        if (!Server_->IsShuttingDown()) {
-            if (RequestCallback_) {
-                MakeIntrusive<TThis>(
-                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, RequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
-            } else {
-                MakeIntrusive<TThis>(
-                    static_cast<TService*>(Server_), this->Service, this->CQ, Cb_, StreamRequestCallback_, Name_, Logger_, Counters_->Clone(), RequestLimiter_)->Run();
-            }
-        }
-    }
-
-    void OnBeforeCall() {
-        Y_ABORT_UNLESS(!RequestDestroyed_, "Cannot start grpc calls after request is already destroyed");
-        Y_ABORT_UNLESS(!Finished_, "Cannot start grpc calls after request is finished");
-        bool wasInProgress = std::exchange(CallInProgress_, true);
-        Y_ABORT_UNLESS(!wasInProgress, "Another grpc call is already in progress");
-    }
-
-    void OnAfterCall() {
-        Y_ABORT_UNLESS(!RequestDestroyed_, "Finished grpc call after request is already destroyed");
-        bool wasInProgress = std::exchange(CallInProgress_, false);
-        Y_ABORT_UNLESS(wasInProgress, "Finished grpc call that was not in progress");
-    }
-
-    void WriteDataOk(NProtoBuf::Message* resp, ui32 status) {
-        auto makeResponseString = [&] {
-            TString x;
-            TOutProtoPrinter printer;
-            printer.SetSingleLineMode(true);
-            printer.PrintToString(*resp, &x);
-            return x;
-        };
-
-        auto sz = (size_t)resp->ByteSize();
-        if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s", this, GetRpcMethodName().c_str(),
-                makeResponseString().data(), this->Context.peer().c_str());
-            StateFunc_ = &TThis::SetFinishDone;
-            ResponseSize = sz;
-            ResponseStatus = status;
-            Y_ABORT_UNLESS(this->Context.c_call());
-            OnBeforeCall();
-            Finished_ = true;
-            Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
-        } else {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s (enqueued)",
-                this, GetRpcMethodName().c_str(), makeResponseString().data(), this->Context.peer().c_str());
-
-            // because of std::function cannot hold move-only captured object
-            // we allocate shared object on heap to avoid message copy
-            auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
-            auto cb = [this, uResp = std::move(uResp), sz, status]() {
-                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s peer# %s (pushed to grpc)",
-                    this, GetRpcMethodName().c_str(), this->Context.peer().c_str());
-                StateFunc_ = &TThis::NextReply;
-                ResponseSize += sz;
-                ResponseStatus = status;
-                OnBeforeCall();
-                StreamWriter_->Write(*uResp, GetGRpcTag());
-            };
-            StreamAdaptor_->Enqueue(std::move(cb), false);
-        }
-    }
-
-    void WriteByteDataOk(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) {
-        auto sz = resp->Length();
-        if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s", this, GetRpcMethodName().c_str(),
-                this->Context.peer().c_str());
-            StateFunc_ = &TThis::SetFinishDone;
-            ResponseSize = sz;
-            ResponseStatus = status;
-            OnBeforeCall();
-            Finished_ = true;
-            Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
-        } else {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (enqueued)", this, GetRpcMethodName().c_str(),
-                this->Context.peer().c_str());
-
-            // because of std::function cannot hold move-only captured object
-            // we allocate shared object on heap to avoid buffer copy
-            auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
-            const bool finish = ctrl == EStreamCtrl::FINISH;
-            auto cb = [this, uResp = std::move(uResp), sz, status, finish]() {
-                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (pushed to grpc)",
-                    this, GetRpcMethodName().c_str(), this->Context.peer().c_str());
-
-                StateFunc_ = finish ? &TThis::SetFinishDone : &TThis::NextReply;
-
-                ResponseSize += sz;
-                ResponseStatus = status;
-                OnBeforeCall();
-                if (finish) {
-                    Finished_ = true;
-                    const auto option = grpc::WriteOptions().set_last_message();
-                    StreamWriter_->WriteAndFinish(*uResp, option, grpc::Status::OK, GetGRpcTag());
-                } else {
-                    StreamWriter_->Write(*uResp, GetGRpcTag());
-                }
-            };
-            StreamAdaptor_->Enqueue(std::move(cb), false);
-        }
-    }
-
-    void FinishGrpcStatus(grpc::StatusCode code, const TString& msg, const TString& details, bool urgent) {
-        Y_ABORT_UNLESS(code != grpc::OK);
-        if (code == grpc::StatusCode::UNAUTHENTICATED) {
-            Counters_->CountNotAuthenticated();
-        } else if (code == grpc::StatusCode::RESOURCE_EXHAUSTED) {
-            Counters_->CountResourceExhausted();
-        }
-
-        if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)", this,
-                GetRpcMethodName().c_str(), msg.c_str(), this->Context.peer().c_str(), (int)code);
-            StateFunc_ = &TThis::SetFinishError;
-            TOut resp;
-            OnBeforeCall();
-            Finished_ = true;
-            Writer_->Finish(TUniversalResponseRef<TOut>(&resp), grpc::Status(code, msg, details), GetGRpcTag());
-        } else {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
-                                    " (enqueued)", this, GetRpcMethodName().c_str(), msg.c_str(), this->Context.peer().c_str(), (int)code);
-            auto cb = [this, code, msg, details]() {
-                GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
-                                        " (pushed to grpc)", this, GetRpcMethodName().c_str(), msg.c_str(),
-                               this->Context.peer().c_str(), (int)code);
-                StateFunc_ = &TThis::SetFinishError;
-                OnBeforeCall();
-                Finished_ = true;
-                StreamWriter_->Finish(grpc::Status(code, msg, details), GetGRpcTag());
-            };
-            StreamAdaptor_->Enqueue(std::move(cb), urgent);
-        }
-    }
-
-    bool SetRequestDone(bool ok) {
-        OnAfterCall();
-
-        auto makeRequestString = [&] {
-            TString resp;
-            if (ok) {
-                TInProtoPrinter printer;
-                printer.SetSingleLineMode(true);
-                printer.PrintToString(*Request_, &resp);
-            } else {
-                resp = "<not ok>";
-            }
-            return resp;
-        };
-        GRPC_LOG_DEBUG(Logger_, "[%p] received request Name# %s ok# %s data# %s peer# %s", this, GetRpcMethodName().c_str(),
-            ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
-
-        if (this->Context.c_call() == nullptr) {
-            Y_ABORT_UNLESS(!ok);
-            // One ref by OnFinishTag, grpc will not call this tag if no request received
-            UnRef();
-        } else if (!(RequestRegistered_ = Server_->RegisterRequestCtx(this))) {
-            // Request cannot be registered due to shutdown
-            // It's unsafe to continue, so drop this request without processing
-            GRPC_LOG_DEBUG(Logger_, "[%p] dropping request Name# %s due to shutdown", this, GetRpcMethodName().c_str());
-            this->Context.TryCancel();
-            return false;
-        }
-
-        Clone(); // TODO: Request pool?
-        if (!ok) {
-            Counters_->CountNotOkRequest();
-            return false;
-        }
-
-        if (IncRequest()) {
-            // Adjust counters.
-            RequestSize = Request_->ByteSize();
-            Counters_->StartProcessing(RequestSize, Deadline());
-            RequestTimer.Reset();
-
-            if (!SslServer()) {
-                Counters_->CountRequestWithoutTls();
-            }
-
-            //TODO: Move this in to grpc_request_proxy
-            auto maybeDatabase = GetPeerMetaValues(TStringBuf("x-ydb-database"));
-            if (maybeDatabase.empty()) {
-                Counters_->CountRequestsWithoutDatabase();
-            }
-            auto maybeToken = GetPeerMetaValues(TStringBuf("x-ydb-auth-ticket"));
-            if (maybeToken.empty() || maybeToken[0].empty()) {
-                TString db{maybeDatabase ? maybeDatabase[0] : TStringBuf{}};
-                Counters_->CountRequestsWithoutToken();
-                GRPC_LOG_DEBUG(Logger_, "[%p] received request without user token "
-                    "Name# %s data# %s peer# %s database# %s", this, GetRpcMethodName().c_str(),
-                    makeRequestString().data(), this->Context.peer().c_str(), db.c_str());
-            }
-
-            // Handle current request.
-            Cb_(this);
-        } else {
-            //This request has not been counted
-            SkipUpdateCountersOnError = true;
-            FinishGrpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, "no resource", "", true);
-        }
-        return true;
-    }
-
-    bool NextReply(bool ok) {
-        OnAfterCall();
-
-        auto logCb = [this, ok](int left) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] ready for next reply Name# %s ok# %s peer# %s left# %d", this, GetRpcMethodName().c_str(),
-                ok ? "true" : "false", this->Context.peer().c_str(), left);
-        };
-
-        if (!ok) {
-            logCb(-1);
-            DecRequest();
-            Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
-                TDuration::Seconds(RequestTimer.Passed()));
-            return false;
-        }
-
-        Ref();  // To prevent destroy during this call in case of execution Finish
-        size_t left = StreamAdaptor_->ProcessNext();
-        logCb(left);
-        if (NextReplyCb_) {
-            NextReplyCb_(left);
-        }
-        // Now it is safe to destroy even if Finish was called
-        UnRef();
-        return true;
-    }
-
-    bool SetFinishDone(bool ok) {
-        OnAfterCall();
-
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished request Name# %s ok# %s peer# %s", this, GetRpcMethodName().c_str(),
-            ok ? "true" : "false", this->Context.peer().c_str());
-        //PrintBackTrace();
-        DecRequest();
-        Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
-            TDuration::Seconds(RequestTimer.Passed()));
-        return false;
-    }
-
-    bool SetFinishError(bool ok) {
-        OnAfterCall();
-
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished request with error Name# %s ok# %s peer# %s", this, GetRpcMethodName().c_str(),
-            ok ? "true" : "false", this->Context.peer().c_str());
-        if (!SkipUpdateCountersOnError) {
-            DecRequest();
-            Counters_->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
-                TDuration::Seconds(RequestTimer.Passed()));
-        }
-        return false;
-    }
+    //! Create and run the next request object for the same method (called once per request)
+    virtual void CloneAndRun(ICounterBlockPtr counters) = 0;
 
     // Returns pointer to IQueueEvent to pass into grpc c runtime
     // Implicit C style cast from this to void* is wrong due to multiple inheritance
@@ -522,53 +122,45 @@ private:
         return static_cast<IQueueEvent*>(this);
     }
 
-    void OnFinish(EQueueEventStatus evStatus) {
-        if (this->Context.IsCancelled()) {
-            ClientLost_.store(true);
-            FinishPromise_.SetValue(EFinishStatus::CANCEL);
-        } else {
-            FinishPromise_.SetValue(evStatus == EQueueEventStatus::OK ? EFinishStatus::OK : EFinishStatus::ERROR);
-        }
-    }
+private:
+    class TSharedByteBuffer;
 
-    bool IncRequest() {
-        if (!Server_->IncRequest())
-            return false;
+    void Clone();
+    void OnBeforeCall();
+    void OnAfterCall();
+    void WriteDataOk(NProtoBuf::Message* resp, ui32 status);
+    void WriteByteDataOk(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl);
+    void EnqueueStreamWrite(TIntrusivePtr<TSharedByteBuffer> buffer, size_t sz, ui32 status, bool finish, bool byteData);
+    void FinishGrpcStatus(grpc::StatusCode code, const TString& msg, const TString& details, bool urgent);
+    bool SetRequestDone(bool ok);
+    bool NextReply(bool ok);
+    bool SetFinishDone(bool ok);
+    bool SetFinishError(bool ok);
+    void OnFinish(EQueueEventStatus evStatus);
+    bool IncRequest();
+    void DecRequest();
 
-        if (!RequestLimiter_)
-            return true;
-
-        if (!RequestLimiter_->IncRequest()) {
-            Server_->DecRequest();
-            return false;
-        }
-
-        return true;
-    }
-
-    void DecRequest() {
-        if (RequestLimiter_) {
-            RequestLimiter_->DecRequest();
-        }
-        Server_->DecRequest();
-    }
-
-    using TStateFunc = bool (TThis::*)(bool);
-    TGrpcServiceProtectiable* Server_ = nullptr;
+protected:
+    TGrpcServiceProtectiable* const Server_ = nullptr;
     TOnRequest Cb_;
-    TRequestCallback RequestCallback_;
-    TStreamRequestCallback StreamRequestCallback_;
+    const char* const ServiceName_;
     const char* const Name_;
     TLoggerPtr Logger_;
     ICounterBlockPtr Counters_;
     IGRpcRequestLimiterPtr RequestLimiter_;
 
-    THolder<grpc::ServerAsyncResponseWriter<TUniversalResponseRef<TOut>>> Writer_;
-    THolder<grpc::ServerAsyncWriterInterface<TUniversalResponse<TOut>>> StreamWriter_;
+    THolder<TUnaryWriter> Writer_;
+    THolder<TStreamWriter> StreamWriter_;
+
+private:
+    using TStateFunc = bool (TGRpcRequestImplBase::*)(bool);
     TStateFunc StateFunc_;
 
+protected:
     google::protobuf::Arena Arena_;
-    TIn* Request_ = nullptr;
+    NProtoBuf::Message* Request_ = nullptr;
+
+private:
     TOnNextReply NextReplyCb_;
     ui32 RequestSize = 0;
     ui32 ResponseSize = 0;
@@ -580,12 +172,95 @@ private:
     bool CallInProgress_ = false;
     bool Finished_ = false;
 
-    using TFixedEvent = TQueueFixedEvent<TGRpcRequestImpl>;
-    TFixedEvent OnFinishTag = { this, &TGRpcRequestImpl::OnFinish };
+    using TFixedEvent = TQueueFixedEvent<TGRpcRequestImplBase>;
+    TFixedEvent OnFinishTag = { this, &TGRpcRequestImplBase::OnFinish };
     NThreading::TPromise<EFinishStatus> FinishPromise_ = NThreading::NewPromise<EFinishStatus>();
     bool SkipUpdateCountersOnError = false;
     IStreamAdaptor::TPtr StreamAdaptor_;
     std::atomic<bool> ClientLost_ = false;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+//! Typed grpc server request. Only the parts that really depend on the
+//! request/response/service types live here: the typed Request<Method> call
+//! and the creation of the next request object.
+//! TInProtoPrinter and TOutProtoPrinter are kept for source compatibility and
+//! are not used: messages are logged with the runtime-descriptor security printer.
+template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter, typename TOutProtoPrinter>
+class TGRpcRequestImpl
+    : public TGRpcRequestImplBase
+{
+    using TThis = TGRpcRequestImpl<TIn, TOut, TService, TInProtoPrinter, TOutProtoPrinter>;
+    using TAsyncService = typename TService::TCurrentGRpcService::AsyncService;
+
+public:
+    using TOnRequest = TGRpcRequestImplBase::TOnRequest;
+    using TRequestCallback = void (TAsyncService::*)(grpc::ServerContext*, TIn*,
+        grpc::ServerAsyncResponseWriter<TOut>*, grpc::CompletionQueue*, grpc::ServerCompletionQueue*, void*);
+    using TStreamRequestCallback = void (TAsyncService::*)(grpc::ServerContext*, TIn*,
+        grpc::ServerAsyncWriter<TOut>*, grpc::CompletionQueue*, grpc::ServerCompletionQueue*, void*);
+
+    TGRpcRequestImpl(TService* server,
+                 TAsyncService* service,
+                 grpc::ServerCompletionQueue* cq,
+                 TOnRequest cb,
+                 TRequestCallback requestCallback,
+                 const char* name,
+                 TLoggerPtr logger,
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter)
+        : TGRpcRequestImplBase(server, cq, std::move(cb), TService::TCurrentGRpcService::service_full_name(), name,
+            std::move(logger), std::move(counters), std::move(limiter), TIn::default_instance(), false, server->NeedAuth())
+        , Service(service)
+        , RequestCallback_(requestCallback)
+        , StreamRequestCallback_(nullptr)
+    {
+    }
+
+    TGRpcRequestImpl(TService* server,
+                 TAsyncService* service,
+                 grpc::ServerCompletionQueue* cq,
+                 TOnRequest cb,
+                 TStreamRequestCallback requestCallback,
+                 const char* name,
+                 TLoggerPtr logger,
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter)
+        : TGRpcRequestImplBase(server, cq, std::move(cb), TService::TCurrentGRpcService::service_full_name(), name,
+            std::move(logger), std::move(counters), std::move(limiter), TIn::default_instance(), true, server->NeedAuth())
+        , Service(service)
+        , RequestCallback_(nullptr)
+        , StreamRequestCallback_(requestCallback)
+    {
+    }
+
+private:
+    void RequestCall() override {
+        TIn* request = static_cast<TIn*>(Request_);
+        if (RequestCallback_) {
+            (Service->*RequestCallback_)
+                    (&Context, request,
+                    reinterpret_cast<grpc::ServerAsyncResponseWriter<TOut>*>(Writer_.Get()), CQ, CQ, GetGRpcTag());
+        } else {
+            (Service->*StreamRequestCallback_)
+                    (&Context, request,
+                    reinterpret_cast<grpc::ServerAsyncWriter<TOut>*>(StreamWriter_.Get()), CQ, CQ, GetGRpcTag());
+        }
+    }
+
+    void CloneAndRun(ICounterBlockPtr counters) override {
+        if (RequestCallback_) {
+            MakeIntrusive<TThis>(
+                static_cast<TService*>(Server_), Service, CQ, Cb_, RequestCallback_, Name_, Logger_, std::move(counters), RequestLimiter_)->Run();
+        } else {
+            MakeIntrusive<TThis>(
+                static_cast<TService*>(Server_), Service, CQ, Cb_, StreamRequestCallback_, Name_, Logger_, std::move(counters), RequestLimiter_)->Run();
+        }
+    }
+
+    TAsyncService* const Service;
+    TRequestCallback RequestCallback_;
+    TStreamRequestCallback StreamRequestCallback_;
 };
 
 template<typename TIn, typename TOut, typename TService, typename TInProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TIn>, typename TOutProtoPrinter = ::NKikimr::TSecurityTextFormatPrinter<TOut>>

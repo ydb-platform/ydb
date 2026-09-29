@@ -2,6 +2,7 @@
 #include "partition_util.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
@@ -384,10 +385,7 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
 namespace {
 
 TKey WithHeadOffsetDelta(TKey&& key, const THead& head) {
-    if (HasAppData()
-        && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()
-        && !head.GetBatches().empty())
-    {
+    if (CanWriteOffsetDeltaInKeys() && !head.GetBatches().empty()) {
         const ui64 offsetDelta = head.GetOffsetDelta();
         if (offsetDelta > 0) {
             key.SetOffsetDelta(offsetDelta);
@@ -562,6 +560,7 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
         Head.AddBatch(NewHead.ExtractFirstBatch());
     }
     Head.PackedSize += NewHead.PackedSize;
+    Head.TrailingOffsetDelta = NewHead.TrailingOffsetDelta;
 
     if (Head.PackedSize > 0 && DataKeysBody.empty()) {
         startOffset = Head.Offset + (Head.PartNo > 0 ? 1 : 0);
@@ -636,11 +635,31 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     const ui32 size = NewHead.PackedSize;
     std::pair<TKey, ui32> res(key, size);
     ui32 x = headCleared ? 0 : Head.PackedSize;
+
     AFL_ENSURE(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x);
     for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         auto jt = it; ++jt;
         if (it->NeedCompaction()) {
             res = it->Compact();
+            // NewHead pushes OffsetDelta to the next key.
+            // level 3: [key1] [key2] [key3] [NewHead key (with offset delta!)]
+            // level 2: [key4]
+            // level 1: [key5] [key6]
+            // level 0: [key7] [key8]
+            // ...
+            // level 3: []
+            // level 2: [key4] [key1 + key2 + key3 + NewHead key (with offset delta!)]
+            // level 1: [key5] [key6]
+            // level 0: [key7] [key8]
+            // ...
+            if (CanWriteOffsetDeltaInKeys()) {
+                AFL_ENSURE(NewHead.GetOffsetDelta() > 0)
+                    ("NewHead.Offset", NewHead.Offset)
+                    ("NewHead.Count", NewHead.GetCount())
+                    ("NewHead.TrailingOffsetDelta", NewHead.TrailingOffsetDelta);
+                res.first.SetOffsetDelta(NewHead.Offset - res.first.GetOffset() + NewHead.GetOffsetDelta());
+            }
+
             if (jt != DataKeysHead.rend()) {
                 jt->AddKey(res.first, res.second);
             }
@@ -651,6 +670,10 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     }
     AFL_ENSURE(res.second >= size);
     AFL_ENSURE(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
+    if (CanWriteOffsetDeltaInKeys()) {
+        AFL_ENSURE(res.first.HasOffsetDelta())
+            ("key", res.first.ToString());
+    }
     return res;
 }
 

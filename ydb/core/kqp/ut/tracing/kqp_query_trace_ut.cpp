@@ -248,13 +248,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
         auto request = MakeSQLRequest("SELECT SUM(value) FROM `/Root/table-1`;", true);
         request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
         request->Record.MutableRequest()->ClearTxControl();
-        ActorIdToProto(sender, request->Record.MutableRequestActorId());
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
-            request.Release(), 0, 0, nullptr, NWilson::TTraceId::NewTraceId(15, 4095)));
-        const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
-            response->Get()->Record.DebugString());
-        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecRequest(runtime, sender, std::move(request));
         UNIT_ASSERT(requests);
         UNIT_ASSERT(FindSpan(*uploader, "Task: "));
     }

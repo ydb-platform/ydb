@@ -232,15 +232,15 @@ SELECT dense_rank() OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS 
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 pragma AnsiCurrentRow;
-SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
+SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
  column0 | ten | four 
 ---------+-----+------
-       0 |   0 |    0 
     None |   0 |    0 
+       0 |   0 |    0 
     None |   0 |    2 
-       1 |   1 |    1 
     None |   1 |    1 
+       1 |   1 |    1 
     None |   1 |    3 
        1 |   3 |    3 
        0 |   4 |    0 
@@ -253,15 +253,15 @@ SELECT lag(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PAR
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 pragma AnsiCurrentRow;
-SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
+SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
  column0 | ten | four 
 ---------+-----+------
-       4 |   0 |    0 
        0 |   0 |    0 
+       4 |   0 |    0 
     None |   0 |    2 
-       7 |   1 |    1 
        1 |   1 |    1 
+       7 |   1 |    1 
        3 |   1 |    3 
     None |   3 |    3 
     None |   4 |    0 
@@ -274,15 +274,15 @@ SELECT lead(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PA
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 pragma AnsiCurrentRow;
-SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten) ORDER BY ten, four;
+SELECT lead(ten * 2, 1) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (PARTITION BY four ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
  column0 | ten | four 
 ---------+-----+------
-       8 |   0 |    0 
        0 |   0 |    0 
+       8 |   0 |    0 
     None |   0 |    2 
-      14 |   1 |    1 
        2 |   1 |    1 
+      14 |   1 |    1 
        6 |   1 |    3 
     None |   3 |    3 
     None |   4 |    0 
@@ -316,16 +316,16 @@ SELECT first_value(ten) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w
 pragma TablePathPrefix = "/Root/stream_query_window.test_results";
 pragma SimpleColumns;
 pragma AnsiCurrentRow;
-SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten) ORDER BY ten, four;
+SELECT last_value(four) OVER w, last_value(four) OVER w, ten, four FROM tenk1 WHERE unique2 < 10 WINDOW w AS (ORDER BY ten, unique2) ORDER BY ten, four, unique2;
 
  column0 | column1 | ten | four 
 ---------+---------+-----+------
-       2 |       2 |   0 |    0 
-       2 |       2 |   0 |    0 
+       0 |       0 |   0 |    0 
+       0 |       0 |   0 |    0 
        2 |       2 |   0 |    2 
        1 |       1 |   1 |    1 
        1 |       1 |   1 |    1 
-       1 |       1 |   1 |    3 
+       3 |       3 |   1 |    3 
        3 |       3 |   3 |    3 
        0 |       0 |   4 |    0 
        1 |       1 |   7 |    1 

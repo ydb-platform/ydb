@@ -1169,6 +1169,61 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundNodes"), "1");
     }
 
+    Y_UNIT_TEST(StorageGroupsExcludeDDisks) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort(2134))
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        TServer server(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        runtime.SetObserverFunc([](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto* response = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>();
+                response->Record.ClearEntries();
+                for (ui32 id = 0; id < 4; ++id) {
+                    auto* group = response->Record.AddEntries();
+                    group->MutableKey()->SetGroupId(id);
+                    auto* info = group->MutableInfo();
+                    info->SetGeneration(1);
+                    info->SetErasureSpeciesV2("none");
+                    // Also cover an absent DDisk field from an older controller.
+                    if (id != 0) {
+                        info->SetDDisk(id != 2);
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        for (bool paginate : {false, true}) {
+            const TString path = paginate
+                ? "/storage/groups?sort=GroupId&offset=1&limit=1"
+                : "/storage/groups?sort=GroupId";
+            NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
+            runtime.Send(new IEventHandle(MakeViewerID(0), sender,
+                new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
+            TAutoPtr<IEventHandle> handle;
+            auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+            NJson::TJsonValue json;
+            NJson::ReadJsonTree(result->Response->Body, &json, true);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("TotalGroups").GetUInteger(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(json.GetMap().at("FoundGroups").GetUInteger(), 2);
+            const auto& groups = json.GetMap().at("StorageGroups").GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), paginate ? 1 : 2);
+            UNIT_ASSERT_VALUES_EQUAL(groups.back().GetMap().at("GroupId"), "2");
+            if (!paginate) {
+                UNIT_ASSERT_VALUES_EQUAL(groups.front().GetMap().at("GroupId"), "0");
+            }
+        }
+    }
+
     void CheckVDiskReplicationStatus(bool groups) {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))

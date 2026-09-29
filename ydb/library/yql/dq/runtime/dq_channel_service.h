@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dq_input_channel.h"
+#include "dq_input_ready.h"
 #include "dq_output_channel.h"
 
 #include <ydb/library/actors/core/actorid.h>
@@ -109,6 +110,11 @@ public:
     virtual void ExportPushStats(TDqAsyncStats& stats) = 0;
     virtual void ExportPopStats(TDqAsyncStats& stats) = 0;
 
+    // an input buffer marks the hook whenever it may have become non-empty or finished, see TDqInputReadySet
+    virtual void SetReadyHook(const TDqInputReadyHook& hook) {
+        Y_UNUSED(hook);
+    }
+
     void SendFinish();
 };
 
@@ -125,12 +131,19 @@ public:
     virtual std::shared_ptr<IChannelBuffer> GetOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) = 0;
     virtual std::shared_ptr<IChannelBuffer> GetInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) = 0;
     virtual void SetServiceActorId(NActors::TActorId serviceActorId) = 0;
+    // TDqChannelLimits::EnableChannelNotifications
+    virtual bool IsChannelNotificationsEnabled() const = 0;
 };
 
 inline NActors::TActorId MakeChannelServiceActorID(ui32 nodeId) {
     const char name[12] = { 'd', 'q', 'c', 'h', 'a', 'n', 'n', 'e', 'l', 's', '2', '0', };
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
+
+// Interconnect channels of the remote messages, one per direction, to keep the order within each of them.
+// Registered by name as NKikimr::TInterconnectChannels::IC_DQ_DATA and IC_DQ_CONTROL
+constexpr ui32 DqIcChannelData = 9;         // TEvChannelDataV2, TEvChannelDiscoveryV2
+constexpr ui32 DqIcChannelControl = 10;     // TEvChannelAckV2, TEvChannelUpdateV2
 
 struct TDqChannelLimits {
     // Node level memory back pressure: report a negative IMemoryQuotaManager::GetMemoryAvailability of the
@@ -146,6 +159,9 @@ struct TDqChannelLimits {
     TDuration CleanupPeriod = TDuration::MilliSeconds(30000);
     TDuration IdlePingPeriod = TDuration::MilliSeconds(30000);
     TDuration IdleDestroyPeriod = TDuration::MilliSeconds(30000);
+    // channels tell their consumers and producers what changed, rather than being polled: a union of inputs visits
+    // the channels which have something for it, see TDqInputReadySet; off, the channels are polled as before
+    bool EnableChannelNotifications = true;
 };
 
 NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,

@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
@@ -339,6 +340,7 @@ public:
             limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
+            limits.EnableChannelNotifications = config.GetEnableChannelNotifications();
         } else { // deprecated
             limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();
             limits.RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes();
@@ -353,6 +355,9 @@ public:
         //         channelPoolId = it->second;
         //     }
         // }
+
+        static_assert(NYql::NDq::DqIcChannelData == TInterconnectChannels::IC_DQ_DATA);
+        static_assert(NYql::NDq::DqIcChannelControl == TInterconnectChannels::IC_DQ_CONTROL);
 
         auto channelServiceActorId = TActivationContext::Register(
             NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(),

@@ -45,7 +45,9 @@ namespace NKikimr::NBlobDepot {
             {"agentId", LogId},
             {"pipeId", PipeId},
             {"requestId", id});
-        NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvRegisterAgent(VirtualGroupId, AgentInstanceId), id);
+        auto registerEv = std::make_unique<TEvBlobDepot::TEvRegisterAgent>(VirtualGroupId, AgentInstanceId);
+        registerEv->Record.SetSupportsIdRangeExpiry(true);
+        NTabletPipe::SendData(SelfId(), PipeId, registerEv.release(), id);
         RegisterRequest(id, this, nullptr, {}, true);
         SwitchMode(EMode::ConnectPending);
     }
@@ -55,6 +57,10 @@ namespace NKikimr::NBlobDepot {
             {"marker", "BDA06"},
             {"agentId", LogId},
             {"msg", msg});
+        if (BlobDepotGeneration != msg.GetGeneration()) {
+            // Expiry watermarks belong to one generation; the new tablet starts allocating from step 1 again.
+            ExpiredSteps.clear();
+        }
         BlobDepotGeneration = msg.GetGeneration();
         DecommitGroupId = msg.HasDecommitGroupId() ? std::make_optional(msg.GetDecommitGroupId()) : std::nullopt;
 
@@ -92,13 +98,40 @@ namespace NKikimr::NBlobDepot {
             ChannelKinds.erase(kind);
         }
 
-        for (const auto& [channel, kind] : ChannelToKind) {
-            kind->Trim(channel, BlobDepotGeneration - 1, Max<ui32>());
+        auto invalidateBlobSeqIds = [](TChannelKind& kind, ui8 channel, ui32 generation, ui32 step) {
+            kind.Trim(channel, generation, step);
 
-            auto& wif = kind->WritesInFlight;
+            auto& wif = kind.WritesInFlight;
             const TBlobSeqId min{channel, 0, 0, 0};
-            const TBlobSeqId max{channel, BlobDepotGeneration - 1, Max<ui32>(), TBlobSeqId::MaxIndex};
+            const TBlobSeqId max{channel, generation, step, TBlobSeqId::MaxIndex};
             wif.erase(wif.lower_bound(min), wif.upper_bound(max));
+        };
+
+        for (const auto& [channel, kind] : ChannelToKind) {
+            invalidateBlobSeqIds(*kind, channel, BlobDepotGeneration - 1, Max<ui32>());
+        }
+
+        // Blob sequence numbers the tablet reclaimed while we were away. Apply them here, before OnConnect() lets
+        // queries run again: drop them from the free list and from WritesInFlight (they must never be reported back
+        // as live), and remember the watermark so a put that is still writing one of those blobs fails instead of
+        // committing a blob the tablet may already have collected.
+        for (const auto& item : msg.GetInvalidatedSteps()) {
+            Y_ABORT_UNLESS(item.GetGeneration() == BlobDepotGeneration);
+            const ui8 channel = item.GetChannel();
+            const ui32 step = item.GetInvalidatedStep();
+
+            ui32& expired = ExpiredSteps[channel];
+            expired = Max(expired, step);
+
+            YDB_LOG_INFO("BlobSeqIds reclaimed by BlobDepot while disconnected",
+                {"marker", "BDA66"},
+                {"agentId", LogId},
+                {"channel", int(channel)},
+                {"invalidatedStep", step});
+
+            if (const auto it = ChannelToKind.find(channel); it != ChannelToKind.end()) {
+                invalidateBlobSeqIds(*it->second, channel, BlobDepotGeneration, step);
+            }
         }
 
         for (auto& [_, kind] : ChannelKinds) {

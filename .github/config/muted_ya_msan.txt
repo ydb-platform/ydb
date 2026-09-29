@@ -4,7 +4,6 @@ ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
 ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
-ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
@@ -14,7 +13,6 @@ ydb/core/kqp/ut/topics unittest.[*/*] chunk
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma

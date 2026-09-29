@@ -33,6 +33,7 @@
 #include <util/generic/queue.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
+#include <array>
 
 #include <atomic>
 #include <functional>
@@ -138,6 +139,11 @@ public:
     i64 StaticGroupChunkReservePerMilleCached = 0;
     TControlWrapper ForcedPDiskSpaceColor;
     TControlWrapper CompactionAdmissionColor;
+    TControlWrapper SystemReserveChunks;
+    TControlWrapper MaintenanceReserveChunks;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> AllocatedByPurpose;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> RefusedByPurpose;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, size_t(EAllocationPurpose::Count)> HeadroomByPurpose;
     std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> GetForcedPDiskSpaceColorIcb() const {
         if (i64 forcedColor = ForcedPDiskSpaceColor; forcedColor != 0) {
             if (NKikimrBlobStorage::TPDiskSpaceColor_E_IsValid(static_cast<int>(forcedColor))) {
@@ -401,7 +407,8 @@ public:
     TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason,
             bool forHousekeeping = false,
             NKikimrBlobStorage::TPDiskSpaceColor::E refuseAtColor = NKikimrBlobStorage::TPDiskSpaceColor::BLACK,
-            NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor = nullptr);
+            NKikimrBlobStorage::TPDiskSpaceColor::E *estimatedColor = nullptr,
+            EAllocationPurpose purpose = EAllocationPurpose::Recovery);
     void ChunkReserve(TChunkReserve &evChunkReserve);
     bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, bool isDDisk, TStringStream& outErrorReason);
     void ChunkForget(TChunkForget &evChunkForget);
@@ -431,7 +438,7 @@ public:
     ui32 ReleaseUncommittedChunks(TOwner owner);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void AttachSharedUringRouter(const TYardInit& evYardInit, TEvYardInitResult& result);
-    void EnsureSharedUringRouter(ui32 idleSpinUs);
+    void EnsureSharedUringRouter(ui32 idleSpinUs, bool devNullMode);
 #if defined(__linux__)
     TDeviceIoSampleSink MakeUringSampleSink() const;
 #endif
@@ -441,7 +448,6 @@ public:
     // Planned level compaction (EnableVDiskPlannedCompaction); all of it runs under StateMutex
     std::unique_ptr<TCompactionArbiter> CompactionArbiter; // set when the feature is enabled
     struct TCompactionArbiterSpace;
-    ui32 CompactionArbiterFreeChunks = 0; // what the arbiter last saw, to tell it only about changes
     std::optional<NKikimrBlobStorage::TPDiskSpaceColor::E> CompactionArbiterForcedColor;
     i64 CompactionAdmissionColorCached = 0;
     void ProcessCompactionBidder(TCompactionBidder& req);

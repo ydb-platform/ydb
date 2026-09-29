@@ -186,7 +186,23 @@ namespace NYdb::inline Dev::NPathAliasingTests {
 
             Check(Await(session.CreateTable("/short-table", TableDescription())));
             Check(Await(session.CreateTable(A("table_b"), TableDescription())));
-            Check(Await(physicalSession.DescribeTable(P("table"))));
+
+            auto aliasedTable = Await(session.DescribeTable("/short-table"));
+            Check(aliasedTable);
+            EXPECT_EQ(aliasedTable.GetEntry().Name, "short-table");
+            auto physicalTable = Await(physicalSession.DescribeTable(P("table")));
+            Check(physicalTable);
+            EXPECT_EQ(physicalTable.GetEntry().Name, "table");
+
+            NScheme::TSchemeClient aliasScheme(*Alias);
+            NScheme::TSchemeClient canonicalScheme(*Canonical);
+            auto aliasedPath = Await(aliasScheme.DescribePath("/short-table"));
+            Check(aliasedPath);
+            EXPECT_EQ(aliasedPath.GetEntry().Name, "short-table");
+            auto physicalPath = Await(canonicalScheme.DescribePath(P("table")));
+            Check(physicalPath);
+            EXPECT_EQ(physicalPath.GetEntry().Name, "table");
+
             Check(Await(alias.BulkUpsert(A("table"), Row(1, "/kfront/literal"))));
             Check(Await(alias.BulkUpsert(A("table_b"), Row(1, "/kfront/literal"))));
 

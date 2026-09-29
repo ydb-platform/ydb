@@ -784,6 +784,108 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
     }
 
+    Y_UNIT_TEST(DevNullSharedRouterRejectsBothMismatchOrders) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        for (const bool firstMode : {false, true}) {
+            TActorTestContext::TSettings settings;
+            settings.UseSectorMap = false;
+            settings.SmallDisk = true;
+            settings.ChunkSize = 16 << 20;
+            settings.DiskSize = ui64{16} << 30;
+            TActorTestContext ctx(settings);
+            auto first = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+                2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+                true, 10, firstMode), NKikimrProto::OK);
+            UNIT_ASSERT(first->UringRouter);
+            UNIT_ASSERT_VALUES_EQUAL(first->UringRouter->GetConfig().DevNullMode, firstMode);
+
+            auto rejected = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+                3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+                true, 10, !firstMode), NKikimrProto::ERROR);
+            UNIT_ASSERT(rejected->ErrorReason.find("DevNullMode conflicts") != TString::npos);
+            auto second = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+                3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+                true, 10, firstMode), NKikimrProto::OK);
+            UNIT_ASSERT(second->UringRouter);
+            UNIT_ASSERT_VALUES_EQUAL(second->UringRouter->GetConfig().DevNullMode, firstMode);
+        }
+    }
+
+    Y_UNIT_TEST(RejectedStaleInitCannotSelectSharedDevNullMode) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        const TVDiskID firstDisk(0, 1, 0, 0, 0);
+        ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, firstDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            false), NKikimrProto::OK);
+        auto stale = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, firstDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, true), NKikimrProto::ERROR);
+        UNIT_ASSERT(stale->ErrorReason.find("OwnerRound") != TString::npos);
+        auto normal = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+            true, 10, false), NKikimrProto::OK);
+        UNIT_ASSERT(normal->UringRouter);
+        UNIT_ASSERT(!normal->UringRouter->GetConfig().DevNullMode);
+    }
+
+    Y_UNIT_TEST(RejectedReadOnlyNewOwnerCannotSelectSharedDevNullMode) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        const TVDiskID knownDisk(0, 1, 0, 0, 0);
+        ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, knownDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            false), NKikimrProto::OK);
+        ctx.SafeRunOnPDisk([](auto* pdisk) { pdisk->Cfg->ReadOnly = true; });
+        auto rejected = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            3, TVDiskID(1, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 2, 0,
+            true, 10, true), NKikimrProto::CORRUPTED);
+        UNIT_ASSERT(rejected->ErrorReason.find("ReadOnly") != TString::npos);
+        ctx.SafeRunOnPDisk([](auto* pdisk) { pdisk->Cfg->ReadOnly = false; });
+        auto normal = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            3, knownDisk, ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, false), NKikimrProto::OK);
+        UNIT_ASSERT(normal->UringRouter);
+        UNIT_ASSERT(!normal->UringRouter->GetConfig().DevNullMode);
+    }
+
+    Y_UNIT_TEST(DevNullRequiresRouterAndCannotFallBackToRawPDiskIo) {
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = true; // no duplicable device fd
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        auto unavailable = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, true), NKikimrProto::ERROR);
+        UNIT_ASSERT(unavailable->ErrorReason.find("requires an available shared io_uring router") != TString::npos);
+        auto incompatible = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            false, 10, true), NKikimrProto::ERROR);
+        UNIT_ASSERT(incompatible->ErrorReason.find("ForcePDiskFallback") != TString::npos);
+        auto normal = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0,
+            true, 10, false), NKikimrProto::OK);
+        UNIT_ASSERT(!normal->UringRouter);
+    }
+
     Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
         auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
@@ -2241,6 +2343,45 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
     // lock that does the allocation, whether the reservation is worth the colour it
     // would cost -- instead of reserving first and discovering from the reply that the
     // colour has already moved.
+    Y_UNIT_TEST(ChunkReserveProtectsSystemFromUserAndRecovery) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        using TPurpose = NPDisk::EAllocationPurpose;
+        TActorTestContext testCtx({.DiskSize = 10_GB, .SmallDisk = true, .EnableTightPDiskSpaceColors = true});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        const auto owner = vdisk.PDiskParams->Owner;
+        const auto round = vdisk.PDiskParams->OwnerRound;
+        TControlWrapper systemReserve(8, 0, 1000000);
+        TControlWrapper maintenanceReserve(12, 0, 1000000);
+        auto& controls = testCtx.GetRuntime()->GetAppData().Icb->PDiskControls;
+        TControlBoard::RegisterSharedControl(systemReserve, controls.SystemReserveChunks);
+        TControlBoard::RegisterSharedControl(maintenanceReserve, controls.MaintenanceReserveChunks);
+        systemReserve = 8;
+        maintenanceReserve = 12;
+
+        const auto space = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(owner, round), NKikimrProto::OK);
+        UNIT_ASSERT(space->Headroom.ToRed > 20);
+        TVector<ui32> chunks;
+        auto reserve = [&](ui32 count, TPurpose purpose, NKikimrProto::EReplyStatus expected) {
+            auto result = testCtx.TestResponse<NPDisk::TEvChunkReserveResult>(new NPDisk::TEvChunkReserve(
+                owner, round, count, purpose == TPurpose::Maintenance, TColor::RED, purpose), expected);
+            chunks.insert(chunks.end(), result->ChunkIds.begin(), result->ChunkIds.end());
+            return result;
+        };
+        reserve(space->Headroom.ToRed - 20, TPurpose::User, NKikimrProto::OK);
+        reserve(1, TPurpose::User, NKikimrProto::OUT_OF_SPACE);
+        reserve(12, TPurpose::Recovery, NKikimrProto::OK);
+        reserve(1, TPurpose::Recovery, NKikimrProto::OUT_OF_SPACE);
+        // Same VDisk owner and RED cutoff, but SYSTEM can spend its reserve, and maintenance is never held back by
+        // it: it is what gives space back.
+        reserve(1, TPurpose::System, NKikimrProto::OK);
+        reserve(1, TPurpose::Maintenance, NKikimrProto::OK);
+        testCtx.TestResponse<NPDisk::TEvChunkForgetResult>(
+            new NPDisk::TEvChunkForget(owner, round, std::move(chunks)), NKikimrProto::OK);
+        reserve(1, TPurpose::User, NKikimrProto::OK);
+    }
+
     Y_UNIT_TEST(ChunkReserveRefusesAtColorBound) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 

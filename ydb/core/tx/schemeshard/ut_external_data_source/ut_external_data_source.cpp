@@ -632,6 +632,11 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTest) {
             )");
         env.TestWaitNotification(runtime, txId);
 
+        // Keep the dropped path among the parent's children
+        auto observer = runtime.AddObserver<TEvPrivate::TEvCleanDroppedPaths>([](auto& ev) {
+            ev.Reset();
+        });
+
         TestDropTable(runtime, ++txId, "/MyRoot", "UniqueName");
         env.TestWaitNotification(runtime, txId);
 

@@ -168,6 +168,50 @@ class MetricsExportTest(unittest.TestCase):
                 with self.assertRaises(BenchmarkError):
                     exporter._skip_existing(db, 'run', {}, exporter._settings())
 
+    def test_dedicated_cluster_exports_deployment_metrics_with_tenant_labels(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run = root / 'run'
+            profile = run / 'dedicated-ydb' / 'cluster'
+            archive = profile / 'telemetry' / 'sample-000001' / 'host-01' / 'ydb-counters'
+            archive.mkdir(parents=True)
+            (run / 'run.json').write_text(
+                json.dumps(
+                    {'runs': [dict(benchmark='dedicated-ydb', profile='cluster', directory='dedicated-ydb/cluster')]}
+                )
+            )
+            (profile / 'run.json').write_text(
+                json.dumps(
+                    {
+                        'parameters': {
+                            'mode': 'deploy',
+                            'distributed': {'template': {'nodes': [{'name': 'dynamic', 'tenant': '/Root/db'}]}},
+                        }
+                    }
+                )
+            )
+            with gzip.open(archive / 'part.jsonl.gz', 'wt') as stream:
+                stream.write(json.dumps(self.record('deployment')) + '\n')
+            settings = mock.Mock()
+            settings.snapshot.return_value = {'settings': dict(prometheus_url='http://prometheus', prometheus_token='')}
+            exporter = export.MetricsExporter(root, settings, 'owner')
+            response = mock.MagicMock()
+            response.__enter__.return_value.status = 204
+            with mock.patch.object(exporter, '_skip_existing', return_value=0), mock.patch.object(
+                export, 'build_opener'
+            ) as opener, mock.patch.object(export, 'encode_write', wraps=export.encode_write) as encode:
+                opener.return_value.open.return_value = response
+                exporter.start('run', run, {})
+                exporter.thread.join(10)
+                status = exporter.status('run', {})
+                self.assertEqual('completed', status['state'], status)
+                self.assertEqual(5, status['samples'])
+                labels = encode.call_args.args[0][0][0]
+                self.assertEqual('dedicated-ydb', labels['bench_benchmark'])
+                self.assertEqual('deployment', labels['bench_attempt'])
+                self.assertEqual('/Root/db', labels['database'])
+                self.assertEqual('dynamic', labels['pod'])
+
     def test_settings_generation_invalidates_status(self):
         with tempfile.TemporaryDirectory() as root:
             settings = mock.Mock()

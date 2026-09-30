@@ -549,8 +549,10 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
-            appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(
-                Settings->AppConfig->GetResourcePathPrefixMapping());
+            const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
+            if (pathMapping.RulesSize()) {
+                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+            }
 
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())

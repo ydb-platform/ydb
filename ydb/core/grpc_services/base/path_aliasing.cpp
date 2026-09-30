@@ -31,7 +31,7 @@ namespace NKikimr::NGRpcService {
     void IRequestProxyCtx::InitializePathNormalization(
         std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer)
     {
-        if (PathNormalizationInitialized_ || !IsPathNormalizationEnabled()) {
+        if (PathNormalizationInitialized_ || !IsPathNormalizationEnabled() || !normalizer) {
             return;
         }
 

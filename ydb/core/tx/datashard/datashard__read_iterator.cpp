@@ -2633,6 +2633,15 @@ public:
             }
         }
 
+        if (state.PendingSelectedUnit && CompareSamplingPos(
+                SamplingStart(*state.PendingSelectedUnit),
+                SamplingRangeStart(request->Ranges.front()), TableInfo.KeyColumnTypes) > 0)
+        {
+            SetStatusError(Result->Record, Ydb::StatusIds::BAD_REQUEST,
+                "Sampling continuation starts after the resume position");
+            return;
+        }
+
         // Make prefixes in the new 'any' form compatible with the old '+inf' form
         for (size_t i = 0; i < request->Keys.size(); ++i) {
             const auto& key = request->Keys[i];

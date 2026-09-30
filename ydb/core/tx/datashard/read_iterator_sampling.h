@@ -2,8 +2,8 @@
 
 // Sampling for forward TEvRead ranges. NTable::TKeyBlockIterator divides the
 // key space into units using part-page boundaries and memtable key anchors.
-// Whole units are selected with probability Rate: rows in the same unit share
-// a decision. Rate 1 selects every unit.
+// Rows in each unit share a decision; Rate controls the selection probability.
+// Rate 1 selects every unit.
 //
 // ranges -> unit selection
 //                +-- skip --> advance without reading data pages
@@ -67,6 +67,7 @@ void SaveSamplingBounds(
         NKikimrTxDataShard::TReadSamplingBounds& proto);
 
 // Rate must be finite and in (0, 1]. Rate 1 selects every unit.
+// Probability is rounded down in steps of 2^-64, with a 2^-64 minimum.
 ui64 SamplingThreshold(double rate);
 
 // Draws are stable for one (tablet, table, layout, seed) namespace.

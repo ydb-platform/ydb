@@ -321,6 +321,55 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSampling) {
         });
     }
 
+    Y_UNIT_TEST(PendingContinuationResumePosition) {
+        TSamplingTestHelper helper;
+        helper.UpsertBatch(0, 8);
+        const auto key = [](ui32 value) {
+            return TSerializedCellVec(TVector<TCell>{TCell::Make(value)});
+        };
+        auto check = [&](const NTable::TBounds& pending, bool inclusive, Ydb::StatusIds::StatusCode status) {
+            auto request = helper.MakeRead(1.0, 1);
+            auto* continuation = request->Record.MutableSampling()->MutableContinuation();
+            continuation->SetLastProcessedKeyInclusive(inclusive);
+            SaveSamplingBounds(pending, *continuation->MutablePendingSelectedUnit());
+            AddRangeQuery<ui32>(*request, {3}, inclusive, {5}, true);
+            const auto read = helper.ReadShard(std::move(request));
+            UNIT_ASSERT_VALUES_EQUAL(read.Results.back().GetStatus().GetCode(), status);
+            if (status == Ydb::StatusIds::BAD_REQUEST) {
+                UNIT_ASSERT(read.Rows.empty());
+            } else {
+                UNIT_ASSERT(read.Finished);
+                TVector<TSamplingRow> expected;
+                for (ui32 value = inclusive ? 3 : 4; value <= 5; ++value) {
+                    expected.push_back({value, value});
+                }
+                AssertSameRows(read.Rows, expected);
+            }
+        };
+        // A gap before the pending interval would silently omit unread rows.
+        check({key(4), key(7), true, true}, true, Ydb::StatusIds::BAD_REQUEST);
+        check({key(3), key(7), false, true}, true, Ydb::StatusIds::BAD_REQUEST);
+
+        check({key(3), key(7), true, true}, true, Ydb::StatusIds::SUCCESS);
+        check({key(3), key(7), false, true}, false, Ydb::StatusIds::SUCCESS);
+        check({key(3), key(7), true, true}, false, Ydb::StatusIds::SUCCESS);
+        check({key(2), key(7), true, true}, true, Ydb::StatusIds::SUCCESS);
+        // Already-consumed intervals are discarded, including an exclusive end at the cursor.
+        check({key(1), key(2), true, true}, true, Ydb::StatusIds::SUCCESS);
+        check({key(1), key(3), true, false}, true, Ydb::StatusIds::SUCCESS);
+
+        // An inclusive empty start is normalized to the all-null minimum key.
+        auto request = helper.MakeRead(1.0, 1);
+        AddRangeQuery<ui32>(*request, {}, true, {5}, true);
+        const NTable::TBounds pending(TSerializedCellVec(TVector<TCell>{TCell()}), key(7), true, true);
+        SaveSamplingBounds(pending,
+            *request->Record.MutableSampling()->MutableContinuation()->MutablePendingSelectedUnit());
+        const auto read = helper.ReadShard(std::move(request));
+        UNIT_ASSERT_VALUES_EQUAL(read.Results.back().GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(read.Finished);
+        AssertSameRows(read.Rows, {{0, 0}, {1, 1}, {2, 2}, {3, 3}, {4, 4}, {5, 5}});
+    }
+
     Y_UNIT_TEST(RateOneEqualsFullRead) {
         TSamplingTestHelper helper({.ForcePartPerCommit = true, .SmallPages = true});
         helper.UpsertRange(0, 10, 3);

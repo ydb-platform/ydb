@@ -2507,12 +2507,12 @@ message TReadSamplingBounds {
 message TReadSamplingContinuation {
     // LastProcessedKey is an inclusive resume point when this is set.
     optional bool LastProcessedKeyInclusive = 1 [default = false];
-    // Selected unit that has not been fully read yet.
+    // Unfinished selected unit; must start at or before the resume position.
     optional TReadSamplingBounds PendingSelectedUnit = 2;
 }
 
 message TReadSampling {
-    // Finite selection probability in (0, 1].
+    // Finite requested probability in (0, 1].
     optional double Rate = 1;
     optional uint64 Seed = 2;
     // Positive; keep unchanged across continuations.

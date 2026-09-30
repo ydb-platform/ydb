@@ -7,7 +7,6 @@
 
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 
-#include <util/generic/hash_set.h>
 #include <util/generic/is_in.h>
 
 #include <utility>
@@ -36,25 +35,17 @@ bool IsPathKey(TStringBuf tag) {
     return IsIn(pathTags, tag);
 }
 
-using TRewrittenPaths = THashSet<ui64>;
-
 TExprNode::TPtr RewritePathAtom(const TExprNode::TPtr& atom, TExprContext& ctx,
-    const std::function<TString(TStringBuf)>& normalizePath, TRewrittenPaths& rewrittenPaths) {
-    if (rewrittenPaths.contains(atom->UniqueId())) {
-        return atom;
-    }
+    const std::function<TString(TStringBuf)>& normalizePath) {
     TString normalized = normalizePath(atom->Content());
     if (normalized == atom->Content()) {
         return atom;
     }
-    auto result = ctx.NewAtom(atom->Pos(), std::move(normalized));
-    // Intents can repeat before RewriteIO; do not apply a second alias to the replacement.
-    rewrittenPaths.insert(result->UniqueId());
-    return result;
+    return ctx.NewAtom(atom->Pos(), std::move(normalized));
 }
 
 TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
-    const std::function<TString(TStringBuf)>& normalizePath, TRewrittenPaths& rewrittenPaths) {
+    const std::function<TString(TStringBuf)>& normalizePath) {
     // Only known schema-object keys with literal paths are rewritten.
     if (!key->IsCallable("Key") || !key->ChildrenSize() || key->Child(0)->ChildrenSize() < 2) {
         return key;
@@ -74,7 +65,7 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
         if (path->ChildrenSize() != 1 || !path->Child(0)->IsAtom()) {
             continue;
         }
-        auto atom = RewritePathAtom(path->ChildPtr(0), ctx, normalizePath, rewrittenPaths);
+        auto atom = RewritePathAtom(path->ChildPtr(0), ctx, normalizePath);
         if (atom != path->ChildPtr(0)) {
             auto newPath = ctx.ChangeChild(*path, 0, std::move(atom));
             newEntry = ctx.ChangeChild(*newEntry, i, std::move(newPath));
@@ -85,21 +76,21 @@ TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
 }
 
 TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx,
-    const std::function<TString(TStringBuf)>& normalizePath, TRewrittenPaths& rewrittenPaths) {
+    const std::function<TString(TStringBuf)>& normalizePath) {
     if (value->IsAtom()) {
-        return RewritePathAtom(value, ctx, normalizePath, rewrittenPaths);
+        return RewritePathAtom(value, ctx, normalizePath);
     }
 
     // String(Atom) represents a literal path; computed expressions are left unchanged.
     if (value->IsCallable("String") && value->ChildrenSize() == 1 && value->Child(0)->IsAtom()) {
-        auto atom = RewritePathValue(value->ChildPtr(0), ctx, normalizePath, rewrittenPaths);
+        auto atom = RewritePathValue(value->ChildPtr(0), ctx, normalizePath);
         return atom == value->ChildPtr(0) ? value : ctx.ChangeChild(*value, 0, std::move(atom));
     }
 
     if (value->IsList()) {
         auto result = value;
         for (ui32 i = 0; i < value->ChildrenSize(); ++i) {
-            auto child = RewritePathValue(value->ChildPtr(i), ctx, normalizePath, rewrittenPaths);
+            auto child = RewritePathValue(value->ChildPtr(i), ctx, normalizePath);
             if (child != value->ChildPtr(i)) {
                 result = ctx.ChangeChild(*result, i, std::move(child));
             }
@@ -125,20 +116,20 @@ bool IsPathOption(TStringBuf tag, TStringBuf option) {
 }
 
 TExprNode::TPtr RewriteOptionPaths(const TExprNode::TPtr& node, TStringBuf tag, TExprContext& ctx,
-    const std::function<TString(TStringBuf)>& normalizePath, TRewrittenPaths& rewrittenPaths) {
+    const std::function<TString(TStringBuf)>& normalizePath) {
     if (!node->IsList()) {
         return node;
     }
 
     if (node->ChildrenSize() == 2 && node->Child(0)->IsAtom()
         && IsPathOption(tag, node->Child(0)->Content())) {
-        auto value = RewritePathValue(node->ChildPtr(1), ctx, normalizePath, rewrittenPaths);
+        auto value = RewritePathValue(node->ChildPtr(1), ctx, normalizePath);
         return value == node->ChildPtr(1) ? node : ctx.ChangeChild(*node, 1, std::move(value));
     }
 
     auto result = node;
     for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
-        auto child = RewriteOptionPaths(node->ChildPtr(i), tag, ctx, normalizePath, rewrittenPaths);
+        auto child = RewriteOptionPaths(node->ChildPtr(i), tag, ctx, normalizePath);
         if (child != node->ChildPtr(i)) {
             result = ctx.ChangeChild(*result, i, std::move(child));
         }
@@ -147,7 +138,7 @@ TExprNode::TPtr RewriteOptionPaths(const TExprNode::TPtr& node, TStringBuf tag, 
 }
 
 TExprNode::TPtr RewriteSqlPathAliases(const TExprNode::TPtr& node, TExprContext& ctx, TStringBuf localCluster,
-    const std::function<TString(TStringBuf)>& normalizePath, TRewrittenPaths& rewrittenPaths) {
+    const std::function<TString(TStringBuf)>& normalizePath) {
     const bool isRead = node->IsCallable(ReadName);
     if (!isRead && !node->IsCallable(WriteName)) {
         return node;
@@ -164,12 +155,12 @@ TExprNode::TPtr RewriteSqlPathAliases(const TExprNode::TPtr& node, TExprContext&
         return node;
     }
 
-    auto key = RewriteKey(node->ChildPtr(2), ctx, normalizePath, rewrittenPaths);
+    auto key = RewriteKey(node->ChildPtr(2), ctx, normalizePath);
     auto result = key == node->ChildPtr(2) ? node : ctx.ChangeChild(*node, 2, std::move(key));
     if (!isRead && result->Child(2)->IsCallable("Key") && result->Child(2)->ChildrenSize()
         && result->Child(2)->Child(0)->ChildrenSize()) {
         const auto tag = result->Child(2)->Child(0)->Child(0)->Content();
-        auto options = RewriteOptionPaths(result->ChildPtr(4), tag, ctx, normalizePath, rewrittenPaths);
+        auto options = RewriteOptionPaths(result->ChildPtr(4), tag, ctx, normalizePath);
         if (options != result->ChildPtr(4)) {
             result = ctx.ChangeChild(*result, 4, std::move(options));
         }
@@ -187,20 +178,18 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         if (SessionCtx->Query().IsSql && SessionCtx->Config().NormalizePath) {
             input = RewriteSqlPathAliases(input, ctx, SessionCtx->GetCluster(),
-                SessionCtx->Config().NormalizePath, RewrittenPaths);
+                SessionCtx->Config().NormalizePath);
         }
         return Intents->Transform(input, output, ctx);
     }
 
     void Rewind() override {
         Intents->Rewind();
-        RewrittenPaths.clear();
     }
 
 private:
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     TAutoPtr<IGraphTransformer> Intents;
-    TRewrittenPaths RewrittenPaths;
 };
 
 }

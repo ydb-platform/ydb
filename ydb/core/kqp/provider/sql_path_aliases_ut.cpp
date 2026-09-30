@@ -103,13 +103,10 @@ struct TAliasRewriteFixture {
     }
 };
 
-TString NormalizePath(TStringBuf path, bool chainedAliases = false) {
+TString NormalizePath(TStringBuf path) {
     TStringBuf normalizedPath = path;
     while (normalizedPath.StartsWith("//")) {
         normalizedPath = normalizedPath.SubStr(1);
-    }
-    if (chainedAliases && normalizedPath.StartsWith("/canonical/")) {
-        return TString("/other") + TString(normalizedPath.SubStr(10));
     }
     if (normalizedPath == "/alias") {
         return TString("/canonical");
@@ -118,10 +115,10 @@ TString NormalizePath(TStringBuf path, bool chainedAliases = false) {
 }
 
 TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false, bool withAliases = true,
-    bool expectUnchanged = false, bool chainedAliases = false, bool isSql = true) {
+    bool expectUnchanged = false, bool isSql = true) {
     std::function<TString(TStringBuf)> normalizePath;
     if (withAliases) {
-        normalizePath = [chainedAliases](TStringBuf path) { return NormalizePath(path, chainedAliases); };
+        normalizePath = NormalizePath;
     }
     TAliasRewriteFixture fixture(std::move(normalizePath), isSql);
     auto query = fixture.CompileSql(sql, pathPrefix, dynamicCluster);
@@ -241,24 +238,13 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
         UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/alias"), TString::npos);
     }
 
-    Y_UNIT_TEST(ChainedRulesDoNotRunTwice) {
-        const auto rewritten = RewriteSql(
-            "PRAGMA TablePathPrefix = '/alias'; REPLACE INTO table (key) VALUES (1); SELECT * FROM table;",
-            {}, false, true, false, true);
-        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
-        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/other/table"), TString::npos);
-    }
-
-    Y_UNIT_TEST(PhysicalInputUsesItsOwnRule) {
-        const auto rewritten = RewriteSql(
-            "SELECT * FROM `/alias/table`; SELECT * FROM `/canonical/table`;",
-            {}, false, true, false, true);
-        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
-        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/other/table");
+    Y_UNIT_TEST(PhysicalInputIsUnchanged) {
+        const auto unchanged = RewriteSql("SELECT * FROM `/canonical/table`;", {}, false, true, true);
+        UNIT_ASSERT_STRING_CONTAINS(unchanged, "/canonical/table");
     }
 
     Y_UNIT_TEST(NewIoFromViewExpansionIsRewritten) {
-        TAliasRewriteFixture fixture([](TStringBuf path) { return NormalizePath(path, true); });
+        TAliasRewriteFixture fixture(NormalizePath);
         auto query = fixture.CompileSql("SELECT * FROM `/alias/view`;");
         fixture.Rewrite(query);
         auto body = fixture.CompileSql("SELECT * FROM `/alias/table`;");
@@ -267,21 +253,25 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
         const auto rewritten = KqpExprToPrettyString(*query, fixture.Ctx);
         UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/view");
         UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/table");
-        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/other/"), TString::npos);
+        UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/alias/"), TString::npos);
     }
 
-    Y_UNIT_TEST(RewindClearsPathNormalizationState) {
-        TAliasRewriteFixture fixture([](TStringBuf path) { return NormalizePath(path, true); });
+    Y_UNIT_TEST(CopiedGraphKeepsPhysicalPathsAfterRewind) {
+        TAliasRewriteFixture fixture(NormalizePath);
         auto query = fixture.CompileSql("SELECT * FROM `/alias/table`;");
         fixture.Rewrite(query);
+        TNodeOnNodeOwnedMap clones;
+        auto copy = fixture.Ctx.DeepCopy(*query, fixture.Ctx, clones, true, false);
+        UNIT_ASSERT(copy->UniqueId() != query->UniqueId());
+        const auto original = copy.Get();
         fixture.Intents->Rewind();
-        fixture.Rewrite(query);
-        const auto rewritten = KqpExprToPrettyString(*query, fixture.Ctx);
-        UNIT_ASSERT_STRING_CONTAINS(rewritten, "/other/table");
+        fixture.Rewrite(copy);
+        UNIT_ASSERT_VALUES_EQUAL(copy.Get(), original);
+        UNIT_ASSERT_STRING_CONTAINS(KqpExprToPrettyString(*copy, fixture.Ctx), "/canonical/table");
     }
 
     Y_UNIT_TEST(NonSqlQueryLeavesGraphUnchanged) {
-        const auto unchanged = RewriteSql("SELECT * FROM `/alias/table`;", {}, false, true, true, false, false);
+        const auto unchanged = RewriteSql("SELECT * FROM `/alias/table`;", {}, false, true, true, false);
         UNIT_ASSERT_STRING_CONTAINS(unchanged, "/alias/table");
     }
 

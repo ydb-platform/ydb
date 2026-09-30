@@ -176,7 +176,7 @@ public:
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-        if (SessionCtx->Query().IsSql && SessionCtx->Config().NormalizePath) {
+        if (SessionCtx->Config().NormalizePath) {
             input = RewriteSqlPathAliases(input, ctx, SessionCtx->GetCluster(),
                 SessionCtx->Config().NormalizePath);
         }

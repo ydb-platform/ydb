@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 
+#include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
@@ -58,11 +59,10 @@ struct TAliasRewriteFixture {
         CreateDefaultTimeProvider(), CreateDeterministicRandomProvider(1), nullptr);
     TAutoPtr<IGraphTransformer> Intents;
 
-    TAliasRewriteFixture(std::function<TString(TStringBuf)> normalizePath, bool isSql = true, bool registerWrites = false) {
+    TAliasRewriteFixture(std::function<TString(TStringBuf)> normalizePath, bool registerWrites = false) {
         Config->NormalizePath = std::move(normalizePath);
         Session->SetCluster("plato");
         Session->SetDatabase("/canonical");
-        Session->Query().IsSql = isSql;
         Types.AddDataSource(KikimrProviderName, new TTestProvider(ReadName,
             CreateSqlPathAliasesTransformer(Session, new TNullTransformer)));
         Types.AddDataSink(KikimrProviderName, new TTestProvider(WriteName, registerWrites
@@ -96,6 +96,14 @@ struct TAliasRewriteFixture {
         return query;
     }
 
+    TExprNode::TPtr CompileAst(TStringBuf text) {
+        auto ast = ParseAst(TString(text));
+        UNIT_ASSERT_C(ast.IsOk(), ast.Issues.ToString());
+        TExprNode::TPtr query;
+        UNIT_ASSERT_C(CompileExpr(*ast.Root, query, Ctx, nullptr, nullptr), Ctx.IssueManager.GetIssues().ToString());
+        return query;
+    }
+
     void Rewrite(TExprNode::TPtr& query) {
         Ctx.Step.Repeat(TExprStep::Intents);
         UNIT_ASSERT_VALUES_EQUAL_C(SyncTransform(*Intents, query, Ctx), IGraphTransformer::TStatus::Ok,
@@ -115,16 +123,16 @@ TString NormalizePath(TStringBuf path) {
 }
 
 TString RewriteSql(TStringBuf sql, TStringBuf pathPrefix = {}, bool dynamicCluster = false, bool withAliases = true,
-    bool expectUnchanged = false, bool isSql = true) {
+    bool expectUnchanged = false) {
     std::function<TString(TStringBuf)> normalizePath;
     if (withAliases) {
         normalizePath = NormalizePath;
     }
-    TAliasRewriteFixture fixture(std::move(normalizePath), isSql);
+    TAliasRewriteFixture fixture(std::move(normalizePath));
     auto query = fixture.CompileSql(sql, pathPrefix, dynamicCluster);
     const auto original = query.Get();
     fixture.Rewrite(query);
-    if (!withAliases || expectUnchanged || !isSql) {
+    if (!withAliases || expectUnchanged) {
         UNIT_ASSERT_VALUES_EQUAL(query.Get(), original);
     }
     const auto rewritten = query.Get();
@@ -270,9 +278,65 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
         UNIT_ASSERT_STRING_CONTAINS(KqpExprToPrettyString(*copy, fixture.Ctx), "/canonical/table");
     }
 
-    Y_UNIT_TEST(NonSqlQueryLeavesGraphUnchanged) {
-        const auto unchanged = RewriteSql("SELECT * FROM `/alias/table`;", {}, false, true, true, false);
-        UNIT_ASSERT_STRING_CONTAINS(unchanged, "/alias/table");
+    Y_UNIT_TEST(LiteralPathsFromAst) {
+        for (const bool withAliases : {true, false}) {
+            std::function<TString(TStringBuf)> normalizePath;
+            if (withAliases) {
+                normalizePath = NormalizePath;
+            }
+            TAliasRewriteFixture fixture(std::move(normalizePath));
+            auto query = fixture.CompileAst(R"(
+                (
+                    (let read (Read! world (DataSource 'kikimr 'plato)
+                        (Key '('table (String '"/alias/input"))) (Void) '()))
+                    (return (Write! (Left! read) (DataSink 'kikimr 'plato)
+                        (Key '('table (String '"/alias/output"))) (Right! read) '('('mode 'upsert))))
+                )
+            )");
+            const auto original = query.Get();
+            fixture.Rewrite(query);
+            const auto rewritten = KqpExprToPrettyString(*query, fixture.Ctx);
+            if (withAliases) {
+                UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/input");
+                UNIT_ASSERT_STRING_CONTAINS(rewritten, "/canonical/output");
+                UNIT_ASSERT_VALUES_EQUAL(rewritten.find("/alias/"), TString::npos);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(query.Get(), original);
+                UNIT_ASSERT_STRING_CONTAINS(rewritten, "/alias/input");
+                UNIT_ASSERT_STRING_CONTAINS(rewritten, "/alias/output");
+            }
+            const auto rewrittenRoot = query.Get();
+            fixture.Rewrite(query);
+            UNIT_ASSERT_VALUES_EQUAL(query.Get(), rewrittenRoot);
+        }
+    }
+
+    Y_UNIT_TEST(LoweredIoFromAstIsUnchanged) {
+        for (const TStringBuf text : {
+            R"((
+                (return (KiReadTable! world (DataSource 'kikimr 'plato)
+                    (Key '('table (String '"/alias/table"))) (Void) '()))
+            ))",
+            R"((
+                (return (KiWriteTable! world (DataSink 'kikimr 'plato)
+                    '"/alias/table" (AsList (AsStruct '('key (Uint64 '1)))) 'upsert '() '()))
+            ))",
+        }) {
+            ui32 calls = 0;
+            TAliasRewriteFixture fixture([&calls](TStringBuf path) {
+                ++calls;
+                return NormalizePath(path);
+            });
+            auto query = fixture.CompileAst(text);
+            UNIT_ASSERT(query->IsCallable("KiReadTable!") || query->IsCallable("KiWriteTable!"));
+            const auto original = query.Get();
+            auto transformer = CreateSqlPathAliasesTransformer(fixture.Session, new TNullTransformer);
+            UNIT_ASSERT_VALUES_EQUAL_C(SyncTransform(*transformer, query, fixture.Ctx), IGraphTransformer::TStatus::Ok,
+                fixture.Ctx.IssueManager.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(query.Get(), original);
+            UNIT_ASSERT_VALUES_EQUAL(calls, 0);
+            UNIT_ASSERT_STRING_CONTAINS(KqpExprToPrettyString(*query, fixture.Ctx), "/alias/table");
+        }
     }
 
     Y_UNIT_TEST(EmptyConfigKeepsOriginalIntentTransformer) {
@@ -284,7 +348,7 @@ Y_UNIT_TEST_SUITE(SqlPathAliases) {
     }
 
     Y_UNIT_TEST(SinkRegistersPhysicalPathBeforeMetadata) {
-        TAliasRewriteFixture fixture([](TStringBuf path) { return NormalizePath(path); }, true, true);
+        TAliasRewriteFixture fixture([](TStringBuf path) { return NormalizePath(path); }, true);
         auto query = fixture.CompileSql("PRAGMA TablePathPrefix = '/alias'; REPLACE INTO table (key) VALUES (1);");
         fixture.Rewrite(query);
         const auto& tables = fixture.Session->Tables().GetTables();

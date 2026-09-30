@@ -1413,7 +1413,6 @@ private:
         TKqpTranslationSettingsBuilder& settingsBuilder) const
     {
         TCompileExprResult result;
-        SessionCtx->Query().IsSql = isSql;
         std::shared_ptr<NYql::TAstParseResult> queryAst;
         if (!query.AstResult) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())

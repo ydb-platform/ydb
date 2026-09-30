@@ -141,7 +141,6 @@ struct TKikimrQueryContext : TThrRefBase {
     TKikimrQueryContext& operator=(const TKikimrQueryContext&) = delete;
 
     bool PrepareOnly = false;
-    bool IsSql = false;
 
     /*
      * Defuse DDL-prohibiting checks when PrepareOnly = true. Used in scripting query explain.

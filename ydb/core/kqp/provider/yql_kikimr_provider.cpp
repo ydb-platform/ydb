@@ -174,7 +174,6 @@ TKikimrQueryContext::TKikimrQueryContext(const NKikimr::NMiniKQL::IFunctionRegis
 
 void TKikimrQueryContext::Reset() {
     PrepareOnly = false;
-    IsSql = false;
     SuppressDdlChecks = false;
     StatsMode = EKikimrStatsMode::None;
     Type = EKikimrQueryType::Unspecified;

@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         // The transfer must fail with a visible access-denied error
         // instead of silently staying in the Running state.
-        testCase.CheckTransferStateError("UNAUTHORIZED");
+        testCase.CheckTransferStateError("No ReadTopic permissions");
 
         // Nothing must be written to the target table.
         testCase.CheckResult({});

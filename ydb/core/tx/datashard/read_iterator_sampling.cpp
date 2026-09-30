@@ -1,6 +1,7 @@
 #include "read_iterator_sampling.h"
 
 #include <util/digest/city.h>
+#include <util/random/fast.h>
 
 #include <cmath>
 
@@ -147,7 +148,7 @@ void SaveSamplingBounds(
 }
 
 ui64 SamplingThreshold(double rate) {
-    // Keep rates below 2^-64 nonzero: hash == 0 still selects a unit.
+    // Keep rates below 2^-64 nonzero: a zero draw still selects a unit.
     if (rate == 1.0) {
         return Max<ui64>();
     }
@@ -171,8 +172,8 @@ bool TSamplingSelector::Draw(TStringBuf selectionKey) const {
     if (Threshold == Max<ui64>()) {
         return true;
     }
-    const ui64 hash = CityHash64WithSeeds(selectionKey.data(), selectionKey.size(), NamespaceHash, Seed);
-    return hash < Threshold;
+    TFastRng64 rng(CityHash64WithSeeds(selectionKey.data(), selectionKey.size(), NamespaceHash, Seed));
+    return rng.GenRand() < Threshold;
 }
 
 }

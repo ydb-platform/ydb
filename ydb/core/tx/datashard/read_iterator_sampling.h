@@ -70,7 +70,7 @@ void SaveSamplingBounds(
 // Probability is rounded down in steps of 2^-64, with a 2^-64 minimum.
 ui64 SamplingThreshold(double rate);
 
-// Draws are stable for one (tablet, table, layout, seed) namespace.
+// Each unit seeds a PCG draw, stable within one (tablet, table, layout, seed) namespace.
 class TSamplingSelector {
 public:
     TSamplingSelector() = default;

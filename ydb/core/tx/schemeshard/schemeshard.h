@@ -114,6 +114,11 @@ namespace TEvSchemeShard {
         EvShredInfoResponse,
         EvShredManualStartupRequest,
 
+        EvClaimIamDelegationRevocations,
+        EvClaimIamDelegationRevocationsResult,
+        EvIamDelegationsRevoked,
+        EvIamDelegationsRevokedResult,
+
         EvEnd
     };
 
@@ -699,6 +704,33 @@ namespace TEvSchemeShard {
 
     struct TEvListUsersResult : TEventPB<TEvListUsersResult, NKikimrScheme::TEvListUsersResult, EvListUsersResult> {
         TEvListUsersResult() = default;
+    };
+
+    struct TEvClaimIamDelegationRevocations : TEventPB<TEvClaimIamDelegationRevocations, NKikimrScheme::TEvClaimIamDelegationRevocations, EvClaimIamDelegationRevocations> {
+        TEvClaimIamDelegationRevocations() = default;
+
+        explicit TEvClaimIamDelegationRevocations(TDuration lease) {
+            Record.SetLeaseSeconds(lease.Seconds());
+        }
+    };
+
+    struct TEvClaimIamDelegationRevocationsResult : TEventPB<TEvClaimIamDelegationRevocationsResult, NKikimrScheme::TEvClaimIamDelegationRevocationsResult, EvClaimIamDelegationRevocationsResult> {
+        TEvClaimIamDelegationRevocationsResult() = default;
+    };
+
+    struct TEvIamDelegationsRevoked : TEventPB<TEvIamDelegationsRevoked, NKikimrScheme::TEvIamDelegationsRevoked, EvIamDelegationsRevoked> {
+        TEvIamDelegationsRevoked() = default;
+
+        TEvIamDelegationsRevoked(ui64 claimId, const TVector<TString>& referrerIds) {
+            Record.SetClaimId(claimId);
+            for (const auto& referrerId : referrerIds) {
+                Record.AddReferrerIds(referrerId);
+            }
+        }
+    };
+
+    struct TEvIamDelegationsRevokedResult : TEventPB<TEvIamDelegationsRevokedResult, NKikimrScheme::TEvIamDelegationsRevokedResult, EvIamDelegationsRevokedResult> {
+        TEvIamDelegationsRevokedResult() = default;
     };
 
     struct TEvTenantShredRequest : TEventPB<TEvTenantShredRequest, NKikimrScheme::TEvTenantShredRequest, EvTenantShredRequest> {

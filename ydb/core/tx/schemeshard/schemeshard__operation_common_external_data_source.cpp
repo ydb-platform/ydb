@@ -107,6 +107,48 @@ bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
     }
 }
 
+namespace {
+
+bool CheckSecretIsNotDelegation(const TString& secretName, TStringBuf usage, TSchemeShard* ss, TString& errStr) {
+    if (!secretName.StartsWith('/')) {
+        return true; // a secret of the metadata provider
+    }
+    const TPath path = TPath::Resolve(secretName, ss);
+    if (!path.IsResolved() || !path.Base()->IsSecret()) {
+        return true;
+    }
+    const auto it = ss->Secrets.find(path.Base()->PathId);
+    if (it == ss->Secrets.end() || !it->second || !it->second->Description.HasIamDelegation()) {
+        return true;
+    }
+    errStr = TStringBuilder() << "Secret " << secretName << " is an IAM delegation secret: its value is an IAM token of the delegated"
+        << " service account and cannot be used as " << usage << ", reference it with AUTH_METHOD = \"TOKEN\"";
+    return false;
+}
+
+} // namespace
+
+bool ValidateSecretsUsage(const NKikimrSchemeOp::TAuth& auth, TSchemeShard* ss, TString& errStr) {
+    switch (auth.identity_case()) {
+        case NKikimrSchemeOp::TAuth::kServiceAccount:
+            return CheckSecretIsNotDelegation(auth.GetServiceAccount().GetSecretName(), "a service account key signature", ss, errStr);
+        case NKikimrSchemeOp::TAuth::kMdbBasic:
+            return CheckSecretIsNotDelegation(auth.GetMdbBasic().GetServiceAccountSecretName(), "a service account key signature", ss, errStr)
+                && CheckSecretIsNotDelegation(auth.GetMdbBasic().GetPasswordSecretName(), "a password", ss, errStr);
+        case NKikimrSchemeOp::TAuth::kBasic:
+            return CheckSecretIsNotDelegation(auth.GetBasic().GetPasswordSecretName(), "a password", ss, errStr);
+        case NKikimrSchemeOp::TAuth::kAws:
+            return CheckSecretIsNotDelegation(auth.GetAws().GetAwsAccessKeyIdSecretName(), "an AWS access key id", ss, errStr)
+                && CheckSecretIsNotDelegation(auth.GetAws().GetAwsSecretAccessKeySecretName(), "an AWS secret access key", ss, errStr);
+        case NKikimrSchemeOp::TAuth::kToken:
+        case NKikimrSchemeOp::TAuth::kIam:
+        case NKikimrSchemeOp::TAuth::kNone:
+        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
+            return true;
+    }
+    return true;
+}
+
 TExternalDataSourceInfo::TPtr CreateExternalDataSource(const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion) {
     auto externalDataSourceInfo = MakeIntrusive<TExternalDataSourceInfo>();
     externalDataSourceInfo->SourceType = desc.GetSourceType();

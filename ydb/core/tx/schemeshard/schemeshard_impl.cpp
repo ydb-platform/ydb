@@ -4071,9 +4071,14 @@ void TSchemeShard::PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId) {
 
     auto secretInfo = Secrets.at(pathId);
     if (secretInfo->AlterData) {
+        // a force drop removes the secret under a CREATE or an ALTER still in flight: whatever its next
+        // version names goes to the outbox too (a delegation IAM never set up is revoked as NOT_FOUND)
+        PersistIamDelegationRevocations(db, pathId, secretInfo->AlterData->Description, nullptr);
         secretInfo->AlterData = nullptr;
         PersistSecretAlterRemove(db, pathId);
     }
+
+    PersistIamDelegationRevocations(db, pathId, secretInfo->Description, nullptr);
 
     Secrets.erase(pathId);
     db.Table<Schema::Secrets>().Key(pathId.LocalPathId).Delete();
@@ -6185,6 +6190,11 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvProgressForcedCompaction, Handle);
         // } // NForcedCompaction
 
+        // namespace NIamDelegation {
+        HFuncTraced(TEvSchemeShard::TEvClaimIamDelegationRevocations, Handle);
+        HFuncTraced(TEvSchemeShard::TEvIamDelegationsRevoked, Handle);
+        // } // NIamDelegation
+
         //namespace NCdcStreamScan {
         HFuncTraced(TEvPrivate::TEvRunCdcStreamScan, Handle);
         HFuncTraced(TEvDataShard::TEvCdcStreamScanResponse, Handle);
@@ -6697,6 +6707,9 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             break;
         case TPathElement::EPathType::EPathTypeStreamingQuery:
             PersistRemoveStreamingQuery(db, node->PathId);
+            break;
+        case TPathElement::EPathType::EPathTypeSecret:
+            PersistSecretRemove(db, node->PathId); // the delegations of an IAM delegation secret go to the outbox
             break;
         default:
             // not all path types support removal

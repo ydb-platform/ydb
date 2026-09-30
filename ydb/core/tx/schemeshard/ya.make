@@ -280,6 +280,8 @@ SRCS(
     schemeshard_scheme_builders.h
     schemeshard_export.cpp
     schemeshard_export__cancel.cpp
+    schemeshard_iam_delegation.cpp
+    schemeshard_iam_delegation.h
     schemeshard_export__create.cpp
     schemeshard_export__forget.cpp
     schemeshard_export__get.cpp

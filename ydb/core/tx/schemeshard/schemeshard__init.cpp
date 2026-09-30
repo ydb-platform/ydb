@@ -6511,6 +6511,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read the IAM delegation revocations still to be made
+        {
+            auto rowset = db.Table<Schema::IamDelegationRevocations>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TIamDelegationRevocation revocation;
+                revocation.ReferrerId = rowset.GetValue<Schema::IamDelegationRevocations::ReferrerId>();
+                revocation.ServiceAccountId = rowset.GetValue<Schema::IamDelegationRevocations::ServiceAccountId>();
+                revocation.CloudId = rowset.GetValue<Schema::IamDelegationRevocations::CloudId>();
+                revocation.PathId = Self->MakeLocalId(rowset.GetValue<Schema::IamDelegationRevocations::PathId>());
+                revocation.NotBefore = TInstant::MicroSeconds(rowset.GetValueOrDefault<Schema::IamDelegationRevocations::NotBefore>(0));
+                Self->IamDelegationRevocations[revocation.ReferrerId] = std::move(revocation);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Read forced compactions
         {
             auto compactionsRowset = db.Table<Schema::ForcedCompactions>().Select();

@@ -474,3 +474,28 @@ message TEvShredInfoResponse {
 
 message TEvShredManualStartupRequest {
 }
+
+// The outbox of IAM delegation revocations (schemeshard_iam_delegation.h). A node claims the revocations that
+// are due, revokes them through its delegation service and acknowledges the accepted ones; a claimed revocation
+// is hidden from other claimers for the lease. The schemeshard only keeps the records.
+message TEvClaimIamDelegationRevocations {
+    optional uint64 LeaseSeconds = 1;
+}
+
+message TEvClaimIamDelegationRevocationsResult {
+    message TRevocation {
+        optional string ReferrerId = 1;
+        optional string ServiceAccountId = 2;
+        optional string CloudId = 3;
+    }
+    repeated TRevocation Revocations = 1;
+    optional uint64 ClaimId = 2; // names this claim; a revocation is acknowledged with it
+}
+
+message TEvIamDelegationsRevoked {
+    repeated string ReferrerIds = 1;
+    optional uint64 ClaimId = 2;
+}
+
+message TEvIamDelegationsRevokedResult {
+}

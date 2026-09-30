@@ -40,6 +40,12 @@ private:
         }
     }
 
+    static void Convert(const NKikimrSchemeOp::TIamDelegation& from, ::Ydb::Secret::IamDelegation& to) {
+        to.set_service_account_id(from.GetServiceAccountId());
+        to.set_cloud_id(from.GetCloudId());
+        to.set_referrer_id(from.GetReferrerId());
+    }
+
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->GetRecord();
         const auto& pathDescription = record.GetPathDescription();
@@ -60,9 +66,16 @@ private:
                     return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
                 }
 
+                const auto& secret = pathDescription.GetSecretDescription();
                 ::Ydb::Secret::DescribeSecretResult result;
                 ConvertDirectoryEntry(pathDescription.GetSelf(), result.mutable_self(), true);
-                result.set_version(pathDescription.GetSecretDescription().GetVersion());
+                result.set_version(secret.GetVersion());
+                if (secret.HasIamDelegation()) {
+                    Convert(secret.GetIamDelegation(), *result.mutable_iam_delegation());
+                }
+                if (secret.HasPendingIamDelegation()) {
+                    Convert(secret.GetPendingIamDelegation(), *result.mutable_pending_iam_delegation());
+                }
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
             }
             case NKikimrScheme::StatusPathDoesNotExist:

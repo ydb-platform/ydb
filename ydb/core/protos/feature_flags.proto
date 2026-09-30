@@ -428,4 +428,6 @@ message TFeatureFlags {
     // Applies to new processes; existing processes keep their scheduling mode.
     optional bool EnableCompositeConveyorScheduling = 349 [default = false];
     optional bool EnableCsIndexReadMemoryTracking = 350 [default = false];
+    // Creates asynchronous indexes on newly created asynchronous replication destinations.
+    optional bool EnableAsyncIndexReplication = 351 [default = false];
 }

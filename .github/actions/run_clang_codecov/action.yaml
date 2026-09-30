@@ -90,10 +90,6 @@ runs:
         BAZEL_REMOTE_PASSWORD: ${{ inputs.bazel_remote_password }}
       run: |
         set -euo pipefail
-        OUT="$(pwd)/coverage_workspace/${SUITE}"
-        mkdir -p "$OUT"
-        echo "out_dir=$OUT" >> "$GITHUB_OUTPUT"
-
         BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         trap 'rm -f "$BAZEL_REMOTE_PASSWORD_FILE"' EXIT
         printf '%s' "${BAZEL_REMOTE_PASSWORD}" > "$BAZEL_REMOTE_PASSWORD_FILE"
@@ -111,7 +107,6 @@ runs:
           "--coverage-exclude-regexp=${EXCL}"
           --test-threads "${TEST_THREADS}"
           --link-threads "${LINK_THREADS}"
-          --output "$OUT"
           --no-dir-outputs
         )
         if [ -n "${BAZEL_REMOTE_URI}" ]; then
@@ -126,7 +121,23 @@ runs:
           )
         fi
 
-        ./ya make "${params[@]}" "${TARGETS[@]}"
+        python3 .github/scripts/codecov/run_coverage.py \
+          --suite "${SUITE}" \
+          --work-dir "${RUNNER_TEMP}/codecov" \
+          --secret-file "$BAZEL_REMOTE_PASSWORD_FILE" \
+          -- ./ya make "${params[@]}" "${TARGETS[@]}"
+
+    - name: Upload coverage failure diagnostics
+      # Preserve the first failure even when a fresh retry succeeds.
+      if: ${{ always() && steps.ya.outputs.had_failure == 'true' }}
+      continue-on-error: true
+      uses: actions/upload-artifact@v4
+      with:
+        name: codecov-diagnostics-${{ inputs.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
+        path: ${{ steps.ya.outputs.diagnostics_dir }}
+        retention-days: 7
+        compression-level: 3
+        if-no-files-found: warn
 
     - name: Export filtered LCOV
       id: export

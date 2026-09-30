@@ -33,13 +33,15 @@ jobs:
       - name: Test Python helpers
         run: |
           set -euo pipefail
-          python3 .github/scripts/codecov/tests/test_helpers.py -v
+          python3 -m unittest discover -s .github/scripts/codecov/tests -p 'test_*.py' -v
           python3 -m py_compile \
             .github/scripts/codecov/codecov_suites.py \
             .github/scripts/codecov/detect_codecov_matrix.py \
             .github/scripts/codecov/export_coverage_lcov.py \
             .github/scripts/codecov/generate_coverage_landing.py \
-            .github/scripts/codecov/tests/test_helpers.py
+            .github/scripts/codecov/run_coverage.py \
+            .github/scripts/codecov/tests/test_helpers.py \
+            .github/scripts/codecov/tests/test_run_coverage.py
 
       - name: Check shell syntax
         run: bash -n .github/scripts/codecov/overlay_trusted_codecov_ci.sh

@@ -12085,6 +12085,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     }
 
+    Y_UNIT_TEST_FLAG(DropNotNullWithMetrics, EnableDetailedMetrics) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(EnableDetailedMetrics);
+        ui64 txId = 100;
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "Key" Type: "Uint64" }
+                Columns { Name: "Value" Type: "Uint64" NotNull: true }
+                Columns { Name: "Other" Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["Key"]
+            }
+            IndexDescription { Name: "byValue" KeyColumnNames: ["Value"] }
+            IndexDescription { Name: "byOther" KeyColumnNames: ["Other"] }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TMap<TString, ui64> versions;
+        for (const TString& path : {TString("/MyRoot/Table"), TString("/MyRoot/Table/byValue/indexImplTable"),
+                TString("/MyRoot/Table/byOther/indexImplTable")})
+        {
+            versions[path] = DescribePrivatePath(runtime, path).GetPathDescription().GetTable().GetTableSchemaVersion();
+        }
+        TString alter = R"(Name: "Table" Columns { Name: "Value" NotNull: false })";
+        if (EnableDetailedMetrics) {
+            alter += R"(DetailedMetricsSettings { Configured { MetricsLevel: MetricsLevelTable } })";
+        }
+        TestAlterTable(runtime, ++txId, "/MyRoot", alter);
+        env.TestWaitNotification(runtime, txId);
+
+        for (const auto& [path, version] : versions) {
+            const auto table = DescribePrivatePath(runtime, path).GetPathDescription().GetTable();
+            const bool containsValue = path != "/MyRoot/Table/byOther/indexImplTable";
+            // Both changes must share one ALTER, with one version increment per table.
+            UNIT_ASSERT_VALUES_EQUAL_C(table.GetTableSchemaVersion(),
+                version + (containsValue || EnableDetailedMetrics), path);
+            UNIT_ASSERT_VALUES_EQUAL_C(table.HasDetailedMetricsSettings(), EnableDetailedMetrics, path);
+            if (EnableDetailedMetrics) {
+                UNIT_ASSERT_C(table.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()
+                    == NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable, path);
+            }
+            bool found = false;
+            for (const auto& column : table.GetColumns()) {
+                if (column.GetName() == "Value") {
+                    UNIT_ASSERT_C(!column.GetNotNull(), path);
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(found, containsValue, path);
+        }
+    }
+
     Y_UNIT_TEST_FLAG(DropNotNullWithBusyIndex, ImplementationOnly) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

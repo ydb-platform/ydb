@@ -137,6 +137,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.StoredTypesUuidDyNumberJsonDocument
 ydb/core/kqp/ut/scheme GeneratedStored.StreamWriteModesMaterializeStoredColumn+EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedStored.StreamWriteModesMaterializeStoredColumn-EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedStored.TtlOnIndependentColumnWorks
+ydb/core/kqp/ut/scheme GeneratedStored.UniqueIndexOnGeneratedColumnRejectsCollisionsAtomically
 ydb/core/kqp/ut/scheme GeneratedStored.UniqueIndexOnNullableGeneratedColumnTracksNullTransitions
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateExpressionsUseOldValuesAndRecomputeStoredColumn
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnDependencyToNull
@@ -152,6 +153,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnViaSelect
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateOnWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningBothGeneratedIndependentDependencies
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningBothGeneratedSharedDependency
+ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningDependenciesUpdatedAndNot
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningGeneratedNotUpdated
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningNoGeneratedColumns
 ydb/core/kqp/ut/scheme GeneratedStored.UpdateReturningOneOfTwoGenerated
@@ -210,6 +212,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultUndeterministicExpression
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefault+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefault-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultNoExistingDefault
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnColumnTable
@@ -245,9 +248,11 @@ ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Write_Upsert+EnableCom
 ydb/core/kqp/ut/scheme KqpConstraints.CompileTimeDefaults_Write_Upsert-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNotNullColumn_InsertOrReplace-IsInsert
+ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNullableColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultNullableColumn_InsertOrReplace-IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.DropDefaultThenUpsertWithIndex-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpConstraints.IndexedTableAndNotNullColumnAddNotNullColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNotNullColumn_InsertOrReplace+IsInsert

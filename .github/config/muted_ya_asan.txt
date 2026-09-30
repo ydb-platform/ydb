@@ -261,6 +261,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes+EnableCompileTimeD
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultMultipleTimes-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNotNullColumn_InsertOrReplace+IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNotNullColumn_InsertOrReplace-IsInsert
+ydb/core/kqp/ut/scheme KqpConstraints.SetDefaultNullableColumn_InsertOrReplace-IsInsert
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpConstraints.UpdateDoesNotApplyDefaultWithIndex-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeSchemeLimits-EnableAlterDatabase

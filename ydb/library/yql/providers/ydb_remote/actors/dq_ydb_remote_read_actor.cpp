@@ -35,7 +35,6 @@ void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
             settings.Timeout = TDuration::MilliSeconds(source.GetReadTimeoutMs());
             settings.MaxBatchBytes = source.GetMaxBatchBytes();
             settings.MaxRetries = source.GetMaxRetries();
-            settings.MemoryReservation = NYdbRemote::ReadMemoryReservation;
             for (const auto& column : source.GetColumns()) {
                 settings.Columns.push_back(column.GetName());
             }

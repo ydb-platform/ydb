@@ -16,8 +16,6 @@ struct TCluster {
 };
 
 struct TTable {
-    // Retained for as long as the compile-time schema remains cached.
-    std::shared_ptr<void> MetadataLease;
     const TStructExprType* RowType = nullptr;
     TVector<TString> ColumnOrder;
     THashMap<TString, Ydb::Type> ColumnTypes;
@@ -26,14 +24,8 @@ struct TTable {
 inline constexpr ui64 MaxMetadataTables = 64;
 inline constexpr ui64 MaxMetadataColumns = 1024;
 inline constexpr ui64 MaxMetadataSchemaBytes = 64 * 1024;
-// Covers the compact primitive schema, its map/order copies and type annotations.
-// A separate admission reservation covers provider callbacks; it is not a hard
-// bound on SDK protobuf decoding, temporary objects or transport memory.
-inline constexpr ui64 MetadataSchemaReservation = 1024 * 1024;
-inline constexpr ui64 MetadataResponseReservation = 64 * 1024 * 1024;
 
 struct TMetadataSchema {
-    std::shared_ptr<void> MemoryLease;
     TVector<std::pair<TString, Ydb::Type>> Columns;
 };
 
@@ -46,14 +38,12 @@ struct TState : public TThrRefBase {
 
     TState(TTypeAnnotationContext* types, const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver,
            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-           TInstant metadataDeadline = TInstant::Max(),
-           std::shared_ptr<NNative::IAsyncMemoryQuota> metadataQuota = {})
+           TInstant metadataDeadline = TInstant::Max())
         : Types(types)
         , Driver(driver)
         , TlsDriver(tlsDriver)
         , CredentialsFactory(std::move(credentialsFactory))
         , MetadataDeadline(metadataDeadline == TInstant::Max() ? TInstant::Now() + TDuration::Seconds(60) : metadataDeadline)
-        , MetadataQuota(std::move(metadataQuota))
     {
     }
 
@@ -61,8 +51,8 @@ struct TState : public TThrRefBase {
     const NYdb::TDriver Driver;
     const NYdb::TDriver TlsDriver;
     const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
+    // One local budget for the whole metadata batch, including all tables.
     const TInstant MetadataDeadline;
-    const std::shared_ptr<NNative::IAsyncMemoryQuota> MetadataQuota;
     THashMap<TString, TCluster> Clusters;
     THashMap<TString, TString> Tokens;
     THashSet<TString> ValidClusters;

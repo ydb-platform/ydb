@@ -258,7 +258,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     if (Deadline) {
         TDuration timeout = Deadline - TAppData::TimeProvider->Now();
         request.MutableRuntimeSettings()->SetTimeoutMs(timeout.MilliSeconds());
-        request.MutableRuntimeSettings()->SetSourceDeadlineUs(Deadline.MicroSeconds());
     }
 
     for (ui64 taskId : requestData.TaskIds) {
@@ -615,7 +614,6 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .Database = Database,
         .Query = Query,
         .UseBatchPool = UserRequestContext->UseBatchPool,
-        .SourceDeadline = Deadline ? Deadline : TInstant::Max(),
     });
 
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, actorId, nullptr));

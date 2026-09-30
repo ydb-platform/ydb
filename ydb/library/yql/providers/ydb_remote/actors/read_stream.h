@@ -6,11 +6,10 @@
 
 namespace NYql::NYdbRemote {
 
+// The baseline SDK decodes protobuf/compression before provider validation.
+// This transport limit and the decoded batch checks are not an RM reservation
+// or a hard bound on allocations inside the SDK.
 inline constexpr ui64 MaxInboundMessageBytes = 8 * 1024 * 1024;
-// Admission reservation for one read attempt and its provider-owned result.
-// The baseline SDK decodes protobuf/compression before provider validation and
-// does not expose full transport lifetimes: this is not a hard memory bound.
-inline constexpr ui64 ReadMemoryReservation = 64 * 1024 * 1024;
 
 void ValidateSource(const TSource& source);
 TString BuildReadQuery(const TSource& source);

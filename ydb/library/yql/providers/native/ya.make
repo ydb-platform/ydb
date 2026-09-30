@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     actors/read_actor.cpp
-    actors/memory_quota.cpp
 )
 
 PEERDIR(

@@ -151,10 +151,6 @@ void TEvKqp::TEvQueryRequest::PrepareRemote() const {
             Record.MutableRequest()->SetCancelAfterMs(CancelAfter.MilliSeconds());
             Record.MutableRequest()->SetTimeoutMs(OperationTimeout.MilliSeconds());
         }
-        const auto requestDeadline = GetRequestDeadline();
-        if (requestDeadline != TInstant::Max()) {
-            Record.MutableRequest()->SetRequestDeadlineUs(requestDeadline.MicroSeconds());
-        }
         Record.MutableRequest()->SetIsInternalCall(RequestCtx->IsInternalCall());
         Record.MutableRequest()->SetOutputChunkMaxSize(QuerySettings.OutputChunkMaxSize);
         Record.MutableRequest()->SetSchemaInclusionMode(QuerySettings.SchemaInclusionMode);

@@ -53,40 +53,29 @@ bool ParseRead(const TYdbRemoteRead& read, TString& table, TExprContext& ctx) {
     return true;
 }
 
-// Each provider callback retains its phase reservation. The existing SDK can
-// still own decoded responses after invoking/destroying this callback; this is
-// admission control, not an exact accounting of SDK or transport memory.
-struct TMetadataCallbackLease {
-    std::shared_ptr<void> Memory;
-    NThreading::TPromise<void> Released = NThreading::NewPromise<void>();
-
-    ~TMetadataCallbackLease() {
-        Memory.reset();
-        Released.TrySetValue();
-    }
-};
-
 struct TMetadataRequest {
     TState::TTableKey Key;
     TMetadataSchema Schema;
 };
 
+// Requests are sequential and schemas are size checked. SDK response buffers
+// and the cached schemas have no resource-manager reservation in this stage.
 class TMetadataBatch final : public std::enable_shared_from_this<TMetadataBatch> {
 public:
     TMetadataBatch(TState::TPtr state, TVector<TMetadataRequest> requests)
         : State_(std::move(state))
-        , Context_{State_->MetadataDeadline, Cancellation_.Token(), {}}
+        , Context_{State_->MetadataDeadline, Cancellation_.Token()}
         , Requests(std::move(requests))
     {
     }
 
     void Start() {
-        AcquireSchema();
+        StartNextTable();
     }
 
     void Cancel() {
-        // Stop admission and subsequent provider phases. An in-flight Table RPC
-        // retains this batch until its callback or the original RPC deadline.
+        // Stop subsequent provider phases. An in-flight Table RPC retains this
+        // batch until its callback or the original provider-local RPC deadline.
         Cancellation_.Cancel();
     }
 
@@ -108,15 +97,6 @@ private:
         return true;
     }
 
-    void Fail(TString error) {
-        if (!Error) {
-            Error = std::move(error);
-        }
-        Session_.reset();
-        Client_.reset();
-        Done_.TrySetValue();
-    }
-
     TDuration RemainingTimeout(TDuration cap = TDuration::Max()) {
         if (Context_.Cancellation.IsCancellationRequested()) {
             Error = "Native YDB metadata cancelled";
@@ -130,7 +110,7 @@ private:
         return Min(Context_.Deadline - now, cap);
     }
 
-    void AcquireSchema() {
+    void StartNextTable() {
         if (!Continue()) {
             return;
         }
@@ -138,69 +118,16 @@ private:
             Done_.TrySetValue();
             return;
         }
-        auto self = shared_from_this();
-        try {
-            State_->MetadataQuota->Acquire(MetadataSchemaReservation, Context_.Deadline, Context_.Cancellation)
-                .Subscribe([self](const NThreading::TFuture<std::shared_ptr<void>>& admitted) {
-                    try {
-                        self->Requests[self->Index_].Schema.MemoryLease = admitted.GetValue();
-                        if (self->Continue()) {
-                            self->CreateSession();
-                        }
-                    } catch (...) {
-                        self->Fail("Native YDB metadata memory admission failed");
-                    }
-                });
-        } catch (...) {
-            Fail("Native YDB metadata memory admission failed");
-        }
-    }
-
-    // Provider phases are serialized until the preceding callback releases its
-    // lease. SDK-internal response teardown can overlap the next phase.
-    void Request(std::function<void(std::shared_ptr<TMetadataCallbackLease>)> launch,
-                 std::function<void()> next, bool cleanup = false) {
-        if (!cleanup && !Continue()) {
-            return;
-        }
-        auto self = shared_from_this();
-        try {
-            State_->MetadataQuota->Acquire(MetadataResponseReservation, Context_.Deadline, Context_.Cancellation)
-                .Subscribe([self, launch = std::move(launch), next = std::move(next), cleanup](
-                    const NThreading::TFuture<std::shared_ptr<void>>& admitted) {
-                    try {
-                        auto lifetime = std::make_shared<TMetadataCallbackLease>();
-                        lifetime->Memory = admitted.GetValue();
-                        if (!cleanup && !self->Continue()) {
-                            return;
-                        }
-                        lifetime->Released.GetFuture().Subscribe([self, next, cleanup](const NThreading::TFuture<void>&) {
-                            if (cleanup || self->Continue()) {
-                                next();
-                            }
-                        });
-                        try {
-                            launch(lifetime);
-                        } catch (...) {
-                            // Credential providers may put credentials in exception text.
-                            self->Error = "Native YDB metadata client initialization failed";
-                        }
-                    } catch (...) {
-                        self->Fail("Native YDB metadata memory admission failed");
-                    }
-                });
-        } catch (...) {
-            Fail("Native YDB metadata memory admission failed");
-        }
+        CreateSession();
     }
 
     void CreateSession() {
         auto self = shared_from_this();
-        Request([self](std::shared_ptr<TMetadataCallbackLease> lifetime) {
-            const auto& cluster = self->State_->Clusters.at(self->Requests[self->Index_].Key.first);
-            const auto credentials = self->State_->CredentialsFactory->Create(
-                self->State_->Tokens.at(self->Requests[self->Index_].Key.first), false);
-            self->Client_ = std::make_shared<NYdb::NTable::TTableClient>(cluster.UseTls ? self->State_->TlsDriver : self->State_->Driver,
+        try {
+            const auto& cluster = State_->Clusters.at(Requests[Index_].Key.first);
+            const auto credentials = State_->CredentialsFactory->Create(
+                State_->Tokens.at(Requests[Index_].Key.first), false);
+            Client_ = std::make_shared<NYdb::NTable::TTableClient>(cluster.UseTls ? State_->TlsDriver : State_->Driver,
                 NYdb::NTable::TClientSettings()
                     .Database(cluster.Database)
                     .DiscoveryEndpoint(cluster.Endpoint)
@@ -208,14 +135,14 @@ private:
                     .SslCredentials(NYdb::TSslCredentials(cluster.UseTls))
                     .CredentialsProviderFactory(credentials)
                     .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1).MinPoolSize(0).RetryLimit(0)));
-            const auto remaining = self->RemainingTimeout();
+            const auto remaining = RemainingTimeout();
             if (!remaining) {
+                Close();
                 return;
             }
-            self->Client_->CreateSession(NYdb::NTable::TCreateSessionSettings()
+            Client_->CreateSession(NYdb::NTable::TCreateSessionSettings()
                 .ClientTimeout(remaining).OperationTimeout(remaining))
-                .Subscribe([self, lifetime](const NYdb::NTable::TAsyncCreateSessionResult& future) {
-                    Y_UNUSED(lifetime);
+                .Subscribe([self](const NYdb::NTable::TAsyncCreateSessionResult& future) {
                     try {
                         const auto& result = future.GetValue();
                         if (result.IsSuccess()) {
@@ -226,81 +153,88 @@ private:
                     } catch (...) {
                         self->Error = "Native YDB metadata session failed";
                     }
+                    self->Describe();
                 });
-        }, [self] { self->Describe(); });
+        } catch (...) {
+            // Credential providers may put credentials in exception text.
+            Error = "Native YDB metadata client initialization failed";
+            Close();
+        }
     }
 
     void Describe() {
+        if (!Continue()) {
+            return;
+        }
         auto self = shared_from_this();
-        Request([self](std::shared_ptr<TMetadataCallbackLease> lifetime) {
-            const auto& key = self->Requests[self->Index_].Key;
-            const auto& cluster = self->State_->Clusters.at(key.first);
+        try {
+            const auto& key = Requests[Index_].Key;
+            const auto& cluster = State_->Clusters.at(key.first);
             const TString tablePath = key.second.StartsWith('/') ? key.second : cluster.Database + "/" + key.second;
-            const auto remaining = self->RemainingTimeout();
+            const auto remaining = RemainingTimeout();
             if (!remaining) {
+                Close();
                 return;
             }
-            self->Session_->DescribeTable(tablePath, NYdb::NTable::TDescribeTableSettings()
+            Session_->DescribeTable(tablePath, NYdb::NTable::TDescribeTableSettings()
                 .ClientTimeout(remaining).OperationTimeout(remaining))
-                .Subscribe([self, lifetime](const NYdb::NTable::TAsyncDescribeTableResult& future) {
-                    Y_UNUSED(lifetime);
+                .Subscribe([self](const NYdb::NTable::TAsyncDescribeTableResult& future) {
                     try {
                         const auto& result = future.GetValue();
-                        if (self->Context_.Cancellation.IsCancellationRequested() ||
-                            TInstant::Now() >= self->Context_.Deadline) {
-                            return; // Released -> Continue reports cancellation/deadline.
-                        }
-                        if (result.IsSuccess()) {
-                            ExtractMetadataSchema(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()),
-                                self->Requests[self->Index_].Schema, self->Error);
-                        } else {
-                            self->Error = TStringBuilder() << "Native YDB DescribeTable failed: " << result.GetStatus();
+                        if (!self->Context_.Cancellation.IsCancellationRequested() &&
+                            TInstant::Now() < self->Context_.Deadline) {
+                            if (result.IsSuccess()) {
+                                ExtractMetadataSchema(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()),
+                                    self->Requests[self->Index_].Schema, self->Error);
+                            } else {
+                                self->Error = TStringBuilder() << "Native YDB DescribeTable failed: " << result.GetStatus();
+                            }
                         }
                     } catch (...) {
                         self->Error = "Native YDB DescribeTable failed";
                     }
+                    self->Close();
                 });
-        }, [self] { self->Close(); });
+        } catch (...) {
+            Error = "Native YDB DescribeTable failed";
+            Close();
+        }
+    }
+
+    void FinishTable() {
+        Session_.reset();
+        Client_.reset();
+        if (Context_.Cancellation.IsCancellationRequested()) {
+            Error = "Native YDB metadata cancelled";
+        } else if (TInstant::Now() >= Context_.Deadline) {
+            Error = "Native YDB metadata deadline exceeded";
+        }
+        if (Error) {
+            Done_.TrySetValue();
+            return;
+        }
+        ++Index_;
+        StartNextTable();
     }
 
     void Close() {
-        if (Closing_) {
-            return;
-        }
-        Closing_ = true;
-        auto self = shared_from_this();
-        auto finish = [self] {
-            self->Session_.reset();
-            self->Client_.reset();
-            self->Closing_ = false;
-            if (self->Context_.Cancellation.IsCancellationRequested()) {
-                self->Error = "Native YDB metadata cancelled";
-            } else if (TInstant::Now() >= self->Context_.Deadline) {
-                self->Error = "Native YDB metadata deadline exceeded";
-            }
-            if (self->Error) {
-                self->Done_.TrySetValue();
-                return;
-            }
-            ++self->Index_;
-            self->AcquireSchema();
-        };
         if (!Session_ || Context_.Cancellation.IsCancellationRequested() || TInstant::Now() >= Context_.Deadline) {
-            // No new provider RPC is started after cancellation/deadline. The
-            // existing SDK may issue its own DeleteSession on destruction; that
-            // cleanup has an SDK timeout and is outside this reservation.
-            finish();
+            // Skip further provider RPCs when cancellation/deadline is observed.
+            // The existing SDK may issue its own DeleteSession on destruction;
+            // that cleanup has a separate SDK timeout.
+            FinishTable();
             return;
         }
-        Request([self](std::shared_ptr<TMetadataCallbackLease> lifetime) {
-            const auto remaining = self->RemainingTimeout(TDuration::Seconds(5));
+        auto self = shared_from_this();
+        try {
+            const auto remaining = RemainingTimeout(TDuration::Seconds(5));
             if (!remaining) {
+                FinishTable();
                 return;
             }
-            self->Session_->Close(NYdb::NTable::TCloseSessionSettings()
+            Session_->Close(NYdb::NTable::TCloseSessionSettings()
                 .ClientTimeout(remaining).OperationTimeout(remaining))
-                .Subscribe([self, lifetime](const NYdb::TAsyncStatus& future) {
-                    Y_UNUSED(lifetime);
+                .Subscribe([self](const NYdb::TAsyncStatus& future) {
                     try {
                         if (!future.GetValue().IsSuccess() && !self->Error) {
                             self->Error = "Native YDB metadata session cleanup failed";
@@ -310,8 +244,14 @@ private:
                             self->Error = "Native YDB metadata session cleanup failed";
                         }
                     }
+                    self->FinishTable();
                 });
-        }, std::move(finish), true);
+        } catch (...) {
+            if (!Error) {
+                Error = "Native YDB metadata session cleanup failed";
+            }
+            FinishTable();
+        }
     }
 
     const TState::TPtr State_;
@@ -321,7 +261,6 @@ private:
     std::shared_ptr<NYdb::NTable::TTableClient> Client_;
     std::optional<NYdb::NTable::TSession> Session_;
     size_t Index_ = 0;
-    bool Closing_ = false;
 
 public:
     TVector<TMetadataRequest> Requests;
@@ -369,10 +308,6 @@ public:
             ctx.AddError(TIssue({}, "Native YDB metadata deadline exceeded"));
             return TStatus::Error;
         }
-        if (!State_->MetadataQuota) {
-            ctx.AddError(TIssue({}, "Native YDB metadata memory quota is unavailable"));
-            return TStatus::Error;
-        }
         Batch_ = std::make_shared<TMetadataBatch>(State_, std::move(requests));
         AsyncFuture_ = Batch_->GetFuture();
         Batch_->Start();
@@ -408,7 +343,6 @@ public:
                 items.emplace_back(ctx.MakeType<TItemExprType>(name, annotation));
             }
             table.RowType = ctx.MakeType<TStructExprType>(items);
-            table.MetadataLease = std::move(request.Schema.MemoryLease);
             State_->Tables.emplace(request.Key, std::move(table));
         }
         Batch_.reset();

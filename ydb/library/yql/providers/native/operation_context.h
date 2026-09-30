@@ -1,43 +1,15 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <library/cpp/threading/cancellation/cancellation_token.h>
-
-#include <functional>
-#include <memory>
-
-namespace NActors {
-class TActorSystem;
-class IActor;
-}
+#include <util/datetime/base.h>
 
 namespace NYql::NNative {
 
 struct TOperationContext {
+    // A provider-local absolute deadline, shared by all phases and retries.
+    // Propagation of the client query deadline is a separate integration step.
     TInstant Deadline = TInstant::Max();
     NThreading::TCancellationToken Cancellation = NThreading::TCancellationToken::Default();
-    // Stream implementations, their provider callbacks and pending results retain
-    // this lease. This does not account for SDK-internal or transport buffers
-    // whose ownership is not exposed by the client API. Release is asynchronous.
-    std::shared_ptr<void> MemoryLease;
 };
-
-class IAsyncMemoryQuota {
-public:
-    virtual ~IAsyncMemoryQuota() = default;
-    virtual NThreading::TFuture<std::shared_ptr<void>> Acquire(
-        ui64 bytes, TInstant deadline, NThreading::TCancellationToken cancellation) = 0;
-    // Cancel admission. Already issued leases remain valid until their last owner releases them.
-    virtual void Shutdown() = 0;
-};
-
-// The registrar can place the governor in the compute actor's mailbox when its
-// quota manager is not thread safe. Without a registrar it gets its own mailbox.
-std::shared_ptr<IAsyncMemoryQuota> CreateAsyncMemoryQuota(
-    NActors::TActorSystem* actorSystem,
-    NDq::IMemoryQuotaManager::TPtr quota,
-    ui64 perOperationLimit,
-    std::function<NActors::TActorId(NActors::IActor*)> registerActor = {});
 
 } // namespace NYql::NNative

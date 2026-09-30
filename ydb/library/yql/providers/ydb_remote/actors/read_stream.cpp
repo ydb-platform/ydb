@@ -190,8 +190,8 @@ public:
                 // under Mutex_: a credentials provider may cancel reentrantly.
                 auto future = Client_->StreamExecuteQuery(std::string(BuildReadQuery(Source_)),
                     NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRO()).CommitTx(), settings);
-                // Keep the provider reservation until this callback returns, even
-                // if local cancellation has already completed the caller's future.
+                // Keep the stream alive until this callback returns, even if
+                // local cancellation has already completed the caller's future.
                 future.Subscribe([self = shared_from_this(), promise](const auto& result) mutable {
                     try {
                         auto iterator = std::make_shared<NYdb::NQuery::TExecuteQueryIterator>(result.GetValue());
@@ -274,7 +274,7 @@ private:
                     YQL_ENSURE(part.GetResultSetIndex() == 0, "YdbRemote unexpected result set");
                     auto batch = DecodeArrowResult(part.GetResultSet(), self->Source_, self->Context_.MaxBatchBytes);
                     const ui64 bytes = NUdf::GetSizeOfArrowBatchInBytes(*batch);
-                    self->Complete(promise, {.MemoryLease = self->Context_.MemoryLease, .Batch = std::move(batch), .Bytes = bytes});
+                    self->Complete(promise, {.Batch = std::move(batch), .Bytes = bytes});
                 } else {
                     self->Complete(promise, {});
                 }

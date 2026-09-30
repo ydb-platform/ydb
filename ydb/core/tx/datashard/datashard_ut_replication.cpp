@@ -4,7 +4,10 @@
 #include "datashard_ut_common_kqp.h"
 #include "datashard_user_table.h"
 
+<<<<<<< HEAD
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+=======
+>>>>>>> 40facefb665 (Support asynchronous indexes in asynchronous replication (#54343))
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 

@@ -1554,8 +1554,12 @@ void ApplyChanges(
     auto status = ev->Get()->Record.GetStatus();
     UNIT_ASSERT_C(status == expected,
         "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
+<<<<<<< HEAD
         << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected)
         << ": " << ev->Get()->Record.ShortDebugString());
+=======
+        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected));
+>>>>>>> 40facefb665 (Support asynchronous indexes in asynchronous replication (#54343))
     if (expectedReason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) {
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetReason()), static_cast<ui32>(expectedReason));
     }

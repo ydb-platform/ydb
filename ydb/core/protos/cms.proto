@@ -838,6 +838,8 @@ message TDDiskDiskListRequest {
     // If set, only disks currently considered unavailable are returned
     // (evaluated on the CMS side, before paging).
     optional bool OnlyProblems = 7 [default = false];
+    // Preserve tablet lists for legacy clients; overview clients can request counts only.
+    optional bool IncludeTabletIds = 8 [default = true];
 }
 
 message TDDiskDiskListResponse {
@@ -854,6 +856,8 @@ message TDDiskDiskListResponse {
         // Fractions, absent when the role is unused or monitoring is unavailable.
         optional double DDiskOccupancy = 6; // underlying PDisk owner occupancy
         optional double PersistentBufferOccupancy = 7; // relative to MaxChunks
+        optional uint32 DDiskTabletCount = 8;
+        optional uint32 PersistentBufferTabletCount = 9;
 
     }
 

@@ -990,6 +990,26 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             }
         }
 
+        // Counts match the distinct legacy lists; compact responses omit those lists.
+        {
+            NKikimrCms::TDDiskDiskListRequest request;
+            request.SetLimit(0);
+            request.SetIncludeTabletIds(false);
+            const auto compact = env.RequestDDiskDiskList(request);
+            UNIT_ASSERT_VALUES_EQUAL(compact.GetTotalCount(), full.GetTotalCount());
+            UNIT_ASSERT_VALUES_EQUAL(compact.DisksSize(), full.DisksSize());
+            for (size_t i = 0; i < full.DisksSize(); ++i) {
+                const auto& legacy = full.GetDisks(i);
+                const auto& disk = compact.GetDisks(i);
+                UNIT_ASSERT_VALUES_EQUAL(legacy.GetDDiskTabletCount(), legacy.DDiskTabletIdsSize());
+                UNIT_ASSERT_VALUES_EQUAL(legacy.GetPersistentBufferTabletCount(), legacy.PersistentBufferTabletIdsSize());
+                UNIT_ASSERT_VALUES_EQUAL(disk.GetDDiskTabletCount(), legacy.GetDDiskTabletCount());
+                UNIT_ASSERT_VALUES_EQUAL(disk.GetPersistentBufferTabletCount(), legacy.GetPersistentBufferTabletCount());
+                UNIT_ASSERT_VALUES_EQUAL(disk.DDiskTabletIdsSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(disk.PersistentBufferTabletIdsSize(), 0);
+            }
+        }
+
         // Filter by tablet id: only disks used by tabletId1 must be returned.
         {
             NKikimrCms::TDDiskDiskListRequest request;

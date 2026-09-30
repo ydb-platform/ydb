@@ -106,6 +106,9 @@ public:
             case EMode::DiskList: {
                 auto event = MakeHolder<TEvCms::TEvDDiskDiskListRequest>();
                 FillOffsetAndLimit(params, event->Record);
+                if (params.contains("include_tablet_ids")) {
+                    event->Record.SetIncludeTabletIds(IsTrue(params.Get("include_tablet_ids")));
+                }
                 if (params.contains("filter")) {
                     event->Record.SetFilterDiskId(params.Get("filter"));
                 }

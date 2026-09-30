@@ -2547,11 +2547,15 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         const auto* usage = items[i];
         auto* disk = response->Record.AddDisks();
         disk->MutableDiskId()->CopyFrom(usage->DiskId);
-        for (auto id : usage->DDiskTabletIds) {
-            disk->AddDDiskTabletIds(id);
-        }
-        for (auto id : usage->PersistentBufferTabletIds) {
-            disk->AddPersistentBufferTabletIds(id);
+        disk->SetDDiskTabletCount(usage->DDiskTabletIds.size());
+        disk->SetPersistentBufferTabletCount(usage->PersistentBufferTabletIds.size());
+        if (request.GetIncludeTabletIds()) {
+            for (auto id : usage->DDiskTabletIds) {
+                disk->AddDDiskTabletIds(id);
+            }
+            for (auto id : usage->PersistentBufferTabletIds) {
+                disk->AddPersistentBufferTabletIds(id);
+            }
         }
         disk->SetAvailable(IsDDiskAvailable(usage->DiskId));
         disk->SetState(GetDDiskStateName(usage->DiskId));

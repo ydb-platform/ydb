@@ -167,8 +167,10 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         void SetupResultsCapture(i64 skip, i64 capture = std::numeric_limits<i64>::max()) {
             ReverseSkip.store(skip);
             ReverseCapture.store(capture);
-            for (auto& [_, pipe] : Pipes) {
-                pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+            with_lock(PipesLock) {
+                for (auto& [_, pipe] : Pipes) {
+                    pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                }
             }
         }
 
@@ -208,12 +210,15 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         }
 
         void Forward(TAutoPtr<::NActors::IEventHandle> ev) {
-            TReplyPipeStub* pipe = Pipes[ev->Sender];
-            if (pipe == nullptr) {
-                pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
-                Register(pipe);
-                for (auto& [_, pipe] : Pipes) {
-                    pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+            TReplyPipeStub* pipe;
+            with_lock(PipesLock) {
+                pipe = Pipes[ev->Sender];
+                if (pipe == nullptr) {
+                    pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
+                    Register(pipe);
+                    for (auto& [_, pipe] : Pipes) {
+                        pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                    }
                 }
             }
             auto id = pipe->SelfId();
@@ -225,22 +230,24 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
             with_lock(CaptureLock) {
                 tosend.swap(Captured);
             }
-            for (auto& ev : tosend) {
-                TReplyPipeStub* pipe = Pipes[ev->Sender];
-                if (pipe == nullptr) {
-                    pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
-                    runtime->Register(pipe);
-                    for (auto& [_, pipe] : Pipes) {
-                        pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+            with_lock(PipesLock) {
+                for (auto& ev : tosend) {
+                    TReplyPipeStub* pipe = Pipes[ev->Sender];
+                    if (pipe == nullptr) {
+                        pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
+                        runtime->Register(pipe);
+                        for (auto& [_, pipe] : Pipes) {
+                            pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                        }
                     }
+                    auto id = pipe->SelfId();
+                    ev->Rewrite(ev->GetTypeRewrite(), id);
+                    runtime->Send(ev.Release());
                 }
-                auto id = pipe->SelfId();
-                ev->Rewrite(ev->GetTypeRewrite(), id);
-                runtime->Send(ev.Release());
-            }
-            if (sendResults) {
-                for (auto& [_, pipe] : Pipes) {
-                    pipe->SendCaptured(runtime);
+                if (sendResults) {
+                    for (auto& [_, pipe] : Pipes) {
+                        pipe->SendCaptured(runtime);
+                    }
                 }
             }
         }
@@ -255,6 +262,7 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
         TMutex CaptureLock;
         TVector<THolder<IEventHandle>> Captured;
+        TMutex PipesLock;
         THashMap<TActorId, TReplyPipeStub*> Pipes;
     };
 

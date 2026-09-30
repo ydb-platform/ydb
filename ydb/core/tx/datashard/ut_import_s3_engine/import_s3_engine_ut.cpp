@@ -610,6 +610,7 @@ TVector<TValueCase> MakeValueCases() {
     // precision is: the values of the type are those of 22 digits, the
     // infinities and NaN.
     const TInt128 maxDecimal = GetBounds(NScheme::DECIMAL_PRECISION).second - 1;
+    const i64 maxInterval = static_cast<i64>(MAX_TIMESTAMP) - 1;
     const auto makeDecimalCase = [&](TInt128 invalid) {
         return TValueCase{
             .TypeId = NScheme::NTypeIds::Decimal,
@@ -629,10 +630,12 @@ TVector<TValueCase> MakeValueCases() {
             arrow::timestamp(arrow::TimeUnit::MICRO), MAX_TIMESTAMP - 1, MAX_TIMESTAMP),
         // the exporter writes Interval as int64
         MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Interval, arrow::int64(), MAX_TIMESTAMP - 1, MAX_TIMESTAMP),
+        MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Interval, arrow::int64(), -maxInterval, -maxInterval - 1),
         MakeNumericCase<arrow::Int32Type>(NScheme::NTypeIds::Date32, arrow::int32(), MAX_DATE32, MAX_DATE32 + 1),
         MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Datetime64, arrow::int64(), MAX_DATETIME64, MAX_DATETIME64 + 1),
         MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Timestamp64, arrow::int64(), MAX_TIMESTAMP64, MAX_TIMESTAMP64 + 1),
         MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Interval64, arrow::int64(), MAX_INTERVAL64, MAX_INTERVAL64 + 1),
+        MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Interval64, arrow::int64(), -MAX_INTERVAL64, -MAX_INTERVAL64 - 1),
         makeDecimalCase(Err()),
         // one digit more than the column has
         makeDecimalCase(maxDecimal + 1),
@@ -719,7 +722,7 @@ TImportOutcome ImportKeyValueParquet(
 
 struct TBatchedImport {
     TVector<TString> Keys;     // the keys of the imported rows, in the order they came
-    TVector<ui64> BatchBytes;  // the cell bytes of the rows of every batch that has rows
+    TVector<ui64> BatchBytes;  // what the rows of every batch that has rows take in an upload
     ui64 PeakArrowBytes = 0;   // the most memory Arrow held while rows were emitted
 };
 
@@ -751,12 +754,8 @@ TBatchedImport ImportInBatches(
     const auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
         UNIT_ASSERT_VALUES_EQUAL(keys.size(), 1);
         result.Keys.emplace_back(keys.front().AsBuf());
-        for (const auto& cell : keys) {
-            batchBytes += cell.Size();
-        }
-        for (const auto& cell : values) {
-            batchBytes += cell.Size();
-        }
+        // the way the downloader puts a row into an upload
+        batchBytes += TSerializedCellVec::Serialize(keys).size() + TSerializedCellVec::Serialize(values).size();
 
         const i64 arrowBytes = arrowPool->bytes_allocated() - arrowBytesBefore;
         result.PeakArrowBytes = Max<ui64>(result.PeakArrowBytes, Max<i64>(arrowBytes, 0));
@@ -814,15 +813,25 @@ TVector<ui64> FillBatches(const TVector<ui64>& rowBytes, ui64 budget) {
 }
 
 // Imports the values as one row group of a table with a Utf8 key and a Utf8
-// value, and checks that its batches are filled to the byte budget.
-void CheckBatchesAreFilledToTheBudget(const TVector<TString>& values, ui32 budget) {
-    const TString source = BuildKeyValueParquet(MakeStringArray(values), /*rowGroupSize=*/values.size());
+// value, and checks that its batches are filled to the byte budget. A value
+// that is not set is a NULL.
+void CheckBatchesAreFilledToTheBudget(const TVector<TMaybe<TString>>& values, ui32 budget) {
+    arrow::StringBuilder builder;
+    for (const auto& value : values) {
+        UNIT_ASSERT((value ? builder.Append(value->data(), value->size()) : builder.AppendNull()).ok());
+    }
+    const TString source = BuildKeyValueParquet(FinishArray(builder), /*rowGroupSize=*/values.size());
+
+    // A row takes two serialized cell vectors in an upload, the key and the
+    // value: the number of the cells and a header for every cell, a NULL as
+    // well, come on top of the cell bytes.
+    static constexpr ui64 RowOverhead = 2 * (sizeof(ui16) + sizeof(ui32));
 
     TVector<TString> keys;
     TVector<ui64> rowBytes;
     for (size_t i = 0; i < values.size(); ++i) {
         keys.push_back(TStringBuilder() << "k" << i);
-        rowBytes.push_back(keys.back().size() + values[i].size());
+        rowBytes.push_back(RowOverhead + keys.back().size() + (values[i] ? values[i]->size() : 0));
     }
 
     const TEngineFixture fixture;
@@ -1403,14 +1412,14 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
         // Repeated values are written as a dictionary: the sizes in the
         // metadata of the file are far below the sizes of the decoded rows.
-        CheckBatchesAreFilledToTheBudget(TVector<TString>(64, TString(64_KB, 'a')), Budget);
+        CheckBatchesAreFilledToTheBudget(TVector<TMaybe<TString>>(64, TString(64_KB, 'a')), Budget);
 
         // Narrow rows followed by wide ones: the rows read so far say nothing
         // about the rows that follow.
         {
-            TVector<TString> values(200, TString(16, 'n'));
+            TVector<TMaybe<TString>> values(200, TString(16, 'n'));
             for (ui32 i = 0; i < 32; ++i) {
-                values.emplace_back(64_KB, static_cast<char>('a' + i % 26));
+                values.emplace_back(TString(64_KB, static_cast<char>('a' + i % 26)));
             }
             CheckBatchesAreFilledToTheBudget(values, Budget);
         }
@@ -1423,6 +1432,25 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             TString(16, 'n'),
             TString(300_KB, 'w'),
         }, Budget);
+    }
+
+    Y_UNIT_TEST(ParquetCountsNullsInTheByteBudget) {
+        // A NULL has no cell bytes, but it is a cell of the upload, with a
+        // header. So is every other cell: the rows of a batch take more in an
+        // upload than their cell bytes, many times more when they are narrow
+        // or mostly NULL. The budget is for what they take in the upload.
+        static constexpr ui32 Budget = 64_KB;
+
+        CheckBatchesAreFilledToTheBudget(TVector<TMaybe<TString>>(50000, Nothing()), Budget);
+
+        // NULL and narrow values mixed
+        {
+            TVector<TMaybe<TString>> values;
+            for (ui32 i = 0; i < 50000; ++i) {
+                values.push_back(i % 3 ? Nothing() : MakeMaybe(TString("v")));
+            }
+            CheckBatchesAreFilledToTheBudget(values, Budget);
+        }
     }
 
     Y_UNIT_TEST(ParquetBoundsTheMemoryOfDecodedRows) {

@@ -5,6 +5,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/formats/arrow/converter.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
@@ -13,6 +14,7 @@
 #include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
@@ -161,13 +163,18 @@ bool IsWriterCoercion(const arrow::DataType& fileType, const arrow::DataType& ex
     return fileType.id() == arrow::Type::INT64 && expectedType.id() == arrow::Type::UINT32;
 }
 
-// The cell bytes of the rows of a decoded batch, that is what the converter
-// emits for them. Conversions are off, so a cell is the Arrow value as it is:
-// the width of the type for a fixed-width column, the length of the value for
-// a string or a binary one, and nothing for a null.
+// The bytes the rows of a decoded batch take in an upload. A row is uploaded
+// as two serialized cell vectors, the key and the value, where every cell has
+// a header, a NULL as well: that is rowOverhead, the same for every row. The
+// rest is the cell bytes, that is what the converter emits. Conversions are
+// off, so a cell is the Arrow value as it is: the width of the type for a
+// fixed-width column, the length of the value for a string or a binary one,
+// and nothing for a null.
 class TRowSizes {
 public:
-    explicit TRowSizes(const arrow::RecordBatch& batch) {
+    TRowSizes(const arrow::RecordBatch& batch, ui64 rowOverhead)
+        : RowOverhead(rowOverhead)
+    {
         Columns.reserve(batch.num_columns());
         for (int i = 0; i < batch.num_columns(); ++i) {
             TColumn column{.Array = batch.column(i)};
@@ -188,7 +195,7 @@ public:
     }
 
     ui64 RowBytes(i64 row) const {
-        ui64 bytes = 0;
+        ui64 bytes = RowOverhead;
         for (const auto& column : Columns) {
             if (column.Array->IsNull(row)) {
                 continue;
@@ -205,6 +212,7 @@ private:
         ui64 Width = 0; // the cell bytes of a fixed-width column
     };
 
+    const ui64 RowOverhead;
     TVector<TColumn> Columns;
 };
 
@@ -336,21 +344,28 @@ class TParquetDataParser final : public IParquetStreamParser {
         return static_cast<i64>(Min<ui64>(fitting, Min<ui64>(2 * rows, MaxBatchRows)));
     }
 
-    // The number of rows, out of count rows starting at offset, whose cells
-    // fit into the byte budget. A row that does not fit into an empty batch is
-    // taken alone: that is the only way for a batch to exceed the budget.
-    static i64 RowsWithinBudget(const TRowSizes& sizes, i64 offset, i64 count, ui64 budget, bool emptyBatch) {
-        i64 rows = 0;
-        ui64 bytes = 0;
-        while (rows < count) {
-            const ui64 rowBytes = sizes.RowBytes(offset + rows);
-            if (rowBytes > budget - bytes) {
+    struct TFittingRows {
+        i64 Rows = 0;
+        ui64 Bytes = 0;
+    };
+
+    // The rows, out of count rows starting at offset, that fit into the byte
+    // budget. A row that does not fit into an empty batch is taken alone: that
+    // is the only way for a batch to exceed the budget.
+    static TFittingRows RowsWithinBudget(const TRowSizes& sizes, i64 offset, i64 count, ui64 budget, bool emptyBatch) {
+        TFittingRows fitting;
+        while (fitting.Rows < count) {
+            const ui64 rowBytes = sizes.RowBytes(offset + fitting.Rows);
+            if (rowBytes > budget - fitting.Bytes) {
                 break;
             }
-            bytes += rowBytes;
-            ++rows;
+            fitting.Bytes += rowBytes;
+            ++fitting.Rows;
         }
-        return rows == 0 && emptyBatch ? 1 : rows;
+        if (fitting.Rows == 0 && emptyBatch) {
+            fitting = {.Rows = 1, .Bytes = sizes.RowBytes(offset)};
+        }
+        return fitting;
     }
 
 public:
@@ -400,9 +415,19 @@ public:
                 ? arrow::int64() // mirrors the exporter's remap in export_parquet.cpp
                 : arrowType.ValueUnsafe();
 
-            YdbSchema.emplace_back(meta.Name, meta.TypeInfo);
+            // The converter casts a column to the Arrow array class of its YDB
+            // type. For Interval that is a duration array, and the file has an
+            // int64 one, so the converter is given Int64: the cell is the same.
+            YdbSchema.emplace_back(
+                meta.Name,
+                meta.TypeInfo.GetTypeId() == NScheme::NTypeIds::Interval
+                    ? NScheme::TTypeInfo(NScheme::NTypeIds::Int64)
+                    : meta.TypeInfo);
             ColumnMeta.push_back(std::move(meta));
         }
+
+        RowOverhead = TSerializedCellVec::SerializedSize(TVector<TCell>(KeyCount))
+            + TSerializedCellVec::SerializedSize(TVector<TCell>(ColumnMeta.size() - KeyCount));
 
         return {};
     }
@@ -598,17 +623,25 @@ public:
                     return false;
                 }
                 if (batch->num_rows() > 0) {
+                    auto casted = CastCoercedColumns(std::move(batch));
+                    if (!casted) {
+                        if (!Session->Memory->HasRefused()) {
+                            return std::unexpected(std::move(casted.error()));
+                        }
+                        if (auto result = ReopenWithSmallerBatches(); !result) {
+                            return std::unexpected(std::move(result.error()));
+                        }
+                        continue;
+                    }
+                    batch = std::move(*casted);
+
                     Session->DecodedBatches.push_back(batch->num_rows());
                     Session->BatchRows = Min(
                         NextBatchRows(decodeBytes, DecodedBytes(*batch), batch->num_rows()),
                         Session->BatchRowsLimit);
 
-                    auto casted = CastCoercedColumns(std::move(batch));
-                    if (!casted) {
-                        return std::unexpected(std::move(casted.error()));
-                    }
-                    Session->HeldBatch = std::move(*casted);
-                    Session->HeldSizes.ConstructInPlace(*Session->HeldBatch);
+                    Session->HeldBatch = std::move(batch);
+                    Session->HeldSizes.ConstructInPlace(*Session->HeldBatch, RowOverhead);
                     Session->HeldOffset = 0;
                 }
             }
@@ -624,6 +657,7 @@ public:
             };
         };
 
+        ui64 usedBytes = 0; // of the byte budget, by the rows emitted so far
         while (true) {
             auto available = fetch();
             if (!available) {
@@ -641,14 +675,15 @@ public:
             const i64 remaining = held->num_rows() - Session->HeldOffset;
             i64 take = remaining;
             if (maxDataBytes) {
-                const auto emitted = rowWriter.GetParsedData();
-                take = RowsWithinBudget(
+                const auto fitting = RowsWithinBudget(
                     *Session->HeldSizes, Session->HeldOffset, remaining,
-                    maxDataBytes > emitted.DataBytes ? maxDataBytes - emitted.DataBytes : 0,
-                    /*emptyBatch=*/emitted.Rows == 0);
-                if (take == 0) {
+                    maxDataBytes > usedBytes ? maxDataBytes - usedBytes : 0,
+                    /*emptyBatch=*/rowWriter.GetParsedData().Rows == 0);
+                if (fitting.Rows == 0) {
                     return makeResult(true); // the rows that are left go to the next batch
                 }
+                take = fitting.Rows;
+                usedBytes += fitting.Bytes;
             }
 
             const auto slice = take == held->num_rows()
@@ -720,13 +755,19 @@ private:
     std::expected<std::shared_ptr<arrow::RecordBatch>, TString> CastCoercedColumns(
         std::shared_ptr<arrow::RecordBatch> batch) const
     {
+        // The memory of the columns the cast makes is within the limit of the
+        // decoding as well: a cast that is refused is a batch that is refused.
+        Session->Memory->ResetRefused();
+        arrow::compute::ExecContext context(Session->Memory.get());
+
         for (const auto& [name, type] : Session->CastColumns) {
             const int index = batch->schema()->GetFieldIndex(name);
             if (index < 0) {
                 return std::unexpected(TStringBuilder() << "column '" << name << "' is missing in a parquet record batch");
             }
 
-            auto casted = arrow::compute::Cast(*batch->column(index), type, arrow::compute::CastOptions::Safe());
+            auto casted = arrow::compute::Cast(
+                *batch->column(index), type, arrow::compute::CastOptions::Safe(), &context);
             if (!casted.ok()) {
                 return std::unexpected(TStringBuilder() << "column '" << name << "': cannot convert parquet type "
                     << batch->column(index)->type()->ToString() << " to " << type->ToString()
@@ -829,8 +870,9 @@ private:
 private:
     const ui64 DecodeMemoryLimit; // 0 = no limit
     TVector<TColumnMeta> ColumnMeta;
-    std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
+    std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema; // what the converter takes the columns for
     ui32 KeyCount = 0;
+    ui64 RowOverhead = 0; // see TRowSizes
     std::unique_ptr<TParquetFileSession> Session;
 };
 

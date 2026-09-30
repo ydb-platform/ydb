@@ -98,9 +98,10 @@ public:
 
     virtual void ResetRowGroup() = 0;
 
-    // Decodes rows of the open row group until about maxDataBytes of cell data
-    // have been emitted (0 = no limit) or the row group ends. HasMore reports
-    // whether rows remain in the row group.
+    // Decodes rows of the open row group until the rows emitted take
+    // maxDataBytes in an upload (0 = no limit) or the row group ends. That is
+    // the cell data and a header for every cell, a NULL as well. HasMore
+    // reports whether rows remain in the row group.
     virtual std::expected<TParsedBatch, TString> ProcessNextBatch(
         TMemoryPool& pool,
         const TAddRowFn& addRow,

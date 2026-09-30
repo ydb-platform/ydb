@@ -535,6 +535,13 @@ namespace {
                     issues.AddIssue(TIssue("QuerySessionPool actor was terminated"));
                     Send(sender, new TEvSessionError(Ydb::StatusIds::CANCELLED, issues));
                 }
+                for (auto session: databaseState.InflightCreateSessions) {
+                    if (!session->SessionId.empty()) {
+                        SendDeleteSession(std::move(session->SessionId), database);
+                        session->SessionId.clear();
+                    }
+                    CleanupStreamProcessor(session);
+                }
                 for (auto& session: databaseState.ReadySessions) {
                     if (!session->SessionId.empty()) {
                         SendDeleteSession(std::move(session->SessionId), database);

@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(VectorWorkloadSql) {
         params.KeyColumns = {"id"};
         params.EmbeddingColumn = "embedding";
         params.Metric = NYdb::NTable::TVectorIndexSettings::EMetric::InnerProduct;
+        params.Hnsw = true;
         UNIT_ASSERT_STRING_CONTAINS(MakeSelect(params, "ann"), "PRAGMA ydb.HNSWEfSearch=\"15\"");
         params.HnswEfSearch = 50;
         UNIT_ASSERT_STRING_CONTAINS(MakeSelect(params, "ann"), "PRAGMA ydb.HNSWEfSearch=\"50\"");
@@ -51,6 +52,7 @@ Y_UNIT_TEST_SUITE(VectorWorkloadSql) {
         params.EmbeddingColumn = "embedding";
         params.Metric = NYdb::NTable::TVectorIndexSettings::EMetric::Euclidean;
         UNIT_ASSERT_STRING_CONTAINS(MakeSelect(params, "ann"), "VIEW ann");
+        UNIT_ASSERT(MakeSelect(params, "ann").find("HNSWEfSearch") == std::string::npos);
         params.Hnsw = true;
         params.PrefixColumn = "category";
         params.PrefixType = "Uint64";

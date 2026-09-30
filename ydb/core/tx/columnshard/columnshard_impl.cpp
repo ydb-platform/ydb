@@ -506,6 +506,8 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     Counters.GetCSCounters().OnStartBackground();
+    // GC needs no index, and the MoveData gate waits for this incarnation's first round even on an indexless shard.
+    SetupGC();
 
     if (!TablesManager.HasPrimaryIndex()) {
         YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -526,7 +528,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     if (!!MoveDataDriverId) {
         Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
     }
-    SetupGC();
 
     RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
 }
@@ -944,18 +945,17 @@ bool TColumnShard::SetupTtl() {
     return true;
 }
 
-bool TColumnShard::SetupMoveDataRewrites() {
-    if (!MoveDataState.Active || !TablesManager.HasPrimaryIndex()) {
-        return false;
+void TColumnShard::SetupMoveDataRewrites() {
+    if (!MoveDataState.Active || !HasIndex()) {
+        return;
     }
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
         {}, DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::MoveDataOnly);
     if (indexChanges.empty()) {
-        return false;
+        return;
     }
     StartTtlChanges(std::move(indexChanges));
-    return true;
 }
 
 void TColumnShard::StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges) {

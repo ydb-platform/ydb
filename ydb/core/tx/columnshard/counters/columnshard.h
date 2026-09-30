@@ -109,6 +109,7 @@ private:
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsPending;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsConfirmedToMove;
     std::shared_ptr<TValueAggregationClient> MoveDataPortionsInFlight;
+    NMonitoring::TDynamicCounters::TCounterPtr MoveDataFinishedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByReseedCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByVacuumCount;
     NMonitoring::TDynamicCounters::TCounterPtr MoveDataGateBlockedByPortionsCount;
@@ -263,6 +264,7 @@ public:
     }
 
     void OnMoveDataFinished() const {
+        MoveDataFinishedCount->Add(1);
         MoveDataActive->SetValue(0);
         MoveDataPortionsPending->SetValue(0);
         MoveDataPortionsConfirmedToMove->SetValue(0);

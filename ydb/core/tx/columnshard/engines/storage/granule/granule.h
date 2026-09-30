@@ -309,8 +309,8 @@ public:
         return OptimizerPlanner->GetBucketPositions();
     }
 
-    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag,
-        const NActualizer::EActualizationScope scope = NActualizer::EActualizationScope::All) const;
+    void BuildActualizationTasks(
+        NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const NActualizer::EActualizationScope scope) const;
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

@@ -714,6 +714,8 @@ void TColumnShard::RestartMoveDataActualizer() {
     AFL_VERIFY(MoveDataState.Active);
     MoveDataState.TargetsChanged = false;
     MoveDataState.CleanupWatermark.reset();
+    // A fresh actualizer counts rejections from zero again.
+    MoveDataState.ReportedRejections = 0;
     if (!HasIndex()) {
         return;
     }
@@ -778,7 +780,7 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     } else if (!MoveDataState.CleanupWatermark) {
         // Whoever retired a target portion sits in CleanupPortions, in the running cleanup, or is gone; include runningOldest so in-flight cleanup does not slip past.
         const TInstant maxPending = HasIndex() ? GetIndexAs<NOlap::TColumnEngineForLogs>().GetMaxCleanupPortionInstant() : TInstant::Zero();
-        MoveDataState.CleanupWatermark = NOlap::NActualizer::FreezeCleanupWatermark(maxPending, runningCleanupOldest);
+        MoveDataState.CleanupWatermark = Max(maxPending, runningCleanupOldest.value_or(TInstant::Zero()));
     }
     // A running cleanup holds its portions outside CleanupPortions, but only one reaching back to the watermark can hold target data.
     const bool hasCleanupPortions =

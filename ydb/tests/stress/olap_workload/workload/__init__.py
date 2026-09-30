@@ -55,7 +55,7 @@ class WorkloadRunner:
         ]
         # Pool shrink/grow needs the console endpoint, so it is enabled only when supplied.
         if self.endpoint:
-            workloads.append(WorkloadMoveData(self.client, self.name, stop, self.endpoint, self.client.database))
+            workloads.append(WorkloadMoveData(self.client, self.name, stop, self.endpoint))
         for w in workloads:
             w.start()
         started_at = started_at = time.time()

@@ -113,7 +113,7 @@ public:
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 
-    // Only the native BS operator tracks these queues; other implementations return false.
+    // The BS operator adds its own queues; others only know the shared blobs.
     virtual bool HasBlobsForGroups(const THashSet<ui32>& groups) const {
         return SharedBlobs && SharedBlobs->HasBlobsForGroups(groups);
     }

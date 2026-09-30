@@ -31,9 +31,4 @@ struct TMoveDataQueueSizes {
     }
 };
 
-// FreezeCleanupWatermark raises the boundary to Max(maxPending, runningOldest) so that cleanup already in flight (portions already moved out of CleanupPortions) still blocks the gate.
-inline TInstant FreezeCleanupWatermark(const TInstant maxPending, const std::optional<TInstant>& runningOldest) {
-    return runningOldest ? Max(maxPending, *runningOldest) : maxPending;
-}
-
 }   // namespace NKikimr::NOlap::NActualizer

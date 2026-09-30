@@ -66,7 +66,7 @@ void TGranuleActualizationIndex::StartMoveData(const THashSet<ui32>& targetGroup
     AFL_VERIFY(!MoveDataActualizer);
     MoveDataActualizer = std::make_shared<TMoveDataActualizer>(targetGroups, VersionedIndex);
     Actualizers.emplace_back(MoveDataActualizer);
-    MoveDataActualizer->Refresh(context, uncommitted);
+    MoveDataActualizer->Seed(context, uncommitted);
 }
 
 void TGranuleActualizationIndex::OnUncommittedPortionAborted(const ui64 portionId) {

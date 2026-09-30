@@ -15,7 +15,7 @@ private:
     TColumnShard* Self;
     // Dropped to zero by TColumnShard::Die before it poisons us; an event queued in between must not touch Self.
     const std::shared_ptr<TAtomicCounter> TabletActivity;
-    // A lower bound between turns, not a period: a poke may run one sooner.
+    // Periodic fallback interval; pokes run a turn sooner.
     static constexpr TDuration Cadence = TDuration::Seconds(5);
 
     void ScheduleWakeup(const TActorContext& ctx) {
@@ -40,8 +40,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TThis::StateWork);
-        // The tablet has only recorded the request: the first turn launches the session.
-        ctx.Send(ctx.SelfID, new TEvPrivate::TEvMoveDataPoke());
+        // The tablet pokes after registering; this is the periodic fallback.
         ScheduleWakeup(ctx);
     }
 

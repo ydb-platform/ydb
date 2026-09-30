@@ -22,9 +22,9 @@ class WorkloadMoveData(WorkloadBase):
     """
 
     # settle_time: a decommission is not instant; grow back too early and it is cancelled.
-    def __init__(self, client, prefix, stop, endpoint, database, settle_time=30, converge_timeout=300):
+    def __init__(self, client, prefix, stop, endpoint, settle_time=30, converge_timeout=300):
         super().__init__(client, prefix, "move_data", stop)
-        self.database = database
+        self.database = client.database
         self.settle_time = settle_time
         self.converge_timeout = converge_timeout
         # kikimr_client_factory speaks plaintext message bus, so on grpcs:// only this workload stands down.
@@ -124,10 +124,7 @@ class WorkloadMoveData(WorkloadBase):
         logger.info("move_data: shrunk pool to %s units, letting the move run", target)
 
         # The move runs while the pool is small; the other workloads keep writing.
-        waited = 0
-        while waited < self.settle_time and not self.is_stop_requested():
-            time.sleep(1)
-            waited += 1
+        self.stop.wait(self.settle_time)
 
         target = self.unit_count + 1
         self._alter_units(1)
@@ -143,10 +140,10 @@ class WorkloadMoveData(WorkloadBase):
             try:
                 self._cycle()
             except Exception as e:
-                # A rejected alter (BSC busy) is expected under load; only a fatal state stops us.
+                # Every failed cycle is counted and retried after a pause; a rejected alter under load is the usual case.
                 self.errors += 1
                 logger.warning("move_data: cycle failed: %s", e)
-                time.sleep(5)
+                self.stop.wait(5)
         self._settle_on_stop()
 
     def _settle_on_stop(self):

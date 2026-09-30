@@ -31,8 +31,8 @@ class TestOlapWorkloadMoveData(StressFixture):
             },
         )
 
-    # Hive counts every TEvMoveDataResponse it gets back; a ColumnShard answers only after its blobs left the group.
-    def _moves_answered(self):
+    # A ColumnShard bumps this only when its gate passed: its portion data left the target groups and it answered Success.
+    def _column_shard_moves_finished(self):
         total = 0
         for node in list(self.cluster.nodes.values()) + list(self.cluster.slots.values()):
             try:
@@ -40,7 +40,7 @@ class TestOlapWorkloadMoveData(StressFixture):
             except Exception:
                 continue
             for sensor in data.get("sensors", []):
-                if sensor.get("labels", {}).get("sensor") == "Hive/ShrinkMoveDataAnswered":
+                if sensor.get("labels", {}).get("sensor") == "Deriviative/MoveData/Finished/Count":
                     total += int(sensor.get("value", 0))
         return total
 
@@ -57,4 +57,4 @@ class TestOlapWorkloadMoveData(StressFixture):
                     "--duration", self.base_duration,
                 ]
             )
-            assert self._moves_answered() > 0, "the workload ran but no ColumnShard answered a MoveData request"
+            assert self._column_shard_moves_finished() > 0, "the workload ran but no ColumnShard completed a move"

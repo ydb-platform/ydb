@@ -353,7 +353,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void CheckMoveDataGate(const TActorContext& ctx);
     // Driver-side: stops and starts the actualizer for the current target set, clearing TargetsChanged.
     void RestartMoveDataActualizer();
-    bool SetupMoveDataRewrites();
+    void SetupMoveDataRewrites();
     void StartMoveDataDriver(const TActorContext& ctx);
     void StopMoveDataDriver(const TActorContext& ctx);
 

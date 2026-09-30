@@ -89,7 +89,8 @@ public:
 
     static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);
 
-    void Refresh(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
+    // Once, right after construction: a new target set gets a new actualizer.
+    void Seed(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
 
     TMoveDataActualizer(const THashSet<ui32>& targetGroups, const TVersionedIndex& versionedIndex)
         : TargetGroups(targetGroups)

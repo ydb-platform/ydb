@@ -261,18 +261,9 @@ TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
         .Rejected = RejectedPortions };
 }
 
-void TMoveDataActualizer::Refresh(
+void TMoveDataActualizer::Seed(
     const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) {
-    InitialPortionIds.clear();
-    PendingPortionIds.clear();
-    PortionsToMove.clear();
-    PortionAddress.clear();
-    InFlightPortionIds.clear();
-    RequestedAt.clear();
-    UncommittedPortionIds.clear();
-    UncommittedOnTarget.clear();
-    RejectedPortions = 0;
-
+    AFL_VERIFY(InitialPortionIds.empty() && PendingPortionIds.empty());
     for (auto& [portionId, portion] : externalContext.GetPortions()) {
         if (!HasEntityInDefaultStorage(*portion, VersionedIndex)) {
             continue;

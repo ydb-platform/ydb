@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
         TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, schema.Index);
         const TInstant start = TInstant::Seconds(1000);
-        actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, {}), {});
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, {}), {});
 
         actualizer.AddToInitialAndPendingForTest(PortionId);
         actualizer.ConfirmPortionForTest(PortionId);
@@ -310,21 +310,12 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({ inTarget }, {}), "an empty target set selects nothing");
     }
 
-    Y_UNIT_TEST(FreezeCleanupWatermarkRaisesToRunningOldest) {
-        using NOlap::NActualizer::FreezeCleanupWatermark;
-        const TInstant kT = TInstant::Seconds(100);
-        UNIT_ASSERT_VALUES_EQUAL_C(FreezeCleanupWatermark(kT, std::nullopt), kT, "no running cleanup: the pending boundary stands");
-        UNIT_ASSERT_VALUES_EQUAL_C(FreezeCleanupWatermark(kT - TDuration::Seconds(1), kT), kT, "a running cleanup newer than pending raises it");
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            FreezeCleanupWatermark(kT, kT - TDuration::Seconds(1)), kT, "a running cleanup older than pending does not lower it");
-    }
-
     // Live groups are rejected, so a portion created after the session started cannot hold a target blob.
     Y_UNIT_TEST(PortionCreatedAfterTheSessionStartedIsNotAdopted) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
         TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, schema.Index);
         const TInstant start = TInstant::Seconds(1000);
-        actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, {}), {});
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, {}), {});
 
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
         actualizer.AddPortion(MakeDefaultTierPortion(1), NOlap::NActualizer::TAddExternalContext(start + TDuration::Minutes(1), noPortions));
@@ -339,7 +330,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         const TInstant start = TInstant::Seconds(1000);
         const auto portion = MakeDefaultTierPortion(1);
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
-        actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});
         UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(1), "a default-tier portion must be admitted at session start");
 
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
@@ -492,7 +483,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             TActualizerSchema schema(MakeMaxIndexInfo(false));
             TMoveDataActualizerTestable actualizer(targetGroups, schema.Index);
             const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 1, MakeTieredPortion(1, "tier1", schema.GetIndexInfo()) } };
-            actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
+            actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(1), "tiered portion with its index in BlobStorage must be admitted");
         }
 
@@ -501,7 +492,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             TActualizerSchema schema(MakeMaxIndexInfo(true));
             TMoveDataActualizerTestable actualizer(targetGroups, schema.Index);
             const THashMap<ui64, NOlap::TPortionInfo::TPtr> portions = { { 2, MakeTieredPortion(2, "tier1", schema.GetIndexInfo()) } };
-            actualizer.Refresh(NOlap::NActualizer::TAddExternalContext(start, portions), {});
+            actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), {});
             UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(2), "tiered portion with every entity in tier storage must be skipped");
         }
     }
@@ -552,6 +543,122 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             MakeTieredPortion(PortionId, "tier1", schema.GetIndexInfo()), NOlap::NActualizer::TAddExternalContext(start, noPortions));
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0,
             "a returned portion that stopped qualifying must leave the queues, otherwise MoveDataResponse is never sent");
+    }
+
+    // Recovered barriers and queues only; the keep list is sized to hit the per-task GC limit.
+    class TRecoveredGcDb: public NOlap::IBlobManagerDb {
+    public:
+        TGenStep Last;
+        TGenStep Prepared;
+        std::vector<NOlap::TUnifiedBlobId> Keeps;
+
+        bool LoadGCBarrierPreparation(TGenStep& genStep) override {
+            genStep = Prepared;
+            return true;
+        }
+
+        void SaveGCBarrierPreparation(const TGenStep&) override {
+        }
+
+        bool LoadLastGcBarrier(TGenStep& genStep) override {
+            genStep = Last;
+            return true;
+        }
+
+        void SaveLastGcBarrier(const TGenStep&) override {
+        }
+
+        bool LoadLists(std::vector<NOlap::TUnifiedBlobId>& blobsToKeep, NOlap::TTabletsByBlob&, const NOlap::IBlobGroupSelector*,
+            const NOlap::TTabletId) override {
+            blobsToKeep = Keeps;
+            return true;
+        }
+
+        void AddBlobToKeep(const NOlap::TUnifiedBlobId&) override {
+        }
+
+        void EraseBlobToKeep(const NOlap::TUnifiedBlobId&) override {
+        }
+
+        void AddBlobToDelete(const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
+        }
+
+        void EraseBlobToDelete(const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
+        }
+
+        bool LoadTierLists(const TString&, NOlap::TTabletsByBlob&, std::deque<NOlap::TUnifiedBlobId>&, const NOlap::TTabletId) override {
+            return true;
+        }
+
+        void AddTierBlobToDelete(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
+        }
+
+        void RemoveTierBlobToDelete(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
+        }
+
+        void AddTierDraftBlobId(const TString&, const NOlap::TUnifiedBlobId&) override {
+        }
+
+        void RemoveTierDraftBlobId(const TString&, const NOlap::TUnifiedBlobId&) override {
+        }
+
+        void AddBlobSharing(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
+        }
+
+        void RemoveBlobSharing(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
+        }
+
+        void AddBorrowedBlob(const TString&, const NOlap::TUnifiedBlobId&, const NOlap::TTabletId) override {
+        }
+
+        void RemoveBorrowedBlob(const TString&, const NOlap::TUnifiedBlobId&) override {
+        }
+    };
+
+    // A barrier recovered from an older generation proves nothing about this one: the all-history broadcast must repeat until one of this generation went out.
+    Y_UNIT_TEST(FirstGCBroadcastRepeatsUntilABarrierOfThisGenerationGoesOut) {
+        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 TabletId = 47;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 NewGroup = 200;
+        static constexpr ui32 ReassignGen = 5;
+        static constexpr ui32 TabletGen = 7;
+        static constexpr ui32 DataChannel = 2;
+        // One more than the per-task keep limit, so the first task cannot advance past the recovered barrier.
+        static constexpr ui32 KeepCount = 500001;
+
+        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
+        auto mgr = std::make_shared<NOlap::TBlobManager>(tabletInfo, TabletGen, NOlap::TTabletId(TabletId));
+        TRecoveredGcDb db;
+        db.Last = TGenStep(4, 0);
+        db.Prepared = TGenStep(4, 1);
+        for (ui32 i = 0; i < KeepCount; ++i) {
+            db.Keeps.push_back(MakeDsBlobId(NewGroup, TabletId, ReassignGen, 1 + i / 1000, DataChannel));
+            db.Keeps.back() = NOlap::TUnifiedBlobId(NewGroup, TLogoBlobID(TabletId, ReassignGen, 1 + i / 1000, DataChannel, BlobSize, i % 1000));
+        }
+        UNIT_ASSERT(mgr->LoadState(db, NOlap::TTabletId(TabletId)));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        NOlap::NBlobOperations::TStorageCounters storageCounters(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        auto counters = storageCounters.GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
+        const NOlap::NBlobOperations::NBlobStorage::TBlobAddress oldGroupAddress(OldGroup, DataChannel);
+
+        auto first = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
+        UNIT_ASSERT_C(first, "the recovered barrier must produce a task");
+        UNIT_ASSERT_C(first->GetListsByGroupId().contains(oldGroupAddress), "the first task broadcasts to every historical group");
+        mgr->OnGCStartOnComplete(TGenStep(4, 1));
+        mgr->OnGCFinishedOnComplete(TGenStep(4, 1));
+        UNIT_ASSERT_C(!mgr->HasCollectedBeforeCurrentGeneration(), "a barrier from generation 4 must not count for generation 7");
+
+        auto second = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
+        UNIT_ASSERT_C(second, "the remaining keep entry must produce a task");
+        UNIT_ASSERT_C(second->GetListsByGroupId().contains(oldGroupAddress),
+            "the barrier of this generation must reach the historical group, or an orphan written before the crash stays behind the gate");
+        mgr->OnGCStartOnComplete(TGenStep(TabletGen, 0));
+        mgr->OnGCFinishedOnComplete(TGenStep(TabletGen, 0));
+        UNIT_ASSERT(mgr->HasCollectedBeforeCurrentGeneration());
     }
 
 }   // Y_UNIT_TEST_SUITE

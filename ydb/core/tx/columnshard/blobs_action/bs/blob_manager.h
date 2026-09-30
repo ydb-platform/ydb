@@ -184,7 +184,7 @@ public:
     // Scans the pending keep/delete queues, not live portions.
     bool HasBlobsForGroups(const THashSet<ui32>& groups) const;
 
-    // True once the first GC round of this incarnation committed a barrier covering every earlier generation.
+    // True once a barrier from this generation was broadcast to every historical group and committed.
     bool HasCollectedBeforeCurrentGeneration() const {
         return LastCollectedGenStep >= TGenStep(CurrentGen, 0);
     }

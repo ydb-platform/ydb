@@ -44,8 +44,8 @@ public:
     TGranuleActualizationIndex(
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
-    void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext,
-        const EActualizationScope scope = EActualizationScope::All) const;
+    void ExtractActualizationTasks(
+        TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, const EActualizationScope scope) const;
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);

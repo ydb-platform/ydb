@@ -1122,7 +1122,7 @@ class TJsonNodes : public TViewerPipeClient {
             "with",
         };
 
-        // Resricted query parameters
+        // Restricted query parameters
         for (TStringBuf forbiddenParam : ForbiddenQueryParams) {
             if (Params.Has(forbiddenParam)) {
                 DenyStrictDatabaseOnlyQueryParam(forbiddenParam,
@@ -3642,7 +3642,7 @@ public:
                 if ((FieldsAvailable.test(+ENodeFields::NodeInfo) || FieldsAvailable.test(+ENodeFields::SystemState)) && (FieldsRequested & FieldsSystemState).any()) {
                     *jsonNode.MutableSystemState() = std::move(node->SystemState);
                     if (IsStrictDatabaseOnlyRequest()) {
-                        // all_whiteboard_fields can include a peer outside the database.
+                        // Hide identities of peers outside the database; metadata of its own nodes remains visible.
                         jsonNode.MutableSystemState()->ClearMaxClockSkewPeerId();
                     }
                 }

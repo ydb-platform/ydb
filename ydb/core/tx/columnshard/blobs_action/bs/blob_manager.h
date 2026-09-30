@@ -145,8 +145,8 @@ private:
     const ui32 CurrentGen;
     ui32 CurrentStep;
     std::optional<TGenStep> CollectGenStepInFlight;
-    // Blobs handed to the task are in no queue below until it commits.
-    bool GCTaskInFlight = false;
+    // Groups the in-flight task sends requests to: its blobs are in no queue below until it commits.
+    THashSet<ui32> GCTaskInFlightGroups;
     // Lists of blobs that need Keep flag to be set
     TBlobsByGenStep BlobsToKeep;
     // Lists of blobs that need DoNotKeep flag to be set

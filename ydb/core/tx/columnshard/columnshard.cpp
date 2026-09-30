@@ -57,6 +57,8 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     for (auto&& i : ActorsToStop) {
         ctx.Send(i, new TEvents::TEvPoisonPill);
     }
+    // The driver holds a raw pointer to this tablet, so it must not outlive it.
+    StopMoveDataDriver(ctx);
 
     StoragesManager->Stop();
     DataLocksManager->Stop();

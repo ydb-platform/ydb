@@ -35,6 +35,8 @@ class WorkloadMoveData(WorkloadBase):
         self.kikimr_client = kikimr_client_factory(host, port or "2135")
         self.unit_kind = None
         self.unit_count = 0
+        # The size every cycle returns to and the cleanup restores; set once the pool is ready.
+        self.initial_units = 0
         self.shrinks = 0
         self.grows = 0
         self.errors = 0
@@ -88,9 +90,27 @@ class WorkloadMoveData(WorkloadBase):
             if not self._wait_units(2):
                 logger.warning("move_data: pool did not reach 2 units, workload disabled")
                 return False
+        self.initial_units = self.unit_count
         return True
 
+    def _restore_units(self, timeout=None):
+        # A rejected grow leaves the pool small; a shrink must never start from that state.
+        if self.unit_count >= self.initial_units:
+            return True
+        self._alter_units(self.initial_units - self.unit_count)
+        saved = self.converge_timeout
+        if timeout is not None:
+            self.converge_timeout = timeout
+        try:
+            return self._wait_units(self.initial_units)
+        finally:
+            self.converge_timeout = saved
+
     def _cycle(self):
+        if not self._restore_units():
+            if self.is_stop_requested():
+                return
+            raise RuntimeError(f"pool did not grow back to {self.initial_units} units within {self.converge_timeout}s")
         target = self.unit_count - 1
         self._alter_units(-1)
         if not self._wait_units(target):
@@ -127,15 +147,16 @@ class WorkloadMoveData(WorkloadBase):
         self._settle_on_stop()
 
     def _settle_on_stop(self):
-        # Best-effort: a stop can land mid-cycle; the cleanup retry is the real backstop.
+        # Best-effort on a mid-cycle stop; polls itself because _wait_units gives up once stop is requested.
         try:
             units = self._storage_units()
-            if units is not None and units.count < 2:
-                self._alter_units(2 - units.count)
+            if units is not None and units.count < self.initial_units:
+                self._alter_units(self.initial_units - units.count)
             deadline = time.time() + 30
             while time.time() < deadline:
                 current = self._storage_units()
-                if current is not None and current.count >= 2:
+                if current is not None and current.count >= self.initial_units:
+                    self.unit_count = current.count
                     break
                 time.sleep(1)
         except Exception as e:

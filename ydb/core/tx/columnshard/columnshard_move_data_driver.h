@@ -17,7 +17,7 @@ class TColumnShard;
 // this is not CPU offload: the heavy passes still run on the tablet's thread.
 class TMoveDataDriver: public TActorBootstrapped<TMoveDataDriver> {
 private:
-    TColumnShard* Self;
+    TColumnShard* Self;   // Raw: the tablet poisons the driver from CleanupActors before it dies.
     // A lower bound between gate checks, not a period: a poke may check sooner.
     static constexpr TDuration Cadence = TDuration::Seconds(5);
 

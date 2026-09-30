@@ -179,6 +179,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         auto task = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
         UNIT_ASSERT_C(task, "a queued delete must produce a GC task");
         UNIT_ASSERT_C(mgr->HasBlobsForGroups({ OldGroup }), "the gate must stay closed while a delete-only GC task is in flight");
+        UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ NewGroup }), "a task that touches only the old group must not hold a move out of the new one");
 
         mgr->OnGCFinishedOnComplete(std::nullopt);
         UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ OldGroup }), "the gate must open once the task commits");

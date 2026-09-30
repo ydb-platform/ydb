@@ -302,7 +302,6 @@ private:
         TGroupCheckInfo& info = it->second;
         const bool requestWasPending = std::exchange(info.RequestPending, false);
 
-        TInstant now = TActivationContext::Now();
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
             if (!requestWasPending) {
@@ -344,7 +343,7 @@ private:
                     Send(*info.WorkerId, new TEvents::TEvPoisonPill);
                 }
             } else if (requestWasPending) {
-                ScheduleRetry(groupId, info, now);
+                ScheduleRetry(groupId, info);
             }
             break;
         default:
@@ -406,7 +405,7 @@ private:
             info.CancellationPending = false;
             ++*WorkersTerminated;
             if (!info.DeleteAfterWorker) {
-                ScheduleRetry(groupId, info, now);
+                ScheduleRetry(groupId, info);
             }
             break;
         }
@@ -501,7 +500,7 @@ private:
             return;
         }
 
-        const TInstant now = TActivationContext::Now();
+        const TMonotonic now = TActivationContext::Monotonic();
         while (!OutgoingRequests.empty() && OutgoingRequests.begin()->first <= now) {
             const TGroupId groupId = OutgoingRequests.begin()->second;
             OutgoingRequests.erase(OutgoingRequests.begin());
@@ -598,11 +597,11 @@ private:
         }
     }
 
-    void ScheduleRetry(TGroupId groupId, TGroupCheckInfo& info, TInstant now) {
+    void ScheduleRetry(TGroupId groupId, TGroupCheckInfo& info) {
         if (CheckPeriodicity == TDuration::Zero()) {
             return;
         }
-        OutgoingRequests.emplace(now + info.RetryDelay, groupId);
+        OutgoingRequests.emplace(TActivationContext::Monotonic() + info.RetryDelay, groupId);
         info.RetryDelay = TDuration::MicroSeconds(Min<ui64>(
                 info.RetryDelay.MicroSeconds() * 2, MaxRetryDelay.MicroSeconds()));
     }
@@ -612,7 +611,7 @@ private:
 
     std::unordered_map<TGroupId, TGroupCheckInfo> Groups;
     std::multimap<TInstant, TGroupId> CheckOrder;
-    std::multimap<TInstant, TGroupId> OutgoingRequests;
+    std::multimap<TMonotonic, TGroupId> OutgoingRequests;
 
     TDuration CheckPeriodicity = TDuration::Days(30);
 

@@ -124,20 +124,22 @@ void TBlobStorageController::UpdateBlobCheckerState() {
         return;
     }
 
-    TMonotonic now = TActivationContext::Monotonic();
-    if (now >= NextAllowedBlobCheckerTimestamp) {
-        NextAllowedBlobCheckerTimestamp = BlobCheckerPlanner->GetNextAllowedCheckTimestamp(now);
+    const TMonotonic now = TActivationContext::Monotonic();
+    if (now < NextAllowedBlobCheckerTimestamp) {
+        return;
+    }
 
-        const std::optional<TGroupId> groupToScan = BlobCheckerPlanner->ObtainNextGroupToCheck();
-        if (groupToScan) {
-            if (ScrubState.IsGroupScrubbed(*groupToScan)) {
-                DequeueCheckForGroup(*groupToScan, /*notifyOrchestrator=*/true);
-                return;
-            }
-            ScrubState.SetBlobCheckerInProgress(*groupToScan, true);
-            Send(BlobCheckerOrchestratorId,
-                    new TEvBlobCheckerDecision(*groupToScan, NKikimrProto::OK));
+    while (const std::optional<TGroupId> groupToScan = BlobCheckerPlanner->ObtainNextGroupToCheck()) {
+        if (ScrubState.IsGroupScrubbed(*groupToScan)) {
+            DequeueCheckForGroup(*groupToScan, /*notifyOrchestrator=*/true);
+            continue;
         }
+
+        NextAllowedBlobCheckerTimestamp = BlobCheckerPlanner->GetNextAllowedCheckTimestamp(now);
+        ScrubState.SetBlobCheckerInProgress(*groupToScan, true);
+        Send(BlobCheckerOrchestratorId,
+                new TEvBlobCheckerDecision(*groupToScan, NKikimrProto::OK));
+        break;
     }
 }
 
@@ -150,39 +152,30 @@ void TBlobStorageController::UpdateBlobCheckerSettings(TDuration periodicity) {
         return;
     }
 
-    bool wasEnabled = IsBlobCheckerEnabled();
     BlobCheckerPeriodicity = periodicity;
     if (!BlobCheckerPlanner) {
         // TxLoadEverything will initialize the planner and orchestrator from this value.
         return;
     }
-    if (!wasEnabled) {
-        if (IsBlobCheckerEnabled()) {
-            BlobCheckerPlanner->SetPeriodicity(BlobCheckerPeriodicity);
-            NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
-            if (BlobCheckerOrchestratorId) {
-                Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateSettings(periodicity));
-            } else {
-                InitializeBlobCheckerOrchestratorActor();
-            }
-        } else {
-            return;
-        }
-    } else {
-        if (IsBlobCheckerEnabled()) {
-            BlobCheckerPlanner->SetPeriodicity(BlobCheckerPeriodicity);
-            NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+
+    if (IsBlobCheckerEnabled()) {
+        BlobCheckerPlanner->SetPeriodicity(BlobCheckerPeriodicity);
+        NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+        if (BlobCheckerOrchestratorId) {
             Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateSettings(periodicity));
         } else {
-            STLOG(PRI_NOTICE, BS_CONTROLLER, BSC51, "Suspending BlobCheckerOrchestrator actor");
-            // Retain group/node locks until active workers acknowledge cancellation,
-            // but do not count the disabled interval as pacing debt on re-enable.
-            BlobCheckerPlanner->ResetPacing();
-            NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
-            if (BlobCheckerOrchestratorId) {
-                Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateSettings(periodicity));
-            }
+            InitializeBlobCheckerOrchestratorActor();
         }
+        return;
+    }
+
+    STLOG(PRI_NOTICE, BS_CONTROLLER, BSC51, "Suspending BlobCheckerOrchestrator actor");
+    // Retain group/node locks until active workers acknowledge cancellation,
+    // but do not count the disabled interval as pacing debt on re-enable.
+    BlobCheckerPlanner->ResetPacing();
+    NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+    if (BlobCheckerOrchestratorId) {
+        Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateSettings(periodicity));
     }
 }
 

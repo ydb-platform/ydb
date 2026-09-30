@@ -30,9 +30,6 @@
 // cut intervals and may change between Executes. Callers must keep committed
 // decisions: retain a selected unit's bounds until fully read, carry cursor
 // inclusivity, never redraw.
-//
-// Unit iteration uses index pages and memtable keys. SplitPoints estimates
-// main-group I/O and suggests smaller ranges when budgets are exceeded.
 
 #include "flat_part_slice.h"
 #include "flat_row_eggs.h"
@@ -44,21 +41,8 @@
 #include <util/generic/vector.h>
 #include <util/system/types.h>
 
-#include <memory>
-#include <optional>
-
 namespace NKikimr {
 namespace NTable {
-
-    enum class EBoundarySide : ui8 {
-        Before = 0, // key belongs to the following unit
-        After = 1,  // key belongs to the preceding unit
-    };
-
-    struct TKeyBoundary {
-        TSerializedCellVec Key; // empty: Before = -inf, After = +inf
-        EBoundarySide Side = EBoundarySide::After;
-    };
 
     struct TKeyBlock {
         TBounds Bounds;
@@ -84,10 +68,8 @@ namespace NTable {
         ui64 UnitsMemtable = 0;
         // The counters below are not cleared by Seek.
         ui64 OwnerRowsPerUnitMax = 0;
-        // Unique main-group bytes, classified on first encounter.
-        // Includes SplitPoints and pages probed to detect the range end.
+        // Unique owner main-group bytes encountered during unit discovery.
         ui64 OwnerMainGroupBytes = 0;
-        ui64 OtherMainGroupBytes = 0;
         ui64 IndexPagesTouched = 0; // unique pages over the iterator's lifetime
         // Memtable keys examined while locating units.
         ui64 MemtableKeysVisited = 0;
@@ -95,44 +77,6 @@ namespace NTable {
         ui32 Parts = 0;
         ui32 Memtables = 0;
         ui32 Slices = 0;
-    };
-
-    // Unfinished piece and index-page budget.
-    struct TSplitContinuation {
-    private:
-        friend class TKeyBlockIterator;
-        struct TState;
-        std::shared_ptr<const TState> State;
-    };
-
-    struct TSplitRequest {
-        // End must not precede the current position; equal positions give an empty result.
-        TSerializedCellVec EndKey; // empty = +inf; missing suffix cells = +inf
-        bool EndInclusive = false;
-        double Rate = 1.0; // independent unit selection probability; finite, (0, 1]
-        // Zero is a strict limit for both budgets.
-        ui64 MaxExpectedBytes = 0; // conservative expected main-group bytes per piece
-        // Unique index pages across the range and its continuations, including
-        // cache hits; Max<ui64>() = unlimited.
-        ui64 MaxIndexPages = 0;
-        // Maximum units examined per call; 0 = unlimited.
-        ui64 MaxUnitsPerCall = 0;
-        // From a Paused result; owns the continuation state.
-        // Only MaxUnitsPerCall may change on resume.
-        std::optional<TSplitContinuation> Continuation;
-        // Optional selected interval, clipped and charged at rate 1; valid during the call.
-        const TBounds* Certain = nullptr;
-    };
-
-    struct TSplitResult {
-        TVector<TKeyBoundary> Keys; // sorted interior unit boundaries
-        bool Truncated = false; // index budget reached; tail remains unchecked
-        // MaxUnitsPerCall reached; ResumeAt and Continuation are valid.
-        bool Paused = false;
-        TKeyBoundary ResumeAt;
-        TSplitContinuation Continuation;
-        // Continuation no longer matches; Keys is empty.
-        bool Stale = false;
     };
 
     class TKeyBlockIterator {
@@ -175,16 +119,8 @@ namespace NTable {
         // Full current unit, even after a seek into its middle; requires IsValid().
         const TKeyBlock& Get() const;
 
-        // Walks from the last Seek/Next position to EndKey; requires IsValid().
-        // Preserves the read cursor. On Page, out is unchanged; the next call starts over.
-        // Single units are exempt from both budgets; a truncated tail needs another walk.
-        // On Paused, Seek(ResumeAt) and pass Continuation to the next call.
-        // Without Continuation, piece and index-page accounting start fresh.
-        // On Stale, restart the original range without Continuation.
-        EReady SplitPoints(const TSplitRequest& request, TSplitResult& out);
-
         TKeyBlocksTelemetry Telemetry() const;
-        // Cold parts are omitted from unit boundaries and byte estimates.
+        // Cold parts are omitted from unit boundaries.
         bool HasColdParts() const;
 
     private:

@@ -1,6 +1,7 @@
 #include "nbs2_maintenance_helpers.h"
 
 #include <ydb/core/cms/cms_ut_common.h>
+#include <ydb/core/cms/walle.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <util/generic/algorithm.h>
@@ -591,9 +592,18 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
                 outcome == EOutcome::Allow ? TStatus::ALLOW_PARTIAL : PermissionStatus(outcome));
             const size_t granted = outcome == EOutcome::Allow ? 1 : 0;
             UNIT_ASSERT_VALUES_EQUAL(response.PermissionsSize(), granted);
-            UNIT_ASSERT(!response.GetRequestId().empty());
             fixture.Permissions(granted);
 
+            // Neither DENY nor a transport error triggers checks of subsets.
+            fixture.Drain();
+            UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+            if (outcome == EOutcome::Timeout) {
+                UNIT_ASSERT(response.GetRequestId().empty());
+                fixture.Env.CheckListRequests(fixture.User, 0);
+                continue;
+            }
+
+            UNIT_ASSERT(!response.GetRequestId().empty());
             const auto pending = fixture.GetRequest(response.GetRequestId());
             UNIT_ASSERT_VALUES_EQUAL(pending.RequestsSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(pending.GetRequests(0).ActionsSize(), 3 - granted);
@@ -617,9 +627,6 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
             if (outcome == EOutcome::Deny) {
                 UNIT_ASSERT_C(response.GetStatus().GetReason().Contains("101"), response.ShortDebugString());
             }
-            // Neither DENY nor a transport error triggers checks of subsets.
-            fixture.Drain();
-            UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
         }
 
         {
@@ -864,6 +871,69 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         UNIT_ASSERT_VALUES_EQUAL(legacy.PermissionsSize(), 1);
         fixture.Permissions(2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 9);
+    }
+
+    Y_UNIT_TEST(WalleCreateTaskTimeoutAndRetry) {
+        TCmsFixture fixture(0);
+        // Cleanup must not hide requests orphaned by a failed creation.
+        auto cleanupObserver = fixture.Env.AddObserver<NCms::TCms::TEvPrivate::TEvCleanupWalle>(
+            [](auto& ev) { ev.Reset(); });
+        const TString taskId = "nbs2-walle-retry";
+        const auto nodeId = fixture.Env.GetNodeId(10);
+        const auto create = [&] {
+            return fixture.Send(MakeWalleCreateRequest(taskId, "reboot", false, nodeId).Release(), 0);
+        };
+
+        for (size_t count = 1; count <= 2; ++count) {
+            const auto client = create();
+            const auto attempt = fixture.WaitForCheck(count, client);
+            fixture.CheckNodes(count - 1, {10});
+            fixture.Complete(attempt, EOutcome::Timeout);
+            const auto response = fixture.Response<TEvCms::TEvWalleCreateTaskResponse>(client, TStatus::ERROR_TEMP);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetTaskId(), taskId);
+            UNIT_ASSERT_C(response.GetStatus().GetReason().Contains("timed out"), response.ShortDebugString());
+            fixture.Env.CheckListRequests(NCms::WALLE_CMS_USER, 0);
+            fixture.Env.CheckListPermissions(NCms::WALLE_CMS_USER, 0);
+            fixture.Env.CheckWalleListTasks(0);
+            fixture.Env.CheckWalleCheckTask(taskId, TStatus::WRONG_REQUEST);
+        }
+
+        // A lower-priority check must not include nodes from failed Wall-E requests.
+        auto request = MakePermissionRequest(TRequestOptions(fixture.User, false, true, false), fixture.Shutdown(11));
+        request->Record.SetPriority(NCms::WALLE_DEFAULT_PRIORITY + 1);
+        const auto lowerPriority = fixture.Send(request.Release());
+        const auto lowerPriorityAttempt = fixture.WaitForCheck(3, lowerPriority);
+        fixture.CheckNodes(2, {11});
+        fixture.Complete(lowerPriorityAttempt, EOutcome::Allow);
+        const auto dryRun = fixture.Response<TEvCms::TEvPermissionResponse>(lowerPriority, TStatus::ALLOW);
+        UNIT_ASSERT_VALUES_EQUAL(dryRun.PermissionsSize(), 1);
+        fixture.Permissions(0);
+
+        // Unlike a timeout, DENY must create a task linked to its pending request.
+        const auto retry = create();
+        const auto denied = fixture.WaitForCheck(4, retry);
+        fixture.CheckNodes(3, {10});
+        fixture.Complete(denied, EOutcome::Deny);
+        const auto pending = fixture.Response<TEvCms::TEvWalleCreateTaskResponse>(retry, TStatus::DISALLOW_TEMP);
+        UNIT_ASSERT_VALUES_EQUAL(pending.GetTaskId(), taskId);
+        fixture.Env.CheckListRequests(NCms::WALLE_CMS_USER, 1);
+        fixture.Env.CheckListPermissions(NCms::WALLE_CMS_USER, 0);
+        fixture.Env.CheckWalleListTasks(taskId, "in-process", nodeId);
+
+        auto check = MakeHolder<TEvCms::TEvWalleCheckTaskRequest>();
+        check->Record.SetTaskId(taskId);
+        const auto refresh = fixture.Send(check.Release(), 0);
+        const auto allowed = fixture.WaitForCheck(5, refresh);
+        fixture.CheckNodes(4, {10});
+        fixture.Complete(allowed, EOutcome::Allow);
+        fixture.Response<TEvCms::TEvWalleCheckTaskResponse>(refresh, TStatus::ALLOW);
+        fixture.Env.CheckListRequests(NCms::WALLE_CMS_USER, 0);
+        const auto permissions = fixture.Env.CheckListPermissions(NCms::WALLE_CMS_USER, 1);
+        UNIT_ASSERT_VALUES_EQUAL(permissions.GetPermissions(0).GetAction().GetHost(), ToString(nodeId));
+        fixture.Env.CheckWalleListTasks(taskId, "ok", nodeId);
+        fixture.Env.CheckWalleCheckTask(taskId, TStatus::ALLOW, nodeId);
+        fixture.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 5);
     }
 
     Y_UNIT_TEST(CreateMaintenanceTaskTimeoutAndRetry) {

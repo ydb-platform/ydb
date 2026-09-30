@@ -647,18 +647,12 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
         const auto& error = result.GetError();
         if (error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
-<<<<<<< HEAD
-            auto request = Aws::S3::Model::HeadObjectRequest()
-                .WithKey(Settings.GetDataKey(DataFormat, CompressionCodec));
-            this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
-=======
             CurrentObjectKey = Settings.GetDataKey(DataFormat, CompressionCodec);
             // ListObjects orders prefix matches lexicographically, so the exact key, if present, is first.
             auto request = Aws::S3::Model::ListObjectsRequest()
                 .WithPrefix(GetObjectKeyForListing())
                 .WithMaxKeys(1);
             this->Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
->>>>>>> c4a04dcfd71 (Export NO_SUCH_UPLOAD  check: HeadObject -> ListObjects (#54325))
             return this->Become(&TThis::StateCheckUploadedData);
         }
 
@@ -704,12 +698,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         const auto& error = result.GetError();
-<<<<<<< HEAD
-=======
+
         YDB_LOG_ERROR("[Export] ListObjects request failed",
             {"key", CurrentObjectKey},
             {"error", error});
->>>>>>> c4a04dcfd71 (Export NO_SUCH_UPLOAD  check: HeadObject -> ListObjects (#54325))
+
         if (CanRetry(error)) {
             UploadId.Clear();
             Retry();

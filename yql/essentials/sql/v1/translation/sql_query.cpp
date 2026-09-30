@@ -357,7 +357,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             };
 
             TNodePtr node;
-            if (IsOnlySelect(stmt) && !selectKind.GetRule_select_kind1().GetBlock2().HasAlt3()) {
+            if (Mode_ == NSQLTranslation::ESqlMode::SUBQUERY ||
+                (IsOnlySelect(stmt) && !selectKind.GetRule_select_kind1().GetBlock2().HasAlt3()))
+            {
                 node = buildLegacy(stmt);
             } else {
                 node = YqlSelectOrLegacy(

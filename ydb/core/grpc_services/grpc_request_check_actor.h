@@ -761,12 +761,14 @@ private:
             return {EConnectRightVerdict::Allowed, "user is an admin"};
         }
 
-        // The user-level connect right cannot limit node registration: registration is a
-        // cluster-wide system action (via the discovery service), not a per-database/tenant
-        // one. Requiring here the root database as a cluster alias would add no value and
-        // introduce technical issues.
-        if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
-            return {EConnectRightVerdict::Allowed, "user is a special subject for node registration"};
+        if constexpr (IsGrpcRequest) {
+            // The user-level connect right cannot limit node registration: registration is a
+            // cluster-wide system action (via the discovery service), not a per-database/tenant
+            // one. Requiring here the root database as a cluster alias would add no value and
+            // introduce technical issues.
+            if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
+                return {EConnectRightVerdict::Allowed, "user is a special subject for node registration"};
+            }
         }
 
         if (!SecurityObject_->CheckAccess(NACLib::ConnectDatabase, *parsedToken)) {

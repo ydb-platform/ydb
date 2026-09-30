@@ -377,8 +377,7 @@ void ConfigureSecurityConfig(TTestActorRuntime* runtime) {
     securityConfig.AddMonitoringAllowedSIDs(TString{MonitoringOnlySid});
     securityConfig.AddAdministrationAllowedSIDs(TString{AdminOnlySid});
     runtime->GetAppData().AdministrationAllowedSIDs = {TString{AdminOnlySid}};
-    // The list must be non-empty: an empty one is treated as allowing node registration to
-    // everyone, which would make every user exempt from the connect right check.
+    // Keep node registration permissions separate from database access permissions.
     securityConfig.AddRegisterDynamicNodeAllowedSIDs(TString{NodeRegistrationSid});
     runtime->GetAppData().RegisterDynamicNodeAllowedSIDs = {TString{NodeRegistrationSid}};
 }
@@ -561,7 +560,7 @@ Y_UNIT_TEST(DedicatedNoConnectRightButSuccess) {
     UNIT_ASSERT_VALUES_EQUAL(after.AccessDeny, before.AccessDeny);
 }
 
-Y_UNIT_TEST(NodeRegistrationSubjectOk) {
+Y_UNIT_TEST(NodeRegistrationSubjectWithoutConnectRight) {
     TTestSetup setup("database-only", "/Root/db", {});
     ConfigureSecurityConfig(setup.GetRuntime());
     setup.GetRuntime()->GetAppData().RegisterDynamicNodeAllowedSIDs = {TString{DatabaseOnlySid}};
@@ -569,7 +568,7 @@ Y_UNIT_TEST(NodeRegistrationSubjectOk) {
     SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
     const auto response = RunHttpAuthCheck(setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
     UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::SUCCESS);
-    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::Ok);
+    UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
 }
 
 Y_UNIT_TEST(NoSecurityObject) {
@@ -685,6 +684,26 @@ Y_UNIT_TEST(DedicatedNoConnectRightUnauthorized) {
     const auto after = ReadDatabaseAccessCounters(setup.GetRuntime());
     UNIT_ASSERT_VALUES_EQUAL(after.HttpAccessDeny - before.HttpAccessDeny, 1);
     UNIT_ASSERT_VALUES_EQUAL(after.AccessDeny, before.AccessDeny);
+}
+
+Y_UNIT_TEST(NodeRegistrationPermissionsDoNotBypassHttpConnectCheck) {
+    for (bool allowEveryone : {false, true}) {
+        TTestSetup setup("database-only", "/Root/db", {});
+        ConfigureSecurityConfig(setup.GetRuntime());
+        auto& appData = setup.GetRuntime()->GetAppData();
+        appData.RegisterDynamicNodeAllowedSIDs.clear();
+        appData.DomainsConfig.MutableSecurityConfig()->ClearRegisterDynamicNodeAllowedSIDs();
+        if (!allowEveryone) {
+            appData.RegisterDynamicNodeAllowedSIDs.emplace_back(DatabaseOnlySid);
+            appData.DomainsConfig.MutableSecurityConfig()->AddRegisterDynamicNodeAllowedSIDs(TString{DatabaseOnlySid});
+        }
+        TSchemeBoardEvents::TDescribeSchemeResult describeSchemeResult;
+        SetupDedicatedSubDomain(describeSchemeResult, "/Root/db");
+        const auto response = RunHttpAuthCheckWithDatabaseAccessEnforce(
+            setup, "/Root/db", describeSchemeResult, MakeSecurityObjectWithoutConnect());
+        UNIT_ASSERT_EQUAL(response.Result->Status, Ydb::StatusIds::UNAUTHORIZED);
+        UNIT_ASSERT_EQUAL(response.Result->DatabaseAccessVerdict, NGRpcService::EHttpDatabaseAccessVerdict::NoConnectRight);
+    }
 }
 
 Y_UNIT_TEST(EmptyDatabaseUnauthorized) {

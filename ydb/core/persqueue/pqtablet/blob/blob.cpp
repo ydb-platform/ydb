@@ -303,12 +303,24 @@ ui32 THead::FindPos(const ui64 offset, const ui16 partNo) const {
         --i;
     }
 
-    if (i == 0) {
-        if (Batches[i].IsGreaterThan(offset, partNo)) {
-            return Max<ui32>();
-        } else {
-            return 0;
+    if (Batches[i].IsGreaterThan(offset, partNo)) {
+        return Max<ui32>();
+    }
+
+    // Parts of one client batch share its starting offset, even when the batch
+    // contains several logical messages. For example, a client batch covering
+    // offsets [100, 105) may have parts 0, 1 and 2 in separate storage batches:
+    //     B0: (100, 0)    B1: (100, 1)    B2: (100, 2)
+    // For a read at (103, 0), the search above stops at B2, but we need B0.
+    // Walk back while the current batch starts after the requested part and
+    // the previous batch still covers the requested offset. OffsetDelta in
+    // its header lets us check this without unpacking the batch.
+    while (i > 0 && Batches[i].GetPartNo() > partNo) {
+        const auto& previous = Batches[i - 1];
+        if (!previous.HasOffsetDelta() || previous.GetOffset() + previous.GetOffsetDelta() <= offset) {
+            break;
         }
+        --i;
     }
 
     return i;

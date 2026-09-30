@@ -94,6 +94,15 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
         AFL_ENSURE(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
         AFL_ENSURE(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
         --it;
+
+        while (
+            (it != DataKeysBody.begin()) &&
+            (it->Key.GetPartNo() > partNo) &&
+            ((std::prev(it)->Key.HasOffsetDelta() && std::prev(it)->Key.GetOffset() + *(std::prev(it)->Key.GetOffsetDelta()) > startOffset))
+        ) {
+            --it;
+        }
+
         AFL_ENSURE(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
         ui32 cnt = 0;
         ui32 sz = 0;
@@ -290,11 +299,18 @@ bool TPartitionBlobEncoder::PositionInBody(ui64 offset, ui32 partNo) const
         const auto& lastKey = DataKeysBody.back().Key;
         if (lastKey.HasOffsetDelta()) {
             pos = std::make_pair(lastKey.GetOffset() + *lastKey.GetOffsetDelta(), 0);
-        } else {
-            pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
+            return required < pos;
         }
-
+        
+        pos = std::make_pair(lastKey.GetOffset() + lastKey.GetCount(), 0);
         return required <= pos;
+    }
+
+    if (Head.PartNo > partNo && !DataKeysBody.empty()) {
+        const auto& lastKey = DataKeysBody.back().Key;
+        if (lastKey.HasOffsetDelta()) {
+            return offset < lastKey.GetOffset() + *lastKey.GetOffsetDelta();
+        }
     }
 
     return (offset < Head.Offset) || ((Head.Offset == offset) && (partNo < Head.PartNo));

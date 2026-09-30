@@ -653,13 +653,17 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of failure or overload of a [node](#node).{% if audience != "corp" %} For more details about Hive, see the [dedicated article](../contributor/hive.md).{% endif %}
 
-#### Cluster management system {#cms}
+#### CMS {#cms}
 
-**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used for performing rolling restarts of the cluster without affecting user workloads, maintenance, cluster reconfiguration, etc.
+**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used for performing rolling restarts of the cluster without affecting user workloads, maintenance, cluster reconfiguration, etc. CMS includes Sentinel, a component that implements [SelfHeal](#self-heal).
 
-#### Node Broker {#node-broker}
+#### SelfHeal {#self-heal}
 
-**NodeBroker** is a system tablet that is responsible for registering [dynamic nodes](#dynamic) in the cluster.
+[**SelfHeal**](../devops/concepts/selfheal.md) is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../devops/concepts/selfheal-storage.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) relocates [State Storage](#state-storage), [Board](#board), and [SchemeBoard](#scheme-board) replicas after failures and can add replicas when new nodes appear.
+
+#### NodeBroker {#node-broker}
+
+**NodeBroker** is a system tablet responsible for registering [dynamic nodes](#dynamic) in the cluster.
 
 #### BSController {#ds-controller}
 

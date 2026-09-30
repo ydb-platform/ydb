@@ -19,3 +19,5 @@ items:
   href: replacing-nodes.md
 - name: Аутентификация и авторизация узлов баз данных
   href: node-authorization.md
+- name: SelfHeal статической группы
+  href: static-group-self-heal.md

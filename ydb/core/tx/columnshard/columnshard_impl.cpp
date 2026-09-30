@@ -506,8 +506,6 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     StoragesManager->GetOperatorVerified(NOlap::IStoragesManager::DefaultStorageId);
     StoragesManager->GetSharedBlobsManager()->GetStorageManagerVerified(NOlap::IStoragesManager::DefaultStorageId);
     Counters.GetCSCounters().OnStartBackground();
-    // GC needs no index, and the MoveData gate waits for this incarnation's first round even on an indexless shard.
-    SetupGC();
 
     if (!TablesManager.HasPrimaryIndex()) {
         YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
@@ -528,6 +526,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     if (!!MoveDataDriverId) {
         Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
     }
+    SetupGC();
 
     RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
 }

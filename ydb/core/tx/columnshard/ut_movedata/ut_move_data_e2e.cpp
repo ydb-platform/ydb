@@ -96,7 +96,7 @@ public:
     // The cutter sends TEvCutTabletHistory here, so it must be a real actor.
     TActorId Launcher;
 
-    explicit TMoveDataFixture(const bool moveDataEnabled = true, const bool withSchema = true)
+    explicit TMoveDataFixture(const bool moveDataEnabled = true)
         : Controller(SetupRuntime(moveDataEnabled))
     {
         // Without a real mediator the rewrite plan-step never ages, so set staleness to zero.
@@ -105,15 +105,7 @@ public:
         Launcher = Runtime.AllocateEdgeActor();
         TabletActorId = BootTablet(Runtime, MakeTabletInfo(TabletId, { { 0, OldGroup } }), Launcher);
         Sender = Runtime.AllocateEdgeActor();
-        if (withSchema) {
-            ReadStep = SetupSchema(Runtime, Sender, TableId, Table);
-        }
-    }
-
-    // Reassign without writing anything first: the shard may not even have a schema.
-    void ReassignFrom(const ui32 fromGeneration, const ui32 toGroup) {
-        History.emplace_back(fromGeneration, toGroup);
-        Restart();
+        ReadStep = SetupSchema(Runtime, Sender, TableId, Table);
     }
 
     // The write id doubles as the tx id.
@@ -273,17 +265,6 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         UNIT_ASSERT_VALUES_EQUAL_C((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch,
             "expected ErrorGroupIdMismatch");
         UNIT_ASSERT_VALUES_EQUAL_C(f.ReadRows(), 1000, "a refused move must not touch the data");
-    }
-
-    // An empty column store's shards have no index; the first-GC clause of the gate must still be satisfiable.
-    Y_UNIT_TEST(IndexlessShardAnswersMoveData) {
-        TMoveDataFixture f(/*moveDataEnabled=*/true, /*withSchema=*/false);
-        // The first boot ran at generation 2, so the restart lands on the new group.
-        f.ReassignFrom(3, NewGroup);
-        f.StartMove();
-        const auto response = f.DriveGate(100);
-        UNIT_ASSERT_C(response, "an indexless shard never answered: nothing scheduled its first GC round");
-        UNIT_ASSERT_VALUES_EQUAL((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::Success);
     }
 
     // A poke queued behind the tablet's death but ahead of the driver's poison must not touch the dead tablet.

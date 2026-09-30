@@ -1323,11 +1323,9 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result) {
-            YQL_ENSURE(result->IsShardEmpty);
-            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
-            Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
-        }
+        AFL_ENSURE(result.IsShardEmpty);
+        RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
+        Callbacks->OnPrepared(std::move(preparedInfo), result.DataSize);
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -1355,14 +1353,6 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (!result) {
-            // A resent batch is answered twice, only the first result is taken
-            YDB_LOG_DEBUG("Ignored an already acknowledged result",
-                {"logPrefix", this->LogPrefix},
-                {"tabletId", ev->Get()->Record.GetOrigin()},
-                {"cookie", ev->Cookie});
-            return;
-        }
 
         RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
 
@@ -1379,13 +1369,13 @@ public:
             }
         }
 
-        if (result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
+        if (result.IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result.DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnMessageAcknowledged(result->DataSize);
+            Callbacks->OnMessageAcknowledged(result.DataSize);
         }
     }
 

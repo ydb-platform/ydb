@@ -1056,7 +1056,7 @@ public:
             }
         }
 
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
         YDB_LOG_DEBUG("Sent request to target",
             {"requestId", requestId},
             {"targetId", targetId},

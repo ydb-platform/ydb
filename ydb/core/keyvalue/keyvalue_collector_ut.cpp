@@ -482,7 +482,9 @@ Y_UNIT_TEST(TestKeyValueCollectorDoNotKeepOnly) {
     context.Setup();
 
     const ui32 dataGeneration = 35;
-    const ui32 doNotKeepCount = NKeyValue::CollectorMaxFlagsPerMessage + NKeyValue::CollectorMaxFlagsPerMessage / 2;
+    const ui32 chunkCount = 10;
+    const ui32 doNotKeepCount = (chunkCount - 1) * NKeyValue::CollectorMaxFlagsPerMessage
+        + NKeyValue::CollectorMaxFlagsPerMessage / 2;
     TVector<TLogoBlobID> doNotKeep;
     for (ui32 idx = 0; idx < doNotKeepCount; ++idx) {
         doNotKeep.emplace_back(0x10010000001000Bull, dataGeneration, idx + 1, NKeyValue::BLOB_CHANNEL, 100, 0);
@@ -494,10 +496,12 @@ Y_UNIT_TEST(TestKeyValueCollectorDoNotKeepOnly) {
 
     const TActorId dataProxy = context.GetProxyActorId(NKeyValue::BLOB_CHANNEL, dataGeneration);
     TSet<TLogoBlobID> deliveredDoNotKeep;
+    TVector<TAutoPtr<IEventHandle>> held;
+    // Without a barrier, all chunks must leave before any is acknowledged.
     while (deliveredDoNotKeep.size() < expectedDoNotKeep.size()) {
         TAutoPtr<IEventHandle> handle;
-        auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
-        UNIT_ASSERT(collect);
+        const auto* collect = context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, TDuration::Seconds(30));
+        UNIT_ASSERT_C(collect, "DoNotKeep chunks must also be sent concurrently");
         UNIT_ASSERT(handle->Recipient == dataProxy);
         UNIT_ASSERT(!collect->Collect);
         UNIT_ASSERT(!collect->Keep);
@@ -506,14 +510,20 @@ Y_UNIT_TEST(TestKeyValueCollectorDoNotKeepOnly) {
         for (const TLogoBlobID& id : *collect->DoNotKeep) {
             UNIT_ASSERT(deliveredDoNotKeep.insert(id).second);
         }
-        context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, collect->TabletId,
-                    collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel), handle->Cookie);
+        held.emplace_back(handle.Release());
     }
     UNIT_ASSERT(deliveredDoNotKeep == expectedDoNotKeep);
+    UNIT_ASSERT_VALUES_EQUAL(held.size(), chunkCount);
+    for (size_t idx = held.size(); idx-- > 0;) {
+        const auto* collect = held[idx]->Get<TEvBlobStorage::TEvCollectGarbage>();
+        context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, collect->TabletId,
+                    collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel), held[idx]->Cookie);
+    }
 
     TAutoPtr<IEventHandle> handle;
     auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle);
     UNIT_ASSERT(eraseCollect);
+    UNIT_ASSERT(!context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, TDuration::Seconds(30)));
 }
 
 TVector<TLogoBlobID> MakeBlobIds(ui32 generation, ui32 channel, ui32 count) {
@@ -531,15 +541,17 @@ void ReplyToCollect(TContext& context, const TEvBlobStorage::TEvCollectGarbage* 
                 collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel), handle->Cookie);
 }
 
-Y_UNIT_TEST(TestKeyValueCollectorWaitsForChunkAck) {
+Y_UNIT_TEST(TestKeyValueCollectorConcurrentChunksWaitForAllAcks) {
     TContext context;
     context.Setup();
 
     const ui32 dataGeneration = 35;
     const ui32 slowChannel = NKeyValue::BLOB_CHANNEL;
     const ui32 fastChannel = NKeyValue::BLOB_CHANNEL + 1;
-    const ui32 slowKeepCount = NKeyValue::CollectorMaxFlagsPerMessage * 2 + 1;
-    TVector<TLogoBlobID> keep = MakeBlobIds(dataGeneration, slowChannel, slowKeepCount);
+    const size_t flagChunks = 10;
+    const size_t chunkSize = NKeyValue::CollectorMaxFlagsPerMessage;
+    TVector<TLogoBlobID> keep = MakeBlobIds(dataGeneration, slowChannel, flagChunks * chunkSize + 1);
+    const TVector<TLogoBlobID> expectedKeep = keep;
     const TVector<TLogoBlobID> fastKeep = MakeBlobIds(dataGeneration, fastChannel, 3);
     keep.insert(keep.end(), fastKeep.begin(), fastKeep.end());
 
@@ -550,49 +562,170 @@ Y_UNIT_TEST(TestKeyValueCollectorWaitsForChunkAck) {
     const TActorId slowProxy = context.GetProxyActorId(slowChannel, dataGeneration);
     const TActorId fastProxy = context.GetProxyActorId(fastChannel, dataGeneration);
     const TDuration quiet = TDuration::Seconds(30);
+    TVector<TAutoPtr<IEventHandle>> held;
+    THashSet<ui64> cookies;
+    TSet<TLogoBlobID> deliveredKeep;
+    auto holdChunk = [&](TAutoPtr<IEventHandle>& handle) {
+        const auto* collect = handle->Get<TEvBlobStorage::TEvCollectGarbage>();
+        UNIT_ASSERT(handle->Recipient == slowProxy);
+        UNIT_ASSERT(!collect->Collect);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Keep->size(), chunkSize);
+        UNIT_ASSERT(cookies.insert(handle->Cookie).second);
+        for (const auto& id : *collect->Keep) {
+            UNIT_ASSERT(deliveredKeep.insert(id).second);
+        }
+        held.emplace_back(handle.Release());
+    };
 
-    // one request per group/channel: the slow group gets its first chunk, the fast one its only chunk with the barrier
-    TAutoPtr<IEventHandle> heldHandle;
-    const TEvBlobStorage::TEvCollectGarbage* heldCollect = nullptr;
-    for (ui32 idx = 0; idx < 2; ++idx) {
+    // Receive every nonfinal chunk without acknowledging any of them.
+    // The other channel must still be able to finish independently.
+    for (size_t idx = 0; idx < flagChunks + 1; ++idx) {
         TAutoPtr<IEventHandle> handle;
-        auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
-        UNIT_ASSERT(collect);
-        if (handle->Recipient == slowProxy) {
-            UNIT_ASSERT(!collect->Collect);
-            UNIT_ASSERT_VALUES_EQUAL(collect->Keep->size(), NKeyValue::CollectorMaxFlagsPerMessage);
-            heldHandle = handle;
-            heldCollect = collect;
-        } else {
-            UNIT_ASSERT(handle->Recipient == fastProxy);
+        auto* collect = context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, quiet);
+        UNIT_ASSERT_C(collect, "all nonfinal chunks must be sent before any acknowledgment");
+        if (handle->Recipient == fastProxy) {
             UNIT_ASSERT(collect->Collect);
-            UNIT_ASSERT_VALUES_EQUAL(collect->Keep->size(), fastKeep.size());
+            UNIT_ASSERT(*collect->Keep == fastKeep);
             ReplyToCollect(context, collect, handle, NKikimrProto::OK);
+        } else {
+            holdChunk(handle);
         }
     }
-    UNIT_ASSERT(heldCollect);
+    UNIT_ASSERT_VALUES_EQUAL(held.size(), flagChunks);
+    {
+        TAutoPtr<IEventHandle> handle;
+        UNIT_ASSERT(!context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, quiet));
+    }
 
-    // the fast group finished, nothing else leaves the collector while the first slow chunk is unacked
+    // ACK later chunks first while the first chunk stays held.
+    for (size_t idx = held.size(); idx-- > 1;) {
+        ReplyToCollect(context, held[idx]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[idx], NKikimrProto::OK);
+    }
     {
         TAutoPtr<IEventHandle> handle;
         UNIT_ASSERT(!context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, quiet));
         UNIT_ASSERT(!context.GrabEventOrNull<TEvKeyValue::TEvCompleteGC>(handle, quiet));
     }
 
-    ReplyToCollect(context, heldCollect, heldHandle, NKikimrProto::OK);
-    size_t keepSeen = heldCollect->Keep->size();
-    for (bool done = false; !done;) {
+    ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::OK);
+    TAutoPtr<IEventHandle> finalHandle;
+    const auto* finalCollect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(finalHandle);
+    UNIT_ASSERT(finalHandle->Recipient == slowProxy);
+    UNIT_ASSERT(finalCollect->Collect);
+    UNIT_ASSERT_VALUES_EQUAL(finalCollect->Keep->size(), 1);
+    UNIT_ASSERT(deliveredKeep.insert(finalCollect->Keep->front()).second);
+    UNIT_ASSERT((deliveredKeep == TSet<TLogoBlobID>(expectedKeep.begin(), expectedKeep.end())));
+    {
         TAutoPtr<IEventHandle> handle;
-        auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
-        UNIT_ASSERT(collect);
-        UNIT_ASSERT(handle->Recipient == slowProxy);
-        keepSeen += collect->Keep->size();
-        done = collect->Collect;
-        UNIT_ASSERT_VALUES_EQUAL(done, keepSeen == slowKeepCount);
+        UNIT_ASSERT(!context.GrabEventOrNull<TEvKeyValue::TEvCompleteGC>(handle, quiet));
+    }
+    ReplyToCollect(context, finalCollect, finalHandle, NKikimrProto::OK);
+    TAutoPtr<IEventHandle> handle;
+    UNIT_ASSERT(context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle));
+}
+
+Y_UNIT_TEST(TestKeyValueCollectorConcurrentChunksPerGroupChannel) {
+    TContext context;
+    context.Setup();
+    const ui32 generation = 35;
+    const size_t flagChunks = 10;
+    const size_t flagsPerChannel = (flagChunks + 1) * NKeyValue::CollectorMaxFlagsPerMessage;
+    const ui32 firstChannel = NKeyValue::BLOB_CHANNEL;
+    const ui32 secondChannel = firstChannel + 1;
+    const ui32 group = context.GetGroupId(firstChannel, generation);
+    context.GetTabletInfo()->Channels[secondChannel].History.back().GroupID = group;
+    TVector<TLogoBlobID> keep = MakeBlobIds(generation, firstChannel, flagsPerChannel);
+    auto otherKeep = MakeBlobIds(generation, secondChannel, flagsPerChannel);
+    keep.insert(keep.end(), otherKeep.begin(), otherKeep.end());
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), {}, {}, true));
+    context.SetActor(CreateKeyValueCollector(
+                context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200));
+
+    TVector<TAutoPtr<IEventHandle>> held;
+    THashMap<ui32, size_t> counts;
+    THashSet<ui64> cookies;
+    for (size_t idx = 0; idx < flagChunks * 2; ++idx) {
+        TAutoPtr<IEventHandle> handle;
+        const auto* collect = context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, TDuration::Seconds(30));
+        UNIT_ASSERT_C(collect, "all channels must send their nonfinal chunks concurrently");
+        UNIT_ASSERT(handle->Recipient == MakeBlobStorageProxyID(group));
+        UNIT_ASSERT(!collect->Collect);
+        UNIT_ASSERT(collect->Channel == firstChannel || collect->Channel == secondChannel);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Keep->size(), NKeyValue::CollectorMaxFlagsPerMessage);
+        UNIT_ASSERT(cookies.insert(handle->Cookie).second);
+        ++counts[collect->Channel];
+        held.emplace_back(handle.Release());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(counts[firstChannel], flagChunks);
+    UNIT_ASSERT_VALUES_EQUAL(counts[secondChannel], flagChunks);
+    {
+        TAutoPtr<IEventHandle> handle;
+        UNIT_ASSERT(!context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, TDuration::Seconds(30)));
+    }
+    for (size_t idx = held.size(); idx-- > 0;) {
+        ReplyToCollect(context, held[idx]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[idx], NKikimrProto::OK);
+    }
+    THashSet<ui32> completedChannels;
+    for (size_t idx = 0; idx < 2; ++idx) {
+        TAutoPtr<IEventHandle> handle;
+        const auto* collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+        UNIT_ASSERT(collect->Collect);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Keep->size(), NKeyValue::CollectorMaxFlagsPerMessage);
+        UNIT_ASSERT(completedChannels.insert(collect->Channel).second);
         ReplyToCollect(context, collect, handle, NKikimrProto::OK);
     }
-
     TAutoPtr<IEventHandle> handle;
+    UNIT_ASSERT(context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle));
+}
+
+Y_UNIT_TEST(TestKeyValueCollectorRetryBackoffsAreIndependent) {
+    TContext context;
+    context.Setup();
+    const ui32 generation = 35;
+    TVector<TLogoBlobID> keep = MakeBlobIds(generation, NKeyValue::BLOB_CHANNEL,
+        NKeyValue::CollectorMaxFlagsPerMessage * 2 + 1);
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), {}, {}, true));
+    context.SetActor(CreateKeyValueCollector(
+                context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200));
+    const TActorId proxy = context.GetProxyActorId(NKeyValue::BLOB_CHANNEL, generation);
+    TVector<TAutoPtr<IEventHandle>> held;
+    for (size_t idx = 0; idx < 3; ++idx) {
+        TAutoPtr<IEventHandle> handle;
+        const auto* collect = context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, TDuration::Seconds(30));
+        UNIT_ASSERT(collect);
+        if (handle->Recipient == proxy) {
+            UNIT_ASSERT(!collect->Collect);
+            held.emplace_back(handle.Release());
+        } else {
+            ReplyToCollect(context, collect, handle, NKikimrProto::OK);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(held.size(), 2);
+    const auto firstFlags = *held[0]->Get<TEvBlobStorage::TEvCollectGarbage>()->Keep;
+    const auto secondFlags = *held[1]->Get<TEvBlobStorage::TEvCollectGarbage>()->Keep;
+    context.AllowSchedule(held[0]->Sender);
+    // Grow the first chunk's backoff without failing the second chunk.
+    for (size_t idx = 0; idx < 3; ++idx) {
+        ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::ERROR);
+        TAutoPtr<IEventHandle> retry;
+        const auto* collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(retry);
+        UNIT_ASSERT(*collect->Keep == firstFlags);
+        held[0] = retry;
+    }
+    ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::ERROR);
+    ReplyToCollect(context, held[1]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[1], NKikimrProto::ERROR);
+    // A newly failed chunk keeps the initial delay and retries before the older failure.
+    for (const auto* expected : {&secondFlags, &firstFlags}) {
+        TAutoPtr<IEventHandle> handle;
+        const auto* collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+        UNIT_ASSERT(!collect->Collect);
+        UNIT_ASSERT(*collect->Keep == *expected);
+        ReplyToCollect(context, collect, handle, NKikimrProto::OK);
+    }
+    TAutoPtr<IEventHandle> handle;
+    const auto* collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+    UNIT_ASSERT(collect->Collect);
+    ReplyToCollect(context, collect, handle, NKikimrProto::OK);
     UNIT_ASSERT(context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle));
 }
 
@@ -611,8 +744,8 @@ Y_UNIT_TEST(TestKeyValueCollectorRetryBudgetIsPerChunk) {
     // every chunk fails just short of the limit; a shared budget would have poisoned the tablet on the second chunk
     const ui32 failuresPerChunk = NKeyValue::CollectorMaxErrors - 1;
     ui32 chunksAcked = 0;
-    ui32 failuresLeft = failuresPerChunk;
-    std::optional<TVector<TLogoBlobID>> lastFailedChunk;
+    THashMap<TLogoBlobID, ui32> failures;
+    THashMap<TLogoBlobID, TVector<TLogoBlobID>> chunks;
     for (bool done = false; !done;) {
         TAutoPtr<IEventHandle> handle;
         auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
@@ -622,19 +755,15 @@ Y_UNIT_TEST(TestKeyValueCollectorRetryBudgetIsPerChunk) {
             ReplyToCollect(context, collect, handle, NKikimrProto::OK);
             continue;
         }
-        if (lastFailedChunk) {
-            UNIT_ASSERT(*lastFailedChunk == *collect->Keep);
-        }
-        if (failuresLeft) {
-            --failuresLeft;
-            lastFailedChunk = *collect->Keep;
+        const auto id = collect->Keep->front();
+        const auto [it, inserted] = chunks.try_emplace(id, *collect->Keep);
+        UNIT_ASSERT(it->second == *collect->Keep);
+        if (failures[id]++ < failuresPerChunk) {
             context.AllowSchedule(handle->Sender);
             ReplyToCollect(context, collect, handle, NKikimrProto::ERROR);
             continue;
         }
         ++chunksAcked;
-        failuresLeft = failuresPerChunk;
-        lastFailedChunk.reset();
         done = collect->Collect;
         ReplyToCollect(context, collect, handle, NKikimrProto::OK);
     }
@@ -647,30 +776,51 @@ Y_UNIT_TEST(TestKeyValueCollectorRetryBudgetIsPerChunk) {
 Y_UNIT_TEST(TestKeyValueCollectorExhaustedChunkPoisonsTablet) {
     TContext context;
     context.Setup();
-
-    const ui32 dataGeneration = 35;
-    const ui32 keepCount = NKeyValue::CollectorMaxFlagsPerMessage + 1;
-    TVector<TLogoBlobID> keep = MakeBlobIds(dataGeneration, NKeyValue::BLOB_CHANNEL, keepCount);
+    const ui32 generation = 35;
+    TVector<TLogoBlobID> keep = MakeBlobIds(generation, NKeyValue::BLOB_CHANNEL,
+        NKeyValue::CollectorMaxFlagsPerMessage * 2 + 1);
     TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), {}, {}, true));
     context.SetActor(CreateKeyValueCollector(
                 context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200));
 
-    const TActorId dataProxy = context.GetProxyActorId(NKeyValue::BLOB_CHANNEL, dataGeneration);
-    ui32 failures = 0;
-    while (failures < NKeyValue::CollectorMaxErrors) {
+    const TActorId proxy = context.GetProxyActorId(NKeyValue::BLOB_CHANNEL, generation);
+    TVector<TAutoPtr<IEventHandle>> held;
+    for (size_t idx = 0; idx < 3; ++idx) {
         TAutoPtr<IEventHandle> handle;
-        auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+        auto* collect = context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, TDuration::Seconds(30));
         UNIT_ASSERT(collect);
-        if (handle->Recipient != dataProxy) {
+        if (handle->Recipient == proxy) {
+            UNIT_ASSERT(!collect->Collect);
+            held.emplace_back(handle.Release());
+        } else {
             ReplyToCollect(context, collect, handle, NKikimrProto::OK);
-            continue;
         }
-        UNIT_ASSERT(!collect->Collect);
-        ++failures;
-        context.AllowSchedule(handle->Sender);
-        ReplyToCollect(context, collect, handle, NKikimrProto::ERROR);
     }
-
+    UNIT_ASSERT_VALUES_EQUAL(held.size(), 2);
+    const TVector<TLogoBlobID> failedFlags = *held[0]->Get<TEvBlobStorage::TEvCollectGarbage>()->Keep;
+    context.AllowSchedule(held[0]->Sender);
+    for (ui32 failures = 1; failures < NKeyValue::CollectorMaxErrors; ++failures) {
+        const ui64 previousCookie = held[0]->Cookie;
+        ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::ERROR);
+        // Ignore duplicate replies while this chunk is waiting for its retry timer.
+        ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::OK);
+        ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::ERROR);
+        TAutoPtr<IEventHandle> retry;
+        const auto* collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(retry);
+        UNIT_ASSERT(!collect->Collect);
+        UNIT_ASSERT(*collect->Keep == failedFlags);
+        UNIT_ASSERT_C(retry->Cookie != previousCookie, "each retry attempt must have a new cookie");
+        // A late reply from the previous attempt cannot acknowledge this retry.
+        ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::OK);
+        held[0] = retry;
+    }
+    ReplyToCollect(context, held[1]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[1], NKikimrProto::OK);
+    {
+        TAutoPtr<IEventHandle> handle;
+        UNIT_ASSERT(!context.GrabEventOrNull<TEvBlobStorage::TEvCollectGarbage>(handle, TDuration::Seconds(30)));
+        UNIT_ASSERT(!context.GrabEventOrNull<TEvKeyValue::TEvCompleteGC>(handle, TDuration::Seconds(30)));
+    }
+    ReplyToCollect(context, held[0]->Get<TEvBlobStorage::TEvCollectGarbage>(), held[0], NKikimrProto::ERROR);
     TAutoPtr<IEventHandle> handle;
     UNIT_ASSERT(context.GrabEvent<TEvents::TEvPoisonPill>(handle));
     UNIT_ASSERT(handle->Recipient == context.GetTabletActorId());

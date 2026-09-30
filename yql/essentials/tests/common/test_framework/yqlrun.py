@@ -219,7 +219,6 @@ class YQLRun(object):
         if self.extra_args:
             cmd += " ".join(self.extra_args) + " "
 
-        cmd += '--mounts=' + yql_utils.get_mount_config_file() + ' '
         cmd += '--validate-result-format '
         cmd += '--fuzz-untyped-lambda '
         if self.fuzz_universal:

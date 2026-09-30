@@ -1061,19 +1061,19 @@ public:
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
-        if (!Serializer->Buffer->IsFinished()) {
+        if (!IsBufferFinished()) {
             Serializer->Push(std::move(value));
         }
     }
 
     void WidePush(NUdf::TUnboxedValue* values, ui32 width) override {
-        if (!Serializer->Buffer->IsFinished()) {
+        if (!IsBufferFinished()) {
             Serializer->WidePush(values, width);
         }
     }
 
     void Push(NDqProto::TWatermark&& watermark) override {
-        if (!Serializer->Buffer->IsFinished()) {
+        if (!IsBufferFinished()) {
             Serializer->Push(std::move(watermark));
         }
     }
@@ -1165,6 +1165,21 @@ public:
         return IsLocalChannel;
     }
 
+    // Whether the rows pushed are to be dropped. Asked for every row: with the finish epoch bound, the buffer is
+    // asked only once the epoch has moved, as it moves the epoch when it finishes; without it, every time as before
+    bool IsBufferFinished() {
+        if (!FinishEpoch) {
+            return Serializer->Buffer->IsFinished();
+        }
+        // loaded before the buffer is asked: a finish meanwhile moves it again, and the next push asks again
+        const ui64 epoch = FinishEpoch->load();
+        if (epoch != CheckedFinishEpoch) {
+            CheckedFinishEpoch = epoch;
+            BufferFinished = Serializer->Buffer->IsFinished();
+        }
+        return BufferFinished;
+    }
+
     // the epoch goes to the buffer, and again to the bound buffer which replaces the stub, see Bind
     bool BindFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override {
         FinishEpoch = epoch;
@@ -1180,6 +1195,9 @@ public:
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
     std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
+    // the finish of the buffer as of the FinishEpoch checked last, see IsBufferFinished
+    std::optional<ui64> CheckedFinishEpoch;
+    bool BufferFinished = false;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {

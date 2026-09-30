@@ -2104,6 +2104,35 @@ struct TConsumerPopsWhileSessionLockedTest : public TSessionTest {
     }
 };
 
+// An output buffer which counts what a channel asks of it and pushes into it, and is finished when the test says so
+struct TCountingOutputBuffer : public IChannelBuffer {
+    TCountingOutputBuffer()
+        : IChannelBuffer(TChannelFullInfo(1, {}, {}, 0, 1, TCollectStatsLevel::None))
+    {}
+
+    EDqFillLevel GetFillLevel() const override { return EDqFillLevel::NoLimit; }
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator>) override {}
+    void Push(TDataChunk&& data) override {
+        Chunks++;
+        Rows += data.Rows;
+    }
+    bool IsFinished() override {
+        FinishChecks++;
+        return Finished;
+    }
+    bool IsEarlyFinished() override { return false; }
+    bool IsEmpty() override { return true; }
+    bool Pop(TDataChunk&) override { return false; }
+    void EarlyFinish() override {}
+    void ExportPushStats(TDqAsyncStats&) override {}
+    void ExportPopStats(TDqAsyncStats&) override {}
+
+    ui64 FinishChecks = 0;
+    ui64 Chunks = 0;
+    ui64 Rows = 0;
+    bool Finished = false;
+};
+
 // A compute actor binds its output channels to the finish epoch before they are bound to their peer: the channel
 // holds a stub buffer then. The epoch has to reach the buffer which replaces the stub on Bind, or a channel which
 // finishes afterwards would never move the epoch, and the compute actor would wait for it forever.
@@ -2241,6 +2270,48 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(EarlyFinishEpoch1n) {
         FinishEpochTest(true, true);
+    }
+
+    // A channel asked its buffer whether it had finished for every row pushed; bound to the finish epoch, it asks
+    // only once the epoch has moved, and drops the rows once the buffer has finished
+    Y_UNIT_TEST(OutputPushChecksFinishOnEpoch) {
+        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+        NKikimr::NMiniKQL::TTypeEnvironment typeEnv(alloc);
+        TDqChannelSettings settings;
+        settings.RowType = NKikimr::NMiniKQL::TDataType::Create(NYql::NUdf::TDataType<i32>::Id, typeEnv);
+        auto buffer = std::make_shared<TCountingOutputBuffer>();
+        TIntrusivePtr<TFastDqOutputChannel> channel = new TFastDqOutputChannel({}, settings, buffer, false);
+
+        // without the epoch: asked for every row, as before
+        for (i32 i = 0; i < 5; ++i) {
+            channel->Push(NYql::NUdf::TUnboxedValuePod(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer->FinishChecks, 5);
+
+        // bound: asked once, as long as the epoch does not move
+        auto epoch = std::make_shared<TDqOutputFinishEpoch>(0);
+        UNIT_ASSERT(channel->BindFinishEpoch(epoch));
+        for (i32 i = 0; i < 100; ++i) {
+            channel->Push(NYql::NUdf::TUnboxedValuePod(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer->FinishChecks, 6);
+        channel->Flush();
+        UNIT_ASSERT_VALUES_EQUAL(buffer->Rows, 105);
+        const auto chunks = buffer->Chunks;
+
+        // the buffer finishes and moves the epoch: asked once more, and the rows are dropped from then on
+        buffer->Finished = true;
+        (*epoch)++;
+        for (i32 i = 0; i < 50; ++i) {
+            channel->Push(NYql::NUdf::TUnboxedValuePod(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(buffer->FinishChecks, 7);
+        channel->Flush();
+        UNIT_ASSERT_VALUES_EQUAL(buffer->Rows, 105);
+        UNIT_ASSERT_VALUES_EQUAL(buffer->Chunks, chunks);
+
+        // the serializer holds MiniKQL state of this allocator
+        channel.Reset();
     }
 
     Y_UNIT_TEST(OutputChannelFinishEpochBinding) {

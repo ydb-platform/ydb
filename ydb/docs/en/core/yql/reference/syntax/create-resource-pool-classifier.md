@@ -1,4 +1,4 @@
-# CREATE RESOURCE POOL CLASSIFIER
+﻿# CREATE RESOURCE POOL CLASSIFIER
 
 `CREATE RESOURCE POOL CLASSIFIER` creates a [resource pool classifier](../../../concepts/glossary.md#resource-pool-classifier).
 
@@ -9,39 +9,14 @@ CREATE RESOURCE POOL CLASSIFIER <name>
 WITH ( <parameter_name> [= <parameter_value>] [, ... ] )
 ```
 
-<<<<<<< HEAD
-- `name` — name of the resource pool classifier to create. Must be unique and must not contain characters forbidden for schema objects.
-- `WITH ( <parameter_name> [= <parameter_value>] [, ... ] )` — parameters that define classifier behavior.
-=======
-- `name` — the name of the resource pool classifier being created. It must be unique. The name must not contain characters prohibited for schema objects.
-- `WITH ( <parameter_name> [= <parameter_value>] [, ... ] )` — allows you to set parameter values that define the behavior of the resource pool classifier.
->>>>>>> 811e21506d8 (wlm: docs for has predicates (#51956))
+- `name` тАФ the name of the resource pool classifier being created. It must be unique. The name must not contain characters prohibited for schema objects.
+- `WITH ( <parameter_name> [= <parameter_value>] [, ... ] )` тАФ allows you to set parameter values that define the behavior of the resource pool classifier.
 
 ### Common parameters
 
-<<<<<<< HEAD
-* `RANK` (Int64) — Optional: order in which classifiers are evaluated. If omitted, the maximum existing `RANK` plus 1000 is used. Allowed values: a unique number in $[0, 2^{63}-1]$.
-* `RESOURCE_POOL` (String) — Required: name of the resource pool for queries that match the classifier.
-* `MEMBER_NAME` (String) — Optional: user or group routed to that pool. If omitted, the classifier ignores `MEMBER_NAME` and uses other criteria.
-
-## Notes {#remarks}
-
-If `RANK` is omitted in the DDL, the default is $RANK = MAX(existing\_ranks) + 1000$. All `RANK` values must be unique so pool choice is deterministic when rules conflict. This allows inserting new classifiers between existing ones.
-
-A classifier may reference a non-existent pool or a pool the user cannot access; such classifiers are skipped.
-
-Classifier count limits are described on the [limits](../../../concepts/limits-ydb.md#resource_pool) page.
-
-## Permissions
-
-The `ALL` [permission](grant.md#permissions-list) on the database is required.
-
-Example:
-
-=======
-* `RANK` (Int64) — an optional field that specifies the selection order of the resource pool classifier. If the value is not specified, the maximum existing `RANK` is taken and 1000 is added to it. Valid values: a unique number in the range $[0, 2^{63}-1]$.
-* `RESOURCE_POOL` (String) — the name of the resource pool to which requests matching the classifier's predicates are directed.
-* `ACTION` (Enum) — the action applied to a request when the classifier matches. Allowed value — `reject`: the request is rejected, and the user receives an error of the form `Request is rejected by classifier '<name>' (rank=<rank>)`.
+* `RANK` (Int64) тАФ an optional field that specifies the selection order of the resource pool classifier. If the value is not specified, the maximum existing `RANK` is taken and 1000 is added to it. Valid values: a unique number in the range $[0, 2^{63}-1]$.
+* `RESOURCE_POOL` (String) тАФ the name of the resource pool to which requests matching the classifier's predicates are directed.
+* `ACTION` (Enum) тАФ the action applied to a request when the classifier matches. Allowed value тАФ `reject`: the request is rejected, and the user receives an error of the form `Request is rejected by classifier '<name>' (rank=<rank>)`.
 
 {% note info %}
 
@@ -51,34 +26,34 @@ The `RESOURCE_POOL` and `ACTION` parameters are mutually exclusive: exactly one 
 
 ### Predicate parameters
 
-A predicate is a condition checked for an incoming request. A classifier matches if **all** of its predicates are satisfied (logical **AND**). To express **OR** logic, create multiple classifiers with different `RANK` values. Classifiers are processed in ascending order of `RANK`; processing stops at the first match — the request has that classifier's `ACTION` applied or is directed to its `RESOURCE_POOL`.
+A predicate is a condition checked for an incoming request. A classifier matches if **all** of its predicates are satisfied (logical **AND**). To express **OR** logic, create multiple classifiers with different `RANK` values. Classifiers are processed in ascending order of `RANK`; processing stops at the first match тАФ the request has that classifier's `ACTION` applied or is directed to its `RESOURCE_POOL`.
 
-Predicate parameters are optional. A classifier without any predicates matches any request — this is useful for a "catch-all" classifier with the maximum `RANK`, for example, to direct all unclassified traffic to a specific pool (`RESOURCE_POOL`) or to reject it (`ACTION='reject'`).
+Predicate parameters are optional. A classifier without any predicates matches any request тАФ this is useful for a "catch-all" classifier with the maximum `RANK`, for example, to direct all unclassified traffic to a specific pool (`RESOURCE_POOL`) or to reject it (`ACTION='reject'`).
 
 {% note warning %}
 
-Be careful when creating a "catch-all" classifier: all classifiers following it by `RANK` will never fire — processing stops at the first match, and the "catch-all" always matches.
+Be careful when creating a "catch-all" classifier: all classifiers following it by `RANK` will never fire тАФ processing stops at the first match, and the "catch-all" always matches.
 
 {% endnote %}
 
 List of predicates:
 
-* `MEMBER_NAME` (String) — the SID of the user or group on whose behalf the request was made. See [below](#member-name) for details.
-* `HAS_PATH` (String) — path to a YDB object accessed by the request; supports wildcards `*` and `?`. See [below](#has-path) for details.
-* `HAS_APP_NAME` (String) — client application identifier. See [below](#has-app-name) for details.
-* `HAS_FULL_SCAN` (String) — path to an object for which a full scan is expected; supports wildcards `*` and `?`. See [below](#has-full-scan) for details.
-* `HAS_STREAM` (Bool) — indicates whether the request is streaming. See [below](#has-stream) for details.
+* `MEMBER_NAME` (String) тАФ the SID of the user or group on whose behalf the request was made. See [below](#member-name) for details.
+* `HAS_PATH` (String) тАФ path to a YDB object accessed by the request; supports wildcards `*` and `?`. See [below](#has-path) for details.
+* `HAS_APP_NAME` (String) тАФ client application identifier. See [below](#has-app-name) for details.
+* `HAS_FULL_SCAN` (String) тАФ path to an object for which a full scan is expected; supports wildcards `*` and `?`. See [below](#has-full-scan) for details.
+* `HAS_STREAM` (Bool) тАФ indicates whether the request is streaming. See [below](#has-stream) for details.
 
 #### MEMBER_NAME {#member-name} {#member-name-format}
 
 `MEMBER_NAME` is compared character by character with the user's [SID](../../../concepts/glossary.md#access-sid) or any group SID from their authentication token. The SID format depends on how the user logged into the system.
 
-- **Built-in {{ ydb-short-name }} users (login/password)** — the SID matches the username, without a suffix. For example, `user1`. For more information, see [{#T}](../../../security/authentication.md#static-credentials).
-- **Cloud users (Access Service)** — the SID has the form `<subject_id>@as`, where `<subject_id>` is the user ID in IAM. The suffix is set by the [`access_service_domain`](../../../reference/configuration/auth_config.md#iam-auth-config) parameter (default `as`). For example, `ajeb89hv69nujke769fa@as`. For more information, see [{#T}](../../../security/authentication.md#iam).
-- **LDAP** — the SID has the form `<login>@<domain>`, where the domain is set by the [`ldap_authentication_domain`](../../../reference/configuration/auth_config.md#ldap-auth-config) parameter (default `ldap`). For example, `user1@ldap`. For more information, see [{#T}](../../../security/authentication.md#ldap).
-- **External identity providers (OIDC)** — the SID has the form `<login>@<domain>`, where the domain is set by the `external_idp_authentication_domain` parameter in the [authentication configuration](../../../reference/configuration/auth_config.md) (default `sso`). For example, `user1@sso`.
+- **Built-in {{ ydb-short-name }} users (login/password)** тАФ the SID matches the username, without a suffix. For example, `user1`. For more information, see [{#T}](../../../security/authentication.md#static-credentials).
+- **Cloud users (Access Service)** тАФ the SID has the form `<subject_id>@as`, where `<subject_id>` is the user ID in IAM. The suffix is set by the [`access_service_domain`](../../../reference/configuration/auth_config.md#iam-auth-config) parameter (default `as`). For example, `ajeb89hv69nujke769fa@as`. For more information, see [{#T}](../../../security/authentication.md#iam).
+- **LDAP** тАФ the SID has the form `<login>@<domain>`, where the domain is set by the [`ldap_authentication_domain`](../../../reference/configuration/auth_config.md#ldap-auth-config) parameter (default `ldap`). For example, `user1@ldap`. For more information, see [{#T}](../../../security/authentication.md#ldap).
+- **External identity providers (OIDC)** тАФ the SID has the form `<login>@<domain>`, where the domain is set by the `external_idp_authentication_domain` parameter in the [authentication configuration](../../../reference/configuration/auth_config.md) (default `sso`). For example, `user1@sso`.
 
-You can specify either the SID of a specific user or the SID of a group. The `all-users@well-known` group is automatically added to all authenticated users — it is convenient when you need to direct queries from all authenticated clients to a pool.
+You can specify either the SID of a specific user or the SID of a group. The `all-users@well-known` group is automatically added to all authenticated users тАФ it is convenient when you need to direct queries from all authenticated clients to a pool.
 
 **Example.** Direct requests from user `user1@ldap` to the `olap` pool:
 
@@ -92,7 +67,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_user WITH (
 
 #### HAS_PATH {#has-path}
 
-`HAS_PATH` compares the paths of YDB objects accessed by the request against the specified mask. The mask supports wildcards: `*` — any sequence of characters, `?` — any single character. The predicate matches if at least one object in the request plan matches the mask.
+`HAS_PATH` compares the paths of YDB objects accessed by the request against the specified mask. The mask supports wildcards: `*` тАФ any sequence of characters, `?` тАФ any single character. The predicate matches if at least one object in the request plan matches the mask.
 
 **Example.** Direct requests to archive tables to the `pool_archive` pool:
 
@@ -110,18 +85,18 @@ CREATE RESOURCE POOL CLASSIFIER cl_archive WITH (
 
 {% note warning %}
 
-The `HAS_APP_NAME` value is set by the client and is not authenticated by the server — do not use it as an access control mechanism. For effective isolation, combine it with `MEMBER_NAME` or direct unrecognized requests to a sandbox pool with strict limits.
+The `HAS_APP_NAME` value is set by the client and is not authenticated by the server тАФ do not use it as an access control mechanism. For effective isolation, combine it with `MEMBER_NAME` or direct unrecognized requests to a sandbox pool with strict limits.
 
 {% endnote %}
 
 Setting the application identifier on the client:
 
-- **{{ ydb-short-name }} Embedded UI** — fixed value `ydb-ui`, set by the viewer and not user-configurable.
-- **YDB CLI** — not supported: the client application identifier is not sent in requests.
-- **YDB C++ SDK** — per request via the `Header` parameter of [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, where the [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) constant equals `x-ydb-application-name`.
-- **YDB Go SDK** — at the driver level via the [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) option in the `ydb.Open` call.
-- **YDB Java SDK** — at the transport level via the [`GrpcTransportBuilder.withApplicationName`](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.4.11/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java#L280) method.
-- **YDB Python SDK** — no dedicated parameter; the value is set per request via a generic header: `settings.with_header("x-ydb-application-name", "my-app")` (the [`BaseRequestSettings.with_header`](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.4/ydb/settings.py#L66) method).
+- **{{ ydb-short-name }} Embedded UI** тАФ fixed value `ydb-ui`, set by the viewer and not user-configurable.
+- **YDB CLI** тАФ not supported: the client application identifier is not sent in requests.
+- **YDB C++ SDK** тАФ per request via the `Header` parameter of [`TRequestSettings`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h): `settings.Header({{ NYdb::YDB_APPLICATION_NAME, "my-app" }})`, where the [`YDB_APPLICATION_NAME`](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h) constant equals `x-ydb-application-name`.
+- **YDB Go SDK** тАФ at the driver level via the [`WithApplicationName`](https://github.com/ydb-platform/ydb-go-sdk/blob/v3.151.1/options.go#L163) option in the `ydb.Open` call.
+- **YDB Java SDK** тАФ at the transport level via the [`GrpcTransportBuilder.withApplicationName`](https://github.com/ydb-platform/ydb-java-sdk/blob/v2.4.11/core/src/main/java/tech/ydb/core/grpc/GrpcTransportBuilder.java#L280) method.
+- **YDB Python SDK** тАФ no dedicated parameter; the value is set per request via a generic header: `settings.with_header("x-ydb-application-name", "my-app")` (the [`BaseRequestSettings.with_header`](https://github.com/ydb-platform/ydb-python-sdk/blob/3.31.4/ydb/settings.py#L66) method).
 
 **Example.** Direct requests from the Embedded UI to the `pool_adhoc` pool:
 
@@ -151,10 +126,10 @@ Details of full-scan detection:
     );
     ```
 
-    the index table has path `/Root/orders/by_status/indexImplTable`. The query `SELECT * FROM orders VIEW by_status` performs a full scan of the index table — the main `/Root/orders` is not scanned. Therefore:
+    the index table has path `/Root/orders/by_status/indexImplTable`. The query `SELECT * FROM orders VIEW by_status` performs a full scan of the index table тАФ the main `/Root/orders` is not scanned. Therefore:
 
-    - `HAS_FULL_SCAN='/Root/orders'` — **will not match**;
-    - `HAS_FULL_SCAN='/Root/orders/by_status/indexImplTable'` or `HAS_FULL_SCAN='/Root/orders/*'` — **will match**.
+    - `HAS_FULL_SCAN='/Root/orders'` тАФ **will not match**;
+    - `HAS_FULL_SCAN='/Root/orders/by_status/indexImplTable'` or `HAS_FULL_SCAN='/Root/orders/*'` тАФ **will match**.
 
 **Example.** Reject requests that cause a full scan of the orders archive:
 
@@ -168,10 +143,10 @@ CREATE RESOURCE POOL CLASSIFIER cl_fullscan_reject WITH (
 
 #### HAS_STREAM {#has-stream}
 
-`HAS_STREAM` determines whether a request is [streaming](create-streaming-query.md) — that is, performs a long-running continuous read and/or write over data streams. Allowed values:
+`HAS_STREAM` determines whether a request is [streaming](create-streaming-query.md) тАФ that is, performs a long-running continuous read and/or write over data streams. Allowed values:
 
-- `true` — the classifier matches streaming requests;
-- `false` — the classifier matches non-streaming requests.
+- `true` тАФ the classifier matches streaming requests;
+- `false` тАФ the classifier matches non-streaming requests.
 
 **Example.** Direct streaming requests to the `pool_stream` pool:
 
@@ -197,20 +172,16 @@ The [permission](./grant.md#permissions-list) `USE` on the database is required.
 
 Example of granting such a permission:
 
->>>>>>> 811e21506d8 (wlm: docs for has predicates (#51956))
 ```yql
 GRANT 'USE' ON `/my_db` TO `user1@domain`;
 ```
 
 ## Examples {#examples}
 
-<<<<<<< HEAD
-=======
 Below is a combined example that composes several classifiers and predicates: rejecting full scans of archive tables, isolating streaming requests, and dedicating a pool for interactive admin queries from the Embedded UI.
 
 Creating resource pools:
 
->>>>>>> 811e21506d8 (wlm: docs for has predicates (#51956))
 ```yql
 CREATE RESOURCE POOL pool_stream WITH (
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=20
@@ -221,9 +192,6 @@ CREATE RESOURCE POOL pool_adhoc_admin WITH (
 );
 ```
 
-<<<<<<< HEAD
-The example above creates a resource pool classifier named `olap_classifier` that routes queries from user `user1@domain` to the resource pool named `olap`. Queries from all other users go to the `default` resource pool, assuming no other resource pool classifiers exist.
-=======
 Creating classifiers:
 
 ```yql
@@ -241,7 +209,7 @@ CREATE RESOURCE POOL CLASSIFIER cl_stream WITH (
     HAS_STREAM=true
 );
 
--- Admin requests from the Embedded UI — into the interactive-queries pool.
+-- Admin requests from the Embedded UI тАФ into the interactive-queries pool.
 -- AND condition: both MEMBER_NAME and HAS_APP_NAME must match.
 CREATE RESOURCE POOL CLASSIFIER cl_adhoc_admin WITH (
     RANK=300,
@@ -252,7 +220,6 @@ CREATE RESOURCE POOL CLASSIFIER cl_adhoc_admin WITH (
 ```
 
 Classifiers are processed in ascending order of `RANK`; the first matching classifier is applied to the request. A request that does not match any classifier is directed to the `default` pool.
->>>>>>> 811e21506d8 (wlm: docs for has predicates (#51956))
 
 ## See also
 

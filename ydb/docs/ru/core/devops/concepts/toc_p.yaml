@@ -9,8 +9,6 @@ items:
   href: versioning.md
 - name: Обслуживание
   href: maintenance-without-downtime.md
-<<<<<<< HEAD
-=======
 - name: SelfHeal
   href: selfheal.md
   items:
@@ -18,6 +16,3 @@ items:
     href: selfheal-storage.md
   - name: SelfHeal подсистем распространения метаданных
     href: selfheal-metadata-distribution.md
-- name: Аутентификация и авторизация узлов баз данных
-  href: node-authorization.md
->>>>>>> a8191fbd90e ([YDBDOCS-2805] Рефакторинг self heal (#52358))

@@ -130,12 +130,7 @@ To estimate the required equipment, perform the following steps.
    MinEmptySlots = ceil( MaxSlotsInRack + 0.027 × TotalSlots )
    ```
 
-<<<<<<< HEAD
-
-   The reserve of empty slots is necessary for the normal operation of the [SelfHeal](../../maintenance/manual/selfheal.md) mechanism, which performs automatic reconfiguration of storage groups to replace failed or long-unavailable disks.
-=======
    The reserve of empty slots is necessary for the normal operation of the [SelfHeal](selfheal-storage.md) mechanism, which performs automatic reconfiguration of storage groups to replace failed or long-unavailable disks.
->>>>>>> a8191fbd90e ([YDBDOCS-2805] Рефакторинг self heal (#52358))
 
    The first term `MaxSlotsInRack` is the maximum number of slots in one failure domain. For a homogeneous cluster `MaxSlotsInRack = DisksPerRack × ExpectedSlotCount`, for a heterogeneous one — `MaxSlotsInRack = max_i(DisksPerRack_i × ExpectedSlotCount)`. This reserve is necessary so that when the most capacious domain fails, its VDisks can fit on the remaining equipment.
 

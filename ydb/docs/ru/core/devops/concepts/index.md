@@ -9,11 +9,7 @@
 * [{#T}](./capacity-planning.md)
 * [{#T}](./versioning.md)
 * [{#T}](./maintenance-without-downtime.md)
-<<<<<<< HEAD
-=======
 * [{#T}](./selfheal.md)
-* [{#T}](./node-authorization.md)
->>>>>>> a8191fbd90e ([YDBDOCS-2805] Рефакторинг self heal (#52358))
 
 Смотрите также:
 

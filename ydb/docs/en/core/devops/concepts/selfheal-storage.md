@@ -1,19 +1,5 @@
 # Storage SelfHeal
 
-<<<<<<< HEAD:ydb/docs/en/core/maintenance/manual/selfheal.md
-During cluster operation, entire nodes or individual block devices on which {{ ydb-short-name }} runs may fail.
-
-SelfHeal is used to maintain cluster availability and fault tolerance if failed nodes or devices cannot be quickly restored.
-
-SelfHeal allows you to:
-
-* Detect faulty system components.
-* Move faulty components in a gentle manner without data loss or disbanding storage groups.
-
-SelfHeal is enabled by default.
-
-The {{ ydb-short-name }} component responsible for SelfHeal is called Sentinel.
-=======
 Storage SelfHeal is a mechanism for automatically restoring {{ ydb-short-name }} storage fault tolerance.
 
 For an overview of the mechanisms and their operating conditions, see [SelfHeal](selfheal.md). Recovery of State Storage, Board, and SchemeBoard replicas is described in [Metadata Distribution SelfHeal](selfheal-metadata-distribution.md).
@@ -25,7 +11,6 @@ Sentinel, a component of [CMS](../../concepts/glossary.md#cms), continuously mon
 The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The relocation itself can take from minutes to a day, depending on the data volume and the hardware. Once the command has been accepted, CMS treats the task as issued; distributed storage is responsible for completing replication.
 
 Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
->>>>>>> a8191fbd90e ([YDBDOCS-2805] Рефакторинг self heal (#52358)):ydb/docs/en/core/devops/concepts/selfheal-storage.md
 
 ## Enabling and disabling SelfHeal {#on-off}
 
@@ -33,21 +18,17 @@ You can enable and disable SelfHeal using the [{{ ydb-short-name }} DSTool](../.
 
 To enable SelfHeal, run the command:
 
-
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ```
-
 
 `<bs_endpoint>` is the endpoint of any [storage node](../../concepts/glossary.md#storage-node) in the cluster.
 
 To disable SelfHeal, run the command:
 
-
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 ```
-
 
 ## SelfHeal settings {#settings}
 
@@ -90,14 +71,11 @@ The following settings are available:
 
 A donor disk is a previous VDisk after data migration that continues to store its data and only responds to read requests from the new VDisk. When migrating with donor disks enabled, previous VDisks continue to function until the data is fully migrated to new disks. To prevent data loss during VDisk migration, enable the use of donor disks:
 
-
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --enable-donor-mode
 ```
 
-
 To disable donor disks, enter the command:
-
 
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --disable-donor-mode

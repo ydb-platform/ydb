@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage("historyInput", "retained");
         ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY historyQuery WITH (OUTPUT_FROM = Timestamp("{}"){}) AS DO BEGIN
+            CREATE STREAMING QUERY historyQuery WITH (FORCE = TRUE, OUTPUT_FROM = Timestamp("{}"){}) AS DO BEGIN
                 INSERT INTO historySource.historyOutput SELECT Data FROM historySource.historyInput
             END DO
         )", outputFrom.ToString(), ReadFrom ? ", READ_FROM = EARLIEST" : ""));

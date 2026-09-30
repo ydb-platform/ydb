@@ -871,8 +871,8 @@ Y_UNIT_TEST_SUITE(NKMeans) {
 
         UNIT_ASSERT(!FillSetting(settings, "m", "0", error));
         UNIT_ASSERT(!FillSetting(settings, "ef_construction", "0", error));
-        UNIT_ASSERT(!FillSetting(settings, "m", ToString(MaxHnswConnectivity + 1), error));
-        UNIT_ASSERT(!FillSetting(settings, "ef_construction", ToString(MaxHnswConstructionCandidates + 1), error));
+        UNIT_ASSERT(!FillSetting(settings, "m", ToString(MaxHnswM + 1), error));
+        UNIT_ASSERT(!FillSetting(settings, "ef_construction", ToString(MaxHnswEfConstruction + 1), error));
     }
 
     Y_UNIT_TEST(ValidateHnswResourceLimits) {
@@ -882,16 +882,16 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         settings.set_vector_dimension(4);
         TString error;
 
-        settings.set_m(MaxHnswConnectivity + 1);
+        settings.set_m(MaxHnswM + 1);
         UNIT_ASSERT(!ValidateSettings(settings, error));
         UNIT_ASSERT_STRING_CONTAINS(error, "M");
 
-        settings.set_m(MaxHnswConnectivity);
-        settings.set_ef_construction(MaxHnswConstructionCandidates + 1);
+        settings.set_m(MaxHnswM);
+        settings.set_ef_construction(MaxHnswEfConstruction + 1);
         UNIT_ASSERT(!ValidateSettings(settings, error));
         UNIT_ASSERT_STRING_CONTAINS(error, "ef_construction");
 
-        settings.set_ef_construction(MaxHnswConstructionCandidates);
+        settings.set_ef_construction(MaxHnswEfConstruction);
         UNIT_ASSERT(ValidateSettings(settings, error));
     }
 }

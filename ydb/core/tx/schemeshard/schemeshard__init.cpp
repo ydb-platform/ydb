@@ -4161,7 +4161,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 TOperation::TPtr operation = Self->Operations.at(operationId.GetTxId());
                 Y_ABORT_UNLESS(operationId.GetSubTxId() == operation->Parts.size());
-                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+                TOperationContext context{Self, txc, ctx, OnComplete, DbChanges};
                 ISubOperation::TPtr part = operation->RestorePart(txState.TxType, txState.State, context);
                 ++(operation->PreparedParts);
                 operation->AddPart(part);
@@ -6049,7 +6049,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             for (auto& part: operation->Parts) {
-                TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};
+                TOperationContext context{Self, txc, ctx, OnComplete, DbChanges};
                 part->ProgressState(context);
             }
         }

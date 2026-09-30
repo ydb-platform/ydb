@@ -223,7 +223,7 @@ IEventHandle* GetRequestAuthAndCheckHandle(
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,
-        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+        new NKikimr::NGRpcService::TEvHttpRequestAuthAndCheck(
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
             owner,

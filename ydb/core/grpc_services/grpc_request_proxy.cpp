@@ -109,7 +109,7 @@ private:
             NYql::TIssues()});
     }
 
-    void Handle(TEvRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
+    void Handle(TEvHttpRequestAuthAndCheck::TPtr& ev, const TActorContext&) {
         ev->Get()->ReplyWithYdbStatus(Ydb::StatusIds::SUCCESS);
     }
 
@@ -193,7 +193,7 @@ private:
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
-                if (!std::is_same_v<TEvent, TEvRequestAuthAndCheck>) { // TEvRequestAuthAndCheck is allowed to be processed without database
+                if (!std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>) { // TEvHttpRequestAuthAndCheck is allowed to be processed without database
                     Counters->IncEmptyDatabaseNameCounter();
                     if (!AllowYdbRequestsWithoutDatabase &&
                         (DynamicNode || (forbidRequestsToStaticNodesWithoutDatabase
@@ -677,7 +677,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvStreamTopicDirectReadRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
-        HFunc(TEvRequestAuthAndCheck, PreHandle);
+        HFunc(TEvHttpRequestAuthAndCheck, PreHandle);
 
         default:
             Y_ABORT("Unknown request: %u\n", ev->GetTypeRewrite());

@@ -1931,6 +1931,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
 
@@ -2040,6 +2046,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {{"fqdn", Ydb::Type::STRING}};
@@ -2145,6 +2157,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -2357,6 +2375,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -2539,6 +2563,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -4105,6 +4135,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {

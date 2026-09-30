@@ -102,7 +102,7 @@ public:
         Runtime.EnableScheduleForActor(TopicSession);
     }
 
-    void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false) {
+    void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false, ui64 generation = 17) {
         std::map<ui32, ui64> readOffsets;
         if (readOffset) {
             readOffsets[PartitionId] = *readOffset;
@@ -114,7 +114,8 @@ public:
             readOffsets,
             0,         // StartingMessageTimestamp;
             "QueryId");
-        Runtime.Send(new IEventHandle(TopicSession, readActorId, event));
+        ClientGenerations[readActorId] = generation;
+        Runtime.Send(new IEventHandle(TopicSession, readActorId, event, 0, generation));
 
         const auto& predicate = source.GetPredicate();
         if (predicate && !expectedError) {
@@ -164,6 +165,7 @@ public:
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+            UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(readActorId));
 
             UNIT_ASSERT_VALUES_EQUAL(1, eventHolder->Get()->Record.MessagesSize());
             NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(0);
@@ -188,6 +190,7 @@ public:
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(readActorId));
 
         const auto& record = eventHolder->Get()->Record;
         NYql::TIssues issues;
@@ -201,6 +204,7 @@ public:
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvNewDataArrived>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
             UNIT_ASSERT(readActorIds.contains(eventHolder->Get()->ReadActorId));
+            UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(eventHolder->Get()->ReadActorId));
             readActorIds.erase(eventHolder->Get()->ReadActorId);
         }
     }
@@ -210,6 +214,7 @@ public:
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(readActorId));
 
         size_t numberMessages = 0;
         for (const auto& message : eventHolder->Get()->Record.GetMessages()) {
@@ -230,6 +235,7 @@ public:
                 if (!clients.contains(client.ReadActorId)) {
                     return false;
                 }
+                UNIT_ASSERT_VALUES_EQUAL(client.Generation, ClientGenerations.at(client.ReadActorId));
                 if (clients[client.ReadActorId] != client.Offset) {
                     return false;
                 }
@@ -281,6 +287,7 @@ public:
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
     NActors::TActorId ReadActorId3;
+    TMap<TActorId, ui64> ClientGenerations;
     ui32 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
@@ -457,6 +464,33 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
+    }
+
+    Y_UNIT_TEST_F(RestartForDifferentFormatFlushesBufferedJson, TMockTopicFixture) {
+        // Keep the JSON batch buffered until the new raw client restarts the SDK session.
+        Init("mixed_formats", std::numeric_limits<ui64>::max(), 0, {}, 60000);
+        auto jsonSource = BuildSource(true);
+        StartSession(ReadActorId1, jsonSource);
+        PQWrite({Json1, Json2, Json3});
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "JSON input buffered", [&] {
+            auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
+            return event && event->Get()->Stat.Common.LastReadedOffset == 2;
+        });
+
+        auto rawSource = BuildSource(true);
+        rawSource.SetFormat("raw");
+        rawSource.ClearColumns();
+        rawSource.ClearColumnTypes();
+        rawSource.AddColumns("data");
+        rawSource.AddColumnTypes("[DataType; String]");
+        StartSession(ReadActorId2, rawSource, 1, false, 23);
+
+        // Restart must flush the other format before historical messages are replayed.
+        ExpectMessageBatch(ReadActorId1, {JsonMessage(1), JsonMessage(2), JsonMessage(3)}, true, {0, 1, 2});
+        PQWrite({Json2, Json3}, 1);
+        ExpectMessageBatch(ReadActorId2, {TRow().AddString(Json2), TRow().AddString(Json3)}, true, {1, 2});
+        ExpectStatistics({{ReadActorId1, 3}, {ReadActorId2, 3}});
+        PassAway();
     }
 
     Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TRealTopicFixture) {
@@ -739,14 +773,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source);
         ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "no path");
         
-        auto event = new NFq::TEvRowDispatcher::TEvStartSession(
-            source,
-            {PartitionId},
-            "Token",
-            {},
-            0,
-            "QueryId");
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, event));
+        StartSession(ReadActorId2, source, Nothing(), true, 23);
 
         ExpectSessionError(ReadActorId2, EStatusId::SCHEME_ERROR, "no path");
     }

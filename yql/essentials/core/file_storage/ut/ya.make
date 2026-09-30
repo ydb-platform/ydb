@@ -12,6 +12,7 @@ PEERDIR(
     library/cpp/http/server
     library/cpp/threading/future
     library/cpp/deprecated/atomic
+    library/cpp/testing/common
     yql/essentials/utils/test_http_server
     yql/essentials/utils/fetch/proto
 )

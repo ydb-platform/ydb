@@ -41,7 +41,7 @@ public:
   void Inject(context::propagation::TextMapCarrier &carrier,
               const context::Context &context) noexcept override
   {
-    SpanContext span_context = trace::GetSpan(context)->GetContext();
+    SpanContext span_context = trace::GetSpanContext(context);
     if (!span_context.IsValid())
     {
       return;

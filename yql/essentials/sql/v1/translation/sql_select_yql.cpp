@@ -615,8 +615,11 @@ private:
         }
 
         if (rule.HasBlock8()) {
-            Token(rule.GetBlock8().GetToken1());
-            return Unsupported("WITHOUT (IF EXISTS)? without_column_list");
+            if (auto result = Build(rule.GetBlock8())) {
+                setItem.Without = std::move(*result);
+            } else {
+                return std::unexpected(result.error());
+            }
         }
 
         if (rule.HasBlock9()) {
@@ -706,6 +709,64 @@ private:
         }
 
         return TNonNull(node);
+    }
+
+    TSQLResult<TYqlWithout> Build(const TRule_select_core::TBlock8& block) {
+        Token(block.GetToken1());
+        if (auto result = Build(block.GetRule_without_column_list3())) {
+            return TYqlWithout{
+                .Columns = std::move(*result),
+                .IsIfExists = block.HasBlock2(),
+            };
+        } else {
+            return std::unexpected(result.error());
+        }
+    }
+
+    TSQLResult<TVector<TYqlWithout::TColumn>> Build(const TRule_without_column_list& rule) {
+        TVector<TYqlWithout::TColumn> columns(Reserve(1 + rule.GetBlock2().size()));
+        if (auto result = Build(rule.GetRule_without_column_name1())) {
+            columns.emplace_back(std::move(*result));
+        } else {
+            return std::unexpected(result.error());
+        }
+
+        for (const auto& block : rule.GetBlock2()) {
+            Token(block.GetToken1());
+            if (auto result = Build(block.GetRule_without_column_name2())) {
+                columns.emplace_back(std::move(*result));
+            } else {
+                return std::unexpected(result.error());
+            }
+        }
+        return columns;
+    }
+
+    TSQLResult<TYqlWithout::TColumn> Build(const TRule_without_column_name& rule) {
+        TString source;
+        TString name;
+        switch (rule.Alt_case()) {
+            case TRule_without_column_name::kAltWithoutColumnName1:
+                source = Id(rule.GetAlt_without_column_name1().GetRule_an_id1(), *this);
+                name = Id(rule.GetAlt_without_column_name1().GetRule_an_id3(), *this);
+                break;
+            case TRule_without_column_name::kAltWithoutColumnName2:
+                name = Id(rule.GetAlt_without_column_name2().GetRule_an_id_without1(), *this);
+                break;
+            case TRule_without_column_name::ALT_NOT_SET:
+                YQL_ENSURE(false, "Unreachable");
+        }
+        if (name.empty()) {
+            if (!Ctx_.HasPendingErrors) {
+                Error() << "Empty column name is not allowed";
+            }
+            return std::unexpected(ESQLError::Basic);
+        }
+        return TYqlWithout::TColumn{
+            .Position = Ctx_.Pos(),
+            .Source = std::move(source),
+            .Name = std::move(name),
+        };
     }
 
     TSQLResult<TProjection> BuildProjection(const TRule_select_core& rule) {

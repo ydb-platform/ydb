@@ -1443,9 +1443,9 @@
     ],
     "test.test[select_yql-uncorrelated_asterisk_subquery_in-default.txt-Debug]": [
         {
-            "checksum": "a3bbf6ad6343a87d08e2e7539de763f6",
-            "size": 374,
-            "uri": "https://{canondata_backend}/1937424/d02bb271c9ab67557c669f52bc80a0a698a8a91e/resource.tar.gz#test.test_select_yql-uncorrelated_asterisk_subquery_in-default.txt-Debug_/opt.yql"
+            "checksum": "50a8401302f429f20772b8e103ecf2e0",
+            "size": 391,
+            "uri": "https://{canondata_backend}/1942173/4a06f0feb4df636a408f3a07d754953c9bd770ed/resource.tar.gz#test.test_select_yql-uncorrelated_asterisk_subquery_in-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-uncorrelated_asterisk_subquery_in-default.txt-Results]": [

@@ -168,6 +168,15 @@ message TDDiskStateInfo {
     optional double DDiskOccupancy = 3; // normalized PDisk owner occupancy
     optional double PersistentBufferOccupancy = 4; // used / configured capacity
     optional uint64 ChangeTime = 5; // last sample received by whiteboard, milliseconds
+    optional uint32 NodeId = 6; // filled during merge
+    optional uint64 AllocatedSize = 7; // bytes allocated by the shared PDisk owner
+    optional uint64 AvailableSize = 8; // bytes available within owner and PDisk limits
+    optional uint64 TotalSize = 9; // PDisk owner hard limit in bytes
+    optional string PersistentBufferId = 10; // stable service actor ID
+    // False means controller identity only; size and occupancy samples are unavailable.
+    optional bool HasWhiteboardData = 11; // filled by viewer
+    optional uint32 GroupId = 12; // absent when controller information is unavailable
+    optional string DDiskPath = 13; // actor monitoring path on the owning node
 }
 
 message TEvPDiskStateRequest {

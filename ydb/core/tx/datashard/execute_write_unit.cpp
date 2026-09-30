@@ -549,7 +549,7 @@ public:
     }
 
     void DoUnsafeTruncateToUserDb(const TValidatedWriteTxOperation& validatedOperation, TConstArrayRef<ui64> preserveLockTxIds,
-        ui64 globalTxId, const TRowVersion& mvccVersion, TTransactionContext& txc, const TActorContext& ctx)
+        ui64 txId, const TRowVersion& mvccVersion, TTransactionContext& txc, const TActorContext& ctx)
     {
         const ui64 tableId = validatedOperation.GetTableId().PathId.LocalPathId;
         const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
@@ -573,7 +573,7 @@ public:
 
         DataShard.IncCounter(COUNTER_UNSAFE_TRUNCATE);
 
-        NDataIntegrity::LogIntegrityTrailsUnsafeTruncate(ctx, DataShard.TabletID(), globalTxId, tableId,
+        NDataIntegrity::LogIntegrityTrailsUnsafeTruncate(ctx, DataShard.TabletID(), txId, tableId,
             TStringBuilder() << mvccVersion.Step << ":" << mvccVersion.TxId,
             lockStats.Broken, lockStats.Preserved);
     }
@@ -925,7 +925,7 @@ public:
                     }
                     if (validatedOperation.GetOperationType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSAFE_TRUNCATE) {
                         DoUnsafeTruncateToUserDb(validatedOperation, writeTx->GetPreserveLockTxIds(),
-                            writeOp->GetGlobalTxId(), mvccVersion, txc, ctx);
+                            writeOp->GetTxId(), mvccVersion, txc, ctx);
                         continue;
                     }
 

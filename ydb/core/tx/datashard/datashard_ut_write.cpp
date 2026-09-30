@@ -5823,6 +5823,25 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         }
     }
 
+    Y_UNIT_TEST(UnsafeTruncatePreserveLocksWithoutTruncateRejected) {
+        auto [runtime, server, sender] = TestCreateServer();
+
+        TShardedTableOptions opts;
+        const auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+
+        for (auto mode : {NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, NKikimrDataEvents::TEvWrite::MODE_PREPARE}) {
+            auto request = MakeWriteRequest(100, mode,
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, opts.Columns_, 1);
+            request->Record.AddPreserveLockTxIds(42);
+
+            Write(runtime, sender, shards[0], std::move(request),
+                NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(ReadTable(server, shards, tableId), "");
+        UNIT_ASSERT_VALUES_EQUAL(GetUnsafeTruncateCounter(runtime, shards[0]), 0u);
+    }
+
     Y_UNIT_TEST(UnsafeTruncateImmediate) {
         auto [runtime, server, sender] = TestCreateServer();
 

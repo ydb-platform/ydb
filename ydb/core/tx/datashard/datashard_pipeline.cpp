@@ -1822,6 +1822,12 @@ TOperation::TPtr TPipeline::BuildOperation(NEvents::TDataEvents::TEvWrite::TPtr&
         return writeOp;
     }
 
+    if (!writeTx->GetPreserveLockTxIds().empty() && !writeTx->HasUnsafeTruncate()) {
+        badRequest(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+            "PreserveLockTxIds requires an unsafe truncate operation");
+        return writeOp;
+    }
+
     if (writeTx->HasUnsafeTruncate()) {
         // NTable::TDatabase::TruncateTable asserts both !Truncated and !DataModified for the
         // table, so mixing an unsafe truncate with anything else touching the same table would abort

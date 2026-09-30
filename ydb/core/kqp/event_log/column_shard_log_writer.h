@@ -6,6 +6,8 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
 
+#include <optional>
+
 namespace NKikimr::NKqp {
 
 class TKikimrRunner;
@@ -43,9 +45,11 @@ protected:
     TString GetCreateStoreQuery();
     TString GetCreateTableQuery();
 
+    TString GetStorePath() const;
+    TString GetTablePath() const;
+    std::optional<TVector<TString>> GetTableColumnNames() const;
     void CreateStorage();
     bool ExecuteSchemeQuery(const TString& sessionId, const TString& query);
-    bool Exists{false};
     bool CheckStorageExists();
     void CreateOrUpdateStorage() override;
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;

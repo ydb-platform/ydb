@@ -31,6 +31,38 @@ using TEvCreateSessionRequest = NGRpcService::TGrpcRequestOperationCall<
 using TEvExecuteSchemeQueryRequest = NGRpcService::TGrpcRequestOperationCall<
     Ydb::Table::ExecuteSchemeQueryRequest,
     Ydb::Table::ExecuteSchemeQueryResponse>;
+using TEvDescribeTableRequest = NGRpcService::TGrpcRequestOperationCall<
+    Ydb::Table::DescribeTableRequest,
+    Ydb::Table::DescribeTableResponse>;
+
+template<typename TEvent, typename TResult>
+std::optional<TResult> CallLocalRpc(
+    typename TEvent::TRequest&& request,
+    const TString& database)
+{
+    auto future = NRpcService::DoLocalRpc<TEvent>(
+        std::move(request), database, "", TActivationContext::ActorSystem());
+    const auto response = future.GetValueSync();
+    if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
+        return std::nullopt;
+    }
+
+    TResult result;
+    if (!response.operation().result().UnpackTo(&result)) {
+        return std::nullopt;
+    }
+    return result;
+}
+
+std::optional<Ydb::Table::DescribeTableResult> DescribeTable(
+    const TString& database,
+    const TString& path)
+{
+    Ydb::Table::DescribeTableRequest request;
+    request.set_path(path);
+    return CallLocalRpc<TEvDescribeTableRequest, Ydb::Table::DescribeTableResult>(
+        std::move(request), database);
+}
 
 } // namespace
 
@@ -125,28 +157,46 @@ TString TColumnShardLogWriter::GetCreateTableQuery() {
     return sb;
 }
 
+TString TColumnShardLogWriter::GetStorePath() const {
+    return TStringBuilder() << Settings.Path << "/" << Settings.StoreName;
+}
+
+TString TColumnShardLogWriter::GetTablePath() const {
+    return TStringBuilder() << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName;
+}
+
+std::optional<TVector<TString>> TColumnShardLogWriter::GetTableColumnNames() const {
+    const auto tableDescription = DescribeTable(Settings.Path, GetTablePath());
+    if (!tableDescription) {
+        return std::nullopt;
+    }
+
+    TVector<TString> columnNames;
+    columnNames.reserve(tableDescription->columns_size());
+    for (const auto& column : tableDescription->columns()) {
+        columnNames.push_back(column.name());
+    }
+    return columnNames;
+}
+
 bool TColumnShardLogWriter::CheckStorageExists() {
-    // @todo Сделать нормальную асинхронную проверку
-    if (Exists) {
+    if (CreationState.load() == TCreationState::Exists) {
         return true;
     }
-    Exists = true;
-    return false;
-#if 0
-    // @todo Будет ли работать в production
-    // @todo Не слишком ли - ходить через клиента?
-    auto schemeClient = Runner.GetSchemeClient();
 
-    const TString storePath = "/Root/" + Settings.StoreName;
-    const auto store = schemeClient.DescribePath(storePath).GetValueSync();
-    if (!store.IsSuccess() || store.GetEntry().Type != NYdb::NScheme::ESchemeEntryType::ColumnStore) {
+    const auto columnNames = GetTableColumnNames();
+    if (!columnNames || columnNames->empty()) {
         return false;
     }
 
-    const TString tablePath = storePath + "/" + Settings.TableName;
-    const auto table = schemeClient.DescribePath(tablePath).GetValueSync();
-    return table.IsSuccess() && table.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::ColumnTable;
-#endif
+    Cerr << "DEBUG: table exists, fields:";
+    for (const auto& columnName : *columnNames) {
+        Cerr << " " << columnName;
+    }
+    Cerr << Endl;
+
+    CreationState.store(TCreationState::Exists);
+    return true;
 }
 
 bool TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const TString& query) {

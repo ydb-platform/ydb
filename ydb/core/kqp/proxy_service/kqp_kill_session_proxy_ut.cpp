@@ -4,6 +4,8 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <util/generic/scope.h>
+
 namespace NKikimr::NKqp {
 namespace {
 
@@ -219,6 +221,40 @@ Y_UNIT_TEST_SUITE(KqpKillSessionProxy) {
         UNIT_ASSERT_VALUES_EQUAL(callerResponses, 0);
         closeObserver.Remove();
         fixture.Runtime->Send(closes.front().Release(), 1);
+        fixture.ExpectKill(42, Ydb::StatusIds::SUCCESS);
+        fixture.Kill(sessionId, 43, TDuration::Seconds(30), "root@builtin", true);
+        fixture.ExpectKill(43, Ydb::StatusIds::PRECONDITION_FAILED);
+    }
+
+    Y_UNIT_TEST_TWIN(NoDeadlineDoesNotScheduleTimeout, remote) {
+        TKillSessionFixture fixture(remote ? 2 : 1);
+        const ui32 ownerNodeIndex = remote ? 1 : 0;
+        const auto sessionId = fixture.CreateSession("owner@builtin", ownerNodeIndex);
+        TVector<TAutoPtr<IEventHandle>> closes;
+        auto closeObserver = fixture.Runtime->AddObserver<TEvKqp::TEvCloseSessionRequest>(
+            [&](TEvKqp::TEvCloseSessionRequest::TPtr& ev) {
+                if (ev->Get()->Record.GetRequest().GetSessionId() == sessionId) {
+                    closes.emplace_back(ev.Release());
+                }
+            });
+        ui32 infiniteTimeouts = 0;
+        TTestActorRuntimeBase::TScheduledEventFilter previousScheduledFilter;
+        previousScheduledFilter = fixture.Runtime->SetScheduledEventFilter(
+            [&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev, TDuration delay, TInstant& deadline) {
+                if (deadline == TInstant::Max()) {
+                    ++infiniteTimeouts;
+                }
+                return previousScheduledFilter(runtime, ev, delay, deadline);
+            });
+        Y_DEFER { fixture.Runtime->SetScheduledEventFilter(previousScheduledFilter); };
+
+        fixture.Kill(sessionId, 42, TDuration::Max());
+        fixture.Runtime->WaitFor("administrative close", [&] { return !closes.empty(); }, TDuration::Seconds(5));
+        fixture.Barrier(ownerNodeIndex);
+        UNIT_ASSERT_VALUES_EQUAL(infiniteTimeouts, 0);
+
+        closeObserver.Remove();
+        fixture.Runtime->Send(closes.front().Release(), ownerNodeIndex);
         fixture.ExpectKill(42, Ydb::StatusIds::SUCCESS);
         fixture.Kill(sessionId, 43, TDuration::Seconds(30), "root@builtin", true);
         fixture.ExpectKill(43, Ydb::StatusIds::PRECONDITION_FAILED);

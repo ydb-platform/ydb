@@ -152,7 +152,9 @@ public:
         }
 
         Become(&TKqpKillSessionRelay::StateWork);
-        Schedule(deadline - now, new TEvents::TEvWakeup());
+        if (deadline != TInstant::Max()) {
+            Schedule(deadline - now, new TEvents::TEvWakeup());
+        }
         Send(MakeKqpProxyID(NodeId), Request->Release().Release(),
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
     }
@@ -1099,7 +1101,9 @@ public:
         const ui64 requestId = ++NextKillSessionRequestId;
         KillSessionWaiters.emplace(requestId, TKillSessionWaiter{ev->Sender, ev->Cookie, sessionId});
         KillSessionWaitersBySession[sessionId].insert(requestId);
-        Schedule(deadline - now, new TEvPrivate::TEvKillSessionTimeout(requestId));
+        if (deadline != TInstant::Max()) {
+            Schedule(deadline - now, new TEvPrivate::TEvKillSessionTimeout(requestId));
+        }
 
         if (sessionInfo->TerminationReason.empty()) {
             TString reason = "Query execution was cancelled by KILL SESSION";

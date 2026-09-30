@@ -1482,7 +1482,7 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CoveredVectorIndexWithFollowers, StaleRO) {
+    Y_UNIT_TEST_QUAD(CoveredVectorIndexWithFollowers, StaleRO, Hnsw) {
         const TString mainTableName = "/Root/TestTable";
         const TString levelTableName = "/Root/TestTable/index/indexImplLevelTable";
         const TString postingTableName = "/Root/TestTable/index/indexImplPostingTable";
@@ -1508,13 +1508,13 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         auto db = kikimr.GetTableClient();
         auto session = DoCreateTableForVectorIndex(db, flags);
         {
-            const TString createIndex(Q_(R"(
+            const TString createIndex(Q_(Sprintf(R"(
                 ALTER TABLE `/Root/TestTable`
                     ADD INDEX index
-                    GLOBAL USING hnsw
+                    GLOBAL USING %s
                     ON (emb) COVER (emb, data)
                     WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
+            )", Hnsw ? "hnsw" : "vector_kmeans_tree")));
 
             auto result = session.ExecuteSchemeQuery(createIndex)
                           .ExtractValueSync();
@@ -1559,13 +1559,10 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             CheckTableReads(session, postingTableName, true, false);
         }
 
-        if (StaleRO) {
-            CheckTableReads(session, levelTableName, false, false);
-            CheckTableReads(session, levelTableName, true, true);
-        } else {
-            CheckTableReads(session, levelTableName, false, true);
-            CheckTableReads(session, levelTableName, true, false);
-        }
+        // HNSW searches posting partitions directly. Only k-means
+        // traverses the level table, using the same leader/follower read mode.
+        CheckTableReads(session, levelTableName, false, !Hnsw && !StaleRO);
+        CheckTableReads(session, levelTableName, true, !Hnsw && StaleRO);
 
         // Etalon reads from main table
         CheckTableReads(session, mainTableName, false, true);
@@ -1720,9 +1717,9 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                     UNIT_ASSERT(tx.ParseFromString(record.GetTxBody()));
                     if (tx.HasAlterTable()) {
                         auto* alter = tx.MutableAlterTable();
+                        alter->SetVectorIndexHnsw(true);
                         alter->SetVectorIndexEmbeddingColumn("emb");
                         alter->SetVectorIndexEmbeddingColumnId(2);
-                        alter->SetVectorIndexHnsw(true);
                         auto* settings = alter->MutableVectorIndexKmeansTreeDescription()
                             ->MutableSettings()->mutable_settings();
                         settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);

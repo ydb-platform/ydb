@@ -73,6 +73,14 @@ namespace {
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
 
+    void CheckExportedTableFiles(TTestBasicRuntime& runtime, TS3Mock& s3Mock) {
+        const bool tableBackupAsSql = runtime.GetAppData().FeatureFlags.GetEnableTableBackupAsSql();
+        const auto& data = s3Mock.GetData();
+        UNIT_ASSERT_VALUES_EQUAL(data.size(), tableBackupAsSql ? 10u : 8u);
+        UNIT_ASSERT_VALUES_EQUAL(data.contains("/create_table.sql"), tableBackupAsSql);
+        UNIT_ASSERT_VALUES_EQUAL(data.contains("/create_table.sql.sha256"), tableBackupAsSql);
+    }
+
     TString GenerateScheme(const TPathDescription& pathDesc) {
         UNIT_ASSERT(pathDesc.HasTable());
         const auto& tableDesc = pathDesc.GetTable();
@@ -2599,7 +2607,7 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        CheckExportedTableFiles(runtime, s3Mock);
 
         // Restore table
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -2681,7 +2689,7 @@ value {
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
 
-        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
+        CheckExportedTableFiles(runtime, s3Mock);
 
         // Make corruption
         corruption(s3Mock.GetData());

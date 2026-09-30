@@ -50,6 +50,15 @@ Supplying both `compare_ref` and `compare_current_ref` (or explicit paths) lets
 you compare two arbitrary prebuilt binaries — e.g. `main` vs `main` (a noise
 sanity check) or two different refs — **without a local build**.
 
+The GitHub workflow defaults vector comparisons to **baseline `vector_kmeans_tree`
+versus current `hnsw`**. Set `baseline_index_type=hnsw` and select a baseline ref
+that supports HNSW to compare HNSW on both versions. Fulltext keeps its workload
+default. Index types are included in the report.
+
+For HNSW, the comparison passes `--min-rows 1` so small generated partitions use
+the graph cache; query search breadth remains 15. This applies to generated,
+reloaded, and S3 datasets on either side. Warmup precedes each measured run.
+
 ## Parameters (`--test-param compare_*=...`)
 
 | param | default | meaning |
@@ -61,7 +70,8 @@ sanity check) or two different refs — **without a local build**.
 | `compare_rows` | `10000` | rows in the generated database |
 | `compare_threads` | `10` | client threads |
 | `compare_targets` | `1000` | number of query targets |
-| `compare_index_type` | `` | value passed to the selected workload as `--index-type`; empty uses its default |
+| `compare_index_type` | `` | current-side index type; also used by the baseline unless overridden |
+| `compare_baseline_index_type` | `` | baseline index type; empty inherits `compare_index_type` |
 | `compare_ref` | `main` | baseline S3 ref (download URL + report label) |
 | `compare_current_ref` | `` | current S3 ref; empty → use the locally built `ydbd` |
 | `compare_build_preset` | `release` | S3 preset for downloads + report label (e.g. `release`, `relwithdebinfo`, `profile`) |

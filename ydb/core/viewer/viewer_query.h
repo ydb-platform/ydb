@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/services/workload_manager/session_updater.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
@@ -951,6 +952,15 @@ private:
         if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             QueryResponse.Set(std::move(ev));
             MakeOkReply(jsonResponse, QueryResponse->Record);
+            if (QueryResponse->Record.GetResponse().HasWmState()) {
+                const auto wmState = QueryResponse->Record.GetResponse().GetWmState();
+                if (wmState != NKikimrKqp::WM_STATE_NONE) {
+                    jsonResponse["wm_state"] = NWorkloadManager::WmStateToStatus(wmState);
+                }
+            }
+            if (QueryResponse->Record.GetResponse().HasWmClassifiedBy()) {
+                jsonResponse["wm_classified_by"] = QueryResponse->Record.GetResponse().GetWmClassifiedBy();
+            }
             if (Schema == ESchemaType::Classic && Stats.empty() && (Action.empty() || Action == "execute")) {
                 jsonResponse = std::move(jsonResponse["result"]);
             }

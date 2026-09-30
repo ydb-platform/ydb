@@ -13,10 +13,9 @@ constexpr size_t QUERY_TEXT_LIMIT = 10_KB;
 void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFieldsMap& fieldsMap) const {
     // Snapshot the WM state once so State/StateChangeAt/QueryStartAt stay
     // internally consistent even if a WM callback races with serialization.
-    using EWmState = NWorkloadManager::ISessionUpdater::EState;
     const auto wmState = WmState->GetState();
-    const bool isInWmQueue = EqualToOneOf(wmState, EWmState::PENDING, EWmState::DELAYED);
-    const bool wmExited = (wmState == EWmState::EXITED);
+    const bool isInWmQueue = NWorkloadManager::IsWmStateQueued(wmState);
+    const bool wmExited = (wmState == NWorkloadManager::ISessionUpdater::EState::EXITED);
 
     if (fieldsMap.NeedField(VSessions::SessionId::ColumnId)) {  // 1
         proto->SetSessionId(SessionId);
@@ -24,11 +23,11 @@ void TKqpSessionInfo::SerializeTo(::NKikimrKqp::TSessionInfo* proto, const TFiel
 
     if (fieldsMap.NeedField(VSessions::State::ColumnId)) {  // 3
         if (isInWmQueue) {
-            proto->SetState("QUEUED");
+            proto->SetState(NWorkloadManager::WmStateToStatus(wmState));
         } else {
             switch(State) {
                 case TKqpSessionInfo::ESessionState::IDLE:
-                    proto->SetState("IDLE"); 
+                    proto->SetState("IDLE");
                     break;
                 case TKqpSessionInfo::ESessionState::EXECUTING:
                     proto->SetState("EXECUTING");

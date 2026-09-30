@@ -37,6 +37,14 @@ public:
         Inner->SetPoolContext(std::move(poolId), std::move(classifiedBy));
     }
 
+    EState GetState() const override {
+        return Inner->GetState();
+    }
+
+    TString GetClassifiedBy() const override {
+        return Inner->GetClassifiedBy();
+    }
+
 private:
     std::shared_ptr<ISessionUpdater> Inner;
     EState FinalState;
@@ -534,6 +542,48 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
             UNIT_ASSERT_C(!reader[0].WmState,     "WmState must be NULL for state=" << ui32(state));
             UNIT_ASSERT_C(!reader[0].WmEnterTime, "WmEnterTime must be NULL for state=" << ui32(state));
             UNIT_ASSERT_C(!reader[0].WmExitTime,  "WmExitTime must be NULL for state=" << ui32(state));
+        }
+    }
+
+    ///
+    /// Verify that WmStateToStatus, WmStateToProto, and IsWmStateQueued
+    /// are mutually consistent for all WM states.
+    ///
+    Y_UNIT_TEST(WmStateConversionConsistency) {
+        for (int stateInt = static_cast<int>(ISessionUpdater::EState::NONE);
+             stateInt <= static_cast<int>(ISessionUpdater::EState::EXITED);
+             ++stateInt)
+        {
+            const auto state = static_cast<ISessionUpdater::EState>(stateInt);
+            const auto status = WmStateToStatus(state);
+            const auto protoState = WmStateToProto(state);
+            const auto isQueued = IsWmStateQueued(state);
+
+            // WmStateToStatus and WmStateToProto must agree
+            if (status == "QUEUED") {
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(protoState), static_cast<int>(NKikimrKqp::WM_STATE_QUEUED),
+                    "Inconsistent: status=QUEUED but proto=" << static_cast<int>(protoState)
+                    << " for state " << stateInt);
+            } else if (status == "EXECUTING") {
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(protoState), static_cast<int>(NKikimrKqp::WM_STATE_EXECUTING),
+                    "Inconsistent: status=EXECUTING but proto=" << static_cast<int>(protoState)
+                    << " for state " << stateInt);
+            } else if (status.empty()) {
+                // WM_STATE_NONE maps to an empty status string
+                UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(protoState), static_cast<int>(NKikimrKqp::WM_STATE_NONE),
+                    "Inconsistent: status is empty but proto=" << static_cast<int>(protoState)
+                    << " for state " << stateInt);
+            } else {
+                UNIT_FAIL("Unknown status: " << status);
+            }
+
+            // IsWmStateQueued must agree with both status and proto
+            UNIT_ASSERT_VALUES_EQUAL_C(isQueued, status == "QUEUED",
+                "Inconsistent: isQueued=" << isQueued << " but status=" << status
+                << " for state " << stateInt);
+            UNIT_ASSERT_VALUES_EQUAL_C(isQueued, protoState == NKikimrKqp::WM_STATE_QUEUED,
+                "Inconsistent: isQueued=" << isQueued << " but proto="
+                << static_cast<int>(protoState) << " for state " << stateInt);
         }
     }
 }

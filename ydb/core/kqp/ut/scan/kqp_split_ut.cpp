@@ -216,8 +216,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 if (pipe == nullptr) {
                     pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
                     Register(pipe);
-                    for (auto& [_, pipe] : Pipes) {
-                        pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                    for (auto& [_, p] : Pipes) {
+                        p->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
                     }
                 }
             }
@@ -236,8 +236,8 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                     if (pipe == nullptr) {
                         pipe = Pipes[ev->Sender] = new TReplyPipeStub(SelfId(), ev->Sender);
                         runtime->Register(pipe);
-                        for (auto& [_, pipe] : Pipes) {
-                            pipe->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
+                        for (auto& [_, p] : Pipes) {
+                            p->SetupCapture(ReverseSkip.load(), ReverseCapture.load());
                         }
                     }
                     auto id = pipe->SelfId();

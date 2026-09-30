@@ -443,6 +443,7 @@ TString GetObfuscatedData(TStringBuf data) {
         "Cookie",
         "Set-Cookie",
         "X-Ydb-Auth-Ticket",
+        "X-Ydb-Iam-Token",
         "X-YaCloud-SubjectToken",
     };
 

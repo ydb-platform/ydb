@@ -93,8 +93,15 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             );
         )", true);
         execute("UPSERT INTO TestTable (Key, Value, Other) VALUES (1, 10, 20);");
+        const TString writeNulls = "UPSERT INTO TestTable (Key, Value, Other) VALUES (1, NULL, 20), (2, NULL, 30);";
+        auto rejected = client.ExecuteQuery(writeNulls, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(!rejected.IsSuccess(), "Writing NULL must fail before DROP NOT NULL");
+        UNIT_ASSERT_STRING_CONTAINS(rejected.GetIssues().ToString(), "Failed to convert type");
+        auto unchanged = execute("SELECT Key, Value, Other FROM TestTable ORDER BY Key;");
+        CompareYson("[[1;10;20]]", NYdb::FormatResultSetYson(unchanged.GetResultSet(0)));
+
         execute("ALTER TABLE TestTable ALTER COLUMN Value DROP NOT NULL;", true);
-        execute("UPSERT INTO TestTable (Key, Value, Other) VALUES (1, NULL, 20), (2, NULL, 30);");
+        execute(writeNulls);
 
         for (const TString& source : {TString("TestTable"), TString("TestTable VIEW ByValue"), TString("TestTable VIEW ByOther")}) {
             auto result = execute("SELECT Key, Value, Other FROM " + source + " ORDER BY Key;");

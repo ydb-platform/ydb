@@ -348,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
                 INDEX fulltext_idx
                     GLOBAL USING fulltext_relevance
                     ON (Text)
-                    WITH (analyzer="snowball", language="russian")
+                    WITH (analyzer="snowball", language="english,russian")
             );
         )";
         auto result = ExecuteSchemeQuery(kikimr, query, UseQueryClient);

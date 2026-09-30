@@ -32,6 +32,7 @@ private:
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
     YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
     YDB_READONLY_DEF(TLockWriteSeqNum, WriteSeqNum);
+    YDB_READONLY_DEF(ui64, OriginalShard);
 };
 
 class TValidatedWriteTx: TNonCopyable, public TValidatedTx {
@@ -294,6 +295,7 @@ private:
     std::unique_ptr<NEvents::TDataEvents::TEvWrite> WriteRequest;
     NWilson::TTraceId WriteRequestTraceId;
     std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> WriteResult;
+    std::unique_ptr<NEvents::TDataEvents::TEvWriteResult> DuplicateOpsResult;
 
     TValidatedWriteTx::TPtr WriteTx;
 
@@ -306,6 +308,7 @@ private:
     YDB_ACCESSOR_DEF(ui64, SchemeShardId);
     YDB_ACCESSOR_DEF(ui64, SubDomainPathId);
     YDB_ACCESSOR_DEF(NKikimrSubDomains::TProcessingParams, ProcessingParams);
+    YDB_ACCESSOR_DEF(absl::flat_hash_set<size_t>, DuplicateWriteOpIdxs);
 
     ui64 PageFaultCount = 0;
 };

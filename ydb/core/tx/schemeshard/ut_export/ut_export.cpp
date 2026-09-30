@@ -1623,7 +1623,6 @@ partitioning_settings {
                 ExprText: "a + b"
                 Stored: true
                 DependencyColumnNames: ["a", "b"]
-                Context: ""
               }
             }
             KeyColumnNames: ["key"]

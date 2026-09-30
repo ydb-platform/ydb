@@ -711,6 +711,7 @@ public:
     struct TDatabaseStorageStats {
         ui64 Size = 0;
         ui64 Limit = 0;
+        ui64 Groups = 0;
     };
 
     void ReplyAndPassAway() override {
@@ -954,6 +955,7 @@ public:
                                 auto& databaseStats = databaseStorageByType[poolType];
                                 databaseStats.Size += poolStats.Size;
                                 databaseStats.Limit += poolStats.Limit;
+                                databaseStats.Groups += poolStats.Groups;
                                 storageGroups += poolStats.Groups;
                                 storageSize += poolStats.Size;
                                 storageLimit += poolStats.Limit;
@@ -969,6 +971,7 @@ public:
                             databaseStorage.SetType(type);
                             databaseStorage.SetSize(ds.Size);
                             databaseStorage.SetLimit(ds.Limit);
+                            databaseStorage.SetGroups(ds.Groups);
                         }
 
                         THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;

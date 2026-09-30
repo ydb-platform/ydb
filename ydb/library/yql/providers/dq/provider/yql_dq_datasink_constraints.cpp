@@ -16,11 +16,12 @@ namespace {
 
 class TDqDataSinkConstraintTransformer : public TVisitorTransformerBase {
 public:
-    TDqDataSinkConstraintTransformer()
+    explicit TDqDataSinkConstraintTransformer(bool processSortConstraint)
         : TVisitorTransformerBase(true)
+        , ProcessSortConstraint_(processSortConstraint)
     {
-        AddHandler({TDqStage::CallableName(), TDqPhyStage::CallableName()}, Hndl(&NDq::ConstraintDqStage));
-        AddHandler({TDqOutput::CallableName()}, Hndl(&NDq::ConstraintDqOutput));
+        AddHandler({TDqStage::CallableName(), TDqPhyStage::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleDqStage));
+        AddHandler({TDqOutput::CallableName()}, Hndl(&TDqDataSinkConstraintTransformer::HandleDqOutput));
         AddHandler({
             TDqCnUnionAll::CallableName(),
             TDqCnBroadcast::CallableName(),
@@ -29,7 +30,7 @@ public:
             TDqCnHashShuffle::CallableName(),
             TDqCnResult::CallableName(),
             TDqCnValue::CallableName()
-            }, Hndl(&NDq::ConstraintDqConnection));
+            }, Hndl(&TDqDataSinkConstraintTransformer::HandleDqConnection));
         AddHandler({TDqCnMerge::CallableName()}, Hndl(&NDq::ConstraintDqCnMerge));
         AddHandler({TDqReplicate::CallableName()}, Hndl(&NDq::ConstraintDqReplicate));
         AddHandler({
@@ -49,15 +50,31 @@ public:
         }, Hndl(&TDqDataSinkConstraintTransformer::HandleDefault));
     }
 
+private:
+    TStatus HandleDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return NDq::ConstraintDqStage(input, ctx, ProcessSortConstraint_);
+    }
+
+    TStatus HandleDqOutput(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return NDq::ConstraintDqOutput(input, ctx, ProcessSortConstraint_);
+    }
+
+    TStatus HandleDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
+        return NDq::ConstraintDqConnection(input, ctx, ProcessSortConstraint_);
+    }
+
     TStatus HandleDefault(TExprBase, TExprContext&) {
         return TStatus::Ok;
     }
+
+private:
+    const bool ProcessSortConstraint_;
 };
 
 } // anonymous namespace
 
-THolder<IGraphTransformer> CreateDqDataSinkConstraintTransformer() {
-    return THolder<IGraphTransformer>(new TDqDataSinkConstraintTransformer());
+THolder<IGraphTransformer> CreateDqDataSinkConstraintTransformer(bool processSortConstraint) {
+    return THolder<IGraphTransformer>(new TDqDataSinkConstraintTransformer(processSortConstraint));
 }
 
 } // namespace NYql

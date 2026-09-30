@@ -132,7 +132,7 @@ message TPDiskStateInfo {
     optional string Path = 4 [(DefaultField) = true];
     optional uint64 Guid = 5 [(DefaultField) = true];
     optional uint64 Category = 6 [(DefaultField) = true];
-    optional uint64 AvailableSize = 7 [(DefaultField) = true, (InsignificantChangeAmount) = 104857600]; // 100Mb
+    optional uint64 AvailableSize = 7 [(DefaultField) = true, (InsignificantChangeAmount) = 104857600]; // 100 MiB
     optional uint64 TotalSize = 8 [(DefaultField) = true];
     optional NKikimrBlobStorage.TPDiskState.E State = 9 [(DefaultField) = true];
     optional uint32 NodeId = 10; // filled during merge
@@ -154,17 +154,33 @@ message TPDiskStateInfo {
     optional double PDiskUsage = 26; // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
     optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskCapacityAlert = 27; // Max(SharedQuota.Color, CommonLog.Color)
     optional uint64 ExpectedSlotSize = 28 [(DefaultField) = true];
+    // Filled by viewer from the BlobStorage controller system view.
+    optional string Status = 29;
+    optional string DecommitStatus = 30;
+    optional string MaintenanceStatus = 31;
+    optional bool HasWhiteboardData = 32; // filled by viewer
+}
+
+// One DDisk slot and its PB share a PDisk owner. Reported by the PB every 5s.
+message TDDiskStateInfo {
+    optional uint32 PDiskId = 1;
+    optional uint32 DDiskSlotId = 2;
+    optional double DDiskOccupancy = 3; // normalized PDisk owner occupancy
+    optional double PersistentBufferOccupancy = 4; // used / configured capacity
+    optional uint64 ChangeTime = 5; // last sample received by whiteboard, milliseconds
 }
 
 message TEvPDiskStateRequest {
     optional uint64 ChangedSince = 1;
     repeated int32 FieldsRequired = 2 [packed = true];
+    optional bool IncludeDDiskState = 3 [default = false];
 }
 
 message TEvPDiskStateResponse {
     repeated TPDiskStateInfo PDiskStateInfo = 1;
     optional uint64 ResponseTime = 2;
     optional uint32 ResponseDuration = 3; // filled during collect
+    repeated TDDiskStateInfo DDiskStateInfo = 4;
 }
 
 // The structure reports VDisk compaction satisfaction rank, i.e.
@@ -255,6 +271,7 @@ message TVDiskStateInfo {
     optional double NormalizedOccupancy = 34;
     optional double VDiskRawUsage = 35; // 100.0 * Owner.Used / Owner.HardLimit
     optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlert = 36;
+    optional bool HasWhiteboardData = 38; // filled by viewer
 }
 
 message TEvVDiskStateRequest {

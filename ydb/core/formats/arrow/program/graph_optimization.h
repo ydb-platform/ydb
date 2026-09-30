@@ -169,6 +169,12 @@ private:
     TConclusion<bool> OptimizeFilterWithAnd(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
     TConclusion<bool> OptimizeMergeFetching(TGraphNode* baseNode);
     TConclusion<bool> OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds);
+    /** The DISTINCT marker key is `JsonValue(dataColumnId, const path)` computed over the dedicated single sub-column
+     *  fetch of `dataColumnId` (built by OptimizeForFetchSubColumns), and no other fetch of `dataColumnId` exists.
+     *  Returns that FetchOriginalData node, nullptr otherwise. Walks edges only: `Producers` is stale for sub-columns. */
+    TGraphNode* FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, const ui32 dataColumnId) const;
+    /** Marks the FetchOriginalData node that feeds the producer of `columnId` as dictionary-only. */
+    bool SetDictionaryOnlyOnFetch(const ui32 columnId);
 
 
     bool HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const;

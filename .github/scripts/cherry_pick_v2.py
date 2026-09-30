@@ -492,7 +492,7 @@ def process_branch(
             if output:
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}")
+            raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}, stdout: {e.stdout}, stderr: {e.stderr}")
 
     ahead_result = run_git(
         repo_path, ['rev-list', '--count', f'{target_branch}..HEAD'], logger, check=False
@@ -757,6 +757,7 @@ def main():
             ['git', 'clone', repo_url, repo_dir],
             env={**os.environ, 'GIT_PROTOCOL': '2'},
             check=True,
+            text=True,
             capture_output=True
         )
         
@@ -812,6 +813,9 @@ def main():
         if results_path:
             with open(results_path, 'w') as f:
                 json.dump([{'pr_id': r.pr.id, 'pr_number': r.pr.number, 'branch': r.target_branch} for r in results if r.pr], f, indent=2)
+    except subprocess.CalledProcessError as e:
+        logger.error(f'{e}, stdout: {e.stdout}, stderr: {e.stderr}')
+        raise
     finally:
         if os.path.exists(repo_dir):
             shutil.rmtree(repo_dir)

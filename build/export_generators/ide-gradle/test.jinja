@@ -28,16 +28,40 @@ tasks.register("{{ testname }}", Test::class) {
     useJUnitPlatform()
 {%-             endif %}
 }
-{%-         endfor %}
+{%-         endfor -%}
+{%-         if named_test_artifacts -%}
+{#-             Own jar and configuration for each named test sourceSet, one per name, not per target -#}
+{%-             for extra_target in ordered_extra_targets|selectattr('test_reldir')|rejectattr('test_reldir', 'in', [NS_TEST, NS_SRC_TEST]) -%}
+{%-                 set testname = SourceSetName(extra_target) %}
+
+val {{ testname }}Jar by tasks.registering(Jar::class) {
+    archiveClassifier.set("{{ testname }}")
+    dependsOn(tasks["compile{{ testname|title }}Java"])
+    from(sourceSets["{{ testname }}"].output)
+}
+artifacts.add(configurations.create("{{ testname }}{{ ARTIFACTS_SUFFIX }}").name, {{ testname }}Jar)
+{%-             endfor -%}
+{%-             if test_extra_targets|length %}
+
+val {{ NS_TEST }}Jar by tasks.registering(Jar::class) {
+    archiveClassifier.set("{{ NS_TEST }}")
+    dependsOn(tasks["compileTestJava"])
+    from(sourceSets["{{ NS_TEST }}"].output)
+}
+artifacts.add(configurations.create("{{ NS_TEST }}{{ ARTIFACTS_SUFFIX }}").name, {{ NS_TEST }}Jar)
+{%-             endif %}
+{%-         else %}
 
 val testsJar by tasks.registering(Jar::class) {
     archiveClassifier.set("tests")
-{%-         for extra_target in ordered_extra_targets -%}
-{%-             set testname = SourceSetName(extra_target) %}
+{%-             for extra_target in ordered_extra_targets -%}
+{%-                 set testname = SourceSetName(extra_target) %}
     dependsOn(tasks["compile{{ testname|title }}Java"])
     from(sourceSets["{{ testname }}"].output)
-{%-         endfor %}
+{%-             endfor %}
 }
+artifacts.add(configurations.create("{{ NS_TEST }}{{ ARTIFACTS_SUFFIX }}").name, testsJar)
+{%-         endif -%}
 {%     else %}
 
 tasks.named<Test>("test") {
@@ -56,6 +80,6 @@ val testsJar by tasks.registering(Jar::class) {
     dependsOn(tasks["compileTestJava"])
     from(sourceSets["test"].output)
 }
-{%      endif -%}
-artifacts.add(configurations.create("testArtifacts").name, testsJar)
+artifacts.add(configurations.create("{{ NS_TEST }}{{ ARTIFACTS_SUFFIX }}").name, testsJar)
+{%-      endif -%}
 {%- endif -%}

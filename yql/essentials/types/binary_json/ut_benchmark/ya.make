@@ -1,3 +1,6 @@
+# Fails on Windows.
+NO_BUILD_IF(OS_WINDOWS)
+
 G_BENCHMARK()
 
 TAG(ya:fat)

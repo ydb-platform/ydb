@@ -2,7 +2,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
-#include <ydb/core/kqp/ut/olap/helpers/aggregation.h>
+#include <ydb/core/kqp/ut/olap/helpers/test_case.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
@@ -1924,6 +1924,14 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
     }
 
     void RunBlockChannelTest(auto blockChannelsMode) {
+        auto CountSubstr = [](const TString& str, const TString& sub) -> ui64 {
+            ui64 count = 0;
+            for (auto pos = str.find(sub); pos != TString::npos; pos = str.find(sub, pos + sub.size())) {
+                ++count;
+            }
+            return count;
+        };
+
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -1984,7 +1992,9 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
 
             switch (blockChannelsMode) {
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:
-                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(ToFlow (WideFromBlocks"), plan.QueryStats->Getquery_ast());
+                    // Aggregation runs on blocks, but channels stay scalar: each stage converts back before its output.
+                    UNIT_ASSERT_EQUAL_C(CountSubstr(plan.QueryStats->Getquery_ast(), "(return (WideFromBlocks"), 2, plan.QueryStats->Getquery_ast());
+                    UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(WideToBlocks"), plan.QueryStats->Getquery_ast());
                     break;
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_AUTO:
                     UNIT_ASSERT_C(plan.QueryStats->Getquery_ast().Contains("(WideFromBlocks"), plan.QueryStats->Getquery_ast());
@@ -2062,14 +2072,6 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), scanSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             auto plan = CollectStreamResult(it);
-
-            auto CountSubstr = [](const TString& str, const TString& sub) -> ui64 {
-                ui64 count = 0;
-                for (auto pos = str.find(sub); pos != TString::npos; pos = str.find(sub, pos + sub.size())) {
-                    ++count;
-                }
-                return count;
-            };
 
             switch (blockChannelsMode) {
                 case NKikimrConfig::TTableServiceConfig_EBlockChannelsMode_BLOCK_CHANNELS_SCALAR:

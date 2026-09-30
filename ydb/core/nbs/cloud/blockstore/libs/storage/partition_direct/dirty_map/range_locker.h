@@ -2,8 +2,8 @@
 
 #include "public.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/common/pbuffer_key.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/pbuffer_key.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -23,7 +23,7 @@ struct ILockableRanges
     virtual void LockPBuffer(TPBufferKey pBufferKey) = 0;
     virtual void UnlockPBuffer(TPBufferKey pBufferKey) = 0;
     virtual TLockRangeHandle LockDDiskRange(
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask) = 0;
     virtual void UnLockDDiskRange(TLockRangeHandle handle) = 0;
 };
@@ -52,12 +52,12 @@ private:
     // Lock the range on the DDisks specified by the mask.
     TRangeLock(
         ILockableRangesWeakPtr lockableRanges,
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask);
 
     ILockableRangesWeakPtr LockableRanges;
     TPBufferKey PBufferKey;
-    TBlockRange64 Range;
+    TBlockRange16 Range;
     THostMask Mask;
 
     ILockableRanges::TLockRangeHandle LockRange{};

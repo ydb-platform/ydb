@@ -6,14 +6,20 @@ import shutil
 import signal
 import time
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.request import urlopen
 
 import pytest
 import yatest.common
+from library.python.port_manager import PortManager, PortManagerException
 
 
 TLS_FILES = ('ca.pem', 'cert.pem', 'key.pem')
 LOCAL_YDB_TIMEOUT = 180
 READY_TIMEOUT = 90
+QUERY_TIMEOUT = 30
+RESERVED_PORT_COUNT = 32
+TEST_CPU_COUNT = 2
 
 
 def _binary_path(environment_variable):
@@ -49,6 +55,14 @@ def _command_environment(**overrides):
     return environment
 
 
+def _limit_cpu_affinity():
+    # Keep auto-config tied to the CPUs assigned to this test, rather than all
+    # host CPUs visible on runners without a dedicated CPU cgroup.
+    if hasattr(os, 'sched_getaffinity'):
+        cpus = sorted(os.sched_getaffinity(0))[:TEST_CPU_COUNT]
+        os.sched_setaffinity(0, cpus)
+
+
 def _run(command, environment, check=True, timeout=LOCAL_YDB_TIMEOUT):
     return yatest.common.execute(
         [str(argument) for argument in command],
@@ -56,6 +70,7 @@ def _run(command, environment, check=True, timeout=LOCAL_YDB_TIMEOUT):
         check_exit_code=check,
         text=True,
         timeout=timeout,
+        preexec_fn=_limit_cpu_affinity,
     )
 
 
@@ -125,10 +140,54 @@ def _set_default_log_level(config_path, level):
     config_path.write_text(content[:section_match.end()] + section + content[section_end:])
 
 
+def _set_shared_actor_threads(config_path, enabled):
+    content = config_path.read_text()
+    setting = '  use_shared_threads: {}'.format(str(enabled).lower())
+    existing = re.search(r'(?m)^  use_shared_threads: (?:true|false)$', content)
+    if existing:
+        content = content[:existing.start()] + setting + content[existing.end():]
+    else:
+        header = 'actor_system_config:\n'
+        assert content.count(header) == 1
+        content = content.replace(header, header + setting + '\n', 1)
+    config_path.write_text(content)
+
+
+def _actor_pool_names(local_ydb):
+    prefix = '--mon-port='
+    ports = [
+        argument[len(prefix):]
+        for argument in local_ydb._first_node()['command']
+        if argument.startswith(prefix)
+    ]
+    assert len(ports) == 1
+    url = 'http://localhost:{}/viewer/json/sysinfo'.format(ports[0])
+    deadline = time.monotonic() + 30
+    names = None
+    while time.monotonic() < deadline:
+        try:
+            with urlopen(url, timeout=5) as response:
+                nodes = json.load(response)['SystemStateInfo']
+            names = {pool['Name'] for pool in nodes[0]['PoolStats']}
+        except (OSError, json.JSONDecodeError, IndexError, KeyError):
+            pass
+        if names:
+            return names
+        time.sleep(0.5)
+    raise AssertionError('Actor pool stats did not become available')
+
+
 class LocalYdb:
     def __init__(self, working_directory, environment=None):
         self.working_directory = Path(working_directory)
-        self.environment = environment if environment is not None else _command_environment()
+        self.environment = dict(environment if environment is not None else _command_environment())
+        # Keep the global reservation across CLI exits and server restarts. The
+        # child allocates individual ports inside this range using its own locks.
+        self.port_manager = PortManager()
+        first_port = self.port_manager.get_port_range(0, RESERVED_PORT_COUNT)
+        # PortManager interprets the upper bound as exclusive.
+        self.environment['VALID_PORT_RANGE'] = '{}:{}'.format(first_port, first_port + RESERVED_PORT_COUNT)
+        self.environment['PORT_SYNC_PATH'] = str(self.working_directory / 'port-sync')
 
     def _command(self, action, *extra_arguments, check=True):
         return _run(
@@ -193,7 +252,7 @@ class LocalYdb:
             endpoint = '{}:{}'.format(endpoint.rsplit(':', 1)[0], tls_ports[0])
         return endpoint, '/' + database.lstrip('/')
 
-    def query(self, statement, tls_ca=None, output_format=None, check=True):
+    def query(self, statement, tls_ca=None, output_format=None, check=True, timeout=QUERY_TIMEOUT):
         endpoint, database = self._connection(tls=tls_ca is not None)
         command = [
             _binary_path('YDB_CLI_BINARY'),
@@ -208,28 +267,46 @@ class LocalYdb:
         command.extend(['sql', '-s', statement])
         if output_format:
             command.extend(['--format', output_format])
-        return _run(command, self.environment, check=check, timeout=30)
+        return _run(command, self.environment, check=check, timeout=timeout)
 
     def wait_for_query(self, statement, tls_ca=None, output_format=None):
         deadline = time.monotonic() + READY_TIMEOUT
         last_result = None
-        while time.monotonic() < deadline:
-            last_result = self.query(
-                statement,
-                tls_ca=tls_ca,
-                output_format=output_format,
-                check=False,
-            )
-            if last_result.returncode == 0:
-                return last_result
-            time.sleep(0.5)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                last_result = self.query(
+                    statement,
+                    tls_ca=tls_ca,
+                    output_format=output_format,
+                    check=False,
+                    timeout=min(QUERY_TIMEOUT, remaining),
+                )
+            except yatest.common.ExecutionTimeoutError as error:
+                last_result = error.execution_result
+            else:
+                if last_result.returncode == 0:
+                    return last_result
+            time.sleep(min(0.5, max(0, deadline - time.monotonic())))
         raise AssertionError(
-            'YDB did not accept a query in {} seconds:\nstdout:\n{}\nstderr:\n{}'.format(
+            'YDB did not accept a query in {} seconds:\nstdout:\n{}\nstderr:\n{}\nserver logs:\n{}'.format(
                 READY_TIMEOUT,
                 last_result.stdout if last_result else '',
                 last_result.stderr if last_result else '',
+                self.log_tails(),
             )
         )
+
+    def log_tails(self):
+        chunks = []
+        for path in self._log_paths():
+            if path.is_file():
+                with path.open('rb') as stream:
+                    stream.seek(max(0, path.stat().st_size - 65536))
+                    chunks.append('{}:\n{}'.format(path, stream.read().decode('utf-8', errors='replace')))
+        return '\n'.join(chunks)
 
     def log_offsets(self):
         result = {}
@@ -270,6 +347,65 @@ class LocalYdb:
                 except ProcessLookupError:
                     pass
             shutil.rmtree(self.working_directory, ignore_errors=True)
+            self.port_manager.release()
+
+
+@pytest.mark.parametrize('available,expected', [({3, 5, 7}, [3, 5]), ({7}, [7])])
+def test_limit_cpu_affinity(monkeypatch, available, expected):
+    calls = []
+    monkeypatch.setattr(os, 'sched_getaffinity', lambda pid: available, raising=False)
+    monkeypatch.setattr(os, 'sched_setaffinity', lambda pid, cpus: calls.append((pid, cpus)), raising=False)
+    _limit_cpu_affinity()
+    assert calls == [(0, expected)]
+
+
+@pytest.mark.parametrize('ready', [True, False])
+def test_wait_for_query_retries_timeouts(tmp_path, monkeypatch, ready):
+    clock = [0]
+    timeouts = []
+    result = SimpleNamespace(returncode=0, stdout='query result', stderr='')
+    instance = LocalYdb(tmp_path / 'ydb')
+
+    def query(*args, timeout, **kwargs):
+        timeouts.append(timeout)
+        if ready and len(timeouts) == 2:
+            return result
+        clock[0] += timeout
+        raise yatest.common.ExecutionTimeoutError(result, 'query timed out')
+
+    monkeypatch.setattr(time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(time, 'sleep', lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    monkeypatch.setattr(instance, 'query', query)
+    monkeypatch.setattr(instance, 'log_tails', lambda: 'server recovery diagnostics')
+    try:
+        if ready:
+            assert instance.wait_for_query('SELECT 1') is result
+            assert len(timeouts) == 2
+        else:
+            with pytest.raises(AssertionError, match='server recovery diagnostics'):
+                instance.wait_for_query('SELECT 1')
+            assert len(timeouts) == 3
+            assert timeouts[-1] < QUERY_TIMEOUT
+            assert clock[0] == READY_TIMEOUT
+    finally:
+        instance.close()
+
+
+def test_ports_are_reserved_until_close(tmp_path, monkeypatch):
+    monkeypatch.setenv('PORT_SYNC_PATH', str(tmp_path / 'global-port-sync'))
+    instance = LocalYdb(tmp_path / 'ydb')
+    monkeypatch.setenv('VALID_PORT_RANGE', instance.environment['VALID_PORT_RANGE'])
+    try:
+        with PortManager() as competitor:
+            with pytest.raises(PortManagerException):
+                competitor.get_port()
+        # The CLI must be able to allocate inside the globally reserved range.
+        with PortManager(sync_dir=instance.environment['PORT_SYNC_PATH']) as child:
+            child.get_port()
+    finally:
+        instance.close()
+    with PortManager() as competitor:
+        competitor.get_port()
 
 
 @pytest.fixture
@@ -371,6 +507,24 @@ def test_modified_config_is_applied_after_restart(local_ydb):
     assert _json_rows(result) == ['{"id":1}', '{"id":2}', '{"id":3}']
     local_ydb.stop()
     assert ' INFO:' in local_ydb.logs_since(log_offsets)
+
+
+def test_actor_system_config_changes_after_restart(local_ydb):
+    local_ydb.deploy()
+    local_ydb.wait_for_query('SELECT 1;')
+    default_pools = _actor_pool_names(local_ydb)
+
+    local_ydb.stop()
+    _set_shared_actor_threads(local_ydb.config_path, False)
+    local_ydb.start()
+    local_ydb.wait_for_query('SELECT 1;')
+    assert _actor_pool_names(local_ydb) != default_pools
+
+    local_ydb.stop()
+    _set_shared_actor_threads(local_ydb.config_path, True)
+    local_ydb.start()
+    local_ydb.wait_for_query('SELECT 1;')
+    assert _actor_pool_names(local_ydb) == default_pools
 
 
 def test_generated_tls_bundle_is_reused_from_read_only_directory(

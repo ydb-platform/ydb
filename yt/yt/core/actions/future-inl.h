@@ -2334,9 +2334,9 @@ private:
 
     void OnFutureSet(int index, const TErrorOr<T>& result) noexcept
     {
+        // NB: Relaxed ordering is sufficient since this flag is only a best-effort fast path;
+        // SpinLock_ synchronizes access to Results_ and ResponseCount_.
         if (ResultObtained_.load(std::memory_order::relaxed)) {
-            // NB: Relaxed ordering is sufficient since this flag is only a best-effort fast path;
-            // ResultsLock_ synchronizes access to Results_ and ResponseCount_.
             return;
         }
 

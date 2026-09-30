@@ -1007,9 +1007,9 @@ public:
             return true;
         }
 
-        auto& externalSource = tableDesc.Metadata->ExternalSource;
-        if (externalSource.SourceType != ESourceType::ExternalDataSource && externalSource.SourceType != ESourceType::ExternalTable) {
-            YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type: " << externalSource.SourceType;
+        auto& metadata = *tableDesc.Metadata;
+        if (!metadata.IsExternalDataSource() && !metadata.IsExternalTable()) {
+            YQL_CVLOG(NLog::ELevel::ERROR, NLog::EComponent::ProviderKikimr) << "Skip RewriteIO for external entity: unknown entity type";
             return true;
         }
 
@@ -1023,9 +1023,9 @@ public:
         if (mode != "insert_abort") {
             if (mode == "drop" || mode == "drop_if_exists") {
                 TString dropHint;
-                if (externalSource.SourceType == ESourceType::ExternalDataSource) {
+                if (metadata.IsExternalDataSource()) {
                     dropHint = "DROP EXTERNAL DATA SOURCE";
-                } else if (externalSource.SourceType == ESourceType::ExternalTable) {
+                } else if (metadata.IsExternalTable()) {
                     dropHint = "DROP EXTERNAL TABLE";
                 }
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Cannot drop external entity by using DROP TABLE" << (dropHint ?  ". Please use " : "") << dropHint));
@@ -1035,15 +1035,16 @@ public:
             return false;
         }
 
-        if (externalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
+        if (metadata.IsExternalDataSource() && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Attempt to write to external data source \"" << key.GetTablePath() << "\" without table. Please specify table to write to"));
             return false;
         }
 
-        if (++externalSource.WriteOperations > 1) {
+        const bool isExternalTable = metadata.IsExternalTable();
+        if (!ExternalWritePaths.insert(NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())).second) {
             ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
                 << "Multiple writes into same topic or external object is not supported. "
-                << "Found multiple write operations for " << (externalSource.UnderlyingExternalSourceMetadata ? "external table" : "object") << ": " << NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())));
+                << "Found multiple write operations for " << (isExternalTable ? "external table" : "object") << ": " << NCommon::FullTableName(dataSink.Cluster(), key.GetTablePath())));
             return false;
         }
 
@@ -1054,8 +1055,8 @@ public:
                 .Repeat(TExprStep::RewriteIO);
 
         YQL_ENSURE(ExternalSourceFactory);
-        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(externalSource.Type);
-        if (externalSource.SourceType == ESourceType::ExternalDataSource) {
+        if (metadata.IsExternalDataSource()) {
+            const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
             auto writeArgs = node->ChildrenList();
             writeArgs[1] = Build<TCoDataSink>(ctx, node->Pos())
                             .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
@@ -1067,8 +1068,9 @@ public:
             return true;
         }
 
-        // tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable
-        TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), externalSource.TableLocation) });
+        const auto& externalTable = metadata.ExternalTable();
+        const auto& externalSourceInfo = ExternalSourceFactory->GetOrCreate(metadata.GetExternalSourceType());
+        TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), externalTable.GetLocation()) });
         auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
         auto keyNode = ctx.NewCallable(node->Pos(), "Key", {table});
         resultNode = Build<TCoWrite>(ctx, node->Pos())
@@ -1076,13 +1078,13 @@ public:
             .DataSink()
                 .Category(ctx.NewAtom(node->Pos(), externalSourceInfo->GetName()))
                 .FreeArgs()
-                    .Add(ctx.NewAtom(node->Pos(), externalSource.DataSourcePath))
+                    .Add(ctx.NewAtom(node->Pos(), externalTable.GetDataSourcePath()))
                     .Build()
                 .Build()
             .FreeArgs()
                 .Add(keyNode)
                 .Add(node->Child(3))
-                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSourceInfo, externalSource.TableContent))
+                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, externalSourceInfo, externalTable.GetContent()))
             .Build()
             .Done().Ptr();
         return true;
@@ -1277,6 +1279,12 @@ public:
                     }
                 } else if (mode == "analyze") {
                     auto columns = Build<TCoAtomList>(ctx, node->Pos());
+                    TMaybeNode<TExprBase> sampleRate;
+                    for (const auto& setting : settings.Other) {
+                        if (setting.Name().Value() == "sampleRate") {
+                            sampleRate = setting.Value();
+                        }
+                    }
 
                     for (const auto& column: settings.Columns.Cast().Ptr()->Children()) {
                         columns.Add(column);
@@ -1287,6 +1295,7 @@ public:
                         .DataSink(node->Child(1))
                         .Table().Build(key.GetTablePath())
                         .Columns(columns.Done())
+                        .SampleRate(sampleRate)
                         .Done()
                         .Ptr();
                 } else {
@@ -1933,6 +1942,11 @@ private:
     TIntrusivePtr<IKikimrGateway> Gateway;
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;
     NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory;
+
+    // Query-planning state: counts write operations per external entity path
+    // within a single query compilation (multiple writes into the same
+    // external object are not supported).
+    THashSet<TString> ExternalWritePaths;
 
     TAutoPtr<IGraphTransformer> IntentDeterminationTransformer;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;

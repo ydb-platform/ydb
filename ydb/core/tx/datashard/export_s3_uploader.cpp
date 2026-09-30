@@ -23,6 +23,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/struct_log/text_writer.h>
+#include <ydb/library/backup/proto/proto.h>
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <util/generic/buffer.h>
@@ -31,8 +32,6 @@
 #include <util/generic/string.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
-
-#include <google/protobuf/text_format.h>
 
 #include <ydb/core/protos/config.pb.h>
 
@@ -231,7 +230,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
 
     template <typename T>
     void PutMessage(const google::protobuf::Message& message, const TString& key, TString& checksum, T stateFunc, TMaybe<TEncryptionIV> iv) {
-        google::protobuf::TextFormat::PrintToString(message, &Buffer);
+        Y_ENSURE(NYdb::NBackup::PrintProto(message, Buffer));
         PutDataWithChecksum(std::move(Buffer), key, checksum, stateFunc, iv);
     }
 

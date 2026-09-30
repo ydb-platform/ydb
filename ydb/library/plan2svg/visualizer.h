@@ -11,6 +11,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <util/generic/string.h>
+#include <util/string/builder.h>
 
 #include <functional>
 #include <map>
@@ -31,6 +32,10 @@ public:
     void LoadSafe(const std::function<void()>& load);
     void LoadPlan(const TString& planNodeType, const NJson::TJsonValue& root);
     void PostProcessPlans();
+    // The strip naming the columns every plan below shares, and carrying the
+    // timeline scale. Emitted last so it paints over the plans it slides across
+    // while the document scrolls.
+    void PrintColumnHeaders(TStringBuilder& svg, ui64 maxSec, ui64 deltaSec, ui32 x, ui32 w);
     TString PrintSvg();
     TString PrintSvgSafe();
     ui32 NextGroupId() { return ++GroupId; }

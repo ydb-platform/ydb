@@ -329,6 +329,9 @@ public:
     }
 
     void NotifyOnRestart(const TString& status, TSideEffects& sideEffects);
+
+private:
+    void ChangeNode(TNodeId nodeId);
 };
 
 

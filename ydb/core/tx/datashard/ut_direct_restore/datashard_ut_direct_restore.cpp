@@ -1,6 +1,7 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
 
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -537,6 +538,37 @@ Y_UNIT_TEST(WriteBlockedDuringRestore) {
     UNIT_ASSERT(opResult);
     UNIT_ASSERT(opResult->GetSuccess());
     UNIT_ASSERT_VALUES_EQUAL(ReadTable(env.Server, shards, tableId), ExpectedUint32TableState(1));
+}
+
+Y_UNIT_TEST(ReportsTableStatsAfterRestore) {
+    TTestEnv env;
+    auto [shards, tableId] = env.CreateUint32Table();
+    const ui64 shardId = shards[0];
+    const auto desc = env.TableDescription(shardId, tableId);
+
+    // Wait for the first report, which means the shard has already built stats for
+    // the still empty table. Otherwise the restore below would ride on that initial
+    // build instead of having to invalidate the stats itself.
+    WaitTableStats(env.Runtime, shardId, [](const NKikimrTableStats::TTableStats& stats) {
+        return stats.GetRowCount() == 0;
+    });
+
+    env.StartS3(MakeCsv(100, ""));
+
+    const auto result = env.ProposeAndPlanRestore(shardId, tableId, desc);
+    UNIT_ASSERT(result.GetSuccess());
+    UNIT_ASSERT_VALUES_EQUAL(result.GetRowsProcessed(), 100u);
+
+    // Nothing went through the memtable and no compaction ran, so the shard must
+    // invalidate cached stats in TTxS3DirectWriteFinish itself.
+    const auto stats = WaitTableStats(env.Runtime, shardId, [](const NKikimrTableStats::TTableStats& stats) {
+        return stats.GetRowCount() > 0;
+    }).GetTableStats();
+
+    UNIT_ASSERT_VALUES_EQUAL(stats.GetRowCount(), 100u);
+    UNIT_ASSERT_VALUES_EQUAL(stats.GetPartCount(), 1u);
+    UNIT_ASSERT_GT(stats.GetDataSize(), 0u);
+    UNIT_ASSERT_GT(stats.GetLastUpdateTime(), 0u);
 }
 
 Y_UNIT_TEST(CompactionAfterRestore) {

@@ -6,6 +6,8 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -367,39 +369,29 @@ bool CheckDroppingColumns(const TSchemeShard* ss, const NKikimrSchemeOp::TTableD
 }
 
 class TConfigureParts: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TConfigureParts"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TConfigureParts"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TConfigureParts(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType});
+        IgnoreMessages({TEvHive::TEvCreateTabletReply::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvProposeTransactionResult"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", ev->Get()->Record.ShortDebugString()},
+        );
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -411,8 +403,9 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose modify scheme on datashard " << datashardId << " txid: " << OperationId << " at schemeshard" << ssId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on datashard",
+                {"datashardId", datashardId},
+            );
 
             const auto seqNo = context.SS->StartRound(*txState);
             const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
@@ -426,31 +419,25 @@ public:
 };
 
 class TPropose: public TSubOperationState {
+public:
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TAlterTable TPropose"
-                << " operationId# " << OperationId;
-    }
 
 public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvDataShard::TEvProposeTransactionResult::EventType});
+        IgnoreMessages({TEvDataShard::TEvProposeTransactionResult::EventType});
     }
 
     bool HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemaChanged"
-                               << " triggers early"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << evRecord.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"message", evRecord.ShortDebugString()},
+        );
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -458,13 +445,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
-        TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", operationId: " << OperationId
-                               << ", stepId: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -521,11 +505,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -545,6 +525,9 @@ public:
 
 class TAlterTable: public TSubOperation {
     bool AllowShadowData = false;
+
+public:
+    virtual const char* Name() const override final { return "TAlterTable"; }
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -610,12 +593,10 @@ public:
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", pathId},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -720,7 +701,9 @@ public:
             return result;
         }
 
-        bool isReplicated = false;
+        bool hasLegacyReplicationStream = false;
+        bool hasSchemaReplicationStream = false;
+        bool hasSchemaCdcStream = false;
         if (path.Base()->GetAliveChildren()) {
             for (const auto& [_, childPathId] : path.Base()->GetChildren()) {
                 Y_ABORT_UNLESS(context.SS->PathsById.contains(childPathId));
@@ -730,8 +713,18 @@ public:
                     continue;
                 }
 
-                if (isReplicated = childPath->AsyncReplication.IsDefined()) {
-                    break;
+                Y_ABORT_UNLESS(context.SS->CdcStreams.contains(childPathId));
+                const auto& stream = context.SS->CdcStreams.at(childPathId);
+                hasSchemaCdcStream |= stream->SchemaChanges;
+
+                if (!childPath->AsyncReplication.IsDefined()) {
+                    continue;
+                }
+                if (stream->SchemaChanges) {
+                    hasSchemaReplicationStream = true;
+                } else {
+                    // A legacy stream will not receive the column DDL record.
+                    hasLegacyReplicationStream = true;
                 }
             }
         }
@@ -747,12 +740,22 @@ public:
 
         Y_ABORT_UNLESS(alterData->AlterVersion == table->AlterVersion + 1);
 
+        if (hasSchemaCdcStream) {
+            for (const auto& family : alterData->PartitionConfigFull().GetColumnFamilies()) {
+                if (family.GetId() != 0 && family.GetName().empty()) {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "SCHEMA_CHANGES requires names for non-default column families");
+                    return result;
+                }
+            }
+        }
+
         if (!CheckDroppingColumns(context.SS, alter, path, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 
-        if (isReplicated) {
+        if (hasLegacyReplicationStream) {
             for (const auto& [id, column] : alterData->Columns) {
                 if (column.CreateVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot add columns to replicated table");
@@ -760,6 +763,24 @@ public:
                 }
                 if (column.DeleteVersion == alterData->AlterVersion) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot drop columns of replicated table");
+                    return result;
+                }
+            }
+        }
+
+        // CDC schema records contain the resulting column name/type/key
+        // snapshot, but cannot reproduce defaults or NOT NULL transitions.
+        if (hasSchemaReplicationStream) {
+            for (const auto& column : alter.GetColumns()) {
+                const bool altersExistingColumn = table->GetColumnIdByNameSlow(column.GetName())
+                    != TTableInfo::InvalidColumnId;
+                if (column.HasDefaultFromLiteral() || column.HasDefaultFromSequence()
+                    || column.HasDefaultFromExpression() || column.HasEmptyDefault()
+                    || (column.HasSetNotNullInProgress() && column.GetSetNotNullInProgress())
+                    || (column.HasNotNull() && (column.GetNotNull() || altersExistingColumn)))
+                {
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                        "Cannot alter column defaults or NOT NULL on replicated table");
                     return result;
                 }
             }
@@ -786,11 +807,11 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterTable AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -1143,3 +1164,5 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

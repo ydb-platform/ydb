@@ -29,6 +29,28 @@ class TIamTokenService : public NActors::TActor<TIamTokenService>, NGrpcActorCli
         MakeCall<TCreateIamTokenForServiceAccountRequest>(std::move(ev));
     }
 
+    struct TCreateIamTokenForServiceRequest : TGrpcRequest {
+        static constexpr auto Request = &yandex::cloud::priv::iam::v1::IamTokenService::Stub::AsyncCreateForService;
+        using TRequestEventType = TEvIamTokenService::TEvCreateForServiceRequest;
+        using TResponseEventType = TEvIamTokenService::TEvCreateForServiceResponse;
+
+        static const yandex::cloud::priv::iam::v1::CreateIamTokenForServiceRequest& Obfuscate(const yandex::cloud::priv::iam::v1::CreateIamTokenForServiceRequest& p) {
+            return p;
+        }
+
+        static yandex::cloud::priv::iam::v1::CreateIamTokenResponse Obfuscate(const yandex::cloud::priv::iam::v1::CreateIamTokenResponse& p) {
+            yandex::cloud::priv::iam::v1::CreateIamTokenResponse r(p);
+            if (r.iam_token()) {
+                r.set_iam_token(MaskToken(r.iam_token()));
+            }
+            return r;
+        }
+    };
+
+    void Handle(TEvIamTokenService::TEvCreateForServiceRequest::TPtr& ev) {
+        MakeCall<TCreateIamTokenForServiceRequest>(std::move(ev));
+    }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::IAM_TOKEN_SERVICE_ACTOR; }
 
@@ -40,6 +62,7 @@ public:
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvIamTokenService::TEvCreateForServiceAccountRequest, Handle);
+            hFunc(TEvIamTokenService::TEvCreateForServiceRequest, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
         }
     }

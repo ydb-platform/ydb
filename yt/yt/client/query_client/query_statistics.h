@@ -66,6 +66,8 @@ struct TQueryStatistics
     bool IncompleteOutput = false;
     i64 QueryCount = 1;
 
+    EReportedScanOrder ScanOrder = EReportedScanOrder::Unknown;
+
     std::vector<TQueryStatistics> InnerStatistics;
 
     void AddInnerStatistics(TQueryStatistics statistics);

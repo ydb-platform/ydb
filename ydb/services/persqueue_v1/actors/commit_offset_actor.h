@@ -4,10 +4,10 @@
 #include "distributed_commit_helper.h"
 
 
-#include <ydb/core/kqp/common/events/events.h>
-#include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
-
+#include <ydb/core/grpc_services/rpc_deferrable.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
@@ -17,8 +17,8 @@ namespace NKikimr::NGRpcProxy::V1 {
 using namespace NKikimr::NGRpcService;
 
 class TCommitOffsetActor : public TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>
-                         , public NActors::IActorExceptionHandler {
-
+                         , public NActors::IActorExceptionHandler
+                         , public NPQ::TLogPrefix {
     using TBase = TRpcOperationRequestActor<TCommitOffsetActor, TEvCommitOffsetRequest>;
 
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
@@ -42,6 +42,10 @@ public:
     bool OnUnhandledException(const std::exception& exc) override;
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::FRONT_PQ_COMMIT; }
+
+    NPQ::TStructuredMessage LogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE({"consumer", ClientId});
+    }
 
     bool HasCancelOperation() {
         return false;

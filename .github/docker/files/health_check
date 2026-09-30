@@ -1,11 +1,145 @@
 #!/usr/bin/env bash
+# Docker uses cached readiness; --readiness always runs the full check for init.
+# Linux runtime: Bash, coreutils (timeout/stat) and util-linux flock. Run directly
+# or with bash, not sh. Masked procfs disables caching but still runs readiness.
+[ -n "${BASH_VERSION:-}" ] || { echo 'healthcheck: requires Bash; run /health_check directly or with bash' >&2; exit 1; }
+set -euo pipefail
+: "${GRPC_PORT:=2136}"
+HEALTH_CLI=(/ydb --endpoint "grpc://localhost:${GRPC_PORT}" --database /local --no-discovery)
+: "${YDB_READINESS_ENABLE_DDL:=true}"
+: "${YDB_READINESS_INTERVAL_SECONDS:=60}"
+: "${YDB_READINESS_TIMEOUT:=8s}"
+: "${YDB_LIVENESS_TIMEOUT:=2s}"
 
-set -e
-if [ "${DEBUG}" = "true" ]; then
+# Docker provides a writable /dev/shm tmpfs even with --read-only. Keep runtime
+# state off the image filesystem; callers can select another writable mount.
+: "${YDB_HEALTH_STATE_DIR:=/dev/shm/ydb_health}"
+HEALTH_STATE_FILE=${YDB_HEALTH_STATE_DIR}/last_readiness_ok
+
+health_validate_settings() {
+    if [[ ! "$YDB_READINESS_INTERVAL_SECONDS" =~ ^[1-9][0-9]{0,8}$ ]] ||
+       [[ "$YDB_READINESS_ENABLE_DDL" != true && "$YDB_READINESS_ENABLE_DDL" != false ]]; then
+        echo 'healthcheck: invalid readiness interval or DDL setting' >&2
+        return 1
+    fi
+    health_validate_timeout "$YDB_READINESS_TIMEOUT" && health_validate_timeout "$YDB_LIVENESS_TIMEOUT"
+}
+
+health_validate_timeout() {
+    # GNU timeout accepts zero as "no deadline"; health probes must stay bounded.
+    [[ "$1" =~ ^[0-9]+([.][0-9]+)?[smhd]?$ && "$1" =~ [1-9] ]] || {
+        echo 'healthcheck: timeout must be a positive duration' >&2
+        return 1
+    }
+}
+
+health_uptime() {
+    local uptime _
+    read -r uptime _ </proc/uptime || return 1
+    printf '%s\n' "${uptime%%.*}"
+}
+
+health_context() {
+    local boot_id pid_stat
+    local -a fields
+    read -r boot_id </proc/sys/kernel/random/boot_id || return 1
+    IFS= read -r pid_stat </proc/1/stat || return 1
+    # comm (field 2) can contain spaces and parentheses. Fields below start at 3.
+    read -r -a fields <<<"${pid_stat##*) }"
+    [[ "${fields[19]:-}" =~ ^[0-9]+$ ]] || return 1
+    printf '%s\n' "$boot_id ${fields[19]}" "$GRPC_PORT" "$YDB_READINESS_ENABLE_DDL"
+}
+
+health_cache_is_fresh() {
+    local cached checked context current_context now
+    # A read-only record cannot be invalidated after a liveness failure. Never
+    # trust it, even if its timestamp and context otherwise look current.
+    [[ -r "$HEALTH_STATE_FILE" && -w "$HEALTH_STATE_FILE" && -w "$YDB_HEALTH_STATE_DIR" ]] || return 1
+    cached=$(<"$HEALTH_STATE_FILE")
+    checked=${cached%%$'\n'*}
+    context=${cached#*$'\n'}
+    [[ "$checked" =~ ^(0|[1-9][0-9]{0,9})$ ]] || return 1
+    current_context=$(health_context) 2>/dev/null || return 1
+    [[ "$context" == "$current_context" ]] || return 1
+    now=$(health_uptime) || return 1
+    # Monotonic uptime avoids wall-clock jumps; reject future/corrupt state too.
+    (( now >= checked && now - checked < YDB_READINESS_INTERVAL_SECONDS ))
+}
+
+health_record_readiness() {
+    # The caller holds readiness.lock. Readers see either a complete record or
+    # no record; a killed writer's .new file is never treated as a success.
+    local record
+    if ! record=$(health_uptime && health_context) 2>/dev/null; then
+        echo 'healthcheck: cannot read procfs cache identity; readiness succeeded without caching' >&2
+        return 0
+    fi
+    printf '%s\n' "$record" >"${HEALTH_STATE_FILE}.new" || return 1
+    mv -f "${HEALTH_STATE_FILE}.new" "$HEALTH_STATE_FILE"
+}
+
+health_readiness() {
+    # The caller holds fd 9 and runs this whole sequence under one timeout.
+    if [[ "${DEBUG:-false}" == true ]]; then
+        set -x
+    fi
+    rm -f "$HEALTH_STATE_FILE" || return 1
+    "${HEALTH_CLI[@]}" sql -s 'select 1' >/dev/null || return 1
+    "${HEALTH_CLI[@]}" scheme ls /local >/dev/null || return 1
+    if [[ "$YDB_READINESS_ENABLE_DDL" == true ]]; then
+        # IF NOT EXISTS recovers the table after an interrupted probe.
+        "${HEALTH_CLI[@]}" sql -s 'create table if not exists `/local/.sys_health/test` (key int32, value utf8, primary key(key))' >/dev/null || return 1
+        "${HEALTH_CLI[@]}" sql -s 'drop table `/local/.sys_health/test`' >/dev/null || return 1
+    fi
+    health_record_readiness
+}
+
+# The timeout child sources this same file to run readiness without taking the lock again.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != --readiness ) ]]; then
+    echo 'Usage: /health_check [--readiness]' >&2
+    exit 1
+fi
+for dependency in flock timeout stat; do
+    command -v "$dependency" >/dev/null || { echo "healthcheck: requires $dependency" >&2; exit 1; }
+done
+health_validate_settings
+if [[ "${DEBUG:-false}" == true ]]; then
     set -x
 fi
 
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s "select 1" >/dev/null
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery scheme ls /local >/dev/null
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s 'create table if not exists `/local/.sys_health/test` (key int32, value utf8, primary key(key))' >/dev/null
-/ydb --endpoint grpc://localhost:${GRPC_PORT} --database /local --no-discovery sql -s 'drop table `/local/.sys_health/test`' >/dev/null
+mkdir -m 700 -p "$YDB_HEALTH_STATE_DIR"
+# Reject pre-created foreign or writable directories in the shared tmpfs before
+# opening files in them. Never follow a symlink supplied by another process.
+state_mode=$(stat -c %a -- "$YDB_HEALTH_STATE_DIR")
+if [[ -L "$YDB_HEALTH_STATE_DIR" || ! -O "$YDB_HEALTH_STATE_DIR" ]] ||
+   (( (8#$state_mode & 022) != 0 )); then
+    echo 'healthcheck: state directory must be owned by this user and not writable by group or others' >&2
+    exit 1
+fi
+# Every probe holds the same lock, including while reading/invalidating the cache
+# and during liveness. Never unlink this file: flock locks its inode.
+exec 9>"${YDB_HEALTH_STATE_DIR}/readiness.lock"
+# Init can wait for an in-flight Docker probe (8s by default). Docker's regular
+# probe remains nonblocking; the bounded wait applies only to --readiness.
+if [[ $# -eq 1 ]]; then
+    flock --exclusive --wait 10 9 || { echo 'healthcheck: timed out waiting for readiness lock' >&2; exit 1; }
+elif ! flock --exclusive --nonblock 9; then
+    echo 'healthcheck: another probe is running' >&2
+    exit 1
+fi
+
+if [[ $# -eq 0 ]] && health_cache_is_fresh; then
+    if timeout --signal=KILL "$YDB_LIVENESS_TIMEOUT" "${HEALTH_CLI[@]}" discovery whoami >/dev/null; then
+        exit 0
+    fi
+    # Recovery after a failed liveness RPC requires full readiness again.
+    rm -f "$HEALTH_STATE_FILE"
+    exit 1
+fi
+
+# exec preserves fd 9 in timeout and its children. KILL at the deadline prevents
+# a TERM-ignoring CLI from surviving with the lock after its parent exits.
+exec timeout --signal=KILL "$YDB_READINESS_TIMEOUT" \
+    /bin/bash -c 'source "$1"; health_readiness' _ "${BASH_SOURCE[0]}"

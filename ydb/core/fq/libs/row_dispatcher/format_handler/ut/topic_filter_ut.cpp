@@ -5,6 +5,7 @@
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
@@ -322,6 +323,18 @@ public:
 }  // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TestPurecalcFilter) {
+    Y_UNIT_TEST_F(MemoryQuotaLimitsFilterExecution, TFilterFixture) {
+        auto manager = std::make_shared<NYql::NDq::TGuaranteeQuotaManager>(8_MB, 8_MB);
+        auto consumer = MakeConsumer({{"a1", "[DataType; String]"}}, "", "(a1 || a1) = a1", EmptyCheck());
+        auto program = CreateProgramHolder(consumer, manager);
+        CheckSuccess(MakeProgram(consumer, program));
+        UNIT_ASSERT_GT(manager->GetCurrentQuota(), 0);
+        UNIT_ASSERT_EXCEPTION(Push({MakeStringVector({TString(8_MB, 'a')})}), NKikimr::TMemoryLimitExceededException);
+        RemoveProgram();
+        program.Reset();
+        UNIT_ASSERT_VALUES_EQUAL(manager->GetCurrentQuota(), 0);
+    }
+
     Y_UNIT_TEST_F(Simple1, TFilterFixture) {
         TVector<ui64> offsets, expectedOffsets;
         TVector<bool> filters, expectedFilters;

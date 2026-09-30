@@ -12,101 +12,108 @@ using namespace NKikimr::NDetailedMetricsTests;
 
 namespace {
 
-/**
- * Create Data Shard public counters and populate them with fake values.
- *
- * @param[in] runtime The test runtime
- * @param[in] sourceGroupName The name of the counter group for the new counters
- * @param[in] offset The offset for the counter values
- *
- * @return The counters group created for these public counters
- */
-NMonitoring::TDynamicCounterPtr PopulateDataShardPublicCounters(
-    TTestBasicRuntime& runtime,
-    const TString& sourceGroupName,
-    ui32 offset
-) {
-    auto sourceCountersGroup = runtime.GetAppData(0).Counters->GetSubgroup(
-        "counters",
-        sourceGroupName
-    );
+    /**
+     * Create Data Shard public counters and populate them with fake values.
+     *
+     * @param[in] runtime The test runtime
+     * @param[in] sourceGroupName The name of the counter group for the new counters
+     * @param[in] offset The offset for the counter values
+     *
+     * @return The counters group created for these public counters
+     */
+    NMonitoring::TDynamicCounterPtr PopulateDataShardPublicCounters(
+        TTestBasicRuntime& runtime,
+        const TString& sourceGroupName,
+        ui32 offset) {
+        auto sourceCountersGroup = runtime.GetAppData(0).Counters->GetSubgroup(
+            "counters",
+            sourceGroupName);
 
-    // Simple counters
-    const auto setSimpleCounterValue = [&](const char* name, ui64 value) {
-        sourceCountersGroup->GetNamedCounter(
+        // Simple counters
+        const auto setSimpleCounterValue = [&](const char* name, ui64 value) {
+            sourceCountersGroup->GetNamedCounter(
+                                   "name",
+                                   name,
+                                   false /* derivative */
+                                   )
+                ->Set(offset * 1000 + value);
+        };
+
+        setSimpleCounterValue("table.datashard.row_count", 1);
+        setSimpleCounterValue("table.datashard.size_bytes", 2);
+
+        // Cumulative counters
+        const auto setCumulativeCounterValue = [&](const char* name, ui64 value) {
+            sourceCountersGroup->GetNamedCounter(
+                                   "name",
+                                   name,
+                                   true /* derivative */
+                                   )
+                ->Set(offset * 1000 + value);
+        };
+
+        setCumulativeCounterValue("table.datashard.write.rows", 3);
+        setCumulativeCounterValue("table.datashard.write.bytes", 4);
+        setCumulativeCounterValue("table.datashard.read.rows", 5);
+        setCumulativeCounterValue("table.datashard.read.bytes", 6);
+        setCumulativeCounterValue("table.datashard.erase.rows", 7);
+        setCumulativeCounterValue("table.datashard.erase.bytes", 8);
+        setCumulativeCounterValue("table.datashard.bulk_upsert.rows", 9);
+        setCumulativeCounterValue("table.datashard.bulk_upsert.bytes", 10);
+        setCumulativeCounterValue("table.datashard.scan.rows", 11);
+        setCumulativeCounterValue("table.datashard.scan.bytes", 12);
+        setCumulativeCounterValue("table.datashard.cache_hit.bytes", 13);
+        setCumulativeCounterValue("table.datashard.cache_miss.bytes", 14);
+        setCumulativeCounterValue("table.datashard.consumed_cpu_us", 15);
+
+        // Percentile counters
+        const auto cpuHistogram = sourceCountersGroup->GetNamedHistogram(
             "name",
-            name,
+            "table.datashard.used_core_percents",
+            NMonitoring::ExplicitHistogram({
+                0,
+                10,
+                20,
+                30,
+                40,
+                50,
+                60,
+                70,
+                80,
+                90,
+                100,
+            }),
             false /* derivative */
-        )->Set(offset * 1000 + value);
-    };
+        );
 
-    setSimpleCounterValue("table.datashard.row_count",  1);
-    setSimpleCounterValue("table.datashard.size_bytes", 2);
+        // NOTE: This is needed to allow PopulateDataShardPublicCounters() to be called
+        //       multiple times to update counters for an existing source group
+        cpuHistogram->Reset();
 
-    // Cumulative counters
-    const auto setCumulativeCounterValue = [&](const char* name, ui64 value) {
-        sourceCountersGroup->GetNamedCounter(
-            "name",
-            name,
-            true /* derivative */
-        )->Set(offset * 1000 + value);
-    };
+        cpuHistogram->Collect(static_cast<i64>(0), offset * 1000 + 1);
+        cpuHistogram->Collect(static_cast<i64>(10), offset * 1000 + 2);
+        cpuHistogram->Collect(static_cast<i64>(20), offset * 1000 + 3);
+        cpuHistogram->Collect(static_cast<i64>(30), offset * 1000 + 4);
+        cpuHistogram->Collect(static_cast<i64>(40), offset * 1000 + 5);
+        cpuHistogram->Collect(static_cast<i64>(50), offset * 1000 + 6);
+        cpuHistogram->Collect(static_cast<i64>(60), offset * 1000 + 7);
+        cpuHistogram->Collect(static_cast<i64>(70), offset * 1000 + 8);
+        cpuHistogram->Collect(static_cast<i64>(80), offset * 1000 + 9);
+        cpuHistogram->Collect(static_cast<i64>(90), offset * 1000 + 10);
+        cpuHistogram->Collect(static_cast<i64>(100), offset * 1000 + 11);
+        cpuHistogram->Collect(static_cast<i64>(101), offset * 1000 + 12);
 
-    setCumulativeCounterValue("table.datashard.write.rows",         3);
-    setCumulativeCounterValue("table.datashard.write.bytes",        4);
-    setCumulativeCounterValue("table.datashard.read.rows",          5);
-    setCumulativeCounterValue("table.datashard.read.bytes",         6);
-    setCumulativeCounterValue("table.datashard.erase.rows",         7);
-    setCumulativeCounterValue("table.datashard.erase.bytes",        8);
-    setCumulativeCounterValue("table.datashard.bulk_upsert.rows",   9);
-    setCumulativeCounterValue("table.datashard.bulk_upsert.bytes", 10);
-    setCumulativeCounterValue("table.datashard.scan.rows",         11);
-    setCumulativeCounterValue("table.datashard.scan.bytes",        12);
-    setCumulativeCounterValue("table.datashard.cache_hit.bytes",   13);
-    setCumulativeCounterValue("table.datashard.cache_miss.bytes",  14);
-    setCumulativeCounterValue("table.datashard.consumed_cpu_us",   15);
+        return sourceCountersGroup;
+    }
 
-    // Percentile counters
-    const auto cpuHistogram = sourceCountersGroup->GetNamedHistogram(
-        "name",
-        "table.datashard.used_core_percents",
-        NMonitoring::ExplicitHistogram({
-            0,
-            10,
-            20,
-            30,
-            40,
-            50,
-            60,
-            70,
-            80,
-            90,
-            100,
-        }),
-        false /* derivative */
-    );
+    NMonitoring::TDynamicCounters::TCounterPtr GetPublicCounter(
+        NMonitoring::TDynamicCounterPtr group, const TString& name) {
+        auto counter = group->FindNamedCounter("name", name);
+        UNIT_ASSERT_C(counter, "Missing public counter " << name);
+        return counter;
+    }
 
-    // NOTE: This is needed to allow PopulateDataShardPublicCounters() to be called
-    //       multiple times to update counters for an existing source group
-    cpuHistogram->Reset();
-
-    cpuHistogram->Collect(static_cast<i64>(  0), offset * 1000 +  1);
-    cpuHistogram->Collect(static_cast<i64>( 10), offset * 1000 +  2);
-    cpuHistogram->Collect(static_cast<i64>( 20), offset * 1000 +  3);
-    cpuHistogram->Collect(static_cast<i64>( 30), offset * 1000 +  4);
-    cpuHistogram->Collect(static_cast<i64>( 40), offset * 1000 +  5);
-    cpuHistogram->Collect(static_cast<i64>( 50), offset * 1000 +  6);
-    cpuHistogram->Collect(static_cast<i64>( 60), offset * 1000 +  7);
-    cpuHistogram->Collect(static_cast<i64>( 70), offset * 1000 +  8);
-    cpuHistogram->Collect(static_cast<i64>( 80), offset * 1000 +  9);
-    cpuHistogram->Collect(static_cast<i64>( 90), offset * 1000 + 10);
-    cpuHistogram->Collect(static_cast<i64>(100), offset * 1000 + 11);
-    cpuHistogram->Collect(static_cast<i64>(101), offset * 1000 + 12);
-
-    return sourceCountersGroup;
-}
-
-} // namespace <anonymous>
+} // namespace
 
 /**
  * Unit tests for the YDB metrics aggregator class (TYdbMetricsAggregator).
@@ -132,19 +139,17 @@ Y_UNIT_TEST_SUITE(TYdbMetricsAggregatorTest) {
         //         at this point the target values should be all zeros
         const auto targetCountersGroup = runtime.GetAppData(0).Counters->GetSubgroup(
             "counters",
-            "target-group"
-        );
+            "target-group");
 
         auto aggregator = CreateYdbMetricsAggregatorByTabletType(
             TTabletTypes::DataShard,
-            targetCountersGroup
-        );
+            targetCountersGroup);
 
         TString countersJson = NormalizeJson(NMonitoring::ToJson(*targetCountersGroup));
         Cerr << "TEST Target counters (initial):" << Endl << countersJson << Endl;
 
         TString expectedJsonAllZeros = NormalizeJson(
-R"json(
+            R"json(
 {
   "sensors": [
     {
@@ -289,14 +294,12 @@ R"json(
     }
   ]
 }
-)json"
-        );
+)json");
 
         UNIT_ASSERT_EQUAL_C(
             countersJson,
             expectedJsonAllZeros,
-            "Expected JSON (initial):" << Endl << expectedJsonAllZeros
-        );
+            "Expected JSON (initial):" << Endl << expectedJsonAllZeros);
 
         // TEST 2: Add first two source groups and make sure the target counters are updated
         aggregator->AddSourceCountersGroup("source-group-1", sourceCountersGroup1);
@@ -307,7 +310,7 @@ R"json(
         Cerr << "TEST Target counters (2 source groups added):" << Endl << countersJson << Endl;
 
         TString expectedJson = NormalizeJson(
-R"json(
+            R"json(
 {
   "sensors": [
     {
@@ -452,14 +455,12 @@ R"json(
     }
   ]
 }
-)json"
-        );
+)json");
 
         UNIT_ASSERT_EQUAL_C(
             countersJson,
             expectedJson,
-            "Expected JSON (2 source groups added):" << Endl << expectedJson
-        );
+            "Expected JSON (2 source groups added):" << Endl << expectedJson);
 
         // TEST 3: Add the third source groups and make sure the target counters are updated
         aggregator->AddSourceCountersGroup("source-group-3", sourceCountersGroup3);
@@ -469,7 +470,7 @@ R"json(
         Cerr << "TEST Target counters (all source groups added):" << Endl << countersJson << Endl;
 
         expectedJson = NormalizeJson(
-R"json(
+            R"json(
 {
   "sensors": [
     {
@@ -614,14 +615,12 @@ R"json(
     }
   ]
 }
-)json"
-        );
+)json");
 
         UNIT_ASSERT_EQUAL_C(
             countersJson,
             expectedJson,
-            "Expected JSON (all source groups added):" << Endl << expectedJson
-        );
+            "Expected JSON (all source groups added):" << Endl << expectedJson);
 
         // TEST 4: Update the first source groups and make sure the target counters are updated
         PopulateDataShardPublicCounters(runtime, "source-group-1", 1000);
@@ -631,7 +630,7 @@ R"json(
         Cerr << "TEST Target counters (the first group updated):" << Endl << countersJson << Endl;
 
         expectedJson = NormalizeJson(
-R"json(
+            R"json(
 {
   "sensors": [
     {
@@ -776,14 +775,12 @@ R"json(
     }
   ]
 }
-)json"
-        );
+)json");
 
         UNIT_ASSERT_EQUAL_C(
             countersJson,
             expectedJson,
-            "Expected JSON (the first group updated):" << Endl << expectedJson
-        );
+            "Expected JSON (the first group updated):" << Endl << expectedJson);
 
         // TEST 5: Remove the first source group and make sure the target counters are updated
         aggregator->RemoveSourceCountersGroup("source-group-1");
@@ -793,7 +790,7 @@ R"json(
         Cerr << "TEST Target counters (the first source group removed):" << Endl << countersJson << Endl;
 
         expectedJson = NormalizeJson(
-R"json(
+            R"json(
 {
   "sensors": [
     {
@@ -938,14 +935,12 @@ R"json(
     }
   ]
 }
-)json"
-        );
+)json");
 
         UNIT_ASSERT_EQUAL_C(
             countersJson,
             expectedJson,
-            "Expected JSON (the first source group removed):" << Endl << expectedJson
-        );
+            "Expected JSON (the first source group removed):" << Endl << expectedJson);
 
         // TEST 6: Remove all remaining source group and make sure the target counters are all zeros
         aggregator->RemoveSourceCountersGroup("source-group-2");
@@ -958,7 +953,106 @@ R"json(
         UNIT_ASSERT_EQUAL_C(
             countersJson,
             expectedJsonAllZeros,
-            "Expected JSON (all source group removed):" << Endl << expectedJsonAllZeros
-        );
+            "Expected JSON (all source group removed):" << Endl << expectedJsonAllZeros);
     }
-}
+
+    Y_UNIT_TEST(RetainsLatestCumulativeValuesWithoutRetainingLiveCounters) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto first = PopulateDataShardPublicCounters(runtime, "first", 1);
+        auto second = PopulateDataShardPublicCounters(runtime, "second", 2);
+        auto target = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard, target, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
+        aggregator->AddSourceCountersGroup("first", first);
+        aggregator->AddSourceCountersGroup("second", second);
+        aggregator->RecalculateAllTargetCounters();
+        auto cpu = GetPublicCounter(target, "table.datashard.consumed_cpu_us");
+        auto rows = GetPublicCounter(target, "table.datashard.row_count");
+        auto histogram = target->FindNamedHistogram("name", "table.datashard.used_core_percents");
+        UNIT_ASSERT(histogram);
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 3030);
+
+        // Removal captures the latest source values, even without a preceding recalculation.
+        PopulateDataShardPublicCounters(runtime, "first", 3);
+        aggregator->RemoveSourceCountersGroup("first");
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 3030);
+        PopulateDataShardPublicCounters(runtime, "first", 9);
+        for (ui32 i = 0; i < 3; ++i) {
+            aggregator->RecalculateAllTargetCounters();
+            UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 5030);
+            UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 2001);
+            auto snapshot = histogram->Snapshot();
+            for (ui32 bucket = 0; bucket < snapshot->Count(); ++bucket) {
+                UNIT_ASSERT_VALUES_EQUAL(snapshot->Value(bucket), 2001 + bucket);
+            }
+        }
+
+        PopulateDataShardPublicCounters(runtime, "second", 4);
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 7030);
+        aggregator->RemoveSourceCountersGroup("second");
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 7030);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 0);
+        auto snapshot = histogram->Snapshot();
+        for (ui32 bucket = 0; bucket < snapshot->Count(); ++bucket) {
+            UNIT_ASSERT_VALUES_EQUAL(snapshot->Value(bucket), 0);
+        }
+    }
+
+    Y_UNIT_TEST(RetainedCumulativeHistoryAllowsSourceIdReuse) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto first = PopulateDataShardPublicCounters(runtime, "first", 0);
+        auto second = PopulateDataShardPublicCounters(runtime, "second", 1);
+        auto target = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard, target, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
+        auto cpu = GetPublicCounter(target, "table.datashard.consumed_cpu_us");
+        aggregator->AddSourceCountersGroup("source", first);
+        aggregator->RemoveSourceCountersGroup("source");
+        aggregator->AddSourceCountersGroup("source", second);
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 1030);
+
+        PopulateDataShardPublicCounters(runtime, "second", 2);
+        aggregator->RemoveSourceCountersGroup("source");
+        for (ui32 i = 0; i < 3; ++i) {
+            aggregator->RecalculateAllTargetCounters();
+            UNIT_ASSERT_VALUES_EQUAL(cpu->Val(), 2030);
+        }
+    }
+
+    Y_UNIT_TEST(RetainedCumulativeHistoryKeepsFollowerFiltering) {
+        TTestBasicRuntime runtime(1);
+        runtime.Initialize(TAppPrepare().Unwrap());
+        auto leader = PopulateDataShardPublicCounters(runtime, "leader", 1);
+        auto follower = PopulateDataShardPublicCounters(runtime, "follower", 2);
+        auto target = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateYdbMetricsAggregatorByTabletType(
+            TTabletTypes::DataShard, target, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
+        aggregator->AddSourceCountersGroup("leader", leader);
+        aggregator->AddSourceCountersGroup("follower", follower, true);
+        aggregator->RecalculateAllTargetCounters();
+        auto writes = GetPublicCounter(target, "table.datashard.write.rows");
+        auto reads = GetPublicCounter(target, "table.datashard.read.rows");
+        auto rows = GetPublicCounter(target, "table.datashard.row_count");
+        UNIT_ASSERT_VALUES_EQUAL(writes->Val(), 1003);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), 3010);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 1001);
+
+        PopulateDataShardPublicCounters(runtime, "follower", 3);
+        aggregator->RemoveSourceCountersGroup("follower");
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(writes->Val(), 1003);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), 4010);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 1001);
+
+        aggregator->RemoveSourceCountersGroup("leader");
+        aggregator->RecalculateAllTargetCounters();
+        UNIT_ASSERT_VALUES_EQUAL(writes->Val(), 1003);
+        UNIT_ASSERT_VALUES_EQUAL(reads->Val(), 4010);
+        UNIT_ASSERT_VALUES_EQUAL(rows->Val(), 0);
+    }
+} // Y_UNIT_TEST_SUITE(TYdbMetricsAggregatorTest)

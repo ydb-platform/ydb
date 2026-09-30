@@ -709,6 +709,148 @@ document.addEventListener("DOMContentLoaded", ready);
                 }
             }
 
+            // These two tables are rendered once per page load (they are not part of the incremental JSON
+            // refresh above), which is enough: they exist to answer "who is pinning garbage collection" and
+            // "who is holding the S3 write slots" when a tablet looks stuck.
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    s << "Channels";
+                }
+                DIV_CLASS("panel-body") {
+                    const ui32 generation = Executor()->Generation();
+                    TABLE_CLASS("table") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() { s << "channel"; }
+                                TABLEH() { s << "group"; }
+                                TABLEH() { s << "kind"; }
+                                TABLEH() { s << "NextBlobSeqId"; }
+                                TABLEH() { s << "given id ranges"; }
+                                TABLEH() { s << "commits in flight"; }
+                                TABLEH() { s << "assimilated in flight"; }
+                                TABLEH() { s << "least expected blob id"; }
+                            }
+                        }
+                        TABLEBODY() {
+                            for (const TChannelInfo& channel : Channels) {
+                                if (!channel.KindPtr) {
+                                    continue; // system channel, no blobs of ours there
+                                }
+                                TABLER() {
+                                    TABLED() { s << int(channel.Index); }
+                                    TABLED() { s << channel.GroupId; }
+                                    TABLED() { s << NKikimrBlobDepot::TChannelKind::E_Name(channel.ChannelKind); }
+                                    TABLED() { s << channel.NextBlobSeqId; }
+                                    TABLED() {
+                                        if (channel.GivenIdRanges.IsEmpty()) {
+                                            s << "-";
+                                        } else {
+                                            s << channel.GivenIdRanges.GetNumAvailableItems() << " item(s), min "
+                                                << channel.GivenIdRanges.GetMinimumValue();
+                                        }
+                                    }
+                                    TABLED() {
+                                        s << channel.SequenceNumbersInFlight.size();
+                                        if (!channel.SequenceNumbersInFlight.empty()) {
+                                            s << ", min " << *channel.SequenceNumbersInFlight.begin();
+                                        }
+                                    }
+                                    TABLED() {
+                                        s << channel.AssimilatedBlobsInFlight.size();
+                                        if (!channel.AssimilatedBlobsInFlight.empty()) {
+                                            s << ", min " << *channel.AssimilatedBlobsInFlight.begin();
+                                        }
+                                    }
+                                    TABLED() { s << channel.PeekLeastExpectedBlobId(generation).ToString(); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    s << "Agents";
+                }
+                DIV_CLASS("panel-body") {
+                    TABLE_CLASS("table") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() { s << "node"; }
+                                TABLEH() { s << "state"; }
+                                TABLEH() { s << "instance id"; }
+                                TABLEH() { s << "given id ranges"; }
+                                TABLEH() { s << "steps to invalidate"; }
+                                TABLEH() { s << "push requests in flight"; }
+                                TABLEH() { s << "blocks to deliver"; }
+                                TABLEH() { s << "S3 writes in flight"; }
+                            }
+                        }
+                        TABLEBODY() {
+                            std::vector<ui32> nodeIds;
+                            for (const auto& [nodeId, _] : Agents) {
+                                nodeIds.push_back(nodeId);
+                            }
+                            std::sort(nodeIds.begin(), nodeIds.end());
+                            for (const ui32 nodeId : nodeIds) {
+                                const TAgent& agent = Agents.find(nodeId)->second;
+                                TABLER() {
+                                    TABLED() { s << nodeId; }
+                                    TABLED() {
+                                        if (agent.Connection) {
+                                            s << "connected";
+                                        } else if (agent.ExpirationTimestamp == TInstant::Max()) {
+                                            s << "disconnected";
+                                        } else {
+                                            s << "disconnected, expires at " << agent.ExpirationTimestamp;
+                                        }
+                                    }
+                                    TABLED() {
+                                        if (agent.AgentInstanceId) {
+                                            s << *agent.AgentInstanceId;
+                                        } else {
+                                            s << "-";
+                                        }
+                                    }
+                                    TABLED() {
+                                        std::map<ui8, const TGivenIdRange*> ranges;
+                                        for (const auto& [channel, range] : agent.GivenIdRanges) {
+                                            if (!range.IsEmpty()) {
+                                                ranges.emplace(channel, &range);
+                                            }
+                                        }
+                                        if (ranges.empty()) {
+                                            s << "-";
+                                        } else {
+                                            for (const auto& [channel, range] : ranges) {
+                                                s << "ch" << int(channel) << ": "
+                                                    << range->GetNumAvailableItems() << " item(s), min "
+                                                    << range->GetMinimumValue() << "<br/>";
+                                            }
+                                        }
+                                    }
+                                    TABLED() {
+                                        std::map<ui8, ui32> steps(agent.InvalidatedStepInFlight.begin(),
+                                            agent.InvalidatedStepInFlight.end());
+                                        if (steps.empty()) {
+                                            s << "-";
+                                        } else {
+                                            for (const auto& [channel, step] : steps) {
+                                                s << "ch" << int(channel) << ": " << step << "<br/>";
+                                            }
+                                        }
+                                    }
+                                    TABLED() { s << agent.InvalidateStepRequests.size(); }
+                                    TABLED() { s << agent.BlockToDeliver.size(); }
+                                    TABLED() { s << agent.S3WritesInFlight.size(); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
                     s << "Data";

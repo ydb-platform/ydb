@@ -5,6 +5,7 @@
 #include "partition_scale_manager_graph_cmp.h"
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/persqueue/common/logging.h>
 #include "ydb/core/persqueue/public/utils.h"
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -23,7 +24,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-class TPartitionScaleManager {
+class TPartitionScaleManager : public TLogPrefix {
 private:
     struct TBalancerConfig {
         TBalancerConfig(
@@ -108,7 +109,7 @@ private:
     std::vector<ui32> ReorderSplits() const;
     ui32 FirstFreePartitionId() const;
     bool PrescribedChildrenContinueSequence(const TPartitionSplit& split, ui32 nextPartitionId, ui32& nextAfter) const;
-    TString LogPrefix() const;
+    TStructuredMessage LogPrefix() const override;
     void ClearMirrorInfo();
     void UpdateMirrorRootPartitionsSet();
 

@@ -7,7 +7,7 @@
 namespace NYql {
 
 // Wraps a raw GENERATED expression body in the SELECT envelope
-TString AssembleGeneratedQuery(const TString& context, const TString& exprBody);
+TString AssembleGeneratedQuery(const TString& exprBody);
 
 // Compiles the stored SQL text of a GENERATED column into
 // a normalized `(lambda '(row) <expr>)` whose single argument is the table row

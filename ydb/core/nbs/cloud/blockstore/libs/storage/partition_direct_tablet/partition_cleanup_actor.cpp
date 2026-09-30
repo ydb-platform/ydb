@@ -1,5 +1,7 @@
 #include "partition_cleanup_actor.h"
 
+#include "bsc_proxy.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_events_private.h>
 
@@ -8,7 +10,6 @@
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
-#include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/protos/base.pb.h>
@@ -22,6 +23,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/ptr.h>
 #include <util/system/datetime.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -39,8 +41,11 @@ NProto::TError CheckDeallocateResult(
     const auto& record = msg.Record;
 
     if (record.GetStatus() != NKikimrProto::OK) {
+        const ui32 code = record.GetStatus() == TBscProxy::PipeFailureStatus
+                              ? E_REJECTED
+                              : E_FAIL;
         return MakeError(
-            E_FAIL,
+            code,
             TStringBuilder() << "BSController deallocate failed: "
                              << record.GetErrorReason());
     }
@@ -103,18 +108,18 @@ class TPartitionCleanupActor: public TActorBootstrapped<TPartitionCleanupActor>
         NActors::TActorId Target;
         ui32 NodeId = 0;
         ECleanupTarget Kind = ECleanupTarget::PBuffer;
+        ui32 DBGIndex = 0;
     };
 
 private:
     const TPartitionCleanupParams Params;
     TLogTitle LogTitle;
+    NActors::TActorId BscProxy;
 
     THashMap<ui64, TRequest> InFlight;
     ui64 NextCookie = 1;
     ECleanupPhase Phase = ECleanupPhase::WipePBuffer;
     bool Completed = false;
-
-    NActors::TActorId BSControllerPipeClient;
 
 public:
     explicit TPartitionCleanupActor(TPartitionCleanupParams params)
@@ -138,7 +143,7 @@ public:
             LogTitle.GetWithTime().c_str());
 
         ctx.Schedule(PartitionCleanupTimeout, new TEvents::TEvWakeup());
-        StartPBufferBarrierErase(ctx);
+        StartPBufferUnregister(ctx);
     }
 
 private:
@@ -146,8 +151,8 @@ private:
     {
         switch (ev->GetTypeRewrite()) {
             HFunc(
-                NDDisk::TEvErasePersistentBufferResult,
-                HandleErasePersistentBufferResult);
+                NDDisk::TEvUnregisterPersistentBufferResult,
+                HandleUnregisterPersistentBufferResult);
             HFunc(
                 NDDisk::TEvDeleteTabletChunksResult,
                 HandleDeleteTabletChunksResult);
@@ -174,8 +179,6 @@ private:
             HFunc(
                 TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult,
                 HandleDeallocateResult);
-            HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
             HFunc(TEvents::TEvWakeup, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
@@ -190,20 +193,22 @@ private:
         }
     }
 
-    void StartPBufferBarrierErase(const TActorContext& ctx)
+    void StartPBufferUnregister(const TActorContext& ctx)
     {
         Phase = ECleanupPhase::WipePBuffer;
 
-        const auto creds = NDDisk::TQueryCredentials::ForInternal(
-            Params.TabletId,
-            Params.Generation,
-            std::nullopt,
-            0);
-
-        THashSet<TActorId> targets;
-        for (const auto& group:
-             Params.Connections.GetDirectBlockGroupConnections())
+        for (ui32 dbgIndex = 0;
+             dbgIndex < Params.Connections.DirectBlockGroupConnectionsSize();
+             ++dbgIndex)
         {
+            const auto& group =
+                Params.Connections.GetDirectBlockGroupConnections(dbgIndex);
+            const auto creds = NDDisk::TQueryCredentials::ForInternal(
+                Params.TabletId,
+                Params.Generation,
+                std::nullopt,
+                dbgIndex);
+            THashSet<TActorId> targets;
             for (const auto& connection: group.GetConnections()) {
                 const auto target = MakePBufferServiceId(
                     connection.GetPersistentBufferDDiskId());
@@ -214,9 +219,9 @@ private:
                     ctx,
                     target,
                     ECleanupTarget::PBuffer,
-                    std::make_unique<NDDisk::TEvErasePersistentBuffer>(
-                        creds,
-                        Max<ui64>()));
+                    std::make_unique<NDDisk::TEvUnregisterPersistentBuffer>(
+                        creds),
+                    dbgIndex);
             }
         }
 
@@ -261,11 +266,15 @@ private:
         const TActorContext& ctx,
         const TActorId& target,
         ECleanupTarget kind,
-        std::unique_ptr<IEventBase> event)
+        std::unique_ptr<IEventBase> event,
+        ui32 dbgIndex = 0)
     {
         const ui64 cookie = NextCookie++;
-        InFlight[cookie] =
-            TRequest{.Target = target, .NodeId = target.NodeId(), .Kind = kind};
+        InFlight[cookie] = TRequest{
+            .Target = target,
+            .NodeId = target.NodeId(),
+            .Kind = kind,
+            .DBGIndex = dbgIndex};
 
         LOG_INFO(
             ctx,
@@ -314,21 +323,39 @@ private:
         }
     }
 
-    void HandleErasePersistentBufferResult(
-        const NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
+    void HandleUnregisterPersistentBufferResult(
+        const NDDisk::TEvUnregisterPersistentBufferResult::TPtr& ev,
         const TActorContext& ctx)
     {
         const auto& record = ev->Get()->Record;
         LOG_INFO(
             ctx,
             NKikimrServices::NBS_PARTITION,
-            "%s HandleErasePersistentBufferResult cookie=%lu status=%s",
+            "%s HandleUnregisterPersistentBufferResult cookie=%lu status=%s",
             LogTitle.GetWithTime().c_str(),
             ev->Cookie,
             NKikimrBlobStorage::NDDisk::TReplyStatus_E_Name(record.GetStatus())
                 .c_str());
 
-        OnWipeResult(ctx, ev->Cookie, TranslateError(record));
+        // Cleanup may be retried after a lost reply or target registrations may
+        // never have been made. Their absence already satisfies cleanup.
+        if (record.GetStatus() ==
+                NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY ||
+            record.GetStatus() ==
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED)
+        {
+            ctx.Schedule(
+                TDuration::MilliSeconds(100),
+                new TEvents::TEvWakeup(ev->Cookie));
+            return;
+        }
+        const bool absent =
+            record.GetStatus() ==
+            NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST;
+        OnWipeResult(
+            ctx,
+            ev->Cookie,
+            absent ? NProto::TError{} : TranslateError(record));
     }
 
     void HandleDeleteTabletChunksResult(
@@ -395,7 +422,23 @@ private:
         const TEvents::TEvWakeup::TPtr& ev,
         const TActorContext& ctx)
     {
-        Y_UNUSED(ev);
+        if (const ui64 cookie = ev->Get()->Tag) {
+            if (const auto* request = InFlight.FindPtr(cookie)) {
+                const auto creds = NDDisk::TQueryCredentials::ForInternal(
+                    Params.TabletId,
+                    Params.Generation,
+                    std::nullopt,
+                    request->DBGIndex);
+                ctx.Send(new IEventHandle(
+                    request->Target,
+                    ctx.SelfID,
+                    new NDDisk::TEvUnregisterPersistentBuffer(creds),
+                    IEventHandle::FlagTrackDelivery |
+                        IEventHandle::FlagSubscribeOnSession,
+                    cookie));
+            }
+            return;
+        }
         Complete(ctx, MakeError(E_TIMEOUT, "partition cleanup timed out"));
     }
 
@@ -408,9 +451,6 @@ private:
             NKikimrServices::NBS_PARTITION,
             "%s Become StateDeallocate",
             LogTitle.GetWithTime().c_str());
-
-        BSControllerPipeClient = ctx.Register(
-            NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
 
         auto request = std::make_unique<
             TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
@@ -428,7 +468,10 @@ private:
             define->SetNumPersistentBuffers(0);
         }
 
-        NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
+        BscProxy = ctx.Register(new TBscProxy(SelfId(), LogTitle));
+        ctx.Send(
+            BscProxy,
+            new TBscProxy::TEvSend(THolder<IEventBase>(request.release())));
     }
 
     void HandleDeallocateResult(
@@ -446,54 +489,6 @@ private:
             record.GetErrorReason().c_str());
 
         Complete(ctx, CheckDeallocateResult(*ev->Get()));
-    }
-
-    void HandleConnect(
-        TEvTabletPipe::TEvClientConnected::TPtr& ev,
-        const TActorContext& ctx)
-    {
-        const auto* msg = ev->Get();
-        if (msg->ClientId != BSControllerPipeClient) {
-            return;
-        }
-        if (msg->Status == NKikimrProto::OK) {
-            return;
-        }
-
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s BSController pipe connect failed during deallocate: %s",
-            LogTitle.GetWithTime().c_str(),
-            NKikimrProto::EReplyStatus_Name(msg->Status).c_str());
-
-        Complete(
-            ctx,
-            MakeError(
-                E_REJECTED,
-                "BSController pipe connect failed during deallocate"));
-    }
-
-    void HandleDisconnect(
-        TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
-        const TActorContext& ctx)
-    {
-        const auto* msg = ev->Get();
-        if (msg->ClientId != BSControllerPipeClient) {
-            return;
-        }
-
-        LOG_ERROR(
-            ctx,
-            NKikimrServices::NBS_PARTITION,
-            "%s BSController pipe destroyed during deallocate",
-            LogTitle.GetWithTime().c_str());
-
-        Complete(
-            ctx,
-            MakeError(
-                E_REJECTED,
-                "BSController pipe destroyed during deallocate"));
     }
 
     void Complete(const TActorContext& ctx, NProto::TError error)
@@ -519,11 +514,9 @@ private:
 
     void PassAway() override
     {
-        if (BSControllerPipeClient) {
-            NTabletPipe::CloseClient(
-                TActivationContext::AsActorContext(),
-                BSControllerPipeClient);
-            BSControllerPipeClient = {};
+        if (BscProxy) {
+            Send(BscProxy, new TEvents::TEvPoisonPill());
+            BscProxy = {};
         }
         TActorBootstrapped::PassAway();
     }

@@ -53,7 +53,7 @@ public:
         }
         THarmonizerStats harmonizerStats;
         statsSubSystem.GetHarmonizerStats(harmonizerStats);
-        ActorSystemCounters.Set(harmonizerStats);
+        ActorSystemCounters.Set(harmonizerStats, ctx.ActorSystem()->GetAsyncFrameCacheStats());
         actor->OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }

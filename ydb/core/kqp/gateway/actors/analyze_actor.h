@@ -25,7 +25,8 @@ struct TEvAnalyzePrivate {
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 public:
     TAnalyzeActor(const TString& database,const TString& tablePath,
-        const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise);
+        const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise,
+        double sampleRate);
 
     void Bootstrap();
 
@@ -33,7 +34,7 @@ public:
         switch(ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            HFunc(TEvAnalyzePrivate::TEvAnalyzeRetry, Handle);
+            cFunc(TEvAnalyzePrivate::TEvAnalyzeRetry::EventType, SendAnalyzeRequest);
             HFunc(NStat::TEvStatistics::TEvAnalyzeResponse, Handle);
             HFunc(TEvKqp::TEvAbortExecution, Handle);
             default:
@@ -44,7 +45,6 @@ public:
 private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvAnalyzePrivate::TEvAnalyzeRetry::TPtr& ev, const TActorContext& ctx);
     void Handle(NStat::TEvStatistics::TEvAnalyzeResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx);
     void HandleUnexpectedEvent(ui32 typeRewrite);
@@ -52,14 +52,17 @@ private:
     void PassAway() final;
 
 private:
-    void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
+    bool BuildAnalyzeRequest(const NSchemeCache::TSchemeCacheNavigate::TEntry&, const TActorContext&);
+    void SendStatisticsAggregatorAnalyze(const NSchemeCache::TSchemeCacheNavigate::TEntry&);
 
     TDuration CalcBackoffTime();
+    void SendAnalyzeRequest();
 
 private:
     const TString Database;
     const TString TablePath;
     const TVector<TString> Columns;
+    const double SampleRate;
     NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> Promise;
     // For Statistics Aggregator
     std::optional<ui64> StatisticsAggregatorId;

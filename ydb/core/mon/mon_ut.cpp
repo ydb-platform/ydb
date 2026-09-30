@@ -164,6 +164,41 @@ Y_UNIT_TEST_SUITE(ActorPage) {
         UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketFails, 0);
     }
 
+    Y_UNIT_TEST(PreservesRequestIdAtTicketParser) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::ActorPage,
+            .ActorAllowedSIDs = {"valid_group"},
+            .TicketParserGroupSIDs = {"valid_group"},
+        });
+        const TString requestId = "monitoring-inbound-request-id";
+        auto headers = env.MakeAuthHeaders();
+        headers["x-request-id"] = requestId;
+
+        TStringStream responseStream;
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, headers);
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->CapturedRequestId, requestId);
+    }
+
+    Y_UNIT_TEST(GeneratesRequestIdAtTicketParser) {
+        THttpMonTestEnv env({
+            .RegKind = THttpMonTestEnvOptions::ERegKind::ActorPage,
+            .ActorAllowedSIDs = {"valid_group"},
+            .TicketParserGroupSIDs = {"valid_group"},
+        });
+
+        TStringStream responseStream;
+        const auto status = env.GetHttpClient().DoGet(env.MakeDefaultUrl(), &responseStream, env.MakeAuthHeaders());
+        UNIT_ASSERT_VALUES_EQUAL(status, HTTP_OK);
+
+        TFakeTicketParserActor* ticketParser = env.GetTicketParser();
+        UNIT_ASSERT_VALUES_EQUAL(ticketParser->AuthorizeTicketRequests, 1);
+        UNIT_ASSERT(!ticketParser->CapturedRequestId.empty());
+    }
+
     Y_UNIT_TEST(NoValidGroupForbidden) {
         THttpMonTestEnv env({
             .RegKind = THttpMonTestEnvOptions::ERegKind::ActorPage,

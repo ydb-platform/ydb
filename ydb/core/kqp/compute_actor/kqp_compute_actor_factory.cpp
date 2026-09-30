@@ -4,7 +4,11 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
+#include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
+#include <ydb/core/kqp/tracing/kqp_task_rendering.h>
+
+#include <atomic>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
@@ -31,6 +35,7 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MinMemAllocSize = 1_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;
     std::atomic<ui64> ChannelChunkSizeLimit = 48_MB;
+    std::atomic<bool> EnableOperatorMemoryQuota = false;
 
 public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,
@@ -65,6 +70,7 @@ public:
         ChannelChunkSizeLimit.store(config.GetChannelChunkSizeLimit());
         MinMemAllocSize.store(config.GetMinMemAllocSize());
         MinMemFreeSize.store(config.GetMinMemFreeSize());
+        EnableOperatorMemoryQuota.store(config.GetEnableOperatorMemoryQuota());
     }
 
     bool GetVerboseMemoryLimitException() override {
@@ -77,12 +83,14 @@ public:
     }
 
     TActorId CreateKqpComputeActor(TCreateArgs&& args) override {
+        args.TraceId = GetTaskTraceParent(*args.Task, args.TraceId);
         NYql::NDq::TComputeMemoryLimits memoryLimits;
         memoryLimits.ChannelBufferSize = 0;
         memoryLimits.MkqlLightProgramMemoryLimit = MkqlLightProgramMemoryLimit.load();
         memoryLimits.MkqlHeavyProgramMemoryLimit = MkqlHeavyProgramMemoryLimit.load();
         memoryLimits.MinMemAllocSize = MinMemAllocSize.load();
         memoryLimits.MinMemFreeSize = MinMemFreeSize.load();
+        memoryLimits.EnableOperatorMemoryQuota = EnableOperatorMemoryQuota.load();
         memoryLimits.ArrayBufferMinFillPercentage = args.Task->GetArrayBufferMinFillPercentage();
         if (args.Task->HasBufferPageAllocSize()) {
             memoryLimits.BufferPageAllocSize = args.Task->GetBufferPageAllocSize();
@@ -135,7 +143,8 @@ public:
             runtimeSettings.RlPath = args.RlPath;
         }
 
-        runtimeSettings.TerminateHandler = [state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
+        runtimeSettings.TerminateHandler = [state=args.State, query=args.QueryQuotaManager, initialMemoryLimit=args.InitialMemoryLimit,
+                txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
                 YDB_LOG_DEBUG("Compute actor terminated",
                     {"problem", "finish_compute_actor"},
@@ -143,6 +152,10 @@ public:
                     {"taskId", taskId},
                     {"success", success},
                     {"message", issues.ToOneLineString()});
+                if (query) {
+                    // the task memory is freed by now, the task quota manager returns what it grew by when it dies
+                    query->FreeTasks(1, initialMemoryLimit);
+                }
                 if (state) {
                     state->OnTaskFinished(txId, executerId, taskId, success);
                 }
@@ -172,10 +185,11 @@ public:
         if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
             YQL_ENSURE(args.ComputesByStages);
             auto& info = args.ComputesByStages->UpsertTaskWithScan(*args.Task, meta);
+            info.TraceId = NWilson::TTraceId(args.TraceId);
             IActor* computeActor = CreateKqpScanComputeActor(
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
-                std::move(schedulableOptions), args.BlockTrackingMode);
+                std::move(schedulableOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             TActorId result = args.UseBatchPool
                 ? TlsActivationContext->Register(computeActor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId)
                 : TlsActivationContext->Register(computeActor);

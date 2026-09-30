@@ -4,6 +4,7 @@
 #include "metadata_subscription/udf_module.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "wasm/compile.h"
+#include <ydb/public/lib/udf/manifest/manifest.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/log.h>
@@ -30,20 +31,20 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
 
     switch (Step_) {
         case EStep::ReadLibrarySource:
-            NTableQuery::SetSelectModuleByNameParams(request, LibraryName_);
-            break;
-        case EStep::MarkCompiling:
-            NTableQuery::SetUpdateCompileStatusParams(
+            NTableQuery::SetSelectModuleByNameParams(
                 request,
-                LibrarySource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
-                "");
+                LibraryName_,
+                TUdfModule::TypeToString(EUdfType::LIBRARY));
+            break;
+        case EStep::EnsurePending:
+        case EStep::MarkCompiling:
+            NTableQuery::SetSelectArtifactParams(request, LibraryName_, Kind_, LibrarySource_.Uid);
             break;
         case EStep::ReadLibraryChunks:
-            NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid);
+            NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid, SourceChunks_.size());
             break;
         case EStep::DeleteArtifactChunks:
-            NTableQuery::SetDeleteArtifactChunksParams(request, LibraryName_, Kind_);
+            NTableQuery::SetDeleteArtifactChunksParams(request, LibraryName_, Kind_, LibrarySource_.Uid);
             break;
         case EStep::UpsertArtifact:
             NTableQuery::SetUpsertArtifactParams(request, ArtifactRow_);
@@ -55,24 +56,31 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
                 request,
                 LibraryName_,
                 Kind_,
+                LibrarySource_.Uid,
                 chunk.BlobKind,
                 chunk.ChunkIdx,
                 chunk.Data);
             break;
         }
-        case EStep::UpdateMetaReady:
-            NTableQuery::SetUpdateCompileStatusParams(
+        case EStep::VerifyStillCurrent:
+        case EStep::ConfirmStillCurrent:
+            NTableQuery::SetSelectModuleByNameParams(
                 request,
-                LibrarySource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Ready),
-                "");
+                LibraryName_,
+                TUdfModule::TypeToString(EUdfType::LIBRARY));
             break;
-        case EStep::UpdateMetaFailed:
-            NTableQuery::SetUpdateCompileStatusParams(
+        case EStep::DeleteStaleArtifactChunks:
+        case EStep::DeleteStaleArtifacts:
+            NTableQuery::SetDeleteStaleArtifactsParams(
                 request,
+                LibraryName_,
+                Kind_,
                 LibrarySource_.Uid,
-                TUdfModule::CompileStatusToString(ECompileStatus::Failed),
-                ErrorMessage_);
+                TUdfModule::TypeToString(EUdfType::LIBRARY));
+            break;
+        case EStep::MarkArtifactFailed:
+            NTableQuery::SetMarkArtifactFailedParams(
+                request, LibraryName_, Kind_, LibrarySource_.Uid, ErrorMessage_);
             break;
     }
 
@@ -87,9 +95,26 @@ void TWasmLibraryCompileActor::HandleQueryResult(
 }
 
 void TWasmLibraryCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed::TPtr& ev) {
-    ReplyError(TStringBuilder()
+    if (Step_ == EStep::DeleteStaleArtifactChunks || Step_ == EStep::DeleteStaleArtifacts) {
+        // Leftover rows of replaced uploads are not worth failing over, but
+        // still confirm we own the modules row before reporting ready.
+        ALS_WARN(NKikimrServices::METADATA_PROVIDER)
+            << "TWasmLibraryCompileActor: failed to drop stale artifacts of '" << LibraryName_
+            << "': " << ev->Get()->GetErrorMessage();
+        Step_ = EStep::ConfirmStillCurrent;
+        ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
+        return;
+    }
+    const TString message = TStringBuilder()
         << "YQL request failed at library compile step " << static_cast<int>(Step_)
-        << ": " << ev->Get()->GetErrorMessage());
+        << ": " << ev->Get()->GetErrorMessage();
+    if (Step_ == EStep::MarkArtifactFailed) {
+        // A failure to persist must terminate instead of recursively retrying
+        // the same update, and must keep the original compilation error.
+        ReplyError(TStringBuilder() << ErrorMessage_ << "; failed to persist error: " << message);
+    } else {
+        FailAndPersist(message);
+    }
 }
 
 void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryResponse& response) {
@@ -100,8 +125,13 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                     ReplyError(TStringBuilder() << "Library source '" << LibraryName_ << "' not found");
                     return;
                 }
+                Step_ = EStep::EnsurePending;
+                ExecuteQuery(NTableQuery::BuildEnsurePendingArtifactQuery(ArtifactTablePath_), false);
+                return;
+            }
+            case EStep::EnsurePending: {
                 Step_ = EStep::MarkCompiling;
-                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+                ExecuteQuery(NTableQuery::BuildMarkArtifactCompilingQuery(ArtifactTablePath_), false);
                 return;
             }
             case EStep::MarkCompiling: {
@@ -110,25 +140,32 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                 return;
             }
             case EStep::ReadLibraryChunks: {
-                TVector<TString> chunks;
-                if (!NTableQuery::ParseSourceChunksResponse(response, chunks)) {
-                    ReplyError(TStringBuilder()
+                const size_t previousChunkCount = SourceChunks_.size();
+                if (!NTableQuery::AppendSourceChunksResponse(response, SourceChunks_)) {
+                    FailAndPersist(TStringBuilder()
                         << "Failed to read library source chunks for '" << LibraryName_ << "'");
                     return;
                 }
-                if (chunks.size() != LibrarySource_.ChunkCount) {
-                    ReplyError(TStringBuilder()
-                        << "Library '" << LibraryName_ << "' chunk_count mismatch: meta="
-                        << LibrarySource_.ChunkCount << " actual=" << chunks.size());
+                if (SourceChunks_.size() - previousChunkCount == NTableQuery::ChunksPerRead
+                    && SourceChunks_.size() <= LibrarySource_.ChunkCount)
+                {
+                    ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(ModuleChunksTablePath_), true);
                     return;
                 }
-                LibrarySource_.Body = JoinBlobs(chunks);
-                if (LibrarySource_.Size != 0 && LibrarySource_.Body.size() != LibrarySource_.Size) {
-                    ReplyError(TStringBuilder()
-                        << "Library '" << LibraryName_ << "' size mismatch: meta="
-                        << LibrarySource_.Size << " actual=" << LibrarySource_.Body.size());
+                TString joinError;
+                if (!JoinAndVerifyBlobs(
+                        SourceChunks_,
+                        LibrarySource_.ChunkCount,
+                        LibrarySource_.Size,
+                        LibrarySource_.Md5,
+                        LibrarySource_.Body,
+                        joinError))
+                {
+                    FailAndPersist(TStringBuilder()
+                        << "Library '" << LibraryName_ << "' source is corrupted: " << joinError);
                     return;
                 }
+                SourceChunks_.clear();
                 CompileLibrary();
                 return;
             }
@@ -143,14 +180,69 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
                 return;
             }
             case EStep::UpsertArtifact: {
-                Step_ = EStep::UpdateMetaReady;
-                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+                Step_ = EStep::VerifyStillCurrent;
+                ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
                 return;
             }
-            case EStep::UpdateMetaReady:
+            case EStep::VerifyStillCurrent: {
+                NTableQuery::TModuleSourceRow current;
+                if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
+                    ReplyDeferred(TStringBuilder()
+                        << "Library '" << LibraryName_ << "' disappeared while compiling");
+                    return;
+                }
+                if (current.Uid != LibrarySource_.Uid) {
+                    // Losing to a re-upload is not a failure of this library:
+                    // reported as a real one it would count against the compile
+                    // controller's retry budget for a perfectly good library.
+                    ReplyDeferred(TStringBuilder()
+                        << "Library '" << LibraryName_ << "' was re-uploaded while compiling: uid="
+                        << LibrarySource_.Uid << " is now " << current.Uid);
+                    return;
+                }
+                // Current upload confirmed, so the artifacts of every other
+                // uid belong to uploads that have been replaced. Chunks go
+                // first, otherwise a death in between leaves chunks nobody can
+                // find. The delete is gated on modules.uid still matching.
+                Step_ = EStep::DeleteStaleArtifactChunks;
+                ExecuteQuery(
+                    NTableQuery::BuildDeleteStaleArtifactChunksQuery(
+                        ArtifactChunksTablePath_,
+                        ModulesTablePath_),
+                    false);
+                return;
+            }
+            case EStep::DeleteStaleArtifactChunks: {
+                Step_ = EStep::DeleteStaleArtifacts;
+                ExecuteQuery(
+                    NTableQuery::BuildDeleteStaleArtifactsQuery(
+                        ArtifactTablePath_,
+                        ModulesTablePath_),
+                    false);
+                return;
+            }
+            case EStep::DeleteStaleArtifacts: {
+                Step_ = EStep::ConfirmStillCurrent;
+                ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
+                return;
+            }
+            case EStep::ConfirmStillCurrent: {
+                NTableQuery::TModuleSourceRow current;
+                if (!NTableQuery::ParseModuleSourceResponse(response, current)) {
+                    ReplyDeferred(TStringBuilder()
+                        << "Library '" << LibraryName_ << "' disappeared while compiling");
+                    return;
+                }
+                if (current.Uid != LibrarySource_.Uid) {
+                    ReplyDeferred(TStringBuilder()
+                        << "Library '" << LibraryName_ << "' was re-uploaded while compiling: uid="
+                        << LibrarySource_.Uid << " is now " << current.Uid);
+                    return;
+                }
                 ReplySuccess();
                 return;
-            case EStep::UpdateMetaFailed:
+            }
+            case EStep::MarkArtifactFailed:
                 ReplyError(ErrorMessage_);
                 return;
         }
@@ -161,8 +253,12 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
 
 void TWasmLibraryCompileActor::CompileLibrary() {
     try {
-        const auto format = NWasm::DetectBytecodeFormatFromBody(LibrarySource_.Body);
-        Format_ = format == NYdb::NWasm::EBytecodeFormat::HumanReadable ? "wat" : "wasm";
+        const auto manifest = NYdb::NUdfManifest::Parse(LibrarySource_.Manifest);
+        if (manifest.Name != LibraryName_ || manifest.Type != NYdb::NUdfManifest::EModuleType::Library || manifest.Kind != NYdb::NUdfManifest::EModuleKind::Wasm) {
+            ythrow yexception() << "Expected matching WASM library manifest";
+        }
+        Format_ = manifest.Extension;
+        const auto format = NWasm::DetectBytecodeFormat(Format_);
         const TString objectCode = NWasm::CompileModuleObjectCode(LibrarySource_.Body, format);
         const auto wasmChunks = SplitBlob(LibrarySource_.Body);
         const auto objectChunks = SplitBlob(objectCode);
@@ -186,7 +282,7 @@ void TWasmLibraryCompileActor::CompileLibrary() {
         ArtifactRow_ = NTableQuery::TWasmArtifactRow{
             .Id = LibraryName_,
             .Kind = Kind_,
-            .SourceMd5 = LibrarySource_.Md5,
+            .Uid = LibrarySource_.Uid,
             .Version = LibrarySource_.Version,
             .Format = Format_,
             .WasmDataSize = LibrarySource_.Body.size(),
@@ -223,13 +319,20 @@ void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
         ReplyError(message);
         return;
     }
-    Step_ = EStep::UpdateMetaFailed;
-    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+    Step_ = EStep::MarkArtifactFailed;
+    ExecuteQuery(NTableQuery::BuildMarkArtifactFailedQuery(ArtifactTablePath_), false);
 }
 
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {
     ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "TWasmLibraryCompileActor: " << message;
     Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, message));
+    PassAway();
+}
+
+void TWasmLibraryCompileActor::ReplyDeferred(const TString& reason) {
+    ALS_INFO(NKikimrServices::METADATA_PROVIDER)
+        << "TWasmLibraryCompileActor: deferred library '" << LibraryName_ << "': " << reason;
+    Send(ReplyTo_, new TEvLibraryCompileResponse(false, LibraryName_, reason, true));
     PassAway();
 }
 

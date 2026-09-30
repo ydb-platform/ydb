@@ -32,10 +32,9 @@
 using namespace NKikimr;
 using namespace NStorage;
 
-TNodeWardenConfig::TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory)
+TNodeWardenConfig::TNodeWardenConfig()
     : BlobStorageConfig(std::make_unique<NKikimrConfig::TBlobStorageConfig>())
     , NameserviceConfig(std::make_unique<NKikimrConfig::TStaticNameserviceConfig>())
-    , PDiskServiceFactory(pDiskServiceFactory)
     , AllVDiskKinds(new TAllVDiskKinds)
     , AllDriveModels(new NPDisk::TDriveModelDb)
     , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())
@@ -93,6 +92,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , EnableChecksumReadValidationOnVDisk(0, 0, 1)
     , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
     , EnableChunkKeeper(0, 0, 1)
+    , SpaceReportPeriodSeconds(0, 0, 86400)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
@@ -116,6 +116,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
     , MaxPutTimeoutSeconds(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000)
+    , DormantTimeoutMinutes(DefaultDormantTimeout.Minutes(), 0, 1'000'000)
     , EnableChecksumCalcAndValidationOnDsProxy(0, 0, 1)
     , EnableDeepScrubbing(false, false, true)
     , EnableFreshSyncDataThrottling(0, 0, 1)
@@ -185,6 +186,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
         hFunc(TEvPrivate::TEvRetrySlay, Handle);
+        hFunc(TEvPrivate::TEvRestartDrainReminder, Handle);
 
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
@@ -384,7 +386,8 @@ void TNodeWarden::StartInvalidGroupProxy() {
         {"marker", "NW11"},
         {"groupId", groupId});
     TActivationContext::ActorSystem()->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
-        CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
+        CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon, DormantTimeoutMinutes),
+        TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
 }
 
 void TNodeWarden::StopInvalidGroupProxy() {
@@ -501,6 +504,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(EnableChecksumReadValidationOnVDisk, icb->VDiskControls.EnableChecksumReadValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, icb->VDiskControls.EnableChecksumWriteValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
+        TControlBoard::RegisterSharedControl(SpaceReportPeriodSeconds, icb->VDiskControls.SpaceReportPeriodSeconds);
 
         TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncCount, icb->VDiskControls.MaxInProgressStartupDataSyncCount);
         TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, icb->VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount);
@@ -544,6 +548,7 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
         TControlBoard::RegisterSharedControl(MaxPutTimeoutSeconds, icb->DSProxyControls.MaxPutTimeoutSeconds);
+        TControlBoard::RegisterSharedControl(DormantTimeoutMinutes, icb->DSProxyControls.DormantTimeoutMinutes);
         TControlBoard::RegisterSharedControl(EnableChecksumCalcAndValidationOnDsProxy, icb->DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy);
 
         TControlBoard::RegisterSharedControl(EnableFreshSyncDataThrottling, icb->VDiskControls.EnableFreshSyncDataThrottling);

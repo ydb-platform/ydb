@@ -82,7 +82,10 @@ namespace NKikimr::NSqsTopic {
         const TString& topicPath,
         const TString& consumerName,
         const TString& method,
-        TVector<std::pair<TString, TString>>&& labels
+        TVector<std::pair<TString, TString>>&& labels,
+        const TString& databaseId,
+        const TString& cloudId,
+        const TString& folderId
     ) {
         TString fullDatabasePath = databasePath + "/";
         TString adjustedTopicPath;
@@ -94,10 +97,15 @@ namespace NKikimr::NSqsTopic {
 
         TVector<std::pair<TString, TString>> common{
             {"database", databasePath},
-            {"method", method},
-            {"topic", adjustedTopicPath},
-            {"consumer", ConvertOldConsumerName(consumerName)},
+            {"database_id", databaseId},
         };
+        if (!cloudId.empty() || !folderId.empty()) {
+            common.emplace_back("cloud_id", cloudId);
+            common.emplace_back("folder_id", folderId);
+        }
+        common.emplace_back("method", method);
+        common.emplace_back("topic", adjustedTopicPath);
+        common.emplace_back("consumer", ConvertOldConsumerName(consumerName));
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;
     }

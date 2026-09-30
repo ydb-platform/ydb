@@ -198,6 +198,15 @@ private:
 
 }
 
+template<>
+template<>
+IActor* TEvAttachSessionRequest::CreateRpcActor(IRequestNoOpCtx* msg, ui64 rpcBufferSize) {
+    Y_UNUSED(rpcBufferSize);
+    auto* req = dynamic_cast<TEvAttachSessionRequest*>(msg);
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    return new TAttachSessionRPC(std::unique_ptr<IRequestNoOpCtx>(req));
+}
+
 namespace NQuery {
 
 void DoAttachSession(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& provider) {

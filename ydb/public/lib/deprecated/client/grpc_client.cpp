@@ -1,6 +1,7 @@
 #include "grpc_client.h"
 
 #include <ydb/core/protos/grpc.grpc.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <util/system/thread.h>
 #include <util/system/mutex.h>
@@ -75,6 +76,7 @@ namespace NKikimr {
 
             private:
                 void Start() override {
+                    Impl->AddAuthMetadata(Context);
                     Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ);
                     Reader->Finish(&Reply, &Status, this);
                 }
@@ -145,6 +147,7 @@ namespace NKikimr {
                 void Start() override {
                     // Stub call will cause async call to InvokeProcess. Lock reader to avoid race.
                     auto guard = Guard(ReaderLock);
+                    Impl->AddAuthMetadata(Context);
                     Reader = (Impl->Stub.*AsyncRequest)(&Context, Params, &Impl->CQ, this);
                 }
 
@@ -180,6 +183,7 @@ namespace NKikimr {
             TStub Stub;
             grpc::CompletionQueue CQ;
             TMaybe<TDuration> Timeout;
+            TString AuthToken;
             ui32 MaxInFlight = 0;
             ui32 InFlight = 0;
             TQueue<THolder<IProcessorBase>> PendingQ;
@@ -205,6 +209,18 @@ namespace NKikimr {
 
             grpc_connectivity_state GetNetworkStatus() const {
                 return Channel->GetState(false);
+            }
+
+            void SetAuthToken(const TString& token) {
+                with_lock (Mutex) {
+                    AuthToken = token;
+                }
+            }
+
+            void AddAuthMetadata(grpc::ClientContext& context) const {
+                if (!AuthToken.empty()) {
+                    context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, AuthToken);
+                }
             }
 
             template<typename TRequest, typename TResponse>
@@ -305,6 +321,10 @@ namespace NKikimr {
 
         const TGRpcClientConfig& TGRpcClient::GetConfig() const {
             return Config;
+        }
+
+        void TGRpcClient::SetAuthToken(const TString& token) {
+            Impl->SetAuthToken(token);
         }
 
         grpc_connectivity_state TGRpcClient::GetNetworkStatus() const {

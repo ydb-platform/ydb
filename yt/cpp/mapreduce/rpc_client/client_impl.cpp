@@ -127,7 +127,7 @@ NApi::IConnectionPtr GetOrCreateConnection(const TConnectionCacheKey& key)
         // (memory is leaked since we never clear the cache).
         cache.emplace(key, connection);
     } else {
-        YT_LOG_WARNING("Cannot cache IConnection since connection cache reached maximum size");
+        YT_TLOG_WARNING("Cannot cache IConnection since connection cache reached maximum size");
     }
 
     return connection;
@@ -149,6 +149,9 @@ static NApi::IClientPtr CreateApiClientImpl(const TClientContext& context, bool 
     if (context.JobProxySocketPath) {
         clientOptions.MultiproxyTargetCluster = context.MultiproxyTargetCluster;
     }
+    // NB(achains): Failed commit must not abort the transaction,
+    //              the commit is retried by RequestWithRetry with the same mutation id.
+    clientOptions.AbandonMasterTransactionsOnFailedCommit = true;
 
     return connection->CreateClient(clientOptions);
 }

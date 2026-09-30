@@ -17,14 +17,20 @@ class TestYdbWorkload(StressFixture):
             "enable_fulltext_index": True,
             "enable_fulltext_index_prefix": True,
             "enable_fulltext_index_row_id": True,
+            "enable_compact_fulltext_index": True,
             "enable_add_unique_index": True,
             "enable_json_index": True,
+            "enable_json_index_auto_select": True,
         }
 
     @pytest.fixture(scope="function")
     def setup_common(self):
         yield from self.setup_cluster(
-            extra_feature_flags=self._feature_flags()
+            extra_feature_flags=self._feature_flags(),
+            table_service_config={
+                "enable_hybrid_search": True,
+                "enable_index_stream_write": True,
+            },
         )
 
     @pytest.fixture(scope="function")
@@ -33,7 +39,11 @@ class TestYdbWorkload(StressFixture):
             additional_log_configs={
                 "TLI": LogLevels.INFO,
             },
-            extra_feature_flags=self._feature_flags()
+            extra_feature_flags=self._feature_flags(),
+            table_service_config={
+                "enable_hybrid_search": True,
+                "enable_index_stream_write": True,
+            },
         )
 
     def test(self, setup_common):

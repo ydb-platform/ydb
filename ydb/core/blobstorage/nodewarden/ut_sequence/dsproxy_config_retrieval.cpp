@@ -98,7 +98,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
 
     for (ui32 i = 0; i < runtime.GetNodeCount(); ++i) {
         SetupStateStorage(runtime, i);
-        auto config = MakeIntrusive<TNodeWardenConfig>(new TStrandedPDiskServiceFactory(runtime));
+        auto config = MakeIntrusive<TNodeWardenConfig>();
         config->SectorMaps[paths[i]] = sectorMaps[i];
         config->BlobStorageConfig->MutableServiceSet()->CopyFrom(configs[i]);
         SetupBSNodeWarden(runtime, i, config);
@@ -106,6 +106,7 @@ void SetupServices(TTestBasicRuntime& runtime) {
         SetupNodeWhiteboard(runtime, i);
     }
 
+    SetupPDiskSubsystem(&runtime);
     runtime.Initialize(app.Unwrap());
 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController), &CreateFlatBsController);

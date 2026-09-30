@@ -252,7 +252,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     }
     if (nodeFetch) {
         std::shared_ptr<IMemoryCalculationPolicy> policy;
-        if (baseNode->Is(EProcessorType::Filter)) {
+        if (baseNode->Is(EProcessorType::Filter) || baseNode->Is(EProcessorType::DistinctMarker)) {
             policy = std::make_shared<TFilterCalculationPolicy>();
         } else if (baseNode->Is(EProcessorType::Projection)) {
             policy = std::make_shared<TFetchingCalculationPolicy>();
@@ -301,9 +301,107 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     return changed;
 }
 
+namespace {
+
+TGraphNode* GetSingleInputProducer(const TGraphNode* node, const ui32 resourceId) {
+    TGraphNode* result = nullptr;
+    for (const auto& [addr, inputNode] : node->GetInputEdges()) {
+        if (addr.GetResourceId() != resourceId) {
+            continue;
+        }
+        if (result) {
+            return nullptr;
+        }
+        result = inputNode;
+    }
+    return result;
+}
+
+}   // namespace
+
+TGraphNode* TGraph::FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, const ui32 dataColumnId) const {
+    const auto marker = markerNode->GetProcessorAs<TDistinctMarkerProcessor>();
+    TGraphNode* calcNode = GetSingleInputProducer(markerNode, marker->GetKeyColumnId());
+    if (!calcNode || !calcNode->Is(EProcessorType::Calculation)) {
+        return nullptr;
+    }
+    const auto calc = calcNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetKernelLogic() || calc->GetKernelLogic()->GetClassName() != TGetJsonPath::GetClassNameStatic()) {
+        return nullptr;
+    }
+    if (calc->GetInput().size() != 2 || calc->GetOutput().size() != 1) {
+        return nullptr;
+    }
+    TGraphNode* pathNode = GetSingleInputProducer(calcNode, calc->GetInput()[1].GetColumnId());
+    if (!pathNode || !pathNode->Is(EProcessorType::Const)) {
+        return nullptr;
+    }
+    // The data input must be the dedicated single sub-column assembler produced by OptimizeForFetchSubColumns.
+    TGraphNode* assembleNode = GetSingleInputProducer(calcNode, calc->GetInput()[0].GetColumnId());
+    if (!assembleNode || !assembleNode->Is(EProcessorType::AssembleOriginalData)) {
+        return nullptr;
+    }
+    const auto& assembleAddr = assembleNode->GetProcessorAs<TOriginalColumnAccessorProcessor>()->GetDataAddress();
+    if (assembleAddr.GetColumnId() != dataColumnId || assembleAddr.GetSubColumnNames(false).size() != 1) {
+        return nullptr;
+    }
+    TGraphNode* fetchNode = GetSingleInputProducer(assembleNode, dataColumnId);
+    if (!fetchNode || !fetchNode->Is(EProcessorType::FetchOriginalData)) {
+        return nullptr;
+    }
+    const auto fetchProc = fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+    if (!fetchProc) {
+        return nullptr;
+    }
+    const auto& fetchAddrs = fetchProc->GetDataAddresses();
+    auto itAddr = fetchAddrs.find(dataColumnId);
+    if (itAddr == fetchAddrs.end() || itAddr->second.GetSubColumnNames(false) != assembleAddr.GetSubColumnNames(false)) {
+        return nullptr;
+    }
+    // Any other fetch of the same column (another JSON path, the whole column) would be merged with this one later
+    // and inherit the dictionary-only flag: refuse unless this is the only fetch of the column.
+    for (auto&& [_, n] : Nodes) {
+        if (n.get() == fetchNode || !n->Is(EProcessorType::FetchOriginalData)) {
+            continue;
+        }
+        const auto otherProc = n->GetProcessorAs<TOriginalColumnDataProcessor>();
+        if (!otherProc) {
+            return nullptr;
+        }
+        if (otherProc->GetDataAddresses().contains(dataColumnId)) {
+            return nullptr;
+        }
+    }
+    return fetchNode;
+}
+
+bool TGraph::SetDictionaryOnlyOnFetch(const ui32 columnId) {
+    TGraphNode* producer = GetProducerVerified(columnId);
+    for (const auto& [addr, inputNode] : producer->GetInputEdges()) {
+        if (addr.GetResourceId() != columnId) {
+            continue;
+        }
+        if (!inputNode->Is(EProcessorType::FetchOriginalData)) {
+            break;
+        }
+        auto proc = inputNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+        if (proc) {
+            const auto& addrs = proc->GetDataAddresses();
+            auto it = addrs.find(columnId);
+            if (it != addrs.end() && !it->second.GetUseDictionaryOnly()) {
+                proc->SetDictionaryOnlyForColumn(columnId);
+                return true;
+            }
+        }
+        break;
+    }
+    return false;
+}
+
 // Strict: only allow dictionary-only when the entire request needs exactly one data column, and either:
 // - aggregation: that column is a group key and every aggregate is SOME(columnId), or
-// - distinct marker: a stateless DISTINCT marker on that single column.
+// - distinct marker: a stateless DISTINCT marker on that single column, or on JsonValue(column, path) computed
+//   over the dedicated single sub-column fetch of that column (the sub-column dictionary values are the DISTINCT domain).
 TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds) {
     if (requiredDataColumnIds.size() != 1) {
         return false;
@@ -311,10 +409,28 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
 
     const ui32 columnId = *requiredDataColumnIds.begin();
 
-    if (node->Is(EProcessorType::Filter)) {
-        const auto distinctMarker = std::dynamic_pointer_cast<TDistinctMarkerProcessor>(node->GetProcessor());
-        if (!distinctMarker || distinctMarker->GetKeyColumnId() != columnId) {
+    if (node->Is(EProcessorType::DistinctMarker)) {
+        const auto distinctMarker = node->GetProcessorAs<TDistinctMarkerProcessor>();
+        if (!distinctMarker) {
             return false;
+        }
+        if (distinctMarker->GetKeyColumnId() != columnId) {
+            TGraphNode* fetchNode = FindSingleSubColumnJsonKeyFetch(node, columnId);
+            if (!fetchNode) {
+                return false;
+            }
+            auto proc = fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>();
+            if (!proc) {
+                return false;
+            }
+            const auto& addrs = proc->GetDataAddresses();
+            auto it = addrs.find(columnId);
+            if (it == addrs.end() || it->second.GetUseDictionaryOnly()) {
+                // Already dictionary-only: report no graph change so the optimizer loop terminates.
+                return false;
+            }
+            proc->SetDictionaryOnlyForColumn(columnId);
+            return true;
         }
     } else if (node->Is(EProcessorType::Aggregation)) {
         const auto aggrProc = node->GetProcessorAs<NAggregation::TWithKeysAggregationProcessor>();
@@ -357,28 +473,7 @@ TConclusion<bool> TGraph::OptimizeForFetchDictionaryOnly(TGraphNode* node, const
         return false;
     }
 
-    bool changed = false;
-    TGraphNode* producer = GetProducerVerified(columnId);
-    for (const auto& [addr, inputNode] : producer->GetInputEdges()) {
-        if (addr.GetResourceId() != columnId) {
-            continue;
-        }
-        if (!inputNode->Is(EProcessorType::FetchOriginalData)) {
-            break;
-        }
-        auto proc = inputNode->GetProcessorAs<TOriginalColumnDataProcessor>();
-        if (proc) {
-            const auto& addrs = proc->GetDataAddresses();
-            auto it = addrs.find(columnId);
-            if (it != addrs.end() && !it->second.GetUseDictionaryOnly()) {
-                proc->SetDictionaryOnlyForColumn(columnId);
-                changed = true;
-            }
-        }
-        break;
-    }
-
-    return changed;
+    return SetDictionaryOnlyOnFetch(columnId);
 }
 
 TConclusion<bool> TGraph::OptimizeIndexesToApply(TGraphNode* condNode) {
@@ -423,6 +518,12 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
         const auto proc = condNode->GetProcessorAs<TCalculationProcessor>();
         if (!proc->GetKernelLogic()) {
             return std::nullopt;
+        }
+        if (const auto inputIdx = proc->GetKernelLogic()->GetOriginalAddressFromInput()) {
+            if (proc->GetInput().size() <= *inputIdx) {
+                return std::nullopt;
+            }
+            return GetOriginalAddress(GetProducerVerified(proc->GetInput()[*inputIdx].GetColumnId()));
         }
         if (proc->GetKernelLogic()->GetClassName() == TGetJsonPath::GetClassNameStatic()) {
         } else if (proc->GetKernelLogic()->GetClassName() == TExistsJsonPath::GetClassNameStatic()) {
@@ -765,7 +866,7 @@ TConclusionStatus TGraph::Collapse() {
     {
         std::vector<TGraphNode*> nodesToOptimize;
         for (auto&& [_, n] : Nodes) {
-            if (n->Is(EProcessorType::Filter)) {
+            if (n->Is(EProcessorType::Filter) || n->Is(EProcessorType::DistinctMarker)) {
                 nodesToOptimize.emplace_back(n.get());
             }
         }

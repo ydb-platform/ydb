@@ -479,6 +479,7 @@ PEERDIR(
     ydb/library/actors/async
     ydb/library/actors/core
     ydb/library/actors/http
+    ydb/library/backup/proto
     ydb/library/chunks_limiter
     ydb/library/protobuf_printer
     ydb/library/yql/dq/actors/compute
@@ -534,6 +535,7 @@ RECURSE_FOR_TESTS(
     ut_kqp_scan
     ut_lock_rows
     ut_locks
+    ut_locks_transfer
     ut_minikql
     ut_minstep
     ut_object_storage_listing

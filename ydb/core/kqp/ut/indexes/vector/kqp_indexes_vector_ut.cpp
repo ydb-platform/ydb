@@ -7,7 +7,9 @@
 #include <ydb/core/kqp/gateway/kqp_metadata_loader.h>
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
+#include <ydb/core/testlib/actors/block_events.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
@@ -1923,6 +1925,63 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         UNIT_ASSERT_VALUES_EQUAL(capturedParallel, 2);
     }
 
+    Y_UNIT_TEST_QUAD(VectorIndexRebuildAllowsQueries, EnableIndexStreamWrite, Covering) {
+        auto settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
+        TKikimrRunner kikimr(settings);
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, Covering ? F_COVERING : 0); });
+        auto rebuildSession = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); });
+
+        const TString query = R"(
+            SELECT pk, data FROM `/Root/TestTable` VIEW index1
+            ORDER BY Knn::CosineDistance(emb, "\x03\x30\x02") LIMIT 1;
+        )";
+        TString expected = "[[0;\"0\"]]";
+        auto checkQuery = [&](bool retryOnSchemaChange = false) {
+            auto result = kikimr.RunCall([&] { return ExecuteDataQuery(session, query); });
+            if (retryOnSchemaChange && result.GetStatus() == EStatus::ABORTED) {
+                // Replacing an index invalidates cached query plans, as with a normal index move.
+                result = kikimr.RunCall([&] { return ExecuteDataQuery(session, query); });
+            }
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+        checkQuery();
+
+        TBlockEvents<TEvDataShard::TEvSampleKRequest> sampleBlocker(runtime);
+        TBlockEvents<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction> moveBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex;
+        });
+        auto rebuild = kikimr.RunInThreadPool([&] {
+            return rebuildSession.ExecuteSchemeQuery(R"(
+                ALTER TABLE `/Root/TestTable` REBUILD INDEX index1 WITH (levels=2, clusters=3);
+            )").ExtractValueSync();
+        });
+        runtime.WaitFor("rebuild sampling", [&] { return !sampleBlocker.empty(); });
+        checkQuery(true);
+        kikimr.RunCall([&] { DoOnlyUpsertValuesIntoTable(session); });
+        checkQuery();
+
+        sampleBlocker.Stop().Unblock();
+        runtime.WaitFor("rebuild replacement", [&] { return !moveBlocker.empty(); });
+        checkQuery(true);
+        // Vector builds use a snapshot. Once finalized, both indexes must receive writes
+        // until the replacement transaction switches the public name to the new index.
+        const auto update = kikimr.RunCall([&] {
+            return ExecuteDataQuery(session, "UPDATE `/Root/TestTable` SET data = 'updated' WHERE pk = 0;");
+        });
+        UNIT_ASSERT_C(update.IsSuccess(), update.GetIssues().ToString());
+        expected = "[[0;\"updated\"]]";
+        checkQuery();
+
+        moveBlocker.Stop().Unblock();
+        const auto result = runtime.WaitFuture(rebuild);
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        checkQuery(true);
+    }
+
     Y_UNIT_TEST_TWIN(SecondaryIndexBuildCustomParallel, EnableIndexStreamWrite) {
         DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`
@@ -2151,6 +2210,68 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             Cerr << "Query 4 (new session): level reads = " << levelTableReadCount.load() << Endl;
             UNIT_ASSERT_C(levelTableReadCount.load() == 0,
                 "Query from new session should use cache, got " << levelTableReadCount.load());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(HalfVectorIndex, BFloat16) {
+        auto kikimr = TKikimrRunner{TKikimrSettings{}.SetWithSampleTables(false)};
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        const TString type = BFloat16 ? "BFloat16" : "Float16";
+        const TString sqlType = BFloat16 ? "bfloat16" : "float16";
+        auto status = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/TestTable` (pk Int64 NOT NULL, emb String, PRIMARY KEY (pk));
+        )").ExtractValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+        TStringBuilder insert;
+        insert << "UPSERT INTO `/Root/TestTable` (pk, emb) VALUES ";
+        for (ui32 i = 0; i < 8; ++i) {
+            if (i) {
+                insert << ", ";
+            }
+            insert << "(" << i << ", Untag(Knn::ToBinaryString" << type
+                << "([" << (static_cast<float>(i) / 4 - 0.9375f) << "f, 0.25f]), \"" << type << "Vector\"))";
+        }
+        auto inserted = ExecuteDataQuery(session, insert);
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+
+        for (bool autoDetect : {false, true}) {
+            TStringBuilder ddl;
+            ddl << "ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx GLOBAL USING vector_kmeans_tree ON (emb) "
+                << "WITH (distance=euclidean, levels=2, clusters=2";
+            if (!autoDetect) {
+                ddl << ", vector_type=" << sqlType << ", vector_dimension=2";
+            }
+            ddl << ");";
+            status = session.ExecuteSchemeQuery(ddl).ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+
+            auto described = session.DescribeTable("/Root/TestTable").ExtractValueSync();
+            UNIT_ASSERT_C(described.IsSuccess(), described.GetIssues().ToString());
+            const auto indexes = described.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+            const auto& settings = std::get<TKMeansTreeSettings>(indexes.front().GetIndexSettings()).Settings;
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorType, BFloat16
+                ? TVectorIndexSettings::EVectorType::BFloat16 : TVectorIndexSettings::EVectorType::Float16);
+            UNIT_ASSERT_VALUES_EQUAL(settings.VectorDimension, 2);
+
+            auto qSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto shown = qSession.ExecuteQuery("SHOW CREATE TABLE `/Root/TestTable`;", NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(shown.IsSuccess(), shown.GetIssues().ToString());
+            TResultSetParser parser(shown.GetResultSet(0));
+            UNIT_ASSERT(parser.TryNextRow());
+            UNIT_ASSERT_STRING_CONTAINS(parser.ColumnParser(0).GetOptionalUtf8().value_or(""),
+                TStringBuilder() << "vector_type = '" << sqlType << "'");
+
+            const TString target = TStringBuilder() << "$target = Knn::ToBinaryString" << type << "([0.3125f, 0.25f]);\n";
+            const TString order = " ORDER BY Knn::EuclideanDistance(emb, $target) LIMIT 3;";
+            const TString plainQuery = target + "SELECT pk FROM `/Root/TestTable`" + order;
+            const TString indexQuery = TStringBuilder() << "PRAGMA ydb.KMeansTreeSearchTopSize = \"4\";\n"
+                << target << "SELECT pk FROM `/Root/TestTable` VIEW vector_idx" << order;
+            DoPositiveQueriesVectorIndex(session, TTxSettings::SerializableRW(), plainQuery, indexQuery);
+
+            status = session.ExecuteSchemeQuery("ALTER TABLE `/Root/TestTable` DROP INDEX vector_idx;").ExtractValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
         }
     }
 

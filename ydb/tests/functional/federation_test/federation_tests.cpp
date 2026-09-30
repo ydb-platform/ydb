@@ -144,6 +144,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
                 shortMirroredTopicPath,
                 TAlterTopicSettings()
                     .SetPartitionWriteSpeedBytesPerSecond(2_MB)
+                    .SetPartitionWriteBurstBytes(2_MB)
             ).GetValueSync();
             driverB.Stop(true);
             UNIT_ASSERT_C(result.IsSuccess(),

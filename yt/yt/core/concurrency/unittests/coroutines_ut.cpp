@@ -232,21 +232,21 @@ TEST_F(TCoroutineTest, ResumeCoroutineAcrossFiberThreads)
     std::optional<TCoroutine<void()>> coroutine;
     bool bodyStarted = false;
 
-    WaitFor(
-        BIND([&] {
-            coroutine.emplace([&] (TCoroutine<void()>& self) {
-                bodyStarted = true;
-                self.Yield();
-            });
-        })
-        .AsyncVia(creationQueue->GetInvoker()).Run())
+    WaitFor(BIND([&] {
+        coroutine.emplace([&] (TCoroutine<void()>& self) {
+            bodyStarted = true;
+            self.Yield();
+        });
+    })
+        .AsyncVia(creationQueue->GetInvoker())
+        .Run())
         .ThrowOnError();
 
-    WaitFor(
-        BIND([&] {
-            coroutine->Run();
-        })
-        .AsyncVia(executionQueue->GetInvoker()).Run())
+    WaitFor(BIND([&] {
+        coroutine->Run();
+    })
+        .AsyncVia(executionQueue->GetInvoker())
+        .Run())
         .ThrowOnError();
 
     EXPECT_TRUE(bodyStarted);

@@ -3,12 +3,17 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_private.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TRmDir: public TSubOperationBase {
+    virtual const char* Name() const override final { return "TRmDir"; }
+    virtual const char* CurrentStateName() const override final { return "none"; }
+
 public:
     using TSubOperationBase::TSubOperationBase;
 
@@ -20,12 +25,10 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TRmDir Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << drop.GetId()
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+            {"pathId", drop.GetId()},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -70,10 +73,11 @@ public:
 
         const TPathElement::TPtr pathElement = context.SS->PathsById.at(path.Base()->PathId);
         if (pathElement->TempDirOwnerActorId) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Processing remove temp directory with Name: " << name
-                    << ", WorkingDir: " << parentPathStr
-                    << ", TempDirOwnerActorId: " << pathElement->TempDirOwnerActorId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Processing remove temp directory",
+                {"name", name},
+                {"workingDir", parentPathStr},
+                {"tempDirOwnerActorId", pathElement->TempDirOwnerActorId},
+            );
             context.OnComplete.UpdateTempDirsToRemoveState(pathElement->TempDirOwnerActorId, path.Base()->PathId);
         }
 
@@ -106,10 +110,10 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "TRmDir ProgressState"
-                       << ", opId: " << OperationId
-                       << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_INFO_CTX(context.Ctx, "TRmDir ProgressState",
+            {"operationId", OperationId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
@@ -119,31 +123,23 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        const TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "TRmDir HandleReply TEvOperationPlan"
-                       << ", opId: " << OperationId
-                       << ", step: " << step
-                       << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
         if (!txState) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "txState is nullptr, considered as duplicate PlanStep"
-                           << ", opId: " << OperationId
-                           << ", at schemeshard: " << ssId);
+            YDB_LOG_WARN_CTX(context.Ctx, "txState is nullptr, considered as duplicate PlanStep");
             return true;
         }
 
         if (txState->State != TTxState::Propose) {
-            LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Duplicate PlanStep"
-                           << ", opId: " << OperationId
-                           << ", state: " << TTxState::StateName(txState->State)
-                           << ", at schemeshard: " << ssId);
+            YDB_LOG_WARN_CTX(context.Ctx, "Duplicate PlanStep",
+                {"state", TTxState::StateName(txState->State)},
+            );
             return true;
         }
 
@@ -175,21 +171,18 @@ public:
         context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
         context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
-        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "RmDir is done"
-                        << ", opId: " << OperationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_DEBUG_CTX(context.Ctx, "RmDir is done");
 
         context.OnComplete.DoneOperation(OperationId);
         return true;
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "RmDir AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TRmDir AbortUnsafe",
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -209,3 +202,5 @@ ISubOperation::TPtr CreateRmDir(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

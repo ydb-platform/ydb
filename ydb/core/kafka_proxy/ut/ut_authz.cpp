@@ -163,6 +163,44 @@ void WaitUntil(TFn&& fn, TDuration timeout = TDuration::Seconds(20)) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
+    Y_UNIT_TEST(TokenRecheckUsesNewRequestIdForEachRequest) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .TokenRecheckIntervalMs = 100,
+        });
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        auto* runtime = testServer.KikimrServer->GetRuntime();
+        const auto ticketParserEdge = runtime->AllocateEdgeActor();
+        runtime->RegisterService(NKikimr::MakeTicketParserID(), ticketParserEdge);
+
+        auto firstRequest = runtime->GrabEdgeEvent<NKikimr::TEvTicketParser::TEvAuthorizeTicket>(
+            ticketParserEdge, TDuration::Seconds(5));
+        UNIT_ASSERT(firstRequest);
+
+        NKikimr::TEvTicketParser::TError retryableError;
+        retryableError.Message = "Retry token recheck";
+        runtime->Send(new IEventHandle(
+            firstRequest->Sender,
+            ticketParserEdge,
+            new NKikimr::TEvTicketParser::TEvAuthorizeTicketResult(firstRequest->Get()->Ticket, retryableError),
+            0,
+            firstRequest->Cookie));
+
+        auto secondRequest = runtime->GrabEdgeEvent<NKikimr::TEvTicketParser::TEvAuthorizeTicket>(
+            ticketParserEdge, TDuration::Seconds(5));
+        UNIT_ASSERT(secondRequest);
+
+        const TString& firstRequestId = firstRequest->Get()->TraceContext.RequestId;
+        const TString& secondRequestId = secondRequest->Get()->TraceContext.RequestId;
+        UNIT_ASSERT(!firstRequestId.empty());
+        UNIT_ASSERT(!secondRequestId.empty());
+        UNIT_ASSERT_VALUES_UNEQUAL(firstRequestId, secondRequestId);
+    }
+
     Y_UNIT_TEST(ProduceAndFetchFailAfterTopicAclRevoke) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",

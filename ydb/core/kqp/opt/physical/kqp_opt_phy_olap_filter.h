@@ -1,6 +1,7 @@
 #pragma once
 #include "predicate_collector.h"
 
+#include <util/generic/strbuf.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
@@ -9,6 +10,9 @@ namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
+
+// Synthetic name prefix for OLAP projections that would otherwise shadow a stored column.
+constexpr TStringBuf KqpOlapProjectionNamePrefix = "__kqp_olap_projection";
 
 struct TFilterOpsLevels {
     TFilterOpsLevels(const TMaybeNode<TExprBase>& firstLevel, const TMaybeNode<TExprBase>& secondLevel)
@@ -46,5 +50,15 @@ bool CollectOlapOperationForProjection(TExprNode::TPtr input, const TExprNode& a
                                        TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>>& projectionCandidates,
                                        ui32& nextMemberId, TExprContext& ctx, const TPushdownOptions& pushdownOptions);
 TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& argument, TExprContext& ctx, const TPushdownOptions& pushdownOptions);
+
+// Free lambda argument which stands for an OLAP expression computed by the column shard (see `TPushdownOptions::ExternalArgs`).
+struct TOlapExternalArg {
+    TExprNode::TPtr Arg;
+    TExprNode::TPtr OlapExpression;
+    const TTypeAnnotationNode* Type = nullptr;
+};
+
+TExprNode::TPtr ReplaceJsonValuesWithExternalArgs(const TExprNode::TPtr& predicate, const TExprNode& argument, TExprContext& ctx,
+                                                  const TPushdownOptions& pushdownOptions, TVector<TOlapExternalArg>& externalArgs);
 
 } // namespace NKikimr::NKqp::NOpt

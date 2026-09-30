@@ -4533,11 +4533,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         i64 Key;
         TString Value;
         ui64 TxId;
+        ui32 SavepointSeqNum;
 
-        explicit TTxWriteRow(i64 key, TString value, ui64 txId = 0)
+        explicit TTxWriteRow(i64 key, TString value, ui64 txId = 0, ui32 savepointSeqNum = 0)
             : Key(key)
             , Value(std::move(value))
             , TxId(txId)
+            , SavepointSeqNum(savepointSeqNum)
         { }
 
         bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
@@ -4549,7 +4551,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             if (TxId == 0) {
                 txc.DB.Update(TableId, NTable::ERowOp::Upsert, { key }, { ops });
             } else {
-                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId);
+                txc.DB.UpdateTx(TableId, NTable::ERowOp::Upsert, { key }, { ops }, TxId, SavepointSeqNum);
             }
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
             return true;
@@ -4700,6 +4702,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                         << " value2 = " << NTable::ECellOp(row.GetCellOp(2)) << " " << value2;
                     if (it->IsUncommitted()) {
                         builder << " txId " << it->GetUncommittedTxId();
+                        if (ui32 savepointSeqNum = it->GetUncommittedSavepointSeqNum()) {
+                            builder << " savepointSeqNum " << savepointSeqNum;
+                        }
                     }
                     builder << Endl;
 
@@ -5043,6 +5048,94 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                 "Key 2 = Upsert value = Set ghi value2 = Set mno txId 123\n"
                 "Key 2 = Upsert value = Empty NULL value2 = Set bar\n"
                 "Key 3 = Upsert value = Set abc value2 = Empty NULL txId 123\n");
+        }
+    }
+
+    Y_UNIT_TEST(CompactMultipleChangesSavepointSeqNum) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "foo") });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "aaa", 123) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "bbb", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "ccc", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "ddd", 123, 7) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "eee", 123, 7) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "fff", 234, 3) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Empty NULL value2 = Set ddd txId 123 savepointSeqNum 7\n"
+                "Key 1 = Upsert value = Set ccc value2 = Empty NULL txId 123 savepointSeqNum 5\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set bbb txId 123 savepointSeqNum 5\n"
+                "Key 1 = Upsert value = Set aaa value2 = Empty NULL txId 123\n"
+                "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+                "Key 2 = Upsert value = Set fff value2 = Empty NULL txId 234 savepointSeqNum 3\n"
+                "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n");
+        }
+
+        // Deltas of the same transaction are only merged when they have the same savepoint seq num
+        const TString compacted =
+            "Key 1 = Upsert value = Empty NULL value2 = Set ddd txId 123 savepointSeqNum 7\n"
+            "Key 1 = Upsert value = Set ccc value2 = Set bbb txId 123 savepointSeqNum 5\n"
+            "Key 1 = Upsert value = Set aaa value2 = Empty NULL txId 123\n"
+            "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
+            "Key 2 = Upsert value = Set fff value2 = Empty NULL txId 234 savepointSeqNum 3\n"
+            "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n";
+
+        Cerr << "...compacting mem table" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...compacting parts" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        // Savepoint seq nums don't affect how deltas are committed
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set ccc value2 = Set ddd\n"
+                "Key 2 = Upsert value = Set eee value2 = Empty NULL\n");
         }
     }
 

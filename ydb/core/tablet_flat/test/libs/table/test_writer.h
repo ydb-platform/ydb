@@ -319,14 +319,25 @@ namespace NTest {
         {
             NextVersion = rowVersion;
             NextTxId = 0;
+            NextSavepointSeqNum = 0;
 
             return *this;
         }
 
-        inline TPartCook& Delta(ui64 txId)
+        inline TPartCook& Delta(ui64 txId, ui32 savepointSeqNum = 0)
         {
             NextVersion = TRowVersion::Min();
             NextTxId = txId;
+            NextSavepointSeqNum = savepointSeqNum;
+
+            return *this;
+        }
+
+        // Locks the next new key before its deltas are written
+        inline TPartCook& Lock(ELockMode mode, ui64 txId)
+        {
+            NextLockMode = mode;
+            NextLockTxId = txId;
 
             return *this;
         }
@@ -395,11 +406,15 @@ namespace NTest {
                 Writer->BeginKey(LastKey);
                 CurrentDeltas = 0;
                 CurrentVersions = 0;
+
+                if (NextLockMode != ELockMode::None) {
+                    Writer->AddKeyLock(std::exchange(NextLockMode, ELockMode::None), NextLockTxId);
+                }
             }
 
             if (NextTxId != 0) {
                 Y_ENSURE(CurrentVersions == 0, "Cannot write deltas after committed versions");
-                Writer->AddKeyDelta(row, NextTxId);
+                Writer->AddKeyDelta(row, NextTxId, NextSavepointSeqNum);
                 ++CurrentDeltas;
             } else {
                 Writer->AddKeyVersion(row, NextVersion);
@@ -433,6 +448,9 @@ namespace NTest {
         TOwnedCellVec LastKey;
         TRowVersion NextVersion = TRowVersion::Min();
         ui64 NextTxId = 0;
+        ui32 NextSavepointSeqNum = 0;
+        ELockMode NextLockMode = ELockMode::None;
+        ui64 NextLockTxId = 0;
         ui64 CurrentDeltas = 0;
         ui64 CurrentVersions = 0;
     };

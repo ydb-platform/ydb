@@ -125,12 +125,12 @@ namespace NTable {
             KeyState.LockTxId = lockTxId;
         }
 
-        void AddKeyDelta(const TRowState& row, ui64 txId)
+        void AddKeyDelta(const TRowState& row, ui64 txId, ui32 savepointSeqNum = 0)
         {
             Y_ENSURE(KeyState.Written == 0, "Cannot add deltas after committed versions");
             Y_ENSURE(txId != 0, "Cannot add delta with txId == 0");
 
-            WriteDeltaRow(row, txId);
+            WriteDeltaRow(row, txId, savepointSeqNum);
         }
 
         void AddKeyVersion(const TRowState& row, TRowVersion version)
@@ -199,7 +199,7 @@ namespace NTable {
             ++KeyState.Written;
         }
 
-        void WriteDeltaRow(const TRowState& row, ui64 txId)
+        void WriteDeltaRow(const TRowState& row, ui64 txId, ui32 savepointSeqNum = 0)
         {
             Y_ENSURE(Phase == 0, "WriteDeltaRow called after Finish");
 
@@ -208,7 +208,7 @@ namespace NTable {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId);
+                g.NextDataSize = g.Data.CalcSize(groupKey, row, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId, savepointSeqNum);
                 g.NextIndexSize = WriteFlatIndex ? g.FlatIndex.CalcSize(groupKey) : 0;
                 g.NextBTreeIndexSize = WriteBTreeIndex ? g.BTreeIndex.CalcSize(groupKey) : 0;
                 overheadBytes += (
@@ -251,7 +251,7 @@ namespace NTable {
                 auto& g = Groups[groupIdx];
                 // N.B. non-main groups have no key
                 TCellsRef groupKey = groupIdx == 0 ? KeyState.Key : TCellsRef{ };
-                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId);
+                g.Data.Add(g.NextDataSize, groupKey, row, *this, KeyState.Final, TRowVersion::Min(), TRowVersion::Max(), txId, KeyState.LockMode, KeyState.LockTxId, savepointSeqNum);
             }
 
             KeyState.LockMode = ELockMode::None;

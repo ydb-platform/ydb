@@ -1186,6 +1186,18 @@ namespace NTable {
             return data->GetDeltaTxId(info);
         }
 
+        ui32 GetDeltaSavepointSeqNum() const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(!SkipMainVersion, "Current record is not a delta record");
+            Y_DEBUG_ABORT_UNLESS(Main.IsValid(), "Cannot use unpositioned iterators");
+
+            const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
+            Y_DEBUG_ABORT_UNLESS(data->IsDelta(), "Current record is not a delta record");
+
+            const auto& info = Part->Scheme->Groups[0];
+            return data->GetDeltaSavepointSeqNum(info);
+        }
+
         std::tuple<ELockMode, ui64> GetLockInfo() const noexcept
         {
             if (SkipMainVersion || SkipEraseVersion) {
@@ -1759,6 +1771,12 @@ namespace NTable {
         {
             Y_DEBUG_ABORT_UNLESS(CurrentIt);
             return CurrentIt->GetDeltaTxId();
+        }
+
+        ui32 GetDeltaSavepointSeqNum() const noexcept
+        {
+            Y_DEBUG_ABORT_UNLESS(CurrentIt);
+            return CurrentIt->GetDeltaSavepointSeqNum();
         }
 
         std::tuple<ELockMode, ui64> GetLockInfo() const noexcept

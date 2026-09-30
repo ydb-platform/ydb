@@ -1598,6 +1598,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         CreateTableForSqlBackup(txId, IsColumn);
         const auto expected = DescribeTableAsSql();
 
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(false);
         WaitTableSqlExport(StartTableSqlExport(txId, "legacy"));
         UNIT_ASSERT(HasS3File("/legacy/scheme.pb"));
         UNIT_ASSERT(!HasS3File("/legacy/create_table.sql"));
@@ -5059,7 +5060,10 @@ partitioning_settings {
         )", S3Port()));
         Env().TestWaitNotification(Runtime(), txId);
 
-        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 8);
+        const bool tableBackupAsSql = Runtime().GetAppData().FeatureFlags.GetEnableTableBackupAsSql();
+        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), tableBackupAsSql ? 10u : 8u);
+        UNIT_ASSERT_VALUES_EQUAL(HasS3File("/create_table.sql"), tableBackupAsSql);
+        UNIT_ASSERT_VALUES_EQUAL(HasS3File("/create_table.sql.sha256"), tableBackupAsSql);
         const auto* dataChecksum = S3Mock().GetData().FindPtr("/data_00.csv.sha256");
         UNIT_ASSERT(dataChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*dataChecksum, "19dcd641390a61063ee45f3e6e06b8f0d3acfc33f934b9bf1ba204668a98f21d data_00.csv");
@@ -5125,7 +5129,10 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), txId);
 
         // Verify checksums are created
-        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 8);
+        const bool tableBackupAsSql = Runtime().GetAppData().FeatureFlags.GetEnableTableBackupAsSql();
+        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), tableBackupAsSql ? 10u : 8u);
+        UNIT_ASSERT_VALUES_EQUAL(HasS3File("/create_table.sql"), tableBackupAsSql);
+        UNIT_ASSERT_VALUES_EQUAL(HasS3File("/create_table.sql.sha256"), tableBackupAsSql);
 
         const auto* dataChecksum = S3Mock().GetData().FindPtr("/data_00.csv.sha256");
         UNIT_ASSERT(dataChecksum);

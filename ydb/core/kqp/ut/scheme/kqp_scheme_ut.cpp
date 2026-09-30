@@ -15200,17 +15200,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "RUN property must be 'true' or 'false'");
         }
 
-        {
-            const auto result = db.ExecuteQuery(R"(
-                CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
-                    FORCE = TRUE
-                ) AS DO BEGIN
-                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
-                END DO)",
-                NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid properties for creation new streaming query");
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Got unexpected properties: FORCE");
+        for (const TString& ifNotExists : {"", "IF NOT EXISTS"}) {
+            for (const TString& force : {"TRUE", "FALSE"}) {
+                const auto query = fmt::format(R"(
+                    CREATE STREAMING QUERY {if_not_exists} `MyFolder/MyQuery` WITH (
+                        RUN = FALSE,
+                        FORCE = {force}
+                    ) AS DO BEGIN
+                        INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                    END DO)",
+                    "if_not_exists"_a = ifNotExists, "force"_a = force);
+                const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, query << "\n" << result.GetIssues().ToOneLineString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid properties for creation new streaming query");
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Got unexpected properties: FORCE");
+            }
         }
 
         // Test alter

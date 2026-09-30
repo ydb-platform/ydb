@@ -19,6 +19,7 @@ namespace NKikimr::NSharedCache {
         DoGCScheduled = 1,
         DoGCManual = 2,
         DoLimitDecrease = 3,
+        ContinueBTreeWalk = 4,
     };
 
     enum EEv {
@@ -32,6 +33,7 @@ namespace NKikimr::NSharedCache {
         EvRequest,
         EvResult,
         EvUpdated,
+        EvStickyCollectionPages,
 
         EvEnd
 
@@ -71,12 +73,31 @@ namespace NKikimr::NSharedCache {
     };
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
+        // One B-tree per group: index nodes always live in the main group's collection
+        // (IndexCollectionId), while the data pages they point at live in that group's
+        // collection (DataCollectionId) — the same collection for group 0.
+        struct TBtreeSeed {
+            TLogoBlobID IndexCollectionId;
+            TLogoBlobID DataCollectionId;
+            NTable::NPage::TPageLocation Root;
+            ui32 LevelCount = 0;
+            bool QueueDataPages = true;
+            bool Sticky = false;
+            bool IndexCollectionSticky = false;
+
+            bool operator==(const TBtreeSeed&) const = default;
+        };
+
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         ECacheMode CacheMode;
+        // Authoritative for the sender: an empty vector withdraws that owner's walks.
+        TVector<TBtreeSeed> BtreeSeeds;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode,
+                TVector<TBtreeSeed> btreeSeeds = {})
             : PageCollection(std::move(pageCollection))
             , CacheMode(cacheMode)
+            , BtreeSeeds(std::move(btreeSeeds))
         {
         }
     };
@@ -157,6 +178,19 @@ namespace NKikimr::NSharedCache {
 
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
         THashMap<TLogoBlobID, THashSet<TPageOffset>> DroppedPages;
+    };
+
+    // The pages of a sticky collection, for the owner to fetch and keep.
+    struct TEvStickyCollectionPages : public TEventLocal<TEvStickyCollectionPages, EvStickyCollectionPages> {
+        static constexpr size_t MaxBatchLocations = 1024;
+
+        TEvStickyCollectionPages(TLogoBlobID collectionId, TVector<TPageLocation> locations)
+            : CollectionId(std::move(collectionId))
+            , Locations(std::move(locations))
+        {}
+
+        const TLogoBlobID CollectionId;
+        TVector<TPageLocation> Locations;
     };
 }
 

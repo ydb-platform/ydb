@@ -1,5 +1,6 @@
 #include "flat_page_btree_index.h"
 #include "flat_page_btree_index_writer.h"
+#include "flat_part_walker.h"
 #include "flat_table_part.h"
 #include "test/libs/table/test_writer.h"
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
@@ -92,10 +93,9 @@ namespace {
     // Helper: make a TConf with WriteBTreeIndexV2 = true, no V1 shadow (V2-only)
     NPage::TConf MakeV2Conf(bool fin = true, ui32 page = 7 * 1024) {
         NPage::TConf conf{ fin, page };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = false;
         conf.WriteBTreeIndexV2 = true;
         conf.WriteFlatIndex = false;
-        conf.BTreeIndexV2KeepV1Shadow = false;
         return conf;
     }
 
@@ -776,7 +776,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
     Y_UNIT_TEST(Conf) {
         NPage::TConf conf;
 
-        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndex, true);
+        UNIT_ASSERT_VALUES_EQUAL(conf.WriteBTreeIndexV1, true);
         UNIT_ASSERT_VALUES_EQUAL(conf.WriteFlatIndex, true);
     }
 
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -820,7 +820,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -851,7 +851,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
@@ -885,7 +885,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Final = false;
         conf.Group(0).PageRows = 33;
@@ -920,7 +920,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Group(0).PageRows = 3;
         conf.Group(1).PageRows = 4;
@@ -959,7 +959,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.Group(0).PageRows = 3;
         conf.Group(1).PageRows = 4;
@@ -1011,7 +1011,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPart) {
             .Key({0});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
         conf.SmallEdge = 133;
         conf.LargeEdge = 333;
@@ -1180,7 +1180,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0, 1});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
 
         NPage::TConf v2Conf = MakeV2Conf();
@@ -1202,7 +1202,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0, 1});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
 
         NPage::TConf v2Conf = MakeV2Conf();
@@ -1224,7 +1224,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0, 1});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         v1Conf.Group(0).BTreeIndexNodeKeysMin = 3;
@@ -1250,7 +1250,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Final = false;
         v1Conf.Group(0).PageRows = 33;
@@ -1278,7 +1278,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).PageRows = 3;
         v1Conf.Group(1).PageRows = 4;
@@ -1309,7 +1309,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexTPartV2) {
             .Key({0});
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).PageRows = 3;
         v1Conf.Group(1).PageRows = 4;
@@ -1399,7 +1399,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1429,7 +1429,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         // V1 part
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         TPartCook v1Cook(lay, v1Conf);
         feedRows(v1Cook, lay);
@@ -1468,7 +1468,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         // V1 part with multi-level btree
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         v1Conf.Group(0).BTreeIndexNodeKeysMin = 3;
@@ -1521,7 +1521,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         };
 
         NPage::TConf v1Conf{ true, 7 * 1024 };
-        v1Conf.WriteBTreeIndex = true;
+        v1Conf.WriteBTreeIndexV1 = true;
         v1Conf.WriteBTreeIndexV2 = false;
         v1Conf.Group(0).PageRows = 3;
         v1Conf.Group(1).PageRows = 4;
@@ -1601,7 +1601,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1700,7 +1700,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
 
         NPage::TConf v2Conf = MakeV2Conf();
         UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndexV2, true);
-        UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndex, true);
+        UNIT_ASSERT_VALUES_EQUAL(v2Conf.WriteBTreeIndexV1, false);
     }
 
     // -----------------------------------------------------------------------
@@ -1716,7 +1716,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1766,7 +1766,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0, 1});
 
         NPage::TConf conf{ true, 7 * 1024 };
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = true;
         conf.WriteBTreeIndexV2 = false;
 
         TPartCook cook(lay, conf);
@@ -1824,7 +1824,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         NPage::TConf conf = MakeV2Conf();
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.BTreeIndexV2KeepV1Shadow = true;
+        conf.WriteBTreeIndexV1 = true;
 
         TPartCook cook(lay, conf);
         for (ui32 i : xrange(700)) {
@@ -1889,7 +1889,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
         NPage::TConf conf = MakeV2Conf();
         conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
         conf.Group(0).BTreeIndexNodeKeysMin = 3;
-        conf.BTreeIndexV2KeepV1Shadow = true;
+        conf.WriteBTreeIndexV1 = true;
 
         TPartCook cook(lay, conf);
         for (ui32 i : xrange(700)) {
@@ -1976,7 +1976,7 @@ Y_UNIT_TEST_SUITE(TBtreeIndexV2Specific) {
             .Key({0});
 
         NPage::TConf conf = MakeV2Conf();
-        conf.BTreeIndexV2KeepV1Shadow = true;
+        conf.WriteBTreeIndexV1 = true;
         // Force many small btree pages so V2's larger children produce more levels.
         // Group 1 uses short format (20 vs 36 bytes per child, 80% larger for V2).
         conf.Group(0).BTreeIndexNodeTargetSize = 1024;
@@ -2182,5 +2182,197 @@ Y_UNIT_TEST_SUITE(TBtreeIndexReadFlags) {
     }
 
 }
+
+// ========================================================================
+Y_UNIT_TEST_SUITE(TBTreePartWalker) {
+    using namespace NTest;
+
+    Y_UNIT_TEST(WalkMultiLevelBTree) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT(meta.HasRootV2());
+        UNIT_ASSERT_C(meta.LevelCount() > 0, "Expected multi-level b-tree");
+
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        TTestEnv env;
+        UNIT_ASSERT_C(walker.Step(part.Get(), &env, TGroupId{}),
+            "Walker should complete in one pass when all pages are resident");
+    }
+
+    Y_UNIT_TEST(WalkSingleDataPage) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 7 * 1024;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(5)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i, TString(10, 'x') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT(meta.HasRootV2());
+        UNIT_ASSERT_VALUES_EQUAL_C(meta.LevelCount(), 0u,
+            "Expected LevelCount == 0 for a single data page root");
+
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        TTestEnv env;
+        UNIT_ASSERT_C(walker.Step(part.Get(), &env, TGroupId{}),
+            "Single data page walker should complete in one pass");
+    }
+
+    Y_UNIT_TEST(WalkNonMainGroupSkipDataPages) {
+        TLayoutCook lay;
+
+        lay
+            .Col(0, 0, NScheme::NTypeIds::Uint32)
+            .Col(0, 1, NScheme::NTypeIds::String)
+            .Col(1, 2, NScheme::NTypeIds::String)
+            .Key({0});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+        conf.Group(1).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(1).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay)
+                .Col(i, TString(512, 'a') + ToString(i))
+                .Col(TString(512, 'b') + ToString(i)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        UNIT_ASSERT(part->IndexPages.BTreeGroups.size() > 1);
+        const auto& meta = part->IndexPages.BTreeGroups[1];
+        UNIT_ASSERT(meta.HasRootV2());
+        UNIT_ASSERT_C(meta.LevelCount() > 0,
+            "Non-main group must have multi-level B-tree, got LevelCount="
+            + ToString(meta.LevelCount()));
+
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        TTestEnv env;
+        // Walk group 1 with skipDataPages=true — traverse index pages
+        // in room 0, skip data pages in room 1.
+        UNIT_ASSERT_C(walker.Step(part.Get(), &env, TGroupId{1}, true),
+            "Non-main group walker should complete with skipDataPages=true");
+    }
+
+    Y_UNIT_TEST(ResumableWalkAcrossRounds) {
+        TLayoutCook lay;
+        lay
+            .Col(0, 0,  NScheme::NTypeIds::Uint32)
+            .Col(0, 1,  NScheme::NTypeIds::String)
+            .Key({0, 1});
+
+        NPage::TConf conf = MakeV2Conf();
+        conf.Group(0).BTreeIndexNodeTargetSize = 3 * 1024;
+        conf.Group(0).BTreeIndexNodeKeysMin = 3;
+
+        TPartCook cook(lay, conf);
+        for (ui32 i : xrange(700)) {
+            cook.Add(*TSchemedCookRow(*lay).Col(i / 9, TString(1024, 'x') + ToString(i % 9)));
+        }
+        TPartEggs eggs = cook.Finish();
+        const auto part = eggs.Lone();
+
+        const auto& meta = part->IndexPages.BTreeGroups[0];
+        UNIT_ASSERT(meta.LevelCount() > 0);
+
+        struct TMockPages : public IPages {
+            const TPartStore* Part;
+            THashSet<ui64>& Loaded;
+            TVector<TPageLocation> Missed;
+
+            TMockPages(const TPartStore* part, THashSet<ui64>& loaded)
+                : Part(part), Loaded(loaded) {}
+
+            TResult Locate(const TMemTable*, ui64, ui32) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            TResult Locate(const TPart*, ui64, ELargeObj) override {
+                Y_TABLET_ERROR("Unused");
+            }
+            const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+                Y_UNUSED(part);
+                if (Loaded.count(location.GetByteOffset())) {
+                    return Part->Store->GetPage(groupId.Index, location.Offset);
+                }
+                Missed.push_back(location);
+                return nullptr;
+            }
+        };
+
+        THashSet<ui64> loadedOffsets;
+        TMockPages mockPages(part.Get(), loadedOffsets);
+        TBTreePartWalker walker;
+        walker.Start(meta);
+
+        // Round 1: nothing loaded — miss root.
+        {
+            UNIT_ASSERT(!walker.Step(part.Get(), &mockPages, TGroupId{}));
+            UNIT_ASSERT(!mockPages.Missed.empty());
+            for (auto& loc : mockPages.Missed) {
+                loadedOffsets.insert(loc.GetByteOffset());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(mockPages.Missed.size(), 1);
+        }
+
+        // Round 2: root loaded — discover level-1 children.
+        mockPages.Missed.clear();
+        {
+            UNIT_ASSERT(!walker.Step(part.Get(), &mockPages, TGroupId{}));
+            UNIT_ASSERT(!mockPages.Missed.empty());
+            for (auto& loc : mockPages.Missed) {
+                loadedOffsets.insert(loc.GetByteOffset());
+            }
+            UNIT_ASSERT_C(mockPages.Missed.size() > 0, "Level-1 children should be discovered");
+        }
+
+        // Rounds 3+: drive until done.
+        for (int round = 0; round < 10; round++) {
+            mockPages.Missed.clear();
+            if (walker.Step(part.Get(), &mockPages, TGroupId{})) {
+                UNIT_ASSERT(mockPages.Missed.empty());
+                return;
+            }
+            for (auto& loc : mockPages.Missed) {
+                loadedOffsets.insert(loc.GetByteOffset());
+            }
+        }
+        UNIT_ASSERT_C(false, "Walker did not complete within 10 fetch rounds");
+    }
+
+} // Y_UNIT_TEST_SUITE(TBTreePartWalker)
 
 } // namespace NKikimr::NTable::NPage

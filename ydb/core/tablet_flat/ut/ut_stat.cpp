@@ -72,7 +72,7 @@ namespace {
         conf.LargeEdge = 29;  /* Large values placed to single blobs */
 
         conf.CutIndexKeys = false;
-        conf.WriteBTreeIndex = writeBTreeIndex;
+        conf.WriteBTreeIndexV1 = writeBTreeIndex;
         conf.WriteBTreeIndexV2 = false;
 
         return conf;
@@ -456,7 +456,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         }
 
         conf.CutIndexKeys = false;
-        conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+        conf.WriteBTreeIndexV1 = (mode == FlatIndex ? false : true);
 
         return conf;
     }
@@ -1109,7 +1109,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
         for (auto mode : {BTreeIndex, FlatIndex, MixedIndex}) {
             NPage::TConf conf;
             conf.Groups.resize(mass->Model->Scheme->Families.size());
-            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+            conf.WriteBTreeIndexV1 = (mode == FlatIndex ? false : true);
 
             TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerRnd(partsCount), history ? 0.7 : 0);
 
@@ -1129,7 +1129,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             conf.Groups.resize(mass->Model->Scheme->Families.size());
             conf.Group(0).PageRows = 1; // we don't care about pages actual size
             conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
-            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+            conf.WriteBTreeIndexV1 = (mode == FlatIndex ? false : true);
 
             TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerRnd(partsCount));
 
@@ -1149,7 +1149,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             conf.Groups.resize(mass->Model->Scheme->Families.size());
             conf.Group(0).PageRows = 1; // we don't care about pages actual size
             conf.Group(0).BTreeIndexNodeKeysMin = conf.Group(0).BTreeIndexNodeKeysMax = 2;
-            conf.WriteBTreeIndex = (mode == FlatIndex ? false : true);
+            conf.WriteBTreeIndexV1 = (mode == FlatIndex ? false : true);
 
             TAutoPtr<TSubset> subset = TMake(*mass, conf).Mixed(0, partsCount, TMixerSeq(partsCount, mass->Saved.Size()));
 
@@ -1168,7 +1168,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
     // Shared twin-conf builder: V1 and V2 differ only in WriteBTreeIndexV2 and
     // whether a V1 shadow root is kept, so deriving both from one helper keeps
     // the twin comparison apples-to-apples as knobs are added.
-    NPage::TConf MakeTwinConf(size_t groups, bool writeBTreeIndexV2, bool keepV1Shadow) {
+    NPage::TConf MakeTwinConf(size_t groups, bool writeBTreeIndexV2, bool writeBTreeIndexV1) {
         NPage::TConf conf{ true, 2 * 1024 };
 
         conf.Groups.resize(groups);
@@ -1179,18 +1179,17 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
         conf.SmallEdge = 19;
         conf.LargeEdge = 29;
         conf.CutIndexKeys = false;
-        conf.WriteBTreeIndex = true;
+        conf.WriteBTreeIndexV1 = writeBTreeIndexV1;
         conf.WriteBTreeIndexV2 = writeBTreeIndexV2;
         conf.WriteFlatIndex = false;
-        conf.BTreeIndexV2KeepV1Shadow = keepV1Shadow;
 
         return conf;
     }
 
-    // keepV1Shadow=false selects true V2-only parts (byte-offset root, no V1
+    // writeBTreeIndexV1=false selects true V2-only parts (byte-offset root, no V1
     // shadow root) — a distinct mode that has had correctness issues.
-    NPage::TConf PageConfV2(size_t groups, bool keepV1Shadow = true) {
-        return MakeTwinConf(groups, /* writeBTreeIndexV2 = */ true, keepV1Shadow);
+    NPage::TConf PageConfV2(size_t groups, bool writeBTreeIndexV1 = true) {
+        return MakeTwinConf(groups, /* writeBTreeIndexV2 = */ true, writeBTreeIndexV1);
     }
 
     void AssertHistogramValid(const THistogram& histogram, ui64 total,
@@ -1246,7 +1245,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
 
     // V1 conf for twin tests
     NPage::TConf PageConfV1(size_t groups) {
-        return MakeTwinConf(groups, /* writeBTreeIndexV2 = */ false, /* keepV1Shadow = */ false);
+        return MakeTwinConf(groups, /* writeBTreeIndexV2 = */ false, /* writeBTreeIndexV1 = */ true);
     }
 
     // Twin test: write same data in v1 and v2, compare stats.
@@ -1254,7 +1253,7 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
     // covers the distinct V2-only read mode, not just the shadowed V2 layout.
     void CheckTwin(const NTest::TMass& mass, ui32 partsCount, bool history = false) {
         auto v1Conf = PageConfV1(mass.Model->Scheme->Families.size());
-        auto v2Conf = PageConfV2(mass.Model->Scheme->Families.size(), /* keepV1Shadow = */ false);
+        auto v2Conf = PageConfV2(mass.Model->Scheme->Families.size(), /* writeBTreeIndexV1 = */ false);
 
         auto v1Subset = TMake(mass, v1Conf).Mixed(0, partsCount, TMixerOne{ }, history ? 0.3 : 0);
         auto v2Subset = TMake(mass, v2Conf).Mixed(0, partsCount, TMixerOne{ }, history ? 0.3 : 0);
@@ -1388,11 +1387,8 @@ Y_UNIT_TEST_SUITE(BuildStatsBTreeIndexV2) {
             conf.Group(0).BTreeIndexNodeTargetSize = 512; // force a multi-level tree
             conf.Group(0).BTreeIndexNodeKeysMin = 2;
             conf.Group(0).BTreeIndexNodeKeysMax = 4;
-            conf.WriteBTreeIndex = true;
+            conf.WriteBTreeIndexV1 = !v2; // true V2-only: no V1 shadow root
             conf.WriteBTreeIndexV2 = v2;
-            if (v2) {
-                conf.BTreeIndexV2KeepV1Shadow = false; // true V2-only: no V1 shadow root
-            }
             conf.WriteFlatIndex = false; // b-tree only -> selects the btree group iter
             return conf;
         };

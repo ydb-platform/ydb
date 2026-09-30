@@ -22,13 +22,13 @@ namespace NBlockIO {
     };
 
     struct TEvFetch : public TEventLocal<TEvFetch, ui32(EEv::Fetch)> {
-        TEvFetch(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageLocation> pages, ui64 cookie)
+        TEvFetch(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection,
+            TVector<TPageLocation> pages, ui64 cookie)
             : Priority(priority)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
             , Cookie(cookie)
         {
-
         }
 
         const EPriority Priority;

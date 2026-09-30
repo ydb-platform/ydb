@@ -7,6 +7,8 @@
 
 #include <ydb/library/accessor/positive_integer.h>
 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr::NConveyorComposite {
 
 class TProcessCategory: public TNonCopyable {
@@ -17,6 +19,7 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<TCategorySignals>, Counters);
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
+    THashMap<TSchedulerQueryIdentity, THashSet<ui64>> ProcessesByIdentity;
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
 
     [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);

@@ -113,11 +113,12 @@ namespace NKikimr::NConveyorComposite {
         };
 
         TTestSchedulerQuery MakeSchedulerQuery(
-            const TSchedulerQueryIdentity& identity, const TDuration delay = TDuration::MicroSeconds(10), const ui64 fairShare = 1) {
+            const TSchedulerQueryIdentity& identity, const TDuration delay = TDuration::MicroSeconds(10), const ui64 fairShare = 1,
+            const std::optional<TDuration> minDelay = std::nullopt) {
             using namespace NKqp::NScheduler;
             auto delayParams = std::make_shared<TDelayParams>(TDelayParams{
                 .MaxDelay = delay,
-                .MinDelay = delay,
+                .MinDelay = minDelay.value_or(delay),
                 .AttemptBonus = TDuration::Zero(),
                 .MaxRandomDelay = TDuration::MicroSeconds(1),
             });
@@ -275,6 +276,273 @@ namespace NKikimr::NConveyorComposite {
     } // namespace
 
     Y_UNIT_TEST_SUITE(CompositeConveyorScheduler) {
+        /* Scenario:
+            Exercise lookup with many small identities and with large service/managed identities.
+            Report lookup timings without a timing assertion; all shapes preserve zero usage.
+         */
+        Y_UNIT_TEST(IdentityLookupWorkloads) {
+            constexpr ui64 processCount = 4096;
+            constexpr ui64 iterations = 20480;
+            for (ui32 shape = 0; shape < 4; ++shape) {
+                TCounters counters("LOOKUP_WORKLOAD", MakeIntrusive<NMonitoring::TDynamicCounters>());
+                TProcessCategory category(NConfig::TCategory(ESpecialTaskCategory::Scan), counters);
+                const bool service = shape == 1 || shape == 2;
+                const ui64 queryCount = shape == 0 ? 256 : 1;
+                auto scope = category.RegisterScope("shared", TCPULimitsConfig(1));
+                TAtomicCounter executed;
+                for (ui64 id = 1; id <= processCount; ++id) {
+                    const auto identity = service ? kServiceQueryIdentity : MakeIdentity((id - 1) / (processCount / queryCount));
+                    category.RegisterProcess(id, std::shared_ptr<TProcessScope>(scope), identity);
+                    if (shape < 2 || id == processCount) {
+                        category.RegisterTask(id, std::make_shared<TCounterTask>(executed));
+                    }
+                }
+                const auto start = TMonotonic::Now();
+                for (ui64 i = 0; i < iterations; ++i) {
+                    const auto identity = service ? kServiceQueryIdentity : MakeIdentity((i * 17) % queryCount);
+                    const auto usage = category.GetMinProcessUsage(identity);
+                    UNIT_ASSERT(usage && *usage == TDuration::Zero());
+                }
+                Cerr << "IDENTITY_LOOKUP shape=" << shape << " processes=" << processCount
+                     << " queries=" << queryCount << " iterations=" << iterations
+                     << " elapsed_us=" << (TMonotonic::Now() - start).MicroSeconds() << Endl;
+            }
+        }
+
+        /* Scenario:
+            Index all registered processes, including idle ones, by full identity.
+            Preserve usage, queues and scopes through rehash, migration and late accounting.
+         */
+        Y_UNIT_TEST(ProcessIdentityIndexPreservesEligibilityAndLifecycle) {
+            TCounters counters("INDEX_TEST", MakeIntrusive<NMonitoring::TDynamicCounters>());
+            const auto signals = counters.GetWorkersPoolSignals("test")->GetCategorySignals(ESpecialTaskCategory::Scan);
+            TProcessCategory category(NConfig::TCategory(ESpecialTaskCategory::Scan), counters);
+            TAtomicCounter executed;
+            UNIT_ASSERT(category.HasProcesses(kServiceQueryIdentity));
+            UNIT_ASSERT(!category.HasProcesses(MakeIdentity(0)));
+            UNIT_ASSERT(!category.HasTasks(kServiceQueryIdentity));
+
+            for (ui64 id = 1; id <= 128; ++id) {
+                auto scope = category.RegisterScope(::ToString(id), TCPULimitsConfig(1));
+                category.RegisterProcess(id, std::move(scope), MakeIdentity(id));
+                UNIT_ASSERT(category.HasProcesses(MakeIdentity(id)));
+                UNIT_ASSERT(!category.HasTasks(MakeIdentity(id)));
+                category.RegisterTask(id, std::make_shared<TCounterTask>(executed));
+                category.RegisterTask(id, std::make_shared<TCounterTask>(executed));
+            }
+            // Each process keeps one queued task while its first task acquires known usage.
+            for (ui64 id = 1; id <= 128; ++id) {
+                THashSet<TString> scopes;
+                auto task = category.ExtractTaskWithPrediction(signals, scopes, MakeIdentity(id), 0, {});
+                UNIT_ASSERT(task && task->GetProcessId() == id);
+                scopes.clear();
+                category.PutTaskResult(task->GetResult(TMonotonic::MicroSeconds(1000), TMonotonic::MicroSeconds(1000 + id)), scopes);
+                UNIT_ASSERT_VALUES_EQUAL(*category.GetMinProcessUsage(MakeIdentity(id)), TDuration::MicroSeconds(id));
+            }
+            for (ui64 id = 128; id > 0; --id) {
+                UNIT_ASSERT_VALUES_EQUAL(category.MoveProcessesToService(MakeIdentity(id)), 1);
+                UNIT_ASSERT_VALUES_EQUAL(*category.GetMinProcessUsage(kServiceQueryIdentity), TDuration::MicroSeconds(id));
+                UNIT_ASSERT(!category.HasProcesses(MakeIdentity(id)));
+                UNIT_ASSERT(!category.HasTasks(MakeIdentity(id)));
+                UNIT_ASSERT_VALUES_EQUAL(category.MoveProcessesToService(MakeIdentity(id)), 0);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(*category.GetMinProcessUsage(kServiceQueryIdentity), TDuration::MicroSeconds(1));
+            auto firstScope = category.GetProcessScopePtrVerified("1");
+            firstScope->IncInFlight();
+            UNIT_ASSERT_VALUES_EQUAL(*category.GetMinProcessUsage(kServiceQueryIdentity), TDuration::MicroSeconds(2));
+            NKikimrConfig::TCompositeConveyorConfig::THeavyLimit protoLimit;
+            protoLimit.SetCpuLimitUs(2);
+            protoLimit.SetThreadLimit(1);
+            NConfig::THeavyLimit limit;
+            UNIT_ASSERT(limit.DeserializeFromProto(protoLimit).IsSuccess());
+            UNIT_ASSERT(!category.GetMinProcessUsage(kServiceQueryIdentity, 1, {limit}));
+            firstScope->DecInFlight();
+            UNIT_ASSERT_VALUES_EQUAL(*category.GetMinProcessUsage(kServiceQueryIdentity, 1, {limit}), TDuration::MicroSeconds(1));
+
+            auto oldScope = category.RegisterScope("late", TCPULimitsConfig(1));
+            category.RegisterProcess(200, std::shared_ptr<TProcessScope>(oldScope), MakeIdentity(0));
+            category.RegisterTask(200, std::make_shared<TCounterTask>(executed));
+            THashSet<TString> scopes;
+            auto task = category.ExtractTaskWithPrediction(signals, scopes, MakeIdentity(0), 0, {});
+            UNIT_ASSERT(task);
+            UNIT_ASSERT(category.UnregisterProcess(200) == MakeIdentity(0));
+            UNIT_ASSERT(!category.HasProcesses(MakeIdentity(0)));
+            auto newScope = category.RegisterScope("late", TCPULimitsConfig(1));
+            UNIT_ASSERT(newScope != oldScope);
+            category.RegisterProcess(201, std::move(newScope), MakeIdentity(0));
+            category.RegisterTask(201, std::make_shared<TCounterTask>(executed));
+            scopes.clear();
+            category.PutTaskResult(task->GetResult(TMonotonic::MicroSeconds(2000), TMonotonic::MicroSeconds(2001)), scopes);
+            UNIT_ASSERT_VALUES_EQUAL(oldScope->GetCountInFlight(), 0);
+            UNIT_ASSERT(category.HasTasks(MakeIdentity(0)));
+            UNIT_ASSERT(category.UnregisterProcess(201) == MakeIdentity(0));
+            for (ui64 id = 1; id <= 128; ++id) {
+                UNIT_ASSERT(category.UnregisterProcess(id) == kServiceQueryIdentity);
+            }
+            UNIT_ASSERT(category.HasProcesses(kServiceQueryIdentity));
+            UNIT_ASSERT(!category.HasTasks());
+            UNIT_ASSERT(!category.GetMinProcessUsage(kServiceQueryIdentity));
+        }
+
+        /* Scenario:
+            Queries sharing a scope still block each other; queued usage zero remains valid.
+            Lookups of absent identities never create phantom registered processes.
+         */
+        Y_UNIT_TEST(ProcessIdentityIndexKeepsSharedScopeGate) {
+            TCounters counters("INDEX_SCOPE", MakeIntrusive<NMonitoring::TDynamicCounters>());
+            TProcessCategory category(NConfig::TCategory(ESpecialTaskCategory::Scan), counters);
+            auto scope = category.RegisterScope("shared", TCPULimitsConfig(1));
+            TAtomicCounter executed;
+            for (ui64 id : {1, 2}) {
+                category.RegisterProcess(id, std::shared_ptr<TProcessScope>(scope), MakeIdentity(id));
+                category.RegisterTask(id, std::make_shared<TCounterTask>(executed));
+                UNIT_ASSERT_VALUES_EQUAL(*category.GetMinProcessUsage(MakeIdentity(id)), TDuration::Zero());
+            }
+            scope->IncInFlight();
+            for (ui64 id : {1, 2}) {
+                UNIT_ASSERT(category.HasProcesses(MakeIdentity(id)));
+                UNIT_ASSERT(!category.HasTasks(MakeIdentity(id)));
+                UNIT_ASSERT(!category.GetMinProcessUsage(MakeIdentity(id)));
+            }
+            scope->DecInFlight();
+            for (ui64 id : {1, 2}) {
+                UNIT_ASSERT(category.HasTasks(MakeIdentity(id)));
+                category.UnregisterProcess(id);
+                UNIT_ASSERT(!category.HasTasks(MakeIdentity(id)));
+                UNIT_ASSERT(!category.GetMinProcessUsage(MakeIdentity(id)));
+                UNIT_ASSERT(!category.HasProcesses(MakeIdentity(id)));
+            }
+        }
+
+        /* Scenario:
+            A query can retry in a second pool after a first-pool refusal.
+            The one manager timer uses the final deadline, or disappears after success.
+         */
+        Y_UNIT_TEST(RetryUsesFinalOutcomeAcrossPools) {
+            for (ui32 outcome = 0; outcome < 3; ++outcome) {
+                NActors::TTestActorRuntime runtime;
+                runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+                runtime.UpdateCurrentTime(TInstant::FromValue(TMonotonic::Now().GetValue()), true);
+                const auto sink = runtime.AllocateEdgeActor();
+                const auto identity = MakeIdentity(0);
+                auto query = MakeSchedulerQuery(identity, TDuration::Seconds(1), 1, TDuration::MicroSeconds(1));
+                TQueryRegistry external;
+                external.RegisterProcess(identity);
+                external.SetQuery(identity, query.Query);
+                SetCapacity(external, identity, 1);
+                std::optional<TSchedulerLease> occupied(std::get<TSchedulerLease>(external.GetStateVerified(identity).TryStart(TMonotonic::Now())));
+                if (outcome == 2) {
+                    query.SetFairShare(0);
+                }
+                std::vector<TInstant> deadlines;
+                runtime.SetScheduledEventFilter([&](auto&, auto& ev, TDuration, TInstant& deadline) {
+                    if (ev->Recipient == sink && ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+                        deadlines.push_back(deadline);
+                        return true;
+                    }
+                    return false;
+                });
+                ui32 serviceBatches = 0;
+                ui32 managedBatches = 0;
+                const auto previousFilter = runtime.SetEventFilter([&](auto&, auto& ev) {
+                    if (ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType) {
+                        if (ev->template Get<TEvInternal::TEvNewTask>()->GetQueryIdentity().IsServiceQuery) {
+                            ++serviceBatches;
+                            if (outcome == 0) {
+                                occupied.reset();
+                            } else {
+                                query.SetFairShare(outcome == 1 ? 0 : 1);
+                            }
+                        } else {
+                            ++managedBatches;
+                        }
+                    }
+                    return false;
+                });
+                TWorkerEventBlocker<TEvInternal::TEvNewTask> batches(runtime);
+                auto config = ParseConfig(BuildConfig({1, 1}, {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}},
+                                                               {{ESpecialTaskCategory::Scan, 1}}}));
+                TCounters counters("RETRY_TEST", MakeIntrusive<NMonitoring::TDynamicCounters>());
+                TAtomicCounter executed;
+                runtime.RunCall([&] {
+                    TTasksManager manager("RETRY_TEST", config, sink, counters);
+                    manager.RegisterProcess(ESpecialTaskCategory::Scan, "query", 1, TCPULimitsConfig(1), identity);
+                    manager.SetQuery(identity, query.Query);
+                    manager.MutableCategoryVerified(ESpecialTaskCategory::Scan).RegisterTask(1, std::make_shared<TCounterTask>(executed));
+                    manager.MutableCategoryVerified(ESpecialTaskCategory::Insert).RegisterTask(0, std::make_shared<TCounterTask>(executed));
+                    const auto before = TMonotonic::Now();
+                    UNIT_ASSERT(manager.DrainTasks());
+                    const auto after = TMonotonic::Now();
+                    UNIT_ASSERT_VALUES_EQUAL(serviceBatches, 1);
+                    UNIT_ASSERT_VALUES_EQUAL(managedBatches, outcome == 0 ? 1 : 0);
+                    if (outcome == 0) {
+                        UNIT_ASSERT(deadlines.empty());
+                    } else {
+                        const auto delay = outcome == 1 ? TDuration::Seconds(1) : TDuration::MicroSeconds(200);
+                        UNIT_ASSERT_VALUES_EQUAL(deadlines.size(), 1);
+                        UNIT_ASSERT(deadlines[0].GetValue() >= (before + delay).GetValue());
+                        UNIT_ASSERT(deadlines[0].GetValue() <= (after + delay).GetValue());
+                    }
+                    return true;
+                });
+                runtime.SetEventFilter(previousFilter);
+            }
+        }
+
+        /* Scenario:
+            Deliver old wakeups after workers become busy or the query loses its queued tasks.
+            Neither case creates a new timer; ordinary accounting/task events restore progress.
+         */
+        Y_UNIT_TEST_TWIN(IdleRetryDoesNotReschedule, NoQueuedTasks) {
+            const auto identity = MakeIdentity(1);
+            auto query = MakeSchedulerQuery(identity, TDuration::MicroSeconds(1), 0);
+            TSchedulerRuntimeFixture fixture(BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}}));
+            ui64 timers = 0;
+            fixture.Runtime.SetScheduledEventFilter([&](auto&, auto& ev, TDuration, TInstant&) {
+                if (ev->Recipient == fixture.Distributor && ev->GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType) {
+                    ++timers;
+                    return true;
+                }
+                return false;
+            });
+            fixture.RegisterProcess(1, identity);
+            fixture.SendQueryResponse(query.Query);
+            fixture.RegisterProcess(2, identity);
+            TAtomicCounter executed, service;
+            fixture.Submit(executed, 1);
+            fixture.WaitFor([&] { return timers == 1; });
+            NActors::TBlockEvents<TEvInternal::TEvTaskProcessedResult> results(fixture.Runtime);
+            if (NoQueuedTasks) {
+                fixture.UnregisterProcess(1);
+            } else {
+                fixture.Submit(service, 0, ESpecialTaskCategory::Insert);
+                fixture.WaitFor([&] { return results.size() == 1; });
+            }
+            const auto previousTimers = timers;
+            for (ui32 i = 0; i < 3; ++i) {
+                fixture.Runtime.Send(fixture.Distributor, fixture.Sink, new NActors::TEvents::TEvWakeup());
+                fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(timers, previousTimers);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 0);
+            results.Stop().Unblock();
+            if (!NoQueuedTasks) {
+                fixture.WaitFor([&] { return timers == previousTimers + 1; });
+            }
+            query.SetFairShare(1);
+            if (NoQueuedTasks) {
+                fixture.Submit(executed, 2);
+            } else {
+                fixture.Runtime.Send(fixture.Distributor, fixture.Sink, new NActors::TEvents::TEvWakeup());
+            }
+            fixture.WaitFor([&] { return executed.Val() == 1; });
+            if (!NoQueuedTasks) {
+                fixture.UnregisterProcess(1);
+            }
+            fixture.UnregisterProcess(2);
+            fixture.WaitFor([&] { return fixture.Removes[identity.QueryId] == 1; });
+        }
+
         /* Scenario:
             Destroy the registry with started and throttled works, then destroy the HDRF tree.
             A late lease release is a no-op and cannot stop the native work twice.
@@ -1336,7 +1604,7 @@ namespace NKikimr::NConveyorComposite {
 
         /* Scenario:
             - Use Now when no deadlines exist and ignore states without a deadline.
-            - Compute the average and minimum of throttled deadlines, including values near ui64's maximum.
+            - Compute the average of throttled deadlines, including values near ui64's maximum.
          */
         Y_UNIT_TEST(AverageDeadlineHandlesEmptyMissingAndOverflowCases) {
             for (const auto now : {TMonotonic::MicroSeconds(100), TMonotonic::FromValue(Max<ui64>() - 1000)}) {
@@ -1356,7 +1624,6 @@ namespace NKikimr::NConveyorComposite {
                     Y_UNUSED(registry.GetStateVerified(MakeIdentity(id)).TryStart(now));
                     UNIT_ASSERT_VALUES_EQUAL(registry.GetAverageWakeUpDeadline(now).GetValue(), now.GetValue() + (id == 1 ? 100 : 150));
                 }
-                UNIT_ASSERT_VALUES_EQUAL(registry.GetMinWakeUpDeadline()->GetValue(), now.GetValue() + 100);
             }
         }
 
@@ -1620,9 +1887,10 @@ namespace NKikimr::NConveyorComposite {
 
         /* Scenario:
             - Throttle two queries and schedule one wakeup at their minimum deadline after a full drain.
-            - Drain again with scope capacity exhausted; schedule the unchanged minimum without another TryStart.
+            - A blocked query keeps its priority deadline but does not request a new timer.
+            - When scopes are released, the original priority ordering is preserved.
          */
-        Y_UNIT_TEST(DrainSchedulesOneMinimumWakeupEvenWithoutNewAttempts) {
+        Y_UNIT_TEST(DrainSchedulesOnlyFreshRetriesAndPreservesPriority) {
             NActors::TTestActorRuntime runtime;
             runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
             runtime.UpdateCurrentTime(TInstant::FromValue(TMonotonic::Now().GetValue()), true);
@@ -1635,15 +1903,16 @@ namespace NKikimr::NConveyorComposite {
                 }
                 return false;
             });
-            auto query1 = MakeSchedulerQuery(MakeIdentity(1), TDuration::Seconds(1), 0);
+            auto query1 = MakeSchedulerQuery(MakeIdentity(1), TDuration::MicroSeconds(1), 0);
             auto query2 = MakeSchedulerQuery(MakeIdentity(2), TDuration::Seconds(2), 0);
             auto config = ParseConfig(BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}}}));
             TCounters counters("TEST", MakeIntrusive<NMonitoring::TDynamicCounters>());
             TAtomicCounter executed;
+            TWorkerEventBlocker<TEvInternal::TEvNewTask> held(runtime);
             runtime.RunCall([&] {
                 TTasksManager manager("TEST", config, sink, counters);
                 for (ui64 id : {1, 2}) {
-                    manager.RegisterProcess(ESpecialTaskCategory::Scan, "scope", id, TCPULimitsConfig(1), MakeIdentity(id));
+                    manager.RegisterProcess(ESpecialTaskCategory::Scan, ::ToString(id), id, TCPULimitsConfig(1), MakeIdentity(id));
                     manager.SetQuery(MakeIdentity(id), id == 1 ? query1.Query : query2.Query);
                     manager.MutableCategoryVerified(ESpecialTaskCategory::Scan).RegisterTask(id, std::make_shared<TCounterTask>(executed));
                 }
@@ -1651,15 +1920,36 @@ namespace NKikimr::NConveyorComposite {
                 UNIT_ASSERT(!manager.DrainTasks());
                 const auto after = TMonotonic::Now();
                 UNIT_ASSERT_VALUES_EQUAL(deadlines.size(), 1);
-                UNIT_ASSERT(deadlines[0].GetValue() >= (before + TDuration::Seconds(1)).GetValue());
-                UNIT_ASSERT(deadlines[0].GetValue() <= (after + TDuration::Seconds(1)).GetValue());
+                UNIT_ASSERT(deadlines[0].GetValue() >= (before + TDuration::MicroSeconds(1)).GetValue());
+                UNIT_ASSERT(deadlines[0].GetValue() <= (after + TDuration::MicroSeconds(1)).GetValue());
                 // Suppress runnable tasks without touching the already recorded query deadlines.
-                auto& scope = manager.MutableCategoryVerified(ESpecialTaskCategory::Scan).MutableProcessScope("scope");
-                scope.IncInFlight();
+                auto& category = manager.MutableCategoryVerified(ESpecialTaskCategory::Scan);
+                auto& firstScope = category.MutableProcessScope("1");
+                auto& secondScope = category.MutableProcessScope("2");
+                firstScope.IncInFlight();
+                const auto secondBefore = TMonotonic::Now();
                 UNIT_ASSERT(!manager.DrainTasks());
                 UNIT_ASSERT_VALUES_EQUAL(deadlines.size(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(deadlines[1], deadlines[0]);
-                scope.DecInFlight();
+                UNIT_ASSERT(deadlines[1].GetValue() >= (secondBefore + TDuration::Seconds(2)).GetValue());
+                secondScope.IncInFlight();
+                UNIT_ASSERT(!manager.DrainTasks());
+                UNIT_ASSERT_VALUES_EQUAL(deadlines.size(), 2);
+                firstScope.DecInFlight();
+                secondScope.DecInFlight();
+                query1.SetFairShare(1);
+                query2.SetFairShare(1);
+                category.RegisterTask(0, std::make_shared<TCounterTask>(executed));
+                std::optional<TSchedulerQueryIdentity> selected;
+                const auto previousFilter = runtime.SetEventFilter([&](auto&, auto& ev) {
+                    if (ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType) {
+                        selected = ev->template Get<TEvInternal::TEvNewTask>()->GetQueryIdentity();
+                    }
+                    return false;
+                });
+                UNIT_ASSERT(manager.DrainTasks());
+                UNIT_ASSERT(selected && *selected == MakeIdentity(1));
+                UNIT_ASSERT_VALUES_EQUAL(deadlines.size(), 2);
+                runtime.SetEventFilter(previousFilter);
                 return true;
             });
             UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 0);

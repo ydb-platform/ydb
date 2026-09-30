@@ -51,7 +51,7 @@ private:
 
     TRWMutex Mutex;
     struct TQueryState {
-        ui64 RegisterLinksCount;
+        ui64 AddQueryCount;
         NHdrf::NDynamic::TQueryPtr Query;
     };
     NHdrf::NDynamic::TRootPtr Root;                 // protected by Mutex

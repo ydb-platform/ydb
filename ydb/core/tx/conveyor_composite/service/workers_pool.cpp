@@ -217,20 +217,23 @@ std::optional<TDuration> TWorkersPool::GetMinProcessUsage(const TSchedulerQueryI
 
 std::vector<TWorkersPool::TQueryCandidate> TWorkersPool::BuildQueryCandidates(const TDrainContext& context) const {
     const auto& queries = *QueryRegistry;
-    auto candidatesView = queries.GetIdentitiesView()
-        | std::views::filter([&](const auto& identity) {
-              return AcceptsIdentity(identity) && queries.GetStateVerified(identity).IsReady() && GetMinProcessUsage(identity).has_value();
-          })
-        | std::views::transform([&](const auto& identity) {
-              const auto& state = queries.GetStateVerified(identity);
-              return TQueryCandidate{
-                  .Identity = identity,
-                  .EffectiveDeadline = state.GetWakeUpDeadline().value_or(context.AverageWakeUpDeadline),
-                  .MinProcessUsage = *GetMinProcessUsage(identity),
-              };
-          });
-
-    std::vector<TQueryCandidate> result(std::ranges::begin(candidatesView), std::ranges::end(candidatesView));
+    std::vector<TQueryCandidate> result;
+    for (const auto& identity : queries.GetIdentitiesView()) {
+        if (!AcceptsIdentity(identity)) {
+            continue;
+        }
+        const auto& state = queries.GetStateVerified(identity);
+        if (!state.IsReady()) {
+            continue;
+        }
+        if (const auto usage = GetMinProcessUsage(identity)) {
+            result.push_back(TQueryCandidate{
+                .Identity = identity,
+                .EffectiveDeadline = state.GetWakeUpDeadline().value_or(context.AverageWakeUpDeadline),
+                .MinProcessUsage = *usage,
+            });
+        }
+    }
     std::ranges::sort(result, [](const auto& lhs, const auto& rhs) {
         return std::tie(lhs.EffectiveDeadline, lhs.MinProcessUsage, lhs.Identity.QueryId, lhs.Identity.IsServiceQuery)
             < std::tie(rhs.EffectiveDeadline, rhs.MinProcessUsage, rhs.Identity.QueryId, rhs.Identity.IsServiceQuery);
@@ -303,6 +306,7 @@ bool TWorkersPool::DrainOnWorkers(const std::vector<ui64>& workerIdxs, const std
             auto startResult = query.TryStart(context.Now);
             if (std::holds_alternative<TMonotonic>(startResult)) {
                 throttledQueries.insert(identity);
+                context.RetryQueries.insert(identity);
                 break;
             }
             auto schedulerLease = std::get<TSchedulerLease>(std::move(startResult));

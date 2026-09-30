@@ -24,8 +24,7 @@ TTasksManager::TTasksManager(
 
 bool TTasksManager::DrainTasks() {
     for (const auto& identity : QueryRegistry.GetIdentitiesView()) {
-        // Retry apply capacity changes by installed topology.
-        QueryRegistry.PrepareWorkCapacity(identity, CalculateParallelUpperBound(identity));
+        // Lease release can make a previously prepared shrink possible.
         ApplyPreparedQueryCapacity(identity);
     }
     const TMonotonic now = TMonotonic::Now();
@@ -39,9 +38,16 @@ bool TTasksManager::DrainTasks() {
             result = true;
         }
     }
-    if (const auto deadline = QueryRegistry.GetMinWakeUpDeadline()) {
+    std::optional<TMonotonic> retryAt;
+    for (const auto& identity : context.RetryQueries) {
+        const auto& deadline = QueryRegistry.GetStateVerified(identity).GetWakeUpDeadline();
+        if (deadline && (!retryAt || *deadline < *retryAt)) {
+            retryAt = deadline;
+        }
+    }
+    if (retryAt) {
         TActivationContext::Schedule(
-            *deadline, new NActors::IEventHandle(DistributorId, {}, new NActors::TEvents::TEvWakeup()));
+            *retryAt, new NActors::IEventHandle(DistributorId, {}, new NActors::TEvents::TEvWakeup()));
     }
     return result;
 }

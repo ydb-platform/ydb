@@ -426,7 +426,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
         Y_ENSURE(fullPoolId.DatabaseId == databaseId && fullPoolId.PoolId == poolId,
             "Query is already registered in a different pool: " << queryId);
         state.Query->Update(attrs);
-        ++state.RegisterLinksCount;
+        ++state.AddQueryCount;
         return state.Query;
     }
 
@@ -456,8 +456,8 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId, const bool i
 
     if (auto queryIt = Queries.find(queryId); queryIt != Queries.end()) {
         auto& state = queryIt->second;
-        Y_ENSURE(state.RegisterLinksCount > 0, "Query has no registrations: " << queryId);
-        if (isForceRemove || --state.RegisterLinksCount == 0) {
+        Y_ENSURE(state.AddQueryCount > 0, "Query has no registrations: " << queryId);
+        if (isForceRemove || --state.AddQueryCount == 0) {
             state.Query->GetParent()->RemoveQuery(queryId);
             Queries.erase(queryIt);
         }

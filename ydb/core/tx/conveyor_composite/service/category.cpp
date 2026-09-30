@@ -21,6 +21,7 @@ void TProcessCategory::RegisterProcess(const ui64 internalProcessId, std::shared
     scope->IncProcesses();
     AFL_VERIFY(Processes.emplace(internalProcessId,
         std::make_shared<TProcess>(internalProcessId, std::move(scope), WaitingTasksCount, schedulerQueryIdentity)).second);
+    AFL_VERIFY(ProcessesByIdentity[schedulerQueryIdentity].insert(internalProcessId).second);
 }
 
 TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId) {
@@ -31,6 +32,12 @@ TSchedulerQueryIdentity TProcessCategory::UnregisterProcess(const ui64 processId
         ("event", "unregister_process_with_queued_tasks")("process_id", processId)("category", ::ToString(Category))("tasks_count", tasksCount);
     }
     const auto identity = it->second->GetSchedulerQueryIdentity();
+    auto identityIt = ProcessesByIdentity.find(identity);
+    AFL_VERIFY(identityIt != ProcessesByIdentity.end());
+    AFL_VERIFY(identityIt->second.erase(processId) == 1);
+    if (identityIt->second.empty()) {
+        ProcessesByIdentity.erase(identityIt);
+    }
     Y_UNUSED(RemoveWeightedProcess(it->second));
     if (it->second->GetScope()->DecProcesses()) {
         AFL_VERIFY(Scopes.erase(it->second->GetScope()->GetScopeId()));
@@ -44,37 +51,89 @@ bool TProcessCategory::HasTasks() const {
 }
 
 ui64 TProcessCategory::MoveProcessesToService(const TSchedulerQueryIdentity& identity) {
-    ui64 count = 0;
-    for (const auto& process : Processes | std::views::values) {
-        if (process->GetSchedulerQueryIdentity() == identity) {
-            process->MoveToServiceQuery();
-            ++count;
-        }
+    AFL_VERIFY(!identity.IsServiceQuery);
+    auto it = ProcessesByIdentity.find(identity);
+    if (it == ProcessesByIdentity.end()) {
+        return 0;
     }
-    return count;
+    auto processIds = std::move(it->second);
+    ProcessesByIdentity.erase(it);
+    auto& serviceIds = ProcessesByIdentity[kServiceQueryIdentity];
+    for (const auto processId : processIds) {
+        Processes.at(processId)->MoveToServiceQuery();
+        AFL_VERIFY(serviceIds.insert(processId).second);
+    }
+    return processIds.size();
 }
 
 bool TProcessCategory::HasTasks(const TSchedulerQueryIdentity& identity) const {
-    return GetMinProcessUsage(identity).has_value();
+    if (WeightedProcesses.empty()) {
+        return false;
+    }
+    const auto& first = WeightedProcesses.begin()->second.front();
+    if (first->GetSchedulerQueryIdentity() == identity && first->GetScope()->CheckToRun()) {
+        return true;
+    }
+    if (ProcessesByIdentity.size() == 1) {
+        return first->GetSchedulerQueryIdentity() == identity &&
+            std::ranges::any_of(WeightedProcesses | std::views::values | std::views::join,
+                [](const auto& process) { return process->GetScope()->CheckToRun(); });
+    }
+    const auto it = ProcessesByIdentity.find(identity);
+    return it != ProcessesByIdentity.end() && std::ranges::any_of(it->second, [&](ui64 id) {
+        const auto& process = Processes.at(id);
+        return process->GetTasksCount() && process->GetScope()->CheckToRun();
+    });
 }
 
 bool TProcessCategory::HasProcesses(const TSchedulerQueryIdentity& identity) const {
-    return std::ranges::any_of(Processes | std::views::values, [&](const auto& process) {
-        return process->GetSchedulerQueryIdentity() == identity;
-    });
+    return ProcessesByIdentity.contains(identity);
 }
 
 std::optional<TDuration> TProcessCategory::GetMinProcessUsage(const TSchedulerQueryIdentity& identity, const ui64 workerIdx,
     const std::vector<NConfig::THeavyLimit>& heavyLimits) const {
-    auto processes = WeightedProcesses | std::views::values | std::views::join;
-    const auto it = std::ranges::find_if(processes, [&](const auto& process) {
-        return process->GetSchedulerQueryIdentity() == identity && process->CanRunOnWorker(workerIdx, heavyLimits) &&
-            process->GetScope()->CheckToRun();
-    });
-    if (it != processes.end()) {
-        return (*it)->GetWeightedUsage();
+    auto ordered = WeightedProcesses | std::views::values | std::views::join;
+    auto current = ordered.begin();
+    const auto end = ordered.end();
+    if (current == end) {
+        return std::nullopt;
     }
-    return std::nullopt;
+    const auto canRun = [&](const auto& process) {
+        return process->CanRunOnWorker(workerIdx, heavyLimits) && process->GetScope()->CheckToRun();
+    };
+    const auto& first = *current++;
+    if (first->GetSchedulerQueryIdentity() == identity && canRun(first)) {
+        return first->GetWeightedUsage();
+    }
+    if (ProcessesByIdentity.size() == 1) {
+        if (first->GetSchedulerQueryIdentity() != identity) {
+            return std::nullopt;
+        }
+        const auto match = std::ranges::find_if(current, end, canRun);
+        return match == end ? std::nullopt : std::make_optional((*match)->GetWeightedUsage());
+    }
+    const auto it = ProcessesByIdentity.find(identity);
+    if (it == ProcessesByIdentity.end()) {
+        return std::nullopt;
+    }
+    std::optional<TDuration> minimum;
+    for (const auto id : it->second) {
+        if (current == end) {
+            return std::nullopt;
+        }
+        const auto& candidate = *current++;
+        if (candidate->GetSchedulerQueryIdentity() == identity && canRun(candidate)) {
+            return candidate->GetWeightedUsage();
+        }
+        const auto& process = Processes.at(id);
+        if (process->GetTasksCount() && canRun(process)) {
+            const auto usage = process->GetWeightedUsage();
+            if (!minimum || usage < *minimum) {
+                minimum = usage;
+            }
+        }
+    }
+    return minimum;
 }
 
 void TProcessCategory::ApplyConfig(const NConfig::TCategory& config) {

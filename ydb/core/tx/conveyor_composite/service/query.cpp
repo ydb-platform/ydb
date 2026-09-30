@@ -396,17 +396,6 @@ namespace NKikimr::NConveyorComposite {
         return TMonotonic::FromValue(average);
     }
 
-    std::optional<TMonotonic> TQueryRegistry::GetMinWakeUpDeadline() const {
-        std::optional<TMonotonic> result;
-        for (const auto& [identity, state] : Queries) {
-            Y_UNUSED(identity);
-            if (const auto& deadline = state.GetWakeUpDeadline(); deadline && (!result || *deadline < *result)) {
-                result = deadline;
-            }
-        }
-        return result;
-    }
-
     TSchedulerQueryState& TQueryRegistry::GetStateVerified(const TSchedulerQueryIdentity& identity) {
         auto it = Queries.find(identity);
         Y_ENSURE(it != Queries.end(), "scheduler query is not registered");

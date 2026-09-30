@@ -9,6 +9,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
 
 #include <memory>
 #include <optional>
@@ -21,6 +22,7 @@ namespace NKikimr::NConveyorComposite {
     struct TDrainContext {
         TMonotonic Now;
         TMonotonic AverageWakeUpDeadline;
+        THashSet<TSchedulerQueryIdentity> RetryQueries;
     };
 
     struct TSchedulableWorkControl;
@@ -127,7 +129,6 @@ namespace NKikimr::NConveyorComposite {
         }
 
         TMonotonic GetAverageWakeUpDeadline(TMonotonic now) const;
-        std::optional<TMonotonic> GetMinWakeUpDeadline() const;
         TSchedulerQueryState& GetStateVerified(const TSchedulerQueryIdentity& identity);
         const TSchedulerQueryState& GetStateVerified(const TSchedulerQueryIdentity& identity) const;
     };

@@ -25,7 +25,7 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     TWorkersPool* defWorkersPool = &WorkerPools.front();
     auto& schedulablePool = WorkerPools.emplace_back(WorkerPools.size());
     schedulablePool.PoolName = "WP::DEFAULT_SCHEDULABLE";
-    schedulablePool.SchedulingMode = ESchedulingMode::Schedulable;
+    schedulablePool.SchedulingMode = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable;
     schedulablePool.WorkersCountInfo = TThreadsCountInfo(std::nullopt, 1);
     schedulablePool.HeavyLimits = defWorkersPool->GetHeavyLimits();
     std::set<ESpecialTaskCategory> usedCategories;
@@ -69,8 +69,8 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
         bool hasManagedPool = false;
         for (const auto poolId : i.GetWorkerPools()) {
             const auto mode = WorkerPools[poolId].GetSchedulingMode();
-            hasServicePool |= mode != ESchedulingMode::Schedulable;
-            hasManagedPool |= mode != ESchedulingMode::NonSchedulable;
+            hasServicePool |= mode != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable;
+            hasManagedPool |= mode != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable;
         }
         if (!hasServicePool) {
             AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
@@ -278,7 +278,7 @@ TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersC
 }
 
 TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto) {
-    SchedulingMode = static_cast<ESchedulingMode>(proto.GetSchedulingMode());
+    SchedulingMode = proto.GetSchedulingMode();
     if (!proto.GetLinks().size()) {
         return TConclusionStatus::Fail("no categories for workers pool");
     }
@@ -342,8 +342,7 @@ TString TWorkersPool::DebugString() const {
     TStringBuilder sb;
     sb << "{";
     sb << "id=" << WorkersPoolId << ";";
-    sb << "scheduling_mode=" << NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(
-        static_cast<NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode>(SchedulingMode)) << ";";
+    sb << "scheduling_mode=" << NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(SchedulingMode) << ";";
     sb << "threads=" << WorkersCountInfo.DebugString() << ";";
     TStringBuilder sbLinks;
     sbLinks << "[";

@@ -366,9 +366,9 @@ bool TWorkersPool::DrainTasks(TDrainContext& context) {
 }
 
 bool TWorkersPool::AcceptsIdentity(const TSchedulerQueryIdentity& identity) const {
-    return SchedulingMode == NConfig::ESchedulingMode::All
-        || (identity.IsServiceQuery ? SchedulingMode == NConfig::ESchedulingMode::NonSchedulable
-                                    : SchedulingMode == NConfig::ESchedulingMode::Schedulable);
+    using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+    return SchedulingMode == TPool::All
+        || (identity.IsServiceQuery ? SchedulingMode == TPool::NonSchedulable : SchedulingMode == TPool::Schedulable);
 }
 
 bool TWorkersPool::HasProcesses(const TSchedulerQueryIdentity& identity) const {

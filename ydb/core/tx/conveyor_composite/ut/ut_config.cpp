@@ -88,8 +88,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
                 UNIT_ASSERT_VALUES_EQUAL(pools.size(), modes.size() + 2);
                 UNIT_ASSERT_VALUES_EQUAL(pools[0].GetName(), "WP::DEFAULT");
                 UNIT_ASSERT_VALUES_EQUAL(pools[1].GetName(), "WP::DEFAULT_SCHEDULABLE");
-                UNIT_ASSERT(pools[0].GetSchedulingMode() == NConfig::ESchedulingMode::NonSchedulable);
-                UNIT_ASSERT(pools[1].GetSchedulingMode() == NConfig::ESchedulingMode::Schedulable);
+                UNIT_ASSERT(pools[0].GetSchedulingMode() == TPool::NonSchedulable);
+                UNIT_ASSERT(pools[1].GetSchedulingMode() == TPool::Schedulable);
                 UNIT_ASSERT_VALUES_EQUAL(*pools[1].GetWorkersCountInfo().GetFraction(), 1);
                 UNIT_ASSERT(pools[0].GetHeavyLimits() == pools[1].GetHeavyLimits());
                 UNIT_ASSERT_VALUES_EQUAL(pools[1].GetMaxBatchSize(),
@@ -116,9 +116,11 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
      */
     Y_UNIT_TEST(SchedulingModeNamesAndDefaults) {
         using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+        static_assert(TPool::ESchedulingMode_ARRAYSIZE == 3);
+        UNIT_ASSERT_VALUES_EQUAL(TPool::ESchedulingMode_Name(TPool::Schedulable), "Schedulable");
         auto proto = BuildPoolWithCPU(1, std::nullopt);
         auto config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
-        UNIT_ASSERT(config.GetWorkerPools()[2].GetSchedulingMode() == NConfig::ESchedulingMode::NonSchedulable);
+        UNIT_ASSERT(config.GetWorkerPools()[2].GetSchedulingMode() == TPool::NonSchedulable);
         for (const auto mode : {TPool::NonSchedulable, TPool::Schedulable, TPool::All}) {
             proto.MutableWorkerPools(0)->SetSchedulingMode(mode);
             config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
@@ -166,7 +168,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
         auto replaced = NConfig::TConfig::OverlayYamlOnDefaults(defaults, snapshot).DetachResult();
         UNIT_ASSERT(replaced.GetWorkerPools(0).GetSchedulingMode() == TPool::NonSchedulable);
         UNIT_ASSERT(NConfig::TConfig::BuildFromProto(replaced).DetachResult().GetWorkerPools()[2].GetSchedulingMode()
-            == NConfig::ESchedulingMode::NonSchedulable);
+            == TPool::NonSchedulable);
     }
 
     Y_UNIT_TEST(NormalizationMatrix) {

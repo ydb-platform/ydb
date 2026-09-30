@@ -442,6 +442,24 @@ Y_UNIT_TEST(AnalyzeSamplingRequiresColumnTable) {
     UNIT_ASSERT_C(full.IsSuccess(), full.GetIssues().ToString());
 }
 
+Y_UNIT_TEST(AnalyzeSamplingDisabled) {
+    TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+        settings.FeatureFlags.SetEnableAnalyzeSampling(false);
+    });
+    CreateDatabase(env, "Database");
+    CreateEmptyTable(env, "Database", "Table", true);
+    TTableClient client(env.GetDriver());
+    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    const auto execute = [&](const TString& query) {
+        return env.RunInThreadPool([&] { return session.ExecuteSchemeQuery(query).GetValueSync(); });
+    };
+    const auto sampled = execute("ANALYZE `Root/Database/Table` SAMPLE 0.5;");
+    UNIT_ASSERT(!sampled.IsSuccess());
+    UNIT_ASSERT_STRING_CONTAINS(sampled.GetIssues().ToString(), "ANALYZE sampling is disabled");
+    const auto full = execute("ANALYZE `Root/Database/Table`;");
+    UNIT_ASSERT_C(full.IsSuccess(), full.GetIssues().ToString());
+}
+
 Y_UNIT_TEST(RetryPreservesSampleRate) {
     TTestEnv env(1, 1, false);
     auto& runtime = *env.GetServer().GetRuntime();

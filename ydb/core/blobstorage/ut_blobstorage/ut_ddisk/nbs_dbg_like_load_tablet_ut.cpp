@@ -361,6 +361,97 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         }
     };
 
+    void CheckPbWriteQuorumLoss(TStringBuf firstErrorReason) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+
+        TFixture f;
+        const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1);
+        TActorId pipe = f.OpenTabletPipe(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, /*numDirectBlockGroups=*/1), NBSLT_OK);
+        f.Env.Sim(TDuration::Seconds(5));
+
+        constexpr ui32 blockSize = 4096;
+        constexpr ui64 requestCookie = 0x1234;
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
+            auto& cfg = ev->Record;
+            cfg.SetMaxInflightLsns(4);
+            cfg.SetFlushBatchSize(1);
+            cfg.SetEraseBatchSize(1);
+            cfg.SetSyncRequestsBatchSize(1);
+            cfg.SetPBufferReplyTimeoutMicroseconds(500000);
+            cfg.SetNumDirectBlockGroupsToUse(1);
+            cfg.SetIoSizeBytes(blockSize);
+            NTabletPipe::SendData(f.Edge, pipe, ev.release());
+        });
+
+        TString firstPeer;
+        ui32 injectedReplies = 0;
+        auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType) {
+                auto& record = event->Get<NDDisk::TEvWritePersistentBuffersResult>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 3);
+                for (const auto& sub : record.GetResult()) {
+                    UNIT_ASSERT_C(sub.GetResult().GetStatus() == TStatus::OK, sub.DebugString());
+                }
+
+                // Mutate the aggregate in place to preserve its LSN cookie and
+                // the peer identities used by the tablet's quorum calculation.
+                const auto& id = record.GetResult(0).GetPersistentBufferId();
+                firstPeer = TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId()
+                    << ":" << id.GetDDiskSlotId();
+                auto* first = record.MutableResult(0)->MutableResult();
+                first->SetStatus(TStatus::ERROR);
+                first->SetErrorReason(TString(firstErrorReason));
+                auto* second = record.MutableResult(1)->MutableResult();
+                second->SetStatus(TStatus::OVERFILL);
+                second->SetErrorReason("later PB failure");
+                ++injectedReplies;
+            }
+            return previousFilter ? previousFilter(node, event) : true;
+        };
+
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(/*address=*/0, blockSize);
+            TFixture::AddWritePayload(*ev, TRope(TString(blockSize, 'x')));
+            NTabletPipe::SendData(f.Edge, pipe, ev.release(), requestCookie);
+        });
+        auto reply = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsWriteResult>(
+            f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(30)));
+        f.Env.Runtime->FilterFunction = std::move(previousFilter);
+
+        UNIT_ASSERT(reply);
+        UNIT_ASSERT_VALUES_EQUAL(injectedReplies, 1);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, requestCookie);
+        UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == NBSIO_QUORUM_LOST,
+            reply->Get()->Record.DebugString());
+        const auto& reason = reply->Get()->Record.GetReason();
+        UNIT_ASSERT_STRING_CONTAINS(reason, "confirmed# 1");
+        UNIT_ASSERT_STRING_CONTAINS(reason, "need# 3");
+        UNIT_ASSERT_STRING_CONTAINS(reason, "PB");
+        UNIT_ASSERT_STRING_CONTAINS(reason, firstPeer);
+        UNIT_ASSERT_STRING_CONTAINS(reason, "ERROR");
+        if (firstErrorReason) {
+            UNIT_ASSERT_STRING_CONTAINS(reason, firstErrorReason);
+        } else {
+            UNIT_ASSERT_C(!reason.Contains("ERROR:"), reason);
+        }
+        UNIT_ASSERT_C(!reason.Contains("OVERFILL"), reason);
+        UNIT_ASSERT_C(!reason.Contains("later PB failure"), reason);
+
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+        f.ClosePipe(pipe);
+    }
+
+    Y_UNIT_TEST(PbWriteQuorumLossIncludesFirstFailure) {
+        CheckPbWriteQuorumLoss("first PB failure");
+    }
+
+    Y_UNIT_TEST(PbWriteQuorumLossWithoutErrorReason) {
+        CheckPbWriteQuorumLoss("");
+    }
+
     // Create + Run + Delete with a single DBG. Verifies the full lifecycle:
     // - Hive boots the tablet
     // - tablet allocates 1 DBG (5 DDisks + 5 PBs) via BSC

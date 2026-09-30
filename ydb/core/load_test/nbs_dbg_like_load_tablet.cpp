@@ -80,6 +80,15 @@ constexpr TDuration kBscRetryInitialBackoff = TDuration::MilliSeconds(500);
 constexpr TDuration kBscRetryMaxBackoff = TDuration::Seconds(10);
 constexpr ui64 kInitialDDiskSessionSeqNo = 1;
 
+TString DDiskStatusText(NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TStringBuf reason) {
+    TStringBuilder out;
+    out << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(status);
+    if (reason) {
+        out << ": " << reason;
+    }
+    return TString(out);
+}
+
 // Auto-disable per-peer counters at this many DBGs (10 wires per DBG quickly
 // blows up Solomon scrape size). Honour an explicit user setting first.
 constexpr ui32 kMaxPerPeerCounters = 10;
@@ -126,6 +135,8 @@ struct TWriteInfo {
     NActors::TActorId OriginActor;
     ui64              OriginCookie = 0;
     bool              ReplySent = false;
+    // First PB failure observed for this LSN, included in the client reply.
+    TString           IoError;
 
     NWilson::TSpan Span;
 };
@@ -1911,10 +1922,10 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
             Dbg.DDConnected.reset(k);
         }
         ReportReadiness();
-        LOG_D("Worker pre-connect failed DBG " << DbgInfo.DirectBlockGroupId
-            << " " << (isPb ? "PB" : "DD") << k << ": "
-            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(rec.GetStatus())
-            << " " << rec.GetErrorReason());
+        LOG_E("Connect failed DBG# " << MyDbgIndex
+            << " " << (isPb ? "PB" : "DD") << k
+            << " DirectBlockGroupId# " << DbgInfo.DirectBlockGroupId
+            << " Status# " << DDiskStatusText(rec.GetStatus(), rec.GetErrorReason()));
     }
 }
 
@@ -1951,6 +1962,10 @@ void TNbsDbgLikeActor::HandlePeerRegistrationToken(NDDisk::TEvGetPersistentBuffe
         if (RootCnt.ConnectErr) {
             RootCnt.ConnectErr->Inc();
         }
+        const auto& rec = ev->Get()->Record;
+        LOG_E("PB registration token failed DBG# " << MyDbgIndex
+            << " PB" << k
+            << " Status# " << DDiskStatusText(rec.GetStatus(), rec.GetErrorReason()));
         ReportReadiness();
         return;
     }
@@ -1993,6 +2008,9 @@ void TNbsDbgLikeActor::HandlePeerRegistrationProbe(NDDisk::TEvListPersistentBuff
                 || status == TStatus::INCORRECT_REQUEST) {
             Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup(k));
         }
+        LOG_E("PB registration probe failed DBG# " << MyDbgIndex
+            << " PB" << k
+            << " Status# " << DDiskStatusText(status, ev->Get()->Record.GetErrorReason()));
         if (RootCnt.ConnectErr) {
             RootCnt.ConnectErr->Inc();
         }
@@ -2012,6 +2030,12 @@ void TNbsDbgLikeActor::HandlePeerDisconnect(NDDisk::TEvDisconnectResult::TPtr& e
     st.ConnectInFlight = false;
     st.Guid = 0;
     st.Token.reset();
+    const auto& rec = ev->Get()->Record;
+    if (rec.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+        LOG_E("Disconnect failed DBG# " << MyDbgIndex
+            << " " << (isPb ? "PB" : "DD") << k
+            << " Status# " << DDiskStatusText(rec.GetStatus(), rec.GetErrorReason()));
+    }
     if (RootCnt.DisconnectOk) {
         RootCnt.DisconnectOk->Inc();
     }
@@ -2154,6 +2178,9 @@ ui32 TNbsDbgLikeActor::ChooseCoordinator(const TPerDbgState& dbg) const {
 void TNbsDbgLikeActor::ReplyWriteErr(const TActorId& origin, ui64 cookie,
     ENbsIoResultStatus status, TString reason)
 {
+    LOG_E("NbsWrite failed Cookie# " << cookie
+        << " Status# " << ENbsIoResultStatus_Name(status)
+        << " Reason# " << reason);
     if (origin) {
         Send(origin, new TEvLoad::TEvNbsWriteResult(status, std::move(reason)), 0, cookie);
     }
@@ -2162,6 +2189,9 @@ void TNbsDbgLikeActor::ReplyWriteErr(const TActorId& origin, ui64 cookie,
 void TNbsDbgLikeActor::ReplyReadErr(const TActorId& origin, ui64 cookie,
     ENbsIoResultStatus status, TString reason)
 {
+    LOG_E("NbsRead failed Cookie# " << cookie
+        << " Status# " << ENbsIoResultStatus_Name(status)
+        << " Reason# " << reason);
     if (origin) {
         Send(origin, new TEvLoad::TEvNbsReadResult(status, std::move(reason)), 0, cookie);
     }
@@ -2627,6 +2657,19 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
     auto& dbg = Dbg;
     auto it = dbg.Lsns.find(lsn);
     if (it == dbg.Lsns.end()) {
+        for (ui32 i = 0; i < ev->Get()->Record.ResultSize(); ++i) {
+            const auto& sub = ev->Get()->Record.GetResult(i);
+            if (sub.GetResult().GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+                const auto& pbId = sub.GetPersistentBufferId();
+                LOG_E("PB write result for unknown LSN# " << lsn
+                    << " DBG# " << MyDbgIndex
+                    << " NodeId# " << pbId.GetNodeId()
+                    << " PDiskId# " << pbId.GetPDiskId()
+                    << " DDiskSlotId# " << pbId.GetDDiskSlotId()
+                    << " Status# " << DDiskStatusText(
+                        sub.GetResult().GetStatus(), sub.GetResult().GetErrorReason()));
+            }
+        }
         return;
     }
     TWriteInfo& info = it->second;
@@ -2672,15 +2715,22 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
         }
         if (!ok) {
             overallOk = false;
-            LOG_D("HandleWritePbsResult PB error DBG# " << MyDbgIndex
+            const TString statusText = DDiskStatusText(
+                sub.GetResult().GetStatus(), sub.GetResult().GetErrorReason());
+            LOG_E("PB write failed DBG# " << MyDbgIndex
                 << " LSN# " << lsn
+                << " VChunk# " << info.VChunkIndex
+                << " Offset# " << info.OffsetInVChunk
                 << " PeerK# " << k
                 << " NodeId# " << pbId.GetNodeId()
                 << " PDiskId# " << pbId.GetPDiskId()
                 << " DDiskSlotId# " << pbId.GetDDiskSlotId()
-                << " Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(
-                    sub.GetResult().GetStatus())
-                << " ErrorReason# " << sub.GetResult().GetErrorReason());
+                << " Status# " << statusText);
+            if (!info.IoError) {
+                info.IoError = TStringBuilder() << "PB" << k
+                    << " " << pbId.GetNodeId() << ":" << pbId.GetPDiskId()
+                    << ":" << pbId.GetDDiskSlotId() << " " << statusText;
+            }
         }
     }
 
@@ -2770,8 +2820,19 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
         if (needed > stillPending.count()) {
             EnterState(dbg, info.State, /*delta=*/-1);
             if (!info.ReplySent && info.OriginActor) {
-                const TString reason = TStringBuilder() << "confirmed# " << info.WriteConfirmed.count()
+                TStringBuilder reasonBuilder;
+                reasonBuilder << "confirmed# " << info.WriteConfirmed.count()
                     << " need# " << writeQuorum;
+                if (info.IoError) {
+                    reasonBuilder << " " << info.IoError;
+                }
+                const TString reason(reasonBuilder);
+                LOG_E("PB write quorum lost DBG# " << MyDbgIndex
+                    << " LSN# " << lsn
+                    << " Cookie# " << info.OriginCookie
+                    << " VChunk# " << info.VChunkIndex
+                    << " Offset# " << info.OffsetInVChunk
+                    << " " << reason);
                 info.Span.EndError(reason);
                 Send(info.OriginActor, new TEvLoad::TEvNbsWriteResult(NBSIO_QUORUM_LOST, reason),
                     0, info.OriginCookie);
@@ -2911,6 +2972,12 @@ void TNbsDbgLikeActor::HandleSyncResult(
     const ui64 cookie = ev->Cookie;
     auto bIt = FlushInflight.find(cookie);
     if (bIt == FlushInflight.end()) {
+        const auto& msg = ev->Get()->Record;
+        if (msg.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            LOG_E("DDisk sync result for unknown cookie# " << cookie
+                << " DBG# " << MyDbgIndex
+                << " Status# " << DDiskStatusText(msg.GetStatus(), msg.GetErrorReason()));
+        }
         return;
     }
     TFlushBatch batchInfo = std::move(bIt->second);
@@ -3038,6 +3105,33 @@ void TNbsDbgLikeActor::HandleSyncResult(
     }
     BumpPeerReply(dbg, kHostsPerDbgMax + k, EOp::Flush, outerOk);
 
+    ui32 failedSegments = 0;
+    TString firstSegment;
+    for (ui32 i = 0; i < msg.SegmentResultsSize(); ++i) {
+        const auto& seg = msg.GetSegmentResults(i);
+        if (seg.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            continue;
+        }
+        if (!failedSegments) {
+            firstSegment = DDiskStatusText(seg.GetStatus(), seg.GetErrorReason());
+        }
+        ++failedSegments;
+    }
+    if (!outerOk || failedSegments) {
+        const auto& id = dbg.DDiskIdsPb[k];
+        LOG_E("DDisk sync failed DBG# " << MyDbgIndex
+            << " Sink# " << k
+            << " NodeId# " << id.GetNodeId()
+            << " PDiskId# " << id.GetPDiskId()
+            << " DDiskSlotId# " << id.GetDDiskSlotId()
+            << " Cookie# " << cookie
+            << " Lsns# " << batchInfo.Lsns.size()
+            << " Status# " << DDiskStatusText(outerStatus, msg.GetErrorReason())
+            << " FailedSegments# " << failedSegments
+            << (firstSegment ? " FirstSegment# " : "")
+            << firstSegment);
+    }
+
     DoFlush(dbg);
     DoErase(dbg);
 }
@@ -3163,6 +3257,12 @@ void TNbsDbgLikeActor::HandleEraseResult(
     const ui64 cookie = ev->Cookie;
     auto bIt = EraseInflight.find(cookie);
     if (bIt == EraseInflight.end()) {
+        const auto& msg = ev->Get()->Record;
+        if (msg.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            LOG_E("PB erase result for unknown cookie# " << cookie
+                << " DBG# " << MyDbgIndex
+                << " Status# " << DDiskStatusText(msg.GetStatus(), msg.GetErrorReason()));
+        }
         return;
     }
     TEraseBatch batchInfo = std::move(bIt->second);
@@ -3290,6 +3390,17 @@ void TNbsDbgLikeActor::HandleEraseResult(
         }
     }
     BumpPeerReply(dbg, k, EOp::Erase, outerOk);
+    if (!outerOk) {
+        const auto& id = dbg.PBIdsPb[k];
+        LOG_E("PB erase failed DBG# " << MyDbgIndex
+            << " PB" << k
+            << " NodeId# " << id.GetNodeId()
+            << " PDiskId# " << id.GetPDiskId()
+            << " DDiskSlotId# " << id.GetDDiskSlotId()
+            << " Cookie# " << cookie
+            << " Lsns# " << lsns.size()
+            << " Status# " << DDiskStatusText(msg.GetStatus(), msg.GetErrorReason()));
+    }
     UpdateLsnsTotal(dbg);
 
     DoFlush(dbg);
@@ -3444,8 +3555,13 @@ void TNbsDbgLikeActor::HandlePbReadResult(
     TString errorReason;
     if (!ok) {
         errorReason = TStringBuilder() << "PbRead: "
-            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
-            << ": " << msg.GetErrorReason();
+            << DDiskStatusText(msg.GetStatus(), msg.GetErrorReason());
+        LOG_E("PB read failed DBG# " << MyDbgIndex
+            << " Cookie# " << cookie
+            << " VChunk# " << msg.GetVChunkIndex()
+            << " Offset# " << msg.GetOffsetInBytes()
+            << " Size# " << msg.GetSizeInBytes()
+            << " Status# " << DDiskStatusText(msg.GetStatus(), msg.GetErrorReason()));
     }
     if (CompleteRead(cookie, ok, origin, originCookie, size, errorReason) && origin) {
         TString reason;
@@ -3475,8 +3591,10 @@ void TNbsDbgLikeActor::HandleDDiskReadResult(
     TString errorReason;
     if (!ok) {
         errorReason = TStringBuilder() << "DDiskRead: "
-            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
-            << ": " << msg.GetErrorReason();
+            << DDiskStatusText(msg.GetStatus(), msg.GetErrorReason());
+        LOG_E("DDisk read failed DBG# " << MyDbgIndex
+            << " Cookie# " << cookie
+            << " Status# " << DDiskStatusText(msg.GetStatus(), msg.GetErrorReason()));
     }
     if (CompleteRead(cookie, ok, origin, originCookie, size, errorReason) && origin) {
         TString reason;
@@ -3492,6 +3610,7 @@ void TNbsDbgLikeActor::HandleDDiskReadResult(
         Send(origin, resp.release(), 0, originCookie);
     }
 }
+
 void TNbsDbgLikeActor::HandleConfigureTablet(
     TEvLoad::TEvConfigureTablet::TPtr& ev, const TActorContext& ctx)
 {

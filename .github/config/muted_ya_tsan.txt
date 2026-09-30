@@ -59,6 +59,7 @@ ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scan KqpSplit.UndeliveryOnFinishedRead
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi+EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsPublicApi+EnableIndexStreamWrite
@@ -156,10 +157,13 @@ ydb/core/transfer/ut/row_table Transfer_RowTable.WriteNullToColumn
 ydb/core/transfer/ut/row_table unittest.sole chunk
 ydb/core/transfer/ut/transfer_metrics TransferMetrics.TestDescribeTransfer
 ydb/core/transfer/ut/transfer_metrics unittest.sole chunk
+ydb/core/tx/datashard/ut_export ExportS3BufferTest.MemoryIsBoundedWithZstdAndMinBytes
+ydb/core/tx/datashard/ut_export unittest.sole chunk
 ydb/core/tx/datashard/ut_truncate unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TSubDomainTest.CoordinatorRunAtSubdomainNodeWhenAvailable
 ydb/core/tx/tx_proxy/ut_schemereq SchemeReqAccess.AlterLoginProtect-RootDB-Auth-LocalUser-CreateUser-24
 ydb/core/tx/tx_proxy/ut_schemereq unittest.[*/*] chunk
+ydb/core/viewer/tests test.py.TestViewer.test_viewer_acl_write
 ydb/library/actors/http/ut HttpProxy.StreamingFatResponse1
 ydb/library/actors/http/ut unittest.sole chunk
 ydb/library/actors/util/benchmark g_benchmark.sole chunk

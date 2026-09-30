@@ -395,10 +395,16 @@ bool FillBackupTaskTableDescription(
     const TString& sourcePathName,
     const TPath& sourcePath,
     const TPath& exportItemPath,
+    bool allowEmptyTableDescription,
     TString& error
 ) {
     TExportTableSchemeContext context;
     const auto* schemeSnapshot = FindBackupSchemeSnapshot(ss, exportItemPath);
+
+    if ((!schemeSnapshot || !schemeSnapshot->HasTable()) && !sourcePath.IsResolved() && allowEmptyTableDescription) {
+        error.clear();
+        return true;
+    }
 
     const bool prepared = schemeSnapshot && schemeSnapshot->HasTable()
         ? PrepareExportTableSchemeContext(ss, sourcePathName, *schemeSnapshot, exportItemPath, context, error)
@@ -456,7 +462,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         task.SetTableName(ToString(itemIdx));
 
         if (!FillBackupTaskTableDescription(ss, task, item.SourcePathName,
-                TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)), error)) {
+                TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)),
+                !exportInfo.EnableTableBackupAsSql, error)) {
             return nullptr;
         }
     } else {
@@ -476,7 +483,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         task.SetTableName(childName);
 
         if (!FillBackupTaskTableDescription(ss, task, item.SourcePathName,
-                TPath::Init(item.SourcePathId, ss), parentPath.Child(childName), error)) {
+                TPath::Init(item.SourcePathId, ss), parentPath.Child(childName),
+                !exportInfo.EnableTableBackupAsSql, error)) {
             return nullptr;
         }
     }

@@ -866,7 +866,7 @@ Y_UNIT_TEST_TWIN(InternalDatabaseResolutionRespectsFlag, relativePathsEnabled) {
     TTestActorRuntime runtime;
     InitializeDatabaseRuntime(runtime, relativePathsEnabled);
     const auto replyTo = runtime.AllocateEdgeActor();
-    auto request = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>("mydb", Nothing(), replyTo,
+    auto request = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>("mydb", Nothing(), replyTo,
         NGRpcService::TAuditMode::NonModifying(), "", "");
     request->InitRootPath(&runtime.GetAppData());
     NGRpcService::TRefreshTokenGenericRequest refresh("", "Root/mydb", "", "", {});
@@ -932,7 +932,7 @@ Y_UNIT_TEST(DatabaseResolutionWithoutDomainPreservesRawName) {
     TTestGrpcRequest unary(unaryCtx.Get(), [](std::unique_ptr<NGRpcService::IRequestNoOpCtx>, const NGRpcService::IFacilityProvider&) {});
     auto bidiCtx = MakeIntrusive<TTestBiStreamContext>(Nothing(), TString("mydb"));
     NGRpcService::TEvBiStreamPingRequest bidi(bidiCtx);
-    NGRpcService::TEvRequestAuthAndCheck internal("mydb", Nothing(), {},
+    NGRpcService::TEvHttpRequestAuthAndCheck internal("mydb", Nothing(), {},
         NGRpcService::TAuditMode::NonModifying(), "", "");
     unary.InitRootPath(&appData);
     bidi.InitRootPath(&appData);

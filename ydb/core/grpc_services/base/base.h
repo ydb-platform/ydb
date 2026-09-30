@@ -1973,7 +1973,8 @@ public:
         NActors::TActorId sender,
         TAuditMode auditMode,
         TString peerName,
-        TString requestId)
+        TString requestId
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)

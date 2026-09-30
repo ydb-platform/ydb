@@ -2332,6 +2332,10 @@ class TestViewer(object):
             {'fields_required': 'Peers,NodeId'},
             {'fields_required': 'PDisks,MaxPDiskUsage,DiskSpaceUsage,NodeId'},
             {'fields_required': 'all'},
+            {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'true'},
+            {'fields_required': 'all', 'include_ddisks': 'true', 'offload_merge': 'false'},
+            {'fields_required': 'VDisks,NodeId', 'include_ddisks': 'true'},
+            {'storage': 'true', 'include_ddisks': 'true', 'fields_required': 'NodeId'},
             {'fields_required': 'all', 'all_whiteboard_fields': 'true',
              'offload_merge': 'false', 'dump_original_node_batches': 'true'},
             {'fields_required': 'all', 'all_whiteboard_fields': 'true',
@@ -2363,6 +2367,8 @@ class TestViewer(object):
                 fields_required = response['FieldsRequired']
                 assert fields_required[-(field_bit + 1)] == '0', (extra, fields_required, field_bit)
             for node in response.get('Nodes', []):
+                # DDisks share the VDisks permission gate and have no separate field bit.
+                assert 'DDisks' not in node, (extra, node)
                 assert 'MaxClockSkewPeerId' not in node.get('SystemState', {}), (extra, node)
                 for json_key in strict_database_hidden_node_fields.values():
                     if json_key is not None:

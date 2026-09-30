@@ -3759,7 +3759,9 @@ public:
                 parameters:
                   - name: include_ddisks
                     in: query
-                    description: Return DDisks separately instead of legacy VDisk fallback entries (requires VDisks)
+                    description: >
+                        Return DDisks separately instead of legacy VDisk fallback entries (requires VDisks).
+                        DDisks are omitted for database-level users, like VDisks.
                     required: false
                     type: boolean
                     default: false

@@ -264,8 +264,6 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         cutter.SeenBlob(b);
         UNIT_ASSERT(cutter.GetHistoryToCut(0).empty());
     }
-<<<<<<< HEAD
-=======
 
     // One barrier per cut entry when every entry sits on its own group. The barrier
     // generation is the *next* entry's FromGeneration minus one: everything the cut
@@ -573,7 +571,6 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         // (the gen-5 keep and the gen-6 delete) as dropped.
         UNIT_ASSERT_VALUES_EQUAL(gcLogic.TakeSentinelDroppedMarks(), 2u);
     }
->>>>>>> 9475038d9b0 (cut history edge case fixes (#53656))
 }
 
 }

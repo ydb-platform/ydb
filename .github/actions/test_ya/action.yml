@@ -119,12 +119,22 @@ runs:
         BUILD_PRESET: ${{ inputs.build_preset }}
         EVENT_NAME: ${{ github.event_name }}
         GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
         if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
           echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
+          job_name=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail -sS \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${GITHUB_NUMERIC_JOB_ID}" \
+            | jq -r '.name // empty' || true)
+          if [ -n "$job_name" ]; then
+            echo "GITHUB_JOB_NAME=$job_name" >> "$GITHUB_ENV"
+          fi
         else
           echo "job.check_run_id is empty; analytics rows of this job will be dropped" >&2
         fi

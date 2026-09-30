@@ -306,19 +306,39 @@ class WorkflowRunMetricsTest(unittest.TestCase):
 
 
 class GithubEnvDefaultsTest(unittest.TestCase):
-    def test_prefers_analytics_job_name(self):
+    def test_job_name_from_github_job_name(self):
         old = {
             "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
+            "GITHUB_JOB_NAME": os.environ.get("GITHUB_JOB_NAME"),
             "GITHUB_JOB": os.environ.get("GITHUB_JOB"),
             "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID"),
         }
         try:
-            os.environ["ANALYTICS_JOB_NAME"] = "Build and test relwithdebinfo"
-            os.environ["GITHUB_JOB"] = "build"
+            os.environ["ANALYTICS_JOB_NAME"] = "PR-check"
+            os.environ["GITHUB_JOB"] = "build_and_test"
+            os.environ["GITHUB_JOB_NAME"] = "Build and test relwithdebinfo on main"
             os.environ["GITHUB_RUN_ID"] = "12345"
             defaults = github_env_defaults()
-            self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo")
+            self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo on main")
             self.assertEqual(defaults["run_id"], 12345)
+        finally:
+            for key, value in old.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
+    def test_falls_back_to_yaml_job_id(self):
+        old = {
+            "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
+            "GITHUB_JOB_NAME": os.environ.get("GITHUB_JOB_NAME"),
+            "GITHUB_JOB": os.environ.get("GITHUB_JOB"),
+        }
+        try:
+            os.environ["ANALYTICS_JOB_NAME"] = "PR-check"
+            os.environ.pop("GITHUB_JOB_NAME", None)
+            os.environ["GITHUB_JOB"] = "build_and_test"
+            self.assertEqual(github_env_defaults()["job_name"], "build_and_test")
         finally:
             for key, value in old.items():
                 if value is None:
@@ -337,6 +357,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             "GITHUB_REF_NAME",
             "BUILD_PRESET",
             "ANALYTICS_JOB_NAME",
+            "GITHUB_JOB_NAME",
             "GITHUB_JOB",
         )}
         try:
@@ -382,6 +403,8 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             "ORIGINAL_HEAD",
             "BRANCH_NAME",
             "ANALYTICS_JOB_NAME",
+            "GITHUB_JOB_NAME",
+            "GITHUB_JOB",
             "GITHUB_TOKEN",
             "GITHUB_REPOSITORY",
             "GITHUB_NUMERIC_JOB_ID",

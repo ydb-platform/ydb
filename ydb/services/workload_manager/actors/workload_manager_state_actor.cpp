@@ -10,6 +10,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/events/events.h>
@@ -45,15 +46,9 @@ std::shared_ptr<IQueryClassifier> NPrivate::TWorkloadManagerGateway::TryCreateQu
         : NResourcePool::DEFAULT_POOL_ID;
 
     if (!snapshot->Pools || !snapshot->Pools->contains(GetPoolKey(databaseId, effectivePoolId))) {
-        const ui32 nodeId = StateActorId_.NodeId();
         NActors::TActivationContext::Send(new NActors::IEventHandle(
-            NKqp::MakeKqpSchedulerServiceId(nodeId),
-            StateActorId_,
-            new NKqp::NScheduler::TEvAddPool(databaseId, effectivePoolId)));
-        NActors::TActivationContext::Send(new NActors::IEventHandle(
-            MakeServiceId(nodeId),
-            StateActorId_,
-            new TEvSubscribeOnPoolChanges(databaseId, effectivePoolId)));
+            StateActorId_, {},
+            new TEvEnsurePoolSubscribed(databaseId, effectivePoolId)));
     }
 
     return CreateQueryClassifier(
@@ -129,7 +124,7 @@ void NPrivate::TWorkloadManagerGateway::Warmup(const TString& databasePath) {
         return;
     }
     NActors::TActivationContext::Send(new NActors::IEventHandle(
-        StateActorId_, {}, new TEvWarmupDatabaseInfo(databasePath)));
+        StateActorId_, {}, new TEvWarmupDatabaseInfo(CanonizePath(databasePath))));
 }
 
 namespace {
@@ -187,7 +182,6 @@ public:
         FeatureFlags_ = AppData()->FeatureFlags;
         WorkloadManagerConfig_ = AppData()->WorkloadManagerConfig;
         RecomputeFlags();
-        UpdateResourcePoolClassifiersSubscription();
 
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             ClassifierMetadataInitialized_ = true;
@@ -219,6 +213,7 @@ private:
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         hFunc(TEvUpdatePoolInfo, Handle);
+        hFunc(TEvEnsurePoolSubscribed, Handle);
         hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
         hFunc(TEvWarmupDatabaseInfo, Handle);
         hFunc(TEvSubscribeOnWorkloadManagerReady, Handle);
@@ -227,11 +222,23 @@ private:
         IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated);
         IgnoreFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable);
         sFunc(TEvents::TEvPoison, PassAway);
-        IgnoreFunc(TEvents::TEvUndelivered);
+        hFunc(TEvents::TEvUndelivered, Handle);
     )
 
     void HandleSetConfigSubscriptionResponse() const {
         LOG_D("State actor subscribed for config changes");
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        switch (ev->Get()->SourceType) {
+            case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+                LOG_C("Failed to deliver config subscription request to configs dispatcher; "
+                      "workload manager state actor will run with stale flags");
+                break;
+            default:
+                LOG_W("Undelivered event, SourceType: " << ev->Get()->SourceType);
+                break;
+        }
     }
 
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -239,7 +246,6 @@ private:
         FeatureFlags_ = event.GetConfig().GetFeatureFlags();
         WorkloadManagerConfig_ = event.GetConfig().GetWorkloadManagerConfig();
         RecomputeFlags();
-        UpdateResourcePoolClassifiersSubscription();
         Rebuild();
 
         auto responseEvent = std::make_unique<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -247,8 +253,49 @@ private:
     }
 
     void Handle(TEvUpdatePoolInfo::TPtr& ev) {
-        UpdatePoolInfo(ev->Get()->DatabaseId, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject);
+        if (UpdatePoolInfo(ev->Get()->DatabaseId, ev->Get()->PoolId, ev->Get()->Config, ev->Get()->SecurityObject)) {
+            InFlightPoolFetches_.erase(GetPoolKey(ev->Get()->DatabaseId, ev->Get()->PoolId));
+        }
         Rebuild();
+    }
+
+    // Returns true iff the caller may release the in-flight fetch lock for this pool.
+    bool UpdatePoolInfo(const TString& databaseId, const TString& poolId,
+                        const std::optional<NResourcePool::TPoolSettings>& config,
+                        const std::optional<NACLib::TSecurityObject>& securityObject)
+    {
+        const TString& poolKey = GetPoolKey(databaseId, poolId);
+        if (!config) {
+            auto it = PoolsCache_.find(poolKey);
+            if (it == PoolsCache_.end()) {
+                // Our own fetch returned "not found" — release the in-flight lock for future retries.
+                return true;
+            }
+            if (it->second.Expired) {
+                // Second nullopt confirms the pool is gone
+                PoolsCache_.erase(it);
+                return true;
+            }
+            it->second.Expired = true;
+            if (!InFlightPoolFetches_.insert(poolKey).second) {
+                // An op is already in flight (armed elsewhere); leave that lock alone.
+                return false;
+            }
+
+            // Arm a new op to verify the deletion — hold the lock until the response arrives.
+            Send(MakeServiceId(SelfId().NodeId()), new TEvGetPoolInfo(databaseId, poolId));
+            return false;
+        }
+
+        auto& poolInfo = PoolsCache_[poolKey];
+        poolInfo.Config = *config;
+        poolInfo.SecurityObject = securityObject;
+        poolInfo.Expired = false;
+        return true;
+    }
+
+    void Handle(TEvEnsurePoolSubscribed::TPtr& ev) {
+        EnsurePoolSubscribed(ev->Get()->DatabaseId, ev->Get()->PoolId);
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
@@ -256,7 +303,21 @@ private:
         ClassifierMetadataInitialized_ = true;
         PreSubscribeOnClassifierPools();
         Rebuild();
-        SweepAllPendingSubscribersOnReady();
+
+        std::vector<TString> matchedDbIds;
+        matchedDbIds.reserve(PendingSubscribers_.size());
+        for (const auto& [dbId, _] : PendingSubscribers_) {
+            if (DatabasesCache_.contains(dbId)) {
+                matchedDbIds.push_back(dbId);
+            }
+        }
+        for (const TString& dbId : matchedDbIds) {
+            auto it = PendingSubscribers_.find(dbId);
+            for (const auto& sub : it->second) {
+                Send(sub.Actor, new TEvWorkloadManagerReady(sub.Cookie, Ydb::StatusIds::SUCCESS));
+            }
+            PendingSubscribers_.erase(it);
+        }
     }
 
     void Handle(TEvWarmupDatabaseInfo::TPtr& ev) {
@@ -318,6 +379,12 @@ private:
 
         InFlightFetchesByPath_.erase(path);
 
+        // Drop any stale entry keyed by raw path — a prior failed fetch might have written one
+        // before we knew the DB is serverless (differs only when composite prefix is present).
+        if (msg->Database != msg->DatabaseId) {
+            DatabasesCache_.erase(msg->Database);
+        }
+
         if (msg->Status != Ydb::StatusIds::SUCCESS) {
             const TString message = msg->Issues.ToOneLineString();
             LOG_W("Failed to fetch database info, path: " << path << ", status: " << msg->Status << ", issues: " << message);
@@ -376,6 +443,14 @@ private:
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove(watchKey));
         DatabasesCache_.erase(dbId);
         PathToId_.erase(path);
+
+        if (auto subsIt = PendingSubscribers_.find(dbId); subsIt != PendingSubscribers_.end()) {
+            for (const auto& sub : subsIt->second) {
+                Send(sub.Actor, new TEvWorkloadManagerReady(sub.Cookie, Ydb::StatusIds::NOT_FOUND, "Database was deleted"));
+            }
+            PendingSubscribers_.erase(subsIt);
+        }
+
         Rebuild();
     }
 
@@ -397,46 +472,18 @@ private:
         }
     }
 
-    void SweepAllPendingSubscribersOnReady() {
-        std::vector<TString> matchedDbIds;
-        matchedDbIds.reserve(PendingSubscribers_.size());
-        for (const auto& [dbId, _] : PendingSubscribers_) {
-            if (DatabasesCache_.contains(dbId)) {
-                matchedDbIds.push_back(dbId);
-            }
-        }
-        for (const TString& dbId : matchedDbIds) {
-            auto it = PendingSubscribers_.find(dbId);
-            for (const auto& sub : it->second) {
-                Send(sub.Actor, new TEvWorkloadManagerReady(sub.Cookie, Ydb::StatusIds::SUCCESS));
-            }
-            PendingSubscribers_.erase(it);
-        }
-    }
-
-    void UpdatePoolInfo(const TString& databaseId, const TString& poolId,
-                        const std::optional<NResourcePool::TPoolSettings>& config,
-                        const std::optional<NACLib::TSecurityObject>& securityObject)
-    {
+    void EnsurePoolSubscribed(const TString& databaseId, const TString& poolId) {
         const TString& poolKey = GetPoolKey(databaseId, poolId);
-        if (!config) {
-            auto it = PoolsCache_.find(poolKey);
-            if (it == PoolsCache_.end()) {
-                return;
-            }
-            if (it->second.Expired) {
-                PoolsCache_.erase(it);
-            } else {
-                it->second.Expired = true;
-                Send(MakeServiceId(SelfId().NodeId()), new TEvSubscribeOnPoolChanges(databaseId, poolId));
-            }
+        if (auto it = PoolsCache_.find(poolKey); it != PoolsCache_.end() && !it->second.Expired) {
             return;
         }
-
-        auto& poolInfo = PoolsCache_[poolKey];
-        poolInfo.Config = *config;
-        poolInfo.SecurityObject = securityObject;
-        poolInfo.Expired = false;
+        if (!InFlightPoolFetches_.insert(poolKey).second) {
+            return;
+        }
+        Send(NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()),
+             new NKqp::NScheduler::TEvAddPool(databaseId, poolId));
+        Send(MakeServiceId(SelfId().NodeId()),
+             new TEvGetPoolInfo(databaseId, poolId));
     }
 
     void PreSubscribeOnClassifierPools() {
@@ -445,32 +492,36 @@ private:
         }
         for (const auto& [databaseId, info] : LastClassifierSnapshot_->GetResourcePoolClassifierConfigs()) {
             for (const auto& [_, classifier] : info.ByName) {
-                const auto& poolId = classifier.GetClassifierSettings().ResourcePool;
-                if (!poolId) {
-                    continue;
+                if (const auto& poolId = classifier.GetClassifierSettings().ResourcePool) {
+                    EnsurePoolSubscribed(databaseId, *poolId);
                 }
-                if (PoolsCache_.contains(GetPoolKey(databaseId, *poolId))) {
-                    continue;
-                }
-                Send(NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()),
-                     new NKqp::NScheduler::TEvAddPool(databaseId, *poolId));
-                Send(MakeServiceId(SelfId().NodeId()),
-                     new TEvSubscribeOnPoolChanges(databaseId, *poolId));
             }
         }
     }
 
     void RecomputeFlags() {
+        const bool wasEnabled = EnableResourcePools_;
         EnableResourcePools_ = FeatureFlags_.GetEnableResourcePools() || WorkloadManagerConfig_.GetEnabled();
         EnableResourcePoolsOnServerless_ = FeatureFlags_.GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig_.GetEnabled();
-    }
 
-    void UpdateResourcePoolClassifiersSubscription() {
         if (EnableResourcePools_) {
             SubscribeOnResourcePoolClassifiers();
         } else {
             UnsubscribeFromResourcePoolClassifiers();
         }
+        
+        if (wasEnabled && !EnableResourcePools_) {
+            ReleasePendingSubscribers();
+        }
+    }
+
+    void ReleasePendingSubscribers() {
+        for (auto& [_, subs] : PendingSubscribers_) {
+            for (const auto& sub : subs) {
+                Send(sub.Actor, new TEvWorkloadManagerReady(sub.Cookie, Ydb::StatusIds::SUCCESS));
+            }
+        }
+        PendingSubscribers_.clear();
     }
 
     void SubscribeOnResourcePoolClassifiers() {
@@ -523,6 +574,7 @@ private:
 
 private:
     std::unordered_map<TString, TPoolInfo> PoolsCache_;
+    std::unordered_set<TString> InFlightPoolFetches_;
     std::unordered_map<TString, TDatabaseEntry> DatabasesCache_;
     std::unordered_map<TString, TString> PathToId_;
     std::unordered_map<ui32, TString> WatchKeyToDbId_;

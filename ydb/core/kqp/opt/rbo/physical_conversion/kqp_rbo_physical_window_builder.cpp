@@ -45,6 +45,29 @@ bool IsRowSuffixFrame(const TOpWindowFrame& frame) {
     return frame.Type == EWindowFrameType::Rows && startsAtCurrentRow && frame.EndKind == EWindowFrameBound::UnboundedFollowing;
 }
 
+bool IsRangeOffsetFrame(const TOpWindowFrame& frame) {
+    return frame.Type == EWindowFrameType::Range && !IsRangeRunningFrame(frame) && !IsWholePartitionFrame(frame);
+}
+
+bool IsRangeIncrementalFrame(const TOpWindowFrame& frame) {
+    return frame.Type == EWindowFrameType::Range && frame.BeginKind == EWindowFrameBound::UnboundedPreceding &&
+           (frame.EndKind == EWindowFrameBound::Preceding || frame.EndKind == EWindowFrameBound::Following);
+}
+
+bool HasFrameOffset(const TOpWindowFrame& frame) {
+    auto isOffset = [](EWindowFrameBound kind) {
+        return kind == EWindowFrameBound::Preceding || kind == EWindowFrameBound::Following;
+    };
+    return isOffset(frame.BeginKind) || isOffset(frame.EndKind);
+}
+
+bool IsIntegerType(const TTypeAnnotationNode* type) {
+    if (type->GetKind() == ETypeAnnotationKind::Optional) {
+        type = type->Cast<TOptionalExprType>()->GetItemType();
+    }
+    return type->GetKind() == ETypeAnnotationKind::Data && IsDataTypeIntegral(type->Cast<TDataExprType>()->GetSlot());
+}
+
 bool IsRangeComparableType(const TTypeAnnotationNode* type) {
     if (type->GetKind() == ETypeAnnotationKind::Optional) {
         type = type->Cast<TOptionalExprType>()->GetItemType();
@@ -170,11 +193,24 @@ bool TPhysicalWindowBuilder::UsesRowFrames(const TOpWindow& window) {
     return HasAggregate(window);
 }
 
+bool TPhysicalWindowBuilder::UsesRangeFrames(const TOpWindow& window) {
+    const auto& frame = window.GetFrame();
+    if (!IsRangeOffsetFrame(frame) || window.GetSortElements().Items().size() != 1) {
+        return false;
+    }
+
+    const auto* sortColumnType = SortColumnType(window, window.GetSortElements().Items().front().first);
+    if (!(HasFrameOffset(frame) ? IsIntegerType(sortColumnType) : IsRangeComparableType(sortColumnType))) {
+        return false;
+    }
+    return HasAggregate(window);
+}
+
 bool TPhysicalWindowBuilder::CanBuildWindow(const TOpWindow& window) {
     const bool running = IsRunningFrame(window.GetFrame());
     const bool wholePartition = UsesWholePartition(window);
     const bool rangeRunning = UsesRangeCarry(window) || UsesRangePeerGroups(window);
-    const bool rowFrames = UsesRowFrames(window);
+    const bool rowFrames = UsesRowFrames(window) || UsesRangeFrames(window);
 
     for (const auto& [output, func] : window.GetWindowFuncs().Items()) {
         if (func.Kind == EWindowFuncKind::Native) {
@@ -211,6 +247,8 @@ void TPhysicalWindowBuilder::Prepare(const TVector<TInfoUnitId>& inputs) {
     RowFrames = UsesRowFrames(Window);
     RowIncremental = RowFrames && IsRowIncrementalFrame(Window.GetFrame());
     RowSuffix = RowFrames && IsRowSuffixFrame(Window.GetFrame());
+    RangeFrames = UsesRangeFrames(Window);
+    RangeIncremental = RangeFrames && IsRangeIncrementalFrame(Window.GetFrame());
 }
 
 ui32 TPhysicalWindowBuilder::IndexOf(TInfoUnitId column) const {
@@ -960,12 +998,12 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildQueue(TExprNode::TPtr wideFlow) con
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::BuildFrameBounds(TExprNode::TListType rangeIncrementals, TExprNode::TListType rowIntervals,
-                                                         TExprNode::TListType rowIncrementals) const {
+                                                         TExprNode::TListType rowIncrementals, TExprNode::TListType rangeIntervals) const {
     // clang-format off
     return Ctx.Builder(Pos)
         .Callable("AsStruct")
             .List(0).Atom(0, "RangeIncrementals").Add(1, Ctx.NewList(Pos, std::move(rangeIncrementals))).Seal()
-            .List(1).Atom(0, "RangeIntervals").List(1).Seal().Seal()
+            .List(1).Atom(0, "RangeIntervals").Add(1, Ctx.NewList(Pos, std::move(rangeIntervals))).Seal()
             .List(2).Atom(0, "RowIncrementals").Add(1, Ctx.NewList(Pos, std::move(rowIncrementals))).Seal()
             .List(3).Atom(0, "RowIntervals").Add(1, Ctx.NewList(Pos, std::move(rowIntervals))).Seal()
         .Seal().Build();
@@ -1048,23 +1086,17 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeCarry(TExprNode::TPtr wideFlow
     Y_ENSURE(Window.GetSortElements().Items().size() == 1, "A RANGE frame needs exactly one sort column here");
     const auto& sortElement = Window.GetSortElements().Items().front();
 
-    // clang-format off
-    auto bound = Ctx.Builder(Pos)
-        .Callable("AsStruct")
-            .List(0).Atom(0, "Direction").Callable(1, "String").Atom(0, "Following").Seal().Seal()
-            .List(1)
-                .Atom(0, "Number")
-                .Callable(1, "AsTagged")
-                    .Callable(0, "Void").Seal()
-                    .Atom(1, "zero")
-                .Seal()
-            .Seal()
-            .List(2).Atom(0, "SortedColumn").Callable(1, "String").Atom(0, Names.Get(sortElement.first)).Seal().Seal()
-        .Seal().Build();
-    // clang-format on
-
+    auto bound = BuildRangeBound(EWindowFrameBound::CurrentRow, 0, Names.Get(sortElement.first));
     return BuildIncrementalCarry(wideFlow, BuildFrameBounds({bound}, {}, {}), /*isRange=*/true, sortElement.second.Ascending,
                                  /*mayBeEmpty=*/false);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeIncremental(TExprNode::TPtr wideFlow) const {
+    const auto& frame = Window.GetFrame();
+    const auto& sortElement = Window.GetSortElements().Items().front();
+    const bool mayBeEmpty = frame.EndKind == EWindowFrameBound::Preceding && frame.EndValue > 0;
+    auto bound = BuildRangeBound(frame.EndKind, frame.EndValue, Names.Get(sortElement.first));
+    return BuildIncrementalCarry(wideFlow, BuildFrameBounds({bound}, {}, {}), /*isRange=*/true, sortElement.second.Ascending, mayBeEmpty);
 }
 
 TExprNode::TPtr TPhysicalWindowBuilder::BuildRowIncremental(TExprNode::TPtr wideFlow) const {
@@ -1301,10 +1333,45 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRowBound(EWindowFrameBound kind, ui
     // clang-format on
 }
 
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeBound(EWindowFrameBound kind, ui64 value, const TString& sortedColumn) const {
+    TString direction = "Following";
+    TExprNode::TPtr number;
+    switch (kind) {
+        case EWindowFrameBound::UnboundedPreceding:
+        case EWindowFrameBound::UnboundedFollowing:
+            direction = kind == EWindowFrameBound::UnboundedPreceding ? "Preceding" : "Following";
+            number = Ctx.NewCallable(Pos, "AsTagged", {Ctx.NewCallable(Pos, "Void", {}), Ctx.NewAtom(Pos, "inf")});
+            break;
+        case EWindowFrameBound::CurrentRow:
+            number = Ctx.NewCallable(Pos, "AsTagged", {Ctx.NewCallable(Pos, "Void", {}), Ctx.NewAtom(Pos, "zero")});
+            break;
+        case EWindowFrameBound::Preceding:
+        case EWindowFrameBound::Following:
+            direction = kind == EWindowFrameBound::Preceding ? "Preceding" : "Following";
+            // clang-format off
+            number = Ctx.Builder(Pos)
+                .Callable("AsStruct")
+                    .List(0)
+                        .Atom(0, "FiniteValue")
+                        .Callable(1, "Int32").Atom(0, ToString(value)).Seal()
+                    .Seal()
+                .Seal().Build();
+            // clang-format on
+            break;
+    }
+
+    // clang-format off
+    return Ctx.Builder(Pos)
+        .Callable("AsStruct")
+            .List(0).Atom(0, "Direction").Callable(1, "String").Atom(0, direction).Seal().Seal()
+            .List(1).Atom(0, "Number").Add(1, number).Seal()
+            .List(2).Atom(0, "SortedColumn").Callable(1, "String").Atom(0, sortedColumn).Seal().Seal()
+        .Seal().Build();
+    // clang-format on
+}
+
 TExprNode::TPtr TPhysicalWindowBuilder::BuildRowFrames(TExprNode::TPtr wideFlow) const {
     const auto& frame = Window.GetFrame();
-    auto queue = BuildQueue(wideFlow);
-    auto zero = BuildUint64(0);
 
     // clang-format off
     auto interval = Ctx.Builder(Pos)
@@ -1314,7 +1381,29 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRowFrames(TExprNode::TPtr wideFlow)
         .Seal().Build();
     // clang-format on
 
-    auto collected = BuildCollector(BuildChainOutputs(wideFlow), queue, BuildFrameBounds({}, {interval}, {}), /*ascending=*/true);
+    return BuildFrameFold(wideFlow, BuildFrameBounds({}, {interval}, {}), /*isRange=*/false, /*ascending=*/true);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildRangeFrames(TExprNode::TPtr wideFlow) const {
+    const auto& frame = Window.GetFrame();
+    const auto& sortElement = Window.GetSortElements().Items().front();
+    const auto sortedColumn = Names.Get(sortElement.first);
+
+    // clang-format off
+    auto interval = Ctx.Builder(Pos)
+        .Callable("AsStruct")
+            .List(0).Atom(0, "Min").Add(1, BuildRangeBound(frame.BeginKind, frame.BeginValue, sortedColumn)).Seal()
+            .List(1).Atom(0, "Max").Add(1, BuildRangeBound(frame.EndKind, frame.EndValue, sortedColumn)).Seal()
+        .Seal().Build();
+    // clang-format on
+
+    return BuildFrameFold(wideFlow, BuildFrameBounds({}, {}, {}, {interval}), /*isRange=*/true, sortElement.second.Ascending);
+}
+
+TExprNode::TPtr TPhysicalWindowBuilder::BuildFrameFold(TExprNode::TPtr wideFlow, TExprNode::TPtr bounds, bool isRange, bool ascending) const {
+    auto queue = BuildQueue(wideFlow);
+    auto zero = BuildUint64(0);
+    auto collected = BuildCollector(BuildChainOutputs(wideFlow), queue, bounds, ascending);
 
     auto rowArg = Ctx.NewArgument(Pos, "frame_row");
     // clang-format off
@@ -1324,7 +1413,7 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildRowFrames(TExprNode::TPtr wideFlow)
                 .Add(0, queue)
                 .Add(1, zero)
                 .Callable(2, "Bool").Atom(0, "false").Seal()
-                .Callable(3, "Bool").Atom(0, "false").Seal()
+                .Callable(3, "Bool").Atom(0, isRange ? "true" : "false").Seal()
                 .Callable(4, "Bool").Atom(0, "false").Seal()
                 .Callable(5, "DependsOn").Add(0, rowArg).Seal()
             .Seal()
@@ -1391,6 +1480,14 @@ TExprNode::TPtr TPhysicalWindowBuilder::BuildPartitionHandler(TExprNode::TPtr wi
     // f(x) OVER (ORDER BY name, id), the same RANGE frame over any other keys.
     if (RangePeerGroups) {
         return BuildRangePeerGroups(wideFlow);
+    }
+    // RANGE BETWEEN UNBOUNDED PRECEDING AND k PRECEDING (or k FOLLOWING).
+    if (RangeIncremental) {
+        return BuildRangeIncremental(wideFlow);
+    }
+    // RANGE BETWEEN n PRECEDING AND k FOLLOWING, or RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING.
+    if (RangeFrames) {
+        return BuildRangeFrames(wideFlow);
     }
     // ROWS BETWEEN UNBOUNDED PRECEDING AND k PRECEDING (or k FOLLOWING).
     if (RowIncremental) {

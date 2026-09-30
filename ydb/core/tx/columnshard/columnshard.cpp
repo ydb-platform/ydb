@@ -720,7 +720,7 @@ void TColumnShard::RestartMoveDataActualizer() {
         return;
     }
     auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
-    // Stop and rerun rather than extend in place: Refresh rebuilds the queues from scratch.
+    // A changed target set replaces the actualizers and seeds fresh queues.
     index.StopMoveData();
     if (!MoveDataState.TargetGroups.empty()) {
         index.StartMoveData(MoveDataState.TargetGroups);

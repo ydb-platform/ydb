@@ -635,8 +635,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         db.Last = TGenStep(4, 0);
         db.Prepared = TGenStep(4, 1);
         for (ui32 i = 0; i < KeepCount; ++i) {
-            db.Keeps.push_back(MakeDsBlobId(NewGroup, TabletId, ReassignGen, 1 + i / 1000, DataChannel));
-            db.Keeps.back() = NOlap::TUnifiedBlobId(NewGroup, TLogoBlobID(TabletId, ReassignGen, 1 + i / 1000, DataChannel, BlobSize, i % 1000));
+            db.Keeps.emplace_back(NewGroup, TLogoBlobID(TabletId, ReassignGen, 1 + i / 1000, DataChannel, BlobSize, i % 1000));
         }
         UNIT_ASSERT(mgr->LoadState(db, NOlap::TTabletId(TabletId)));
         auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(

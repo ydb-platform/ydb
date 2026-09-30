@@ -21,7 +21,7 @@ class TMoveDataActualizer: public IActualizer {
 private:
     const THashSet<ui32> TargetGroups;
     const TVersionedIndex& VersionedIndex;
-    // Fixed at Refresh: Handle(TEvMoveData) rejects live groups, so a portion created afterwards cannot hold a target blob.
+    // Fixed when seeded: Handle(TEvMoveData) rejects live groups, so a portion created afterwards cannot hold a target blob.
     THashSet<ui64> InitialPortionIds;
     // Portions waiting for accessor-load so we can check their DsGroup.
     THashSet<ui64> PendingPortionIds;

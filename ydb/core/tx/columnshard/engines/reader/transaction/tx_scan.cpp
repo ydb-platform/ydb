@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/actor/actor.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/constructor/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
@@ -87,6 +88,10 @@ TReadDescription TTxScan::MakeReadDescription(const TSnapshot& snapshot, const E
         request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr, false);
     read.ColumnIds.assign(request.GetColumnTags().begin(), request.GetColumnTags().end());
     read.StatsMode = request.GetStatsMode();
+    if (request.HasSystemColumnsFilter()) {
+        read.SystemColumnsFilter =
+            std::make_shared<NOlap::TSystemColumnsFilter>(NOlap::TSystemColumnsFilter::BuildFromProto(request.GetSystemColumnsFilter()));
+    }
     return read;
 }
 

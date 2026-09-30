@@ -98,9 +98,7 @@ void ParseWideReadColumns(const TRuntimeNode& tagsNode,
     columns.reserve(tags->GetValuesCount());
 
     for (ui32 i = 0; i < tags->GetValuesCount(); ++i) {
-
-
-        NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();;
+        NTable::TTag columnId = AS_VALUE(TDataLiteral, tags->GetValue(i))->AsValue().Get<ui32>();
 
         if (IsSystemColumn(columnId)) {
             systemColumns.push_back(columnId);

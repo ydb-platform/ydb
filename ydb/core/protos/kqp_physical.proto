@@ -176,6 +176,30 @@ message TKqpPhyOpDeleteRows {
     TKqpPhyValue RowsValue = 1;
 }
 
+// Bound of a system-column range. Missing Value means unbounded (like an empty PK key bound).
+message TKqpPhySystemColumnBound {
+    TKqpPhyValue Value = 1;
+    bool Inclusive = 2;
+}
+
+// Single range over one system column. Missing From/To means -inf/+inf.
+message TKqpPhySystemColumnRange {
+    TKqpPhySystemColumnBound From = 1;
+    TKqpPhySystemColumnBound To = 2;
+}
+
+// OR of ranges for a single system column (empty Ranges = unsatisfiable).
+message TKqpPhySystemColumnConstraint {
+    uint32 ColumnId = 1;
+    string Name = 2;
+    repeated TKqpPhySystemColumnRange Ranges = 3;
+}
+
+// AND of per-column constraints. Analog of PK key ranges for system columns.
+message TKqpPhySystemColumnsFilter {
+    repeated TKqpPhySystemColumnConstraint Constraints = 1;
+}
+
 message TKqpPhyOpReadOlapRanges {
     enum EReadType {
         ROWS = 0;
@@ -210,6 +234,7 @@ message TKqpPhyOpReadOlapRanges {
     repeated string GroupByColumnNames = 14;
     // If set, only data from the specified tablet will be processed
     optional uint64 TabletId = 15;
+    optional TKqpPhySystemColumnsFilter SystemColumnsFilter = 16;
 }
 
 message TKqpPhyOpReadRanges {

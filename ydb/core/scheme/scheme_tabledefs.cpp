@@ -361,13 +361,15 @@ void TKeyDesc::Out(IOutputStream& o, TKeyDesc::EStatus x) {
 
 struct TSystemColumnsData {
     const TMap<TString, TSystemColumnInfo> SystemColumns = {
-        {YqlPartitionColumnName, {TKeyDesc::EColumnIdDataShard, NScheme::NTypeIds::Uint64}}
+        {YqlPartitionColumnName, {TKeyDesc::EColumnIdDataShard, NScheme::NTypeIds::Uint64}},
+        {YqlPortionColumnName, {TKeyDesc::EColumnIdPortion, NScheme::NTypeIds::Uint64}}
     };
 };
 
 bool IsSystemColumn(ui32 columnId) {
     switch (columnId) {
     case TKeyDesc::EColumnIdDataShard:
+    case TKeyDesc::EColumnIdPortion:
         return true;
     default:
         return false;
@@ -376,6 +378,14 @@ bool IsSystemColumn(ui32 columnId) {
 
 bool IsSystemColumn(const TStringBuf columnName) {
     return GetSystemColumns().FindPtr(columnName);
+}
+
+bool IsRowTableSystemColumn(ui32 columnId) {
+    return columnId == TKeyDesc::EColumnIdDataShard;
+}
+
+bool IsRowTableSystemColumn(const TStringBuf columnName) {
+    return columnName == YqlPartitionColumnName;
 }
 
 const TMap<TString, TSystemColumnInfo>& GetSystemColumns() {

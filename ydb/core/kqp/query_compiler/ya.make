@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/protos
     ydb/core/scheme
+    ydb/core/ydb_convert
     ydb/library/mkql_proto
     yql/essentials/core
     yql/essentials/core/arrow_kernels/request

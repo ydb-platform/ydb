@@ -105,7 +105,7 @@ THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> BuildColumnChunk
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks;
     for (const auto& field : batch->schema()->fields()) {
         const auto columnId = schema->GetColumnIdOptional(field->name());
-        if (!columnId || schema->IsSpecialColumnId(*columnId)) {
+        if (!columnId || schema->IsSpecialColumnId(*columnId) || IIndexInfo::IsVirtualColumn(*columnId)) {
             continue;
         }
         const int fieldIndex = batch->schema()->GetFieldIndex(field->name());

@@ -639,7 +639,10 @@ public:
     enum ESystemColumnIds : ui32 {
         EColumnIdInvalid = Max<ui32>(),
         EColumnIdSystemStart = EColumnIdInvalid - 1000,
-        EColumnIdDataShard = EColumnIdSystemStart + 1
+        // Must match NOlap::NPortion::TSpecialColumns::SPEC_COL_PARTITION_ID_INDEX (Max<ui32>() - 999).
+        EColumnIdDataShard = EColumnIdSystemStart + 1,
+        // Must match NOlap::NPortion::TSpecialColumns::SPEC_COL_PORTION_ID_INDEX (Max<ui32>() - 998).
+        EColumnIdPortion = EColumnIdSystemStart + 2,
     };
 
 #define SCHEME_KEY_DESCRIPTION_STATUS_MAP(XX) \
@@ -800,11 +803,16 @@ struct TSystemColumnInfo {
 };
 
 inline constexpr char YqlPartitionColumnName[] = "_yql_partition_id";
+inline constexpr char YqlPortionColumnName[] = "_yql_portion_id";
 
 const TMap<TString, TSystemColumnInfo>& GetSystemColumns();
 
 bool IsSystemColumn(ui32 columnId);
 bool IsSystemColumn(const TStringBuf columnName);
+
+// Row-table runtimes may synthesize only `_yql_partition_id`. `_yql_portion_id` is OLAP-only.
+bool IsRowTableSystemColumn(ui32 columnId);
+bool IsRowTableSystemColumn(const TStringBuf columnName);
 
 inline int ComparePointKeys(const TKeyDesc& point1, const TKeyDesc& point2) {
     Y_ENSURE(point1.Range.Point);

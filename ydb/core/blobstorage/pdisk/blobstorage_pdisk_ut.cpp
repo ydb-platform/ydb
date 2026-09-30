@@ -142,6 +142,81 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return chunks;
     }
 
+    Y_UNIT_TEST(ChunkReserveMockSuccessCookiesRemainOptIn) {
+        TActorTestContext testCtx({.UsePDiskMock = true});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        constexpr ui64 cookie = 0x1234'5678'9abc'def0ULL;
+
+        for (const bool isDDisk : {false, true}) {
+            auto* request = new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner,
+                vdisk.PDiskParams->OwnerRound, 1);
+            UNIT_ASSERT(!request->IsDDisk);
+            request->IsDDisk = isDDisk;
+            testCtx.Send(request, cookie);
+            auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReserveResult>(
+                testCtx.Sender, TDuration::Seconds(10));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->ChunkIds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? cookie : 0);
+        }
+    }
+
+    Y_UNIT_TEST(ChunkReserveMockFailureCookiesRemainOptIn) {
+        TActorTestContext testCtx({.UsePDiskMock = true});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        constexpr ui64 cookie = 0x1234'5678'9abc'def0ULL;
+        const auto space = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT(space->FreeChunks < Max<ui32>());
+
+        for (const bool isDDisk : {false, true}) {
+            for (const bool invalidRound : {false, true}) {
+                auto* request = new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner,
+                    vdisk.PDiskParams->OwnerRound + (invalidRound ? 1 : 0),
+                    invalidRound ? 1 : space->FreeChunks + 1);
+                request->IsDDisk = isDDisk;
+                testCtx.Send(request, cookie);
+                auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReserveResult>(
+                    testCtx.Sender, TDuration::Seconds(10));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status,
+                    invalidRound ? NKikimrProto::INVALID_ROUND : NKikimrProto::OUT_OF_SPACE);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->ErrorReason,
+                    invalidRound ? "invalid OwnerRound" : "no free chunks");
+                UNIT_ASSERT(reply->Get()->ChunkIds.empty());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? cookie : 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ChunkReserveMockErrorCookiesRemainOptIn) {
+        TActorTestContext testCtx({.UsePDiskMock = true});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        constexpr ui64 cookie = 0x1234'5678'9abc'def0ULL;
+        // The mock does not acknowledge PDiskStop; same-sender ordering puts it
+        // into the error state before either reservation is handled.
+        testCtx.Send(new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr));
+
+        for (const bool isDDisk : {false, true}) {
+            auto* request = new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner,
+                vdisk.PDiskParams->OwnerRound, 1);
+            request->IsDDisk = isDDisk;
+            testCtx.Send(request, cookie);
+            auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReserveResult>(
+                testCtx.Sender, TDuration::Seconds(10));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::CORRUPTED);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->ErrorReason, "Stopped by control message");
+            UNIT_ASSERT(reply->Get()->ChunkIds.empty());
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? cookie : 0);
+        }
+    }
+
     Y_UNIT_TEST(ChunkForgetReleasesReservedChunk) {
         TActorTestContext testCtx(FewChunksSettings());
         TVDiskMock vdisk(&testCtx);

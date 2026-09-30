@@ -561,10 +561,29 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         CompleteSchemaChange(env, controllerId, worker, next);
 
-        auto withColumn = next;
-        withColumn.MutableVersion()->SetStep(300);
-        withColumn.MutableVersion()->SetTxId(30);
-        withColumn.SetSourceSchemaVersion(4);
+        auto withoutMedia = next;
+        withoutMedia.MutableVersion()->SetStep(300);
+        withoutMedia.MutableVersion()->SetTxId(30);
+        withoutMedia.SetSourceSchemaVersion(4);
+        withoutMedia.MutableFamilies(1)->ClearMedia();
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, withoutMedia));
+        const auto resetRelease = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(resetRelease->Get()->Record.GetSchema().SerializeAsString(), withoutMedia.SerializeAsString());
+        const auto reset = env.GetDescription("/Root/replica1");
+        bool mediaReset = false;
+        for (const auto& family : reset.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies()) {
+            if (family.GetId() == archiveId) {
+                mediaReset = family.GetStorageConfig().GetData().GetAllowOtherKinds();
+            }
+        }
+        UNIT_ASSERT(mediaReset);
+        CompleteSchemaChange(env, controllerId, worker, withoutMedia);
+
+        auto withColumn = withoutMedia;
+        withColumn.MutableVersion()->SetStep(400);
+        withColumn.MutableVersion()->SetTxId(40);
+        withColumn.SetSourceSchemaVersion(5);
         auto* extra = withColumn.AddColumns();
         extra->SetName("extra");
         extra->SetType("Uint64");

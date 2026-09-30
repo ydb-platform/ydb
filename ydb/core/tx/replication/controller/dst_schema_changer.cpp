@@ -165,18 +165,14 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             return true;
         }
 
-        if (actual && actualSettings.Media && !expectedSettings.Media) {
-            error = TStringBuilder() << "column family '" << desired.GetName()
-                << "' has explicit destination media '" << actualSettings.Media << "' but source media is unspecified";
-            return false;
-        }
-
         auto* changed = Alter.MutableAlterTable()->MutablePartitionConfig()->AddColumnFamilies();
         changed->SetName(desired.GetName());
-        if (expectedSettings.Media && actualSettings.Media != expectedSettings.Media) {
+        if (actualSettings.Media != expectedSettings.Media) {
             auto* data = changed->MutableStorageConfig()->MutableData();
-            data->SetPreferredPoolKind(desired.GetMedia());
-            data->SetAllowOtherKinds(false);
+            if (expectedSettings.Media) {
+                data->SetPreferredPoolKind(desired.GetMedia());
+                data->SetAllowOtherKinds(false);
+            }
         }
 
         if (!actual || actualSettings.Compression != expectedSettings.Compression) {

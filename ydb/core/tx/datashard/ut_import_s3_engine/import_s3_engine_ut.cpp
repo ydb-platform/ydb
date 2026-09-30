@@ -596,7 +596,32 @@ TVector<TValueCase> MakeValueCases() {
         };
     };
 
+    // Bool is a byte in the file: only 0 and 1 are values of the type.
+    const auto makeBoolCase = [](ui8 invalid) {
+        return TValueCase{
+            .TypeId = NScheme::NTypeIds::Bool,
+            .PgTypeId = Nothing(),
+            .Valid = MakeNumericArray<arrow::UInt8Type>(arrow::uint8(), {0, 1, 0, 1}),
+            .Invalid = MakeNumericArray<arrow::UInt8Type>(arrow::uint8(), {0, 1, 0, invalid}),
+        };
+    };
+
+    // The column is Decimal(22,9), and the file holds 128 bits whatever the
+    // precision is: the values of the type are those of 22 digits, the
+    // infinities and NaN.
+    const TInt128 maxDecimal = GetBounds(NScheme::DECIMAL_PRECISION).second - 1;
+    const auto makeDecimalCase = [&](TInt128 invalid) {
+        return TValueCase{
+            .TypeId = NScheme::NTypeIds::Decimal,
+            .PgTypeId = Nothing(),
+            .Valid = MakeDecimalArray({0, maxDecimal, -maxDecimal, Inf(), -Inf(), Nan()}),
+            .Invalid = MakeDecimalArray({0, maxDecimal, -maxDecimal, invalid}),
+        };
+    };
+
     return {
+        makeBoolCase(2),
+        makeBoolCase(255),
         MakeNumericCase<arrow::UInt16Type>(NScheme::NTypeIds::Date, arrow::uint16(), MAX_DATE - 1, MAX_DATE),
         // uint32 is stored as INT64 and cast back by the importer
         MakeNumericCase<arrow::UInt32Type>(NScheme::NTypeIds::Datetime, arrow::uint32(), MAX_DATETIME - 1, MAX_DATETIME),
@@ -608,12 +633,10 @@ TVector<TValueCase> MakeValueCases() {
         MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Datetime64, arrow::int64(), MAX_DATETIME64, MAX_DATETIME64 + 1),
         MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Timestamp64, arrow::int64(), MAX_TIMESTAMP64, MAX_TIMESTAMP64 + 1),
         MakeNumericCase<arrow::Int64Type>(NScheme::NTypeIds::Interval64, arrow::int64(), MAX_INTERVAL64, MAX_INTERVAL64 + 1),
-        TValueCase{
-            .TypeId = NScheme::NTypeIds::Decimal,
-            .PgTypeId = Nothing(),
-            .Valid = MakeDecimalArray({0, 1, 2, Nan()}),
-            .Invalid = MakeDecimalArray({0, 1, 2, Err()}),
-        },
+        makeDecimalCase(Err()),
+        // one digit more than the column has
+        makeDecimalCase(maxDecimal + 1),
+        makeDecimalCase(-maxDecimal - 1),
         makeStringCase(NScheme::NTypeIds::Utf8, "valid", invalidUtf8),
         makeStringCase(NScheme::NTypeIds::Json, json, "not-json"),
         makeBinaryCase(NScheme::NTypeIds::Yson, "{key=value}", "{key="),

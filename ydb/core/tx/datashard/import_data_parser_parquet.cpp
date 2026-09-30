@@ -8,6 +8,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
@@ -44,6 +45,15 @@ bool IsValidCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
     }
 
     switch (typeInfo.GetTypeId()) {
+    case NScheme::NTypeIds::Bool:
+        // a byte in the file, which can hold more than false and true
+        return cell.AsValue<ui8>() <= 1;
+    case NScheme::NTypeIds::Decimal: {
+        // 128 bits in the file, which can hold more digits than the column has
+        const auto value = cell.AsValue<NYql::NDecimal::TInt128>();
+        return NYql::NDecimal::IsNan(value) || NYql::NDecimal::IsInf(value)
+            || NYql::NDecimal::IsNormal(value, typeInfo.GetDecimalType().GetPrecision());
+    }
     case NScheme::NTypeIds::DyNumber:
         return NDyNumber::IsValidDyNumber(cell.AsBuf());
     case NScheme::NTypeIds::JsonDocument:

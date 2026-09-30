@@ -1,6 +1,8 @@
 items:
 - name: Добавление групп хранения
   href: adding_storage_groups.md
+- name: Удаление групп хранения из базы данных
+  href: removing_storage_groups.md
 - name: Безопасный рестарт и выключение узлов
   href: node_restarting.md
 - name: Включение и выключение Scrubbing

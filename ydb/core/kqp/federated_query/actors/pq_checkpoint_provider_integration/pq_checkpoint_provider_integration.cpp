@@ -263,6 +263,7 @@ class TPqSourceRecoveryActor final : public TPqCheckpointActorBase<TPqSourceReco
     using TEvent = NYdb::NTopic::TReadSessionEvent;
 
     static constexpr ui64 READ_SESSION_MEMORY = 1_MB; // SDK minimum for read sessions.
+    static constexpr TDuration PREPARATION_TIMEOUT = TDuration::Seconds(30);
 
     struct TEvPrivate {
         enum EEv : ui32 {
@@ -326,6 +327,7 @@ public:
 
     void Bootstrap() {
         Become(&TThis::StateWork);
+        Schedule(PREPARATION_TIMEOUT, new TEvents::TEvWakeup());
 
         if (Partitions.empty()) {
             Finish({});
@@ -343,6 +345,7 @@ public:
         hFunc(TEvPrivate::TEvPartition, Handle);
         hFunc(TEvPrivate::TEvRewind, Handle);
         hFunc(TEvPrivate::TEvReadReady, Handle);
+        cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
     )
 
 private:
@@ -422,6 +425,10 @@ private:
         WaitForRead(index);
     }
 
+    void HandleTimeout() {
+        Finish({TIssue(TStringBuilder() << "Cannot prepare topic source recovery for " << Topic << ": timed out after " << PREPARATION_TIMEOUT)});
+    }
+
     void PreparePartition(size_t index, const TPartitionInfo& description) {
         const auto& stats = description.GetPartitionStats();
         Y_ENSURE(stats, "Topic partition statistics are unavailable");
@@ -442,6 +449,14 @@ private:
         if (partition.Offset) {
             Y_ENSURE(*partition.Offset >= partition.StartOffset && *partition.Offset <= partition.EndOffset,
                 "Required checkpoint offset is unavailable for partition " << partition.Id);
+        }
+
+        if (partition.StartOffset == partition.EndOffset) {
+            Y_ENSURE(partition.Offset || !partition.StartOffset,
+                "Required history has expired for partition " << partition.Id
+                    << ": no retained messages at recovery timestamp " << TInstant::MilliSeconds(partition.TimestampMs));
+            Complete(index);
+            return;
         }
 
         if (!Consumer.empty()) {
@@ -469,7 +484,7 @@ private:
 
     void CheckHistory(size_t index, bool rewound) {
         auto& partition = Partitions[index];
-        if ((partition.Offset && partition.StartOffset == partition.EndOffset) || (!rewound && (partition.Offset || !partition.StartOffset))) {
+        if (!rewound && (partition.Offset || !partition.StartOffset)) {
             Complete(index);
             return;
         }

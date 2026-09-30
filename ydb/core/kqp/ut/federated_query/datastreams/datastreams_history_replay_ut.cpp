@@ -233,6 +233,33 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         ReadTopicMessages("historyOutput", {"live"});
     }
 
+    Y_UNIT_TEST_TWIN_F(OutputFromRejectsDisabledCheckpoints, ReadFrom, THistoryReplayFixture) {
+        Init(/* enabled */ true, ReadFrom);
+        CreateTopic("historyOutput");
+        const std::string body = R"( AS DO BEGIN
+            PRAGMA ydb.DisableCheckpoints = "TRUE";
+            INSERT INTO historySource.historyOutput SELECT Data FROM historySource.historyInput
+        END DO)";
+        const std::string outputFrom = "FORCE = TRUE, OUTPUT_FROM = Timestamp(\"2025-05-04T11:30:34Z\")"
+            + std::string(ReadFrom ? ", READ_FROM = EARLIEST" : "");
+        ExecQuery("CREATE STREAMING QUERY historyQuery WITH (RUN = FALSE)" + body);
+        for (const auto prefix : {
+            "CREATE STREAMING QUERY rejectedOutput WITH (",
+            "ALTER STREAMING QUERY historyQuery SET (",
+            "CREATE OR REPLACE STREAMING QUERY historyQuery WITH (",
+        }) {
+            ExecQuery(std::string(prefix) + "RUN = TRUE, " + outputFrom + ")" + body,
+                NYdb::EStatus::GENERIC_ERROR, "Cannot use setting OUTPUT_FROM without checkpoints");
+        }
+
+        ExecQuery("CREATE STREAMING QUERY withoutCheckpoints" + body);
+        WriteTopicMessage("historyInput", "live");
+        ReadTopicMessages("historyOutput", {"live"});
+        // Validate OUTPUT_FROM even when ALTER supplies no query text.
+        ExecQuery("ALTER STREAMING QUERY withoutCheckpoints SET (" + outputFrom + ")",
+            NYdb::EStatus::GENERIC_ERROR, "Cannot use setting OUTPUT_FROM without checkpoints");
+    }
+
     Y_UNIT_TEST_F(OutputFromWithReadFromOnCreateAlterAndReplace, THistoryReplayFixture) {
         Init(/* enabled */ true, /* readFrom */ true);
         const auto base = TInstant::Seconds(TInstant::Now().Seconds());
@@ -306,6 +333,29 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         WaitCheckpoint();
         ExecQuery("CREATE OR REPLACE STREAMING QUERY historyQuery AS " + Body(2, "replaced"));
         WaitMetric("replaced", base.Seconds() + 18, 2);
+    }
+
+    Y_UNIT_TEST_F(RemovingWatermarksReplaysEarlyArrivingEvents, THistoryReplayFixture) {
+        Init();
+        ExecQuery("CREATE STREAMING QUERY historyQuery AS " + Body(3, "early-old"));
+        // These records are accepted by the watermark generator but their write
+        // times precede the event-time frontier saved in the old checkpoint.
+        const auto base = TInstant::Seconds(TInstant::Now().Seconds()) + TDuration::Minutes(2);
+        for (ui32 second = 0; second < 10; ++second) {
+            WriteEvent(base + TDuration::Seconds(second));
+        }
+        WriteEvent(base + TDuration::Seconds(10), "watermark");
+        WaitMetric("early-old", base.Seconds() + 5, 3);
+        WaitCheckpoint();
+
+        ExecQuery(R"(ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE) AS DO BEGIN
+            INSERT INTO historySink.`history-replay/tests/custom`
+            SELECT CAST(ts AS Timestamp) AS ts, 1u AS value, "early-new" AS sensor
+            FROM historySource.historyInput WITH (
+                FORMAT = json_each_row, SCHEMA (ts String NOT NULL, k String NOT NULL)
+            ) WHERE k = "data"
+        END DO)");
+        WaitMetric("early-new", base.Seconds() + 6, 1);
     }
 
     Y_UNIT_TEST_TWIN_F(DeduplicatingPqSinkRequiresForce, CompressedGraph, THistoryReplayFixture) {

@@ -1249,7 +1249,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
         UNIT_ASSERT_VALUES_EQUAL(ReplayWindowStartIndex(plan, 3), 57);
     }
 
-    Y_UNIT_TEST(AutomaticReplayToStatelessOutputUsesAvailableWatermarks) {
+    Y_UNIT_TEST(AutomaticReplayToStatelessOutputPreservesEarlyEventAllowance) {
         TReplayTestGraph old;
         old.Source();
         old.Hop(2, 1, 10 * Second, 30 * Second, 600 * Second);
@@ -1260,7 +1260,7 @@ Y_UNIT_TEST_SUITE(THistoryReplayPlan) {
             TStateLoadPlan plan;
             NYql::TIssues issues;
             UNIT_ASSERT_C(MakeHistoryReplayPlan(old.Params(), next.Params(), old.States, plan, issues), issues.ToString());
-            UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), (watermarkGenerator ? 300 : 600) * Second);
+            UNIT_ASSERT_VALUES_EQUAL(ReplayReadTime(plan, 1), 300 * Second);
         }
     }
 
@@ -1715,7 +1715,7 @@ public:
         ythrow yexception() << "Unexpected DescribeConsumer";
     }
     std::shared_ptr<NYdb::NTopic::IReadSession> CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) override {
-        UNIT_ASSERT(FirstRetainedWriteTimeUs || Expired);
+        UNIT_ASSERT(FirstRetainedWriteTimeUs);
         UNIT_ASSERT(settings.WithoutConsumer_);
         ++Reads;
         Driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig{});
@@ -1832,7 +1832,7 @@ void CheckResolver(bool force, bool expired, bool enabled = true, TMaybe<ui64> f
         return;
     }
     UNIT_ASSERT_VALUES_EQUAL(client->Describes, 1);
-    UNIT_ASSERT_VALUES_EQUAL(client->Reads, firstRetainedWriteTimeUs || expired ? 1 : 0);
+    UNIT_ASSERT_VALUES_EQUAL(client->Reads, firstRetainedWriteTimeUs ? 1 : 0);
     UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Result, !expired || (force && !explicitOutputStartTime), result->Get()->Issues.ToString());
     if (!expired) {
         UNIT_ASSERT(result->Get()->Issues.Empty());
@@ -1919,7 +1919,7 @@ void CheckFederatedResolver(TStateLoadPlanResolverSettings settings = {}, bool e
             UNIT_ASSERT_VALUES_EQUAL(client->DescribedPartitions[i].first, topicPath.StartsWith('/') ? topicPath : database + "/" + topicPath);
             UNIT_ASSERT_C(client->DescribedPartitions[i].second < (client == east ? 2 : 3), client->DescribedPartitions[i].second);
         }
-        UNIT_ASSERT_VALUES_EQUAL(client->Reads, readFirstRetained || client->Expired ? partitions : 0);
+        UNIT_ASSERT_VALUES_EQUAL(client->Reads, readFirstRetained ? partitions : 0);
     }
     const bool fallback = settings.Force && !settings.OutputStartTimeUs;
     UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Result, !expired || fallback, result->Get()->Issues.ToString());

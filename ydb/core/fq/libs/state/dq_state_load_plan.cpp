@@ -526,7 +526,7 @@ public:
         PropagateBounds();
     }
 
-    TStateLoadPlan BuildReplayTaskPlans(const bool useSourceDisposition) const {
+    TStateLoadPlan BuildReplayTaskPlans(const bool useSourceDisposition, const bool fromCheckpoint) const {
         using namespace NKikimr::NMiniKQL;
         using namespace NYql::NDqProto::NDqStateLoadPlan;
 
@@ -569,7 +569,9 @@ public:
 
                 if (task.HasInputBound()) {
                     const auto inputBound = task.GetInputBoundUnsafe();
-                    const auto earlyLimit = task.WatermarkAvailable ? WATERMARK_GENERATOR_EARLY_LIMIT : 0;
+                    // Checkpoint bounds originate in the old graph's event time,
+                    // even when the new graph has removed its watermark generator.
+                    const auto earlyLimit = fromCheckpoint || task.WatermarkAvailable ? WATERMARK_GENERATOR_EARLY_LIMIT : 0;
                     YQL_ENSURE(inputBound >= earlyLimit, "History replay time underflow: required input precedes timestamp zero");
                     state.SetStartingMessageTimestampMs((inputBound - earlyLimit) / 1000);
                 } else {
@@ -744,7 +746,7 @@ bool MakeHistoryReplayPlan(
         TReplayGraph previous(src);
         TReplayGraph next(dst);
         next.ApplyReplayProgress(previous.ReadReplayProgress(states));
-        plan = next.BuildReplayTaskPlans(/* useSourceDisposition */ false);
+        plan = next.BuildReplayTaskPlans(/* useSourceDisposition */ false, /* fromCheckpoint */ true);
         return true;
     } catch (const std::exception& e) {
         issues.AddIssue(NYql::TIssue(TStringBuilder() << "Cannot replay streaming query history: " << e.what()));
@@ -758,7 +760,7 @@ bool MakeOutputStartTimeReplayPlan(const NProto::TGraphParams& tasks, ui64 outpu
 
         TReplayGraph graph(tasks);
         graph.PropagateExplicitOutputBound(outputStartTimeUs);
-        plan = graph.BuildReplayTaskPlans(useSourceDisposition);
+        plan = graph.BuildReplayTaskPlans(useSourceDisposition, /* fromCheckpoint */ false);
         return true;
     } catch (const std::exception& e) {
         issues.AddIssue(NYql::TIssue(TStringBuilder() << "Cannot start from OUTPUT_FROM: " << e.what()));

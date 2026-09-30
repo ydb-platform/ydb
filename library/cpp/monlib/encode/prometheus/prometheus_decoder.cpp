@@ -233,7 +233,14 @@ namespace NMonitoring {
                 if (keyword == TStringBuf("TYPE")) {
                     SkipSpaces();
 
-                    TStringBuf nextName = ReadTokenAsMetricName();
+                    TString decodedName;
+                    TStringBuf nextName;
+                    if (CurrentByte_ == '"') {
+                        decodedName = ReadQuotedString();
+                        nextName = decodedName;
+                    } else {
+                        nextName = ReadTokenAsMetricName();
+                    }
                     Y_PARSER_ENSURE(!nextName.empty(), "invalid metric name");
 
                     SkipSpaces();
@@ -248,7 +255,7 @@ namespace NMonitoring {
                         if (!HistogramBuilder_.Empty()) {
                             ConsumeHistogram();
                         }
-                        HistogramBuilder_.SetName(nextName);
+                        HistogramBuilder_.SetName(emplaceResult.first->first);
                     }
                 } else {
                     // skip HELP and general comments
@@ -260,10 +267,32 @@ namespace NMonitoring {
 
             // metric_name [labels] value [timestamp]
             void ParseMetric() {
-                TStringBuf name = ReadTokenAsMetricName();
-                SkipSpaces();
+                TString decodedName;
+                TStringBuf name;
+                TLabelsMap labels;
+                if (CurrentByte_ == '{') {
+                    SkipExpectedChar('{');
+                    SkipSpaces();
 
-                TLabelsMap labels = ReadLabels();
+                    Y_PARSER_ENSURE(CurrentByte_ == '"', "expected quoted metric name");
+                    decodedName = ReadQuotedString();
+                    name = decodedName;
+                    Y_PARSER_ENSURE(!name.empty(), "invalid metric name");
+                    SkipSpaces();
+
+                    if (CurrentByte_ == ',') {
+                        SkipExpectedChar(',');
+                        SkipSpaces();
+                    } else {
+                        Y_PARSER_ENSURE(CurrentByte_ == '}', "expected ',' or '}' after quoted metric name");
+                    }
+                    labels = ReadLabels(true);
+                } else {
+                    name = ReadTokenAsMetricName();
+                    Y_PARSER_ENSURE(!name.empty(), "invalid metric name");
+                    SkipSpaces();
+                    labels = ReadLabels();
+                }
                 SkipSpaces();
 
                 double value = ParseGoDouble(ReadToken());
@@ -304,7 +333,7 @@ namespace NMonitoring {
 
                             if (!HistogramBuilder_.Empty() && !HistogramBuilder_.Same(baseName, labels)) {
                                 ConsumeHistogram();
-                                HistogramBuilder_.SetName(baseName);
+                                HistogramBuilder_.SetName(SeenTypes_.find(baseName)->first);
                             }
 
                             TBucketValue bucketVal;
@@ -354,25 +383,32 @@ namespace NMonitoring {
             }
 
             // { name = "value", name2 = "value2", }
-            TLabelsMap ReadLabels() {
+            TLabelsMap ReadLabels(bool openingBraceConsumed = false) {
                 TLabelsMap labels;
-                if (CurrentByte_ != '{') {
-                    return labels;
+                if (!openingBraceConsumed) {
+                    if (CurrentByte_ != '{') {
+                        return labels;
+                    }
+                    SkipExpectedChar('{');
+                    SkipSpaces();
                 }
 
-                SkipExpectedChar('{');
-                SkipSpaces();
-
                 while (CurrentByte_ != '}') {
-                    TStringBuf name = ReadTokenAsLabelName();
+                    TString name;
+                    if (CurrentByte_ == '"') {
+                        name = ReadQuotedString();
+                    } else {
+                        name = ReadTokenAsLabelName();
+                    }
+                    Y_PARSER_ENSURE(!name.empty(), "invalid label name");
                     SkipSpaces();
 
                     SkipExpectedChar('=');
                     SkipSpaces();
 
-                    TString value = ReadTokenAsLabelValue();
+                    TString value = ReadQuotedString();
                     SkipSpaces();
-                    labels.emplace(name, value);
+                    labels.emplace(std::move(name), std::move(value));
 
                     if (CurrentByte_ == ',') {
                         SkipExpectedChar(',');
@@ -475,28 +511,28 @@ namespace NMonitoring {
                 return TokenFromPos(begin);
             }
 
-            TString ReadTokenAsLabelValue() {
-                TString labelValue;
+            TString ReadQuotedString() {
+                TString value;
 
                 SkipExpectedChar('"');
                 for (ui32 i = 0; i < MAX_LABEL_VALUE_LEN; i++) {
                     switch (CurrentByte_) {
                         case '"':
                             SkipExpectedChar('"');
-                            return labelValue;
+                            return value;
 
                         case '\n':
-                            Y_PARSER_FAIL("label value contains unescaped new-line");
+                            Y_PARSER_FAIL("quoted string contains unescaped new-line");
 
                         case '\\':
                             ReadNextByte();
                             switch (CurrentByte_) {
                                 case '"':
                                 case '\\':
-                                    labelValue.append(CurrentByte_);
+                                    value.append(CurrentByte_);
                                     break;
                                 case 'n':
-                                    labelValue.append('\n');
+                                    value.append('\n');
                                     break;
                                 default:
                                     Y_PARSER_FAIL("invalid escape sequence '" << CurrentByte_ << '\'');
@@ -504,14 +540,14 @@ namespace NMonitoring {
                             break;
 
                         default:
-                            labelValue.append(CurrentByte_);
+                            value.append(CurrentByte_);
                             break;
                     }
 
                     ReadNextByte();
                 }
 
-                Y_PARSER_FAIL("trying to parse too long label value, size >= " << MAX_LABEL_VALUE_LEN);
+                Y_PARSER_FAIL("trying to parse too long quoted string, size >= " << MAX_LABEL_VALUE_LEN);
             }
 
             TStringBuf TokenFromPos(size_t begin) {

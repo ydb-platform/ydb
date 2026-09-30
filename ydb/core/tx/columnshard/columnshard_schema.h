@@ -487,10 +487,10 @@ struct Schema: NIceDb::Schema {
 
         struct LockId: Column<2, NScheme::NTypeIds::Uint64> {};
 
-        struct Broken: Column<3, NScheme::NTypeIds::Bool> {};
+        struct Broken_Deprecated: Column<3, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<TxId, LockId>;
-        using TColumns = TableColumns<TxId, LockId, Broken>;
+        using TColumns = TableColumns<TxId, LockId, Broken_Deprecated>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {

@@ -2910,6 +2910,10 @@ void TCms::ProcessPermissionRequest(TEvCms::TEvPermissionRequest::TPtr &ev,
     const TErrorInfo *precheckError = nullptr;
     if (nbs2Result && nbs2Result->Status != TStatus::ALLOW) {
         error = GetNbs2MaintenanceError(*nbs2Result, ctx);
+        // Failed task creation must leave its uid available for a retry.
+        if (rec.HasMaintenanceTaskId() && error.Code == TStatus::ERROR_TEMP) {
+            return ReplyWithError<TEvCms::TEvPermissionResponse>(ev, error.Code, error.Reason.GetMessage(), ctx);
+        }
         precheckError = &error;
     }
 

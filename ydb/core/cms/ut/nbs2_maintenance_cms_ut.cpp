@@ -866,6 +866,64 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 9);
     }
 
+    Y_UNIT_TEST(CreateMaintenanceTaskTimeoutAndRetry) {
+        TCmsFixture fixture;
+        const TString taskId = "nbs2-create-retry";
+        const auto create = [&] {
+            auto request = MakeHolder<TEvCms::TEvCreateMaintenanceTaskRequest>();
+            request->Record.SetUserSID(fixture.User);
+            auto& apiRequest = *request->Record.MutableRequest();
+            auto& options = *apiRequest.mutable_task_options();
+            options.set_task_uid(taskId);
+            options.set_availability_mode(Ydb::Maintenance::AVAILABILITY_MODE_FORCE);
+            AddActionGroups(apiRequest,
+                MakeActionGroup(MakeLockAction(fixture.Env.GetNodeId(0), fixture.Duration)));
+            return fixture.Send(request.Release(), 0);
+        };
+        const auto getTask = [&](Ydb::StatusIds::StatusCode status) {
+            auto request = MakeHolder<TEvCms::TEvGetMaintenanceTaskRequest>();
+            request->Record.MutableRequest()->set_task_uid(taskId);
+            return fixture.Response<TEvCms::TEvGetMaintenanceTaskResponse>(
+                fixture.Send(request.Release(), 0), status);
+        };
+
+        const auto first = create();
+        const auto timedOut = fixture.WaitForCheck(1, first);
+        fixture.CheckNodes(0, {0});
+        fixture.Complete(timedOut, EOutcome::Timeout);
+        fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(first, Ydb::StatusIds::UNAVAILABLE);
+        getTask(Ydb::StatusIds::BAD_REQUEST);
+        fixture.Permissions(0);
+        const auto list = fixture.Send(MakeManageRequestRequest(
+            fixture.User, NKikimrCms::TManageRequestRequest::LIST, false).Release());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Response<TEvCms::TEvManageRequestResponse>(list, TStatus::OK).RequestsSize(), 0);
+
+        // Retry the same uid: the failed attempt must not reserve it.
+        const auto retry = create();
+        const auto allowed = fixture.WaitForCheck(2, retry);
+        fixture.CheckNodes(1, {0});
+        fixture.Permissions(0);
+        fixture.Complete(allowed, EOutcome::Allow);
+        const auto response = fixture.Response<TEvCms::TEvMaintenanceTaskResponse>(retry, Ydb::StatusIds::SUCCESS);
+        const auto& result = response.GetResult();
+        UNIT_ASSERT_VALUES_EQUAL(result.task_uid(), taskId);
+        UNIT_ASSERT_VALUES_EQUAL(result.action_group_states_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.action_group_states(0).action_states_size(), 1);
+        const auto& action = result.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(action.status(), Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
+        UNIT_ASSERT_VALUES_EQUAL(action.action().lock_action().scope().node_id(), fixture.Env.GetNodeId(0));
+        const auto permissions = fixture.Permissions(1);
+        UNIT_ASSERT_VALUES_EQUAL(action.action_uid().task_uid(), taskId);
+        UNIT_ASSERT_VALUES_EQUAL(action.action_uid().action_id(), permissions.GetPermissions(0).GetId());
+        const auto stored = getTask(Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(stored.GetResult().action_group_states_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stored.GetResult().action_group_states(0).action_states_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stored.GetResult().action_group_states(0).action_states(0).SerializeAsString(),
+            action.SerializeAsString());
+        fixture.Drain();
+        UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 2);
+    }
+
     Y_UNIT_TEST(CreateMaintenanceTaskBatchAndDryRun) {
         struct TCase {
             EOutcome Outcome;

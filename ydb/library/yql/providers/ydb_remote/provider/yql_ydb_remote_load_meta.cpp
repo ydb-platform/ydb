@@ -5,7 +5,6 @@
 #include <ydb/library/yql/providers/ydb_remote/expr_nodes/yql_ydb_remote_expr_nodes.h>
 #include <ydb/library/yql/providers/native/operation_context.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_control.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
@@ -54,16 +53,16 @@ bool ParseRead(const TYdbRemoteRead& read, TString& table, TExprContext& ctx) {
     return true;
 }
 
-// Each SDK phase owns this reservation until the transport and all SDK callbacks
-// have released it. Advancing on the user-visible result future is insufficient:
-// the SDK can still own the decoded response after fulfilling that future.
-struct TMetadataRequestLifetime {
+// Each provider callback retains its phase reservation. The existing SDK can
+// still own decoded responses after invoking/destroying this callback; this is
+// admission control, not an exact accounting of SDK or transport memory.
+struct TMetadataCallbackLease {
     std::shared_ptr<void> Memory;
-    NThreading::TPromise<void> Quiesced = NThreading::NewPromise<void>();
+    NThreading::TPromise<void> Released = NThreading::NewPromise<void>();
 
-    ~TMetadataRequestLifetime() {
+    ~TMetadataCallbackLease() {
         Memory.reset();
-        Quiesced.TrySetValue();
+        Released.TrySetValue();
     }
 };
 
@@ -86,8 +85,9 @@ public:
     }
 
     void Cancel() {
+        // Stop admission and subsequent provider phases. An in-flight Table RPC
+        // retains this batch until its callback or the original RPC deadline.
         Cancellation_.Cancel();
-        Control_->Cancel();
     }
 
     NThreading::TFuture<void> GetFuture() const {
@@ -156,9 +156,9 @@ private:
         }
     }
 
-    // There is at most one admitted SDK operation for this transformer. The next
-    // phase begins only after its predecessor's lifetime lease is released.
-    void Request(std::function<void(std::shared_ptr<TMetadataRequestLifetime>)> launch,
+    // Provider phases are serialized until the preceding callback releases its
+    // lease. SDK-internal response teardown can overlap the next phase.
+    void Request(std::function<void(std::shared_ptr<TMetadataCallbackLease>)> launch,
                  std::function<void()> next, bool cleanup = false) {
         if (!cleanup && !Continue()) {
             return;
@@ -169,12 +169,12 @@ private:
                 .Subscribe([self, launch = std::move(launch), next = std::move(next), cleanup](
                     const NThreading::TFuture<std::shared_ptr<void>>& admitted) {
                     try {
-                        auto lifetime = std::make_shared<TMetadataRequestLifetime>();
+                        auto lifetime = std::make_shared<TMetadataCallbackLease>();
                         lifetime->Memory = admitted.GetValue();
                         if (!cleanup && !self->Continue()) {
                             return;
                         }
-                        lifetime->Quiesced.GetFuture().Subscribe([self, next, cleanup](const NThreading::TFuture<void>&) {
+                        lifetime->Released.GetFuture().Subscribe([self, next, cleanup](const NThreading::TFuture<void>&) {
                             if (cleanup || self->Continue()) {
                                 next();
                             }
@@ -196,11 +196,11 @@ private:
 
     void CreateSession() {
         auto self = shared_from_this();
-        Request([self](std::shared_ptr<TMetadataRequestLifetime> lifetime) {
+        Request([self](std::shared_ptr<TMetadataCallbackLease> lifetime) {
             const auto& cluster = self->State_->Clusters.at(self->Requests[self->Index_].Key.first);
             const auto credentials = self->State_->CredentialsFactory->Create(
                 self->State_->Tokens.at(self->Requests[self->Index_].Key.first), false);
-            self->Client_ = std::make_shared<NYdb::NTable::TTableClient>(self->State_->Driver,
+            self->Client_ = std::make_shared<NYdb::NTable::TTableClient>(cluster.UseTls ? self->State_->TlsDriver : self->State_->Driver,
                 NYdb::NTable::TClientSettings()
                     .Database(cluster.Database)
                     .DiscoveryEndpoint(cluster.Endpoint)
@@ -213,9 +213,7 @@ private:
                 return;
             }
             self->Client_->CreateSession(NYdb::NTable::TCreateSessionSettings()
-                .ClientTimeout(remaining).OperationTimeout(remaining)
-                .AutoCloseSession(false)
-                .RequestControl(self->Control_).RequestLifetime(lifetime).BoundedResponse(true))
+                .ClientTimeout(remaining).OperationTimeout(remaining))
                 .Subscribe([self, lifetime](const NYdb::NTable::TAsyncCreateSessionResult& future) {
                     Y_UNUSED(lifetime);
                     try {
@@ -234,7 +232,7 @@ private:
 
     void Describe() {
         auto self = shared_from_this();
-        Request([self](std::shared_ptr<TMetadataRequestLifetime> lifetime) {
+        Request([self](std::shared_ptr<TMetadataCallbackLease> lifetime) {
             const auto& key = self->Requests[self->Index_].Key;
             const auto& cluster = self->State_->Clusters.at(key.first);
             const TString tablePath = key.second.StartsWith('/') ? key.second : cluster.Database + "/" + key.second;
@@ -243,12 +241,15 @@ private:
                 return;
             }
             self->Session_->DescribeTable(tablePath, NYdb::NTable::TDescribeTableSettings()
-                .ClientTimeout(remaining).OperationTimeout(remaining)
-                .RequestControl(self->Control_).RequestLifetime(lifetime).BoundedResponse(true))
+                .ClientTimeout(remaining).OperationTimeout(remaining))
                 .Subscribe([self, lifetime](const NYdb::NTable::TAsyncDescribeTableResult& future) {
                     Y_UNUSED(lifetime);
                     try {
                         const auto& result = future.GetValue();
+                        if (self->Context_.Cancellation.IsCancellationRequested() ||
+                            TInstant::Now() >= self->Context_.Deadline) {
+                            return; // Released -> Continue reports cancellation/deadline.
+                        }
                         if (result.IsSuccess()) {
                             ExtractMetadataSchema(NYdb::TProtoAccessor::GetProto(result.GetTableDescription()),
                                 self->Requests[self->Index_].Schema, self->Error);
@@ -285,19 +286,19 @@ private:
             self->AcquireSchema();
         };
         if (!Session_ || Context_.Cancellation.IsCancellationRequested() || TInstant::Now() >= Context_.Deadline) {
-            // AutoCloseSession is disabled: cancellation cannot start an
-            // unaccounted destructor RPC. A cancelled session expires remotely.
+            // No new provider RPC is started after cancellation/deadline. The
+            // existing SDK may issue its own DeleteSession on destruction; that
+            // cleanup has an SDK timeout and is outside this reservation.
             finish();
             return;
         }
-        Request([self](std::shared_ptr<TMetadataRequestLifetime> lifetime) {
+        Request([self](std::shared_ptr<TMetadataCallbackLease> lifetime) {
             const auto remaining = self->RemainingTimeout(TDuration::Seconds(5));
             if (!remaining) {
                 return;
             }
             self->Session_->Close(NYdb::NTable::TCloseSessionSettings()
-                .ClientTimeout(remaining).OperationTimeout(remaining)
-                .RequestControl(self->Control_).RequestLifetime(lifetime).BoundedResponse(true))
+                .ClientTimeout(remaining).OperationTimeout(remaining))
                 .Subscribe([self, lifetime](const NYdb::TAsyncStatus& future) {
                     Y_UNUSED(lifetime);
                     try {
@@ -316,7 +317,6 @@ private:
     const TState::TPtr State_;
     NThreading::TCancellationTokenSource Cancellation_;
     const NNative::TOperationContext Context_;
-    const std::shared_ptr<NYdb::TRequestControl> Control_ = std::make_shared<NYdb::TRequestControl>();
     NThreading::TPromise<void> Done_ = NThreading::NewPromise<void>();
     std::shared_ptr<NYdb::NTable::TTableClient> Client_;
     std::optional<NYdb::NTable::TSession> Session_;
@@ -484,7 +484,8 @@ bool ExtractMetadataSchema(const Ydb::Table::DescribeTableResult& description,
             return false;
         }
     }
-    // Check bounds before copying names/types out of the bounded SDK response.
+    // Bound the provider-owned copy. SDK protobuf decoding has already happened
+    // and is not covered by these schema limits.
     schema.Columns.reserve(description.columns_size());
     for (const auto& column : description.columns()) {
         const auto& type = column.type();

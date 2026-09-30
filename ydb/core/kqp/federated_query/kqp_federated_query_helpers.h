@@ -42,7 +42,9 @@ namespace NKikimr::NKqp {
     ///
     std::shared_ptr<NYdb::TDriver> MakeSharedYdbDriverWithStop(std::unique_ptr<NYdb::TDriver> driver);
 
-    // Separate from the topic driver: the read source requires a bounded gRPC response.
+    // Separate from the topic driver, with a gRPC message-size limit. TLS and
+    // plaintext clients require independently constructed drivers: the existing
+    // SDK channel pool does not include TLS settings in its cache identity.
     std::shared_ptr<NYdb::TDriver> MakeNativeYdbDriver();
 
     NYql::IPqGatewayFactory::TPtr MakePqGatewayFactory(const std::shared_ptr<NYdb::TDriver>& driver, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const std::optional<TLocalTopicClientSettings>& localTopicClientSettings = std::nullopt);
@@ -59,6 +61,7 @@ namespace NKikimr::NKqp {
         // gRPC contexts, preventing deadlocks during graceful shutdown.
         std::shared_ptr<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::TDriver> NativeYdbDriver;
+        std::shared_ptr<NYdb::TDriver> NativeYdbTlsDriver;
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
@@ -127,6 +130,7 @@ namespace NKikimr::NKqp {
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::TDriver> NativeYdbDriver;
+        std::shared_ptr<NYdb::TDriver> NativeYdbTlsDriver;
         std::optional<TLocalTopicClientSettings> LocalTopicClientSettings;
         TScriptExecutionSettings ScriptExecutionSettings;
     };
@@ -168,6 +172,7 @@ namespace NKikimr::NKqp {
             , ActorSystemPtr(actorSystemPtr)
             , Driver(driver)
             , NativeYdbDriver(MakeNativeYdbDriver())
+            , NativeYdbTlsDriver(MakeNativeYdbDriver())
         {
         }
 
@@ -177,7 +182,7 @@ namespace NKikimr::NKqp {
 
         std::optional<TKqpFederatedQuerySetup> Make(NActors::TActorSystem*) override {
             return TKqpFederatedQuerySetup{
-                Driver, NativeYdbDriver, HttpGateway, ConnectorClient, CredentialsFactory,
+                Driver, NativeYdbDriver, NativeYdbTlsDriver, HttpGateway, ConnectorClient, CredentialsFactory,
                 DatabaseAsyncResolver, S3GatewayConfig, GenericGatewayConfig,
                 YtGatewayConfig, YtGateway, SolomonGatewayConfig,
                 ComputationFactory, S3ReadActorFactoryConfig,
@@ -208,6 +213,7 @@ namespace NKikimr::NKqp {
         NKikimr::TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
         std::shared_ptr<NYdb::TDriver> Driver;
         std::shared_ptr<NYdb::TDriver> NativeYdbDriver;
+        std::shared_ptr<NYdb::TDriver> NativeYdbTlsDriver;
         TScriptExecutionSettings ScriptExecutionSettings;
     };
 

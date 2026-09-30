@@ -64,17 +64,21 @@ public:
         }
     }
 
-    void WaitFor(TTag& expected) {
-        const auto deadline = std::chrono::system_clock::now() + std::chrono::seconds(10);
+    bool WaitFor(TTag& expected, TDuration timeout = WaitTimeout, bool required = true) {
+        const auto deadline = std::chrono::system_clock::now() + std::chrono::microseconds(timeout.MicroSeconds());
         while (!expected.Complete) {
             void* tag = nullptr;
             bool ok = false;
-            UNIT_ASSERT(Queue_->AsyncNext(&tag, &ok, deadline) == grpc::CompletionQueue::GOT_EVENT);
+            if (Queue_->AsyncNext(&tag, &ok, deadline) != grpc::CompletionQueue::GOT_EVENT) {
+                UNIT_ASSERT(!required);
+                return false;
+            }
             auto& received = *static_cast<TTag*>(tag);
             UNIT_ASSERT(!received.Complete);
             received.Complete = true;
             received.Ok = ok;
         }
+        return true;
     }
 
     void ReturnSession() {
@@ -89,6 +93,21 @@ public:
         Create.Writer.Finish(response, grpc::Status::OK, &Create.Finished);
         WaitFor(Create.Finished);
         UNIT_ASSERT(Create.Finished.Ok);
+    }
+
+    void ReturnSchema() {
+        WaitFor(Describe.Accepted);
+        Ydb::Table::DescribeTableResult description;
+        auto* column = description.add_columns();
+        column->set_name("value");
+        column->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        Ydb::Table::DescribeTableResponse response;
+        response.mutable_operation()->set_ready(true);
+        response.mutable_operation()->set_status(Ydb::StatusIds::SUCCESS);
+        response.mutable_operation()->mutable_result()->PackFrom(description);
+        Describe.Writer.Finish(response, grpc::Status::OK, &Describe.Finished);
+        WaitFor(Describe.Finished);
+        UNIT_ASSERT(Describe.Finished.Ok);
     }
 
     TString Endpoint;
@@ -130,6 +149,8 @@ public:
         return NThreading::MakeFuture(std::move(lease));
     }
 
+    ui64 Bytes() const { return Counters->Bytes.load(); }
+
     void Shutdown() override {}
 
     void WaitForRelease() const {
@@ -147,9 +168,12 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
     NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(server.Endpoint)
         .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetDatabase("/Remote")
         .SetNetworkThreadsNum(1).SetClientThreadsNum(1));
+    NYdb::TDriver tlsDriver(NYdb::TDriverConfig().SetEndpoint(server.Endpoint)
+        .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetDatabase("/Remote")
+        .SetNetworkThreadsNum(1).SetClientThreadsNum(1));
     auto quota = std::make_shared<TTrackingQuota>();
     auto types = MakeIntrusive<TTypeAnnotationContext>();
-    auto state = MakeIntrusive<TState>(types.Get(), driver, CreateStructuredTokenCredentialsFactory(),
+    auto state = MakeIntrusive<TState>(types.Get(), driver, tlsDriver, CreateStructuredTokenCredentialsFactory(),
         TInstant::Now() + TDuration::Seconds(expireDeadline ? 5 : 30), quota);
     AddCluster(*state, "remote", {{"location", server.Endpoint}, {"database_name", "/Remote"},
         {"authMethod", "NONE"}, {"use_tls", "false"}});
@@ -175,32 +199,47 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
     UNIT_ASSERT(!future.HasValue());
     if (!expireDeadline) {
         transformer->Rewind();
+        UNIT_ASSERT(!future.HasValue());
+        UNIT_ASSERT_VALUES_EQUAL(quota->Bytes(), MetadataSchemaReservation + MetadataResponseReservation);
+        // Rewind stops local work, but the existing SDK cannot cancel the
+        // outstanding unary RPC. Complete it late to release the provider lease.
+        if (cancelDescribe) {
+            server.ReturnSchema();
+        } else {
+            server.ReturnSession();
+        }
+    } else {
+        auto& done = cancelDescribe ? server.Describe.Done : server.Create.Done;
+        auto& context = cancelDescribe ? server.Describe.Context : server.Create.Context;
+        server.WaitFor(done);
+        UNIT_ASSERT(context.IsCancelled());
     }
-    auto& done = cancelDescribe ? server.Describe.Done : server.Create.Done;
-    auto& context = cancelDescribe ? server.Describe.Context : server.Create.Context;
-    server.WaitFor(done);
-    UNIT_ASSERT(context.IsCancelled());
     UNIT_ASSERT(future.Wait(WaitTimeout));
     if (expireDeadline) {
         UNIT_ASSERT_VALUES_EQUAL(transformer->ApplyAsyncChanges(input, output, ctx).Level, IGraphTransformer::TStatus::Error);
         UNIT_ASSERT(ctx.IssueManager.GetIssues().ToString().Contains("deadline exceeded"));
     }
+    if (!expireDeadline && !cancelDescribe) {
+        UNIT_ASSERT(!server.WaitFor(server.Describe.Accepted, TDuration::MilliSeconds(100), false));
+    }
+    UNIT_ASSERT(state->Tables.empty());
     quota->WaitForRelease();
     driver.Stop(true);
+    tlsDriver.Stop(true);
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TYdbRemoteMetadataRpc) {
-    Y_UNIT_TEST(RewindCancelsCreateSessionTransportAndReleasesMemory) {
+    Y_UNIT_TEST(RewindDiscardsLateSessionAndStopsProviderPhases) {
         CheckMetadataCancellation(false);
     }
 
-    Y_UNIT_TEST(RewindCancelsDescribeTransportAndReleasesMemory) {
+    Y_UNIT_TEST(RewindDiscardsLateSchemaAndReleasesCallbackReservation) {
         CheckMetadataCancellation(true);
     }
 
-    Y_UNIT_TEST(SharedDeadlineCancelsPendingTransportAndReleasesMemory) {
+    Y_UNIT_TEST(SharedDeadlineCancelsPendingTransportAndReleasesProviderReservation) {
         CheckMetadataCancellation(false, true);
     }
 }

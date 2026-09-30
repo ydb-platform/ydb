@@ -7,8 +7,9 @@
 namespace NYql::NYdbRemote {
 
 inline constexpr ui64 MaxInboundMessageBytes = 8 * 1024 * 1024;
-// Request data envelope with bounded protobuf decoding and one SDK completion
-// worker; shared gRPC/channel allocations are outside this reservation.
+// Admission reservation for one read attempt and its provider-owned result.
+// The baseline SDK decodes protobuf/compression before provider validation and
+// does not expose full transport lifetimes: this is not a hard memory bound.
 inline constexpr ui64 ReadMemoryReservation = 64 * 1024 * 1024;
 
 void ValidateSource(const TSource& source);

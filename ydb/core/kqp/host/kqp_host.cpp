@@ -2029,13 +2029,14 @@ private:
             return;
         }
 
-        YQL_ENSURE(FederatedQuerySetup->NativeYdbDriver, "Missing native YDB driver");
+        YQL_ENSURE(FederatedQuerySetup->NativeYdbDriver && FederatedQuerySetup->NativeYdbTlsDriver, "Missing native YDB drivers");
         auto resourceManager = TryGetKqpResourceManager(ActorSystem->NodeId);
         YQL_ENSURE(resourceManager, "Missing native YDB metadata resource manager");
         auto metadataQuota = NYql::NNative::CreateAsyncMemoryQuota(ActorSystem,
             NRm::CreateMemoryQuotaManager(std::move(resourceManager)), 128ULL << 20);
         auto provider = NYql::CreateYdbRemoteDataProviders(
-            TypesCtx.Get(), *FederatedQuerySetup->NativeYdbDriver, FederatedQuerySetup->CredentialsFactory,
+            TypesCtx.Get(), *FederatedQuerySetup->NativeYdbDriver, *FederatedQuerySetup->NativeYdbTlsDriver,
+            FederatedQuerySetup->CredentialsFactory,
             NativeYdbDeadline, std::move(metadataQuota));
         TypesCtx->AddDataSource(NYql::YdbRemoteProviderName, std::move(provider.Source));
         TypesCtx->AddDataSink(NYql::YdbRemoteProviderName, std::move(provider.Sink));

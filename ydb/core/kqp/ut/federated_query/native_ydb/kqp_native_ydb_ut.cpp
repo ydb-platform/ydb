@@ -71,9 +71,9 @@ struct TNativeYdbFixture {
         }
     }
 
-    TExecuteQueryResult CreateSource(const TString& endpoint, bool tls) {
+    TExecuteQueryResult CreateSource(const TString& endpoint, bool tls, const TString& name = "remote_db") {
         const TString source = TStringBuilder()
-            << "CREATE EXTERNAL DATA SOURCE remote_db WITH (SOURCE_TYPE='Ydb', LOCATION='"
+            << "CREATE EXTERNAL DATA SOURCE " << name << " WITH (SOURCE_TYPE='Ydb', LOCATION='"
             << endpoint << "', DATABASE_NAME='/Remote', USE_TLS='" << (tls ? "true" : "false") << "', "
             << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token');";
         return Consumer->GetQueryClient().ExecuteQuery(source, TTxControl::NoTx()).ExtractValueSync();
@@ -202,6 +202,26 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
         const auto result = fixture.Read("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Total").GetUint64(), 3);
+    }
+
+    Y_UNIT_TEST(TlsSourceCannotReuseWarmedPlaintextProviderChannel) {
+        TNativeYdbFixture fixture;
+        fixture.Populate();
+        const auto plain = fixture.Read("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
+        UNIT_ASSERT_C(plain.IsSuccess(), plain.GetIssues().ToString());
+        const auto created = fixture.CreateSource(fixture.Remote.GetEndpoint(), true, "remote_tls");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        // Both EDS entries use one federated setup and the same endpoint. The
+        // metadata driver must keep TLS separate from the warmed plaintext cache.
+        const auto tls = fixture.Consumer->GetQueryClient().ExecuteQuery(
+            "SELECT COUNT(*) AS Total FROM remote_tls.`items`;", TTxControl::BeginTx().CommitTx(),
+            TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(3))).ExtractValueSync();
+        UNIT_ASSERT(!tls.IsSuccess());
+        const auto again = fixture.Read("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
+        UNIT_ASSERT_C(again.IsSuccess(), again.GetIssues().ToString());
+        auto rows = again.GetResultSetParser(0);
         UNIT_ASSERT(rows.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Total").GetUint64(), 3);
     }

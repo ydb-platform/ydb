@@ -6,9 +6,9 @@
 namespace NYql::NDq {
 
 void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
-    const NYdb::TDriver& driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
+    const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
     factory.RegisterSource<NYdbRemote::TSource>("YdbRemote",
-        [driver, credentialsFactory = std::move(credentialsFactory)](
+        [driver, tlsDriver, credentialsFactory = std::move(credentialsFactory)](
             NYdbRemote::TSource&& source, IDqAsyncIoFactory::TSourceArguments&& args) {
             NYdbRemote::ValidateSource(source);
             YQL_ENSURE(args.ReadRanges.size() <= 1, "YdbRemote version 1 supports a single split");
@@ -30,7 +30,7 @@ void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
                     ythrow yexception() << "YdbRemote credentials could not be initialized";
                 }
             }
-            auto client = std::make_shared<NYdb::NQuery::TQueryClient>(driver, clientSettings);
+            auto client = std::make_shared<NYdb::NQuery::TQueryClient>(source.GetUseTls() ? tlsDriver : driver, clientSettings);
             NNative::TReadActorSettings settings;
             settings.Timeout = TDuration::MilliSeconds(source.GetReadTimeoutMs());
             settings.MaxBatchBytes = source.GetMaxBatchBytes();

@@ -2669,6 +2669,7 @@ private:
             if (!SendKMeansReshuffle(buildInfo)) {
                 return false;
             }
+            ClearDoneShards(txc, buildInfo);
             if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Reshuffle) {
                 // Upload from Collect state to mimic the behaviour after a possible schemeshard restart
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::UploadClusters;
@@ -2677,7 +2678,6 @@ private:
                 Progress(BuildId);
                 return false;
             } else {
-                ClearDoneShards(txc, buildInfo);
                 buildInfo.Sample.Clear();
                 NIceDb::TNiceDb db{txc.DB};
                 Self->PersistBuildIndexSampleForget(db, buildInfo);
@@ -2864,7 +2864,6 @@ private:
                 return false;
             }
             // New path - reshuffle is already finished before uploading, continue to the next parent
-            ClearDoneShards(txc, buildInfo);
             buildInfo.Sample.Clear();
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexSampleForget(db, buildInfo);

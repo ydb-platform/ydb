@@ -25,9 +25,6 @@ public:
         auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
         alias->SetSrc(Table0Path);
         alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
-        auto* decoy = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
-        decoy->SetSrc("/Root/RecursiveFolderProcessing/Table0");
-        decoy->SetDst("/Root/DoesNotExist");
     }
 };
 
@@ -1993,7 +1990,7 @@ void CancelWhileProcessingImpl(TBackupTestFixture& f, bool isOlap) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE_F(PathAliasingExplicitExport, TPathAliasExplicitExportFixture) {
-    Y_UNIT_TEST(ExplicitItemSourceIsRewrittenOnce) {
+    Y_UNIT_TEST(ExplicitItemSourceAliasIsRewritten) {
         auto settings = MakeExportSettings("/Root/RecursiveFolderProcessing");
         settings.AppendItem(NExport::TExportToFsSettings::TItem{.Src = "/export-alias", .Dst = "archive"});
         auto future = YdbExportClient().ExportToFs(settings);

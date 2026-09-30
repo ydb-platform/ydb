@@ -306,7 +306,7 @@ class WorkflowRunMetricsTest(unittest.TestCase):
 
 
 class GithubEnvDefaultsTest(unittest.TestCase):
-    def test_prefers_api_job_name_not_analytics_or_yaml_id(self):
+    def test_job_name_from_github_job_name(self):
         old = {
             "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
             "GITHUB_JOB_NAME": os.environ.get("GITHUB_JOB_NAME"),

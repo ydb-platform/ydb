@@ -111,10 +111,6 @@ def metrics_from_workflow_run(
             "run_url": html_url,
             "exported_at": now,
         }
-        # Any job that started is exported, including conclusion=cancelled.
-        # GitHub keeps started_at / completed_at and the steps that ran before
-        # cancel-in-progress. Steps that never started have no started_at and
-        # are skipped below. status=completed on the runs list includes cancelled.
         if job_started is not None:
             job_labels: Dict[str, Any] = {}
             if queued_ms is not None:

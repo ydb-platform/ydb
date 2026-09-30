@@ -126,8 +126,6 @@ runs:
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
         if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
           echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
-          # GITHUB_JOB is the yaml id (build_and_test). Display name lives on the job API.
-          # A failed lookup is a log line only: no ::error::/::warning::, and this step stays green.
           body_file=$(mktemp)
           set +e
           set +o pipefail
@@ -146,10 +144,10 @@ runs:
           if [ "$curl_rc" -eq 0 ] && [ "$http_code" = "200" ] && [ "$jq_rc" -eq 0 ] && [ -n "$job_name" ]; then
             echo "GITHUB_JOB_NAME=$job_name" >> "$GITHUB_ENV"
           else
-            echo "analytics: could not read job.name (curl=$curl_rc http=${http_code:-none} jq=$jq_rc); ci_metrics.job_name falls back to GITHUB_JOB" >&2
+            echo "job.name lookup failed (curl=$curl_rc http=${http_code:-none}), using GITHUB_JOB" >&2
           fi
         else
-          echo "analytics: job.check_run_id is empty; analytics rows of this job will be dropped" >&2
+          echo "job.check_run_id is empty; analytics rows of this job will be dropped" >&2
         fi
 
     - name: Init

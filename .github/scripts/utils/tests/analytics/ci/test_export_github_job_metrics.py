@@ -170,8 +170,6 @@ class OpenRunsToSaveTest(unittest.TestCase):
 
 
 class CancelledJobExportTest(unittest.TestCase):
-    """cancel-in-progress: export the job and every step that started before cancel."""
-
     def test_exports_started_steps_on_a_cancelled_job(self):
         run = {
             "id": 20,

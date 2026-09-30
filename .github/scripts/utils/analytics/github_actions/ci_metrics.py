@@ -131,8 +131,6 @@ def github_env_defaults() -> Dict[str, Any]:
         if run_id is not None and repository
         else None
     )
-    # GITHUB_JOB_NAME is job.name from GET /actions/jobs/{id} (set in test_ya).
-    # GITHUB_JOB is only the yaml id. ANALYTICS_JOB_NAME is mute / test history.
     job_name = os.environ.get("GITHUB_JOB_NAME") or os.environ.get("GITHUB_JOB") or None
     return {
         "run_id": run_id,

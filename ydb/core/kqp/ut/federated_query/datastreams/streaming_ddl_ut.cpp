@@ -5620,9 +5620,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
         constexpr char pqSource[] = "pqSource";
         CreateTopic(topic);
-        Y_DEFER {
-            DropTopic(topic);
-        };
+        /* topic dropped explicitly (and unique-named) */
         CreatePqSource(pqSource);
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 

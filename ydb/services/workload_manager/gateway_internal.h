@@ -81,6 +81,8 @@ private:
     void DoWarmupRequest(const TString& databaseId);
 
     TSnapshotPtr Snapshot_;
+    // Written once from the state actor thread in OnRegistered() before the first
+    // PublishSnapshot(); readers reach it only after loading a non-null snapshot.
     NActors::TActorId StateActorId_;
 };
 

@@ -175,7 +175,7 @@ public:
 
         if (PoolSubscribtions.emplace(NHdrf::TFullPoolId{.DatabaseId=databaseId, .PoolId=poolId}, false).second) {
             ApplyPoolConfig(databaseId, poolId, attrs);
-            Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
+            Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvGetPoolInfo(databaseId, poolId));
         }
     }
 
@@ -204,7 +204,7 @@ public:
             if (!poolIt->second) {
                 // The first removal - try to re-subscribe in case it's just the pool removal from cache.
                 poolIt->second = true;
-                Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvSubscribeOnPoolChanges(databaseId, poolId));
+                Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvGetPoolInfo(databaseId, poolId));
             } else {
                 // The second removal - the pool was really removed.
                 PoolSubscribtions.erase(poolIt);

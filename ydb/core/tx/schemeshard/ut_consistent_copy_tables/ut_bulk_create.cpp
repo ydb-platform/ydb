@@ -1,0 +1,232 @@
+#include <ydb/core/base/hive.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+using namespace NKikimr;
+using namespace NSchemeShardUT_Private;
+
+namespace {
+
+const TString TableDescription = R"(
+    Name: "Source"
+    Columns { Name: "key" Type: "Uint64" }
+    Columns { Name: "value" Type: "Utf8" }
+    KeyColumnNames: ["key"]
+    UniformPartitionsCount: 4
+)";
+
+void CheckRequests(const TVector<NKikimrHive::TEvCreateTablet>& requests, bool bulk) {
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), bulk ? 1 : 4);
+    if (bulk) {
+        UNIT_ASSERT_VALUES_EQUAL(requests.front().GetCount(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(requests.front().OwnerIdxsSize(), 0);
+    } else {
+        for (const auto& request : requests) {
+            UNIT_ASSERT(!TEvHive::TEvCreateTablet::IsBatch(request));
+        }
+    }
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
+    Y_UNIT_TEST_TWIN(CreateAndBackupCopy, bulk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(bulk);
+        TVector<NKikimrHive::TEvCreateTablet> requests;
+        auto observer = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            if (ev->Get()->Record.GetTabletType() == TTabletTypes::DataShard) {
+                requests.push_back(ev->Get()->Record);
+            }
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        env.TestWaitNotification(runtime, 100);
+        CheckRequests(requests, bulk);
+        requests.clear();
+
+        TestConsistentCopyTables(runtime, 101, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/Source"
+                DstPath: "/MyRoot/Backup"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, 101);
+        CheckRequests(requests, bulk);
+        for (const auto& request : requests) {
+            UNIT_ASSERT(request.GetIsBackup());
+        }
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Backup"), {NLs::PathExist, NLs::IsTable});
+    }
+
+    Y_UNIT_TEST_TWIN(SparseRetryOnlyForFailedItems, legacyRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
+        TVector<ui64> failed;
+        TVector<ui64> retried;
+        ui32 requests = 0;
+        ui32 replies = 0;
+        auto requestObserver = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (!TEvHive::TEvCreateTablet::IsBatch(record)) {
+                return;
+            }
+            if (++requests == 1) {
+                UNIT_ASSERT_VALUES_EQUAL(record.GetCount(), 4);
+                const ui64 first = record.GetOwnerIdx();
+                // Fake Hive creates just the successful subset of the original request.
+                failed = {first + 1, first + 3};
+                record.ClearCount();
+                record.ClearOwnerIdx();
+                record.AddOwnerIdxs(first);
+                record.AddOwnerIdxs(first + 2);
+            } else {
+                UNIT_ASSERT(!record.HasCount());
+                UNIT_ASSERT(!record.HasOwnerIdx());
+                retried.assign(record.GetOwnerIdxs().begin(), record.GetOwnerIdxs().end());
+                if (legacyRetry) {
+                    // Old Hive rejects a sparse request: there is no scalar OwnerIdx,
+                    // so even the error reply has to be routed by its pipe cookie.
+                    auto reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
+                    reply->Record.SetOwner(record.GetOwner());
+                    reply->Record.SetStatus(NKikimrProto::ERROR);
+                    reply->Record.SetErrorReason(NKikimrHive::ERROR_REASON_INVALID_ARGUMENTS);
+                    runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(), reply.Release(), 0, ev->Cookie));
+                    ev.Reset();
+                }
+            }
+        });
+        auto replyObserver = runtime.AddObserver<TEvHive::TEvCreateTabletReply>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetIsBatch() && ++replies == 1) {
+                for (ui64 idx : failed) {
+                    auto* result = record.AddResults();
+                    result->SetOwnerIdx(idx);
+                    result->SetStatus(NKikimrProto::TRYLATER);
+                }
+            }
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        env.TestWaitNotification(runtime, 100);
+        UNIT_ASSERT_VALUES_EQUAL(requests, 2);
+        UNIT_ASSERT_VALUES_EQUAL(replies, legacyRetry ? 1 : 2);
+        UNIT_ASSERT(retried == failed);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Source"), {NLs::PathExist, NLs::IsTable});
+    }
+
+    Y_UNIT_TEST(LostReplyAndSchemeShardReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
+        TBlockEvents<TEvHive::TEvCreateTabletReply> replies(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetIsBatch();
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        runtime.WaitFor("committed batch reply", [&] { return !replies.empty(); });
+        const auto committed = replies.front()->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(committed.ResultsSize(), 4);
+        replies.Stop().clear();
+
+        NKikimrHive::TEvCreateTabletReply retry;
+        auto observer = runtime.AddObserver<TEvHive::TEvCreateTabletReply>([&](auto& ev) {
+            if (ev->Get()->Record.GetIsBatch()) {
+                retry = ev->Get()->Record;
+            }
+        });
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        env.TestWaitNotification(runtime, 100);
+        UNIT_ASSERT_VALUES_EQUAL(retry.ResultsSize(), 4);
+        for (int i = 0; i < committed.ResultsSize(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetOwnerIdx(), committed.GetResults(i).GetOwnerIdx());
+            UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetTabletID(), committed.GetResults(i).GetTabletID());
+        }
+    }
+
+    Y_UNIT_TEST(LegacyHiveReplyFallsBackToSingles) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
+        ui32 batches = 0;
+        ui32 singles = 0;
+        auto observer = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (record.GetTabletType() != TTabletTypes::DataShard) {
+                return;
+            }
+            if (record.HasCount()) {
+                ++batches;
+                record.ClearCount(); // emulate an old Hive ignoring the new protobuf field
+            } else {
+                ++singles;
+            }
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        env.TestWaitNotification(runtime, 100);
+        UNIT_ASSERT_VALUES_EQUAL(batches, 1);
+        UNIT_ASSERT_VALUES_EQUAL(singles, 3);
+    }
+
+    Y_UNIT_TEST(IncompleteReplyDoesNotAcknowledgeBatch) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
+        TBlockEvents<TEvHive::TEvCreateTabletReply> replies(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetIsBatch();
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        runtime.WaitFor("batch reply", [&] { return !replies.empty(); });
+        replies.Stop();
+        const auto& original = replies.front();
+        auto incomplete = MakeHolder<TEvHive::TEvCreateTabletReply>();
+        incomplete->Record = original->Get()->Record;
+        incomplete->Record.MutableResults()->RemoveLast();
+        runtime.Send(new IEventHandle(original->GetRecipientRewrite(), original->Sender,
+            incomplete.Release(), 0, original->Cookie));
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        replies.Unblock();
+        env.TestWaitNotification(runtime, 100);
+    }
+
+    Y_UNIT_TEST(PermanentConflictDoesNotFallBackToUpsertAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
+        ui64 failedIdx = 0;
+        ui32 failures = 0;
+        ui32 unknownSingles = 0;
+        auto requestObserver = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            if (record.GetTabletType() == TTabletTypes::DataShard
+                && !record.HasTabletID() && !TEvHive::TEvCreateTablet::IsBatch(record)) {
+                ++unknownSingles;
+            }
+        });
+        auto replyObserver = runtime.AddObserver<TEvHive::TEvCreateTabletReply>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (!record.GetIsBatch()) {
+                return;
+            }
+            if (!failedIdx) {
+                failedIdx = record.GetResults(1).GetOwnerIdx();
+            }
+            for (auto& result : *record.MutableResults()) {
+                if (result.GetOwnerIdx() == failedIdx) {
+                    result.SetStatus(NKikimrProto::ERROR);
+                    result.SetErrorReason(NKikimrHive::ERROR_REASON_CREATE_CONFLICT);
+                    ++failures;
+                }
+            }
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        runtime.WaitFor("permanent create conflict", [&] { return failures == 1; });
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(failures, 1);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        runtime.WaitFor("conflict is checked again after recovery", [&] { return failures == 2; });
+        runtime.SimulateSleep(TDuration::Seconds(2));
+        UNIT_ASSERT_VALUES_EQUAL(failures, 2);
+        UNIT_ASSERT_VALUES_EQUAL(unknownSingles, 0);
+    }
+}

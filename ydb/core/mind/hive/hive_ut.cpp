@@ -900,6 +900,155 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         MakeSureTabletIsUp(runtime, tabletId, 0);
     }
 
+    NKikimrHive::TEvCreateTabletReply SendBulkCreate(TTestActorRuntime& runtime,
+            const NKikimrHive::TEvCreateTablet& record) {
+        auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+        request->Record.CopyFrom(record);
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(MakeDefaultHiveID(), sender, request.Release(), 0, GetPipeConfigWithRetries());
+        return runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(sender)->Get()->Record;
+    }
+
+    NKikimrHive::TEvCreateTablet MakeBulkCreate(ui64 first, ui32 count) {
+        TEvHive::TEvCreateTablet request(MakeTabletID(false, 1), first, TTabletTypes::Dummy, BINDED_CHANNELS);
+        request.Record.SetCount(count);
+        request.Record.SetObjectId(777);
+        request.Record.SetIsBackup(true);
+        request.Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+        return request.Record;
+    }
+
+    Y_UNIT_TEST(TestBulkCreateLostReplyAndHiveReboot) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hive = MakeDefaultHiveID();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hive, 0);
+        auto record = MakeBulkCreate(1000, 4);
+        auto* followers = record.AddFollowerGroups();
+        followers->SetFollowerCount(1);
+        followers->SetLocalNodeOnly(true);
+        followers->SetRequireDifferentNodes(true);
+        followers = record.AddFollowerGroups();
+        followers->SetFollowerCount(3);
+        followers->SetRequireAllDataCenters(true);
+
+        TBlockEvents<TEvHive::TEvCreateTabletReply> replies(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetIsBatch();
+        });
+        auto request = MakeHolder<TEvHive::TEvCreateTablet>();
+        request->Record = record;
+        runtime.SendToPipe(hive, runtime.AllocateEdgeActor(), request.Release(), 0, GetPipeConfigWithRetries());
+        runtime.WaitFor("committed batch reply", [&] { return !replies.empty(); });
+        const auto committed = replies.front()->Get()->Record;
+        UNIT_ASSERT_VALUES_EQUAL(committed.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(committed.ResultsSize(), 4);
+        replies.Stop().clear(); // lose the reply after commit
+
+        RebootTablet(runtime, hive, runtime.AllocateEdgeActor());
+        const auto retry = SendBulkCreate(runtime, record);
+        UNIT_ASSERT(retry.GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(retry.ResultsSize(), 4);
+        THashSet<ui64> ids;
+        for (int i = 0; i < retry.ResultsSize(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetStatus(), NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetOwnerIdx(), 1000 + i);
+            UNIT_ASSERT_VALUES_EQUAL(retry.GetResults(i).GetTabletID(), committed.GetResults(i).GetTabletID());
+            UNIT_ASSERT(ids.insert(retry.GetResults(i).GetTabletID()).second);
+        }
+        record.ClearCount();
+        record.ClearOwnerIdx();
+        record.AddOwnerIdxs(1003);
+        record.AddOwnerIdxs(1001);
+        const auto sparse = SendBulkCreate(runtime, record);
+        UNIT_ASSERT_VALUES_EQUAL(sparse.ResultsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sparse.GetResults(0).GetTabletID(), committed.GetResults(3).GetTabletID());
+        UNIT_ASSERT_VALUES_EQUAL(sparse.GetResults(1).GetTabletID(), committed.GetResults(1).GetTabletID());
+    }
+
+    Y_UNIT_TEST(TestBulkCreatePartialConflictDoesNotUpdateTablet) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hive = MakeDefaultHiveID();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hive, 0);
+        auto existing = MakeBulkCreate(1001, 1);
+        existing.SetObjectId(999);
+        const auto first = SendBulkCreate(runtime, existing);
+        UNIT_ASSERT_VALUES_EQUAL(first.GetResults(0).GetStatus(), NKikimrProto::OK);
+
+        const auto partial = SendBulkCreate(runtime, MakeBulkCreate(1000, 3));
+        UNIT_ASSERT_VALUES_EQUAL(partial.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(partial.ResultsSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(partial.GetResults(0).GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(partial.GetResults(1).GetStatus(), NKikimrProto::ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(partial.GetResults(1).GetErrorReason(), NKikimrHive::ERROR_REASON_CREATE_CONFLICT);
+        UNIT_ASSERT_VALUES_EQUAL(partial.GetResults(2).GetStatus(), NKikimrProto::OK);
+
+        // The conflict did not replace the object id or change the existing tablet id.
+        const auto unchanged = SendBulkCreate(runtime, existing);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.GetResults(0).GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(unchanged.GetResults(0).GetTabletID(), first.GetResults(0).GetTabletID());
+        existing.MutableBindedChannels(0)->SetStoragePoolName("another-pool");
+        const auto channelConflict = SendBulkCreate(runtime, existing);
+        UNIT_ASSERT_VALUES_EQUAL(channelConflict.GetResults(0).GetErrorReason(), NKikimrHive::ERROR_REASON_CREATE_CONFLICT);
+    }
+
+    Y_UNIT_TEST(TestBulkCreateValidationAndLegacyReply) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true);
+        const ui64 hive = MakeDefaultHiveID();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hive, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hive, 0);
+        TVector<NKikimrHive::TEvCreateTablet> invalid;
+        invalid.push_back(MakeBulkCreate(1000, 0));
+        invalid.push_back(MakeBulkCreate(1000, TEvHive::TEvCreateTablet::MaxBatchSize + 1));
+        invalid.push_back(MakeBulkCreate(Max<ui64>(), 2));
+        invalid.push_back(MakeBulkCreate(1000, 2));
+        invalid.back().ClearOwnerIdx();
+        invalid.push_back(MakeBulkCreate(1000, 2));
+        invalid.back().AddOwnerIdxs(1001);
+        invalid.push_back(MakeBulkCreate(1000, 2));
+        invalid.back().SetTabletID(123);
+        invalid.push_back(MakeBulkCreate(1000, TEvHive::TEvCreateTablet::MaxBatchSize));
+        invalid.back().MutableBindedChannels(0)->SetStoragePoolName(TString(32 * 1024, 'x'));
+        auto duplicate = MakeBulkCreate(1000, 1);
+        duplicate.ClearCount();
+        duplicate.ClearOwnerIdx();
+        duplicate.AddOwnerIdxs(1000);
+        duplicate.AddOwnerIdxs(1000);
+        invalid.push_back(duplicate);
+        duplicate.SetOwnerIdx(1000);
+        invalid.push_back(duplicate);
+        for (const auto& record : invalid) {
+            const auto reply = SendBulkCreate(runtime, record);
+            UNIT_ASSERT(reply.GetIsBatch());
+            UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), NKikimrProto::ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(reply.GetErrorReason(), NKikimrHive::ERROR_REASON_INVALID_ARGUMENTS);
+            UNIT_ASSERT_VALUES_EQUAL(reply.ResultsSize(), 0);
+        }
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(hive, sender, new TEvHive::TEvLookupTablet(MakeTabletID(false, 1), 1000), 0, GetPipeConfigWithRetries());
+        const auto lookup = runtime.GrabEdgeEventRethrow<TEvHive::TEvCreateTabletReply>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(lookup->Get()->Record.GetStatus(), NKikimrProto::NODATA);
+
+        auto legacy = MakeBulkCreate(1000, 1);
+        legacy.ClearCount();
+        const auto reply = SendBulkCreate(runtime, legacy);
+        UNIT_ASSERT(!reply.GetIsBatch());
+        UNIT_ASSERT_VALUES_EQUAL(reply.ResultsSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(reply.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT(reply.GetTabletID());
+
+        const auto last = SendBulkCreate(runtime, MakeBulkCreate(Max<ui64>(), 1));
+        UNIT_ASSERT_VALUES_EQUAL(last.GetResults(0).GetStatus(), NKikimrProto::OK);
+        const auto largest = SendBulkCreate(runtime, MakeBulkCreate(2000, TEvHive::TEvCreateTablet::MaxBatchSize));
+        UNIT_ASSERT_VALUES_EQUAL(largest.ResultsSize(), TEvHive::TEvCreateTablet::MaxBatchSize);
+        for (const auto& result : largest.GetResults()) {
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrProto::OK);
+        }
+    }
+
     Y_UNIT_TEST(TestBlockCreateTablet) {
         TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);

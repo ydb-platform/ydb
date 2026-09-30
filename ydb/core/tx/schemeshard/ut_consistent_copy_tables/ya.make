@@ -15,6 +15,7 @@ PEERDIR(
 )
 
 SRCS(
+    ut_bulk_create.cpp
     ut_consistent_copy_tables.cpp
 )
 

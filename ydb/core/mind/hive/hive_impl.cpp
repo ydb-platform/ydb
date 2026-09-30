@@ -33,7 +33,10 @@ namespace NHive {
 
 void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
     NKikimrHive::TEvCreateTablet& rec = ev->Get()->Record;
-    if (rec.HasOwner() && rec.HasOwnerIdx() && rec.HasTabletType() && rec.BindedChannelsSize() != 0) {
+    const bool batch = TEvHive::TEvCreateTablet::IsBatch(rec);
+    const bool validIds = batch ? TEvHive::TEvCreateTablet::ValidateBatch(rec) : rec.HasOwnerIdx();
+    if (rec.HasOwner() && validIds && rec.HasTabletType() && rec.BindedChannelsSize() != 0
+        && (!batch || rec.BindedChannelsSize() <= MAX_TABLET_CHANNELS)) {
         YDB_LOG_DEBUG("Handle TEvHive::TEvCreateTablet:",
             {"logPrefix", GetLogPrefix()},
             {"tabletType", rec.GetTabletType()},
@@ -47,6 +50,10 @@ void THive::Handle(TEvHive::TEvCreateTablet::TPtr& ev) {
         THolder<TEvHive::TEvCreateTabletReply> reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
         reply->Record.SetStatus(NKikimrProto::EReplyStatus::ERROR);
         reply->Record.SetErrorReason(NKikimrHive::EErrorReason::ERROR_REASON_INVALID_ARGUMENTS);
+        reply->Record.SetOrigin(TabletID());
+        if (batch) {
+            reply->Record.SetIsBatch(true);
+        }
         if (rec.HasOwner()) {
             reply->Record.SetOwner(rec.GetOwner());
         }

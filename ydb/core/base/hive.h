@@ -141,6 +141,41 @@ namespace NKikimr {
         };
 
         struct TEvCreateTablet : public TEventPB<TEvCreateTablet, NKikimrHive::TEvCreateTablet, EvCreateTablet> {
+            static constexpr ui32 MaxBatchSize = 256;
+            // Conservative estimate (request bytes * item count), not a disk I/O limit.
+            static constexpr ui64 MaxBatchMetadataBytes = 4 * 1024 * 1024;
+
+            static bool IsBatch(const NKikimrHive::TEvCreateTablet& record) {
+                return record.HasCount() || record.OwnerIdxsSize() != 0;
+            }
+
+            // Validate the entire envelope before making any changes in Hive.
+            static bool ValidateBatch(const NKikimrHive::TEvCreateTablet& record) {
+                if (!IsBatch(record) || record.HasTabletID()) {
+                    return false;
+                }
+                const ui64 count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
+                if (!count || count > MaxBatchSize || record.ByteSizeLong() > MaxBatchMetadataBytes / count) {
+                    return false;
+                }
+                if (record.HasCount()) {
+                    return record.HasOwnerIdx() && !record.OwnerIdxsSize()
+                        && record.GetOwnerIdx() <= Max<ui64>() - (count - 1);
+                }
+                if (record.HasOwnerIdx()) {
+                    return false;
+                }
+                // The list is bounded; avoid allocating a hash table for validation.
+                for (int i = 0; i < record.OwnerIdxsSize(); ++i) {
+                    for (int j = 0; j < i; ++j) {
+                        if (record.GetOwnerIdxs(i) == record.GetOwnerIdxs(j)) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
             TEvCreateTablet()
             {}
 

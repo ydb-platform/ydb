@@ -7186,8 +7186,10 @@ void TSchemeShard::Handle(TEvHive::TEvCreateTabletReply::TPtr &ev, const TActorC
         {"message", ev->Get()->Record.ShortDebugString()},
     );
 
-    auto shardIdx = TShardIdx(ev->Get()->Record.GetOwner(),
-                              TLocalShardIdx(ev->Get()->Record.GetOwnerIdx()));
+    const auto& record = ev->Get()->Record;
+    // A batch keeps its original anchor in the pipe cookie, including sparse retries.
+    auto shardIdx = TShardIdx(record.GetOwner(), TLocalShardIdx(
+        record.GetIsBatch() || !record.HasOwnerIdx() ? ev->Cookie : record.GetOwnerIdx()));
 
     if (!ShardInfos.contains(shardIdx)) {
         YDB_LOG_WARN_CTX(ctx, "Got TEvCreateTabletReply for unknown shard idx",

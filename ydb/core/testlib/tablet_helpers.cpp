@@ -1307,18 +1307,49 @@ namespace NKikimr {
         }
 
         void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
+            const auto& record = ev->Get()->Record;
+            auto reply = MakeHolder<TEvHive::TEvCreateTabletReply>();
+            if (!TEvHive::TEvCreateTablet::IsBatch(record)) {
+                reply->Record = CreateTablet(record, ctx);
+            } else {
+                reply->Record.SetIsBatch(true);
+                reply->Record.SetOwner(record.GetOwner());
+                reply->Record.SetOrigin(TabletID());
+                if (!TEvHive::TEvCreateTablet::ValidateBatch(record)) {
+                    reply->Record.SetStatus(NKikimrProto::ERROR);
+                    reply->Record.SetErrorReason(NKikimrHive::ERROR_REASON_INVALID_ARGUMENTS);
+                } else {
+                    reply->Record.SetStatus(NKikimrProto::OK);
+                    const ui32 count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
+                    auto single = record;
+                    single.ClearCount();
+                    single.ClearOwnerIdxs();
+                    for (ui32 i = 0; i < count; ++i) {
+                        single.SetOwnerIdx(record.HasCount() ? record.GetOwnerIdx() + i : record.GetOwnerIdxs(i));
+                        const auto result = CreateTablet(single, ctx);
+                        auto* item = reply->Record.AddResults();
+                        item->SetOwnerIdx(result.GetOwnerIdx());
+                        item->SetStatus(result.GetStatus());
+                        item->SetTabletID(result.GetTabletID());
+                    }
+                }
+            }
+            ctx.Send(ev->Sender, reply.Release(), 0, ev->Cookie);
+        }
+
+        NKikimrHive::TEvCreateTabletReply CreateTablet(const NKikimrHive::TEvCreateTablet& record, const TActorContext& ctx) {
             YDB_LOG_INFO_CTX(ctx, "TEvCreateTablet",
                 {"tabletId", TabletID()},
-                {"msg", ev->Get()->Record});
-            Cerr << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
+                {"msg", record});
+            Cerr << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << record.ShortDebugString() << Endl;
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
-            const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
-            const auto type = ev->Get()->Record.GetTabletType();
-            const auto bootMode = ev->Get()->Record.GetTabletBootMode();
+            const std::pair<ui64, ui64> key(record.GetOwner(), record.GetOwnerIdx());
+            const auto type = record.GetTabletType();
+            const auto bootMode = record.GetTabletBootMode();
 
             YDB_LOG_CREATE_CONTEXT({"tabletId", TabletID()},
-                {"owner", ev->Get()->Record.GetOwner()},
-                {"ownerIdx", ev->Get()->Record.GetOwnerIdx()},
+                {"owner", record.GetOwner()},
+                {"ownerIdx", record.GetOwnerIdx()},
                 {"type", type});
 
             auto it = State->Tablets.find(key);
@@ -1386,7 +1417,7 @@ namespace NKikimr {
                     //       FollowerCountPerDataCenter and FollowerGroups options)
                     //       are completely ignored.
                     if (type == TTabletTypes::DataShard) {
-                        const ui32 followerCount = ev->Get()->Record.GetFollowerCount();
+                        const ui32 followerCount = record.GetFollowerCount();
 
                         if (followerCount) {
                             YDB_LOG_INFO_CTX(ctx, "TEvCreateTablet. DataShard created successfully, creating followers",
@@ -1413,16 +1444,16 @@ namespace NKikimr {
             }
 
             if (status == NKikimrProto::OK) {
-                auto& boundChannels = ev->Get()->Record.GetBindedChannels();
+                const auto& boundChannels = record.GetBindedChannels();
                 it->second.BoundChannels.assign(boundChannels.begin(), boundChannels.end());
-                it->second.ChannelsProfile = ev->Get()->Record.GetChannelsProfile();
+                it->second.ChannelsProfile = record.GetChannelsProfile();
 
                 it->second.State = ETabletState::ReadyToWork;
-                it->second.ObjectDomain = TSubDomainKey(ev->Get()->Record.GetObjectDomain());
+                it->second.ObjectDomain = TSubDomainKey(record.GetObjectDomain());
             }
 
-            ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first,
-                key.second, it->second.TabletId, TabletID()), 0, ev->Cookie);
+            return TEvHive::TEvCreateTabletReply(status, key.first,
+                key.second, it != State->Tablets.end() ? it->second.TabletId : 0, TabletID()).Record;
         }
 
         void TraceAdoptingCases(const std::pair<ui64, ui64> prevKey,

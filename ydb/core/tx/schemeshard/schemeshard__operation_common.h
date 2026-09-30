@@ -110,6 +110,21 @@ public:
 class TCreateParts: public TSubOperationState {
     const TOperationId OperationId;
 
+    struct TCreateBatch {
+        TTabletId Hive;
+        NKikimrHive::TEvCreateTablet Request;
+        TVector<TShardIdx> Shards;
+        TInstant RetryAt;
+        TDuration RetryDelay = TDuration::Seconds(1);
+    };
+    // Only transport state: shard identities and successful mappings are already durable.
+    THashMap<TShardIdx, TCreateBatch> CreateBatches;
+    bool Started = false;
+
+    void SendBatch(TShardIdx anchor, TCreateBatch& batch, TOperationContext& context);
+    bool HandleBatchReply(TEvHive::TEvCreateTabletReply__HandlePtr& ev, TShardIdx anchor, TOperationContext& context);
+    bool HandleCreateReply(const NKikimrHive::TEvCreateTabletReply& record, TOperationContext& context);
+
     virtual const char* Name() const override final { return "TCreateParts"; }
 
     THolder<TEvHive::TEvAdoptTablet> AdoptRequest(TShardIdx shardIdx, TOperationContext& context);

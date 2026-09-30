@@ -40,6 +40,7 @@ ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_BulkUpsert_Column-UseStrea
 ydb/core/kqp/ut/arrow unittest.[*/*] chunk
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.TableNotExists
 ydb/core/kqp/ut/batch_operations KqpBatchUpdate.SimplePartitions
+ydb/core/kqp/ut/cost KqpCost.BatchOperation_Delete
 ydb/core/kqp/ut/data_integrity unittest.[*/*] chunk
 ydb/core/kqp/ut/indexes KqpIndexes.DirectAccessToIndexImplTable+UserIsClusterAdmin+HasUsePermission
 ydb/core/kqp/ut/indexes KqpIndexes.PreSharding+Unique
@@ -107,6 +108,7 @@ ydb/core/kqp/ut/scheme GeneratedStored.DeleteReturningNoMatch
 ydb/core/kqp/ut/scheme GeneratedStored.DeleteWithIndexOnGenerated
 ydb/core/kqp/ut/scheme GeneratedStored.DropGeneratedUnlocksDependencyAlterAndDrop
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionPrimaryKeyConflictIsAtomic
+ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionReadYourWritesAndCommit
 ydb/core/kqp/ut/scheme GeneratedStored.ExplicitTransactionRollbackRestoresGeneratedState
 ydb/core/kqp/ut/scheme GeneratedStored.GeneratedInPrimaryKeyRejected
 ydb/core/kqp/ut/scheme GeneratedStored.IndexOnGeneratedKeyUpdatesEntry
@@ -185,6 +187,7 @@ ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningDmlMatrix-EnableStreamWrite
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningNoMatchDoesNotSynthesizeVirtualRows
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionDuplicateKeys
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionLiteralDefaultDependency
+ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionSequenceDefaultDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionStoredAndVirtualColumns
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningRegressionVolatileDependency
 ydb/core/kqp/ut/scheme GeneratedVirtual.ReturningWithCompactFulltextIndexStreamWrite
@@ -213,6 +216,7 @@ ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnColumnTable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnPK-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDropDefaultOnSequenceColumn
+ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetAndDropDefaultOnNotNullColumn-EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnColumnTable
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK+EnableCompileTimeDefaults
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDefaultOnPK-EnableCompileTimeDefaults
@@ -417,6 +421,7 @@ ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcro
 ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
+ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index_build VectorIndexBuildTest.Metering_ServerLessDB_Restarts-doRestarts-true
 ydb/core/tx/schemeshard/ut_index_build unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb
@@ -528,6 +533,7 @@ ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grp
 ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_skips_not_bsc_ready
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_filter_healthy_groups_requires_bsc_ready
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots_legacy_api
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pool_estimated_usage

@@ -1027,7 +1027,8 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 }
 
 // Requests sync the scheme of a follower on their own, while an idle follower
-// needs this periodic sync to learn its tables and their metrics levels
+// needs this periodic sync to learn its tables and their metrics levels.
+// It runs only after the leader's changes have reached the follower
 class TDataShard::TTxSyncSchemeOnFollower : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxSyncSchemeOnFollower(TDataShard* self)
@@ -1042,10 +1043,18 @@ public:
             return true;
         }
 
-        // An error means the follower has not been initialized yet, the next tick retries
         NKikimrTxDataShard::TError::EKind status;
         TString errMessage;
-        return Self->SyncSchemeOnFollower(txc, ctx, status, errMessage);
+        if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+            return false;
+        }
+
+        // An error means the follower has not been initialized yet, the next tick retries
+        if (status != NKikimrTxDataShard::TError::OK) {
+            Self->SyncSchemeOnFollowerNeeded = true;
+        }
+
+        return true;
     }
 
     void Complete(const TActorContext&) override {
@@ -1055,6 +1064,14 @@ public:
 
 ITransaction* TDataShard::CreateTxSyncSchemeOnFollower() {
     return new TTxSyncSchemeOnFollower(this);
+}
+
+// The sync loads rows of Sys, UserTables and Snapshots only, and every local
+// scheme change writes the UserTables row in the same commit. The executor
+// cannot tell which tables have changed, so any data update of the follower
+// triggers the next periodic sync
+void TDataShard::OnFollowerDataUpdated() {
+    SyncSchemeOnFollowerNeeded = true;
 }
 
 }}

@@ -424,6 +424,8 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
         SyncConfig();
         State = TShardState::Readonly;
         FollowerState = { };
+        // The initial state comes without follower update notifications
+        SyncSchemeOnFollowerNeeded = true;
         // Do not rely on a sync queued before the reactivation, an extra one is a no-op
         SyncSchemeOnFollowerPending = false;
         Executor()->SetPreloadTablesData({Schema::Sys::TableId, Schema::UserTables::TableId, Schema::Snapshots::TableId});
@@ -4182,8 +4184,10 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     // tick reports what the sync has loaded
     if (IsFollower() &&
         AppData(ctx)->FeatureFlags.GetEnableDataShardDetailedMetrics() &&
+        SyncSchemeOnFollowerNeeded &&
         !SyncSchemeOnFollowerPending)
     {
+        SyncSchemeOnFollowerNeeded = false;
         SyncSchemeOnFollowerPending = true;
         Execute(CreateTxSyncSchemeOnFollower(), ctx);
     }

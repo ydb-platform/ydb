@@ -1967,6 +1967,7 @@ public:
     void DelayS3UploadRows(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
     void OnRejectProbabilityRelaxed() override;
     void OnFollowersCountChanged() override;
+    void OnFollowerDataUpdated() override;
     ui64 GetMemoryUsage() const override;
 
     bool HasPipeServer(const TActorId& pipeServerId);
@@ -2903,6 +2904,8 @@ private:
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
+    // Set when the leader's changes have reached the follower since the last periodic sync
+    bool SyncSchemeOnFollowerNeeded = false;
     bool SyncSchemeOnFollowerPending = false;
 
     // Non-persistent flag that is set just after we waited for all pending transactions to finish

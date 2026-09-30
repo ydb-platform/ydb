@@ -78,6 +78,22 @@ void SetupFollowerCountersAggregator(TTestActorRuntime &runtime) {
         runtime.Register(CreateTabletCountersAggregator(true)));
 }
 
+// How many periodic scheme syncs the follower of the tablet has completed.
+ui64 GetFollowerSchemeSyncCount(TTestActorRuntime &runtime, ui64 tabletId) {
+    auto sender = runtime.AllocateEdgeActor();
+    auto pipeConfig = GetPipeConfigWithRetries();
+    pipeConfig.ForceFollower = true;
+    runtime.SendToPipe(tabletId, sender, new TEvTablet::TEvGetCounters(), 0, pipeConfig);
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvGetCountersResponse>(sender);
+    for (const auto &counter : ev->Get()->Record.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+        if (counter.GetName() == "DataShard/TxSyncSchemeOnFollower/RoCompleted") {
+            return counter.GetValue();
+        }
+    }
+    UNIT_FAIL("DataShard/TxSyncSchemeOnFollower/RoCompleted counter not found");
+    return 0;
+}
+
 // The latest report of the table from its leader or from its follower, if any.
 const TReportedTableInfo* FindLastReport(const TVector<TReportedTableInfo> &reported,
                                          const TString &tablePath,
@@ -642,6 +658,87 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT_C(followerReport, "expected a report from the follower");
         UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
             ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+    }
+
+    // A per-table METRICS_LEVEL change rewrites the table's UserTables row but
+    // leaves the local schema intact, so only a data update reaches the follower.
+    Y_UNIT_TEST(TestSetTableInfoIdleFollowerSeesTableMetricsLevelChange) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified));
+
+        WaitTxNotification(server, sender, AsyncAlterSetMetricsLevel(server, "/Root", "table-1",
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    // The periodic sync runs only after the leader's changes reach the follower,
+    // so a follower of an idle leader stops paying for it.
+    Y_UNIT_TEST(TestIdleFollowerSyncsSchemeOnlyAfterLeaderChanges) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        auto shard = GetTableShards(server, sender, "/Root/table-1")[0];
+
+        // Let the follower sync the initial state and the leader settle down
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const ui64 settled = GetFollowerSchemeSyncCount(runtime, shard);
+        UNIT_ASSERT_GT(settled, 0u);
+
+        SimulateSleep(server, TDuration::Seconds(16));
+        UNIT_ASSERT_VALUES_EQUAL(GetFollowerSchemeSyncCount(runtime, shard), settled);
+
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+
+        SimulateSleep(server, TDuration::Seconds(6));
+        UNIT_ASSERT_GT(GetFollowerSchemeSyncCount(runtime, shard), settled);
     }
 }
 

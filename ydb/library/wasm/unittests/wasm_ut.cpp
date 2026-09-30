@@ -6,6 +6,9 @@
 
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
+#include <WAVM/IR/Module.h>
+#include <WAVM/WASM/WASM.h>
+
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <util/generic/scope.h>
@@ -30,6 +33,77 @@ TEST_F(TWebAssemblyTest, Create)
     for (int i = 0; i < 128; ++i) {
         compartments.push_back(CreateMinimalRuntimeImage());
     }
+}
+
+TEST_F(TWebAssemblyTest, StandardTagSection)
+{
+    // Type 1 is the tag signature. Type 0 makes an accidentally hardcoded index visible.
+    const std::vector<WAVM::U8> binary = {
+        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+        0x01, 0x08, 0x02, 0x60, 0x00, 0x00, 0x60, 0x01, 0x7f, 0x00,
+        0x02, 0x08, 0x01, 0x01, 'm', 0x01, 't', 0x04, 0x00, 0x01,
+        0x0d, 0x03, 0x01, 0x00, 0x01,
+    };
+
+    WAVM::IR::Module module;
+    WAVM::WASM::LoadError error;
+    ASSERT_TRUE(WAVM::WASM::loadBinaryModule(binary.data(), binary.size(), module, &error))
+        << error.message;
+    ASSERT_EQ(module.exceptionTypes.imports.size(), 1);
+    ASSERT_EQ(module.exceptionTypes.defs.size(), 1);
+    EXPECT_EQ(module.exceptionTypes.imports[0].type.params,
+              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
+    EXPECT_EQ(module.exceptionTypes.defs[0].type.params,
+              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
+
+    const auto saved = WAVM::WASM::saveBinaryModule(module);
+    WAVM::IR::Module reloaded;
+    ASSERT_TRUE(WAVM::WASM::loadBinaryModule(saved.data(), saved.size(), reloaded, &error))
+        << error.message;
+    EXPECT_EQ(reloaded.exceptionTypes.imports[0].type.params,
+              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
+    EXPECT_EQ(reloaded.exceptionTypes.defs[0].type.params,
+              WAVM::IR::TypeTuple({WAVM::IR::ValueType::i32}));
+}
+
+TEST_F(TWebAssemblyTest, ThrowAndCatch)
+{
+    const TStringBuf source = R"(
+        (module
+            (exception_type $error i32)
+            (func (export "catch_value") (result i32)
+                try (result i32)
+                    i32.const 42
+                    throw $error
+                catch $error
+                end)))";
+
+    auto compartment = CreateMinimalRuntimeImage();
+    compartment->AddModule(source);
+    auto catchValue = TCompartmentFunction<i32()>(compartment.get(), "catch_value");
+    EXPECT_EQ(catchValue(), 42);
+}
+
+TEST_F(TWebAssemblyTest, ImportedCppExceptionTag)
+{
+    if (!EnableSystemLibraries()) {
+        GTEST_SKIP() << "System libraries are not enabled in this build";
+    }
+
+    const TStringBuf source = R"(
+        (module
+            (import "env" "__cpp_exception" (exception_type $cpp i64))
+            (func (export "catch_value") (result i64)
+                try (result i64)
+                    i64.const 42
+                    throw $cpp
+                catch $cpp
+                end)))";
+
+    auto compartment = CreateStandardRuntimeImage();
+    compartment->AddModule(source);
+    auto catchValue = TCompartmentFunction<i64()>(compartment.get(), "catch_value");
+    EXPECT_EQ(catchValue(), 42);
 }
 
 TEST_F(TWebAssemblyTest, AllocateAndFree)

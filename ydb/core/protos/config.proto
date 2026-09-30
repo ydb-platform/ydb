@@ -147,6 +147,9 @@ message TActorSystemConfig {
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
+    // Maximum idle coroutine allocation bytes per actor-system worker. Zero disables caching.
+    optional uint64 AsyncFrameCacheSizeBytes = 26 [default = 4194304];
+
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
 

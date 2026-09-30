@@ -422,6 +422,10 @@ message TFeatureFlags {
     optional bool EnableStreamingAggregationAdvanced = 344 [default = false];
     optional bool EnableTieringObjectKeyTree = 345 [default = false];
     // Bumps GROUP BY HOP state version to 3
-    optional bool EnableHoppingWindowStartCheck = 346 [default = false];
-    optional bool EnableCsIndexReadMemoryTracking = 347 [default = false];
+    optional bool EnableHoppingWindowStartCheck = 346 [default = true];
+    optional bool EnableBackgroundAnalyzeChangeRatio = 347 [default = true];
+    optional bool EnableAnalyzeSampling = 348 [default = true];
+    // Applies to new processes; existing processes keep their scheduling mode.
+    optional bool EnableCompositeConveyorScheduling = 349 [default = false];
+    optional bool EnableCsIndexReadMemoryTracking = 350 [default = false];
 }

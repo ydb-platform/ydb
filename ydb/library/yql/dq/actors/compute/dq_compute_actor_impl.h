@@ -434,15 +434,8 @@ protected:
         InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, failureReason);
     }
 
-    void ProcessOutputsImpl(ERunStatus status) {
-        CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight);
-        if (ProcessOutputsState.Inflight == 0) {
-            ProcessOutputsState = TProcessOutputsState();
-        }
-
-        ProcessOutputsState.LastRunStatus = status;
-        ProcessOutputsState.LastRunTime = TInstant::Now();
-
+    // Drains or checks every output channel, and sums their state up into ProcessOutputsState
+    void ProcessOutputChannels(bool checkBoundOutputs) {
         for (auto& entry : OutputChannelsMap) {
             const ui64 channelId = entry.first;
             TOutputChannelInfo& outputChannel = entry.second;
@@ -468,7 +461,10 @@ protected:
                     }
                 } else {
                     Y_ENSURE(outputChannel.Channel);
-                    if (outputChannel.Channel->IsFinished()) {
+                    if (outputChannel.FinishEpochBound && !outputChannel.Finished && !checkBoundOutputs) {
+                        // not finished at the last check, and none has finished since
+                        ProcessOutputsState.HasDataToSend = true;
+                    } else if (outputChannel.Channel->IsFinished()) {
                         outputChannel.Finished = true;
                     } else {
                         ProcessOutputsState.HasDataToSend = true;
@@ -481,6 +477,43 @@ protected:
             } else {
                 CA_LOG_T("Do not drain channelId: " << channelId << ", finished");
                 ProcessOutputsState.AllOutputsFinished &= outputChannel.Finished;
+            }
+        }
+    }
+
+    void ProcessOutputsImpl(ERunStatus status) {
+        CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight);
+        const bool stateReset = ProcessOutputsState.Inflight == 0;
+        if (stateReset) {
+            ProcessOutputsState = TProcessOutputsState();
+        }
+
+        ProcessOutputsState.LastRunStatus = status;
+        ProcessOutputsState.LastRunTime = TInstant::Now();
+
+        // loaded before the channels are checked: a channel finishing meanwhile moves it again, and wakes us up
+        const ui64 outputFinishEpoch = OutputFinishEpoch->load();
+        const bool checkBoundOutputs = CheckedOutputFinishEpoch != outputFinishEpoch;
+        CheckedOutputFinishEpoch = outputFinishEpoch;
+
+        // With every output channel bound to the epoch, the channels loop only sums up their state: Finished, which is
+        // set there when the epoch has moved, and HasPeer, which drops the sum when it changes. While neither changed,
+        // the sum of the last pass holds, as long as it was taken from a reset state and had every peer known
+        if (AllOutputsFinishEpochBound && !Checkpoints && stateReset && !checkBoundOutputs
+            && OutputChannelsSummary && OutputChannelsSummary->ChannelsReady)
+        {
+            ProcessOutputsState.ChannelsReady = OutputChannelsSummary->ChannelsReady;
+            ProcessOutputsState.HasDataToSend = OutputChannelsSummary->HasDataToSend;
+            ProcessOutputsState.AllOutputsFinished = OutputChannelsSummary->AllOutputsFinished;
+        } else {
+            ProcessOutputChannels(checkBoundOutputs);
+            OutputChannelsSummary.reset();
+            if (AllOutputsFinishEpochBound && stateReset) {
+                OutputChannelsSummary = TOutputChannelsSummary{
+                    .ChannelsReady = ProcessOutputsState.ChannelsReady,
+                    .HasDataToSend = ProcessOutputsState.HasDataToSend,
+                    .AllOutputsFinished = ProcessOutputsState.AllOutputsFinished,
+                };
             }
         }
 
@@ -1057,6 +1090,7 @@ protected:
         bool HasPeer = false;
         NActors::TActorId PeerId;
         bool Finished = false; // != Channel->IsFinished() // If channel is in finished state, it sends only checkpoints.
+        bool FinishEpochBound = false; // the channel counts its finish in OutputFinishEpoch
         bool EarlyFinish = false;
         bool PopStarted = false;
         bool IsTransformOutput = false; // Is this channel output of a transform.
@@ -1256,6 +1290,7 @@ protected:
 
                 outputChannel->HasPeer = true;
                 outputChannel->PeerId = peer;
+                OutputChannelsSummary.reset();
                 if (Task.GetDqChannelVersion() >= 2u) {
                     Y_ENSURE(outputChannel->Channel);
                     outputChannel->Channel->Bind(this->SelfId(), peer);
@@ -2872,6 +2907,19 @@ protected:
         bool LastPopReturnedNoData = false;
     };
     TProcessOutputsState ProcessOutputsState;
+    // Incremented by the output channels bound to it when they finish, see TDqOutputFinishEpoch. The channels
+    // bound to it are checked for finish only when it has moved since the last check: a task feeding a shuffle
+    // has an output per consumer task, and checking every one of them on every run costs more than the run
+    std::shared_ptr<TDqOutputFinishEpoch> OutputFinishEpoch = std::make_shared<TDqOutputFinishEpoch>(0);
+    std::optional<ui64> CheckedOutputFinishEpoch;
+    // every output channel is bound to OutputFinishEpoch: ProcessOutputsImpl may then reuse the sum of the last pass
+    bool AllOutputsFinishEpochBound = false;
+    struct TOutputChannelsSummary {
+        bool ChannelsReady = true;
+        bool HasDataToSend = false;
+        bool AllOutputsFinished = true;
+    };
+    std::optional<TOutputChannelsSummary> OutputChannelsSummary;
     bool HasEffectsOutputs = false; // track execution of DISCARD results
 
     THolder<TDqMemoryQuota> MemoryQuota;

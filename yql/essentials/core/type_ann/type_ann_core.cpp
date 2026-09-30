@@ -16892,11 +16892,11 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["AggregateMergeFinalize"] = &AggregateWrapper;
     ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
-    ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
+    ColumnOrderFunctions["PgSetItem"] = &OrderForSqlSetItem;
     ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
     ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
 
-    ColumnOrderFunctions["YqlSetItem"] = &OrderForPgSetItem;
+    ColumnOrderFunctions["YqlSetItem"] = &OrderForSqlSetItem;
     ColumnOrderFunctions["YqlIterate"] = &OrderFromFirst;
     ColumnOrderFunctions["YqlIterateAll"] = &OrderFromFirst;
 

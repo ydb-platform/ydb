@@ -908,6 +908,7 @@ class TJsonNodes : public TViewerPipeClient {
     bool NoRack = false;
     bool NoDC = false;
     std::vector<TString> Problems;
+    TString InvalidParamError;
 
     void AddProblem(const TString& problem) {
         for (const auto& p : Problems) {
@@ -1020,6 +1021,28 @@ class TJsonNodes : public TViewerPipeClient {
         }
     }
 
+    void ResetSortParams() {
+        NeedSort = false;
+        SortBy = ENodeFields::NodeId;
+        ReverseSort = false;
+    }
+
+    bool ParsePresentationNodeField(TStringBuf paramName, TStringBuf fieldValue, ENodeFields& outField) {
+        outField = ParseENodeFields(fieldValue);
+        if (outField == ENodeFields::COUNT) {
+            InvalidParamError = TStringBuilder() << "unknown " << paramName << " field: " << fieldValue;
+            return false;
+        }
+        return true;
+    }
+
+    static void AddGroupByFieldToRequired(TFieldsType& fieldsRequired, const ENodeFields groupByField) {
+        fieldsRequired.set(+groupByField);
+        if (groupByField == ENodeFields::Uptime) {
+            fieldsRequired.set(+ENodeFields::DisconnectTime);
+        }
+    }
+
 public:
     TJsonNodes(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev, "/viewer/nodes")
@@ -1042,12 +1065,12 @@ public:
         if (FilterPath == Database) {
             FilterPath.clear();
         }
-        if (Params.Has("filter_group") && Params.Has("filter_group_by")) {
-            FilterGroup = Params.Get("filter_group");
-            FilterGroupBy = ParseENodeFields(Params.Get("filter_group_by"));
-            FieldsRequired.set(+FilterGroupBy);
-            if (FilterGroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::DisconnectTime);
+        if (TStringBuf filterGroupByParam = Params.Get("filter_group_by"); filterGroupByParam) {
+            if (!ParsePresentationNodeField("filter_group_by", filterGroupByParam, FilterGroupBy)) {
+                return;
+            }
+            if (TStringBuf filterGroupParam = Params.Get("filter_group"); filterGroupParam) {
+                FilterGroup = filterGroupParam;
             }
         }
 
@@ -1123,13 +1146,23 @@ public:
         }
         TStringBuf sort = Params.Get("sort");
         if (sort) {
-            NeedSort = true;
-            if (sort.StartsWith("-") || sort.StartsWith("+")) {
-                ReverseSort = (sort[0] == '-');
-                sort.Skip(1);
+            TStringBuf sortField = sort;
+            if (sortField.StartsWith("-") || sortField.StartsWith("+")) {
+                ReverseSort = (sortField[0] == '-');
+                sortField.Skip(1);
             }
-            SortBy = ParseENodeFields(sort);
-            FieldsRequired.set(+SortBy);
+            if (!ParsePresentationNodeField("sort", sortField, SortBy)) {
+                return;
+            }
+            NeedSort = true;
+        }
+        TStringBuf group = Params.Get("group");
+        if (group) {
+            if (!ParsePresentationNodeField("group", group, GroupBy)) {
+                return;
+            }
+            NeedGroup = true;
+            ResetSortParams();
         }
         TString fieldsRequired = Params.Get("fields_required");
         if (!fieldsRequired.empty()) {
@@ -1147,16 +1180,14 @@ public:
         } else {
             FieldsRequired.set(+ENodeFields::SystemState);
         }
-        TStringBuf group = Params.Get("group");
-        if (group) {
-            NeedGroup = true;
-            GroupBy = ParseENodeFields(group);
-            FieldsRequired.set(+GroupBy);
-            if (GroupBy == ENodeFields::Uptime) {
-                FieldsRequired.set(+ENodeFields::DisconnectTime);
-            }
-            NeedSort = false;
+        if (NeedGroup) {
+            AddGroupByFieldToRequired(FieldsRequired, GroupBy);
             NeedLimit = false;
+        } else if (NeedSort) {
+            FieldsRequired.set(+SortBy);
+        }
+        if (!FilterGroup.empty()) {
+            AddGroupByFieldToRequired(FieldsRequired, FilterGroupBy);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
         for (auto field = +ENodeFields::NodeId; field != +ENodeFields::COUNT; ++field) {
@@ -1174,6 +1205,14 @@ public:
 
     void Bootstrap() override {
         if (TBase::NeedToRedirect()) {
+            return;
+        }
+        if (!InvalidParamError.empty()) {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER,
+                "Bad request: invalid /viewer/nodes query parameter",
+                {"logPrefix", GetLogPrefix()},
+                {"error", InvalidParamError});
+            TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", InvalidParamError), "BadRequest");
             return;
         }
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
@@ -3624,6 +3663,8 @@ public:
                           * `MaxVDiskSlotUsage`
                           * `MaxVDiskRawUsage`
                           * `CapacityAlert`
+                        When `group` is set, sorting is disabled and fields needed only for sorting
+                        are not fetched. `sort` is still validated; unknown fields return HTTP 400.
                     required: false
                     type: string
                   - name: group
@@ -3668,6 +3709,8 @@ public:
                           * `ClockSkew`
                           * `PingTime`
                           * `CapacityAlert`
+                        The filter is applied only when `filter_group` is also set; `filter_group_by`
+                        alone is parsed but does not filter nodes or extend `fields_required`.
                     required: false
                     type: string
                   - name: filter_group

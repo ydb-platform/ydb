@@ -115,6 +115,11 @@ public:
         Y_UNUSED(hook);
     }
 
+    // an output buffer increments the epoch whenever it becomes finished, see TDqOutputFinishEpoch
+    virtual void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) {
+        Y_UNUSED(epoch);
+    }
+
     void SendFinish();
 };
 
@@ -160,7 +165,8 @@ struct TDqChannelLimits {
     TDuration IdlePingPeriod = TDuration::MilliSeconds(30000);
     TDuration IdleDestroyPeriod = TDuration::MilliSeconds(30000);
     // channels tell their consumers and producers what changed, rather than being polled: a union of inputs visits
-    // the channels which have something for it, see TDqInputReadySet; off, the channels are polled as before
+    // the channels which have something for it, see TDqInputReadySet, and a compute actor checks its output channels
+    // for finish only once one of them has, see TDqOutputFinishEpoch; off, the channels are polled as before
     bool EnableChannelNotifications = true;
 };
 

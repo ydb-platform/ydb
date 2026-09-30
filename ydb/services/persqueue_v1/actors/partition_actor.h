@@ -296,6 +296,7 @@ private:
 
     inline bool IsPartitionDataReady() const;
     inline bool IsNeedMorePartitionData() const;
+    inline bool IsPartitionExhausted() const;
 };
 
 

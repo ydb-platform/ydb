@@ -80,6 +80,7 @@ struct TEvPQProxy {
         EvAlterTopicResponse,
         EvParentCommitedToFinish,
         EvUpdateReadMetrics,
+        EvReadWindowExhausted,
         EvEnd,
     };
 
@@ -635,6 +636,23 @@ struct TEvPQProxy {
         std::vector<ui32> AdjacentPartitionIds;
         std::vector<ui32> ChildPartitionIds;
 
+        ui64 EndOffset;
+    };
+
+    // Reading stopped because the client's max_offset was reached. Unlike
+    // TEvReadingFinished this does NOT mean the partition is closed by
+    // auto-partitioning: the partition is still alive and writable. The read
+    // balancer must not be notified; the partition stays locked to the session
+    // until the session is closed.
+    struct TEvReadWindowExhausted : public TEventLocal<TEvReadWindowExhausted, EvReadWindowExhausted> {
+        TEvReadWindowExhausted(const TString& topic, ui32 partitionId, ui64 endOffset)
+            : Topic(topic)
+            , PartitionId(partitionId)
+            , EndOffset(endOffset)
+        {}
+
+        TString Topic;
+        ui32 PartitionId;
         ui64 EndOffset;
     };
 };

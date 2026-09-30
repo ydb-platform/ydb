@@ -976,6 +976,12 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
     PARTITION_ENSURE(!RequestInfly)
         ("direct_read_id", DirectReadId);
 
+    if (!ReadingFinishedSent && IsPartitionExhausted()) {
+        ReadingFinishedSent = true;
+        ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, EndOffset));
+        return;
+    }
+
     if (isInFlightMemoryOk && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
     } else if (IsNeedMorePartitionData()) {
@@ -1074,6 +1080,12 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
             TDuration::MilliSeconds(res.GetWaitQuotaTimeMs())
         );
         ctx.Send(ParentId, readResponse.Release());
+    }
+
+    if (!ReadingFinishedSent && (IsPartitionExhausted() ||
+            (res.ResultSize() == 0 && ClientMaxOffset.Defined() && res.GetRealReadOffset() >= *ClientMaxOffset))) {
+        ReadingFinishedSent = true;
+        ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, EndOffset));
     }
 
     PipeGeneration = 0; //reset tries counter - all ok
@@ -1416,6 +1428,12 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
             SendCommit(CommitsInfly.back().first, CommitsInfly.back().second.Offset, ctx);
     } else {
         ClientCommitOffset = CommittedOffset;
+    }
+
+    if (!ReadingFinishedSent && IsPartitionExhausted()) {
+        ReadingFinishedSent = true;
+        ctx.Send(ParentId, new TEvPQProxy::TEvReadWindowExhausted(Topic->GetInternalName(), Partition.Partition, EndOffset));
+        return;
     }
 
     if (!MaxTimeLagMs && !ReadTimestampMs && IsPartitionDataReady()) {
@@ -1949,6 +1967,10 @@ bool TPartitionActor::IsPartitionDataReady() const {
 
 bool TPartitionActor::IsNeedMorePartitionData() const {
     return ReadOffset >= EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
+}
+
+bool TPartitionActor::IsPartitionExhausted() const {
+    return ClientMaxOffset.Defined() && ReadOffset >= *ClientMaxOffset;
 }
 
 }

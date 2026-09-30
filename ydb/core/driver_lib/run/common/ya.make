@@ -125,7 +125,6 @@ PEERDIR(
     ydb/core/transfer
     ydb/core/tx
     ydb/core/tx/conveyor/service
-    ydb/core/tx/conveyor_composite/service
     ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/general_cache
     ydb/core/tx/coordinator
@@ -134,7 +133,6 @@ PEERDIR(
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
-    ydb/core/tx/priorities/service
     ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service

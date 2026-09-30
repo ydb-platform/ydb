@@ -13,9 +13,9 @@ namespace NKikimr::NTableIndex::NKMeans {
 
 namespace NKikimr::NKMeans {
 
-inline constexpr ui32 MaxHnswConnectivity = 100;
-inline constexpr ui32 MaxHnswConstructionCandidates = 1000;
-inline constexpr ui32 MaxHnswSearchCandidates = 1000;
+inline constexpr ui32 MaxHnswM = 100;
+inline constexpr ui32 MaxHnswEfConstruction = 1000;
+inline constexpr ui32 MaxHnswEfSearch = 1000;
 
 class IClusters {
 public:

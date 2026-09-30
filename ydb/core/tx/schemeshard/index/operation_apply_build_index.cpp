@@ -182,7 +182,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         TPath index = table.Child(indexName);
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         const auto indexInfoIt = context.SS->Indexes.find(index.Base()->PathId);
-        const bool distributedHnsw = indexInfoIt != context.SS->Indexes.end()
+        const bool isHnsw = indexInfoIt != context.SS->Indexes.end()
             && indexInfoIt->second->Type == NKikimrSchemeOp::EIndexTypeGlobalHnsw;
 
         // The embedding column keeps its original base table name. Recover it
@@ -190,7 +190,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         // schema once the transient build record has been removed. Both the
         // name and settings are needed for the eager posting-table HNSW build.
         TString embeddingColumn;
-        if (distributedHnsw && config.HasVectorIndexKmeansTreeDescription()) {
+        if (isHnsw && config.HasVectorIndexKmeansTreeDescription()) {
             // KMeans tree index keys are defined as [prefix..., embedding].
             // Keep this extraction under the vector-index type guard so a
             // future index layout cannot accidentally reuse the convention.
@@ -238,7 +238,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 // Only the posting table holds the vectors that get indexed.
                 const bool isPostingTable = (indexImplTableName == NTableIndex::NKMeans::PostingTable);
                 result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard(),
-                    isPostingTable && distributedHnsw && config.HasVectorIndexKmeansTreeDescription()
+                    isPostingTable && isHnsw && config.HasVectorIndexKmeansTreeDescription()
                         ? &config.GetVectorIndexKmeansTreeDescription() : nullptr,
                     isPostingTable ? embeddingColumn : TString{}));
             }

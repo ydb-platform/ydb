@@ -3924,7 +3924,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
-        // Unprefixed distributed HNSW uses the actor's all-partition search;
+        // Unprefixed HNSW uses the actor's all-partition search;
         // the legacy lookup chain only implements k-means cluster traversal.
         if (kqpCtx.Config->GetEnableVectorSearchActor()
                 || indexDesc->Type == TIndexDescription::EType::GlobalSyncHnsw) {

@@ -748,11 +748,11 @@ namespace {
         }
 
         if (settings.has_m()
-            && !ValidateSettingInRange("M", settings.m(), 1, MaxHnswConnectivity, error)) {
+            && !ValidateSettingInRange("M", settings.m(), 1, MaxHnswM, error)) {
             return false;
         }
         if (settings.has_ef_construction()
-            && !ValidateSettingInRange("ef_construction", settings.ef_construction(), 1, MaxHnswConstructionCandidates, error)) {
+            && !ValidateSettingInRange("ef_construction", settings.ef_construction(), 1, MaxHnswEfConstruction, error)) {
             return false;
         }
 
@@ -1174,10 +1174,10 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
             ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
     } else if (nameLower == "m") {
         settings.mutable_settings()->set_m(
-            ParseUInt32(nameLower, value, 1, MaxHnswConnectivity, error));
+            ParseUInt32(nameLower, value, 1, MaxHnswM, error));
     } else if (nameLower == "ef_construction") {
         settings.mutable_settings()->set_ef_construction(
-            ParseUInt32(nameLower, value, 1, MaxHnswConstructionCandidates, error));
+            ParseUInt32(nameLower, value, 1, MaxHnswEfConstruction, error));
     } else if (nameLower == "delta_rows") {
         settings.mutable_settings()->set_delta_rows(
             ParseUInt64(nameLower, value, 0, Max<ui64>(), error));

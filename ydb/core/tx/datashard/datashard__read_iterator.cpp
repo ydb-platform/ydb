@@ -2802,7 +2802,7 @@ public:
                 }
                 topState->DistinctColumns.push_back(colIdx);
             }
-            if (topK.GetHnswEfSearch() == 0 || topK.GetHnswEfSearch() > NKMeans::MaxHnswSearchCandidates) {
+            if (topK.GetHnswEfSearch() == 0 || topK.GetHnswEfSearch() > NKMeans::MaxHnswEfSearch) {
                 error = "HNSWEfSearch must be in 1..1000";
             }
             if (error != "") {

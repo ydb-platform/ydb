@@ -1,6 +1,6 @@
 #include "quoter.h"
 
-#include <deque>
+#include <list>
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <ydb/core/base/appdata_fwd.h>
@@ -54,10 +54,13 @@ public:
 private:
     STFUNC(StateWork);
 
-    bool ProcessBucket(TCountedLeakyBucket& bucket, std::deque<TActorId>& pending, const TActorContext& ctx);
+    bool ProcessBucket(TCountedLeakyBucket& bucket, const TKey& key, const TActorContext& ctx);
+    void AddPending(const TKey& key, const TActorId& actorId);
+    void RemoveFrontPending(const TKey& key);
 
     absl::flat_hash_map<TKey, TCountedLeakyBucket> Buckets;
-    absl::flat_hash_map<TKey, std::deque<TActorId>> Pending;
+    absl::flat_hash_map<TKey, std::list<TActorId>> Pending;
+    absl::flat_hash_map<TActorId, std::list<TActorId>::iterator> PendingIterators;
 };
 
 void TWriteSessionsQuoter::Bootstrap(const TActorContext& ctx) {
@@ -100,7 +103,7 @@ void TWriteSessionsQuoter::Handle(TEvWriteSessionsQuoter::TEvAcquireQuota::TPtr&
     auto& pending = Pending[key];
     auto& bucket = Buckets[key];
 
-    ProcessBucket(bucket, pending, ctx);
+    ProcessBucket(bucket, key, ctx);
    
     if (!bucket.TryPush(ctx.Now(), 1)) {
         if (pending.size() >= MAX_PENDING_REQUESTS) {
@@ -136,13 +139,14 @@ void TWriteSessionsQuoter::Wakeup(NActors::TEvents::TEvWakeup::TPtr&, const TAct
     for (auto iter = Pending.begin(); iter != Pending.end();) {
         auto& bucket = Buckets[iter->first];
         bucket.Update(ctx.Now());
-        auto& pending = iter->second;
-        if (!ProcessBucket(bucket, pending, ctx)) {
+        if (!ProcessBucket(bucket, iter->first, ctx)) {
             iter++;
             continue;
         }
 
+        auto actorId = iter->second.front();
         Pending.erase(iter++);
+        PendingIterators.erase(actorId);
     }
 
     ctx.Schedule(TDuration::MilliSeconds(QUOTA_WINDOW_MS), new NActors::TEvents::TEvWakeup());
@@ -157,7 +161,9 @@ void TWriteSessionsQuoter::PassAway() {
     NActors::TActorBootstrapped<TWriteSessionsQuoter>::PassAway();
 }
 
-bool TWriteSessionsQuoter::ProcessBucket(TCountedLeakyBucket& bucket, std::deque<TActorId>& pending, const TActorContext& ctx) {
+bool TWriteSessionsQuoter::ProcessBucket(TCountedLeakyBucket& bucket, const TKey& key, const TActorContext& ctx) {
+    auto& pending = Pending[key];
+    
     bucket.Update(ctx.Now());
     while (!pending.empty()) {
         if (!bucket.TryPush(ctx.Now(), 1)) {
@@ -165,11 +171,22 @@ bool TWriteSessionsQuoter::ProcessBucket(TCountedLeakyBucket& bucket, std::deque
         }
 
         auto actorId = pending.front();
-        pending.pop_front();
+        RemoveFrontPending(key);
         ctx.Send(actorId, new TEvWriteSessionsQuoter::TEvQuotaAcquired());
     }
 
     return true;
+}
+
+void TWriteSessionsQuoter::AddPending(const TKey& key, const TActorId& actorId) {
+    Pending[key].push_back(actorId);
+    PendingIterators[actorId] = std::prev(Pending[key].end());
+}
+
+void TWriteSessionsQuoter::RemoveFrontPending(const TKey& key) {
+    auto actorId = Pending[key].front();
+    Pending[key].pop_front();
+    PendingIterators.erase(actorId);
 }
 
 STFUNC(TWriteSessionsQuoter::StateWork) {

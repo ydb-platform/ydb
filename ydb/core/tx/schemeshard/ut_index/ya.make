@@ -22,7 +22,6 @@ PEERDIR(
 
 SRCS(
     ut_async_index.cpp
-    ut_drop_not_null.cpp
     ut_unique_index.cpp
     ut_vector_index.cpp
     ut_fulltext_index.cpp

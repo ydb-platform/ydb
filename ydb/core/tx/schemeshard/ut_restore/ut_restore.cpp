@@ -6865,6 +6865,9 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        if (!isShouldSuccess) {
+            runtime.GetAppData().FeatureFlags.SetEnableTableBackupAsSql(false);
+        }
         ui64 txId = 100;
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);

@@ -1593,6 +1593,46 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
         CheckSqlBackup("/sql", DescribeTableAsSql());
     }
 
+    Y_UNIT_TEST(TableBackupAsSqlFormatsLegacyOptionalScalarDefault) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableTableBackupAsSql(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableChecksumsExport(true);
+
+        RunS3({R"(
+            Name: "Table"
+            Columns {
+                Name: "key"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type { optional_type { item { type_id: UTF8 } } }
+                    value { items { text_value: "b" } }
+                }
+            }
+            Columns {
+                Name: "value"
+                Type: "Utf8"
+                DefaultFromLiteral {
+                    type { optional_type { item { type_id: UTF8 } } }
+                    value { items { text_value: "a" } }
+                }
+            }
+            KeyColumnNames: ["key"]
+        )"}, R"(
+            ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "sql"
+                }
+            }
+        )", Ydb::StatusIds::SUCCESS, false);
+
+        const auto sql = GetS3FileContent("/sql/create_table.sql");
+        UNIT_ASSERT_C(sql.Contains("`key` Utf8 DEFAULT 'b'"), sql);
+        UNIT_ASSERT_C(sql.Contains("`value` Utf8 DEFAULT 'a'"), sql);
+    }
+
     Y_UNIT_TEST_TWIN(TableBackupAsSqlFormats, IsColumn) {
         ui64 txId = 100;
         CreateTableForSqlBackup(txId, IsColumn);

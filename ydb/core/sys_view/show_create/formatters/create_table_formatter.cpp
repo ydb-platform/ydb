@@ -42,6 +42,30 @@ namespace {
         }
         return descr.SplitBoundarySize() + 1;
     }
+
+    void NormalizeLegacyOptionalScalarDefault(Ydb::TypedValue& typedValue) {
+        if (!typedValue.type().has_optional_type()) {
+            return;
+        }
+
+        const auto& itemType = typedValue.type().optional_type().item();
+        if (!itemType.has_type_id() && !itemType.has_decimal_type()) {
+            return;
+        }
+
+        auto* value = typedValue.mutable_value();
+        if (value->value_case() != Ydb::Value::VALUE_NOT_SET || value->items_size() != 1 || value->pairs_size() != 0) {
+            return;
+        }
+
+        const auto& item = value->items(0);
+        if (item.value_case() == Ydb::Value::VALUE_NOT_SET || item.items_size() != 0 || item.pairs_size() != 0) {
+            return;
+        }
+
+        Ydb::Value normalized(item);
+        value->Swap(&normalized);
+    }
 }
 
 void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isPartition, TString del) {
@@ -521,6 +545,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
     switch (columnDesc.GetDefaultValueCase()) {
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromLiteral: {
             defaultFromLiteral = columnDesc.GetDefaultFromLiteral();
+            NormalizeLegacyOptionalScalarDefault(*defaultFromLiteral);
             break;
         }
         case NKikimrSchemeOp::TColumnDescription::kDefaultFromSequence: {

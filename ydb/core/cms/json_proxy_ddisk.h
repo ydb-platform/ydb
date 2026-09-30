@@ -62,6 +62,8 @@ public:
                         event->Record.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_LAST_CHANGED_AT);
                     } else if (sortBy == "degrade") {
                         event->Record.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_DEGRADE);
+                    } else if (sortBy == "disk_usage") {
+                        event->Record.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_DISK_USAGE);
                     } else if (sortBy == "groups_count") {
                         event->Record.SetSortBy(NKikimrCms::DDISK_TABLET_SORT_BY_GROUPS_COUNT);
                     } else {
@@ -73,6 +75,17 @@ public:
                 }
                 if (params.contains("only_problems")) {
                     event->Record.SetOnlyProblems(IsTrue(params.Get("only_problems")));
+                }
+                if (params.contains("group_by")) {
+                    const auto& groupBy = params.Get("group_by");
+                    if (groupBy == "degrade") {
+                        event->Record.SetGroupBy(NKikimrCms::DDISK_TABLET_GROUP_BY_DEGRADE);
+                    } else if (groupBy == "disk_usage") {
+                        event->Record.SetGroupBy(NKikimrCms::DDISK_TABLET_GROUP_BY_DISK_USAGE);
+                    }
+                }
+                if (params.contains("filter_group")) {
+                    event->Record.SetFilterGroup(params.Get("filter_group"));
                 }
                 if (params.contains("group_by_degrade")) {
                     event->Record.SetGroupByDegrade(IsTrue(params.Get("group_by_degrade")));

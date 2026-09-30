@@ -146,6 +146,24 @@ class DistributedCoordinatorTest(unittest.TestCase):
             self.cluster.start()
         self.assertNotIn(("a", "start-static"), self.calls)
 
+    def test_deployment_readiness_uses_static_host_without_cli(self):
+        self.cluster = DistributedCluster(
+            str(uuid.uuid4()),
+            "run",
+            {"nodes": [{"name": "s", "role": "static", "host_id": "a"}]},
+            None,
+            {},
+            self.directory,
+            self.call,
+            self.cancel,
+            lambda *_args, **_kwargs: None,
+            deploy=True,
+        )
+        self.cluster.start()
+        self.assertIn(("a", "ready"), self.calls)
+        self.assertIsNone(self.cluster.cli_host)
+        self.assertFalse(any(operation == "workload" for _, operation in self.calls))
+
     def test_different_host_configurations_prevent_node_start(self):
         original = self.cluster.call
 
@@ -190,6 +208,29 @@ class DistributedCoordinatorTest(unittest.TestCase):
         self.cluster.stop()
         self.assertEqual([], self.cluster.attempted)
         self.assertFalse(any(operation in ("reserve", "release") for _, operation in self.calls))
+
+    def test_port_ranges_require_support_before_any_reservation(self):
+        self.cluster.template['port_ranges'] = {'http': '8765-8799'}
+        self.capability_overrides['a'] = {'port_ranges': True}
+        with self.assertRaisesRegex(BenchmarkError, 'b does not support configured port ranges'):
+            self.cluster.start()
+        self.assertFalse(self.cluster.attempted)
+        self.assertEqual([('a', 'capabilities'), ('b', 'capabilities')], self.calls)
+        self.capability_overrides['b'] = {'port_ranges': True}
+        self.cluster.start()
+        self.assertTrue(self.cluster.ready)
+
+    def test_auto_ports_require_support_before_any_reservation(self):
+        self.cluster.template['port_ranges'] = {'http': '8765-8799, auto'}
+        self.capability_overrides['a'] = {'port_ranges': True, 'port_auto': True}
+        self.capability_overrides['b'] = {'port_ranges': True}
+        with self.assertRaisesRegex(BenchmarkError, 'b does not support auto port fallback'):
+            self.cluster.start()
+        self.assertFalse(self.cluster.attempted)
+        self.assertEqual([('a', 'capabilities'), ('b', 'capabilities')], self.calls)
+        self.capability_overrides['b']['port_auto'] = True
+        self.cluster.start()
+        self.assertTrue(self.cluster.ready)
 
     def test_cancel_does_not_start_next_phase(self):
         def progress(phase, **_fields):

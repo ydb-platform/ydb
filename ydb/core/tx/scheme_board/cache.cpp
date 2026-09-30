@@ -756,6 +756,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             NotNullColumns.clear();
             SetNotNullInProgressColumns.clear();
             Indexes.clear();
+            MultiColumnStatistics.clear();
             Sequences.clear();
             CdcStreams.clear();
             Partitioning = std::make_shared<TPartitioning>();
@@ -924,7 +925,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillSystemViewInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
-            if (auto schema = NSysView::GetSystemViewResolver().GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
+            const auto sysViewType = pathDesc.GetSysViewDescription().GetType();
+            if (!NKikimrSysView::ESysViewType_IsValid(sysViewType)) {
+                return;
+            }
+
+            if (auto schema = NSysView::GetSystemViewResolver()
+                                .GetSystemViewSchema(static_cast<NKikimrSysView::ESysViewType>(sysViewType)))
+            {
                 Columns = std::move(schema->Columns);
                 KeyColumnTypes = std::move(schema->KeyColumnTypes);
                 for (const auto& [id, column] : Columns) {

@@ -66,7 +66,7 @@ namespace NMonitoring {
                 TVector<char> namesBuf;
                 TVector<char> valuesBuf;
 
-                if (Header_.Version == SV1_03) {
+                if (Header_.Version == SV1_03 || Header_.Version == SV1_04) {
                     auto namesResult = ReadLengthDelimitedStringPool(Header_.LabelNamesSize);
                     namesBuf = std::move(namesResult.first);
                     auto valuesResult = ReadLengthDelimitedStringPool(Header_.LabelValuesSize);
@@ -107,6 +107,10 @@ namespace NMonitoring {
                 // (3) read common time
                 c->OnCommonTime(ReadTime());
 
+                if (Header_.Version == SV1_04) {
+                    c->OnCommonStartTimeSeconds(ReadFixed<ui32>());
+                }
+
                 // (4) read common labels
                 if (ui32 commonLabelsCount = ReadVarint()) {
                     c->OnLabelsBegin();
@@ -133,7 +137,11 @@ namespace NMonitoring {
                     c->OnMetricBegin(metricType);
 
                     // (5.2) flags byte
-                    c->OnMemOnly(ReadFixed<ui8>() & 0x01);
+                    const ui8 flagsByte = ReadFixed<ui8>();
+                    c->OnMemOnly(flagsByte & 0x01);
+                    if (Header_.Version == SV1_04 && flagsByte & 0x02) {
+                        c->OnStartTimeSeconds(ReadFixed<ui32>());
+                    }
 
                     auto metricNameValueIndex = std::numeric_limits<ui32>::max();
                     if (Header_.Version == SV1_02) {

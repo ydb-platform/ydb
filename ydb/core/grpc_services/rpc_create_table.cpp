@@ -347,10 +347,17 @@ private:
     }
 
     void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = GetProtoRequest();
+        const auto* req = GetProtoRequest();
+        Ydb::Table::CreateTableRequest requestWithNormalizedPaths;
+        if (req->has_ttl_settings() && req->ttl_settings().has_tiered_ttl()) {
+            requestWithNormalizedPaths.CopyFrom(*req);
+            NormalizeTtlStoragePaths(*requestWithNormalizedPaths.mutable_ttl_settings(), *Request_);
+            req = &requestWithNormalizedPaths;
+        }
+
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);

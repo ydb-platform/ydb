@@ -73,6 +73,10 @@ TFuture<IYtGateway::TCommitResult> TYtForwardingGatewayBase::Commit(TCommitOptio
     return Slave_->Commit(std::move(options));
 }
 
+TFuture<IYtGateway::TUnlockTablesResult> TYtForwardingGatewayBase::UnlockTables(TUnlockTablesOptions&& options) {
+    return Slave_->UnlockTables(std::move(options));
+}
+
 TFuture<IYtGateway::TDropTrackablesResult> TYtForwardingGatewayBase::DropTrackables(TDropTrackablesOptions&& options) {
     return Slave_->DropTrackables(std::move(options));
 }

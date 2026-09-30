@@ -1,6 +1,7 @@
 """Typed host-local operations for one leased distributed YDB generation."""
 
 import copy
+import errno
 import base64
 import hashlib
 import json
@@ -22,6 +23,7 @@ from ydb.public.api.grpc import ydb_cms_v1_pb2_grpc, ydb_config_v1_pb2_grpc
 from ydb.public.api.protos import ydb_status_codes_pb2
 from ydb.tools.ydb_bench.lib import process_recovery
 from ydb.tools.ydb_bench.lib import cluster_config
+from ydb.tools.ydb_bench.lib.cluster_templates import parse_port_selection
 from ydb.tools.ydb_bench.lib.distributed_disks import DiskAdmission
 from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
@@ -98,7 +100,13 @@ class DistributedWorker:
 
     def capabilities(self, _value):
         # Read-only preflight: no session, process, or persisted record is made.
-        return {"host_id": self.host_id, "protocol_version": PROTOCOL_VERSION, "platform": sys.platform}
+        return {
+            "host_id": self.host_id,
+            "protocol_version": PROTOCOL_VERSION,
+            "platform": sys.platform,
+            "port_ranges": True,
+            "port_auto": True,
+        }
 
     def _save(self, state):
         with self.sessions.lock:
@@ -177,7 +185,12 @@ class DistributedWorker:
             host_ids = template_value.get("host_ids")
             if not isinstance(host_ids, list) or any(not isinstance(host, str) for host in host_ids):
                 raise BenchmarkError("Template host IDs must be a list of strings")
-            template = execution_template(template_value, set(host_ids), value.get("tenant"), multiple_cli=True)
+            deploy = value.get("deploy", False)
+            if type(deploy) is not bool:
+                raise BenchmarkError("deploy must be boolean")
+            template = execution_template(
+                template_value, set(host_ids), value.get("tenant"), multiple_cli=True, deploy=deploy
+            )
             local = [node for node in template["nodes"] if node["host_id"] == self.host_id]
             if not local:
                 raise BenchmarkError("This host has no nodes in the execution template")
@@ -186,6 +199,7 @@ class DistributedWorker:
             if type(reset) is not bool:
                 raise BenchmarkError("reset_disks must be boolean")
             payload = {
+                "deploy": deploy,
                 "template": template,
                 "tenant": value["tenant"],
                 "actor_system": actor_system,
@@ -194,6 +208,7 @@ class DistributedWorker:
             if self.state is None:
                 root = self.root / reference["session_id"]
                 self.state = {
+                    "deploy": deploy,
                     "reference": reference,
                     "root": root,
                     "template": template,
@@ -234,6 +249,61 @@ class DistributedWorker:
         self._check(state)
         return binary
 
+    def _reserve_port(self, state, node_name, kind, candidates, *, required=True):
+        for port in candidates:
+            self._check(state)
+            stream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                stream.bind(("0.0.0.0", port))
+            except OSError as error:
+                stream.close()
+                if port and error.errno in (errno.EADDRINUSE, errno.EACCES):
+                    continue
+                raise
+            except BaseException:
+                stream.close()
+                raise
+            state["sockets"].setdefault(node_name, []).append(stream)
+            return stream.getsockname()[1]
+        if not required:
+            return None
+        raise BenchmarkError(
+            'No available {} ports on host {} for node {} in {} (ports may be busy or require permission)'.format(
+                kind.upper(), self.host_id, node_name, state['template']['port_ranges'][kind]
+            )
+        )
+
+    def _reserve_node_ports(self, state, local):
+        nodes = [node for node in local if node['role'] != 'cli']
+        result = {node['name']: {} for node in local}
+        selections = {
+            kind: parse_port_selection(value, kind.upper() + ' ports')
+            for kind, value in state['template'].get('port_ranges', {}).items()
+        }
+        kinds = [('grpc', 'grpc_port'), ('ic', 'ic_port'), ('http', 'mon_port')]
+
+        def priority(item):
+            ranges, auto = selections.get(item[0], ([], True))
+            return auto or not ranges, sum(last - first + 1 for first, last in ranges)
+
+        # Strict pools take precedence over optional ones. Reserve all explicit
+        # ports before asking the OS, so fallback cannot consume another pool.
+        kinds.sort(key=priority)
+        pending = []
+        with self.sessions.lock:
+            for kind, key in kinds:
+                ranges, auto = selections.get(kind, ([], True))
+                candidates = (port for first, last in ranges for port in range(first, last + 1))
+                for node in nodes:
+                    port = self._reserve_port(state, node['name'], kind, candidates, required=bool(ranges) and not auto)
+                    if port is None:
+                        pending.append((node['name'], kind, key))
+                    else:
+                        result[node['name']][key] = port
+            for name, kind, key in pending:
+                result[name][key] = self._reserve_port(state, name, kind, (0,))
+        return result
+
     def _prepare(self, state, local):
         self._check(state)
         topology = discover_topology()
@@ -242,32 +312,19 @@ class DistributedWorker:
         hostname = socket.getfqdn()
         nodes = []
         reset_disks = []
+        ports = self._reserve_node_ports(state, local)
         for index, node in enumerate(state["template"]["nodes"], 1):
             if node["host_id"] != self.host_id:
                 continue
             self._check(state)
             resource = "ydb_cli" if node["role"] == "cli" else "ydbd"
             binary = self._binary(state, resource, node["binary"])
-            ports = {}
-            if node["role"] != "cli":
-                with self.sessions.lock:
-                    self._check(state)
-                    sockets = state["sockets"].setdefault(node["name"], [])
-                    for key in ("grpc_port", "ic_port", "mon_port"):
-                        stream = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        try:
-                            stream.bind(("0.0.0.0", 0))
-                        except BaseException:
-                            stream.close()
-                            raise
-                        sockets.append(stream)
-                        ports[key] = stream.getsockname()[1]
             nodes.append(
                 {
                     **node,
                     "node_id": index,
                     "hostname": hostname,
-                    "ports": ports,
+                    "ports": ports[node['name']],
                     "placement": placement[node["name"]],
                     "executable": {**binary.manifest_record(), "path": str(binary.path)},
                 }
@@ -825,7 +882,7 @@ class DistributedWorker:
         return {tenant: self._ready_tenant(state, tenant) for tenant in tenants}
 
     def _ready_tenant(self, state, tenant):
-        cli = self._cli_node(state)
+        cli = None if state.get("deploy") else self._cli_node(state)
         targets = [
             node for node in state["cluster_nodes"].values() if node["role"] == "dynamic" and node["tenant"] == tenant
         ]
@@ -841,6 +898,8 @@ class DistributedWorker:
                 request,
                 ready=lambda response: response.Status == 1,
             )
+        if state.get("deploy"):
+            return {"ready": True}
         _, endpoint = self._static_endpoint(state)
         expected = {(node["hostname"].lower(), node["ports"]["grpc_port"]) for node in targets}
         deadline = time.monotonic() + 120

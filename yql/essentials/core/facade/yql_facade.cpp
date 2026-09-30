@@ -8,6 +8,7 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_gc_transformer.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/type_ann/type_ann_partial.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
@@ -281,6 +282,10 @@ void TProgramFactory::AddRemoteLayersProvider(const TString& alias, NLayers::IRe
     RemoteLayersProviders_.emplace(alias, std::move(provider));
 }
 
+void TProgramFactory::SetTranslatorsRegistry(NSQLTranslation::TTranslatorsRegistry translatorsRegistry) {
+    TranslatorsRegistry_ = std::move(translatorsRegistry);
+}
+
 void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
     GatewaysConfig_ = gatewaysConfig;
 }
@@ -358,7 +363,7 @@ TProgramPtr TProgramFactory::Create(
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_ ? MakeHolder<TGatewaysConfig>(*GatewaysConfig_) : nullptr,
                         filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, AutoUseYqlLibs_, ArrowResolver_, hiddenMode,
-                        qContext, RemoteLayersProviders_, BridgeBinaryPath_);
+                        qContext, RemoteLayersProviders_, BridgeBinaryPath_, TranslatorsRegistry_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -394,7 +399,8 @@ TProgram::TProgram(
     EHiddenMode hiddenMode,
     const TQContext& qContext,
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders,
-    TString bridgeBinaryPath)
+    TString bridgeBinaryPath,
+    NSQLTranslation::TTranslatorsRegistry translatorsRegistry)
     : IssueReportTarget_(std::move(issueReportTarget))
     , FunctionRegistry_(functionRegistry)
     , RandomProvider_(std::move(randomProvider))
@@ -430,6 +436,7 @@ TProgram::TProgram(
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
     , RemoteLayersProviders_(std::move(remoteLayersProviders))
+    , TranslatorsRegistry_(std::move(translatorsRegistry))
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -956,7 +963,8 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     NSQLTranslation::TTranslators translators(
         nullptr,
         NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        NSQLTranslationPG::MakeTranslator());
+        NSQLTranslationPG::MakeTranslator(),
+        TranslatorsRegistry_);
 
     return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);
 }
@@ -966,11 +974,15 @@ TProgram::TStatus TProgram::TestPartialTypecheck() {
 
     Y_ENSURE(AstRoot_ || ExprCtx_, "Program not parsed or compiled yet");
 
+    const TPartialAnnotationConfig config = {
+        .LangVer = LangVer_,
+        .ConfigProviderFactory = [](TTypeAnnotationContext& newTypeCtx) {
+            return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
+        },
+    };
+
     TIssues issues;
-    auto ret = PartialAnnonateTypes(AstRoot_, /*isLibrary=*/false, LangVer_, /*udfMeta=*/nullptr, issues, [&](TTypeAnnotationContext& newTypeCtx) {
-        return CreateConfigProvider(newTypeCtx, /*config=*/nullptr, "", {}, /*forPartialTypeCheck=*/true);
-    },
-                                    /*typeParser=*/{}, /*typeWriter=*/{})
+    auto ret = PartiallyAnnotateTypes(AstRoot_, issues, config)
                    ? TProgram::TStatus::Ok
                    : TProgram::TStatus::Error;
     ExprCtx_->IssueManager.AddIssues(issues);

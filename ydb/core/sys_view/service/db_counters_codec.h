@@ -3,6 +3,7 @@
 #include <ydb/core/protos/sys_view.pb.h>
 
 #include <algorithm>
+#include <util/generic/vector.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -91,6 +92,7 @@ void CalculateCountersDiff(NKikimrSysView::TDbCounters* diff,
 
 void ResetSimpleCounters(NKikimrSysView::TDbCounters* dst);
 void ResetMaxCounters(NKikimrSysView::TDbCounters* dst);
+void ResetHistogramBuckets(NKikimrSysView::TDbCounters* dst, const TVector<ui32>& indices);
 
 // Clear output and encode an absolute snapshot when prev is absent, or a delta
 // otherwise. Unsigned subtraction and addition reconstruct decreases modulo

@@ -673,6 +673,308 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    // Reproduces the "FDW shape": two separate ExecuteQuery calls inside one
+    // ReadCommittedRW transaction. The first call INSERTs a row with
+    // PRAGMA kikimr.KqpDisablePessimisticLocks="true" (pessimistic locks
+    // disabled), the second call modifies the same key without the pragma.
+    // A single YQL script combining both statements returns the correct result,
+    // but the separate-call shape loses the uncommitted INSERT row: the second
+    // operation's fresh snapshot read does not see it.
+    class TReadCommittedSeparateExecuteQueries : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto execute = [&](const TString& query, TTxControl txControl) {
+                return Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(query, std::move(txControl)).ExtractValueSync();
+                });
+            };
+
+            {
+                auto result = execute(Q_(R"(
+                    CREATE TABLE `/Root/ReproKqpLocks` (
+                        Id Uint64 NOT NULL,
+                        Val Uint64 NOT NULL,
+                        PRIMARY KEY (Id)
+                    );
+                )"), TTxControl::NoTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+
+        void CheckId1Val(const TExecuteQueryResult& result, ui64 expectedVal) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "expected a single row (Id == 1)");
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Id").GetUint64(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("Val").GetUint64(), expectedVal);
+            UNIT_ASSERT_C(!parser.TryNextRow(), "expected exactly one row (Id == 1)");
+        }
+
+        void CheckId1Absent(const TExecuteQueryResult& result) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 0u);
+        }
+    };
+
+    class TReadCommittedInsertThenUpdateSeparateExecuteQueries : public TReadCommittedSeparateExecuteQueries {
+    protected:
+        void DoExecute() override {
+            TReadCommittedSeparateExecuteQueries::DoExecute();
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto execute = [&](const TString& query, TTxControl txControl) {
+                return Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(query, std::move(txControl)).ExtractValueSync();
+                });
+            };
+
+            {
+                // Sanity check: a single script with INSERT+UPDATE returns Val == 11
+                // and does NOT reproduce the bug.
+                auto script = execute(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                    INSERT INTO `/Root/ReproKqpLocks` (Id, Val) VALUES (1, 10);
+                    UPDATE `/Root/ReproKqpLocks` SET Val = Val + 1 WHERE Id == 1;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(script.GetStatus(), EStatus::SUCCESS, script.GetIssues().ToString());
+
+                auto verify = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                CheckId1Val(verify, 11u);
+            }
+
+            {
+                auto cleanup = execute(Q_(R"(
+                    DELETE FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(cleanup.GetStatus(), EStatus::SUCCESS, cleanup.GetIssues().ToString());
+            }
+
+            {
+                // The failing shape: two separate ExecuteQuery calls in one transaction.
+                // The second call's read must see the row INSERTed by the first call.
+                auto insert = execute(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                    INSERT INTO `/Root/ReproKqpLocks` (Id, Val) VALUES (1, 10);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()));
+                UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), EStatus::SUCCESS, insert.GetIssues().ToString());
+                auto tx1 = insert.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                auto update = execute(Q_(R"(
+                    UPDATE `/Root/ReproKqpLocks` SET Val = Val + 1 WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1));
+                UNIT_ASSERT_VALUES_EQUAL_C(update.GetStatus(), EStatus::SUCCESS, update.GetIssues().ToString());
+
+                auto select = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1).CommitTx());
+                CheckId1Val(select, 11u);
+            }
+
+            {
+                // Committed state must match the transaction result.
+                auto verify = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                CheckId1Val(verify, 11u);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadCommittedInsertThenUpdateSeparateExecuteQueriesOltp) {
+        TReadCommittedInsertThenUpdateSeparateExecuteQueries tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    class TReadCommittedInsertThenDeleteSeparateExecuteQueries : public TReadCommittedSeparateExecuteQueries {
+    protected:
+        void DoExecute() override {
+            TReadCommittedSeparateExecuteQueries::DoExecute();
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto execute = [&](const TString& query, TTxControl txControl) {
+                return Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(query, std::move(txControl)).ExtractValueSync();
+                });
+            };
+
+            {
+                // The failing shape: two separate ExecuteQuery calls in one transaction.
+                // The second call's delete must see the row INSERTed by the first call.
+                auto insert = execute(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                    INSERT INTO `/Root/ReproKqpLocks` (Id, Val) VALUES (1, 10);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()));
+                UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), EStatus::SUCCESS, insert.GetIssues().ToString());
+                auto tx1 = insert.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                auto del = execute(Q_(R"(
+                    DELETE FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1));
+                UNIT_ASSERT_VALUES_EQUAL_C(del.GetStatus(), EStatus::SUCCESS, del.GetIssues().ToString());
+
+                auto select = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1).CommitTx());
+                CheckId1Absent(select);
+            }
+
+            {
+                // Committed state must match the transaction result.
+                auto verify = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                CheckId1Absent(verify);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadCommittedInsertThenDeleteSeparateExecuteQueriesOltp) {
+        TReadCommittedInsertThenDeleteSeparateExecuteQueries tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // Same shape as TReadCommittedInsertThenDeleteSeparateExecuteQueries, but on a
+    // table with a GLOBAL UNIQUE index: the second call's delete must also see the
+    // uncommitted index entry written by the first call.
+    class TReadCommittedInsertThenDeleteWithUniqueIndexSeparateExecuteQueries : public TReadCommittedSeparateExecuteQueries {
+    protected:
+        void DoExecute() override {
+            TReadCommittedSeparateExecuteQueries::DoExecute();
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto execute = [&](const TString& query, TTxControl txControl) {
+                return Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(query, std::move(txControl)).ExtractValueSync();
+                });
+            };
+
+            {
+                auto create = execute(Q_(R"(
+                    CREATE TABLE `/Root/ReproKqpLocksIdx` (
+                        Id Uint64 NOT NULL,
+                        Val Uint64 NOT NULL,
+                        PRIMARY KEY (Id),
+                        INDEX idx_val GLOBAL UNIQUE ON (Val)
+                    );
+                )"), TTxControl::NoTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+            }
+
+            {
+                auto insert = execute(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                    INSERT INTO `/Root/ReproKqpLocksIdx` (Id, Val) VALUES (1, 10);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()));
+                UNIT_ASSERT_VALUES_EQUAL_C(insert.GetStatus(), EStatus::SUCCESS, insert.GetIssues().ToString());
+                auto tx1 = insert.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                auto del = execute(Q_(R"(
+                    DELETE FROM `/Root/ReproKqpLocksIdx` WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1));
+                UNIT_ASSERT_VALUES_EQUAL_C(del.GetStatus(), EStatus::SUCCESS, del.GetIssues().ToString());
+
+                auto select = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocksIdx` WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1).CommitTx());
+                CheckId1Absent(select);
+            }
+
+            {
+                // Committed state must match the transaction result.
+                auto verify = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocksIdx` WHERE Id == 1;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                CheckId1Absent(verify);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadCommittedInsertThenDeleteWithUniqueIndexSeparateExecuteQueriesOltp) {
+        TReadCommittedInsertThenDeleteWithUniqueIndexSeparateExecuteQueries tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // The first call upserts over an existing committed row with pessimistic locks
+    // disabled, the second call deletes the same key. The second call's read must
+    // see the uncommitted upsert of the same transaction.
+    class TReadCommittedUpsertExistingThenDeleteSeparateExecuteQueries : public TReadCommittedSeparateExecuteQueries {
+    protected:
+        void DoExecute() override {
+            TReadCommittedSeparateExecuteQueries::DoExecute();
+
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto execute = [&](const TString& query, TTxControl txControl) {
+                return Kikimr->RunCall([&] {
+                    return session.ExecuteQuery(query, std::move(txControl)).ExtractValueSync();
+                });
+            };
+
+            {
+                auto init = execute(Q_(R"(
+                    INSERT INTO `/Root/ReproKqpLocks` (Id, Val) VALUES (1, 10);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                UNIT_ASSERT_VALUES_EQUAL_C(init.GetStatus(), EStatus::SUCCESS, init.GetIssues().ToString());
+            }
+
+            {
+                auto upsert = execute(Q_(R"(
+                    PRAGMA kikimr.KqpDisablePessimisticLocks="true";
+                    UPSERT INTO `/Root/ReproKqpLocks` (Id, Val) VALUES (1, 20);
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()));
+                UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+                auto tx1 = upsert.GetTransaction();
+                UNIT_ASSERT(tx1);
+
+                auto del = execute(Q_(R"(
+                    DELETE FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1));
+                UNIT_ASSERT_VALUES_EQUAL_C(del.GetStatus(), EStatus::SUCCESS, del.GetIssues().ToString());
+
+                auto select = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::Tx(*tx1).CommitTx());
+                CheckId1Absent(select);
+            }
+
+            {
+                // Committed state must match the transaction result.
+                auto verify = execute(Q_(R"(
+                    SELECT Id, Val FROM `/Root/ReproKqpLocks` WHERE Id == 1;
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW()).CommitTx());
+                CheckId1Absent(verify);
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TReadCommittedUpsertExistingThenDeleteSeparateExecuteQueriesOltp) {
+        TReadCommittedUpsertExistingThenDeleteSeparateExecuteQueries tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     class TUpsertWithDisablePessimisticLocksVisibility : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

@@ -61,7 +61,7 @@ static constexpr const char *kFileDirectory = "file.directory";
 /**
   File extension, excluding the leading dot.
   <p>
-  When the file name has multiple extensions (example.tar.gz), only the last one should be captured
+  When the filename has multiple extensions (example.tar.gz), only the last one should be captured
   ("gz", not "tar.gz").
  */
 static constexpr const char *kFileExtension = "file.extension";
@@ -72,7 +72,7 @@ static constexpr const char *kFileExtension = "file.extension";
   On Linux, a resource fork is used to store additional data with a filesystem object. A file always
   has at least one fork for the data portion, and additional forks may exist. On NTFS, this is
   analogous to an Alternate Data Stream (ADS), and the default data stream for a file is just called
-  $DATA. Zone.Identifier is commonly used by Windows to track contents downloaded from the Internet.
+  $DATA. Zone.Identifier is commonly used by Windows to track contents downloaded from the internet.
   An ADS is typically of the form: C:\path\to\filename.extension:some_fork_name, and some_fork_name
   is the value that should populate @code fork_name @endcode. @code filename.extension @endcode
   should populate @code file.name @endcode, and @code extension @endcode should populate @code
@@ -139,7 +139,7 @@ static constexpr const char *kFileOwnerId = "file.owner.id";
 static constexpr const char *kFileOwnerName = "file.owner.name";
 
 /**
-  Full path to the file, including the file name. It should include the drive letter, when
+  Full path to the file, including the filename. It should include the drive letter, when
   appropriate.
  */
 static constexpr const char *kFilePath = "file.path";

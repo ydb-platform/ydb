@@ -9,8 +9,43 @@ namespace NSchemeShard {
 
 TPath GetBuildPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo, const TString& tableName) {
     return TPath::Init(buildInfo.TablePathId, ss)
-        .Dive(buildInfo.IndexName)
+        .Dive(buildInfo.GetBuildIndexName())
         .Dive(tableName);
+}
+
+TPath GetShardsPath(TSchemeShard* ss, const TIndexBuildInfo& buildInfo) {
+    switch (buildInfo.BuildKind) {
+        case TIndexBuildInfo::EBuildKind::BuildSecondaryIndex:
+        case TIndexBuildInfo::EBuildKind::BuildColumns:
+        case TIndexBuildInfo::EBuildKind::BuildFulltext:
+            if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextIndexDictionary) {
+                if (buildInfo.IsBuildFulltextCompact()) {
+                    return GetBuildPath(ss, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
+                }
+                return GetBuildPath(ss, buildInfo, NTableIndex::ImplTable);
+            }
+            // Compact rowid-mode: the posting fill (SubState None) scans the row-id source table;
+            // the prepass (FulltextRowIdSrc) and all other builds scan the main table.
+            if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
+                return GetBuildPath(ss, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+            }
+            return TPath::Init(buildInfo.TablePathId, ss);
+        case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
+            return buildInfo.IsValidatingUniqueIndex()
+                ? GetBuildPath(ss, buildInfo, NTableIndex::ImplTable)
+                : TPath::Init(buildInfo.TablePathId, ss);
+        case TIndexBuildInfo::EBuildKind::BuildVectorIndex:
+        case TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex:
+            if (buildInfo.KMeans.Level == 1 &&
+                buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
+                buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders) {
+                return TPath::Init(buildInfo.TablePathId, ss);
+            } else {
+                return GetBuildPath(ss, buildInfo, buildInfo.KMeans.ReadFrom());
+            }
+        default:
+            Y_ENSURE(false, buildInfo.InvalidBuildKind());
+    }
 }
 
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(

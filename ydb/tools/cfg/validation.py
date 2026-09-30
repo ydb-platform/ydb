@@ -190,6 +190,21 @@ HOST_SCHEMA = {
         "host": {"type": "string", "minLength": 1},
         "dynamic_slots": {"type": "integer", "minimum": 0},
         "storage": {"type": "boolean"},
+        "storage_profile": {
+            "oneOf": [
+                {"type": "string", "minLength": 1},
+                {"type": "integer"},
+            ],
+        },
+        "dynamic_profiles": {
+            "type": "array",
+            "items": {
+                "oneOf": [
+                    {"type": "string", "minLength": 1},
+                    {"type": "integer"},
+                ],
+            },
+        },
     },
     "oneOf": [
         {
@@ -973,6 +988,22 @@ TEMPLATE_SCHEMA = {
         "metering": copy.deepcopy(METERING_SCHEMA),
         "yql_analytics": copy.deepcopy(YQL_SCHEMA),
         "yq": copy.deepcopy(YQ_SCHEMA),
+        "process_profiles": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "oneOf": [
+                            {"type": "string", "minLength": 1},
+                            {"type": "integer"},
+                        ],
+                    },
+                },
+                "required": ["id"],
+                "additionalProperties": True,
+            },
+        },
     },
     "anyOf": [
         {"required": ["static_erasure", "hosts"]},

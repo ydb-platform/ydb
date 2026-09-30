@@ -1,7 +1,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
+#include <ydb/core/blobstorage/ddisk/ddisk_actor_test_peer.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
@@ -63,12 +65,51 @@ struct TDiskInfo {
     ui32 GroupId = 0;    // unique per disk slot so PDisk treats them as distinct VDisks
 };
 
+struct TEvProbeReservations : TEventLocal<TEvProbeReservations, EventSpaceBegin(TEvents::ES_PRIVATE) + 100> {};
+struct TEvReservationsSettled : TEventLocal<TEvReservationsSettled, EventSpaceBegin(TEvents::ES_PRIVATE) + 101> {
+    bool Settled;
+    explicit TEvReservationsSettled(bool settled) : Settled(settled) {}
+};
+
+// A mailbox probe avoids racing test-thread reads of the actor's reservation state.
+class TReservationProbeDecorator : public TDecorator {
+public:
+    explicit TReservationProbeDecorator(IActor* actor)
+        : TDecorator(THolder<IActor>(actor))
+    {}
+
+    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) override {
+        if (ev->GetTypeRewrite() != TEvProbeReservations::EventType) {
+            return true;
+        }
+        ctx.Send(ev->Sender, new TEvReservationsSettled(
+            NDDisk::TDDiskActorTestPeer::ReservationsSettled(*static_cast<NDDisk::TDDiskActor*>(Actor.Get()))));
+        return false;
+    }
+};
+
+// Keep real PDisk reservations across DDisk-only restarts by losing best-effort
+// shutdown requests. Tracked startup repair still reaches the real PDisk.
+class TDropShutdownReleasesDecorator : public TDecorator {
+public:
+    explicit TDropShutdownReleasesDecorator(IActor* actor)
+        : TDecorator(THolder<IActor>(actor))
+    {}
+
+    bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
+        return !(ev->GetTypeRewrite() == NPDisk::TEvChunkForget::EventType && ev->Cookie == 0);
+    }
+};
+
 class TTestContext {
     THolder<NActors::TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
     TTempDir TempDir;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     NDDisk::TDDiskConfig DDiskConfig;
+    bool ProbeReservations = false;
+    bool AbandonReservations = false;
+    NMonitoring::TDynamicCounters::TCounterPtr UncommittedChunkCount;
     NPDisk::TMainKey PDiskMainKey{.Keys = {DefaultPDiskSequence}, .IsInitialized = true};
     std::optional<ui32> PhysicalChunkSize;
 
@@ -80,7 +121,8 @@ public:
     ui32 NodeId = 0;
 
     explicit TTestContext(NDDisk::TDDiskConfig ddiskConfig = {}, NLog::EPriority ddiskLogPriority = NLog::PRI_ERROR,
-            ui32 numDisks = 1, std::optional<ui32> physicalChunkSize = std::nullopt)
+            ui32 numDisks = 1, std::optional<ui32> physicalChunkSize = std::nullopt,
+            bool probeReservations = false, bool abandonReservations = false)
         : PhysicalChunkSize(physicalChunkSize)
     {
         NActors::TTestActorRuntime::ResetFirstNodeId();
@@ -99,6 +141,8 @@ public:
         Edge = Runtime->AllocateEdgeActor();
         NodeId = Runtime->GetNodeId(0);
         DDiskConfig = ddiskConfig;
+        ProbeReservations = probeReservations;
+        AbandonReservations = abandonReservations;
 
         for (ui32 d = 0; d < numDisks; ++d) {
             AddDisk();
@@ -128,8 +172,18 @@ public:
         pdiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         pdiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(true);
+        if (ProbeReservations) {
+            UNIT_ASSERT_VALUES_EQUAL(p, 0);
+            UncommittedChunkCount = GetServiceCounters(Counters, "pdisks")
+                ->GetSubgroup("pdisk", Sprintf("%09u", pdiskId))
+                ->GetSubgroup("media", to_lower(pdiskConfig->PDiskCategory.TypeStrShort()))
+                ->GetSubgroup("subsystem", "chunks")->GetCounter("UncommitedDataChunks", false);
+        }
 
         IActor* pdiskActor = CreatePDisk(pdiskConfig.Get(), PDiskMainKey, Counters);
+        if (AbandonReservations) {
+            pdiskActor = new TDropShutdownReleasesDecorator(pdiskActor);
+        }
         TActorId pdiskActorId = Runtime->Register(pdiskActor);
 
         TActorId pdiskServiceId = MakeBlobStoragePDiskID(NodeId, pdiskId);
@@ -198,6 +252,9 @@ public:
         NDDisk::TDDiskConfig cfg = DDiskConfig;
         IActor* ddiskActor = NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo,
             std::move(pbFormat), std::move(cfg), Counters);
+        if (ProbeReservations) {
+            ddiskActor = new TReservationProbeDecorator(ddiskActor);
+        }
 
         TActorId ddiskActorId = Runtime->Register(ddiskActor);
         TActorId ddiskServiceId = MakeBlobStorageDDiskId(NodeId, pdiskId, slotId);
@@ -253,6 +310,28 @@ public:
     // still-in-flight owner-stamped ops (which would stop the DDisk early).
     void QuiesceInFlightPDiskOps(TDuration quietWindow = TDuration::MilliSeconds(200)) {
         Sleep(quietWindow);
+    }
+
+    void WaitForReservationsSettled() {
+        UNIT_ASSERT(ProbeReservations);
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (!SendAndGrab<TEvReservationsSettled>(new TEvProbeReservations())->Get()->Settled) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "DDisk reservations did not settle");
+            Sleep(TDuration::MilliSeconds(10));
+        }
+    }
+
+    ui64 UncommittedChunks() const {
+        UNIT_ASSERT(UncommittedChunkCount);
+        return UncommittedChunkCount->Val();
+    }
+
+    void WaitForReservationsReleased() {
+        const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+        while (UncommittedChunks()) {
+            UNIT_ASSERT_C(TInstant::Now() < deadline, "PDisk reservations were not released");
+            Sleep(TDuration::MilliSeconds(10));
+        }
     }
 
     void ForceCutLog(ui32 diskIdx) {
@@ -345,14 +424,14 @@ TString MakeDataWithTabletAndBlock(ui32 tabletId, ui32 blockIdx, ui32 size) {
     return data;
 }
 
-TString AssertReadResult(const NDDisk::TEvReadResult::TPtr& readResult, TStringBuf expected) {
+TString AssertReadResult(const NDDisk::TEvReadResult::TPtr& readResult, TStringBuf expected, bool checksums = true) {
     AssertStatus<NDDisk::TEvReadResult>(readResult, TReplyStatus::OK);
 
     const TString actual = readResult->Get()->GetPayload(0).ConvertToString();
     UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     UNIT_ASSERT_VALUES_EQUAL(expected.size() % NDDisk::IntegrityUnitSize, 0u);
 
-    const ui32 expectedChecksumCount = expected.size() / NDDisk::IntegrityUnitSize;
+    const ui32 expectedChecksumCount = checksums ? expected.size() / NDDisk::IntegrityUnitSize : 0;
     UNIT_ASSERT_VALUES_EQUAL_C(
         static_cast<ui32>(readResult->Get()->Record.ChecksumsSize()), expectedChecksumCount,
         "checksum count mismatch");

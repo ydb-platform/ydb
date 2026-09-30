@@ -2581,24 +2581,31 @@ partitioning_settings {
         ShouldCheckQuotas(TSchemeLimits{.MaxChildrenInDir = 2}, Ydb::StatusIds::CANCELLED);
     }
 
-    Y_UNIT_TEST(ShouldRetryAtFinalStage) {
-        Env(); // Init test env
+    enum class EListObjectsFailure {
+        None,
+        Once,
+        Always,
+        AccessDenied,
+    };
+
+    void CheckMultipartUploadConfirmation(TTestBasicRuntime& runtime, TTestEnv& env, TS3Mock& s3Mock, ui16 s3Port,
+            EListObjectsFailure listFailure) {
         ui64 txId = 100;
 
-        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        Env().TestWaitNotification(Runtime(), txId);
+        env.TestWaitNotification(runtime, txId);
 
-        UpdateRow(Runtime(), "Table", 1, "valueA");
-        UpdateRow(Runtime(), "Table", 2, "valueB");
-        Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
+        UpdateRow(runtime, "Table", 1, "valueA");
+        UpdateRow(runtime, "Table", 2, "valueB");
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -2636,31 +2643,107 @@ partitioning_settings {
         });
 
         const auto exportId = ++txId;
-        TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
+        TestExport(runtime, txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              number_of_retries: 10
+              number_of_retries: 2
               items {
                 source_path: "/MyRoot/Table"
                 destination_prefix: ""
               }
             }
-        )", S3Port()));
+        )", s3Port));
 
         if (!injectResult) {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
                 return bool(injectResult);
             });
-            Runtime().DispatchEvents(opts);
+            runtime.DispatchEvents(opts);
         }
 
-        Runtime().SetObserverFunc(prevObserver);
-        Runtime().Send(injectResult.Release(), 0, true);
+        ui32 noSuchUploads = 0;
+        ui32 listRequests = 0;
+        ui32 listResponses = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            using namespace NWrappers::NExternalStorage;
+            switch (ev->GetTypeRewrite()) {
+                case EvCompleteMultipartUploadResponse: {
+                    const auto& result = ev->Get<TEvCompleteMultipartUploadResponse>()->Result;
+                    if (!result.IsSuccess() && result.GetError().GetErrorType() == Aws::S3::S3Errors::NO_SUCH_UPLOAD) {
+                        ++noSuchUploads;
+                    }
+                    break;
+                }
+                case EvListObjectsRequest: {
+                    ++listRequests;
+                    UNIT_ASSERT_VALUES_EQUAL(noSuchUploads, listRequests);
+                    const auto& request = ev->Get<TEvListObjectsRequest>()->Request;
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetPrefix(), "data_00.csv");
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetMaxKeys(), 1);
+                    UNIT_ASSERT(request.GetMarker().empty());
+                    break;
+                }
+                case EvListObjectsResponse: {
+                    ++listResponses;
+                    auto& result = ev->Get<TEvListObjectsResponse>()->Result;
+                    UNIT_ASSERT(result.IsSuccess());
+                    if (listFailure == EListObjectsFailure::Always
+                        || listFailure == EListObjectsFailure::AccessDenied
+                        || (listFailure == EListObjectsFailure::Once && listResponses == 1)) {
+                        const bool retryable = listFailure != EListObjectsFailure::AccessDenied;
+                        Aws::Client::AWSError<Aws::S3::S3Errors> error(
+                            retryable ? Aws::S3::S3Errors::SLOW_DOWN : Aws::S3::S3Errors::ACCESS_DENIED,
+                            retryable ? "SlowDown" : "AccessDenied", "Injected ListObjects failure", retryable);
+                        error.SetResponseCode(retryable
+                            ? Aws::Http::HttpResponseCode::SERVICE_UNAVAILABLE
+                            : Aws::Http::HttpResponseCode::FORBIDDEN);
+                        result = Aws::S3::Model::ListObjectsOutcome(std::move(error));
+                    }
+                    break;
+                }
+            }
+            return prevObserver(ev);
+        });
+        runtime.Send(injectResult.Release(), 0, true);
 
-        Env().TestWaitNotification(Runtime(), exportId);
-        TestGetExport(Runtime(), exportId, "/MyRoot");
+        env.TestWaitNotification(runtime, exportId);
+        runtime.SetObserverFunc(prevObserver);
+
+        const bool success = listFailure == EListObjectsFailure::None || listFailure == EListObjectsFailure::Once;
+        const auto desc = TestGetExport(runtime, exportId, "/MyRoot",
+            success ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+        if (!success) {
+            const auto& entry = desc.GetResponse().GetEntry();
+            UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+            UNIT_ASSERT_C(TString(entry.GetIssues(0).message()).Contains("Injected ListObjects failure"), entry.DebugString());
+        }
+
+        const ui32 expectedRequests = listFailure == EListObjectsFailure::Once || listFailure == EListObjectsFailure::Always ? 2 : 1;
+        UNIT_ASSERT_VALUES_EQUAL(listRequests, expectedRequests);
+        UNIT_ASSERT_VALUES_EQUAL(listResponses, expectedRequests);
+        UNIT_ASSERT_VALUES_EQUAL(noSuchUploads, expectedRequests);
+
+        const auto* data = s3Mock.GetData().FindPtr("/data_00.csv");
+        UNIT_ASSERT(data);
+        UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldRetryAtFinalStage) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::None);
+    }
+
+    Y_UNIT_TEST(ShouldRetryMultipartUploadConfirmation) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::Once);
+    }
+
+    Y_UNIT_TEST(ShouldFailMultipartUploadConfirmationAfterRetries) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::Always);
+    }
+
+    Y_UNIT_TEST(ShouldFailMultipartUploadConfirmationOnAccessDenied) {
+        CheckMultipartUploadConfirmation(Runtime(), Env(), S3Mock(), S3Port(), EListObjectsFailure::AccessDenied);
     }
 
     Y_UNIT_TEST(ShouldRestartUploadOnInvalidPart) {
@@ -2761,23 +2844,23 @@ partitioning_settings {
         UNIT_ASSERT_VALUES_EQUAL(*data, "1,\"valueA\"\n2,\"valueB\"\n");
     }
 
-    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
-        Env(); // Init test env
+    void CheckMissingMultipartUpload(TTestBasicRuntime& runtime, TTestEnv& env, TS3Mock& s3Mock, ui16 s3Port,
+            bool returnSimilarKey) {
         ui64 txId = 100;
 
-        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        Env().TestWaitNotification(Runtime(), txId);
+        env.TestWaitNotification(runtime, txId);
 
-        UpdateRow(Runtime(), "Table", 1, "valueA");
-        UpdateRow(Runtime(), "Table", 2, "valueB");
+        UpdateRow(runtime, "Table", 1, "valueA");
+        UpdateRow(runtime, "Table", 2, "valueB");
 
         THolder<IEventHandle> injectResult;
-        auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 case TEvDataShard::EvProposeTransaction: {
                     auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
@@ -2829,7 +2912,7 @@ partitioning_settings {
         });
 
         const auto exportId = ++txId;
-        TestExport(Runtime(), txId, "/MyRoot", Sprintf(R"(
+        TestExport(runtime, txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -2838,29 +2921,71 @@ partitioning_settings {
                 destination_prefix: ""
               }
             }
-        )", S3Port()));
+        )", s3Port));
 
         if (!injectResult) {
             TDispatchOptions opts;
             opts.FinalEvents.emplace_back([&injectResult](IEventHandle&) -> bool {
                 return bool(injectResult);
             });
-            Runtime().DispatchEvents(opts);
+            runtime.DispatchEvents(opts);
         }
 
-        Runtime().SetObserverFunc(prevObserver);
-        Runtime().Send(injectResult.Release(), 0, true);
+        ui32 listRequests = 0;
+        ui32 listResponses = 0;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            using namespace NWrappers::NExternalStorage;
+            switch (ev->GetTypeRewrite()) {
+                case EvListObjectsRequest: {
+                    ++listRequests;
+                    const auto& request = ev->Get<TEvListObjectsRequest>()->Request;
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetPrefix(), "data_00.csv");
+                    UNIT_ASSERT_VALUES_EQUAL(request.GetMaxKeys(), 1);
+                    UNIT_ASSERT(request.GetMarker().empty());
+                    break;
+                }
+                case EvListObjectsResponse: {
+                    ++listResponses;
+                    UNIT_ASSERT(ev->Get<TEvListObjectsResponse>()->Result.IsSuccess());
+                    Aws::S3::Model::ListObjectsResult result;
+                    if (returnSimilarKey) {
+                        result.AddContents(Aws::S3::Model::Object().WithKey("data_00.csv.sha256"));
+                    }
+                    ev->Get<TEvListObjectsResponse>()->Result = Aws::S3::Model::ListObjectsOutcome(std::move(result));
+                    break;
+                }
+            }
+            return prevObserver(ev);
+        });
+        runtime.Send(injectResult.Release(), 0, true);
 
-        Env().TestWaitNotification(Runtime(), exportId);
+        env.TestWaitNotification(runtime, exportId);
+        runtime.SetObserverFunc(prevObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL(listRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResponses, 1);
 
         // The table's data object was never assembled by S3.
-        const auto& data = S3Mock().GetData();
+        const auto& data = s3Mock.GetData();
         UNIT_ASSERT_C(data.find("/data_00.csv") == data.end(),
             "precondition: CompleteMultipartUpload failed, so /data_00.csv must not exist");
 
         // Therefore the export must NOT report success. Reporting SUCCESS here means the backup
         // is recorded as complete while the exported table is missing from the bucket.
-        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto desc = TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = desc.GetResponse().GetEntry();
+        UNIT_ASSERT_VALUES_EQUAL(entry.IssuesSize(), 1);
+        UNIT_ASSERT_C(TString(entry.GetIssues(0).message()).Contains(
+            "Cannot confirm multipart upload completion after NoSuchUpload: object '/data_00.csv' was not found"),
+            entry.DebugString());
+    }
+
+    Y_UNIT_TEST(ShouldNotSucceedWhenMultipartUploadIsLost) {
+        CheckMissingMultipartUpload(Runtime(), Env(), S3Mock(), S3Port(), false);
+    }
+
+    Y_UNIT_TEST(ShouldNotConfirmMultipartUploadWithSimilarKey) {
+        CheckMissingMultipartUpload(Runtime(), Env(), S3Mock(), S3Port(), true);
     }
 
     Y_UNIT_TEST(CorruptedDyNumber) {

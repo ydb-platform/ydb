@@ -3,6 +3,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
@@ -11,6 +12,7 @@
 
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/library/aws_init/aws.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -154,7 +156,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
     }
 
-    Y_UNIT_TEST(RebuildVectorIndex) {
+    void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -193,16 +195,74 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         // Write more data
         WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 400);
 
-        // Rebuild the same index
+        const auto liveIndex = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+        const auto livePosting = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+        auto checkLiveIndex = [&] {
+            const auto index = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            TestDescribeResult(index, {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexStateReady)});
+            UNIT_ASSERT_VALUES_EQUAL(index.GetPathDescription().GetSelf().GetPathId(),
+                liveIndex.GetPathDescription().GetSelf().GetPathId());
+            const auto posting = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable", true, true, true);
+            UNIT_ASSERT_VALUES_EQUAL(posting.GetPathDescription().GetSelf().GetPathId(),
+                livePosting.GetPathDescription().GetSelf().GetPathId());
+        };
+
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> kmeansBlocker(runtime);
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> moveBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex;
+        });
         ui64 rebuildIndexTx = ++txId;
         TestRebuildVectorIndex(runtime, rebuildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        runtime.WaitFor("rebuild clustering", [&] { return !kmeansBlocker.empty(); });
+        checkLiveIndex();
+        if (reboot) {
+            RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+            checkLiveIndex();
+        }
+        if (cancel) {
+            TestCancelBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildIndexTx);
+        }
+        kmeansBlocker.Stop().Unblock();
+        if (!cancel) {
+            runtime.WaitFor("rebuild replacement", [&] { return !moveBlocker.empty(); });
+            checkLiveIndex();
+            if (reboot) {
+                RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+                checkLiveIndex();
+            }
+        }
+        auto rejectMove = runtime.AddObserver<TEvSchemeShard::TEvModifySchemeTransaction>([&](auto& ev) {
+            auto* tx = ev->Get()->Record.MutableTransaction(0);
+            if (rejectReplacement && tx->GetOperationType() == NKikimrSchemeOp::ESchemeOpMoveIndex) {
+                tx->MutableMoveIndex()->SetAllowOverwrite(false);
+            }
+        });
+        moveBlocker.Stop().Unblock();
         env.TestWaitNotification(runtime, rebuildIndexTx, tenantSchemeShard);
 
         auto rebuildOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildIndexTx);
-        UNIT_ASSERT_VALUES_EQUAL(rebuildOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+        UNIT_ASSERT_VALUES_EQUAL(rebuildOperation.GetIndexBuild().GetState(),
+            cancel ? Ydb::Table::IndexBuildState::STATE_CANCELLED :
+                rejectReplacement ? Ydb::Table::IndexBuildState::STATE_REJECTED : Ydb::Table::IndexBuildState::STATE_DONE);
 
         TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
             {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+        if (cancel || rejectReplacement) {
+            checkLiveIndex();
+        } else {
+            const auto rebuilt = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            UNIT_ASSERT(rebuilt.GetPathDescription().GetSelf().GetPathId() != liveIndex.GetPathDescription().GetSelf().GetPathId());
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(RebuildVectorIndex, Cancel, Reboot) {
+        DoRebuildVectorIndex(Cancel, Reboot);
+    }
+
+    Y_UNIT_TEST_TWIN(RebuildVectorIndexRejectReplacement, Reboot) {
+        DoRebuildVectorIndex(false, Reboot, true);
     }
 
     Y_UNIT_TEST(RebuildVectorIndexPreservesDataColumns) {
@@ -2844,6 +2904,84 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         }
 
         TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+    }
+
+    Y_UNIT_TEST(LocalKMeansInProgressLog) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix"    Type: "Uint32" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 50 } } } }
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 150 } } } }
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 50);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 1, 50, 150);
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 2, 150, 200);
+
+        // Build vector index with max_shards_in_flight(1) and wait for level 2
+        TBlockEvents<TEvDataShard::TEvReshuffleKMeansRequest> reshuffleBlocker(runtime, [&](const auto& ) {
+            return true;
+        });
+        const ui64 buildIndexTx = ++txId;
+        auto sender = runtime.AllocateEdgeActor();
+        {
+            auto request = CreateBuildIndexRequest(buildIndexTx, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {}, {}
+            });
+            auto settings = request->Record.MutableSettings();
+            settings->set_max_shards_in_flight(1);
+            settings->MutableScanSettings()->SetMaxBatchRows(1);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, request);
+        }
+        runtime.WaitFor("ReshuffleKMeansRequest", [&]{ return reshuffleBlocker.size(); });
+
+        // Capture LocalKMeans requests (probably only 1 request)
+        bool seenLocal = false;
+        NKikimrTxDataShard::TEvLocalKMeansRequest req;
+        TBlockEvents<TEvDataShard::TEvLocalKMeansRequest> localBlocker(runtime, [&](const auto& ev) {
+            req = ev->Get()->Record;
+            seenLocal = true;
+            return false;
+        });
+        reshuffleBlocker.Stop().Unblock();
+        runtime.WaitFor("LocalKMeansRequest", [&] { return seenLocal; });
+
+        // Forcibly send IN_PROGRESS to schemeshard on uploadrows
+        // It was crashing index build because of incorrect types
+        auto ackKey = TSerializedCellVec::Serialize({TCell::Make(ui64(0)), TCell::Make(ui32(0))});
+        TBlockEvents<TEvTxUserProxy::TEvUploadRowsResponse> uploadBlocker(runtime, [&](const auto&) {
+            auto progress = MakeHolder<TEvDataShard::TEvLocalKMeansResponse>();
+            auto& rec = progress->Record;
+            rec.SetId(buildIndexTx);
+            rec.SetTabletId(req.GetTabletId());
+            rec.SetRequestSeqNoGeneration(req.GetSeqNoGeneration());
+            rec.SetRequestSeqNoRound(req.GetSeqNoRound());
+            rec.SetStatus(NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+            rec.SetLastKeyAck(ackKey);
+            ForwardToTablet(runtime, tenantSchemeShard, sender, progress.Release());
+            return false;
+        });
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+
+        localBlocker.Stop();
+        uploadBlocker.Stop();
     }
 
 }

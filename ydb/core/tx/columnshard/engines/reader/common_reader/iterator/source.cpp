@@ -37,17 +37,18 @@ void TExecutionContext::Stop() {
     ExecutionVisitor.reset();
 }
 
-void TExecutionContext::Start(const std::shared_ptr<IDataSource>& source,
-    const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
-    auto readMeta = source->GetContext()->GetCommonContext()->GetReadMetadata();
-    NArrow::NSSA::TProcessorContext context(
-        source, source->MutableStageData().ExtractTable(), readMeta->GetLimitRobustOptional(), readMeta->IsDescSorted());
+void TExecutionContext::Start(
+    IDataSource& source, const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& program, const TFetchingScriptCursor& step) {
+    auto readMeta = source.GetContext()->GetCommonContext()->GetReadMetadata();
+    // ItemsLimit is a distinct-key cap when DistinctMarker is present (reader sync point). SSA CutFilter
+    // would otherwise keep only that many physical rows and hide later keys in the same source.
+    const std::optional<i64> ssaLimit =
+        readMeta->GetProgram().GetDistinctKeyColumnIdOptional() ? std::nullopt : readMeta->GetLimitRobustOptional();
+    NArrow::NSSA::TProcessorContext context(source, source.MutableStageData().ExtractTable(), ssaLimit, readMeta->IsDescSorted());
     auto visitor = std::make_shared<NArrow::NSSA::NGraph::NExecution::TExecutionVisitor>(std::move(context));
-    AFL_VERIFY(!Program);
-    Program = program;
     SetProgramIterator(program->BuildIterator(visitor), visitor);
     SetCursorStep(step);
-    SetStartCategoryName(step.GetPrevName());
+    PrevNode = TPrevNodeTracing{ .CategoryName = step.GetPrevName() };
 }
 
 const TFetchingStepSignals& TExecutionContext::GetCurrentStepSignalsVerified() const {
@@ -98,14 +99,14 @@ ui64 IDataSource::DoGetSourceRecordsCount() const {
     }
 }
 
-TConclusion<bool> IDataSource::DoStartFetch(
+TConclusion<TExecutionResult> IDataSource::DoStartFetch(
     const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) {
     std::vector<std::shared_ptr<IKernelFetchLogic>> fetchers;
     for (auto&& i : fetchersExt) {
         fetchers.emplace_back(std::static_pointer_cast<IKernelFetchLogic>(i));
     }
     if (fetchers.empty()) {
-        return false;
+        return TExecutionResult::Done();
     }
     return DoStartFetchImpl(context, fetchers);
 }
@@ -213,6 +214,11 @@ TString IDataSource::GetEntityStorageId(const ui32 /*entityId*/) const {
     return "";
 }
 
+TString IDataSource::GetIndexStorageId(const ui32 /*indexId*/) const {
+    AFL_VERIFY(false);
+    return "";
+}
+
 TBlobRange IDataSource::RestoreBlobRange(const TBlobRangeLink16& /*rangeLink*/) const {
     AFL_VERIFY(false);
     return TBlobRange();
@@ -285,18 +291,17 @@ void IDataSource::ResetSourceFinishedFlag() {
     AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
 }
 
-void IDataSource::OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::OnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<TDataSourceLease> self) {
     AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
-    AFL_VERIFY(sourcePtr);
-    DoOnSourceFetchingFinishedSafe(owner, sourcePtr);
+    AFL_VERIFY(self && &self->GetSource() == this);
+    DoOnSourceFetchingFinishedSafe(owner, std::move(self));
 }
 
-void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::OnEmptyStageData() {
     AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-    AFL_VERIFY(sourcePtr);
     AFL_VERIFY(!StageResult);
     AFL_VERIFY(StageData);
-    DoOnEmptyStageData(sourcePtr);
+    DoOnEmptyStageData();
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
 
@@ -306,13 +311,12 @@ void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& 
         GetTotalExecutionDuration(), GetReservedMemory());
 }
 
-void IDataSource::BuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::BuildStageResult() {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     AFL_VERIFY(AtomicCas(&StageResultBuiltFlag, 1, 0));
-    AFL_VERIFY(sourcePtr);
     AFL_VERIFY(!StageResult);
     AFL_VERIFY(StageData);
-    DoBuildStageResult(sourcePtr);
+    DoBuildStageResult();
     AFL_VERIFY(StageResult);
     AFL_VERIFY(!StageData);
 

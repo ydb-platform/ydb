@@ -249,7 +249,7 @@ namespace {
             TVector<TSessionState::TPtr> ReadySessions;
             // when entry removed from BusySessions or InflightCreateSessions decremented, we should call TryEnqueueWaiting() or directly create/reuse session
             std::unordered_map<TString, TSessionState::TPtr> BusySessions;
-            ui64 InflightCreateSessions = 0;
+            std::set<TSessionState::TPtr> InflightCreateSessions; // keeps session from moment of creation until we got first SessionState
             TInstant ExpireTime;
         };
 
@@ -270,7 +270,8 @@ namespace {
         }
 
         void SendCreateSession(TSessionState::TPtr state) {
-            ++DatabaseStates[state->Database].InflightCreateSessions;
+            auto [_, inserted] = DatabaseStates[state->Database].InflightCreateSessions.emplace(state);
+            Y_DEBUG_ABORT_UNLESS(inserted);
 
             using TRequest = Ydb::Query::CreateSessionRequest;
             using TResponse = Ydb::Query::CreateSessionResponse;
@@ -309,10 +310,10 @@ namespace {
 
             while (!databaseState.WaitingQueue.empty()) {
                 // too many sessions: wait until some session released
-                if (databaseState.BusySessions.size() + databaseState.InflightCreateSessions >= SessionPoolLimit) {
+                if (databaseState.BusySessions.size() + databaseState.InflightCreateSessions.size() >= SessionPoolLimit) {
                     YDB_LOG_TRACE("Reached pool limit",
                             {"busySessionSize", databaseState.BusySessions.size()},
-                            {"inflightCreateSessions", databaseState.InflightCreateSessions},
+                            {"inflightCreateSessions", databaseState.InflightCreateSessions.size()},
                             {"limit", SessionPoolLimit},
                             {"senderId", databaseState.WaitingQueue.front()},
                             {"database", database}
@@ -399,8 +400,8 @@ namespace {
                     session->Sender = {};
                     Send(sender, new TEvSessionError(status, IssuesFromProtoMessage(response)));
                 }
-                Y_DEBUG_ABORT_UNLESS(databaseState.InflightCreateSessions > 0);
-                --databaseState.InflightCreateSessions;
+                auto removed = databaseState.InflightCreateSessions.erase(session);
+                Y_DEBUG_ABORT_UNLESS(removed);
                 TryEnqueueWaiting(databaseState, session->Database);
                 return;
             }
@@ -440,7 +441,13 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
-            session->StreamProcessor->Read([actorSystem, selfId, session = std::move(session)](Ydb::Query::SessionState&& response) mutable {
+            session->StreamProcessor->Read([actorSystem, selfId, weakSession = std::weak_ptr(session)](Ydb::Query::SessionState&& response) {
+                auto session = weakSession.lock();
+                if (!session) {
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakSession is dead",
+                            {"actorId", selfId});
+                    return;
+                }
                 actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
             });
         }
@@ -484,8 +491,8 @@ namespace {
                     if (auto sender = session->Sender) {
                         session->Sender = {};
                         Send(sender, new TEvSessionError(status, IssuesFromProtoMessage(response)));
-                        Y_DEBUG_ABORT_UNLESS(databaseState.InflightCreateSessions > 0);
-                        --databaseState.InflightCreateSessions;
+                        auto removed = databaseState.InflightCreateSessions.erase(session);
+                        Y_DEBUG_ABORT_UNLESS(removed);
                         TryEnqueueWaiting(databaseState, session->Database);
                     }
                     return;
@@ -493,8 +500,8 @@ namespace {
             if (auto sender = session->Sender) {
                 session->Sender = {};
 
-                Y_DEBUG_ABORT_UNLESS(databaseState.InflightCreateSessions > 0);
-                --databaseState.InflightCreateSessions;
+                auto removed = databaseState.InflightCreateSessions.erase(session);
+                Y_DEBUG_ABORT_UNLESS(removed);
                 SendSession(sender, session);
             }
             if (session->StreamProcessor->HasData()) {
@@ -552,7 +559,7 @@ namespace {
             auto now = TInstant::Now();
             for (auto it = DatabaseStates.begin(); it != DatabaseStates.end(); ) {
                 auto& [database, databaseState] = *it;
-                if (databaseState.ExpireTime <= now && databaseState.BusySessions.size() + databaseState.InflightCreateSessions + databaseState.WaitingQueue.size() == 0) {
+                if (databaseState.ExpireTime <= now && databaseState.BusySessions.size() + databaseState.InflightCreateSessions.size() + databaseState.WaitingQueue.size() == 0) {
                     for (auto session: databaseState.ReadySessions) {
                         CleanupStreamProcessor(session);
                         if (session->SessionId) {
@@ -921,7 +928,13 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
-            state->StreamProcessor->Read([actorSystem, selfId, state = std::move(state)](Ydb::Query::ExecuteQueryResponsePart&& response) mutable {
+            state->StreamProcessor->Read([actorSystem, selfId, weakState = std::weak_ptr(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
+                auto state = weakState.lock();
+                if (!state) {
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakState is dead",
+                            {"actorId", selfId});
+                    return;
+                }
                 actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
             });
         }

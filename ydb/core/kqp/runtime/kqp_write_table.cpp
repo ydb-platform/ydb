@@ -300,6 +300,11 @@ public:
     virtual IDataBatchPtr FlushBatch(ui64 shardId) = 0;
     virtual const THashSet<ui64>& GetShardIds() const = 0;
 
+    virtual std::vector<std::pair<ui64, IDataBatchPtr>> SplitBatchByShards(IDataBatchPtr&&) {
+        AFL_ENSURE(false); // not supported for OLAP at current time
+        return {};
+    }
+
     virtual i64 GetMemory() = 0;
 };
 
@@ -909,12 +914,12 @@ public:
         AFL_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
     }
 
-    void AddRow(TConstArrayRef<TCell> row, const TVector<TKeyDesc::TPartitionInfo>& partitioning) {
-        AFL_ENSURE(row.size() >= KeyColumnTypes.size());
+    const TKeyDesc::TPartitionInfo& FindShard(TConstArrayRef<TCell> key, const TVector<TKeyDesc::TPartitionInfo>& partitioning) const {
+        AFL_ENSURE(key.size() >= KeyColumnTypes.size());
         auto shardIter = std::lower_bound(
             std::begin(partitioning),
             std::end(partitioning),
-            TArrayRef(row.data(), KeyColumnTypes.size()),
+            TArrayRef(key.data(), KeyColumnTypes.size()),
             [this](const auto &partition, const auto& key) {
                 const auto& range = *partition.Range;
                 return 0 > CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
@@ -922,17 +927,22 @@ public:
             });
 
         AFL_ENSURE(shardIter != partitioning.end());
+        return *shardIter;
+    }
 
-        auto batcherIter = Batchers.find(shardIter->ShardId);
+    void AddRow(TConstArrayRef<TCell> row, const TVector<TKeyDesc::TPartitionInfo>& partitioning) {
+        auto shardIter = FindShard(row, partitioning);
+
+        auto batcherIter = Batchers.find(shardIter.ShardId);
         if (batcherIter == std::end(Batchers)) {
             Batchers.emplace(
-                shardIter->ShardId,
+                shardIter.ShardId,
                 TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc));
         }
 
         AFL_ENSURE(row.size() == Columns.size());
-        Batchers.at(shardIter->ShardId).AddRow(row);
-        ShardIds.insert(shardIter->ShardId);
+        Batchers.at(shardIter.ShardId).AddRow(row);
+        ShardIds.insert(shardIter.ShardId);
     }
 
     void AddData(IDataBatchPtr&& data) override {
@@ -951,6 +961,38 @@ public:
                 row,
                 Partitioning);
         }
+    }
+
+    std::vector<std::pair<ui64, IDataBatchPtr>> SplitBatchByShards(IDataBatchPtr&& batch) override {
+        auto datashardBatch = dynamic_cast<TRowBatch*>(batch.Get());
+        AFL_ENSURE(datashardBatch);
+        auto rows = datashardBatch->Extract();
+
+        THashMap<ui64, TRowsBatcher> shardBatchers;
+        for (const auto& row : rows) {
+            AFL_ENSURE(row.size() == Columns.size());
+            const auto& partition = FindShard(row, Partitioning);
+            auto batcherIter = shardBatchers.find(partition.ShardId);
+            if (batcherIter == std::end(shardBatchers)) {
+                batcherIter = shardBatchers.emplace(
+                    partition.ShardId,
+                    TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc)).first;
+            }
+            batcherIter->second.AddRow(row);
+        }
+
+        std::vector<std::pair<ui64, IDataBatchPtr>> result;
+        result.reserve(shardBatchers.size());
+        for (auto& [shardId, batcher] : shardBatchers) {
+            while (true) {
+                auto fragment = batcher.Flush(true);
+                if (fragment->IsEmpty()) {
+                    break;
+                }
+                result.emplace_back(shardId, std::move(fragment));
+            }
+        }
+        return result;
     }
 
     NKikimrDataEvents::EDataFormat GetDataFormat() override {
@@ -1597,6 +1639,10 @@ struct TBatchWithMetadata {
     // (empty) batches have no snapshot.
     std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
     ui64 WriteSeqNum = 0;
+    // Shard that first received this batch (its uncommitted write chain lives there).
+    // 0 = the batch is being sent to its original shard (current). Set on split/merge
+    // re-route so the destination validates against the transferred ancestor chain.
+    ui64 OriginalShard = 0;
 
     bool IsCoveringBatch() const {
         return Data == nullptr;
@@ -1619,8 +1665,8 @@ public:
             : Memory(memory)
             , PendingBatches(pendingBatches)
             , NextCookie(nextCookie)
-            , Cookie(NextCookie++)
             , Closed(closed) {
+            AdvanceCookie();
         }
 
     public:
@@ -1676,7 +1722,7 @@ public:
                     Batches.pop_front();
                 }
 
-                Cookie = NextCookie++;
+                AdvanceCookie();
                 SendAttempts = 0;
                 BatchesInFlight = 0;
 
@@ -1694,6 +1740,11 @@ public:
         }
 
         ui64 GetCookie() const {
+            return Cookie;
+        }
+
+        ui64 AllocateMessageCookie() {
+            AdvanceCookie();
             return Cookie;
         }
 
@@ -1732,6 +1783,10 @@ public:
         }
 
     private:
+        void AdvanceCookie() {
+            Cookie = NextCookie++;
+        }
+
         std::deque<TBatchWithMetadata> Batches;
         i64& Memory;
         ui64& PendingBatches;
@@ -1757,6 +1812,17 @@ public:
 
         auto [insertIt, _] = ShardsInfo.emplace(shard, TShardInfo(Memory, PendingBatches, NextCookie, Closed));
         return insertIt->second;
+    }
+
+    TShardInfo* FindShard(const ui64 shard) {
+        auto it = ShardsInfo.find(shard);
+        return it != std::end(ShardsInfo) ? &it->second : nullptr;
+    }
+
+    ui64 AllocateMessageCookie(const ui64 shardId) {
+        auto* const shardInfo = FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
+        return shardInfo->AllocateMessageCookie();
     }
 
     void ForEachPendingShard(std::function<void(const IShardedWriteController::TPendingShardInfo&)>&& callback) const {
@@ -1884,23 +1950,85 @@ public:
     }
 
     void AfterPartitioningChanged() {
-        if (!WriteInfos.empty() && Settings.Inconsistent) {
-            // TODO: Reroute will be supported for consistent txs later.
-            // A changed shard set means split/merge: only the removed shards are
-            // affected. Re-route their pending batches to the new shards (which
-            // cover exactly the removed shards' key ranges); shards whose tablet id
-            // survived keep their in-flight batches untouched and are never re-sent.
-            auto deletedShards = GetDeletedShards();
-            if (!deletedShards.empty()) {
-                ReRouteShardsData(std::move(deletedShards));
-            }
-        }
-
         for (const auto& [token, writeInfo] : WriteInfos) {
             if (writeInfo.Closed) {
                 // Close recreated serializers. If they must be closed.
                 Close(token);
             }
+        }
+    }
+
+    TPartitioning::TCPtr GetPartitioning() const override {
+        return Partitioning;
+    }
+
+    TVector<ui64> GetDeletedShards() const override {
+        if (IsOlap.value_or(false)) {
+            return {};
+        }
+        AFL_ENSURE(Partitioning);
+        THashSet<ui64> resolvedShards;
+        resolvedShards.reserve(Partitioning->Size());
+        for (const auto& partition : Partitioning->GetTablePartitioning()) {
+            resolvedShards.insert(partition.ShardId);
+        }
+        TVector<ui64> deletedShards;
+        for (const auto& [shardId, _] : ShardsInfo.GetShards()) {
+            if (!resolvedShards.contains(shardId)) {
+                deletedShards.push_back(shardId);
+            }
+        }
+        return deletedShards;
+    }
+
+    void EnsureShards(const TVector<ui64>& shardIds) override {
+        // Only records are created (no batch pushes), so the Reopen/Close dance of
+        // ReRouteShards is not needed here.
+        for (const ui64 shardId : shardIds) {
+            ShardsInfo.GetShard(shardId);
+        }
+    }
+
+    void ReRouteShards(TVector<ui64>&& deletedShards) override {
+        // Batches must be pushed even if the sink finished producing (the controller
+        // may already be closed): temporarily re-open, push, then close back.
+        const auto wasClosed = ShardsInfo.Reopen();
+        for (const ui64 shardId : deletedShards) {
+            auto batches = ShardsInfo.ExtractShard(shardId);
+            for (auto& batch : batches) {
+                // WRITE mode only (the reroute window): no covering batches exist.
+                AFL_ENSURE(batch.Data);
+                AFL_ENSURE(batch.OriginalShard != 0);
+                const ui64 originalShard = batch.OriginalShard;
+                auto fragments = WriteInfos.at(batch.Token).Serializer->SplitBatchByShards(std::move(batch.Data));
+                for (auto& [destShardId, fragment] : fragments) {
+                    if (!fragment || fragment->IsEmpty()) {
+                        continue;
+                    }
+                    auto& destShardInfo = ShardsInfo.GetShard(destShardId);
+                    destShardInfo.PushBatch(TBatchWithMetadata{
+                        .Token = batch.Token,
+                        .OperationType = batch.OperationType,
+                        .Data = std::move(fragment),
+                        .HasRead = batch.HasRead,
+                        .QuerySpanId = batch.QuerySpanId,
+                        .MvccSnapshot = batch.MvccSnapshot,
+                        // The chain position allocated by the original shard is
+                        // preserved; the destination's own counter does not move so
+                        // fresh current batches of the destination start at 1.
+                        .WriteSeqNum = Settings.EnableWriteSeqNum ? batch.WriteSeqNum : destShardInfo.AllocateWriteSeqNum(),
+                        .OriginalShard = originalShard,
+                    });
+                    ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
+                        .ShardId = destShardId,
+                        .HasRead = batch.HasRead,
+                        .QuerySpanId = batch.QuerySpanId,
+                    });
+                }
+            }
+        }
+        if (wasClosed) {
+            ShardsInfo.Close();
         }
     }
 
@@ -2072,33 +2200,38 @@ public:
         return result;
     }
 
+    bool HasShard(ui64 shardId) const override {
+        return ShardsInfo.Has(shardId);
+    }
+
     std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty()) {
             return {};
         }
-        BuildBatchesForShard(shardInfo);
+        return MakeMetadata(*shardInfo);
+    }
 
-        TMessageMetadata meta;
-        meta.Cookie = shardInfo.GetCookie();
-        meta.OperationsCount = shardInfo.GetBatchesInFlight();
-        meta.IsFinal = shardInfo.IsClosed() && shardInfo.Size() == shardInfo.GetBatchesInFlight();
-        meta.SendAttempts = shardInfo.GetSendAttempts();
-        meta.NextOverloadSeqNo = shardInfo.GetOverloadSeqNo();
+    TMessageMetadata PrepareMessageMetadata(ui64 shardId) override {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
+        BuildBatchesForShard(*shardInfo);
+        return MakeMetadata(*shardInfo);
+    }
 
-        return meta;
+    ui64 AllocateMessageCookie(ui64 shardId) override {
+        return ShardsInfo.AllocateMessageCookie(shardId);
     }
 
     TSerializationResult SerializeMessageToPayload(ui64 shardId, NKikimr::NEvents::TDataEvents::TEvWrite& evWrite, const bool isFinalPrepareOrCommit) override {
         TSerializationResult result;
 
-        const auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty()) {
-            return result;
-        }
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo && !shardInfo->IsEmpty());
 
-        for (size_t index = 0; index < shardInfo.GetBatchesInFlight(); ++index) {
-            const auto& inFlightBatch = shardInfo.GetBatch(index);
+        for (size_t index = 0; index < shardInfo->GetBatchesInFlight(); ++index) {
+            const auto& inFlightBatch = shardInfo->GetBatch(index);
             if (inFlightBatch.Data) {
                 AFL_ENSURE(!inFlightBatch.Data->IsEmpty());
                 result.TotalDataSize += inFlightBatch.Data->GetMemory();
@@ -2119,9 +2252,11 @@ public:
                     auto* writeSeqNum = operation.MutableWriteSeqNum();
                     writeSeqNum->SetWriterIndex(Settings.WriterIndex);
                     writeSeqNum->SetWriteSeqNum(inFlightBatch.WriteSeqNum);
+
+                    operation.SetOriginalShard(inFlightBatch.OriginalShard);
                 }
             } else {
-                AFL_ENSURE(index + 1 == shardInfo.GetBatchesInFlight());
+                AFL_ENSURE(index + 1 == shardInfo->GetBatchesInFlight());
             }
         }
 
@@ -2129,30 +2264,34 @@ public:
     }
 
     std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        const auto result = shardInfo.PopBatches(cookie);
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        AFL_ENSURE(cookie != 0);
+        const auto result = shardInfo->PopBatches(cookie);
         if (result) {
             return TMessageAcknowledgedResult {
                 .DataSize = result->DataSize,
-                .IsShardEmpty = shardInfo.IsEmpty(),
+                .IsShardEmpty = shardInfo->IsEmpty(),
             };
         }
         return std::nullopt;
     }
 
     void OnMessageSent(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        AFL_ENSURE(!shardInfo.IsEmpty() && shardInfo.GetCookie() == cookie);
-        shardInfo.IncSendAttempts();
-        shardInfo.IncOverloadSeqNo();
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        AFL_ENSURE(!shardInfo->IsEmpty() && shardInfo->GetCookie() == cookie);
+        shardInfo->IncSendAttempts();
+        shardInfo->IncOverloadSeqNo();
     }
 
     void ResetRetries(ui64 shardId, ui64 cookie) override {
-        auto& shardInfo = ShardsInfo.GetShard(shardId);
-        if (shardInfo.IsEmpty() || shardInfo.GetCookie() != cookie) {
+        auto* const shardInfo = ShardsInfo.FindShard(shardId);
+        AFL_ENSURE(shardInfo);
+        if (shardInfo->IsEmpty() || shardInfo->GetCookie() != cookie) {
             return;
         }
-        shardInfo.ResetSendAttempts();
+        shardInfo->ResetSendAttempts();
     }
 
     i64 GetMemory() const override {
@@ -2240,6 +2379,7 @@ private:
                         // Every non-empty batch gets a write seq num; whether it is attached
                         // to the resulting operations is decided at serialization.
                         .WriteSeqNum = shardInfo.AllocateWriteSeqNum(),
+                        .OriginalShard = shardId,
                     };
                     shardInfo.PushBatch(std::move(batchWithMetadata));
                     ShardUpdates.push_back(IShardedWriteController::TPendingShardInfo{
@@ -2264,55 +2404,14 @@ private:
         }
     }
 
-    // Shards present in ShardsInfo but absent from the current Partitioning. Their
-    // tablet ids were removed by a split/merge, so their pending batches must be
-    // re-routed to the shards that now cover their key ranges.
-    TVector<ui64> GetDeletedShards() const {
-        if (IsOlap.value_or(false)) {
-            return {};
-        }
-        AFL_ENSURE(Partitioning);
-        THashSet<ui64> resolvedShards;
-        resolvedShards.reserve(Partitioning->Size());
-        for (const auto& partition : Partitioning->GetTablePartitioning()) {
-            resolvedShards.insert(partition.ShardId);
-        }
-        TVector<ui64> deletedShards;
-        for (const auto& [shardId, _] : ShardsInfo.GetShards()) {
-            if (!resolvedShards.contains(shardId)) {
-                deletedShards.push_back(shardId);
-            }
-        }
-        return deletedShards;
-    }
-
-    // Re-route the pending batches of shards removed by a split/merge to the new
-    // shards. Only the removed shards are affected: the batches are re-partitioned
-    // through the (new) payload serializers, which map them to the new shards that
-    // cover exactly the removed shards' key ranges. Surviving shards keep their
-    // in-flight batches untouched.
-    void ReRouteShardsData(TVector<ui64>&& deletedShards) {
-        THashSet<TWriteToken> affectedTokens;
-        for (const ui64 shardId : deletedShards) {
-            auto batches = ShardsInfo.ExtractShard(shardId);
-            for (auto& batch : batches) {
-                AFL_ENSURE(batch.Data);
-                WriteInfos.at(batch.Token).Serializer->AddBatch(std::move(batch.Data));
-                affectedTokens.insert(batch.Token);
-            }
-        }
-        // Push the re-partitioned batches into ShardsInfo under the new shard ids
-        // so the actor's next FlushToShards() delivers them without touching the
-        // in-flight batches of the surviving shards. The controller may already be
-        // closed (the sink finished producing before the split was observed), so
-        // temporarily re-open it for the pushes, then close it again right after.
-        const auto wasClosed = ShardsInfo.Reopen();
-        for (const auto token : affectedTokens) {
-            FlushSerializer(token);
-        }
-        if (wasClosed) {
-            ShardsInfo.Close();
-        }
+    static TMessageMetadata MakeMetadata(const TShardsInfo::TShardInfo& shard) {
+        TMessageMetadata meta;
+        meta.Cookie = shard.GetCookie();
+        meta.OperationsCount = shard.GetBatchesInFlight();
+        meta.IsFinal = shard.IsClosed() && shard.Size() == shard.GetBatchesInFlight();
+        meta.SendAttempts = shard.GetSendAttempts();
+        meta.NextOverloadSeqNo = shard.GetOverloadSeqNo();
+        return meta;
     }
 
     TShardedWriteControllerSettings Settings;
@@ -2345,6 +2444,24 @@ IShardedWriteControllerPtr CreateShardedWriteController(
         const TShardedWriteControllerSettings& settings,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TShardedWriteController>(settings, std::move(alloc));
+}
+
+bool IsSupersededWriteResult(const ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata) {
+    AFL_ENSURE(cookie != 0);
+    return !metadata || metadata->Cookie != cookie;
+}
+
+bool IsIgnorableSupersededStatus(const NKikimrDataEvents::TEvWriteResult::EStatus status) {
+    switch (status) {
+        case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_WRONG_SHARD_STATE:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE:
+            return true;
+        default:
+            return false;
+    }
 }
 
 }

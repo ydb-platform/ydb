@@ -112,7 +112,7 @@ public:
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
         bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
         bool expectsResult, TTxAllocatorState::TPtr txAlloc,
-        const TActorId& kqpTempTablesAgentActor)
+        const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId)
         : PhyTx(phyTx)
         , QueryType(queryType)
         , QueryData(queryData)
@@ -129,6 +129,7 @@ public:
         , ExpectsResult(expectsResult)
         , TxAlloc(std::move(txAlloc))
         , KqpTempTablesAgentActor(kqpTempTablesAgentActor)
+        , TraceId(std::move(traceId))
     {
         YQL_ENSURE(RequestContext);
         YQL_ENSURE(PhyTx);
@@ -140,7 +141,7 @@ public:
     }
 
     void StartAlterOperation() {
-        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId, 0, 0, NWilson::TTraceId(TraceId));
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
@@ -167,7 +168,7 @@ public:
         modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false, NWilson::TTraceId(TraceId));
         RegisterWithSameMailbox(requestHandler);
 
         auto actorSystem = TActivationContext::ActorSystem();
@@ -215,7 +216,7 @@ public:
         }
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false, NWilson::TTraceId(TraceId));
         RegisterWithSameMailbox(requestHandler);
 
         auto actorSystem = TlsActivationContext->ActorSystem();
@@ -255,7 +256,7 @@ public:
 
         auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request);
 
-        Send(MakeSchemeCacheID(), ev.release());
+        Send(MakeSchemeCacheID(), ev.release(), 0, 0, NWilson::TTraceId(TraceId));
         Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
@@ -344,7 +345,7 @@ public:
         makeDir->SetName(CombinePath(dirPath.begin(), std::prev(dirPath.end()), false));
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
-        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false, NWilson::TTraceId(TraceId));
         RegisterWithSameMailbox(requestHandler);
 
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
@@ -616,7 +617,7 @@ public:
 
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
                 IActor* analyzeActor = new TAnalyzeActor(Database, analyzeOperation.GetTablePath(), columns, analyzePromise,
-                    sampleRate);
+                    sampleRate, NWilson::TTraceId(TraceId));
 
                 auto actorSystem = TActivationContext::ActorSystem();
                 AnalyzeActorId = RegisterWithSameMailbox(analyzeActor);
@@ -748,7 +749,8 @@ public:
             ev.Release(),
             promise,
             failedOnAlreadyExists,
-            successOnNotExist
+            successOnNotExist,
+            NWilson::TTraceId(TraceId)
         );
         RegisterWithSameMailbox(requestHandler);
 
@@ -962,7 +964,7 @@ public:
         }
 
         auto ev = std::make_unique<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release());
-        Send(schemeCache, ev.release());
+        Send(schemeCache, ev.release(), 0, 0, NWilson::TTraceId(TraceId));
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&) {
@@ -1303,7 +1305,7 @@ public:
         }
 
         Y_ABORT_UNLESS(SchemePipeActorId_);
-        NTabletPipe::SendData(SelfId(), SchemePipeActorId_, ev.release());
+        NTabletPipe::SendData(SelfId(), SchemePipeActorId_, ev.release(), 0, NWilson::TTraceId(TraceId));
     }
 
     void HandleExecute(TEvPrivate::TEvResult::TPtr& ev) {
@@ -1469,6 +1471,7 @@ private:
     bool ExpectsResult = false;
     TTxAllocatorState::TPtr TxAlloc;
     const TActorId KqpTempTablesAgentActor;
+    const NWilson::TTraceId TraceId;
     TActorId AnalyzeActorId;
 };
 
@@ -1480,12 +1483,12 @@ IActor* CreateKqpSchemeExecuter(
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs,
     TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
-    bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor)
+    bool expectsResult, TTxAllocatorState::TPtr txAlloc, const TActorId& kqpTempTablesAgentActor, NWilson::TTraceId traceId)
 {
     return new TKqpSchemeExecuter(
         phyTx, queryType, queryData, target, requestType, database, userToken, clientAddress,
         temporary, createTmpDir, isCreateTableAs, tempDirName, std::move(ctx),
-        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor);
+        expectsResult, std::move(txAlloc), kqpTempTablesAgentActor, std::move(traceId));
 }
 
 } // namespace NKikimr::NKqp

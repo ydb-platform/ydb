@@ -275,6 +275,7 @@ class DistributedRuntime:
             self.cancelled,
             progress,
             reset_disks=self.profile["distributed"].get("reset_disks", False),
+            deploy=self.profile.get("mode") == "deploy",
         )
         with self.service._lock:
             if self.cancelled.is_set():

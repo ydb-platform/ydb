@@ -10,19 +10,24 @@ from ydb.tools.ydb_bench.lib.topology import plan_affinity
 from ydb.tools.ydb_bench.lib.cluster_config import execution_config, validate_placement, tenant_configs
 
 
-def execution_template(value, host_ids, target_tenant, multiple_cli=False):
+def execution_template(value, host_ids, target_tenant, multiple_cli=False, deploy=False):
     template = validate_template(value, host_ids)
     execution_config(template.get("ydb_config", {}))
     tenant_configs(template.get('ydb_tenant_configs', {}), [t['path'] for t in template['tenants']], execution=True)
     nodes = template["nodes"]
+    if deploy:
+        nodes = template["nodes"] = [node for node in nodes if node["role"] != "cli"]
+        template["host_ids"] = list(dict.fromkeys(node["host_id"] for node in nodes))
     cli_count = sum(node["role"] == "cli" for node in nodes)
-    if not cli_count or (not multiple_cli and cli_count != 1):
+    if not deploy and (not cli_count or (not multiple_cli and cli_count != 1)):
         raise BenchmarkError("Distributed YDB requires exactly one CLI generator")
     if not any(node["role"] == "static" for node in nodes):
         raise BenchmarkError("Distributed YDB requires at least one static node")
-    if not isinstance(target_tenant, str) or target_tenant not in {t["path"] for t in template["tenants"]}:
+    if not deploy and (
+        not isinstance(target_tenant, str) or target_tenant not in {t["path"] for t in template["tenants"]}
+    ):
         raise BenchmarkError("Select an existing workload target tenant")
-    if not any(node["role"] == "dynamic" and node["tenant"] == target_tenant for node in nodes):
+    if not deploy and not any(node["role"] == "dynamic" and node["tenant"] == target_tenant for node in nodes):
         raise BenchmarkError("The workload target tenant has no dynamic nodes")
     for node in nodes:
         if node["role"] == "static" and not node["disks"]:

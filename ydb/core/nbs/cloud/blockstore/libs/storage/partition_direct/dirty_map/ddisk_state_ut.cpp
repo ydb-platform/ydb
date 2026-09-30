@@ -14,9 +14,9 @@ namespace {
 
 constexpr ui16 TestBlockCount = 32768;
 
-struct TTestBlockFieldMonitor: public IBehindAheadMonitor
+struct TTestBlockFieldMonitor: public IBehindMonitor
 {
-    void OnBehindAheadChanged() override
+    void OnBehindChanged() override
     {
         ++StateGeneration;
     }
@@ -29,11 +29,7 @@ struct TTestBlockFieldMonitor: public IBehindAheadMonitor
 ////////////////////////////////////////////////////////////////////////////////
 Y_UNIT_TEST_SUITE(TDDiskStateTest)
 {
-    // A range missed while the DDisk was lagging is recorded in the Behind
-    // field. Once the DDisk stops lagging and the same range is flushed
-    // successfully, AddAhead must move it out of Behind and into Ahead (the
-    // BehindField.Remove step): the range is now up-to-date, not outdated.
-    Y_UNIT_TEST(ShouldMoveRangeFromBehindToAheadOnLateFlush)
+    Y_UNIT_TEST(ShouldRemoveRangeFromBehindOnLateFlush)
     {
         TTestBlockFieldMonitor testBlockFieldMonitor;
         TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
@@ -53,17 +49,15 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(range, TDDiskState::EFlushCompletion::Missed);
         UNIT_ASSERT_VALUES_EQUAL("[40..99]", ddisk.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
 
         // The DDisk catches up and the same range is flushed successfully.
-        // The range must leave Behind and appear in Ahead.
+        // The range must leave Behind.
         ddisk.StopLagging();
         ddisk.OnRangeFlushed(range, TDDiskState::EFlushCompletion::Completed);
         UNIT_ASSERT_VALUES_EQUAL("[40..49][60..99]", ddisk.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL("[50..59]", ddisk.DebugPrintAhead());
     }
 
-    Y_UNIT_TEST(ShouldMoveRangeFromAheadToBehindOnMissedFlush)
+    Y_UNIT_TEST(ShouldAddPreviouslyFlushedRangeToBehindOnMissedFlush)
     {
         TTestBlockFieldMonitor monitor;
         TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
@@ -75,12 +69,10 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         const auto range = TBlockRange16::WithLength(50, 10);
         ddisk.RangeSynced(range);
         ddisk.OnRangeFlushed(range, TDDiskState::EFlushCompletion::Completed);
-        UNIT_ASSERT_VALUES_EQUAL("[50..59]", ddisk.DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("[40..49][60..99]", ddisk.DebugPrintBehind());
 
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(range, TDDiskState::EFlushCompletion::Missed);
-        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("[40..99]", ddisk.DebugPrintBehind());
     }
 
@@ -99,8 +91,8 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         const auto dirtyRange = TBlockRange16::WithLength(50, 10);
 
         // The DDisk starts lagging and gets dirty. The lagging state ends and
-        // the dirty range is synchronized successfully. The watermark remains
-        // at 40 because only a part of the fresh tail was synchronized.
+        // the dirty range is synchronized successfully. The readable prefix
+        // remains at 40 because only a part of the fresh tail was synchronized.
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(dirtyRange, TDDiskState::EFlushCompletion::Missed);
         ddisk.StopLagging();
@@ -108,7 +100,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL("[40..49][60..99]", ddisk.DebugPrintBehind());
 
         // The DDisk starts lagging again. The same range is dirtied again
-        // while the watermark is still below it.
+        // while the readable prefix is still below it.
         ddisk.StartLagging();
         ddisk.OnRangeFlushed(dirtyRange, TDDiskState::EFlushCompletion::Missed);
 
@@ -129,10 +121,10 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT(!ddisk.GetFreshRange().has_value());
     }
 
-    // Save() chooses a compact encoding for Ahead/Behind; Load() must restore
+    // Save() chooses a compact encoding for Behind; Load() must restore
     // exactly the same ranges. An empty DDisk produces an empty proto and loads
     // back to empty.
-    Y_UNIT_TEST(ShouldSaveAndLoadAheadAndBehind)
+    Y_UNIT_TEST(ShouldSaveAndLoadBehind)
     {
         TTestBlockFieldMonitor monitor;
         TDDiskState source(CreateArenaAllocator(), TestBlockCount);
@@ -147,11 +139,11 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             TBlockRange16::WithLength(10, 10),
             TDDiskState::EFlushCompletion::Missed);   // Behind = [10..19]
 
-        // Populate Ahead via a successful flush after stopping lagging.
+        // Remove a range via a successful flush after stopping lagging.
         source.StopLagging();
         source.OnRangeFlushed(
             TBlockRange16::WithLength(30, 5),
-            TDDiskState::EFlushCompletion::Completed);   // Ahead = [30..34]
+            TDDiskState::EFlushCompletion::Completed);
 
         // --- Save ---
         TDDiskStateProto proto;
@@ -169,10 +161,6 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         UNIT_ASSERT_VALUES_EQUAL(
             source.DebugPrintBehind(),
             target.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL(
-            source.DebugPrintAhead(),
-            target.DebugPrintAhead());
-
         // --- Empty DDisk round-trip ---
         TTestBlockFieldMonitor monitor3;
         TDDiskState empty(CreateArenaAllocator(), TestBlockCount);
@@ -183,9 +171,6 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
 
         TDDiskStateProto emptyProto;
         empty.Save(&emptyProto);
-        UNIT_ASSERT(
-            emptyProto.GetAhead().GetEncodingCase() ==
-            TBlockFieldProto::ENCODING_NOT_SET);
         UNIT_ASSERT(
             emptyProto.GetBehind().GetEncodingCase() ==
             TBlockFieldProto::ENCODING_NOT_SET);
@@ -198,19 +183,14 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             /*operationalBlockCount=*/100);
         loaded.Load(emptyProto);
         UNIT_ASSERT_VALUES_EQUAL("", loaded.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL("", loaded.DebugPrintAhead());
     }
 
     Y_UNIT_TEST(ShouldPreferLoadedBehindState)
     {
-        TBlockRangeField ahead(CreateArenaAllocator(), TestBlockCount);
-        ahead.Add(TBlockRange16::WithLength(50, 10));
-
         TBlockRangeField behind(CreateArenaAllocator(), TestBlockCount);
         behind.Add(TBlockRange16::WithLength(10, 10));
 
         TDDiskStateProto proto;
-        SaveBlockField(ahead, proto.MutableAhead());
         SaveBlockField(behind, proto.MutableBehind());
 
         TTestBlockFieldMonitor monitor;
@@ -221,11 +201,23 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             /*operationalBlockCount=*/40);
         ddisk.Load(proto);
 
-        UNIT_ASSERT_VALUES_EQUAL("[50..59]", ddisk.DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
     }
 
-    Y_UNIT_TEST(ShouldAddRangeStartingAtWatermarkToAhead)
+    Y_UNIT_TEST(ShouldTreatLoadedEmptyBehindAsAuthoritative)
+    {
+        TTestBlockFieldMonitor monitor;
+        TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
+        ddisk.Init(
+            &monitor,
+            /*totalBlockCount=*/100,
+            /*operationalBlockCount=*/40);
+        ddisk.Load({});
+
+        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
+    }
+
+    Y_UNIT_TEST(ShouldAdvanceReadablePrefixOnCompletedFlush)
     {
         TTestBlockFieldMonitor monitor;
         TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
@@ -237,42 +229,31 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
         ddisk.OnRangeFlushed(
             TBlockRange16::WithLength(0, 39),
             TDDiskState::EFlushCompletion::Completed);
-        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
+        UNIT_ASSERT(ddisk.CanReadFromDDisk(TBlockRange16::WithLength(0, 40)));
 
         ddisk.OnRangeFlushed(
             TBlockRange16::WithLength(35, 10),
             TDDiskState::EFlushCompletion::Completed);
-        UNIT_ASSERT_VALUES_EQUAL("[40..44]", ddisk.DebugPrintAhead());
-
-        ddisk.RangeSynced(TBlockRange16::WithLength(0, 50));
-
-        ddisk.OnRangeFlushed(
-            TBlockRange16::WithLength(50, 10),
-            TDDiskState::EFlushCompletion::Completed);
-        UNIT_ASSERT_VALUES_EQUAL("[50..59]", ddisk.DebugPrintAhead());
+        UNIT_ASSERT(ddisk.CanReadFromDDisk(TBlockRange16::WithLength(0, 45)));
+        UNIT_ASSERT(!ddisk.CanReadFromDDisk(TBlockRange16::WithLength(0, 46)));
     }
 
-    Y_UNIT_TEST(ShouldKeepFreshTailWhenLoadedBehindIsEmpty)
+    Y_UNIT_TEST(ShouldReadOnlyFirstIsland)
     {
-        TBlockRangeField ahead(CreateArenaAllocator(), TestBlockCount);
-        ahead.Add(TBlockRange16::WithLength(50, 10));
-
-        TDDiskStateProto proto;
-        SaveBlockField(ahead, proto.MutableAhead());
-
         TTestBlockFieldMonitor monitor;
         TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
         ddisk.Init(
             &monitor,
             /*totalBlockCount=*/100,
-            /*operationalBlockCount=*/40);
-        ddisk.Load(proto);
+            /*operationalBlockCount=*/20);
+        ddisk.RangeSynced(TBlockRange16::WithLength(30, 30));
 
-        UNIT_ASSERT_VALUES_EQUAL("[50..59]", ddisk.DebugPrintAhead());
-        UNIT_ASSERT_VALUES_EQUAL("[40..49][60..99]", ddisk.DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL("[20..29][60..99]", ddisk.DebugPrintBehind());
+        UNIT_ASSERT(ddisk.CanReadFromDDisk(TBlockRange16::WithLength(0, 20)));
+        UNIT_ASSERT(!ddisk.CanReadFromDDisk(TBlockRange16::WithLength(30, 30)));
     }
 
-    Y_UNIT_TEST(ShouldClearAheadAndBehindWhenSwitchedOffline)
+    Y_UNIT_TEST(ShouldClearBehindWhenSwitchedOffline)
     {
         TTestBlockFieldMonitor monitor;
         TDDiskState ddisk(CreateArenaAllocator(), TestBlockCount);
@@ -291,7 +272,6 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             TDDiskState::EFlushCompletion::Completed);
 
         UNIT_ASSERT_VALUES_EQUAL("[5..29][35..99]", ddisk.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL("[30..34]", ddisk.DebugPrintAhead());
 
         ddisk.SwitchOffline();
 
@@ -300,7 +280,6 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
             ddisk.GetState());
         UNIT_ASSERT_VALUES_EQUAL(false, ddisk.IsTrackingEnabled());
         UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
         UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetFreshBlockCount());
         UNIT_ASSERT_VALUES_EQUAL(0, ddisk.GetRottenBlockCount());
     }
@@ -379,7 +358,7 @@ Y_UNIT_TEST_SUITE(TDDiskStateTest)
                 TBlockRange16::WithLength(20, 5)));   // after Behind
     }
 
-    // IBehindAheadMonitor is notified on Behind/Ahead changes and NOT notified
+    // IBehindMonitor is notified on Behind changes and NOT notified
     // when the field does not actually change (already covered or empty sync).
     Y_UNIT_TEST(MonitorNotifications)
     {

@@ -1,4 +1,4 @@
-from typing import ClassVar, NoReturn, TypeAlias
+from typing import ClassVar, NoReturn
 
 import numpy as np
 import numpy.typing as npt
@@ -6,33 +6,33 @@ import numpy.typing as npt
 import contourpy._contourpy as cpy
 
 # Input numpy array types, the same as in common.h
-CoordinateArray: TypeAlias = npt.NDArray[np.float64]
-MaskArray: TypeAlias = npt.NDArray[np.bool_]
-LevelArray: TypeAlias = npt.ArrayLike
+type CoordinateArray = npt.NDArray[np.float64]
+type MaskArray = npt.NDArray[np.bool_]
+type LevelArray = npt.ArrayLike
 
 # Output numpy array types, the same as in common.h
-PointArray: TypeAlias = npt.NDArray[np.float64]
-CodeArray: TypeAlias = npt.NDArray[np.uint8]
-OffsetArray: TypeAlias = npt.NDArray[np.uint32]
+type PointArray = npt.NDArray[np.float64]
+type CodeArray = npt.NDArray[np.uint8]
+type OffsetArray = npt.NDArray[np.uint32]
 
 # Types returned from filled()
-FillReturn_OuterCode: TypeAlias = tuple[list[PointArray], list[CodeArray]]
-FillReturn_OuterOffset: TypeAlias = tuple[list[PointArray], list[OffsetArray]]
-FillReturn_ChunkCombinedCode: TypeAlias = tuple[list[PointArray | None], list[CodeArray | None]]
-FillReturn_ChunkCombinedOffset: TypeAlias = tuple[list[PointArray | None], list[OffsetArray | None]]
-FillReturn_ChunkCombinedCodeOffset: TypeAlias = tuple[list[PointArray | None], list[CodeArray | None], list[OffsetArray | None]]
-FillReturn_ChunkCombinedOffsetOffset: TypeAlias = tuple[list[PointArray | None], list[OffsetArray | None], list[OffsetArray | None]]
-FillReturn_Chunk: TypeAlias = FillReturn_ChunkCombinedCode | FillReturn_ChunkCombinedOffset | FillReturn_ChunkCombinedCodeOffset | FillReturn_ChunkCombinedOffsetOffset
-FillReturn: TypeAlias = FillReturn_OuterCode | FillReturn_OuterOffset | FillReturn_Chunk
+type FillReturn_OuterCode = tuple[list[PointArray], list[CodeArray]]
+type FillReturn_OuterOffset = tuple[list[PointArray], list[OffsetArray]]
+type FillReturn_ChunkCombinedCode = tuple[list[PointArray | None], list[CodeArray | None]]
+type FillReturn_ChunkCombinedOffset = tuple[list[PointArray | None], list[OffsetArray | None]]
+type FillReturn_ChunkCombinedCodeOffset = tuple[list[PointArray | None], list[CodeArray | None], list[OffsetArray | None]]
+type FillReturn_ChunkCombinedOffsetOffset = tuple[list[PointArray | None], list[OffsetArray | None], list[OffsetArray | None]]
+type FillReturn_Chunk = FillReturn_ChunkCombinedCode | FillReturn_ChunkCombinedOffset | FillReturn_ChunkCombinedCodeOffset | FillReturn_ChunkCombinedOffsetOffset
+type FillReturn = FillReturn_OuterCode | FillReturn_OuterOffset | FillReturn_Chunk
 
 # Types returned from lines()
-LineReturn_Separate: TypeAlias = list[PointArray]
-LineReturn_SeparateCode: TypeAlias = tuple[list[PointArray], list[CodeArray]]
-LineReturn_ChunkCombinedCode: TypeAlias = tuple[list[PointArray | None], list[CodeArray | None]]
-LineReturn_ChunkCombinedOffset: TypeAlias = tuple[list[PointArray | None], list[OffsetArray | None]]
-LineReturn_ChunkCombinedNan: TypeAlias = tuple[list[PointArray | None]]
-LineReturn_Chunk: TypeAlias = LineReturn_ChunkCombinedCode | LineReturn_ChunkCombinedOffset | LineReturn_ChunkCombinedNan
-LineReturn: TypeAlias = LineReturn_Separate | LineReturn_SeparateCode | LineReturn_Chunk
+type LineReturn_Separate = list[PointArray]
+type LineReturn_SeparateCode = tuple[list[PointArray], list[CodeArray]]
+type LineReturn_ChunkCombinedCode = tuple[list[PointArray | None], list[CodeArray | None]]
+type LineReturn_ChunkCombinedOffset = tuple[list[PointArray | None], list[OffsetArray | None]]
+type LineReturn_ChunkCombinedNan = tuple[list[PointArray | None]]
+type LineReturn_Chunk = LineReturn_ChunkCombinedCode | LineReturn_ChunkCombinedOffset | LineReturn_ChunkCombinedNan
+type LineReturn = LineReturn_Separate | LineReturn_SeparateCode | LineReturn_Chunk
 
 
 NDEBUG: int
@@ -127,6 +127,8 @@ class ContourGenerator:
     def fill_type(self) -> FillType: ...
     @property
     def line_type(self) -> LineType: ...
+    @property
+    def name(self) -> str: ...
     @property
     def quad_as_tri(self) -> bool: ...
     @property

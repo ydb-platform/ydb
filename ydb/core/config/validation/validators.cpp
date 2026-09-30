@@ -7,11 +7,13 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/util/pb.h>
 
 #include <library/cpp/logger/priority.h>
 #include <library/cpp/protobuf/json/util.h>
 
+#include <util/generic/algorithm.h>
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 
@@ -263,6 +265,26 @@ EValidationResult ValidateDatabaseConfig(const NKikimrConfig::TAppConfig& config
 }
 
 EValidationResult ValidateConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
+    if (config.GetFeatureFlags().GetSwitchToConfigV2() && config.HasGRpcConfig()
+        && config.GetGRpcConfig().GetStartGRpcProxy()) {
+        const auto& grpcConfig = config.GetGRpcConfig();
+        const auto hasEndpoint = [](const NKikimrConfig::TGRpcConfig& endpoint) {
+            return endpoint.GetPort() || endpoint.GetSslPort();
+        };
+        const auto hasConfigService = [&hasEndpoint](const NKikimrConfig::TGRpcConfig& endpoint) {
+            return hasEndpoint(endpoint)
+                   && (endpoint.GetServices().empty() || IsIn(endpoint.GetServices(), "config")
+                       || IsIn(endpoint.GetServicesEnabled(), "config"))
+                   && !IsIn(endpoint.GetServicesDisabled(), "config");
+        };
+        const bool hasGrpcEndpoint = hasEndpoint(grpcConfig) || AnyOf(grpcConfig.GetExtEndpoints(), hasEndpoint);
+        const bool hasConfigEndpoint = hasConfigService(grpcConfig)
+                                       || AnyOf(grpcConfig.GetExtEndpoints(), hasConfigService);
+        CHECK_ERR(!hasGrpcEndpoint || hasConfigEndpoint,
+                  "FeatureFlags.SwitchToConfigV2 requires the 'config' gRPC service on at least one endpoint; "
+                  "enable it in services/services_enabled and remove it from services_disabled for that endpoint");
+    }
+
     CHECK_ERR(
         config.GetNbsConfig().GetConsoleLogLevel() <= LOG_MAX_PRIORITY,
         TStringBuilder() << "NbsConfig.ConsoleLogLevel: expected 0.."

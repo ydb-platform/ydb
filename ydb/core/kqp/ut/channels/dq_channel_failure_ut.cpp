@@ -98,13 +98,8 @@ struct TOutboundTest : public TSessionTest {
 
 // With the acks held at the sender, nothing leaves the session queue: the producers fill the session
 // window and everything past it waits in the descriptors, on the waiters queue, accounted on the sensors.
-//
-// Known race on main, seen as "consumer of channel N: message K+1 where K was expected" followed by an
-// abort of its producer with "(Peer) NOT FOUND ID": SendFromWaiters takes the last waiting chunk of a
-// descriptor off its WaitQueue (WaitQueueSize goes to 0) before it takes the session Mutex to number
-// it, and a push of the producer in between sees no waiters, takes the Mutex first and gets the lower
-// SeqNo and ChannelSeqNo - the older chunk is delivered after the newer one. It needs a producer pushing
-// while its waiters drain, i.e. the tests of this file under load; a defect of the service, not of them.
+// The producers push on while their waiters drain, which is where the numbering of a drained chunk and
+// of a fresh push of the same descriptor once raced (SendFromWaiters).
 struct TSessionWindowTest : public TOutboundTest {
 
     void Prepare() override {

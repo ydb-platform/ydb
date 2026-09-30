@@ -402,6 +402,12 @@ struct TSessionTest : public TLoadTest {
         return state->GenMinor;
     }
 
+    // the actor the session sends to, learned from the 1st ack of the generation
+    static NActors::TActorId GetInputNodeActorId(const std::shared_ptr<TNodeState>& state) {
+        std::lock_guard lock(state->Mutex);
+        return state->InputNodeActorId;
+    }
+
     static ui64 GetReconciliationCount(const std::shared_ptr<TNodeState>& state) {
         std::lock_guard lock(state->Mutex);
         return state->ReconciliationCount;
@@ -1254,6 +1260,89 @@ struct TLivenessProbeTest : public TSessionTest {
     }
 };
 
+// A bounce naming an actor the session does not address is the echo of a copy sent to an actor already
+// superseded, see HandleUndelivered: taking it for the death of the live peer used to start a major
+// reconciliation, and the peer then failed every unfinished channel bound to the generation left behind.
+// Both halves are pinned: the stale bounce changes nothing, the genuine one still reconciles.
+struct TStaleBounceTest : public TSessionTest {
+
+    void SendBounce(const std::shared_ptr<TNodeState>& session, NActors::TActorId bouncedFrom) {
+        Runtime->Send(session->NodeActorId, bouncedFrom,
+            new NActors::TEvents::TEvUndelivered(TEvDqCompute::TEvChannelDataV2::EventType,
+                NActors::TEvents::TEvUndelivered::ReasonActorUnknown),
+            NodeIndex0, true);
+    }
+
+    void Run() override {
+        Prepare();
+        Init();
+
+        ProducerSettings = TWorkerSettings{ .MessageCount = 5, .MinMessageSize = 10, .MaxMessageSize = 20 };
+        ConsumerSettings = ProducerSettings;
+
+        auto senderNodeId = Runtime->GetNodeId(0);
+        auto receiverNodeId = Runtime->GetNodeId(1);
+
+        StartChannel(1, true);
+        WaitChannel("warm up");
+
+        auto sender = FindNodeState(Service0, receiverNodeId);
+        auto receiver = FindNodeState(Service1, senderNodeId);
+        UNIT_ASSERT_C(sender, "sender node session not found");
+        UNIT_ASSERT_C(receiver, "receiver node session not found");
+        WaitSettled(sender);
+
+        // the consumer lets go of the descriptor only after its TEvFinished has been grabbed, so the
+        // bounce below starts from a receiver with nothing left of the warm up
+        UNIT_ASSERT_C(WaitFor([&]() { return GetInputCount(receiver) == 0; }, TDuration::Seconds(10)),
+            "the input descriptor of the warm up channel is still there");
+
+        auto peerActorId = GetInputNodeActorId(sender);
+        UNIT_ASSERT_C(peerActorId == receiver->NodeActorId, TStringBuilder() << "InputNodeActorId " << peerActorId
+            << ", the session actor of the peer " << receiver->NodeActorId);
+
+        auto genMajor = GetGenMajor(sender);
+        auto details = [&]() {
+            return TStringBuilder() << "GenMajor " << genMajor << " -> " << GetGenMajor(sender)
+                << ", Reconciliation=" << sender->Reconciliation.load()
+                << ", InputNodeActorId " << GetInputNodeActorId(sender) << " (the peer session actor " << peerActorId << ")"
+                << ", reconciliation log: " << GetReconciliationLog(sender);
+        };
+
+        // the session actor of the peer is alive all along; only the actor the bounce names differs. The
+        // stale one lives on the peer node, as the superseded session actor did, so a check on the node
+        // alone would not tell the two apart
+        SendBounce(sender, Genuine ? peerActorId : Control1);
+
+        if (Genuine) {
+            UNIT_ASSERT_C(WaitFor([&]() { return GetGenMajor(sender) == genMajor + 1 && sender->Reconciliation.load() == 0; },
+                TDuration::Seconds(5)), TStringBuilder() << "the genuine bounce did not reconcile the session, " << details());
+            UNIT_ASSERT_C(GetReconciliationLog(sender).Contains("U"),
+                TStringBuilder() << "the major was started by something else than the bounce, " << details());
+        } else {
+            // nothing is expected to happen, so the wait has to time out to mean anything
+            UNIT_ASSERT_C(!WaitFor([&]() { return GetGenMajor(sender) != genMajor || GetReconciliationLog(sender).Contains("U"); },
+                TDuration::Seconds(2)), TStringBuilder() << "the stale bounce started a major reconciliation, " << details());
+            UNIT_ASSERT_VALUES_EQUAL_C(sender->Reconciliation.load(), 0, details());
+            UNIT_ASSERT_C(GetInputNodeActorId(sender) == peerActorId,
+                TStringBuilder() << "the stale bounce forgot the peer, " << details());
+        }
+
+        // a channel started after the bounce still goes through, and at the generation it was left at:
+        // an untouched session in the one case, a recovered one in the other
+        StartChannel(2, true);
+        WaitChannel(details);
+        UNIT_ASSERT_VALUES_EQUAL_C(GetGenMajor(sender), genMajor + (Genuine ? 1 : 0), details());
+
+        // a node session logs through the actor system from its destructor, so it may not outlive it
+        sender.reset();
+        receiver.reset();
+    }
+
+    // the bounce names the session actor of the peer, as one from a peer which really died
+    bool Genuine = false;
+};
+
 Y_UNIT_TEST_SUITE(Channels20) {
 
     void LoadTest(int count, bool local, const TWorkerSettings& producerSettings, const TWorkerSettings& consumerSettings, const TFailureSettings& = TFailureSettings{}) {
@@ -1392,6 +1481,23 @@ Y_UNIT_TEST_SUITE(Channels20) {
         TLivenessProbeTest test;
 
         test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(StaleBounceIgnored) {
+        TStaleBounceTest test;
+
+        test.Local = false;
+
+        test.Run();
+    }
+
+    Y_UNIT_TEST(GenuineBounceReconciles) {
+        TStaleBounceTest test;
+
+        test.Local = false;
+        test.Genuine = true;
 
         test.Run();
     }

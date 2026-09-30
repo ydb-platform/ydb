@@ -1589,11 +1589,11 @@ FROM `{table_name}`"""
 
         query_name = f"test_shared_pushdown_{local_topics!s:.1}"
         kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
-        path = f"{kikimr.get_database_name()}/{query_name}"
-        self.wait_completed_checkpoints(kikimr, query_name)
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
 
         # Check that streaming.query.tasks.count metric exists
-        self.wait_streaming_query_metric(kikimr, query_name, "streaming.query.tasks.count", expected_value=1)
+        self.wait_streaming_query_metric(kikimr, path, "streaming.query.tasks.count", expected_value=1)
 
         data = [
             '{"str1":null,"str2":"DONE","ev":"skipped"}',

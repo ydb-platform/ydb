@@ -119,9 +119,6 @@ bool TBlobManagerDb::LoadLists(std::vector<TUnifiedBlobId>& blobsToKeep, TTablet
         }
     }
     std::swap(blobsToDeleteLocal, blobsToDelete);
-    if (OnListsLoaded) {
-        (*OnListsLoaded)(blobsToKeep, blobsToDelete);
-    }
 
     return true;
 }

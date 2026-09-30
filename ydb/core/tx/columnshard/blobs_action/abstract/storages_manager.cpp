@@ -55,13 +55,12 @@ void IStoragesManager::DoInitialize() {
     GetOperator(LocalMetadataStorageId);
 }
 
-bool IStoragesManager::LoadIdempotency(
-    NTable::TDatabase& database, std::optional<TFunctionRef<void(const std::vector<TUnifiedBlobId>&, const TTabletsByBlob&)>> onListsLoaded) {
+bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
     AFL_VERIFY(Initialized);
     if (!DoLoadIdempotency(database)) {
         return false;
     }
-    TBlobManagerDb blobsDB(database, onListsLoaded);
+    TBlobManagerDb blobsDB(database);
     for (auto&& i : GetStorages()) {
         if (!i.second->Load(blobsDB)) {
             return false;

@@ -191,7 +191,8 @@ public:
         }
         const auto storage =
             std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(Self->StoragesManager->GetDefaultOperator());
-        if (!storage || storage->GetStopped() || storage->HasGCInFlight()) {
+        AFL_VERIFY(storage);
+        if (storage->HasGCInFlight()) {
             return;
         }
         const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
@@ -237,8 +238,34 @@ void TColumnShard::ScheduleCutHistoryContinuation(const TActorContext& ctx) {
     ctx.Schedule(TDuration::MilliSeconds(delay), new TEvPrivate::TEvContinueCutHistory());
 }
 
+void TColumnShard::InitCutHistoryScan() {
+    if (!AppData()->FeatureFlags.GetEnableCutHistory() || !AppData()->FeatureFlags.GetEnableColumnshardCutHistory()) {
+        return;
+    }
+    TCutHistoryScan scan;
+    for (ui32 channel = FirstDataChannel; channel < Info()->Channels.size(); ++channel) {
+        const auto& history = Info()->Channels[channel].History;
+        for (size_t i = 0; i + 1 < history.size(); ++i) {
+            AFL_VERIFY(history[i].FromGeneration < history[i + 1].FromGeneration)("channel", channel);
+            scan.Intervals.push_back({ channel, history[i].FromGeneration, history[i + 1].FromGeneration, history[i].GroupID });
+        }
+    }
+    if (scan.Intervals.empty()) {
+        return;
+    }
+    const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
+    AFL_VERIFY(storage);
+    const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
+    EraseIf(scan.Intervals, [&](const auto& interval) {
+        return NOlap::HasPendingGCBlobsInRange(pendingGenerations, interval.Channel, interval.From, interval.To);
+    });
+    if (!scan.Intervals.empty()) {
+        CutHistoryScan = std::move(scan);
+    }
+}
+
 void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
-    if (!CutHistoryScan || CutHistoryScan->Started != TInstant::Zero()) {
+    if (!CutHistoryScan) {
         return;
     }
     if (!AppData()->FeatureFlags.GetEnableCutHistory() || !AppData()->FeatureFlags.GetEnableColumnshardCutHistory() ||
@@ -247,13 +274,10 @@ void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
         return;
     }
     const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    if (!storage || storage->GetStopped()) {
-        CutHistoryScan.reset();
-        return;
-    }
+    AFL_VERIFY(storage);
     auto& scan = *CutHistoryScan;
     EraseIf(scan.Intervals, [&](const auto& interval) {
-        return interval.BlobReferences || storage->GetSharedBlobs()->HasBlobsInRange(interval.Channel, interval.From, interval.To);
+        return storage->GetSharedBlobs()->HasBlobsInRange(interval.Channel, interval.From, interval.To);
     });
     if (scan.Intervals.empty()) {
         CutHistoryScan.reset();
@@ -361,7 +385,7 @@ void TColumnShard::FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& resu
     ScheduleCutHistoryContinuation(TActivationContext::AsActorContext());
 }
 
-TColumnShard::TCutHistoryInterval* TColumnShard::FindCutHistoryInterval(std::vector<TCutHistoryInterval>& intervals, const TLogoBlobID& id) {
+TCutHistoryInterval* TColumnShard::FindCutHistoryInterval(std::vector<TCutHistoryInterval>& intervals, const TLogoBlobID& id) {
     const auto next =
         UpperBoundBy(intervals.begin(), intervals.end(), std::pair<ui32, ui32>{ id.Channel(), id.Generation() }, [](const auto& interval) {
             return std::make_pair(interval.Channel, interval.From);
@@ -391,7 +415,8 @@ bool TColumnShard::CanCutHistoryInterval(const TCutHistoryInterval& interval, co
         return false;
     }
     const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    return storage && storage->CanCutHistory(pendingGenerations, interval.Channel, interval.From, interval.To);
+    AFL_VERIFY(storage);
+    return storage->CanCutHistory(pendingGenerations, interval.Channel, interval.From, interval.To);
 }
 
 void TColumnShard::TryCutHistory(const TActorContext& ctx) {
@@ -403,8 +428,9 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
         return;
     }
     const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
+    AFL_VERIFY(storage);
     NOlap::TPendingGCBlobGenerations pendingGenerations;
-    if (storage && !storage->GetStopped() && !storage->HasGCInFlight() && AnyOf(CutHistoryScan->Intervals, [](const auto& interval) {
+    if (!storage->HasGCInFlight() && AnyOf(CutHistoryScan->Intervals, [](const auto& interval) {
             return !interval.Attempted && !interval.BlobReferences;
         })) {
         pendingGenerations = storage->GetPendingGCBlobGenerations();

@@ -219,18 +219,28 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         AssertNoEarlierMetrics("reposition", base.Seconds() + 6);
     }
 
-    Y_UNIT_TEST_F(ExplicitOutputFromAllowsStatelessQueryWithoutWatermarks, THistoryReplayFixture) {
-        Init();
+    Y_UNIT_TEST_TWIN_F(StatelessOutputFromUsesRequestedReadPosition, ReadFrom, THistoryReplayFixture) {
+        Init(/* enabled */ true, ReadFrom);
         CreateTopic("historyOutput");
-        ExecQuery(R"(
-            CREATE STREAMING QUERY historyQuery WITH (
-                FORCE = TRUE, OUTPUT_FROM = Timestamp("2025-05-04T11:30:34.336938Z")
-            ) AS DO BEGIN
+        WriteTopicMessage("historyInput", "before-output-from");
+        Sleep(TDuration::Seconds(1));
+        const auto outputFrom = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage("historyInput", "retained");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY historyQuery WITH (OUTPUT_FROM = Timestamp("{}"){}) AS DO BEGIN
                 INSERT INTO historySource.historyOutput SELECT Data FROM historySource.historyInput
             END DO
-        )");
+        )", outputFrom.ToString(), ReadFrom ? ", READ_FROM = EARLIEST" : ""));
+        // Without watermarks, OUTPUT_FROM sets the input position unless an
+        // explicit READ_FROM overrides it. Both paths must read retained data.
+        auto expected = ReadFrom
+            ? std::vector<std::string>{"before-output-from", "retained"}
+            : std::vector<std::string>{"retained"};
+        ReadTopicMessages("historyOutput", expected);
         WriteTopicMessage("historyInput", "live");
-        ReadTopicMessages("historyOutput", {"live"});
+        expected.push_back("live");
+        ReadTopicMessages("historyOutput", expected);
     }
 
     Y_UNIT_TEST_TWIN_F(OutputFromRejectsDisabledCheckpoints, ReadFrom, THistoryReplayFixture) {
@@ -335,7 +345,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         WaitMetric("replaced", base.Seconds() + 18, 2);
     }
 
-    Y_UNIT_TEST_F(RemovingWatermarksReplaysEarlyArrivingEvents, THistoryReplayFixture) {
+    Y_UNIT_TEST_TWIN_F(StatelessOutputReplaysEarlyArrivingEvents, KeepWatermarks, THistoryReplayFixture) {
         Init();
         ExecQuery("CREATE STREAMING QUERY historyQuery AS " + Body(3, "early-old"));
         // These records are accepted by the watermark generator but their write
@@ -348,13 +358,15 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         WaitMetric("early-old", base.Seconds() + 5, 3);
         WaitCheckpoint();
 
-        ExecQuery(R"(ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE) AS DO BEGIN
+        ExecQuery(fmt::format(R"(ALTER STREAMING QUERY historyQuery SET (FORCE = FALSE) AS DO BEGIN
             INSERT INTO historySink.`history-replay/tests/custom`
             SELECT CAST(ts AS Timestamp) AS ts, 1u AS value, "early-new" AS sensor
             FROM historySource.historyInput WITH (
-                FORMAT = json_each_row, SCHEMA (ts String NOT NULL, k String NOT NULL)
+                FORMAT = json_each_row, SCHEMA (ts String NOT NULL, k String NOT NULL){}
             ) WHERE k = "data"
-        END DO)");
+        END DO)", KeepWatermarks
+            ? ", WATERMARK = CAST(ts AS Timestamp) - Interval('PT5S'), WATERMARK_IDLE_TIMEOUT = \"PT1H\""
+            : ""));
         WaitMetric("early-new", base.Seconds() + 6, 1);
     }
 

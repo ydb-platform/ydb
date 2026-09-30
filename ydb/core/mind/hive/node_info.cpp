@@ -255,7 +255,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
-    if (tablet.IsAliveOnLocal(Local)) {
+    if (tablet.IsPresentOnLocal(Local)) {
         return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }
     if (tablet.IsLeader()) {
@@ -462,7 +462,12 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     }
     tablet.FilterRawValues(nodeValues);
     tablet.FilterRawValues(tabletValues);
+<<<<<<< HEAD
     auto current = tablet.IsAliveOnLocal(Local) ? nodeValues : nodeValues + tabletValues;
+=======
+    bool alreadyHere = tablet.IsPresentOnLocal(Local);
+    auto current = alreadyHere ? nodeValues : nodeValues + tabletValues;
+>>>>>>> cb4dc8a4434 (fix races with failed reassigns (#54433))
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);
     if (Hive.GetSpreadNeighbours() && usage < 1 && neighbourPenalty) {

@@ -476,7 +476,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
                 UNIT_ASSERT_VALUES_EQUAL(node.GetTabletsScheduled(), id == nodeId ? 1 : 0);
                 UNIT_ASSERT_VALUES_EQUAL(std::get<NMetrics::EResource::CPU>(node.ResourceValues), id == nodeId ? 100 : 0);
                 // Boot failure handling must recognize the new Local and reject the old one.
-                UNIT_ASSERT_VALUES_EQUAL(tablet.IsAliveOnLocal(node.Local), id == nodeId);
+                UNIT_ASSERT_VALUES_EQUAL(tablet.IsPresentOnLocal(node.Local), id == nodeId);
             }
         };
 

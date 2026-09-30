@@ -25,7 +25,7 @@ public:
         if (local->IsFollower()) {
             if (remote.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                 if (local->AsFollower().Id == remote.GetFollowerId()
-                        && (local->IsStopped() || local->IsAliveOnLocal(Local))) {
+                        && (local->IsStopped() || local->IsPresentOnLocal(Local))) {
                     return true;
                 }
             }

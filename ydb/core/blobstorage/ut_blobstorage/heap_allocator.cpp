@@ -321,6 +321,163 @@ Y_UNIT_TEST_SUITE(VDiskHeapAllocator) {
         }
     }
 
+    Y_UNIT_TEST(MetadataCompactionFromStripeToChunks) {
+        for (EHullDbType db : {EHullDbType::Blocks, EHullDbType::Barriers}) {
+            ui32 stripeSstBytes = 1_MB;
+            TFeatureFlags ff;
+            ff.SetEnableVDiskHeapAllocator(true);
+            ff.SetEnableVDiskFreshSpaceProjection(true);
+            ff.SetEnableTightPDiskSpaceColors(true);
+            TEnvironmentSetup env({
+                .NodeCount = 1,
+                .Erasure = TBlobStorageGroupType::ErasureNone,
+                .VDiskConfigPreprocessor = [&](TVDiskConfig& config) {
+                    config.HeapAllocatorMaxSstInBytes = stripeSstBytes;
+                },
+                .FeatureFlags = ff,
+            });
+            env.CreateBoxAndPool(1, 1);
+            env.Sim(TDuration::Seconds(30));
+            const auto groups = env.GetGroups();
+            UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+            const auto info = env.GetGroupInfo(groups.front());
+            const TActorId vdiskActorId = info->GetActorId(0);
+            constexpr ui64 tabletId = 1000;
+            constexpr ui32 generation = 7;
+            auto deadline = [&] { return env.Now() + TDuration::Minutes(1); };
+
+            TActorId levelIndexActor;
+            TDiskPart inputStripe;
+            ui32 levelResults = 0;
+            ui32 preCompacts = 0;
+            ui32 stripeDeletions = 0;
+            auto observeChange = [&](const auto* msg, const TActorId& recipient) {
+                UNIT_ASSERT(!msg->Aborted);
+                levelIndexActor = recipient;
+                if (msg->FreshCompaction) {
+                    UNIT_ASSERT(inputStripe.Empty());
+                    UNIT_ASSERT_VALUES_EQUAL(msg->AllocatedStripeBlobs.Size(), 1);
+                    UNIT_ASSERT(msg->CommitChunks.empty());
+                    inputStripe = msg->AllocatedStripeBlobs.Vec.front();
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(stripeSstBytes, 0);
+                    UNIT_ASSERT(!msg->CommitChunks.empty());
+                    // None of the worker's lists would trigger PreCompact before the fix: only the input
+                    // SST stripe, which the level-index actor adds later, needs a huge-heap write ID.
+                    UNIT_ASSERT(msg->FreedHugeBlobs.Empty());
+                    UNIT_ASSERT(msg->AllocatedHugeBlobs.Empty());
+                    UNIT_ASSERT(msg->AllocatedStripeBlobs.Empty());
+                    ++levelResults;
+                }
+            };
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvBlobStorage::EvHullChange:
+                        if (db == EHullDbType::Blocks) {
+                            if (const auto* msg = dynamic_cast<THullChange<TKeyBlock, TMemRecBlock>*>(ev->GetBase())) {
+                                observeChange(msg, ev->Recipient);
+                            }
+                        } else if (const auto* msg = dynamic_cast<THullChange<TKeyBarrier, TMemRecBarrier>*>(
+                                ev->GetBase())) {
+                            observeChange(msg, ev->Recipient);
+                        }
+                        break;
+                    case TEvBlobStorage::EvHugePreCompact:
+                        if (levelResults && ev->Sender == levelIndexActor) {
+                            ++preCompacts;
+                        }
+                        break;
+                    case TEvBlobStorage::EvHullFreeHugeSlots: {
+                        const auto* msg = ev->Get<TEvHullFreeHugeSlots>();
+                        for (const auto& part : msg->HugeBlobs) {
+                            if (!inputStripe.Empty() && part == inputStripe) {
+                                UNIT_ASSERT(msg->WId);
+                                ++stripeDeletions;
+                            }
+                        }
+                        break;
+                    }
+                }
+                return true;
+            };
+
+            TActorId edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            env.Runtime->WrapInActorContext(edge, [&] {
+                if (db == EHullDbType::Blocks) {
+                    SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvBlock(tabletId, generation, deadline()));
+                } else {
+                    SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(tabletId, generation,
+                        1, 0, true, generation, 2, nullptr, nullptr, deadline(), true));
+                }
+            });
+            if (db == EHullDbType::Blocks) {
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvBlockResult>(edge, false, deadline());
+                UNIT_ASSERT(res);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            } else {
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(edge, false, deadline());
+                UNIT_ASSERT(res);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            }
+
+            auto compact = [&](TEvCompactVDisk::EMode mode) {
+                env.Runtime->Send(new IEventHandle(vdiskActorId, edge, TEvCompactVDisk::Create(db, mode)),
+                    vdiskActorId.NodeId());
+                UNIT_ASSERT_C(env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, false, deadline()),
+                    "metadata compaction timed out; db# " << static_cast<ui32>(db));
+            };
+            compact(TEvCompactVDisk::EMode::FRESH_ONLY);
+            UNIT_ASSERT(!inputStripe.Empty());
+
+            // Recover the striped input with stripe SST output disabled. This reproduces the same transition
+            // as planned compaction without depending on its feature flag or PDisk arbitration protocol.
+            stripeSstBytes = 0;
+            env.Runtime->DestroyActor(edge);
+            env.RestartNode(vdiskActorId.NodeId());
+            env.Sim(TDuration::Seconds(30));
+            edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            compact(TEvCompactVDisk::EMode::FULL);
+            const TInstant until = deadline();
+            while (!stripeDeletions) {
+                UNIT_ASSERT_C(env.Now() < until, "input SST stripe was not freed");
+                env.Sim(TDuration::Seconds(1));
+            }
+            UNIT_ASSERT(levelResults);
+            UNIT_ASSERT(preCompacts);
+            UNIT_ASSERT_VALUES_EQUAL(stripeDeletions, 1);
+            env.Runtime->FilterFunction = {};
+            env.Runtime->DestroyActor(edge);
+
+            env.RestartNode(vdiskActorId.NodeId());
+            env.Sim(TDuration::Seconds(30));
+            edge = env.Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+            if (db == EHullDbType::Blocks) {
+                env.Runtime->WrapInActorContext(edge, [&] {
+                    SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvGetBlock(tabletId, deadline()));
+                });
+                auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetBlockResult>(edge, true, deadline());
+                UNIT_ASSERT(res);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->BlockedGeneration, generation);
+            } else {
+                env.WithQueueId(info->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::GetFastRead, [&](TActorId queueId) {
+                    env.Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVGetBarrier(
+                        info->GetVDiskId(0), TKeyBarrier::First(), TKeyBarrier::Inf(), nullptr, true)), queueId.NodeId());
+                    auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetBarrierResult>(edge, true, deadline());
+                    UNIT_ASSERT(res);
+                    const auto& record = res->Get()->Record;
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrProto::OK);
+                    UNIT_ASSERT_VALUES_EQUAL(record.KeysSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(record.ValuesSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetTabletId(), tabletId);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetKeys(0).GetChannel(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectGen(), generation);
+                    UNIT_ASSERT_VALUES_EQUAL(record.GetValues(0).GetCollectStep(), 2);
+                });
+            }
+        }
+    }
+
     Y_UNIT_TEST(RandomWorkloadHeapOff) {
         for (ui64 seed = 1; seed <= 3; ++seed) {
             TWorkload(false, seed).Run();

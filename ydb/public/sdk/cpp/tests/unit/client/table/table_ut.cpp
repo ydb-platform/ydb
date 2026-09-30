@@ -895,3 +895,25 @@ TEST(TableTest, AlterTableSetMetricsSettings) {
         Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION
     );
 }
+
+TEST(TtlTierSettings, ObjectKeyPrefixRoundTrip) {
+    using namespace NYdb::NTable;
+    for (auto&& prefix : {std::optional<std::string>(), std::make_optional(std::string()),
+                          std::make_optional(std::string("archive//2026:09/"))}) {
+        const TTtlTierSettings original(TDateTypeColumnModeSettings("ts", TDuration::Days(1)),
+                                        TTtlEvictToExternalStorageAction("/Root/eds", prefix));
+        Ydb::Table::TtlTier proto;
+        original.SerializeTo(proto);
+        ASSERT_EQ(proto.evict_to_external_storage().has_object_key_prefix(), prefix.has_value());
+        const auto restored = TTtlTierSettings::FromProto(proto);
+        ASSERT_TRUE(restored);
+        const auto& action = std::get<TTtlEvictToExternalStorageAction>(restored->GetAction());
+        EXPECT_EQ(action.GetStorage(), "/Root/eds");
+        EXPECT_EQ(action.GetObjectKeyPrefix(), prefix);
+    }
+
+    Ydb::Table::EvictionToExternalStorageSettings proto;
+    proto.set_object_key_prefix("previous");
+    TTtlEvictToExternalStorageAction("/Root/eds").SerializeTo(proto);
+    EXPECT_FALSE(proto.has_object_key_prefix());
+}

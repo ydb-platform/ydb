@@ -48,6 +48,7 @@ private:
         {"md5", {.BindingName = "md5", .MinArgs = 1, .MaxArgs = 1}},
         {"crc32", {.BindingName = "crc32", .MinArgs = 1, .MaxArgs = 1}},
         {"sha1", {.BindingName = "sha1", .MinArgs = 1, .MaxArgs = 1}},
+        {"sha", {.BindingName = "sha1", .MinArgs = 1, .MaxArgs = 1}}, // sha1
         {"sha2", {.BindingName = "sha2", .MinArgs = 2, .MaxArgs = 2}},
         {"unbase64", {.BindingName = "unbase64", .MinArgs = 1, .MaxArgs = 1}},
         {"quote", {.BindingName = "quote", .MinArgs = 1, .MaxArgs = 1}},

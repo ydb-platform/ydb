@@ -218,7 +218,13 @@ public:
 
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void SetReadyHook(const TDqInputReadyHook& hook) override;
+    void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override;
     void AbortChannelByMemoryLimit(ui64 bytes);
+    // under Mutex: marked where data becomes poppable or the buffer finishes, before the input is notified
+    TDqInputReadyHook ReadyHook;
+    // under Mutex: incremented where Finished is set, before the output is notified
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
 
     std::shared_ptr<TLocalBufferRegistry> Registry;
     NActors::TActorSystem* ActorSystem;
@@ -334,6 +340,7 @@ public:
     void HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void UpdateMemoryPressure(bool memoryPressure, TNodeState* nodeState);
     void BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage);
+    void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
 
     // QuotaManager may be assigned later than the descriptor is created - when the output side binds to
@@ -409,6 +416,8 @@ public:
     mutable TInstant WaitTimestamp;
 
     mutable std::mutex FlowControlMutex;
+    // under FlowControlMutex: incremented where Finished is set, before the output is woken up
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     mutable EDqFillLevel FillLevel = EDqFillLevel::NoLimit;
 
@@ -500,6 +509,9 @@ public:
     void EarlyFinish() override;
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override {
+        Descriptor->SetFinishEpoch(epoch);
+    }
 
     std::shared_ptr<TNodeState> NodeState;
     std::shared_ptr<TOutputDescriptor> Descriptor;
@@ -540,6 +552,7 @@ public:
     bool IsEmpty();
     // lock free: true if the queue is empty, and then the consumer is going to be woken up by the next push
     bool IsEmptyFast();
+    void SetReadyHook(const TDqInputReadyHook& hook);
     bool PushDataChunk(TDataChunk&& data);
     bool PopDataChunk(TDataChunk& data);
     ui32 GetQueueSize();
@@ -586,6 +599,8 @@ public:
     // Written by TNodeState::SendUpdateProgress under UpdateMutex only, read lock free to
     // detect that a flip of MemoryPressure is not delivered to the sender yet
     std::atomic<bool> LastSentMemoryPressure = false;
+    // under QueueMutex: marked where data is queued or the channel finishes, before the consumer is notified
+    TDqInputReadyHook ReadyHook;
     // Orders the updates of this channel: they go from the consumer thread and from the session thread (on a
     // discovery), and a flip of MemoryPressure overtaken by the previous state would stick on the sender.
     // Taken under TNodeState::Mutex by HandleDiscovery, takes nothing itself
@@ -628,6 +643,9 @@ public:
     void EarlyFinish() override;
     void ExportPushStats(TDqAsyncStats& stats) override;
     void ExportPopStats(TDqAsyncStats& stats) override;
+    void SetReadyHook(const TDqInputReadyHook& hook) override {
+        Descriptor->SetReadyHook(hook);
+    }
 
     std::shared_ptr<TNodeState> NodeState;
     std::shared_ptr<TInputDescriptor> Descriptor;
@@ -784,9 +802,10 @@ public:
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
     std::atomic<bool> Subscribed;
-    // FlagTrackDelivery, plus FlagSubscribeOnSession for the 1st event since the session was (re)connected
-    ui32 SendFlags() {
-        ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
+    // FlagTrackDelivery on the interconnect channel given (DqIcChannelData or DqIcChannelControl), plus
+    // FlagSubscribeOnSession for the 1st event since the session was (re)connected
+    ui32 SendFlags(ui32 icChannel) {
+        ui32 flags = NActors::IEventHandle::MakeFlags(icChannel, NActors::IEventHandle::FlagTrackDelivery);
         // a load first: a locked exchange on every event would bounce the line between the sending threads
         if (!Subscribed.load() && !Subscribed.exchange(true)) {
             flags |= NActors::IEventHandle::FlagSubscribeOnSession;
@@ -987,6 +1006,9 @@ public:
     // unbound channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelSettings& settings) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelSettings& settings) final;
+    bool IsChannelNotificationsEnabled() const final {
+        return Limits.EnableChannelNotifications;
+    }
     // extras
     void NotifyCleanup();
 
@@ -1073,7 +1095,11 @@ public:
 
     bool IsFinished() const override {
         bool finishCheckResult = Serializer->Buffer->IsFinished();
-        PopStats.FinishCheckTime = TInstant::Now();
+        // checked for every output on every run of the compute actor: the time is taken when the result changes,
+        // so that FinishCheckTime tells since when it holds, without a clock read per check
+        if (finishCheckResult != PopStats.FinishCheckResult || !PopStats.FinishCheckTime) {
+            PopStats.FinishCheckTime = TInstant::Now();
+        }
         PopStats.FinishCheckResult = finishCheckResult;
         return finishCheckResult;
     }
@@ -1139,12 +1165,21 @@ public:
         return IsLocalChannel;
     }
 
+    // the epoch goes to the buffer, and again to the bound buffer which replaces the stub, see Bind
+    bool BindFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) override {
+        FinishEpoch = epoch;
+        Serializer->Buffer->SetFinishEpoch(FinishEpoch);
+        (*FinishEpoch)++;
+        return true;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::unique_ptr<TOutputSerializer> Serializer;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     IDqChannelStorage::TPtr Storage;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    std::shared_ptr<TDqOutputFinishEpoch> FinishEpoch;
 };
 
 class TFastDqInputChannel : public IDqInputChannel {
@@ -1205,6 +1240,8 @@ public:
     void ResumeByCheckpoint() override {
         Y_ENSURE(PausedByCheckpoint);
         PausedByCheckpoint = false;
+        // Pop told nothing while paused, the union may have set the input aside
+        ReadyHook.Mark();
     }
 
     bool IsPausedByCheckpoint() const override {
@@ -1244,6 +1281,14 @@ public:
         Callback = callback;
     }
 
+    // the hook goes to the buffer, and again to the bound buffer which replaces the stub, see Bind
+    bool BindReadySet(const std::shared_ptr<TDqInputReadySet>& set, ui32 slot) override {
+        ReadyHook = TDqInputReadyHook{set, slot};
+        Buffer->SetReadyHook(ReadyHook);
+        ReadyHook.Mark();
+        return true;
+    }
+
     std::weak_ptr<TDqChannelService> Service;
     std::shared_ptr<IChannelBuffer> Buffer;
     std::unique_ptr<TInputDeserializer> Deserializer;
@@ -1251,6 +1296,7 @@ public:
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
     IDqInputChannelCallbacks* Callback = nullptr;
     bool PausedByCheckpoint = false;
+    TDqInputReadyHook ReadyHook;
 };
 
 class TChannelServiceActor : public NActors::TActorBootstrapped<TChannelServiceActor> {

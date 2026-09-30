@@ -1,5 +1,6 @@
 #include "kqp_rbo_physical_convertion_utils.h"
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql::NNodes;
@@ -7,36 +8,36 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 namespace NKikimr::NKqp::NPhysicalConvertionUtils {
-TString GetFullName(const TString& name) {
+TString GetFullName(const TString& name, const TPhysicalNames&) {
     return name;
 }
 
-TString GetFullName(const TInfoUnit& name) {
-    return name.GetFullName();
+TString GetFullName(TInfoUnitId id, const TPhysicalNames& names) {
+    return names.Get(id);
 }
 
-TVector<TInfoUnit> GetLiveOutputIUs(IOperator& op) {
+TVector<TInfoUnitId> GetLiveOutputIUs(IOperator& op) {
     const auto outputIUs = op.GetOutputIUs();
     const auto& liveOut = GetLiveOut(&op);
-    TVector<TInfoUnit> liveOutputIUs;
-    liveOutputIUs.reserve(outputIUs.size());
+    TVector<TInfoUnitId> liveOutputIUs;
+    liveOutputIUs.reserve(outputIUs.Size());
     for (const auto& output : outputIUs) {
-        if (liveOut.contains(output)) {
+        if (liveOut.Contains(output)) {
             liveOutputIUs.push_back(output);
         }
     }
     return liveOutputIUs;
 }
 
-TVector<TInfoUnit> GetLiveInputIUs(IOperator& op, ui32 childIndex) {
-    Y_ENSURE(childIndex < op.Children.size());
-    const auto outputIUs = op.Children[childIndex]->GetOutputIUs();
+TVector<TInfoUnitId> GetLiveInputIUs(IOperator& op, ui32 childIndex) {
+    Y_ENSURE(childIndex < op.GetChildCount());
+    const auto outputIUs = op.GetChild(childIndex)->GetOutputIUs();
     const auto& liveIn = GetLiveIn(&op, childIndex);
 
-    TVector<TInfoUnit> liveInputIUs;
-    liveInputIUs.reserve(outputIUs.size());
+    TVector<TInfoUnitId> liveInputIUs;
+    liveInputIUs.reserve(outputIUs.Size());
     for (const auto& output : outputIUs) {
-        if (liveIn.contains(output)) {
+        if (liveIn.Contains(output)) {
             liveInputIUs.push_back(output);
         }
     }
@@ -53,19 +54,41 @@ TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& c
     // clang-format on
 }
 
-TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numConsumers, TExprContext& ctx, TPositionHandle pos) {
+TExprNode::TPtr BuildSwitch(TExprNode::TPtr input, TReplicate& hub, const TPhysicalNames& names, TExprContext& ctx) {
+    if (TDqPhyStage::Match(input.Get())) {
+        const auto program = TDqPhyStage(input).Program().Ptr();
+        return ctx.ChangeChild(*input, TDqPhyStage::idx_Program,
+            ctx.ChangeChild(*program, 1, BuildSwitch(program->TailPtr(), hub, names, ctx)));
+    }
+    const auto pos = hub.Pos;
+    const auto& outputs = hub.GetOutputs();
+    TVector<TOpReplicate*> ports(outputs.size());
+    for (auto* port : outputs) {
+        Y_ENSURE(port->Props.StageOutputIndex);
+        ports.at(*port->Props.StageOutputIndex) = port;
+    }
+    Y_ENSURE(!ports.empty());
+    auto buildBranch = [&](TExprNode::TPtr stream, TOpReplicate& port) {
+        TVector<std::pair<TString, TString>> columns;
+        const auto& live = GetLiveOut(&port);
+        const auto& rebindings = port.GetRebindings();
+        for (const auto source : hub.GetInput()->GetOutputIUs()) {
+            const auto output = port.IsPrimary() ? source : *rebindings.Find(source);
+            if (live.Contains(output)) {
+                columns.emplace_back(names.Get(source), names.Get(output));
+            }
+        }
+        return BuildRenameMap(stream, columns, ctx, /*ordered=*/true);
+    };
+    if (ports.size() == 1) {
+        return buildBranch(input, *ports.front());
+    }
     TVector<TExprBase> branches;
     auto inputIndex = BuildAtomList("0", pos, ctx);
-    for (ui32 i = 0; i < numConsumers; ++i) {
+    for (auto* port : ports) {
         branches.emplace_back(inputIndex);
-        // Just an empty lambda.
-        // clang-format off
-        auto lambda = Build<TCoLambda>(ctx, pos)
-            .Args({"arg"})
-            .Body("arg")
-        .Done();
-        // clang-format on
-        branches.push_back(lambda);
+        auto arg = ctx.NewArgument(pos, "branch");
+        branches.emplace_back(ctx.NewLambda(pos, ctx.NewArguments(pos, {arg}), buildBranch(arg, *port)));
     }
 
     // clang-format off
@@ -81,63 +104,12 @@ TExprNode::TPtr BuildMultiConsumerHandler(TExprNode::TPtr input, const ui32 numC
      // clang-format on
 }
 
-TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx, bool removeAliases) {
-    // FIXME: This is not always correct, for example:
-    // lambda($arg) { $val = expr($arg); return member($val `name)}
-    // will replace only member arg but leave expr with free arg.
-    if (input->IsCallable("Member")) {
-        auto member = TCoMember(input);
-        auto memberName = member.Name();
-        if (removeAliases) {
-            auto strippedName = memberName.StringValue();
-            if (auto idx = strippedName.find_last_of('.'); idx != TString::npos) {
-                strippedName = strippedName.substr(idx + 1);
-            }
-            // clang-format off
-            memberName = Build<TCoAtom>(ctx, input->Pos()).Value(strippedName).Done();
-            // clang-format on
-        }
-        // clang-format off
-        return Build<TCoMember>(ctx, input->Pos())
-            .Struct(arg)
-            .Name(memberName)
-        .Done().Ptr();
-        // clang-format on
-    } else if (input->IsCallable()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(ReplaceArg(c, arg, ctx, removeAliases));
-        }
-        // clang-format off
-        return ctx.Builder(input->Pos())
-            .Callable(input->Content())
-                .Add(std::move(newChildren))
-                .Seal()
-            .Build();
-        // clang-format on
-    } else if (input->IsList()) {
-        TVector<TExprNode::TPtr> newChildren;
-        for (auto c : input->Children()) {
-            newChildren.push_back(ReplaceArg(c, arg, ctx, removeAliases));
-        }
-        // clang-format off
-        return ctx.Builder(input->Pos())
-            .List()
-                .Add(std::move(newChildren))
-                .Seal()
-            .Build();
-        // clang-format on
-    } else {
-        return input;
-    }
-}
-
-TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members) {
+TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, const TVector<TInfoUnitId>& members, const TPhysicalNames& names) {
     TVector<TCoAtom> memberAtoms;
     memberAtoms.reserve(members.size());
     for (const auto& iu : members) {
         memberAtoms.push_back(Build<TCoAtom>(ctx, input->Pos())
-            .Value(iu.GetFullName())
+            .Value(names.Get(iu))
         .Done());
     }
 
@@ -151,7 +123,7 @@ TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector
     // clang-format on
 }
 
-TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx) {
+TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TString, TString>>& renames, TExprContext& ctx, bool ordered) {
     const auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("map_arg").Done().Ptr();
     TVector<TExprBase> items;
     for (const auto& rename : renames) {
@@ -168,7 +140,7 @@ TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TS
     }
 
     // clang-format off
-    return Build<TCoMap>(ctx, input->Pos())
+    auto map = Build<TCoMap>(ctx, input->Pos())
         .Input(input)
         .Lambda<TCoLambda>()
             .Args({arg})
@@ -178,45 +150,29 @@ TExprNode::TPtr BuildRenameMap(TExprNode::TPtr input, const TVector<std::pair<TS
         .Build()
     .Done().Ptr();
     // clang-format on
+    return ordered ? ctx.RenameNode(*map, "OrderedMap") : map;
 }
 
-TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TInfoUnit>& inputs, const TVector<bool>& unwrapOptionalInputs, TExprContext& ctx) {
+TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TMappedIUs<ui32>& inputs, const TUnorderedIUs& unwrapOptionalInputs, ui32 width, TExprContext& ctx) {
     Y_ENSURE(input->IsLambda());
 
     TVector<TExprNode::TPtr> lambdaArgs;
-    lambdaArgs.reserve(inputs.size());
-    for (ui32 i = 0; i < inputs.size(); ++i) {
+    lambdaArgs.reserve(width);
+    for (ui32 i = 0; i < width; ++i) {
         lambdaArgs.push_back(ctx.NewArgument(input->Pos(), "param" + ToString(i)));
     }
 
-    TVector<TExprBase> items;
-    for (ui32 i = 0; i < inputs.size(); ++i) {
-        TExprNode::TPtr value = lambdaArgs[i];
-        if (unwrapOptionalInputs[i]) {
+    TMappedIUs<TExprNode::TPtr> fields;
+    for (const auto& [id, position] : inputs.Items()) {
+        TExprNode::TPtr value = lambdaArgs.at(position);
+        if (unwrapOptionalInputs.Contains(id)) {
             value = Build<TCoUnwrap>(ctx, input->Pos())
                 .Optional(value)
             .Done().Ptr();
         }
-
-        // clang-format off
-        auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
-            .Name().Build(inputs[i].GetFullName())
-            .Value(value)
-        .Done();
-        // clang-format on
-        items.push_back(tuple);
+        fields.Add(id, std::move(value));
     }
-
-    // clang-format off
-    auto asStruct = Build<TCoAsStruct>(ctx, input->Pos())
-        .Add(items)
-    .Done().Ptr();
-    // clang-format on
-
-    auto lambda = TCoLambda(input);
-    auto body = lambda.Body().Ptr();
-    auto arg = lambda.Args().Arg(0);
-    auto newBody = ctx.ReplaceNode(std::move(body), arg.Ref(), asStruct);
+    auto newBody = LowerRowLambdaBody(input, fields, ctx);
 
     if (!TMaybeNode<TCoVoid>(newBody)) {
         // Wrap with coalsesce in case of null input.
@@ -231,6 +187,25 @@ TExprNode::TPtr ConvertToWideJoinFilter(TExprNode::TPtr input, const TVector<TIn
     }
 
     return ctx.NewLambda(input->Pos(), ctx.NewArguments(input->Pos(), std::move(lambdaArgs)), std::move(newBody));
+}
+
+TExprNode::TPtr LowerRowLambdaBody(const TExprNode::TPtr& lambda,
+    const TMappedIUs<TExprNode::TPtr>& fields, TExprContext& ctx)
+{
+    Y_ENSURE(lambda->IsLambda() && lambda->Head().ChildrenSize() == 1);
+    const auto* row = &lambda->Head().Head();
+    TNodeOnNodeOwnedMap replacements;
+    VisitExpr(lambda->TailPtr(), [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("Member") && &node->Head() == row) {
+            const auto id = GetMemberId(*node);
+            const auto* field = fields.Find(id);
+            Y_ENSURE(field, "Missing physical input ID " << id);
+            replacements.emplace(node.Get(), *field);
+            return false;
+        }
+        return true;
+    });
+    return ctx.ReplaceNodes(lambda->TailPtr(), replacements);
 }
 
 TExprNode::TPtr BuildVoidLambda(TExprContext& ctx, TPositionHandle pos) {

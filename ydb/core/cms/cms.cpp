@@ -1,5 +1,6 @@
 #include "cms_impl.h"
 #include "erasure_checkers.h"
+#include "ddisk_usage.h"
 #include "info_collector.h"
 #include "node_checkers.h"
 #include "scheme.h"
@@ -36,6 +37,7 @@
 #include <util/system/hostname.h>
 
 #include <algorithm>
+#include <cmath>
 #include <numeric>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
@@ -2346,6 +2348,8 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         NKikimrBlobStorage::NDDisk::TDDiskId DiskId;
         TVector<ui64> DDiskTabletIds;
         TVector<ui64> PersistentBufferTabletIds;
+        std::optional<double> DDiskOccupancy;
+        std::optional<double> PersistentBufferOccupancy;
     };
 
     auto diskKey = [](const NKikimrBlobStorage::NDDisk::TDDiskId& id) {
@@ -2392,63 +2396,97 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
 
     TVector<const TDiskUsage*> items;
     items.reserve(disks.size());
-    for (const auto& [key, usage] : disks) {
+    for (auto& [key, usage] : disks) {
         if (!diskFilter.empty() && !key.Contains(diskFilter)) {
             continue;
         }
         if (onlyProblems && IsDDiskAvailable(usage.DiskId)) {
             continue;
         }
+        const auto& id = usage.DiskId;
+        const auto* space = ClusterInfo->FindDDiskState(id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId());
+        if (IsDDiskAvailable(id) && space) {
+            // PDisk quota reductions can make normalized occupancy exceed 100%.
+            // Preserve that information instead of hiding an overfull owner.
+            const double ddiskOccupancy = space->GetDDiskOccupancy();
+            if (!usage.DDiskTabletIds.empty() && space->HasDDiskOccupancy()
+                    && std::isfinite(ddiskOccupancy) && ddiskOccupancy >= 0) {
+                usage.DDiskOccupancy = ddiskOccupancy;
+            }
+            const double bufferOccupancy = space->GetPersistentBufferOccupancy();
+            if (!usage.PersistentBufferTabletIds.empty() && space->HasPersistentBufferOccupancy()
+                    && std::isfinite(bufferOccupancy) && bufferOccupancy >= 0 && bufferOccupancy <= 1) {
+                usage.PersistentBufferOccupancy = bufferOccupancy;
+            }
+        }
         items.push_back(&usage);
     }
 
-    auto idKey = [](const TDiskUsage* usage) -> std::tuple<ui32, ui32, ui32> {
-        return std::make_tuple(usage->DiskId.GetNodeId(), usage->DiskId.GetPDiskId(), usage->DiskId.GetDDiskSlotId());
-    };
-    // Precompute the unique-tablet count for each disk exactly once: computing
-    // it inside the comparator would build a THashSet and scan both tablet-id
-    // vectors O(N log N) times, which is expensive for large clusters.
-    TVector<size_t> tabletsCounts;
-    tabletsCounts.reserve(items.size());
-    for (const auto* usage : items) {
-        THashSet<ui64> unique;
-        for (auto id : usage->DDiskTabletIds) unique.insert(id);
-        for (auto id : usage->PersistentBufferTabletIds) unique.insert(id);
-        tabletsCounts.push_back(unique.size());
-    }
-    TVector<ui32> order(items.size());
-    std::iota(order.begin(), order.end(), 0);
-    std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
-        bool less;
-        if (sortBy == NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT) {
-            const size_t ca = tabletsCounts[a];
-            const size_t cb = tabletsCounts[b];
-            less = ca != cb ? ca < cb : idKey(items[a]) < idKey(items[b]);
-        } else {
-            less = idKey(items[a]) < idKey(items[b]);
+    const bool occupancySort = sortBy == NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY
+        || sortBy == NKikimrCms::DDISK_DISK_SORT_BY_PERSISTENT_BUFFER_OCCUPANCY;
+    if (!occupancySort) {
+        auto idKey = [](const TDiskUsage* usage) -> std::tuple<ui32, ui32, ui32> {
+            return std::make_tuple(usage->DiskId.GetNodeId(), usage->DiskId.GetPDiskId(), usage->DiskId.GetDDiskSlotId());
+        };
+        // Precompute the unique-tablet count for each disk exactly once: computing
+        // it inside the comparator would build a THashSet and scan both tablet-id
+        // vectors O(N log N) times, which is expensive for large clusters.
+        TVector<size_t> tabletsCounts;
+        tabletsCounts.reserve(items.size());
+        for (const auto* usage : items) {
+            THashSet<ui64> unique;
+            for (auto id : usage->DDiskTabletIds) unique.insert(id);
+            for (auto id : usage->PersistentBufferTabletIds) unique.insert(id);
+            tabletsCounts.push_back(unique.size());
         }
-        if (!sortDescending) {
-            return less;
+        TVector<ui32> order(items.size());
+        std::iota(order.begin(), order.end(), 0);
+        std::stable_sort(order.begin(), order.end(), [&](ui32 a, ui32 b) -> bool {
+            bool less;
+            if (sortBy == NKikimrCms::DDISK_DISK_SORT_BY_TABLETS_COUNT) {
+                const size_t ca = tabletsCounts[a];
+                const size_t cb = tabletsCounts[b];
+                less = ca != cb ? ca < cb : idKey(items[a]) < idKey(items[b]);
+            } else {
+                less = idKey(items[a]) < idKey(items[b]);
+            }
+            if (!sortDescending) {
+                return less;
+            }
+            return idKey(items[a]) != idKey(items[b]) && !less;
+        });
+        TVector<const TDiskUsage*> sortedItems;
+        sortedItems.reserve(items.size());
+        for (ui32 i : order) {
+            sortedItems.push_back(items[i]);
         }
-        return idKey(items[a]) != idKey(items[b]) && !less;
-    });
-    TVector<const TDiskUsage*> sortedItems;
-    sortedItems.reserve(items.size());
-    for (ui32 i : order) {
-        sortedItems.push_back(items[i]);
+        items = std::move(sortedItems);
     }
-    items = std::move(sortedItems);
 
     auto response = MakeHolder<TEvCms::TEvDDiskDiskListResponse>();
     response->Record.MutableStatus()->SetCode(NKikimrCms::TStatus::OK);
     response->Record.SetTotalCount(items.size());
 
-    const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
-    const ui32 limit = request.GetLimit();
-    // Compute in ui64 to avoid ui32 overflow when offset + limit would exceed
-    // the ui32 range (e.g. both close to Max<ui32>()).
-    const ui32 end = limit == 0 ? items.size() : Min<ui64>(static_cast<ui64>(offset) + limit, items.size());
-    for (ui32 i = offset; i < end; ++i) {
+    TVector<ui32> page;
+    if (occupancySort) {
+        TVector<TDDiskOccupancySortKey> keys;
+        keys.reserve(items.size());
+        for (const auto* usage : items) {
+            const auto& id = usage->DiskId;
+            keys.push_back({id.GetNodeId(), id.GetPDiskId(), id.GetDDiskSlotId(),
+                sortBy == NKikimrCms::DDISK_DISK_SORT_BY_DDISK_OCCUPANCY
+                    ? usage->DDiskOccupancy : usage->PersistentBufferOccupancy});
+        }
+        page = SortAndPageDDiskOccupancy(keys, sortDescending, request.GetOffset(), request.GetLimit());
+    } else {
+        const ui32 offset = Min<ui32>(request.GetOffset(), items.size());
+        const ui32 limit = request.GetLimit();
+        const ui32 end = limit == 0 ? items.size() : Min<ui64>(ui64(offset) + limit, items.size());
+        page.resize(end - offset);
+        std::iota(page.begin(), page.end(), offset);
+    }
+    // Materialize protobuf records and tablet lists only for the selected page.
+    for (ui32 i : page) {
         const auto* usage = items[i];
         auto* disk = response->Record.AddDisks();
         disk->MutableDiskId()->CopyFrom(usage->DiskId);
@@ -2460,6 +2498,12 @@ void TCms::Handle(TEvCms::TEvDDiskDiskListRequest::TPtr& ev, const TActorContext
         }
         disk->SetAvailable(IsDDiskAvailable(usage->DiskId));
         disk->SetState(GetDDiskStateName(usage->DiskId));
+        if (usage->DDiskOccupancy) {
+            disk->SetDDiskOccupancy(*usage->DDiskOccupancy);
+        }
+        if (usage->PersistentBufferOccupancy) {
+            disk->SetPersistentBufferOccupancy(*usage->PersistentBufferOccupancy);
+        }
     }
 
     ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);

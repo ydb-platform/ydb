@@ -289,7 +289,7 @@ i32 TNodeInfo::GetPriorityForTablet(const TTabletInfo& tablet, TDataCenterPriori
 }
 
 bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* debugState) const {
-    if (tablet.IsAliveOnLocal(Local)) {
+    if (tablet.IsPresentOnLocal(Local)) {
         return !(IsOverloaded() && tablet.HasAllowedMetric(EResourceToBalance::ComputeResources));
     }
     if (tablet.IsLeader()) {
@@ -496,7 +496,7 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     }
     tablet.FilterRawValues(nodeValues);
     tablet.FilterRawValues(tabletValues);
-    bool alreadyHere = tablet.IsAliveOnLocal(Local);
+    bool alreadyHere = tablet.IsPresentOnLocal(Local);
     auto current = alreadyHere ? nodeValues : nodeValues + tabletValues;
     // basically, this is: return max(a / b);
     double usage = TTabletInfo::GetUsage(current, maximum);

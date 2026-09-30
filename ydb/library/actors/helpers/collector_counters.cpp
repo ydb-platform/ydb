@@ -1,5 +1,6 @@
 #include "collector_counters.h"
 
+#include <ydb/library/actors/core/async_frame_cache.h>
 #include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/core/harmonizer/harmonizer_stats.h>
 
@@ -291,9 +292,14 @@ void TActorSystemCounters::Init(NMonitoring::TDynamicCounters* group) {
     MinElapsedCpuPercent = Group->GetCounter("MinElapsedCpuPercent", false);
     AvgAwakeningTimeNs = Group->GetCounter("AvgAwakeningTimeNs", false);
     AvgWakingUpTimeNs = Group->GetCounter("AvgWakingUpTimeNs", false);
+    auto frameCacheGroup = Group->GetSubgroup("subsystem", "async_frame_cache");
+    AsyncFrameCacheCachedFrames = frameCacheGroup->GetCounter("CachedFrames", false);
+    AsyncFrameCacheCachedBytes = frameCacheGroup->GetCounter("CachedBytes", false);
 }
 
-void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats) {
+void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TAsyncFrameCache::TProcessStats& frameCacheStats) {
+    *AsyncFrameCacheCachedFrames = frameCacheStats.CachedFrames;
+    *AsyncFrameCacheCachedBytes = frameCacheStats.CachedBytes;
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
     *MaxUsedCpuPercent = harmonizerStats.MaxUsedCpu;
     *MinUsedCpuPercent = harmonizerStats.MinUsedCpu;

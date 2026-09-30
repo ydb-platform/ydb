@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <ostream>
 #include <utility>
@@ -43,6 +44,11 @@ AggregationTemporality MetricCollector::GetAggregationTemporality(
 {
   auto aggregation_temporality = metric_reader_->GetAggregationTemporality(instrument_type);
   return aggregation_temporality;
+}
+
+std::size_t MetricCollector::GetCardinalityLimit(InstrumentType instrument_type) const noexcept
+{
+  return metric_reader_->GetCardinalityLimit(instrument_type);
 }
 
 MetricProducer::Result MetricCollector::Produce() noexcept

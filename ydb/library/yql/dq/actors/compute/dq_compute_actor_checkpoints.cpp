@@ -492,6 +492,8 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
 }
 
 void TDqComputeActorCheckpoints::AfterStateLoading(const TMaybe<TString>& error) {
+    NDqProto::NDqStateLoadPlan::TTaskPlan{}.Swap(&StateLoadPlan);
+
     auto& checkpoint = RestoringTaskRunnerForCheckpoint;
     if (error.Defined()) {
         auto message = TStringBuilder() << "Failed to load state: " << error << ", ABORTED";

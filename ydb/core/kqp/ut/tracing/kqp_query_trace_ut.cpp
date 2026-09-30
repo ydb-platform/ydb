@@ -245,16 +245,8 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(ev->Get()->Record.GetRuntimeSettings().GetStatsMode()),
                     static_cast<int>(NYql::NDqProto::DQ_STATS_MODE_BASIC));
             });
-        auto request = MakeSQLRequest("SELECT SUM(value) FROM `/Root/table-1`;", true);
-        request->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
-        request->Record.MutableRequest()->ClearTxControl();
-        ActorIdToProto(sender, request->Record.MutableRequestActorId());
-        runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender,
-            request.Release(), 0, 0, nullptr, NWilson::TTraceId::NewTraceId(15, 4095)));
-        const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
-            response->Get()->Record.DebugString());
-        runtime.SimulateSleep(TDuration::Seconds(1));
+        ExecSQL(runtime, sender, "SELECT SUM(value) FROM `/Root/table-1`;", 15, Ydb::StatusIds::SUCCESS,
+            {}, 0, NKikimrKqp::QUERY_TYPE_SQL_SCAN);
         UNIT_ASSERT(requests);
         UNIT_ASSERT(FindSpan(*uploader, "Task: "));
     }
@@ -907,7 +899,7 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 auto error = NEvents::TDataEvents::TEvWriteResult::BuildError(result->Record.GetOrigin(),
                     result->Record.GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE,
                     "injected commit failure");
-                runtime.Send(ev->Recipient, ev->Sender, error.release());
+                runtime.Send(new IEventHandle(ev->Recipient, ev->Sender, error.release(), 0, ev->Cookie));
                 injected = true;
                 return true;
             }

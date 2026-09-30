@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/actors/core/async_frame_cache.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -120,9 +121,11 @@ struct TActorSystemCounters {
     NMonitoring::TDynamicCounters::TCounterPtr AvgAwakeningTimeNs;
     NMonitoring::TDynamicCounters::TCounterPtr AvgWakingUpTimeNs;
 
+    NMonitoring::TDynamicCounters::TCounterPtr AsyncFrameCacheCachedFrames;
+    NMonitoring::TDynamicCounters::TCounterPtr AsyncFrameCacheCachedBytes;
 
     void Init(NMonitoring::TDynamicCounters* group);
-    void Set(const THarmonizerStats& harmonizerStats);
+    void Set(const THarmonizerStats& harmonizerStats, const TAsyncFrameCache::TProcessStats& frameCacheStats);
 };
 
 } // NActors

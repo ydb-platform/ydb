@@ -53,7 +53,141 @@ using namespace NTestUtils;
 using namespace NFederatedQueryTest;
 using namespace NYdb::NConsoleClient::NAi;
 
+namespace {
+
+class THoppingWindowTestFixture : public TStreamingTestFixture {
+public:
+    void Init(bool enabled, bool watermarks = false) {
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableHoppingWindowStartCheck(enabled);
+        config.MutableTableServiceConfig()->SetEnableWatermarks(watermarks);
+        config.MutableTableServiceConfig()->SetEnableWatermarksAdvanced(watermarks);
+        CreateTopic("hoppingInput");
+        CreatePqSource("hoppingSource");
+    }
+
+    void WriteEvent(i32 key, TInstant time) {
+        WriteTopicMessage("hoppingInput", fmt::format(R"({{"Key":{},"Ts":"{}"}})", key, time.ToString()));
+    }
+
+    void WaitCheckpoint() {
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")
+            ->GetCounter("CompletedCheckpoints", true);
+        const auto initial = completed->Val();
+        NTestUtils::WaitFor(TDuration::Seconds(15), "hopping state and source offsets checkpointed", [&](TString& error) {
+            error = TStringBuilder() << "Completed " << completed->Val() << ", need " << initial + 2;
+            return completed->Val() >= initial + 2;
+        });
+    }
+
+    void CheckEvictedKeysAfterRestart(bool watermarks) {
+        Init(/* enabled */ true, watermarks);
+        CreateTopic("hoppingOutput");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY hoppingQuery AS DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 1 }},
+                    {{ "tx": 0, "stage": 1, "tasks": 1 }}
+                ] @@;
+                $windows = SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
+                    FROM hoppingSource.hoppingInput WITH (
+                        FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL) {}
+                    )
+                    GROUP BY {}, Key;
+                INSERT INTO hoppingSource.hoppingOutput
+                    SELECT Unwrap(CAST(Key AS String) || ":" || CAST(Count AS String) || ":" || CAST(Ts AS String))
+                    FROM $windows;
+            END DO
+        )", watermarks
+                ? R"(, WATERMARK = CAST(Ts AS Timestamp) - Interval("PT0S"), WATERMARK_IDLE_TIMEOUT = "PT1H")"
+                : "",
+            watermarks
+                ? R"(HoppingWindow(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S"))"
+                : R"(HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"))"));
+
+        // Keep explicit event-time watermarks within the source's five-minute future limit.
+        const auto base = TInstant::Seconds(TInstant::Now().Seconds());
+        const auto output = [&](i32 key, ui64 count, ui64 second) {
+            return fmt::format("{}:{}:{}", key, count, (base + TDuration::Seconds(second)).ToStringUpToSeconds());
+        };
+        std::vector<std::string> expected = {output(1, 1, 0)};
+        WriteEvent(1, base);
+        WriteEvent(2, base + TDuration::Seconds(20));
+        ReadTopicMessages("hoppingOutput", expected);
+
+        // Key 1 has been removed after its window closed. Neither it nor a new
+        // key may recreate a window behind the global event-time frontier.
+        WriteEvent(1, base);
+        WriteEvent(3, base);
+        WriteEvent(2, base + TDuration::Seconds(40));
+        expected.push_back(output(2, 1, 20));
+        ReadTopicMessages("hoppingOutput", expected);
+        WaitCheckpoint();
+        ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = FALSE)");
+        CheckScriptExecutionsCount(1, 0);
+
+        // No new watermark has arrived after restart: the restored minimum
+        // window start must reject both returning and previously unseen keys.
+        WriteEvent(1, base);
+        WriteEvent(4, base);
+        WriteEvent(2, base + TDuration::Seconds(40));
+        WriteEvent(2, base + TDuration::Seconds(60));
+        ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = TRUE)");
+        CheckScriptExecutionsCount(2, 1);
+        expected.push_back(output(2, 2, 40)); // The open aggregate must also survive the checkpoint.
+        ReadTopicMessages("hoppingOutput", expected);
+        WaitCheckpoint();
+        EnsureTopicEndOffset("hoppingOutput", expected.size());
+    }
+};
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
+    Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysInOrdinaryQuery, Enabled, THoppingWindowTestFixture) {
+        Init(Enabled);
+        const auto base = TInstant::ParseIso8601("2026-09-24T00:00:00Z");
+        for (ui32 day = 1; day <= 3; ++day) {
+            WriteEvent(1, base);
+            WriteEvent(2, base + TDuration::Days(day));
+        }
+        const auto results = ExecQuery(R"(
+            PRAGMA ydb.MaxTasksPerStage = "1";
+            PRAGMA ydb.OverridePlanner = @@ [
+                { "tx": 0, "stage": 0, "tasks": 1 },
+                { "tx": 0, "stage": 1, "tasks": 1 }
+            ] @@;
+            SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
+            FROM hoppingSource.hoppingInput WITH (
+                FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL)
+            )
+            GROUP BY HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"), Key
+            ORDER BY Key, Ts;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        std::vector<std::pair<i32, TInstant>> expected;
+        // With the flag disabled, preserve the old behavior, including reopening
+        // the same already emitted window for key 1 on every late event.
+        for (ui32 i = 0; i < (Enabled ? 1 : 3); ++i) {
+            expected.emplace_back(1, base);
+        }
+        for (ui32 day = 1; day <= 3; ++day) {
+            expected.emplace_back(2, base + TDuration::Days(day));
+        }
+        size_t index = 0;
+        CheckScriptResult(results.front(), 3, expected.size(), [&](NYdb::TResultSetParser& row) {
+            UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("Key").GetInt32(), expected[index].first);
+            UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("Count").GetUint64(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(*row.ColumnParser("Ts").GetOptionalTimestamp(), expected[index].second);
+            ++index;
+        });
+    }
+
+    Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysBeforeAndAfterRestart, Watermarks, THoppingWindowTestFixture) {
+        CheckEvictedKeysAfterRestart(Watermarks);
+    }
+
     void ConfigureRowDispatcherMemoryLimit(TStreamingTestFixture& self, ui64 memoryLimit) {
         auto& appConfig = self.SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSharedReadingInStreamingQueries(true);
@@ -62,6 +196,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         resourceManager.SetQueryMemoryLimit(memoryLimit);
+        resourceManager.SetKqpLevelCacheMaxSizeBytes(0);
         // the memory arena charges the prepaid memory of the query tasks to the same node total: no headroom, units
         // almost free and small MKQL limits keep that charge to about 1 MiB next to the row dispatcher allocations
         resourceManager.SetExecutionUnitMemory(100);
@@ -3373,10 +3508,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "A-2025-08-24T00:00:00.000000Z-P1-1");
 
         Sleep(TDuration::Seconds(2));
-        auto readDisposition = TInstant::Now();
+        const auto readDisposition = TInstant::Now();
 
-        // Write failure message for key B
-        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
+        // Keep the failure message in the open window so it is not dropped as late after recovery.
+        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
 
         // Wait script execution retry
         WaitFor(TDuration::Seconds(10), "wait retry", [&](TString& error) {
@@ -3404,18 +3539,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 {"fqdn": "host2.example.com", "payload": "P2"             })");
         Sleep(TDuration::Seconds(2));
 
-        // Check that offset is restored
+        // Both B messages must be counted after the failed message is replayed from the restored offset.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
-        ReadTopicMessage(outputTopicName, "B-2025-08-24T00:00:00.000000Z-P2-1", readDisposition);
 
-        Sleep(TDuration::Seconds(1));
-        readDisposition = TInstant::Now();
-
-        // Check that HOP state is restored
+        // Close the window and check both the restored HOP state for A and the replayed input for B.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})");
         ReadTopicMessages(outputTopicName, {
             "A-2025-08-25T00:00:00.000000Z-P1-1",
-            "B-2025-08-25T00:00:00.000000Z-P2-1"
+            "B-2025-08-25T00:00:00.000000Z-P2-2"
         }, readDisposition, /* sort */ true);
     }
 

@@ -9,13 +9,14 @@ build types store stripped server and CLI binaries to keep the bundle compact:
 ./ya make --build=profile ydb/tools/ydb_bench
 ```
 
-The tool provides five benchmarks:
+The tool provides five benchmarks and a dedicated cluster type:
 
 - `ping-bench`: pairwise actor ping throughput;
 - `star-ping-bench`: star-topology actor ping throughput.
 - `memory-bandwidth-bench`: mixed sequential-copy and random copy/write memory workload.
 - `local-ydb`: a local static/dynamic YDB cluster driven by the `kv` or `stock` YDB CLI workload.
 - `distributed-ydb`: an experimental fixed multi-host YDB cluster with configurable CLI generators.
+- `dedicated-ydb`: deploy a YDB cluster without a workload and hold it until explicitly released.
 
 Inspect them and print the standard JSON Schema for the YAML configuration:
 
@@ -311,9 +312,14 @@ portable configuration directly.
 
 ### Distributed YDB (experimental)
 
-Select **Deploy cluster** in the distributed Builder to reserve and deploy a
-cluster without running a workload. This is a dedicated run with one profile:
-its YAML contains `mode: deploy`, `cluster-template`, `storage`, and `tenants`.
+Select **Dedicated YDB cluster** in the Builder's **Type** field, choose a
+cluster template and press **Deploy cluster** to reserve and deploy a cluster
+without running a workload. Its **Cluster**, **Storage**, and **Tenants** tabs
+configure placement and per-role actor settings; YAML remains a separate tab.
+This is a dedicated run with exactly one profile. Its YAML uses the
+`dedicated-ydb` top-level key with `cluster-template`, `storage`, `tenants`, and
+optional `reset-disks`; it has no workload, measurement, or mode field.
+Legacy `distributed-ydb` profiles with `mode: deploy` remain supported.
 CLI nodes in the snapshot are ignored; no load generator or search is started.
 The cluster remains active until **Release cluster** is pressed in Runs or the
 run page. Connection endpoints and the actual launch YAML remain available in
@@ -330,6 +336,33 @@ stopping nodes. Run downloads and run-level Prometheus export include these
 archives. Collection/transfer errors are reported explicitly; an interrupted
 transfer can leave the latest interval incomplete. Older reservations without
 telemetry remain readable and are labelled as having no recorded metrics.
+
+The dedicated run's **Operations** tab provides four commands:
+
+- **Create DDisk pool**: choose a box, group count, failure-domain geometry and
+  PDisk type. The geometry uses one realm and one DDisk per failure domain.
+- **Create NBS partition**: specify its Disk ID, DDisk pool, block size, block
+  count, storage media and sync-request batch size.
+- **Write blocks**: fill the selected block range with a repeated UTF-8 pattern.
+  This overwrites existing data; the supplied block size must match the partition.
+- **Read blocks**: read a range by Disk ID; response buffers are shown as base64.
+
+Commands target the current run's deployed static-node gRPC endpoint, not a
+user-supplied server or the current version of its template. Execution is allowed
+only while the cluster is ready and neither cancellation nor release has been
+requested. After release, the operation history remains available in the run;
+requests and outcomes are saved in `cluster-operations.json`.
+
+Each request has a UUID. Resubmitting the same ID and parameters returns the
+recorded operation without replaying it; reusing the ID with different parameters
+is rejected. Requests are not automatically retried. A timeout, disconnect or
+interrupted operation is recorded as `unknown`, not as proof that nothing changed.
+Check the cluster before submitting a new mutation after such an outcome.
+
+Each run accepts up to 200 operations, with a 10-second RPC timeout. Writes are
+limited to 64 KiB and reads to 16 blocks, with a 128 KiB RPC response limit. These
+forms validate request shape and bounds, not whether the cluster's placement or
+NBS configuration can satisfy the request; server rejections appear in history.
 
 The template **Configuration** tab edits all message types reachable from the
 bundled YDB `TAppConfig` and `TEphemeralInputFields` protobuf descriptors. The latter
@@ -542,6 +575,33 @@ These are the same bytes supplied to YDB, including resolved placement and tenan
 overrides, not a later reconstruction from the saved template.
 The run Configuration page and profile result link to these retained artifacts.
 Older runs without these artifacts are explicitly reported as unavailable.
+The template's **Cluster → Allowed ports** fields constrain HTTP monitoring,
+gRPC and interconnect ports on every participating host. Use comma-separated
+ports and inclusive ranges, for example:
+
+```yaml
+port_ranges:
+  http: "8765-8799, auto"
+  grpc: "2135-2169"
+  ic: "19001-19035, 19100"
+```
+
+This is a top-level cluster-template setting, not a YDB configuration field.
+It is retained in the run's template snapshot; resolved ports appear in the
+execution plan, node command lines and generated cluster configuration where
+applicable. Each static or dynamic node requires one free port per protocol.
+Omitted or empty fields, or `auto` alone, use OS-assigned ports. Add `auto` to a
+list (for example `19001-19020, 19100, auto`) to allow OS-assigned fallback when
+the listed ports are exhausted. Its position in the list does not change priority.
+Workers reserve free explicit ports first; busy or permission-denied ports are
+skipped. Strict lists take precedence over lists with `auto`, and all explicit
+reservations finish before OS-assigned fallback starts. Without `auto`, exhaustion
+fails preparation without selecting ports outside the ranges. Separate hosts
+can reuse the same port numbers. All participating benchmark binaries must
+support configured port ranges and, when used, `auto`; incompatible workers fail preflight before
+any host is reserved. These settings do not open firewall ports or change the
+benchmark server listener.
+
 Counters are viewed per host, without merging unrelated wall clocks. Aggregate
 CPU metrics require sufficient common measurement coverage and bounded clock
 uncertainty; missing coverage is not reported as zero utilization.
@@ -753,6 +813,10 @@ and bundled benchmark versions of the YDB dashboards. Links carry
 the attempt time range and host/run/profile/attempt variables. Bundled panels
 use those variables in every metric selector; existing third-party dashboards
 must implement the variables themselves to isolate a benchmark attempt.
+Grafana availability is cached in the browser for 30 seconds, with concurrent
+checks sharing one request. Saving or refreshing monitoring settings invalidates
+the cache. A transient refresh failure retains the last known configuration and
+backs off for 10 seconds; refreshing run progress keeps the existing button.
 
 Configure `grafana_url` as the browser-facing base URL and `grafana_api_url`
 as the base URL reachable from the monitoring settings owner (empty means use

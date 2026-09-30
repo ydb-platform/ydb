@@ -698,11 +698,9 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         }
 
         const auto& error = result.GetError();
-
         YDB_LOG_ERROR("[Export] ListObjects request failed",
             {"key", CurrentObjectKey},
             {"error", error});
-
         if (CanRetry(error)) {
             UploadId.Clear();
             Retry();

@@ -1098,10 +1098,6 @@ class TJsonNodes : public TViewerPipeClient {
             && FieldsRequested.test(+field);
     }
 
-    bool IsNodeFieldAvailableForResponse(ENodeFields field) {
-        return ShouldRenderNodeField(field) && FieldsAvailable.test(+field);
-    }
-
     bool IsClusterLevelNodeField(ENodeFields field) const {
         return field != ENodeFields::COUNT && FieldsHiddenFromStrictDatabaseUsers.test(+field);
     }
@@ -3624,7 +3620,7 @@ public:
                     jsonNode.SetClockSkewUs(node->ClockSkewUs);
                     jsonNode.SetClockSkewMinUs(node->ClockSkewMinUs);
                     jsonNode.SetClockSkewMaxUs(node->ClockSkewMaxUs);
-                    if (IsNodeFieldAvailableForResponse(ENodeFields::ReversePeers)) {
+                    if (FieldsAvailable.test(+ENodeFields::ReversePeers)) {
                         jsonNode.SetReverseClockSkewUs(node->ReverseClockSkewUs);
                     }
                 }
@@ -3632,7 +3628,7 @@ public:
                     jsonNode.SetPingTimeUs(node->PingTimeUs);
                     jsonNode.SetPingTimeMinUs(node->PingTimeMinUs);
                     jsonNode.SetPingTimeMaxUs(node->PingTimeMaxUs);
-                    if (IsNodeFieldAvailableForResponse(ENodeFields::ReversePeers)) {
+                    if (FieldsAvailable.test(+ENodeFields::ReversePeers)) {
                         jsonNode.SetReversePingTimeUs(node->ReversePingTimeUs);
                     }
                 }

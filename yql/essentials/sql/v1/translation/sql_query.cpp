@@ -390,7 +390,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             auto subquery = nodeExpr->GetSource();
             auto yqlSource = GetYqlSource(nodeExpr);
             HasSqlStatements_ = HasSqlStatements_ || subquery || yqlSource;
-            if (auto source = yqlSource) {
+            if (const auto& source = yqlSource) {
                 const auto alias = Ctx_.MakeName("yqlsubquerynode");
                 const auto ref = Ctx_.MakeName("yqlsubquery");
 

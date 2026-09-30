@@ -202,7 +202,8 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonDictionary) {
         ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
         ------
         SCHEMA:
-        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`)
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`DICTIONARY`,
+                    `DICTIONARY_UNIQUE_FRACTION`=`1`)
         ------
         DATA:
         REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, "Alpha"), (2u, "beta"), (3u, "ALPINE")

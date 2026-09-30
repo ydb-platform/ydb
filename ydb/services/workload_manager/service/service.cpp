@@ -10,10 +10,14 @@
 #include <ydb/core/cms/console/console.h>
 
 #include <ydb/services/workload_manager/actors/actors.h>
+#include <ydb/services/workload_manager/actors/workload_manager_state_actor.h>
 #include <ydb/services/workload_manager/common/helpers.h>
+#include <ydb/services/workload_manager/gateway_internal.h>
 #include <ydb/services/workload_manager/tables/table_queries.h>
 
 #include <ydb/core/mind/tenant_node_enumeration.h>
+
+#include <ydb/services/metadata/abstract/common.h>
 
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -61,8 +65,10 @@ class TWorkloadService : public TActorBootstrapped<TWorkloadService> {
     };
 
 public:
-    explicit TWorkloadService(NMonitoring::TDynamicCounterPtr counters)
+    TWorkloadService(NMonitoring::TDynamicCounterPtr counters,
+                     std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
         : Counters(counters)
+        , Gateway(std::move(gateway))
     {}
 
     void Bootstrap() {
@@ -79,9 +85,7 @@ public:
         EnabledResourcePools = AppData()->FeatureFlags.GetEnableResourcePools() || WorkloadManagerConfig.GetEnabled();
         EnabledResourcePoolsOnServerless = AppData()->FeatureFlags.GetEnableResourcePoolsOnServerless() || WorkloadManagerConfig.GetEnabled();
         EnableResourcePoolsCounters = AppData()->FeatureFlags.GetEnableResourcePoolsCounters();
-        if (EnabledResourcePools) {
-            InitializeWorkloadService();
-        }
+        InitializeWorkloadService();
     }
 
     void HandlePoison() {
@@ -99,6 +103,10 @@ public:
             if (poolState.NewPoolHandler) {
                 Send(*poolState.NewPoolHandler, new TEvents::TEvPoison());
             }
+        }
+
+        if (StateActor) {
+            Send(StateActor, new TEvents::TEvPoison());
         }
 
         PassAway();
@@ -159,7 +167,7 @@ public:
         }
     }
 
-    void Handle(TEvSubscribeOnPoolChanges::TPtr& ev) {
+    void Handle(TEvGetPoolInfo::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
         if (!EnabledResourcePools) {
@@ -168,7 +176,7 @@ public:
         }
 
         LOG_D("Received subscription request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
-        GetOrCreateDatabaseState(databaseId)->DoSubscribeRequest(std::move(ev));
+        GetOrCreateDatabaseState(databaseId)->DoGetPoolInfo(std::move(ev));
     }
 
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
@@ -179,6 +187,11 @@ public:
         }
 
         const TString& databaseId = ev->Get()->DatabaseId;
+        if (!EnabledResourcePoolsOnServerless && IsServerlessInSnapshot(databaseId)) {
+            ReplyContinueError(workerActorId, ev->Get()->QueryId, Ydb::StatusIds::UNSUPPORTED,
+                               "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+            return;
+        }
         LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         GetOrCreateDatabaseState(databaseId)->DoPlaceRequest(std::move(ev));
     }
@@ -219,6 +232,13 @@ public:
         }
     }
 
+    // Test-only: WaitForClassifierPropagation injects TEvRefreshSubscriberData via this well-known service id; forward to cache actor.
+    void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
+        if (StateActor) {
+            TActivationContext::Send(ev->Forward(StateActor));
+        }
+    }
+
     STRICT_STFUNC(MainState,
         sFunc(TEvents::TEvPoison, HandlePoison);
         sFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, HandleSetConfigSubscriptionResponse);
@@ -226,10 +246,11 @@ public:
         hFunc(TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
-        hFunc(TEvSubscribeOnPoolChanges, Handle);
+        hFunc(TEvGetPoolInfo, Handle);
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle);
 
         hFunc(TEvFetchDatabaseResponse, Handle);
         hFunc(TEvPrivate::TEvFetchPoolResponse, Handle);
@@ -537,6 +558,7 @@ private:
         ServiceInitialized = true;
 
         LOG_I("Started workload service initialization");
+        StateActor = Register(CreateWorkloadManagerStateActor(Gateway));
         Register(CreateCleanupTablesActor());
         RunNodeInfoRequest();
     }
@@ -696,6 +718,18 @@ private:
         return "[Service] ";
     }
 
+    bool IsServerlessInSnapshot(const TString& databaseId) const {
+        if (!Gateway) {
+            return false;
+        }
+        auto snapshot = Gateway->GetSnapshot();
+        if (!snapshot) {
+            return false;
+        }
+        const auto it = snapshot->Databases.find(databaseId);
+        return it != snapshot->Databases.end() && it->second.Serverless;
+    }
+
 private:
     TCounters Counters;
 
@@ -713,12 +747,17 @@ private:
     std::unordered_map<TString, TPoolState> PoolIdToState;  // DatabaseID/PoolID to state
     std::unique_ptr<TCpuQuotaManagerState> CpuQuotaManager;
     ui32 NodeCount = 0;
+    TActorId StateActor;
+    std::shared_ptr<NPrivate::TWorkloadManagerGateway> Gateway;
 };
 
 }  // anonymous namespace
 
-IActor* CreateService(NMonitoring::TDynamicCounterPtr counters) {
-    return new NWorkloadManager::TWorkloadService(counters);
+IActor* CreateService(
+    NMonitoring::TDynamicCounterPtr counters,
+    std::shared_ptr<NPrivate::TWorkloadManagerGateway> gateway)
+{
+    return new NWorkloadManager::TWorkloadService(counters, std::move(gateway));
 }
 
 NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(NMonitoring::TDynamicCounterPtr rootCounters) {

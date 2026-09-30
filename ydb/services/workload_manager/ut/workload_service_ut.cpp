@@ -1058,7 +1058,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             auto result = ydb->ExecuteQuery("DROP RESOURCE POOL CLASSIFIER MyResourcePoolClassifier", settings);
 
             errorString = result.GetIssues().ToOneLineString();
-            return result.GetStatus() == EStatus::GENERIC_ERROR && errorString.Contains("You don't have access permissions for database Root");
+            return result.GetStatus() == EStatus::GENERIC_ERROR && errorString.Contains("You don't have access permissions for database /Root");
         });
 
         auto createResult = ydb->ExecuteQuery(TStringBuilder() << R"(
@@ -1068,7 +1068,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             );
         )", settings);
         UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::GENERIC_ERROR, createResult.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToOneLineString(), "You don't have access permissions for database Root");
+        UNIT_ASSERT_STRING_CONTAINS(createResult.GetIssues().ToOneLineString(), "You don't have access permissions for database /Root");
 
         auto alterResult = ydb->ExecuteQuery(R"(
             ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier SET (
@@ -1076,7 +1076,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             );
         )", settings);
         UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::GENERIC_ERROR, alterResult.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToOneLineString(), "You don't have access permissions for database Root");
+        UNIT_ASSERT_STRING_CONTAINS(alterResult.GetIssues().ToOneLineString(), "You don't have access permissions for database /Root");
     }
 
     void CreateSampleResourcePoolClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& classifierId, const TQueryRunnerSettings& settings, const TString& poolId) {

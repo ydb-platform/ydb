@@ -1399,8 +1399,10 @@ namespace Tests {
         }
 
         {
-            const auto& appData = Runtime->GetAppData(nodeIdx);
-            IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
+            auto& appData = Runtime->GetAppData(nodeIdx);
+            auto gateway = std::make_shared<NWorkloadManager::NPrivate::TWorkloadManagerGateway>();
+            appData.WorkloadManagerGateway = gateway;
+            IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters), gateway);
             TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
             Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
         }

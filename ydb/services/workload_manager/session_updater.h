@@ -18,10 +18,15 @@ public:
         EXITED = 3     // Request has exited from WM
     };
 
+    struct TPoolContext {
+        TString PoolId;
+        TString ClassifiedBy;
+    };
+
     virtual ~ISessionUpdater() = default;
 
     virtual void SetRequestState(EState state, TInstant timestamp) = 0;
-    virtual void SetPoolContext(TString poolId, TString classifiedBy) = 0;
+    virtual void SetPoolContext(TPoolContext context) = 0;
 };
 
 } // namespace NKikimr::NWorkloadManager

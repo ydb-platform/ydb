@@ -23,14 +23,28 @@ struct TWorkloadManagerEvents {
         EvCleanupRequest,
         EvCleanupResponse,
         EvUpdatePoolInfo,
-        EvSubscribeOnPoolChanges,
+        EvGetPoolInfo,
         EvFetchDatabaseResponse,
+        EvWarmupDatabaseInfo,
+        EvSubscribeOnWorkloadManagerReady,
+        EvWorkloadManagerReady,
+        EvEnsurePoolSubscribed,
     };
 };
 
 
-struct TEvSubscribeOnPoolChanges : public NActors::TEventLocal<TEvSubscribeOnPoolChanges, TWorkloadManagerEvents::EvSubscribeOnPoolChanges> {
-    TEvSubscribeOnPoolChanges(const TString& databaseId, const TString& poolId)
+struct TEvGetPoolInfo : public NActors::TEventLocal<TEvGetPoolInfo, TWorkloadManagerEvents::EvGetPoolInfo> {
+    TEvGetPoolInfo(const TString& databaseId, const TString& poolId)
+        : DatabaseId(databaseId)
+        , PoolId(poolId)
+    {}
+
+    const TString DatabaseId;
+    const TString PoolId;
+};
+
+struct TEvEnsurePoolSubscribed : public NActors::TEventLocal<TEvEnsurePoolSubscribed, TWorkloadManagerEvents::EvEnsurePoolSubscribed> {
+    TEvEnsurePoolSubscribed(const TString& databaseId, const TString& poolId)
         : DatabaseId(databaseId)
         , PoolId(poolId)
     {}
@@ -124,6 +138,38 @@ struct TEvUpdatePoolInfo : public NActors::TEventLocal<TEvUpdatePoolInfo, TWorkl
     const TString PoolId;
     const std::optional<NResourcePool::TPoolSettings> Config;
     const std::optional<NACLib::TSecurityObject> SecurityObject;
+};
+
+struct TEvWarmupDatabaseInfo : public NActors::TEventLocal<TEvWarmupDatabaseInfo, TWorkloadManagerEvents::EvWarmupDatabaseInfo> {
+    explicit TEvWarmupDatabaseInfo(const TString& databasePath)
+        : DatabasePath(databasePath)
+    {}
+
+    const TString DatabasePath;
+};
+
+struct TEvSubscribeOnWorkloadManagerReady : public NActors::TEventLocal<TEvSubscribeOnWorkloadManagerReady, TWorkloadManagerEvents::EvSubscribeOnWorkloadManagerReady> {
+    TEvSubscribeOnWorkloadManagerReady(const TString& databaseId, NActors::TActorId subscriber, ui64 cookie)
+        : DatabaseId(databaseId)
+        , Subscriber(subscriber)
+        , Cookie(cookie)
+    {}
+
+    const TString DatabaseId;
+    const NActors::TActorId Subscriber;
+    const ui64 Cookie;
+};
+
+struct TEvWorkloadManagerReady : public NActors::TEventLocal<TEvWorkloadManagerReady, TWorkloadManagerEvents::EvWorkloadManagerReady> {
+    TEvWorkloadManagerReady(ui64 cookie, Ydb::StatusIds::StatusCode status, TString message = {})
+        : Cookie(cookie)
+        , Status(status)
+        , Message(std::move(message))
+    {}
+
+    const ui64 Cookie;
+    const Ydb::StatusIds::StatusCode Status;
+    const TString Message;
 };
 
 struct TEvFetchDatabaseResponse : public NActors::TEventLocal<TEvFetchDatabaseResponse, TWorkloadManagerEvents::EvFetchDatabaseResponse> {

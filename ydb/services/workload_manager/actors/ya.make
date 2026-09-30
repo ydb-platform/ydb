@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     cpu_load_actors.cpp
     pool_handlers_actors.cpp
+    workload_manager_state_actor.cpp
     scheme_actors.cpp
 )
 

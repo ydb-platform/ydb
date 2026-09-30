@@ -119,6 +119,23 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             TDoubleCounter ReceivedFromKesus;
 
             TCounters(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters) {
+                Init(resource, quoterCounters);
+            }
+
+            ~TCounters() {
+                Reset();
+            }
+
+            // Kesus may delete and recreate the resource while the proxy is disconnected.
+            // If Kesus is colocated, it removes the shared resource subgroup, so the
+            // previously obtained counters are detached. Rebind to the current subgroup.
+            void Rebind(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters) {
+                Reset();
+                Init(resource, quoterCounters);
+            }
+
+        private:
+            void Init(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters) {
                 if (!quoterCounters) {
                     return;
                 }
@@ -141,7 +158,8 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                 ReceivedFromKesus = ResourceCounters->GetCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME, true);
             }
 
-            ~TCounters() {
+            void Reset() {
+                ParentConsumed.clear();
                 if (!ResourceCounters) {
                     return;
                 }
@@ -151,8 +169,16 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                 ResourceCounters->RemoveCounter(RESOURCE_DROPPED_COUNTER_SENSOR_NAME);
                 ResourceCounters->RemoveCounter(RESOURCE_ACCUMULATED_COUNTER_SENSOR_NAME);
                 ResourceCounters->RemoveCounter(RESOURCE_RECEIVED_FROM_KESUS_COUNTER_SENSOR_NAME);
+                ResourceCounters = nullptr;
+                QueueSize = nullptr;
+                QueueWeight = nullptr;
+                Dropped = nullptr;
+                Accumulated = nullptr;
+                AllocatedOffline = TDoubleCounter();
+                ReceivedFromKesus = TDoubleCounter();
             }
 
+        public:
             void AddConsumed(ui64 consumed) {
                 for (::NMonitoring::TDynamicCounters::TCounterPtr& counter : ParentConsumed) {
                     *counter += consumed;
@@ -489,12 +515,14 @@ private:
 
     TResourceState* FindResource(ui64 id) {
         const auto indexIt = ResIndex.find(id);
-        return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
+        // The index may point to Resources.end() for the old id of a recreated resource.
+        return indexIt != ResIndex.end() && indexIt->second != Resources.end() ? indexIt->second->second.Get() : nullptr;
     }
 
     const TResourceState* FindResource(ui64 id) const {
         const auto indexIt = ResIndex.find(id);
-        return indexIt != ResIndex.end() ? indexIt->second->second.Get() : nullptr;
+        // The index may point to Resources.end() for the old id of a recreated resource.
+        return indexIt != ResIndex.end() && indexIt->second != Resources.end() ? indexIt->second->second.Get() : nullptr;
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {
@@ -881,9 +909,8 @@ private:
             {"logPrefix", LogPrefix},
             {"resources", PrintResources(*ev->Get())});
         for (const TEvQuota::TProxyStat& stat : msg->Stats) {
-            const auto indexIt = ResIndex.find(stat.ResourceId);
-            if (indexIt != ResIndex.end()) {
-                TResourceState& res = *indexIt->second->second;
+            if (TResourceState* resPtr = FindResource(stat.ResourceId)) {
+                TResourceState& res = *resPtr;
                 res.AddConsumed(stat.Consumed);
                 res.SetAvailable(res.Available - stat.Consumed);
                 res.QueueWeight = stat.QueueWeight;
@@ -1036,6 +1063,7 @@ private:
                         if (resState->ResId != Max<ui64>() && resState->ResId != resResult.GetResourceId()) { // Kesus was disconnected and then resource was recreated.
                             BreakResource(*resState, GetProxyUpdateEv());
                             ResIndex[resState->ResId] = Resources.end();
+                            resState->Counters.Rebind(resState->Resource, Counters.QuoterCounters);
                         }
                         resState->ResId = resResult.GetResourceId();
                         ResIndex[resState->ResId] = resourceIt;

@@ -9,9 +9,15 @@ How to view current metric values in the [built-in web interface](../../../devop
 | Metric name<br/>Type, units | Description<br/>Labels |
 | --- | --- |
 | `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | Size of user and service data stored in the distributed network storage. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`. |
+| `resources.storage.used_bytes.ssd`<br/>`IGAUGE`, bytes | Total size of user and service data by workload type in SSD storage pools. Included in the metric: tables. |
+| `resources.storage.used_bytes.hdd`<br/>`IGAUGE`, bytes | Total size of user and service data by workload type in HDD storage pools. Included in the metric: tables. |
 | `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | Size of user and service data stored by tables in the distributed network storage. Service data includes data of primary, [secondary indexes](../../../concepts/glossary.md#secondary-index), [vector indexes](../../../concepts/glossary.md#vector-index), [full-text indexes](../../../concepts/glossary.md#fulltext-index), [local Bloom indexes](../../../concepts/glossary.md#local-bloom-skip-index), and [local min_max index](../../../concepts/glossary.md#local-min-max-index). |
+| `resources.storage.table.used_bytes.ssd`<br/>`IGAUGE`, bytes | Size of user and service data stored by tables in SSD storage pools. Service data composition is the same as for `resources.storage.table.used_bytes`. |
+| `resources.storage.table.used_bytes.hdd`<br/>`IGAUGE`, bytes | Size of user and service data stored by tables in HDD storage pools. Service data composition is the same as for `resources.storage.table.used_bytes`. |
 | `resources.storage.topic.used_bytes`<br/>`IGAUGE`, bytes | Size of the distributed network storage used by topics. Equals the sum of `topic.storage_bytes` values of all topics. |
-| `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | Limit on the size of user and service data that the database can store in the distributed network storage. |
+| `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | Limit on the size of user and service data that the database can store in the distributed network storage (total across all workload types and pools). |
+| `resources.storage.limit_bytes.ssd`<br/>`IGAUGE`, bytes | Limit on the size of user and service data in SSD storage pools. Applies to: tables. |
+| `resources.storage.limit_bytes.hdd`<br/>`IGAUGE`, bytes | Limit on the size of user and service data in HDD storage pools. Applies to: tables. |
 
 ## Common gRPC API metrics {#api}
 

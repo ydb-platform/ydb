@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include "kqp_tasks_graph.h"
 
@@ -378,7 +379,7 @@ struct TStorageTableStats {
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
     ui64 AffectedPartitions = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
 };
 
 struct TQueryTableStats {
@@ -561,7 +562,7 @@ struct TBatchOperationTableStats {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
 };
 
 struct TBatchOperationExecutionStats {

@@ -1219,7 +1219,10 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
         queryTableStats.StorageStats.WriteBytes += tableStat.GetWriteBytes();
         queryTableStats.StorageStats.EraseRows += tableStat.GetEraseRows();
         queryTableStats.StorageStats.EraseBytes += tableStat.GetEraseBytes();
-        queryTableStats.StorageStats.AffectedRows += tableStat.GetAffectedRows();
+        if (tableStat.HasAffectedRows()) {
+            queryTableStats.StorageStats.AffectedRows =
+                queryTableStats.StorageStats.AffectedRows.value_or(0) + tableStat.GetAffectedRows();
+        }
         if (txStats) {
             auto& tableShards = TableShards[tablePath];
             for (const auto& perShard : txStats->GetPerShardStats()) {
@@ -1772,7 +1775,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         tableAggr.SetEraseRows(t.StorageStats.EraseRows + t.EraseRows.Sum);
         tableAggr.SetEraseBytes(t.StorageStats.EraseBytes + t.EraseBytes.Sum);
         if (TasksGraph->GetMeta().CollectAffectedRows) {
-            tableAggr.SetAffectedRows(t.StorageStats.AffectedRows + t.AffectedRows.Sum);
+            tableAggr.SetAffectedRows(t.StorageStats.AffectedRows.value_or(0) + t.AffectedRows.Sum);
         }
         tableAggr.SetAffectedPartitions(t.StorageStats.AffectedPartitions +
             (t.AffectedPartitionsUniqueCount ? t.AffectedPartitionsUniqueCount : t.AffectedPartitions.Sum)
@@ -1859,7 +1862,9 @@ void TBatchOperationExecutionStats::TakeExecStats(NYql::NDqProto::TDqExecutionSt
         tableStats.WriteBytes += tableStat.GetWriteBytes();
         tableStats.EraseRows += tableStat.GetEraseRows();
         tableStats.EraseBytes += tableStat.GetEraseBytes();
-        tableStats.AffectedRows += tableStat.GetAffectedRows();
+        if (tableStat.HasAffectedRows()) {
+            tableStats.AffectedRows = tableStats.AffectedRows.value_or(0) + tableStat.GetAffectedRows();
+        }
     }
 
     CpuTimeUs += stats.GetCpuTimeUs();
@@ -1896,7 +1901,7 @@ void TBatchOperationExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecution
         tableAggr.SetEraseRows(tableStats.EraseRows);
         tableAggr.SetEraseBytes(tableStats.EraseBytes);
         if (CollectAffectedRows) {
-            tableAggr.SetAffectedRows(tableStats.AffectedRows);
+            tableAggr.SetAffectedRows(tableStats.AffectedRows.value_or(0));
         }
 
         // TODO: it is not correct for indexImplTables

@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
         TDriver driver = MakeDriver(env.EndpointA, fullProdDatabasePath);
         TTopicClient client(driver);
 
-        std::map<ui64, TString> messages;
+        std::map<uint64_t, TString> messages;
         {
             TTopicClient client(driver);
             auto session = client.CreateReadSession(
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
         WriteMessages(env.EndpointA, fullTestDatabasePath, testTopicPath, "mirror-producer", written);
 
         TDriver driverB = MakeDriver(env.EndpointB, fullTestDatabasePath);
-        std::map<ui64, TString> received;
+        std::map<uint64_t, TString> received;
         {
             TTopicClient client(driverB);
             auto session = client.CreateReadSession(
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
                     .AppendTopics(TTopicReadSettings(shortMirroredTopicPath))
             );
 
-            std::map<ui64, TString> mirroredMessages = ReadMessages(session, 1000, TDuration::Seconds(10));
+            std::map<uint64_t, TString> mirroredMessages = ReadMessages(session, 1000, TDuration::Seconds(10));
             Cerr << TInstant::Now() << " WrittenMessages.size()=" << writtenPayloads.size() << ", mirroredMessages.size()=" << mirroredMessages.size() << Endl;
             UNIT_ASSERT(mirroredMessages.size() < writtenPayloads.size());
             for (auto& [offset, data] : mirroredMessages) {
@@ -264,7 +264,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
 
         std::unordered_set<TString> writtenSet(allWritten.begin(), allWritten.end());
 
-        std::map<std::pair<ui64, ui64>, TString> dstMessages;
+        std::map<std::pair<uint64_t, uint64_t>, TString> dstMessages;
         {
             TDriver driverB = MakeDriver(env.EndpointB, fullProdDatabasePath);
             {

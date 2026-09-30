@@ -283,16 +283,6 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         Y_ABORT_UNLESS(desc);
-        for (const auto& family : desc->GetPartitionConfig().GetColumnFamilies()) {
-            const auto codec = GetColumnCodec(family);
-            if (codec != NKikimrSchemeOp::ColumnCodecPlain && codec != NKikimrSchemeOp::ColumnCodecLZ4) {
-                return Error(NKikimrScheme::StatusSchemeError,
-                    TStringBuilder() << "Unsupported column family codec"
-                        << ": name: " << GetFamilyName(family)
-                        << ", codec: " << static_cast<ui32>(codec));
-            }
-        }
-
         desc->SetName(pathPair.second);
 
         FillReplicationConfig(*desc->MutableReplicationConfig());

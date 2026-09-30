@@ -110,7 +110,10 @@ public:
 };
 
 IDataParser::TPtr CreateCsvDataParser();
-IParquetStreamParser::TPtr CreateParquetDataParser();
+// bufferSizeLimit is the limit of the read buffer of the import, which the
+// engine keeps the row groups within. The memory that decoding takes is limited
+// by it as well: to twice as much. 0 = no limit.
+IParquetStreamParser::TPtr CreateParquetDataParser(ui64 bufferSizeLimit);
 
 } // namespace NKikimr::NDataShard
 

@@ -258,7 +258,7 @@ void CheckLargeParquetRoundTrip(const TLargeParquetData& source) {
     const auto scheme = MakeLargeParquetTableScheme();
     NDataShard::TUserTable::TPtr userTable = new NDataShard::TUserTable(1, scheme, 0);
     const NDataShard::TTableInfo tableInfo(1, userTable);
-    auto parser = NDataShard::CreateParquetDataParser();
+    auto parser = NDataShard::CreateParquetDataParser(/*bufferSizeLimit=*/0);
     auto configureResult = parser->Configure(tableInfo, scheme);
     UNIT_ASSERT_C(configureResult.has_value(), configureResult.error());
 

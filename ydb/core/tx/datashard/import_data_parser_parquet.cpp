@@ -14,6 +14,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
@@ -220,7 +221,82 @@ ui64 DecodedBytes(const arrow::RecordBatch& batch) {
     return bytes;
 }
 
+// The memory Arrow takes to read a file: the pages it uncompresses, the
+// dictionaries and the rows it decodes. The file does not bound it: a page
+// states its own size, and a value of a dictionary is decoded for every row
+// that has it. So it is bounded here: an allocation above the limit is
+// refused, which fails the read that needs it.
+class TDecodeMemoryPool final : public arrow::MemoryPool {
+public:
+    explicit TDecodeMemoryPool(ui64 limit)
+        : Limit(limit)
+    {
+    }
+
+    arrow::Status Allocate(int64_t size, uint8_t** out) override {
+        if (!Fits(size)) {
+            return Refuse();
+        }
+        ARROW_RETURN_NOT_OK(Pool->Allocate(size, out));
+        Allocated += size;
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Reallocate(int64_t oldSize, int64_t newSize, uint8_t** ptr) override {
+        if (newSize > oldSize && !Fits(newSize - oldSize)) {
+            return Refuse();
+        }
+        ARROW_RETURN_NOT_OK(Pool->Reallocate(oldSize, newSize, ptr));
+        Allocated += newSize - oldSize;
+        return arrow::Status::OK();
+    }
+
+    void Free(uint8_t* buffer, int64_t size) override {
+        Pool->Free(buffer, size);
+        Allocated -= size;
+    }
+
+    int64_t bytes_allocated() const override {
+        return Allocated;
+    }
+
+    std::string backend_name() const override {
+        return Pool->backend_name();
+    }
+
+    ui64 GetLimit() const {
+        return Limit;
+    }
+
+    // Whether an allocation has been refused since the last reset.
+    bool HasRefused() const {
+        return Refused;
+    }
+
+    void ResetRefused() {
+        Refused = false;
+    }
+
+private:
+    bool Fits(int64_t size) const {
+        return !Limit || static_cast<ui64>(Allocated) + static_cast<ui64>(size) <= Limit;
+    }
+
+    arrow::Status Refuse() {
+        Refused = true;
+        return arrow::Status::OutOfMemory("decoding takes more than ", Limit, " bytes of memory");
+    }
+
+private:
+    arrow::MemoryPool* const Pool = arrow::default_memory_pool();
+    const ui64 Limit; // 0 = no limit
+    int64_t Allocated = 0;
+    bool Refused = false;
+};
+
 struct TParquetFileSession {
+    // The first one, so that it outlives everything that holds its memory.
+    std::unique_ptr<TDecodeMemoryPool> Memory;
     std::shared_ptr<arrow::io::RandomAccessFile> Source;
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
     std::vector<int> ColumnIndices; // parquet leaf columns to decode, in scheme order
@@ -232,6 +308,8 @@ struct TParquetFileSession {
     i64 HeldOffset = 0;
     ui64 RowsRead = 0; // rows of the open row groups that have been emitted
     i64 BatchRows = 1; // the rows the next batch is decoded with, see NextBatchRows()
+    i64 BatchRowsLimit = Max<i64>(); // lowered by ReopenWithSmallerBatches()
+    TVector<i64> DecodedBatches; // the rows of every batch decoded from the open row groups
 };
 
 class TParquetDataParser final : public IParquetStreamParser {
@@ -243,6 +321,10 @@ class TParquetDataParser final : public IParquetStreamParser {
     //  - the first batch of a row group is a single row;
     //  - a batch is at most twice as long as the one before it, so a run of
     //    wider rows is met by a batch of a limited length.
+    // The byte target is what a batch is expected to take, not a bound: rows
+    // far wider than those before them make a batch that takes far more. The
+    // bound is the memory limit of the decoding, see TDecodeMemoryPool and
+    // ReopenWithSmallerBatches().
     static constexpr i64 MaxBatchRows = 64 * 1024;
     // The byte target of a batch when the caller sets no byte budget.
     static constexpr ui64 DefaultDecodeBytes = 8_MB;
@@ -272,6 +354,15 @@ class TParquetDataParser final : public IParquetStreamParser {
     }
 
 public:
+    // The pages of a row group and the dictionaries decoded from them take up
+    // to its uncompressed size each, and the engine accepts a row group whose
+    // uncompressed size is below the limit of the read buffer. So with twice
+    // that limit a row group the engine accepts can be decoded.
+    explicit TParquetDataParser(ui64 bufferSizeLimit)
+        : DecodeMemoryLimit(bufferSizeLimit > Max<ui64>() / 2 ? Max<ui64>() : 2 * bufferSizeLimit)
+    {
+    }
+
     std::expected<void, TString> Configure(
         const TTableInfo& tableInfo,
         const NKikimrSchemeOp::TTableDescription& scheme) override
@@ -359,13 +450,15 @@ public:
         }
 
         auto session = std::make_unique<TParquetFileSession>();
+        session->Memory = std::make_unique<TDecodeMemoryPool>(DecodeMemoryLimit);
         session->Source = std::move(source);
 
         parquet::arrow::FileReaderBuilder builder;
-        if (auto st = builder.Open(session->Source); !st.ok()) {
+        if (auto st = builder.Open(session->Source, parquet::ReaderProperties(session->Memory.get())); !st.ok()) {
             return std::unexpected(TStringBuilder() << "failed to open parquet file: " << st.ToString());
         }
 
+        builder.memory_pool(session->Memory.get());
         builder.properties(parquet::ArrowReaderProperties(/*use_threads*/ false));
 
         if (auto st = builder.Build(&session->FileReader); !st.ok()) {
@@ -461,6 +554,8 @@ public:
         Session->HeldOffset = 0;
         Session->RowsRead = 0;
         Session->BatchRows = 1;
+        Session->BatchRowsLimit = Max<i64>();
+        Session->DecodedBatches.clear();
     }
 
     std::expected<TParsedBatch, TString> ProcessNextBatch(
@@ -488,19 +583,25 @@ public:
         // Makes sure HeldBatch holds unread rows; false once the row group is exhausted.
         const auto fetch = [this, decodeBytes]() -> std::expected<bool, TString> {
             while (!Session->HeldBatch) {
-                // The reader takes the batch size for every batch it decodes.
-                Session->FileReader->set_batch_size(Session->BatchRows);
-
                 std::shared_ptr<arrow::RecordBatch> batch;
-                if (auto st = Session->BatchReader->ReadNext(&batch); !st.ok()) {
-                    return std::unexpected(TStringBuilder()
-                        << "failed to read parquet record batch: " << st.ToString());
+                if (auto st = ReadBatch(Session->BatchRows, batch); !st.ok()) {
+                    if (!Session->Memory->HasRefused()) {
+                        return std::unexpected(TStringBuilder()
+                            << "failed to read parquet record batch: " << st.ToString());
+                    }
+                    if (auto result = ReopenWithSmallerBatches(); !result) {
+                        return std::unexpected(std::move(result.error()));
+                    }
+                    continue;
                 }
                 if (!batch) {
                     return false;
                 }
                 if (batch->num_rows() > 0) {
-                    Session->BatchRows = NextBatchRows(decodeBytes, DecodedBytes(*batch), batch->num_rows());
+                    Session->DecodedBatches.push_back(batch->num_rows());
+                    Session->BatchRows = Min(
+                        NextBatchRows(decodeBytes, DecodedBytes(*batch), batch->num_rows()),
+                        Session->BatchRowsLimit);
 
                     auto casted = CastCoercedColumns(std::move(batch));
                     if (!casted) {
@@ -655,6 +756,61 @@ private:
         return TStringBuilder() << "row " << row << " past the open row groups";
     }
 
+    // Decodes the next rows of the open row groups: the given number of them,
+    // or fewer at the end. The batch is null when no rows are left.
+    arrow::Status ReadBatch(i64 rows, std::shared_ptr<arrow::RecordBatch>& batch) {
+        Session->Memory->ResetRefused();
+        // The reader takes the batch size for every batch it decodes.
+        Session->FileReader->set_batch_size(rows);
+        return Session->BatchReader->ReadNext(&batch);
+    }
+
+    // Called when a batch does not fit into the memory limit of the decoding.
+    // The reader cannot go on after a read that has failed, so the row groups
+    // are opened again, the rows that have been emitted are decoded once more,
+    // in the batches they were decoded in, and dropped. The reading goes on
+    // with a batch of one row. The batches of these row groups stay shorter
+    // than the one that has failed, so this happens a limited number of times.
+    std::expected<void, TString> ReopenWithSmallerBatches() {
+        const i64 failedRows = Session->BatchRows;
+        if (failedRows == 1) {
+            return std::unexpected(TStringBuilder() << "Parquet " << DescribeRow(Session->RowsRead)
+                << " cannot be decoded within " << Session->Memory->GetLimit()
+                << " bytes of memory (twice RestoreReadBufferSizeLimit)");
+        }
+
+        Session->BatchReader.reset();
+        if (auto st = Session->FileReader->GetRecordBatchReader(
+                Session->RowGroups, Session->ColumnIndices, &Session->BatchReader); !st.ok())
+        {
+            return std::unexpected(TStringBuilder()
+                << "failed to get parquet record batch reader: " << st.ToString());
+        }
+
+        ui64 skipped = 0;
+        for (size_t i = 0; skipped < Session->RowsRead; ++i) {
+            const ui64 left = Session->RowsRead - skipped;
+            const ui64 rows = i < Session->DecodedBatches.size()
+                ? Min<ui64>(Session->DecodedBatches[i], left)
+                : 1;
+
+            std::shared_ptr<arrow::RecordBatch> batch;
+            if (auto st = ReadBatch(static_cast<i64>(rows), batch); !st.ok()) {
+                return std::unexpected(TStringBuilder()
+                    << "failed to read parquet record batch again: " << st.ToString());
+            }
+            if (!batch || static_cast<ui64>(batch->num_rows()) > left) {
+                return std::unexpected(TStringBuilder() << "parquet rows read again differ from those read before "
+                    << DescribeRow(Session->RowsRead));
+            }
+            skipped += batch->num_rows();
+        }
+
+        Session->BatchRows = 1;
+        Session->BatchRowsLimit = failedRows / 2;
+        return {};
+    }
+
     std::expected<void, TString> OpenRowGroups(std::vector<int> rowGroupIndices) {
         ResetRowGroup();
 
@@ -671,6 +827,7 @@ private:
     }
 
 private:
+    const ui64 DecodeMemoryLimit; // 0 = no limit
     TVector<TColumnMeta> ColumnMeta;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema;
     ui32 KeyCount = 0;
@@ -679,8 +836,8 @@ private:
 
 } // anonymous namespace
 
-IParquetStreamParser::TPtr CreateParquetDataParser() {
-    return MakeHolder<TParquetDataParser>();
+IParquetStreamParser::TPtr CreateParquetDataParser(ui64 bufferSizeLimit) {
+    return MakeHolder<TParquetDataParser>(bufferSizeLimit);
 }
 
 } // namespace NKikimr::NDataShard

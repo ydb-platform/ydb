@@ -725,16 +725,22 @@ struct TBatchedImport {
 
 // Imports a data file the way the downloader does: every batch the engine
 // reports as ready is one upload.
-TBatchedImport ImportInBatches(const TEngineFixture& fixture, const TString& source, ui32 readBatchSize) {
-    // The buffer limit is set to hold any row group of the tests, uncompressed:
-    // they are about how a row group is read, not about its size.
+//
+// The default buffer limit holds any row group of the tests, uncompressed: most
+// of them are about how a row group is read, not about its size.
+TBatchedImport ImportInBatches(
+    const TEngineFixture& fixture,
+    const TString& source,
+    ui32 readBatchSize,
+    ui64 bufferSizeLimit = 128_MB)
+{
     auto engine = fixture.MakeEngine(
         EDataFormat::Parquet,
         source,
         readBatchSize,
         /*validateChecksum=*/false,
         ECompressionCodec::None,
-        /*bufferSizeLimit=*/128_MB);
+        bufferSizeLimit);
 
     auto* arrowPool = arrow::default_memory_pool();
     const i64 arrowBytesBefore = arrowPool->bytes_allocated();
@@ -1436,6 +1442,68 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT_VALUES_EQUAL(imported.Keys.size(), Rows);
         UNIT_ASSERT_LT_C(imported.PeakArrowBytes, 8_MB,
             "decoding held " << imported.PeakArrowBytes << " bytes with a budget of " << Budget);
+    }
+
+    Y_UNIT_TEST(ParquetDecodesWideRowsAfterNarrowOnesWithinTheMemoryLimit) {
+        // A batch is sized by the rows before it. After a long run of narrow
+        // rows it is thousands of rows long, and if the rows that follow are
+        // wide, it takes far more memory than the batches before it. A value
+        // that repeats is in the file once, as an entry of a dictionary, so
+        // nothing in the file tells that: here 64 MiB of rows follow the narrow
+        // ones in a file of less than 1 MiB.
+        static constexpr ui32 NarrowRows = 8191; // batches of 1, 2, ... 4096 rows
+        static constexpr ui32 WideRows = 1024;
+        static constexpr ui32 Budget = 256_KB;
+        static constexpr ui64 BufferLimit = 8_MB; // decoding gets twice as much
+
+        TVector<TString> values(NarrowRows, "narrow");
+        values.insert(values.end(), WideRows, TString(64_KB, 'w'));
+        TVector<TString> keys;
+        for (size_t i = 0; i < values.size(); ++i) {
+            keys.push_back(TStringBuilder() << "k" << i);
+        }
+
+        for (const auto compression : {parquet::Compression::UNCOMPRESSED, parquet::Compression::ZSTD}) {
+            const TString source = BuildKeyValueParquet(
+                MakeStringArray(values), /*rowGroupSize=*/values.size(), compression);
+            UNIT_ASSERT_LT(source.size(), 1_MB);
+
+            const TEngineFixture fixture;
+
+            // With a limit that is out of reach the wide rows are decoded as
+            // one batch.
+            const auto unlimited = ImportInBatches(fixture, source, Budget, /*bufferSizeLimit=*/1_GB);
+            UNIT_ASSERT_VALUES_EQUAL(unlimited.Keys.size(), keys.size());
+            UNIT_ASSERT_GT_C(unlimited.PeakArrowBytes, 2 * BufferLimit, unlimited.PeakArrowBytes);
+
+            // With the limit that batch is refused, and the rows are decoded in
+            // batches that fit: all of them, in the order of the file.
+            const auto imported = ImportInBatches(fixture, source, Budget, BufferLimit);
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", imported.Keys), JoinSeq(",", keys));
+            UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", imported.BatchBytes), JoinSeq(",", unlimited.BatchBytes));
+            UNIT_ASSERT_LT_C(imported.PeakArrowBytes, 2 * BufferLimit, imported.PeakArrowBytes);
+        }
+    }
+
+    Y_UNIT_TEST(ParquetFailsWhenARowCannotBeDecodedWithinTheMemoryLimit) {
+        // A row group within the limits by the footer can still take more
+        // memory than decoding gets, even for a single row: here the page of a
+        // dictionary with one value of 840 KB, the dictionary decoded from it
+        // and the row decoded from the dictionary. The import fails with an
+        // error that names the row.
+        static constexpr ui64 BufferLimit = 1_MB;
+
+        const TString source = BuildKeyValueParquet(
+            MakeStringArray({TString(840_KB, 'a')}), /*rowGroupSize=*/1, parquet::Compression::ZSTD);
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source, BufferLimit);
+
+        UNIT_ASSERT_C(outcome.Error, "a row that does not fit into the memory limit was imported");
+        UNIT_ASSERT_VALUES_EQUAL(*outcome.Error,
+            "Parquet row 0 of row group 0 cannot be decoded within 2097152 bytes of memory"
+            " (twice RestoreReadBufferSizeLimit)");
+        UNIT_ASSERT(outcome.Rows.empty());
     }
 
     Y_UNIT_TEST(ArrowAppliesANewBatchSizeToTheNextBatch) {

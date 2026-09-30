@@ -1273,8 +1273,9 @@ private:
     // same file, but the limit is a setting: the file is imported once it is
     // raised.
     //
-    // The rows decoded from a row group are not limited: no file tells that
-    // size, and they are decoded and released in batches.
+    // The rows decoded from a row group are not limited as a whole: no file
+    // tells that size, and they are decoded and released in batches. The
+    // memory the decoding takes at a time is limited by the parser.
     TString RowGroupIsTooBig(ui32 rowGroup, const TString& size) const {
         return TStringBuilder() << "Parquet row group " << rowGroup << " takes " << size
             << ", the limit is " << BufferSizeLimit << " bytes (RestoreReadBufferSizeLimit)";
@@ -1601,7 +1602,7 @@ std::expected<IImportS3Engine::TPtr, TString> CreateImportS3Engine(
             return std::unexpected("Parquet file is too small");
         }
 
-        auto parser = CreateParquetDataParser();
+        auto parser = CreateParquetDataParser(settings.BufferSizeLimit);
         if (auto result = parser->Configure(tableInfo, scheme); !result) {
             return std::unexpected(TStringBuilder() << "failed to configure import parser: " << result.error());
         }

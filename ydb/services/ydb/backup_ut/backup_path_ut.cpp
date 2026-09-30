@@ -23,7 +23,7 @@ public:
         AppConfig().MutableFeatureFlags()->SetEnableFsBackups(true);
         Table0Path = "/export-alias";
         auto* alias = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
-        alias->SetSrc("/export-alias");
+        alias->SetSrc(Table0Path);
         alias->SetDst("/Root/RecursiveFolderProcessing/Table0");
         auto* decoy = AppConfig().MutableResourcePathPrefixMapping()->AddRules();
         decoy->SetSrc("/Root/RecursiveFolderProcessing/Table0");

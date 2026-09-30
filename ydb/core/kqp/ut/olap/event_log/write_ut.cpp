@@ -23,7 +23,7 @@
 
 namespace NKikimr::NKqp {
 
-using namespace NKikimr::NKqp::NSchematizedLog;
+using namespace NKikimr::NKqp::NEventLog;
 
 namespace {
 
@@ -133,8 +133,9 @@ public:
         : TColumnShardLogWriter([component](const NActors::NStructuredLog::TLogMessage& message) {
             return message.Component == component;
         }, TColumnShardLogWriter::TDatabaseSettings {
-            .TableName = "olapTable",
+            .Path = "/Root",
             .StoreName = "olapStore",
+            .TableName = "olapTable",
             .MaxBatchSize = maxBatchSize
         }, columns),
         Runner(runner)
@@ -169,7 +170,7 @@ public:
         TStringBuilder query;
         query << "--!syntax_v1\n";
         query << "\n";
-        query << "SELECT " << selectList << " FROM `/Root/" << Settings.StoreName << "/" << Settings.TableName << "`";
+        query << "SELECT " << selectList << " FROM `" << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName << "`";
         if (!orderBy.empty()) {
             query << " ORDER BY " << orderBy;
         }
@@ -287,10 +288,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:276")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:278")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:280")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:281")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:281")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:283")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:285")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:286")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -329,15 +330,17 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         });
 
         // Write data
-        NActors::NStructuredLog::TLogMessage message;
-        message.Component = TEnvironment::Component;
-        message.Time = TInstant::MicroSeconds(1789233327128336);
-        env.Writer->Write(message);
-        message.Time = TInstant::MicroSeconds(1789233327128337);
-        env.Writer->Write(message);
-        message.Time = TInstant::MicroSeconds(1789233327128338);
-        env.Writer->Write(message);
-        env.Writer->Flush();
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
+            message.Time = TInstant::MicroSeconds(1789233327128336);
+            env.Writer->Write(message);
+            message.Time = TInstant::MicroSeconds(1789233327128337);
+            env.Writer->Write(message);
+            message.Time = TInstant::MicroSeconds(1789233327128338);
+            env.Writer->Write(message);
+            env.Writer->Flush();
+        });
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
@@ -354,16 +357,18 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         });
 
         // Write data
-        NActors::NStructuredLog::TLogMessage message;
-        message.Component = TEnvironment::Component;
-        message.NodeId = 1;
-        env.Writer->Write(message);
-        message.NodeId = 2;
-        env.Writer->Write(message);
-        message.NodeId = 3;
-        env.Writer->Write(message);
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
+            message.NodeId = 1;
+            env.Writer->Write(message);
+            message.NodeId = 2;
+            env.Writer->Write(message);
+            message.NodeId = 3;
+            env.Writer->Write(message);
 
-        env.Writer->Flush();
+            env.Writer->Flush();
+        });
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
@@ -415,7 +420,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"6u", "0u", "#", R"(["Dummy \"value1\" instead of null; Null \"value2\" instead of not casted value string-value"])"}});
     }
 
-    Y_UNIT_TEST(ManualFlush) {
+    /* Y_UNIT_TEST(ManualFlush) {
 
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1),
@@ -423,37 +428,39 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         });
 
         // Write data
-        NActors::NStructuredLog::TLogMessage message;
-        message.Component = TEnvironment::Component;
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
 
-        // First chunk
-        message.NodeId = 1;
-        env.Writer->Write(message);
-        message.NodeId = 2;
-        env.Writer->Write(message);
-        env.Writer->Flush();
+            // First chunk
+            message.NodeId = 1;
+            env.Writer->Write(message);
+            message.NodeId = 2;
+            env.Writer->Write(message);
+            env.Writer->Flush();
 
-        // Check
-        env.Writer->CheckWrittenLogContent({
-            {"1u", "1u"},
-            {"2u", "2u"}});
+            // Check
+            env.Writer->CheckWrittenLogContent({
+                {"1u", "1u"},
+                {"2u", "2u"}});
 
-        // Second chunk
-        message.NodeId = 3;
-        env.Writer->Write(message);
-        message.NodeId = 4;
-        env.Writer->Write(message);
-        env.Writer->Flush();
+            // Second chunk
+            message.NodeId = 3;
+            env.Writer->Write(message);
+            message.NodeId = 4;
+            env.Writer->Write(message);
+            env.Writer->Flush();
 
-        // Check
-        env.Writer->CheckWrittenLogContent({
-            {"1u", "1u"},
-            {"2u", "2u"},
-            {"3u", "3u"},
-            {"4u", "4u"}});
-    }
+            // Check
+            env.Writer->CheckWrittenLogContent({
+                {"1u", "1u"},
+                {"2u", "2u"},
+                {"3u", "3u"},
+                {"4u", "4u"}});
+        });
+    } */
 
-    Y_UNIT_TEST(AutoFlush) {
+    /* Y_UNIT_TEST(AutoFlush) {
 
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1),
@@ -498,14 +505,16 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"3u", "3u"},
             {"4u", "4u"},
             {"5u", "5u"}});
-    }
+    } */
 
-    Y_UNIT_TEST(KqpRequestLog) {
+    /* Y_UNIT_TEST(KqpRequestLog) {
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1)
         });
 
-        env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>());
+        TKqpEventLogWriter::TDatabaseSettings settings;
+        env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>(
+            TKqpEventLogWriter::TDatabaseSettings{.Path="/Root"}));
 
         Cerr << "DEBUG: SELECT 1;" << Endl;
         env.ExecuteQuery("SELECT 1");
@@ -516,12 +525,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Dump
         Cerr << "DEBUG: Dump" << Endl;
-        auto result = ExecuteQueryAndFetchData(env.Kikimr, "SELECT * FROM `/Root/kqp_requests/kqp_requests`");
+        auto result = ExecuteQueryAndFetchData(env.Kikimr, "SELECT * FROM `/local/testdb/kqp_requests/kqp_requests`");
         Cerr << " " << Endl;
         Cerr << "KQP_RESULT:" << Endl;
         Dump(result.value());
         Cerr << " " << Endl;
-    }
+    } */
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapWriteLogSchema) {

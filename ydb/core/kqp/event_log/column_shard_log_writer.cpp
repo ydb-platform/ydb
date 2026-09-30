@@ -21,7 +21,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
-namespace NKikimr::NKqp::NSchematizedLog {
+namespace NKikimr::NKqp::NEventLog {
 
 namespace {
 
@@ -31,8 +31,6 @@ using TEvCreateSessionRequest = NGRpcService::TGrpcRequestOperationCall<
 using TEvExecuteSchemeQueryRequest = NGRpcService::TGrpcRequestOperationCall<
     Ydb::Table::ExecuteSchemeQueryRequest,
     Ydb::Table::ExecuteSchemeQueryResponse>;
-
-constexpr TStringBuf DatabasePath = "/Root";
 
 } // namespace
 
@@ -64,7 +62,7 @@ void TColumnShardLogWriter::Flush() {
 
 TString TColumnShardLogWriter::GetCreateStoreQuery() {
     TStringBuilder sb;
-    sb << " CREATE TABLESTORE `/Root/" << Settings.StoreName << "` (";
+    sb << " CREATE TABLESTORE `" << Settings.Path << "/" << Settings.StoreName << "` (";
 
     for (const auto& column : Columns) {
         sb << column->Name << " " << column->Type;
@@ -98,7 +96,7 @@ TString TColumnShardLogWriter::GetCreateTableQuery() {
 
     TStringBuilder sb;
 
-    sb << " CREATE TABLE `/Root/" << Settings.StoreName << "/" << Settings.TableName<< "` (";
+    sb << " CREATE TABLE `" << Settings.Path << "/" << Settings.StoreName << "/" << Settings.TableName<< "` (";
     for (const auto& column : Columns) {
         sb << column->Name << " " << column->Type;
 
@@ -157,7 +155,7 @@ bool TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const T
     request.set_yql_text(query);
 
     auto future = NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
-        std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem());
+        std::move(request), Settings.Path, "", TActivationContext::ActorSystem());
     const auto response = future.GetValueSync();
     return response.operation().status() == Ydb::StatusIds::SUCCESS;
 }
@@ -167,7 +165,7 @@ void TColumnShardLogWriter::CreateStorage() {
 
     Ydb::Table::CreateSessionRequest request;
     auto future = NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
-        std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem());
+        std::move(request), Settings.Path, "", TActivationContext::ActorSystem());
     const auto response = future.GetValueSync();
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
         Cerr << "FAILED to create session" << Endl;
@@ -215,7 +213,7 @@ void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch
     Ydb::Table::BulkUpsertRequest request;
     request.mutable_arrow_batch_settings()->set_schema(serializedSchema);
     request.set_data(data);
-    request.set_table(Sprintf("/Root/%s/%s", Settings.StoreName.c_str(), Settings.TableName.c_str()));
+    request.set_table(Sprintf("%s/%s/%s", Settings.Path.c_str(), Settings.StoreName.c_str(), Settings.TableName.c_str()));
 
     // std::atomic<size_t> responses = 0;
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>;
@@ -234,4 +232,4 @@ void TColumnShardLogWriter::WriteBatch(std::shared_ptr<arrow::RecordBatch> batch
     });
 }
 
-} // namespace NKikimr::NKqp::NSchematizedLog
+} // namespace NKikimr::NKqp::NEventLog

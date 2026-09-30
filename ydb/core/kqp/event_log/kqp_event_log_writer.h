@@ -4,7 +4,7 @@
 
 #include <ydb/library/services/services.pb.h>
 
-namespace NKikimr::NKqp::NSchematizedLog {
+namespace NKikimr::NKqp::NEventLog {
 
 class TKqpEventLogWriter : public TColumnShardLogWriter {
 public:
@@ -38,17 +38,20 @@ public:
         };
     }
 
-    TKqpEventLogWriter():
+    static TDatabaseSettings UpdateSettings(TDatabaseSettings settings) {
+        settings.TableName = "kqp_requests";
+        settings.StoreName = "kqp_requests";
+        return settings;
+    }
+
+    TKqpEventLogWriter(const TDatabaseSettings& settings):
         TColumnShardLogWriter(
             [](const NActors::NStructuredLog::TLogMessage& message){
                 // @todo текст сообщения в константу
                 return (message.Component == NKikimrServices::KQP_REQUEST) &&
                        (message.TextMessage == "KQP request processed");
             },
-            TDatabaseSettings{
-                .TableName = "kqp_requests",
-                .StoreName = "kqp_requests"
-            },
+            UpdateSettings(settings),
             GetColumns()) {}
 };
 

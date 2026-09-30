@@ -10,14 +10,15 @@ namespace NKikimr::NKqp {
 
 class TKikimrRunner;
 
-namespace NSchematizedLog {
+namespace NEventLog {
 
 class TColumnShardLogWriter : public TBaseEventLogWriter {
 public:
     struct TDatabaseSettings {
+        TString Path;
+        TString StoreName;
+        TString TableName;
         TString OptionalStorageId = "__MEMORY";
-        TString TableName{"olapTable"};
-        TString StoreName{"olapStore"};
         ui32 StoreShardsCount = 4;
         ui32 TableShardsCount = 3;
         std::optional<ui32> MaxBatchSize;
@@ -53,5 +54,5 @@ protected:
     ui32 CurrentBatchSize {0};
 };
 
-} // namespace NSchematizedLog
+} // namespace NEventLog
 } // namespace NKikimr::NKqp

@@ -9,7 +9,7 @@
 #include <functional>
 #include <memory>
 
-namespace NKikimr::NKqp::NSchematizedLog {
+namespace NKikimr::NKqp::NEventLog {
 
 class TBaseEventLogWriter : public NActors::NStructuredLog::ILogSink {
 public:
@@ -45,4 +45,4 @@ protected:
     unsigned WrittenRecordCount {0};
 };
 
-} // namespace NKikimr::NKqp::NSchematizedLog
+} // namespace NKikimr::NKqp::NEventLog

@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 
-namespace NKikimr::NKqp::NSchematizedLog {
+namespace NKikimr::NKqp::NEventLog {
 
 using namespace NActors::NStructuredLog;
 

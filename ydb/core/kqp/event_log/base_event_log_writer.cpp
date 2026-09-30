@@ -5,7 +5,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
-namespace NKikimr::NKqp::NSchematizedLog {
+namespace NKikimr::NKqp::NEventLog {
 
 TBaseEventLogWriter::TBaseEventLogWriter(
     TLogMessageFilter filter,
@@ -113,4 +113,4 @@ std::shared_ptr<arrow::RecordBatch> TBaseEventLogWriter::CreateCurrentBatch() {
     return batch;
 }
 
-} // namespace NKikimr::NKqp::NSchematizedLog
+} // namespace NKikimr::NKqp::NEventLog

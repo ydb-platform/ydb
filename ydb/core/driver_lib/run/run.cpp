@@ -1826,8 +1826,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->ShortHostName = fullHostName.substr(0, firstDot);
     }
 
-    auto ptr = std::make_shared<NKikimr::NKqp::NSchematizedLog::TKqpEventLogWriter>();
-    LogSettings->Sinks.push_back(ptr);
+    /* NKikimr::NKqp::NEventLog::TKqpEventLogWriter::TDatabaseSettings settings;
+    settings.Path = "/local/testdb";
+    auto ptr = std::make_shared<NKikimr::NKqp::NEventLog::TKqpEventLogWriter>(settings);
+    LogSettings->Sinks.push_back(ptr); */
 }
 
 void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)

@@ -3,4 +3,5 @@ RECURSE(
     partition_direct
     storage_transport
     testlib
+    volume
 )

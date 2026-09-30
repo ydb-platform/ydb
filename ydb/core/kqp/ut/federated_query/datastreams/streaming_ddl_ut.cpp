@@ -4607,7 +4607,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     class TConsumerRewindFixture : public TStreamingWithSchemaSecretsTestFixture {
     public:
-        ~TConsumerRewindFixture() {
+        void DropTopics() {
             DropTopic("rewindInput");
             DropTopic("rewindOutput");
         }
@@ -4717,6 +4717,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDisabled, SharedReading, TConsumerRewindFixture) {
         InitConsumerRewind(SharedReading, /* enableReadFrom */ false);
+        Y_DEFER {
+            DropTopics();
+        };
         WriteTopicMessage("rewindInput", "committed");
         CommitConsumer(1);
 
@@ -4731,6 +4734,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDispositions, SharedReading, TConsumerRewindFixture) {
         InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
         WriteTopicMessage("rewindInput", "old");
         Sleep(TDuration::Seconds(1));
         const auto fromTime = TInstant::Now();
@@ -4779,6 +4785,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_QUAD_F(StreamingQueryConsumerCheckpointOffsets, SharedReading, CommittedAhead, TConsumerRewindFixture) {
         InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
         WriteTopicMessage("rewindInput", "first");
         CreateConsumerQuery("OLDEST");
         CheckReadingMode(SharedReading);
@@ -4820,6 +4829,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_QUAD_F(StreamingQueryConsumerCheckpointWithoutOffsets, SharedReading, FromCheckpoint, TConsumerRewindFixture) {
         InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
         CreateConsumerQuery(FromCheckpoint ? "FROM_CHECKPOINT" : "FRESH");
         CheckReadingMode(SharedReading);
         // No data was read, so the checkpoint only contains the starting timestamp.
@@ -4844,6 +4856,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Keep checkpoint commits from advancing the offset again before we observe the rewind.
         CheckpointPeriod = TDuration::Hours(1);
         InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
         WriteTopicMessage("rewindInput", "first");
         WriteTopicMessage("rewindInput", "second");
 

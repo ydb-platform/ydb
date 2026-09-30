@@ -113,6 +113,7 @@ namespace {
 
         struct TLookupState {
             using TPtr = std::shared_ptr<TLookupState>;
+            using TWeakPtr = std::weak_ptr<TLookupState>;
             std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
             // ^^^ must not be lock()ed without bound mkql allocator
             // ^^^ (and allocator must not be bound outside actor context)
@@ -130,7 +131,7 @@ namespace {
             using TPtr = std::shared_ptr<TSessionState>;
             TString SessionId;
             NRpcService::TStreamReadProcessorPtr<Ydb::Query::SessionState> StreamProcessor;
-            TLookupState::TPtr PendingLookup; // avoid circular ownership, either PendingLookup or PendingLookup->SessionState must be nullptr
+            TLookupState::TWeakPtr PendingLookup;
         };
 
         // Event ids
@@ -509,6 +510,8 @@ namespace {
             state->StreamProcessor->Read([actorSystem, selfId, weakState = std::weak_ptr(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
                 auto state = weakState.lock();
                 if (!state) {
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakState is dead",
+                            {"actorId", selfId});
                     return;
                 }
                 actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
@@ -572,6 +575,8 @@ namespace {
             session->StreamProcessor->Read([actorSystem, selfId, weakSession = std::weak_ptr(session)](Ydb::Query::SessionState&& response) {
                 auto session = weakSession.lock();
                 if (!session) {
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakSession is dead",
+                            {"actorId", selfId});
                     return;
                 }
                 actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
@@ -579,29 +584,22 @@ namespace {
         }
 
         void Handle(TEvQuerySessionState::TPtr ev) {
-            auto session = std::move(ev->Get()->State);
-            if (session->PendingLookup) {
-                --InflightCreateSession;
-                if (Y_UNLIKELY(PendingPassAway)) {
-                    SendDeleteSession(session->SessionId);
-                    CleanupStreamProcessor(session);
-                    PassAway();
-                    return;
-                }
-            }
             if (Y_UNLIKELY(PendingPassAway)) {
                 return;
             }
+            auto session = std::move(ev->Get()->State);
+            auto pendingLookup = session->PendingLookup.lock();
+            session->PendingLookup.reset();
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQuerySessionState",
                     COMMON_LOG,
                     {"sessionId", session->SessionId},
                     {"response", response.DebugString()});
             if (Y_UNLIKELY(!session->StreamProcessor)) {
-                YDB_LOG_DEBUG("TEvQuerySessionState called afte CleanupStreamProcessor", COMMON_LOG);
+                YDB_LOG_DEBUG("TEvQuerySessionState called after CleanupStreamProcessor", COMMON_LOG);
                 // possible; TEvQuerySessionState is sent, but in queue; FinalizeRequest calls CleanupStreamProcessor, then handler for TEvQuerySessionState invoked
-                Y_ENSURE(!session->PendingLookup);
                 Y_ENSURE(session->SessionId.empty());
+                Y_ENSURE(!pendingLookup);
                 return;
             }
             auto status = response.status();
@@ -613,10 +611,9 @@ namespace {
             }
             switch(status) {
                 case Ydb::StatusIds::SUCCESS:
-                    if (auto& lookup = session->PendingLookup) {
+                    if (pendingLookup) {
                         // send request (once) upon successful attach
-                        lookup->SessionState = session;
-                        SendRequest(std::exchange(lookup, {}));
+                        SendRequest(std::move(pendingLookup));
                     }
                     break;
 
@@ -630,8 +627,8 @@ namespace {
                         session->SessionId.clear();
                     }
                     CleanupStreamProcessor(session);
-                    if (auto& lookup = session->PendingLookup) {
-                        SendRetryOrError(std::exchange(lookup, {}), status, IssuesFromProtoMessage(response));
+                    if (pendingLookup) {
+                        SendRetryOrError(std::move(pendingLookup), status, IssuesFromProtoMessage(response));
                     }
                     return;
             }
@@ -692,24 +689,22 @@ namespace {
             YDB_LOG_DEBUG("TEvQueryCreateSessionResponse",
                     COMMON_LOG,
                     {"response", response.DebugString()});
-            if (response.status() != Ydb::StatusIds::SUCCESS) {
-                --InflightCreateSession;
-                if (PendingPassAway) {
-                    PassAway();
-                    return;
+            --InflightCreateSession;
+            if (Y_UNLIKELY(PendingPassAway)) {
+                if (response.status() == Ydb::StatusIds::SUCCESS) {
+                    SendDeleteSession(response.session_id());
                 }
-                SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
+                PassAway();
                 return;
             }
-            if (Y_UNLIKELY(PendingPassAway)) {
-                SendDeleteSession(response.session_id());
-                --InflightCreateSession;
-                PassAway();
+            if (response.status() != Ydb::StatusIds::SUCCESS) {
+                SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
                 return;
             }
             auto sessionState = std::make_shared<TSessionState>();
             sessionState->SessionId = std::move(*response.mutable_session_id());
-            sessionState->PendingLookup = std::move(state);
+            sessionState->PendingLookup = state;
+            state->SessionState = sessionState;
             SendAttachSession(std::move(sessionState));
         }
 

@@ -26,17 +26,15 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
     if (Filter && !Filter(message)) {
         return false;
     }
-    if (!StorageExists) {
-        auto after = [this, message]() {
-            WriteImpl(message);
-        };
-        CreateOrUpdateStorage(after);
-        return true; // @todo
-    }
-    return WriteImpl(message);
-}
 
-bool TBaseEventLogWriter::WriteImpl(const NActors::NStructuredLog::TLogMessage& message) {
+    Cerr << "DEBUG: Write " << message.TextMessage << " state = " << static_cast<int>(CreationState.load()) << Endl;
+
+    if (CreationState.load() == TCreationState::Unknown) {
+        CreationState.store(TCreationState::Creating);
+        CreateOrUpdateStorage();
+    }
+
+    Cerr << "DEBUG: Append to batch " << message.TextMessage << Endl;
     TStringBuilder columnWriteErrors;
     for (std::size_t i = 0; i < Columns.size(); ++i) {
         if (ErrorColumnIndex.has_value() && ErrorColumnIndex.value() == i) {
@@ -85,9 +83,12 @@ void TBaseEventLogWriter::Flush() {
     if (WrittenRecordCount == 0) {
         return;
     }
-    if (!StorageExists) {
+    if (CreationState.load() != TCreationState::Exists) {
+        Cerr << "DEBUG: Flush delay" <<  Endl;
         return;
     }
+
+    Cerr << "DEBUG: Flush!! " <<  Endl;
     auto batch = CreateCurrentBatch();
     WriteBatch(batch);
     WrittenRecordCount = 0;

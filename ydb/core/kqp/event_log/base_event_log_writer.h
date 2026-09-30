@@ -25,10 +25,7 @@ public:
     void Flush() override;
 
 protected:
-    bool WriteImpl(const NActors::NStructuredLog::TLogMessage&);
-
-    using TAfterFunc = std::function<void()>;
-    virtual void CreateOrUpdateStorage(TAfterFunc afterFunc = {}) = 0;
+    virtual void CreateOrUpdateStorage() = 0;
     virtual void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) = 0;
 
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
@@ -39,7 +36,12 @@ protected:
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
 
-    bool StorageExists {false};
+    enum class TCreationState {
+        Unknown = 1,
+        Creating = 2,
+        Exists = 3
+    };
+    std::atomic<TCreationState> CreationState {TCreationState::Unknown};
     unsigned WrittenRecordCount {0};
 };
 

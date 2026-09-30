@@ -38,8 +38,8 @@ public:
         };
     }
 
-    TKqpEventLogWriter(TKikimrRunner &runner):
-        TColumnShardLogWriter(runner,
+    TKqpEventLogWriter():
+        TColumnShardLogWriter(
             [](const NActors::NStructuredLog::TLogMessage& message){
                 // @todo текст сообщения в константу
                 return (message.Component == NKikimrServices::KQP_REQUEST) &&

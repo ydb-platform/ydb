@@ -34,21 +34,14 @@ using TEvExecuteSchemeQueryRequest = NGRpcService::TGrpcRequestOperationCall<
 
 constexpr TStringBuf DatabasePath = "/Root";
 
-template<typename TResponse>
-TResponse WaitLocalRpc(TKikimrRunner& runner, NThreading::TFuture<TResponse> future) {
-    return runner.GetTestServer().GetRuntime()->WaitFuture(std::move(future));
-}
-
 } // namespace
 
 TColumnShardLogWriter::TColumnShardLogWriter(
-    TKikimrRunner& runner,
     TLogMessageFilter filter,
     TDatabaseSettings settings,
     TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
     : TBaseEventLogWriter(std::move(filter), std::move(columns))
     , Settings(std::move(settings))
-    , Runner(runner)
 {
 }
 
@@ -56,6 +49,7 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
     if (!TBaseEventLogWriter::Write(message)) {
         return false;
     }
+
     CurrentBatchSize++;
     if (Settings.MaxBatchSize.has_value() && CurrentBatchSize == Settings.MaxBatchSize.value()) {
         Flush();
@@ -133,10 +127,17 @@ TString TColumnShardLogWriter::GetCreateTableQuery() {
     return sb;
 }
 
-bool TColumnShardLogWriter::CheckStorageExists() const {
+bool TColumnShardLogWriter::CheckStorageExists() {
+    // @todo Сделать нормальную асинхронную проверку
+    if (Exists) {
+        return true;
+    }
+    Exists = true;
+    return false;
+#if 0
     // @todo Будет ли работать в production
     // @todo Не слишком ли - ходить через клиента?
-    auto schemeClient = GetRunner().GetSchemeClient();
+    auto schemeClient = Runner.GetSchemeClient();
 
     const TString storePath = "/Root/" + Settings.StoreName;
     const auto store = schemeClient.DescribePath(storePath).GetValueSync();
@@ -147,6 +148,7 @@ bool TColumnShardLogWriter::CheckStorageExists() const {
     const TString tablePath = storePath + "/" + Settings.TableName;
     const auto table = schemeClient.DescribePath(tablePath).GetValueSync();
     return table.IsSuccess() && table.GetEntry().Type == NYdb::NScheme::ESchemeEntryType::ColumnTable;
+#endif
 }
 
 bool TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const TString& query) {
@@ -154,20 +156,19 @@ bool TColumnShardLogWriter::ExecuteSchemeQuery(const TString& sessionId, const T
     request.set_session_id(sessionId);
     request.set_yql_text(query);
 
-    const auto response = WaitLocalRpc(
-        Runner,
-        NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
-            std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem()));
+    auto future = NRpcService::DoLocalRpc<TEvExecuteSchemeQueryRequest>(
+        std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem());
+    const auto response = future.GetValueSync();
     return response.operation().status() == Ydb::StatusIds::SUCCESS;
 }
 
-void TColumnShardLogWriter::CreateStorage(TAfterFunc afterFunc) {
-    Ydb::Table::CreateSessionRequest request;
+void TColumnShardLogWriter::CreateStorage() {
+    Cerr << "DEBUG: CreateStorage" <<  Endl;
 
-    const auto response = WaitLocalRpc(
-        GetRunner(),
-        NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
-            std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem()));
+    Ydb::Table::CreateSessionRequest request;
+    auto future = NRpcService::DoLocalRpc<TEvCreateSessionRequest>(
+        std::move(request), TString(DatabasePath), "", TActivationContext::ActorSystem());
+    const auto response = future.GetValueSync();
     if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
         Cerr << "FAILED to create session" << Endl;
     }
@@ -183,31 +184,27 @@ void TColumnShardLogWriter::CreateStorage(TAfterFunc afterFunc) {
     }
 
     const auto storeQuery = GetCreateStoreQuery();
-    Cerr << "QUERY: " << storeQuery << Endl;
+    Cerr << "DEBUG: QUERY: " << storeQuery << Endl;
     if (!ExecuteSchemeQuery(sessionId, storeQuery)) {
         Cerr << "FAILED to create table store" << Endl;
         return;
     }
 
     const auto tableQuery = GetCreateTableQuery();
-    Cerr << "QUERY: " << tableQuery << Endl;
+    Cerr << "DEBUG: QUERY: " << tableQuery << Endl;
     if (!ExecuteSchemeQuery(sessionId, tableQuery)) {
         Cerr << "FAILED to create table" << Endl;
     }
 
-    if (afterFunc) {
-        afterFunc();
-    }
+    Cerr << "DEBUG: Set CreationState = TCreationState::Exists" <<  Endl;
+    CreationState.store(TCreationState::Exists);
+    //@ todo force call Flush immediatelly?
 }
 
-void TColumnShardLogWriter::CreateOrUpdateStorage(TAfterFunc afterFunc) {
+void TColumnShardLogWriter::CreateOrUpdateStorage() {
+    Cerr << "DEBUG: CreateOrUpdateStorage" <<  Endl;
     if (!CheckStorageExists()) {
-        CreateStorage(afterFunc);
-        StorageExists = true;
-    } else {
-        if (afterFunc) {
-            afterFunc();
-        }
+        CreateStorage();
     }
 }
 

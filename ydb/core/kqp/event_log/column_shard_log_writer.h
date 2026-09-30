@@ -27,14 +27,9 @@ public:
     };
 
     TColumnShardLogWriter(
-        TKikimrRunner& runner,
         TLogMessageFilter filter,
         TDatabaseSettings settings,
         TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
-
-    TKikimrRunner& GetRunner() const {
-        return Runner;
-    }
 
     const TDatabaseSettings& GetDatabaseSettings() const {
         return Settings;
@@ -47,15 +42,15 @@ protected:
     TString GetCreateStoreQuery();
     TString GetCreateTableQuery();
 
-    void CreateStorage(TAfterFunc afterFunc);
+    void CreateStorage();
     bool ExecuteSchemeQuery(const TString& sessionId, const TString& query);
-    bool CheckStorageExists() const;
-    void CreateOrUpdateStorage(TAfterFunc afterFunc) override;
+    bool Exists{false};
+    bool CheckStorageExists();
+    void CreateOrUpdateStorage() override;
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;
 
     const TDatabaseSettings Settings;
     ui32 CurrentBatchSize {0};
-    TKikimrRunner& Runner;
 };
 
 } // namespace NSchematizedLog

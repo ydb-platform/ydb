@@ -121,17 +121,19 @@ namespace {
 
 class TBaseTestExampleLogWriter : public TColumnShardLogWriter {
 public:
+    TKikimrRunner& Runner;
     unsigned WrittenCount{0};
 
     TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
             std::optional<ui32> maxBatchSize = {})
-        : TColumnShardLogWriter(runner, [component](const NActors::NStructuredLog::TLogMessage& message) {
+        : TColumnShardLogWriter([component](const NActors::NStructuredLog::TLogMessage& message) {
             return message.Component == component;
         }, TColumnShardLogWriter::TDatabaseSettings {
             .TableName = "olapTable",
             .StoreName = "olapStore",
             .MaxBatchSize = maxBatchSize
-        }, columns)
+        }, columns),
+        Runner(runner)
     {
         Y_UNUSED(component);
     }
@@ -181,7 +183,7 @@ public:
         auto query = GetFetchQuery();
 
         // Execute query
-        auto result = ExecuteQueryAndFetchData(GetRunner(), query);
+        auto result = ExecuteQueryAndFetchData(Runner, query);
 
         // Dump on error
         if (true /*result != requiredResult*/) {
@@ -281,10 +283,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:274")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:276")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:278")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:279")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:276")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:278")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:280")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:281")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -499,7 +501,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             std::make_shared<TDBLogMessageIdColumn>(1)
         });
 
-        env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>(env.Kikimr));
+        env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>());
         env.ExecuteQuery("SELECT 1;");
 
         // Dump

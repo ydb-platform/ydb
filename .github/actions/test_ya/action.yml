@@ -127,17 +127,29 @@ runs:
         if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
           echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
           # GITHUB_JOB is the yaml id (build_and_test). Display name lives on the job API.
-          job_name=$(curl --retry 5 --retry-all-errors --retry-delay 10 -sS \
+          # A failed lookup is a log line only: no ::error::/::warning::, and this step stays green.
+          body_file=$(mktemp)
+          set +e
+          set +o pipefail
+          http_code=$(curl --retry 5 --retry-all-errors --retry-delay 10 -sS \
+            -o "$body_file" -w '%{http_code}' \
             -H "Authorization: Bearer ${GITHUB_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${GITHUB_NUMERIC_JOB_ID}" \
-            | jq -r '.name // empty' || true)
-          if [ -n "$job_name" ]; then
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${GITHUB_NUMERIC_JOB_ID}")
+          curl_rc=$?
+          job_name=$(jq -r '.name // empty' "$body_file" 2>/dev/null)
+          jq_rc=$?
+          set -e
+          set -o pipefail
+          rm -f "$body_file"
+          if [ "$curl_rc" -eq 0 ] && [ "$http_code" = "200" ] && [ "$jq_rc" -eq 0 ] && [ -n "$job_name" ]; then
             echo "GITHUB_JOB_NAME=$job_name" >> "$GITHUB_ENV"
+          else
+            echo "analytics: could not read job.name (curl=$curl_rc http=${http_code:-none} jq=$jq_rc); ci_metrics.job_name falls back to GITHUB_JOB" >&2
           fi
         else
-          echo "job.check_run_id is empty; analytics rows of this job will be dropped" >&2
+          echo "analytics: job.check_run_id is empty; analytics rows of this job will be dropped" >&2
         fi
 
     - name: Init

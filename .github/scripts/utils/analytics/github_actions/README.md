@@ -92,7 +92,7 @@ WHERE run_id = 123 AND name = "compile";
 | `github_job_id` | `$GITHUB_NUMERIC_JOB_ID` | `456` |
 | `run_attempt` | `$GITHUB_RUN_ATTEMPT` | `1` |
 | `workflow` | `$GITHUB_WORKFLOW` | `PR-check` |
-| `job_name` | `$GITHUB_JOB_NAME` (GitHub API `job.name` из `test_ya`) или `$GITHUB_JOB`. Не `$ANALYTICS_JOB_NAME` (mute / test history) | `Build and test relwithdebinfo` |
+| `job_name` | `$GITHUB_JOB_NAME` (GitHub API `job.name` из `test_ya`) или `$GITHUB_JOB`. Сбой API пишется в лог шага и не роняет job. Не `$ANALYTICS_JOB_NAME` (mute / test history) | `Build and test relwithdebinfo` |
 | `event_name` | `$GITHUB_EVENT_NAME` | `pull_request` |
 | `branch` | `$BRANCH_NAME` / `$GITHUB_BASE_REF` / event | `main` |
 | `commit` | `$ORIGINAL_HEAD` / `$GITHUB_SHA` | `abc…` |

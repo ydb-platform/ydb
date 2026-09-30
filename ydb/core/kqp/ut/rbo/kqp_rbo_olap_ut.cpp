@@ -1938,6 +1938,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
         settings.AppConfig.MutableTableServiceConfig()->SetBlockChannelsMode(blockChannelsMode);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableSpillingNodes("None");
         settings.AppConfig.MutableTableServiceConfig()->SetDefaultHashShuffleFuncType(NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2);
+        settings.AppConfig.MutableTableServiceConfig()->SetDqHashOperatorsUseBlocks(true);
 
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();

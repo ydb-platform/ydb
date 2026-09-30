@@ -38,6 +38,7 @@ bool IsPathKey(TStringBuf tag) {
 
 TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
     const std::function<TString(TStringBuf)>& normalizePath) {
+    // Only known schema-object keys with literal paths are rewritten.
     if (!key->IsCallable("Key") || !key->ChildrenSize() || key->Child(0)->ChildrenSize() < 2) {
         return key;
     }
@@ -78,6 +79,7 @@ TExprNode::TPtr RewritePathValue(const TExprNode::TPtr& value, TExprContext& ctx
         return normalized == value->Content() ? value : ctx.NewAtom(value->Pos(), std::move(normalized));
     }
 
+    // String(Atom) represents a literal path; computed expressions are left unchanged.
     if (value->IsCallable("String") && value->ChildrenSize() == 1 && value->Child(0)->IsAtom()) {
         auto atom = RewritePathValue(value->ChildPtr(0), ctx, normalizePath);
         return atom == value->ChildPtr(0) ? value : ctx.ChangeChild(*value, 0, std::move(atom));
@@ -159,6 +161,7 @@ bool RewriteSqlPathAliases(TExprNode::TPtr& query, TExprContext& ctx, TStringBuf
             if (node->ChildrenSize() < (isRead ? 3U : 5U)) {
                 return node;
             }
+            // Database aliases apply only to Kikimr IO in the current query's cluster.
             const auto* provider = node->Child(1);
             if (!provider->IsCallable(isRead ? "DataSource" : "DataSink") || provider->ChildrenSize() < 2
                 || provider->Child(0)->Content() != KikimrProviderName

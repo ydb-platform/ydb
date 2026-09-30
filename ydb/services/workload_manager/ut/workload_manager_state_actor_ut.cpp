@@ -223,6 +223,71 @@ Y_UNIT_TEST_SUITE(WorkloadManagerStateActor) {
         UNIT_ASSERT_EQUAL(info.FailureStatus, Ydb::StatusIds::NOT_FOUND);
     }
 
+    Y_UNIT_TEST(TestEnsurePoolSubscribedDedupsWhileInFlight) {
+        TFixture fx;
+        fx.Init();
+
+        // First EnsurePoolSubscribed fires TEvAddPool + TEvGetPoolInfo.
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvEnsurePoolSubscribed("/Root/db1", "poolA")));
+        auto firstAdd = fx.Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddPool>(fx.ServicesEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL(firstAdd->Get()->PoolId, "poolA");
+        auto firstSub = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL(firstSub->Get()->PoolId, "poolA");
+
+        // Duplicate EnsurePoolSubscribed for the same key should be deduped;
+        // a subscribe for a different pool must still proceed.
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvEnsurePoolSubscribed("/Root/db1", "poolA")));
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvEnsurePoolSubscribed("/Root/db1", "poolB")));
+
+        auto nextAdd = fx.Runtime.GrabEdgeEvent<NKqp::NScheduler::TEvAddPool>(fx.ServicesEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(nextAdd->Get()->PoolId, "poolB",
+                                    "Duplicate EnsurePoolSubscribed must not fire TEvAddPool");
+        auto nextSub = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(nextSub->Get()->PoolId, "poolB",
+                                    "Duplicate EnsurePoolSubscribed must not fire TEvGetPoolInfo");
+    }
+
+    Y_UNIT_TEST(TestExpiredPoolDedupsResubscribe) {
+        TFixture fx;
+        fx.Init();
+
+        // Populate cache: subscribe, then feed the config update.
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvEnsurePoolSubscribed("/Root/db1", "poolA")));
+        fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvUpdatePoolInfo("/Root/db1", "poolA", NResourcePool::TPoolSettings{}, std::nullopt)));
+
+        // First deletion signal marks expired and re-subscribes (in-flight was empty).
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvUpdatePoolInfo("/Root/db1", "poolA", std::nullopt, std::nullopt)));
+        auto resub = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL(resub->Get()->PoolId, "poolA");
+
+        // Second deletion signal (or duplicate expiration) should not fire another
+        // subscribe. Probe with a different pool to force a next event.
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvUpdatePoolInfo("/Root/db1", "poolA", std::nullopt, std::nullopt)));
+        fx.Runtime.Send(new IEventHandle(
+            fx.StateActor, fx.Sender,
+            new TEvEnsurePoolSubscribed("/Root/db1", "poolB")));
+
+        auto next = fx.Runtime.GrabEdgeEvent<TEvGetPoolInfo>(fx.ServicesEdge, WAIT_TIMEOUT);
+        UNIT_ASSERT_VALUES_EQUAL_C(next->Get()->PoolId, "poolB",
+                                    "Repeated deletion signals must not fire duplicate resubscribes");
+    }
+
     Y_UNIT_TEST(TestEnsureWhenPoolsDisabledOnServerless) {
         TFixture fx;
         fx.Init();

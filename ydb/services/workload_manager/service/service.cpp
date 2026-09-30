@@ -167,7 +167,7 @@ public:
         }
     }
 
-    void Handle(TEvSubscribeOnPoolChanges::TPtr& ev) {
+    void Handle(TEvGetPoolInfo::TPtr& ev) {
         const TString& databaseId = ev->Get()->DatabaseId;
         const TString& poolId = ev->Get()->PoolId;
         if (!EnabledResourcePools) {
@@ -176,7 +176,7 @@ public:
         }
 
         LOG_D("Received subscription request, DatabaseId: " << databaseId << ", PoolId: " << poolId);
-        GetOrCreateDatabaseState(databaseId)->DoSubscribeRequest(std::move(ev));
+        GetOrCreateDatabaseState(databaseId)->DoGetPoolInfo(std::move(ev));
     }
 
     void Handle(TEvPlaceRequestIntoPool::TPtr& ev) {
@@ -187,8 +187,11 @@ public:
         }
 
         const TString& databaseId = ev->Get()->DatabaseId;
-        Y_ENSURE(EnabledResourcePoolsOnServerless || !IsServerlessInSnapshot(databaseId),
-                 "TEvPlaceRequestIntoPool for serverless DB with resource pools disabled — classifier gate is broken");
+        if (!EnabledResourcePoolsOnServerless && IsServerlessInSnapshot(databaseId)) {
+            ReplyContinueError(workerActorId, ev->Get()->QueryId, Ydb::StatusIds::UNSUPPORTED,
+                               "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it");
+            return;
+        }
         LOG_D("Received new request from " << workerActorId << ", DatabaseId: " << databaseId << ", PoolId: " << ev->Get()->PoolId << ", SessionId: " << ev->Get()->SessionId);
         GetOrCreateDatabaseState(databaseId)->DoPlaceRequest(std::move(ev));
     }
@@ -243,7 +246,7 @@ public:
         hFunc(TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
 
-        hFunc(TEvSubscribeOnPoolChanges, Handle);
+        hFunc(TEvGetPoolInfo, Handle);
         hFunc(TEvPlaceRequestIntoPool, Handle);
         hFunc(TEvCleanupRequest, Handle);
         hFunc(TEvents::TEvWakeup, Handle);

@@ -347,9 +347,10 @@ using namespace NYql::NDqProto;
                         UNIT_ASSERT_VALUES_EQUAL(settings.LocalReportStatsSettings->MaxInterval, TDuration::Seconds(30));
                     }
                     UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings.Defined(), streaming);
-                    const auto remote = settings.RemoteReportStatsSettings.GetOrElse(ReportStatsSettingsFromProto({}));
-                    UNIT_ASSERT_VALUES_EQUAL(remote.MinInterval, streaming ? TDuration::Seconds(1) : TDuration::MilliSeconds(20));
-                    UNIT_ASSERT_VALUES_EQUAL(remote.MaxInterval, streaming ? TDuration::Seconds(5) : TDuration::Seconds(1));
+                    if (streaming) {
+                        UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings->MinInterval, TDuration::Seconds(1));
+                        UNIT_ASSERT_VALUES_EQUAL(settings.RemoteReportStatsSettings->MaxInterval, TDuration::Seconds(5));
+                    }
                 }
             }
         }

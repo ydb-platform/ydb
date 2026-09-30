@@ -1,6 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 
 #include <yql/essentials/core/type_ann/type_ann_core.h>
@@ -29,6 +30,10 @@ public:
         : Callable(callable)
         , Intents(std::move(intents))
     {}
+
+    TStringBuf GetName() const override {
+        return KikimrProviderName;
+    }
 
     bool CanParse(const TExprNode& node) override {
         return node.IsCallable(Callable);

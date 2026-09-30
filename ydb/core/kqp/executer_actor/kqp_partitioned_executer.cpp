@@ -572,7 +572,7 @@ private:
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
-        Send(MakeSchemeCacheID(), resolveReq.Release());
+        Send(MakeSchemeCacheID(), resolveReq.Release(), 0, 0, NWilson::TTraceId(Request.TraceId));
     }
 
     void CreateExecutersWithBuffers() {

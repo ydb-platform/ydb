@@ -1854,7 +1854,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, NWilson::TTraceId(ParentTraceId));
     }
 
     void Prepare() {
@@ -5736,7 +5736,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, BufferWriteActorStateSpan.GetTraceId());
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {

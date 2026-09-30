@@ -156,8 +156,6 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateReadUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteWrite:
         return CreateExecuteWriteUnit(dataShard, pipeline);
-    case EExecutionUnitKind::CreateIncrementalRestoreSrc:
-        return CreateIncrementalRestoreSrcUnit(dataShard, pipeline);
     case EExecutionUnitKind::Truncate:
         return CreateTruncateUnit(dataShard, pipeline);
     default:

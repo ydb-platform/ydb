@@ -1997,6 +1997,17 @@ Y_UNIT_TEST_SUITE(TIncrementalRestoreWithRebootsTests) {
                 restoreId = listResp.GetEntries().rbegin()->GetId();
             }
 
+            // Wait until orchestrator marks the restore PROGRESS_DONE — the
+            // schema-tx returns immediately under Path A, but Forget requires
+            // a terminal orchestrator state (Completed/Failed/Finalizing).
+            for (int i = 0; i < 60; ++i) {
+                auto getResp = TestGetBackupCollectionRestore(runtime, restoreId, "/MyRoot");
+                if (getResp.GetBackupCollectionRestore().GetProgress() == Ydb::Backup::RestoreProgress::PROGRESS_DONE) {
+                    break;
+                }
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+
             // First FORGET
             TestForgetBackupCollectionRestore(runtime, ++t.TxId, "/MyRoot", restoreId, Ydb::StatusIds::SUCCESS);
 

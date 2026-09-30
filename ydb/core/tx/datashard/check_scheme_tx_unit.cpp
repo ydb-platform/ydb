@@ -40,7 +40,6 @@ private:
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
     bool CheckRotateCdcStream(TActiveTransaction *activeTx);
-    bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
     bool CheckTruncate(TActiveTransaction *activeTx);
 
@@ -387,9 +386,6 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         break;
     case TSchemaOperation::ETypeRotateCdcStream:
         res = CheckRotateCdcStream(activeTx);
-        break;
-    case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
-        res = CheckCreateIncrementalRestoreSrc(activeTx);
         break;
     case TSchemaOperation::ETypeCreateIncrementalBackupSrc:
         res = CheckCreateIncrementalBackupSrc(activeTx);
@@ -772,16 +768,6 @@ bool TCheckSchemeTxUnit::CheckRotateCdcStream(TActiveTransaction *activeTx) {
     }
 
     return CheckSchemaVersion(activeTx, notice);
-}
-
-bool TCheckSchemeTxUnit::CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx) {
-    if (HasDuplicate(activeTx, "CreateIncrementalRestoreSrc", &TPipeline::HasCreateIncrementalRestoreSrc)) {
-        return false;
-    }
-
-    // TODO: add additional checks
-
-    return true;
 }
 
 bool TCheckSchemeTxUnit::CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx) {

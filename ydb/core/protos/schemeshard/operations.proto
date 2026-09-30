@@ -211,5 +211,9 @@ enum EOperationType {
     // Truncate table
     ESchemeOpTruncateTable = 133;
 
+    // Incremental restore path-state lock/unlock; propose-only, no DS-side work.
+    ESchemeOpIncrementalRestoreLockTargets = 135;
+    ESchemeOpIncrementalRestoreUnlockTargets = 136;
+
     // Some entries are grouped by semantics, so are out of order
 }

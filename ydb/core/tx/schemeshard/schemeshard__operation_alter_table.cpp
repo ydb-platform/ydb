@@ -910,8 +910,8 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
 //
 // No sub-operation may fail once the base table alter is proposed, so an index or an impl table
 // busy under another operation rejects the whole alter here, before anything is proposed; the
-// client retries it later. A migrated index can never be altered here, so it is skipped for good
-// instead: it keeps its previous level.
+// client retries it later. Same for in-flight limits that the alters would exceed.
+// A migrated index can never be altered here, so it is skipped for good instead: it keeps its previous level.
 static ISubOperation::TPtr AppendIndexImplTableMetricsAlters(TVector<ISubOperation::TPtr>& result,
         TOperationId id, const TTxTransaction& tx, const TPath& tablePath, TOperationContext& context)
 {
@@ -922,6 +922,7 @@ static ISubOperation::TPtr AppendIndexImplTableMetricsAlters(TVector<ISubOperati
         return nullptr;
     }
 
+    const size_t partsBefore = result.size();
     for (const auto& [childName, childPathId] : tablePath.Base()->GetChildren()) {
         const auto& child = context.SS->PathsById.at(childPathId);
         if (child->Dropped() || !child->IsTableIndex()) {
@@ -1021,6 +1022,29 @@ static ISubOperation::TPtr AppendIndexImplTableMetricsAlters(TVector<ISubOperati
             *implTableAlter.MutableDetailedMetricsSettings() = alter.GetDetailedMetricsSettings();
 
             result.push_back(CreateAlterTable(NextPartId(id, result), scheme));
+        }
+    }
+
+    if (result.size() == partsBefore) {
+        return nullptr;
+    }
+
+    // ProcessOperationParts checks each part against the in-flight limit of its tx type only as it
+    // proposes the part, when the base table alter is already proposed, so the limits are checked
+    // for all the parts at once here: several index and impl table alters may exceed a limit that
+    // a single alter fits into
+    THashMap<TTxState::ETxType, ui64> partsByTxType;
+    for (const auto& part : result) {
+        if (const auto txType = ConvertToTxType(part->GetModifyScheme().GetOperationType());
+            txType != TTxState::TxInvalid)
+        {
+            ++partsByTxType[txType];
+        }
+    }
+    for (const auto& [txType, count] : partsByTxType) {
+        TString errStr;
+        if (!context.SS->CheckInFlightLimit(txType, errStr, count)) {
+            return CreateReject(id, NKikimrScheme::StatusResourceExhausted, errStr);
         }
     }
 

@@ -7,6 +7,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 
@@ -1819,6 +1820,123 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
             NLs::PathExist,
             checkLevel,
         });
+    }
+
+    /**
+     * Run ALTER TABLE with the detailed metrics settings on a table with two global secondary
+     * indexes under the given in-flight limits, and verify that it either is rejected as a whole,
+     * altering nothing, or alters the base table, both indexes and their impl tables.
+     *
+     * @param[in] inFlightLimits The in-flight limits of the Scheme Shard, by tx type counter
+     * @param[in] expectedStatus The expected status of the alter
+     */
+    void AlterTableWithTwoIndexesUnderInFlightLimits(
+        const TVector<std::pair<ESimpleCounters, ui32>>& inFlightLimits,
+        NKikimrScheme::EStatus expectedStatus
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed1" Type: "Uint64" }
+              Columns { Name: "indexed2" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index1"
+              KeyColumnNames: ["indexed1"]
+            }
+            IndexDescription {
+              Name: "Index2"
+              KeyColumnNames: ["indexed2"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The limits are applied on the Scheme Shard start
+        for (const auto& [counter, limit] : inFlightLimits) {
+            auto* inFlightCounter = runtime.GetAppData().SchemeShardConfig.AddInFlightCounterConfig();
+            inFlightCounter->SetType(counter);
+            inFlightCounter->SetInFlightLimit(limit);
+        }
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        const TVector<TString> indexPaths = {"/MyRoot/Table/Index1", "/MyRoot/Table/Index2"};
+        TVector<ui64> indexVersions;
+        for (const auto& indexPath : indexPaths) {
+            indexVersions.push_back(DescribePrivatePath(runtime, indexPath)
+                .GetPathDescription().GetTableIndex().GetSchemaVersion());
+        }
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DetailedMetricsSettings {
+                Configured {
+                    MetricsLevel: MetricsLevelTable
+                }
+            }
+        )", {expectedStatus});
+        env.TestWaitNotification(runtime, txId);
+
+        const bool altered = expectedStatus == NKikimrScheme::StatusAccepted;
+        auto checkLevel = [altered](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& tableDescription = record.GetPathDescription().GetTable();
+            if (!altered) {
+                UNIT_ASSERT(!tableDescription.HasDetailedMetricsSettings());
+                return;
+            }
+            UNIT_ASSERT_EQUAL(
+                tableDescription.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel(),
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+            );
+        };
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {NLs::PathExist, checkLevel});
+        for (size_t i = 0; i < indexPaths.size(); ++i) {
+            VerifyIndexListsImplTableVersions(runtime, indexPaths[i], indexVersions[i] + (altered ? 1 : 0));
+            TestDescribeResult(DescribePrivatePath(runtime, indexPaths[i] + "/indexImplTable"), {
+                NLs::PathExist,
+                checkLevel,
+            });
+        }
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings is rejected as a whole, rather
+     * than aborting the Scheme Shard, when the index alters it adds exceed the in-flight limit of
+     * index alters, which the alter of a single index fits into.
+     */
+    Y_UNIT_TEST(AlterTableRejectsIndexAltersOverInFlightLimit) {
+        AlterTableWithTwoIndexesUnderInFlightLimits({
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTableIndex, 1},
+        }, NKikimrScheme::StatusResourceExhausted);
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings is rejected as a whole, rather
+     * than aborting the Scheme Shard, when the impl table alters it adds exceed the in-flight limit
+     * of table alters, which the base table alter fits into.
+     */
+    Y_UNIT_TEST(AlterTableRejectsImplTableAltersOverInFlightLimit) {
+        AlterTableWithTwoIndexesUnderInFlightLimits({
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTable, 2},
+        }, NKikimrScheme::StatusResourceExhausted);
+    }
+
+    /**
+     * Verify that ALTER TABLE with the detailed metrics settings succeeds when the in-flight
+     * limits fit all the alters it adds.
+     */
+    Y_UNIT_TEST(AlterTableIndexAltersWithinInFlightLimits) {
+        AlterTableWithTwoIndexesUnderInFlightLimits({
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTableIndex, 2},
+            {COUNTER_IN_FLIGHT_OPS_TxAlterTable, 3},
+        }, NKikimrScheme::StatusAccepted);
     }
 
     /**

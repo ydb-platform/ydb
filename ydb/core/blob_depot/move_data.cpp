@@ -128,7 +128,7 @@ namespace NKikimr::NBlobDepot {
             if (state.NeedsAnotherPass) {
                 Self->RestartMoveDataScan();
             } else {
-                state.Phase = TMoveDataState::EPhase::CheckingTrash;
+                state.Phase = TMoveDataState::EPhase::PreparingTrashCheck;
             }
             SendContinue = true;
             return true;
@@ -451,12 +451,12 @@ namespace NKikimr::NBlobDepot {
             {"id", GetLogId()},
             {"ev", ev->Get()->ToString()});
 
-        if (MoveData.IsInProgress()) {
+        if (!Data->IsTrashFullyLoaded() || !Data->IsLoaded() || MoveData.IsInProgress()) {
             MoveDataRequestsQueue.push_back(ev);
             return;
         }
 
-        TSet<ui32> moveDataGroups;
+        THashSet<ui32> moveDataGroups;
         for (const ui32 groupId : ev->Get()->Record.GetGroups()) {
             moveDataGroups.insert(groupId);
         }
@@ -468,7 +468,7 @@ namespace NKikimr::NBlobDepot {
         StartMoveData(std::move(moveDataGroups), ev->Sender);
     }
 
-    bool TBlobDepot::ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const {
+    bool TBlobDepot::ValidateMoveDataGroups(const THashSet<ui32>& moveDataGroups, const TActorId& sender) const {
         ui32 channelId = 0;
         for (const auto& channel : Info()->Channels) {
             if (moveDataGroups.contains(channel.LatestEntry()->GroupID)) {
@@ -498,7 +498,7 @@ namespace NKikimr::NBlobDepot {
         return MoveData.Groups.contains(groupId);
     }
 
-    void TBlobDepot::StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender) {
+    void TBlobDepot::StartMoveData(THashSet<ui32>&& moveDataGroups, const TActorId& sender) {
         ++MoveDataOperationId;
 
         YDB_LOG_DEBUG("StartMoveData",
@@ -540,11 +540,13 @@ namespace NKikimr::NBlobDepot {
                 Execute(std::make_unique<TTxMoveDataUpdateIndex>(this));
                 break;
 
-            case TMoveDataState::EPhase::CheckingTrash:
+            case TMoveDataState::EPhase::PreparingTrashCheck:
                 MoveData.ChannelGroups = Data->PrepareCheckTrash(MoveData.Groups);
+                MoveData.Phase = TMoveDataState::EPhase::CheckingTrash;
                 CheckTrash();
                 break;
 
+            case TMoveDataState::EPhase::CheckingTrash:
             case TMoveDataState::EPhase::Vacuum:
             case TMoveDataState::EPhase::Idle:
                 Y_ABORT();
@@ -552,20 +554,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     TBlobDepot::TMoveDataState::ETrashStatus TBlobDepot::GetTrashStatus() {
-        if (!Data->IsTrashFullyLoaded()) {
-            return TMoveDataState::ETrashStatus::WaitingForGC;
-        }
-
         for (auto it = MoveData.ChannelGroups.begin(); it != MoveData.ChannelGroups.end(); ) {
             const auto& [channel, groupId] = *it;
             auto& record = Data->GetRecordsPerChannelGroup(channel, groupId);
 
-            if (!record.Used.empty()) {
-                return TMoveDataState::ETrashStatus::NeedsIndexRescan; // should never happen
-            }
+            Y_ABORT_UNLESS(record.Used.empty());
 
-            if (!record.Trash.empty()) {
-                record.CollectIfPossible(Data.get());
+            if (!record.Trash.empty() || record.CollectGarbageRequestsInFlight) {
                 return TMoveDataState::ETrashStatus::WaitingForGC;
             }
 
@@ -584,13 +579,7 @@ namespace NKikimr::NBlobDepot {
                 Executor()->StartMoveDataVacuumFromOwner();
                 break;
 
-            case TMoveDataState::ETrashStatus::NeedsIndexRescan:
-                RestartMoveDataScan();
-                ContinueMoveData();
-                break;
-
             case TMoveDataState::ETrashStatus::WaitingForGC:
-                Schedule(TDuration::MilliSeconds(100), new TEvMoveDataCheckTrash(MoveDataOperationId));
                 break;
         }
     }
@@ -771,11 +760,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::ProcessMoveDataQueue() {
+        if (!Data->IsTrashFullyLoaded() || !Data->IsLoaded() || MoveData.IsInProgress()) {
+            return;
+        }
+
         while (!MoveDataRequestsQueue.empty()) {
             TEvTablet::TEvMoveData::TPtr ev = MoveDataRequestsQueue.front();
             MoveDataRequestsQueue.pop_front();
 
-            TSet<ui32> moveDataGroups;
+            THashSet<ui32> moveDataGroups;
             for (const ui32 groupId : ev->Get()->Record.GetGroups()) {
                 moveDataGroups.insert(groupId);
             }

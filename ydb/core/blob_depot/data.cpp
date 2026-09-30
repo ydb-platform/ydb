@@ -271,12 +271,12 @@ namespace NKikimr::NBlobDepot {
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize;
 
-            if (Self->MoveData.IsInProgress() && !Self->MoveData.ApplyingIndexUpdate) {
+            if (Self->MoveData.IsBlobMovingInProgress() && !Self->MoveData.ApplyingIndexUpdate) {
                 const TString binaryKey = key.MakeBinaryKey();
                 if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey) {
                     Self->MoveData.RecordTouched = true;
                 }
-                if (outcome != EUpdateOutcome::DROP) {
+                if (outcome != EUpdateOutcome::DROP && !Self->MoveData.NeedsAnotherPass) {
                     for (const auto& item : value.ValueChain) {
                         if (item.HasBlobLocator() && Self->NeedMoveBlob(item.GetBlobLocator())) {
                             Self->MoveData.NeedsAnotherPass = true;
@@ -423,8 +423,7 @@ namespace NKikimr::NBlobDepot {
         Self->MoveData.ApplyingIndexUpdate = false;
 
         if (multipleRefs) {
-            const bool inserted = Self->MoveData.BlobIdToNewLocator.emplace(Self->MoveData.BlobId, newLocator).second;
-            Y_ABORT_UNLESS(inserted);
+            Self->MoveData.BlobIdToNewLocator.try_emplace(Self->MoveData.BlobId, newLocator);
         }
 
         return EMoveDataReplaceResult::Replaced;
@@ -434,7 +433,7 @@ namespace NKikimr::NBlobDepot {
         return RefCountBlobs.contains(id);
     }
 
-    std::unordered_set<std::tuple<ui8, ui32>> TData::PrepareCheckTrash(const TSet<ui32>& groups) {
+    std::unordered_set<std::tuple<ui8, ui32>> TData::PrepareCheckTrash(const THashSet<ui32>& groups) {
         std::unordered_set<std::tuple<ui8, ui32>> channelGroups;
         for (const auto& [key, _] : RecordsPerChannelGroup) {
             const auto groupId = std::get<1>(key);

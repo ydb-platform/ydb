@@ -297,11 +297,6 @@ namespace NKikimr::NBlobDepot {
                 record.OnSuccessfulCollect(this);
                 ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}), 0,
                     record.LastConfirmedGenStep);
-
-                if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
-                        Self->MoveData.Groups.contains(groupId)) {
-                    Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
-                }
             }
         } else {
             if (!info.Hard) {
@@ -315,6 +310,11 @@ namespace NKikimr::NBlobDepot {
         TrimChannelHistory(channel, groupId, std::move(trashDeleted));
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.ClearInFlight(this);
+
+        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                Self->MoveData.Groups.contains(groupId)) {
+            Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
+        }
     }
 
     void TData::CollectTrashByHardBarrier(ui8 channel, ui32 groupId, TGenStep hardGenStep,
@@ -323,17 +323,17 @@ namespace NKikimr::NBlobDepot {
         for (auto it = record.Trash.begin(); it != record.Trash.end() && TGenStep(*it) <= hardGenStep && callback(*it); ) {
             record.DeleteTrashRecord(this, it);
         }
-
-        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
-                Self->MoveData.Groups.contains(groupId)) {
-            Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
-        }
     }
 
     void TData::OnCommitHardGC(ui8 channel, ui32 groupId, TGenStep hardGenStep) {
         TRecordsPerChannelGroup& record = GetRecordsPerChannelGroup(channel, groupId);
         record.HardGenStep = hardGenStep;
         record.ClearInFlight(this);
+
+        if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
+                Self->MoveData.Groups.contains(groupId)) {
+            Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
+        }
     }
 
     void TData::TrimChannelHistory(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted) {

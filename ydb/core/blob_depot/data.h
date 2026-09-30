@@ -747,7 +747,7 @@ namespace NKikimr::NBlobDepot {
             const NKikimrBlobDepot::TBlobLocator& newLocator,
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
-        std::unordered_set<std::tuple<ui8, ui32>> PrepareCheckTrash(const TSet<ui32>& groups);
+        std::unordered_set<std::tuple<ui8, ui32>> PrepareCheckTrash(const THashSet<ui32>& groups);
         bool IsBlobReferenced(TLogoBlobID id) const;
 
         bool UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);

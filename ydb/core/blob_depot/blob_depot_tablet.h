@@ -329,12 +329,13 @@ namespace NKikimr::NBlobDepot {
                 ScanningIndex,
                 CopyingBlob,
                 UpdatingIndex,
+                PreparingTrashCheck,
                 CheckingTrash,
                 Vacuum,
             };
 
             EPhase Phase = EPhase::Idle;
-            TSet<ui32> Groups;
+            THashSet<ui32> Groups;
             TActorId RequestSender;
 
             static constexpr ui32 MaxMoveDataKeysPerTx = 10'000;
@@ -355,7 +356,6 @@ namespace NKikimr::NBlobDepot {
             bool ApplyingIndexUpdate = false;
 
             enum class ETrashStatus {
-                NeedsIndexRescan,
                 WaitingForGC,
                 Finished,
             };
@@ -363,6 +363,12 @@ namespace NKikimr::NBlobDepot {
 
             bool IsInProgress() const {
                 return Phase != EPhase::Idle;
+            }
+
+            bool IsBlobMovingInProgress() const {
+                return Phase == EPhase::ScanningIndex ||
+                    Phase == EPhase::CopyingBlob ||
+                    Phase == EPhase::UpdatingIndex;
             }
         };
 
@@ -375,9 +381,9 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvMoveDataBlobCopied::TPtr ev);
         void Handle(TEvMoveDataCheckTrash::TPtr ev);
 
-        bool ValidateMoveDataGroups(const TSet<ui32>& moveDataGroups, const TActorId& sender) const;
+        bool ValidateMoveDataGroups(const THashSet<ui32>& moveDataGroups, const TActorId& sender) const;
         bool NeedMoveBlob(const NKikimrBlobDepot::TBlobLocator& locator) const;
-        void StartMoveData(TSet<ui32>&& moveDataGroups, const TActorId& sender);
+        void StartMoveData(THashSet<ui32>&& moveDataGroups, const TActorId& sender);
         void ContinueMoveData();
         TMoveDataState::ETrashStatus GetTrashStatus();
         void CheckTrash();

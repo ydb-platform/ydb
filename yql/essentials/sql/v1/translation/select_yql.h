@@ -51,6 +51,17 @@ using TProjection = std::variant<
     TVector<TNodePtr>,
     TPlainAsterisk>;
 
+struct TYqlWithout {
+    struct TColumn {
+        TPosition Position;
+        TString Source;
+        TString Name;
+    };
+
+    TVector<TColumn> Columns;
+    bool IsIfExists = false;
+};
+
 struct TGroupingSets {
     struct TRollup {
         TVector<TNodePtr> Expressions;
@@ -101,6 +112,7 @@ struct TYqlSetItemArgs {
     TPosition Position;
     bool Distinct = false;
     TProjection Projection;
+    TMaybe<TYqlWithout> Without;
     TMaybe<TYqlJoin> Source;
     TMaybe<TNodePtr> Where;
     TMaybe<TGroupBy> GroupBy;

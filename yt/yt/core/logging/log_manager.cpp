@@ -596,7 +596,13 @@ private:
 
         std::vector<ILogWriterPtr> writers;
         for (const auto& name : writerNames) {
-            writers.push_back(GetOrCrash(NameToWriter_, name));
+            auto writerIt = NameToWriter_.find(name);
+            if (writerIt == NameToWriter_.end()) {
+                YT_TLOG_WARNING("Skipping unknown log writer referenced by logging rule")
+                    .With("WriterName", name);
+                continue;
+            }
+            writers.push_back(writerIt->second);
         }
 
         return EmplaceOrCrash(KeyToCachedWriter_, cacheKey, writers)->second;

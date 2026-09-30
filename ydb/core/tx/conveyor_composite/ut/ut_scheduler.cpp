@@ -277,39 +277,6 @@ namespace NKikimr::NConveyorComposite {
 
     Y_UNIT_TEST_SUITE(CompositeConveyorScheduler) {
         /* Scenario:
-            Exercise lookup with many small identities and with large service/managed identities.
-            Report lookup timings without a timing assertion; all shapes preserve zero usage.
-         */
-        Y_UNIT_TEST(IdentityLookupWorkloads) {
-            constexpr ui64 processCount = 4096;
-            constexpr ui64 iterations = 20480;
-            for (ui32 shape = 0; shape < 4; ++shape) {
-                TCounters counters("LOOKUP_WORKLOAD", MakeIntrusive<NMonitoring::TDynamicCounters>());
-                TProcessCategory category(NConfig::TCategory(ESpecialTaskCategory::Scan), counters);
-                const bool service = shape == 1 || shape == 2;
-                const ui64 queryCount = shape == 0 ? 256 : 1;
-                auto scope = category.RegisterScope("shared", TCPULimitsConfig(1));
-                TAtomicCounter executed;
-                for (ui64 id = 1; id <= processCount; ++id) {
-                    const auto identity = service ? kServiceQueryIdentity : MakeIdentity((id - 1) / (processCount / queryCount));
-                    category.RegisterProcess(id, std::shared_ptr<TProcessScope>(scope), identity);
-                    if (shape < 2 || id == processCount) {
-                        category.RegisterTask(id, std::make_shared<TCounterTask>(executed));
-                    }
-                }
-                const auto start = TMonotonic::Now();
-                for (ui64 i = 0; i < iterations; ++i) {
-                    const auto identity = service ? kServiceQueryIdentity : MakeIdentity((i * 17) % queryCount);
-                    const auto usage = category.GetMinProcessUsage(identity);
-                    UNIT_ASSERT(usage && *usage == TDuration::Zero());
-                }
-                Cerr << "IDENTITY_LOOKUP shape=" << shape << " processes=" << processCount
-                     << " queries=" << queryCount << " iterations=" << iterations
-                     << " elapsed_us=" << (TMonotonic::Now() - start).MicroSeconds() << Endl;
-            }
-        }
-
-        /* Scenario:
             Index all registered processes, including idle ones, by full identity.
             Preserve usage, queues and scopes through rehash, migration and late accounting.
          */

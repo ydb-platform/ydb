@@ -1671,8 +1671,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         )", EnableIndexStreamWrite);
     }
 
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST_TWIN(VectorIndexRebuildCustomParallel, EnableIndexStreamWrite) {
         auto serverSettings = TKikimrSettings()
             .SetUseRealThreads(false);
@@ -1774,7 +1772,6 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         checkQuery(true);
     }
 
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
     Y_UNIT_TEST_TWIN(SecondaryIndexBuildCustomParallel, EnableIndexStreamWrite) {
         DoTestCustomParallel(R"(
             ALTER TABLE `/Root/TestTable`

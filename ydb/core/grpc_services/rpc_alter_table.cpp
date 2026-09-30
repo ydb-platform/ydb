@@ -75,6 +75,7 @@ public:
             return;
 
         case EOp::AddIndex:
+        case EOp::RebuildIndex:
             if (!BuildAlterTableAddIndexRequest(req, &IndexBuildSettings, 0, code, error)) {
                 Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
                 return;

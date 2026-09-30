@@ -296,15 +296,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     modifyScheme.MutableDrop()->SetName(path->Name);
 
-<<<<<<< HEAD
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "DropBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
-=======
-    YDB_LOG_NOTICE("DropBuildPropose",
-        {"buildId", buildInfo.Id},
-        {"state", buildInfo.State},
-        {"propose", propose->Record.ShortDebugString()},
-    );
 
     return propose;
 }
@@ -346,11 +339,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
     // when the table doesn't exist, so plain non-prefixed rebuilds are unaffected.
     addDropTable(PrefixTable);
 
-    YDB_LOG_NOTICE("DropRebuildImplPropose",
-        {"buildId", buildInfo.Id},
-        {"state", buildInfo.State},
-        {"propose", propose->Record.ShortDebugString()},
-    );
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "DropRebuildImplPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -418,12 +408,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
         }
     }
 
-    YDB_LOG_NOTICE("CreateRebuildImplPropose",
-        {"buildId", buildInfo.Id},
-        {"state", buildInfo.State},
-        {"propose", propose->Record.ShortDebugString()},
-    );
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateRebuildImplPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -3102,16 +3088,12 @@ public:
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextRowIdSrc;
                     Self->PersistBuildIndexState(db, buildInfo);
                 }
-<<<<<<< HEAD
-                if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel() ||
-=======
                 if (buildInfo.IsRebuild && buildInfo.RebuildIndexName.empty() && buildInfo.IsBuildVectorIndex()) {
                     // For rebuild: drop old impl tables, then create new ones
                     buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::RebuildDrop;
                     PersistKMeansState(txc, buildInfo);
                     ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
                 } else if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel() ||
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
                     buildInfo.IsBuildFulltextCompact()) {
                     ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 } else {
@@ -3153,11 +3135,16 @@ public:
         }
         case TIndexBuildInfo::EState::DropBuild:
             Y_ENSURE(buildInfo.IsBuildVectorIndex());
-            Y_ENSURE(buildInfo.KMeans.Level > 2 || buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
+            Y_ENSURE(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildDrop ||
+                buildInfo.KMeans.Level > 2 || buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), DropBuildPropose(Self, buildInfo), 0, ui64(BuildId));
+                if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildDrop) {
+                    Send(Self->SelfId(), DropRebuildImplPropose(Self, buildInfo), 0, ui64(BuildId));
+                } else {
+                    Send(Self->SelfId(), DropBuildPropose(Self, buildInfo), 0, ui64(BuildId));
+                }
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
@@ -3169,6 +3156,10 @@ public:
                 Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+                if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildDrop) {
+                    buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::RebuildCreate;
+                    PersistKMeansState(txc, buildInfo);
+                }
                 Progress(BuildId);
             }
             break;
@@ -3183,6 +3174,8 @@ public:
                     } else {
                         Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
                     }
+                } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildCreate) {
+                    Send(Self->SelfId(), CreateRebuildImplPropose(Self, buildInfo), 0, ui64(BuildId));
                 } else {
                     Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
                 }
@@ -3199,7 +3192,19 @@ public:
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexApplyTx(db, buildInfo);
 
-                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildCreate) {
+                    // Rebuild impl tables created, now proceed to normal fill flow
+                    buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
+                    PersistKMeansState(txc, buildInfo);
+                    if (buildInfo.KMeans.NeedsAnotherLevel()) {
+                        // Multi-level: need to create build tables first
+                        ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+                    } else {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                    }
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                }
                 Progress(BuildId);
             }
             break;

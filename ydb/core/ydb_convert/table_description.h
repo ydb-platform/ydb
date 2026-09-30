@@ -34,7 +34,9 @@ enum class EAlterOperationKind {
     // compact table, possibly with indices
     Compact,
     // set column constraint (not null)
-    SetColumnConstraint
+    SetColumnConstraint,
+    // rebuild index
+    RebuildIndex,
 };
 
 struct TPathId;

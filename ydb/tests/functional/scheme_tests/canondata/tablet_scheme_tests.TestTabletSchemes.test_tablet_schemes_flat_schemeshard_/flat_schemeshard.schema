@@ -5420,8 +5420,6 @@
                 "ColumnId": 58,
                 "ColumnName": "ParentBuildId",
                 "ColumnType": "Uint64"
-<<<<<<< HEAD
-=======
             },
             {
                 "ColumnId": 59,
@@ -5432,7 +5430,6 @@
                 "ColumnId": 60,
                 "ColumnName": "RebuildIndexName",
                 "ColumnType": "Utf8"
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
             }
         ],
         "ColumnsDropped": [],
@@ -5496,13 +5493,9 @@
                     55,
                     56,
                     57,
-<<<<<<< HEAD
-                    58
-=======
                     58,
                     59,
                     60
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
                 ],
                 "RoomID": 0,
                 "Codec": 0,

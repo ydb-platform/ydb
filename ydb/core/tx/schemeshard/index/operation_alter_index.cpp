@@ -199,6 +199,13 @@ public:
         Y_ABORT_UNLESS(newIndexData);
         newIndexData->State = tableIndexAlter.GetState();
 
+        if (tableIndexAlter.KeyColumnNamesSize() > 0) {
+            newIndexData->IndexKeys.assign(tableIndexAlter.GetKeyColumnNames().begin(), tableIndexAlter.GetKeyColumnNames().end());
+        }
+        if (tableIndexAlter.DataColumnNamesSize() > 0) {
+            newIndexData->IndexDataColumns.assign(tableIndexAlter.GetDataColumnNames().begin(), tableIndexAlter.GetDataColumnNames().end());
+        }
+
         if (tableIndexAlter.HasVectorIndexKmeansTreeDescription()) {
             newIndexData->SpecializedIndexDescription = tableIndexAlter.GetVectorIndexKmeansTreeDescription();
         }

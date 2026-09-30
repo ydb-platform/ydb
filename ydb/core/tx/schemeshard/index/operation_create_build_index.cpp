@@ -57,11 +57,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     const auto& op = tx.GetInitiateIndexBuild();
     NKikimrSchemeOp::TIndexCreationConfig indexDesc = op.GetIndex();
-<<<<<<< HEAD
-=======
     const bool isOnlineRebuild = op.GetIsRebuild() && op.HasRebuildIndexName();
     const bool isRebuild = op.GetIsRebuild() && !isOnlineRebuild;
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
 
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -96,13 +93,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-<<<<<<< HEAD
-=======
     if (op.GetIsRebuild() && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
     }
 
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
     auto counts = GetIndexObjectCounts(indexDesc);
 
     const auto table = TPath::Resolve(op.GetTable(), context.SS);
@@ -132,7 +126,19 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     }
 
     const auto index = table.Child(indexDesc.GetName());
-    {
+    if (isRebuild) {
+        const auto checks = index.Check();
+        checks
+            .IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+    } else {
         const auto checks = index.Check();
         checks
             .IsAtLocalSchemeShard();
@@ -165,14 +171,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
     }
 
-<<<<<<< HEAD
-    const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
-    if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
-        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
-            << "indexes count has reached maximum value in the table"
-            << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
-            << ", intention to create new children: " << aliveIndices + 1)};
-=======
     if (!op.GetIsRebuild()) {
         const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
         if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
@@ -181,7 +179,6 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 << ", children limit for dir in domain: " << domainInfo->GetSchemeLimits().MaxTableIndices
                 << ", intention to create new children: " << aliveIndices + 1)};
         }
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
     }
 
     TString errStr;
@@ -197,7 +194,24 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     TVector<ISubOperation::TPtr> result;
 
-    {
+    if (isRebuild) {
+        // For rebuild: set existing index to WriteOnly. Impl table drop and recreation
+        // is handled in the build state machine after Initiating completes.
+        {
+            auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+            *outTx.MutableLockGuard() = tx.GetLockGuard();
+            outTx.SetInternal(tx.GetInternal());
+            auto alterIndex = outTx.MutableAlterTableIndex();
+            alterIndex->SetName(index.LeafName());
+            alterIndex->SetState(NKikimrSchemeOp::EIndexStateWriteOnly);
+            // Update key columns and data columns (may change during rebuild, e.g. non-prefixed to prefixed)
+            *alterIndex->MutableKeyColumnNames() = indexDesc.GetKeyColumnNames();
+            *alterIndex->MutableDataColumnNames() = indexDesc.GetDataColumnNames();
+
+            result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
+        }
+    } else {
+        // For new build: create the index in WriteOnly state
         auto outTx = TransactionTemplate(table.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
         *outTx.MutableLockGuard() = tx.GetLockGuard();
         outTx.MutableCreateTableIndex()->CopyFrom(indexDesc);
@@ -217,6 +231,12 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         snapshot.SetTableName(table.LeafName());
 
         result.push_back(CreateInitializeBuildIndexMainTable(NextPartId(opId, result), outTx));
+    }
+
+    // For rebuild, skip impl table creation - existing impl tables will be reused.
+    // The build state machine will handle dropping old data and filling new data.
+    if (isRebuild) {
+        return result;
     }
 
     auto createImplTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {

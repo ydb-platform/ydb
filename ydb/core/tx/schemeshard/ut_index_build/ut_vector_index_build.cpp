@@ -156,8 +156,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
     }
 
-<<<<<<< HEAD
-=======
     void DoRebuildVectorIndex(bool cancel, bool reboot, bool rejectReplacement = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -695,7 +693,6 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             "only supported for vector_kmeans_tree");
     }
 
->>>>>>> 9c097827e3d (Fix index rebuild according the docs (#53433))
     Y_UNIT_TEST(VectorIndexAutodetect) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

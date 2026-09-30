@@ -2236,6 +2236,7 @@ private:
                     && name != "alterIndex"
                     && name != "addStatistics"
                     && name != "dropStatistics"
+                    && name != "rebuildIndex"
                     && name != "compact")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),

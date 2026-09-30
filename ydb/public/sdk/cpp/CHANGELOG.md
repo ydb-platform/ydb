@@ -1,5 +1,3 @@
-* OIDC providers created by one factory now share tokens, refresh and device authorization while delivering asynchronous results through each driver's own facility.
-
 * Topic and PersQueue writers now respect the driver's outbound gRPC message size limit when batching writes.
 
 * Added a draft UDF client (`client/draft/ydb_udf.h`) with manifest-based uploads, separate module type/code kind, per-platform compile state and optional timestamps, and incremental `UploadModuleFromFile` on a dedicated I/O executor. Upload futures include the final gRPC status.

@@ -19,6 +19,7 @@ PEERDIR(
     library/cpp/string_utils/quote
     library/cpp/string_utils/base64
     library/cpp/threading/cancellation
+    library/cpp/threading/future
     library/cpp/uri
     ydb/public/sdk/cpp/src/client/types/core_facility
     ydb/public/sdk/cpp/src/client/types/credentials

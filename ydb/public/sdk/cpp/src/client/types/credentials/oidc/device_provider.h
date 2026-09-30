@@ -1,6 +1,6 @@
 #pragma once
 
-#include "provider_base.h"
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/provider_base.h>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 

@@ -1,12 +1,15 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/list.h>
+#include <util/generic/string.h>
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
 
@@ -14,7 +17,9 @@
 #include <chrono>
 #include <csignal>
 #include <memory>
+#include <optional>
 #include <string>
+#include <variant>
 
 namespace {
 

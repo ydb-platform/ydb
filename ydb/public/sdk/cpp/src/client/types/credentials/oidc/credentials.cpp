@@ -1,14 +1,23 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
-#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
-#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/client_provider.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/device_provider.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/provider_base.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/overloaded.h>
+#include <util/system/guard.h>
 #include <util/system/mutex.h>
 
 #include <cstdint>
+#include <memory>
+#include <string>
 #include <utility>
+#include <variant>
 
 namespace NYdb::inline Dev::NOidc {
 
@@ -53,8 +62,8 @@ TFactory::TFactory(TOidcConfig config)
     // stable and distinguish custom hooks by their process-local instance identity.
     if (Config.Cacher_ != nullptr || Config.Acceptor_ != nullptr) {
         Identity = HashIdentity(Identity + ":" +
-                                std::to_string(reinterpret_cast<uintptr_t>(Config.Cacher_.get())) + ":" +
-                                std::to_string(reinterpret_cast<uintptr_t>(Config.Acceptor_.get())));
+            std::to_string(reinterpret_cast<uintptr_t>(Config.Cacher_.get())) + ":" +
+            std::to_string(reinterpret_cast<uintptr_t>(Config.Acceptor_.get())));
     }
 }
 
@@ -82,16 +91,16 @@ std::string TFactory::GetClientIdentity() const {
 TCredentialsProviderPtr TFactory::CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const {
     if (State == nullptr) {
         State = std::visit(TOverloaded{
-                               [&](const TStaticOidcConfig&) -> std::shared_ptr<TProviderBase> {
-                                   return std::make_shared<TStaticProvider>(Config);
-                               },
-                               [&](const TClientOidcConfig&) -> std::shared_ptr<TProviderBase> {
-                                   return std::make_shared<TClientProvider>(Config);
-                               },
-                               [&](const TDeviceOidcConfig&) -> std::shared_ptr<TProviderBase> {
-                                   return std::make_shared<TDeviceProvider>(Config);
-                               },
-                           }, Config.FlowConfig);
+            [&](const TStaticOidcConfig&) -> std::shared_ptr<TProviderBase> {
+                return std::make_shared<TStaticProvider>(Config);
+            },
+            [&](const TClientOidcConfig&) -> std::shared_ptr<TProviderBase> {
+                return std::make_shared<TClientProvider>(Config);
+            },
+            [&](const TDeviceOidcConfig&) -> std::shared_ptr<TProviderBase> {
+                return std::make_shared<TDeviceProvider>(Config);
+            },
+        }, Config.FlowConfig);
     }
     return State->CreateProvider(std::move(facility));
 }

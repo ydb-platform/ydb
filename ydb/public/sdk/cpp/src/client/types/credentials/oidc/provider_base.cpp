@@ -1,9 +1,55 @@
 #include "provider_base.h"
-#include "provider.h"
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/provider.h>
+
+#include <library/cpp/threading/future/future.h>
+
+#include <util/datetime/base.h>
+#include <util/system/guard.h>
 
 #include <algorithm>
+#include <chrono>
+#include <exception>
+#include <list>
+#include <memory>
+#include <optional>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
+
+namespace {
+
+std::optional<TTokenCache> ReadCache(const std::shared_ptr<ITokenCacher>& cacher);
+void WriteCache(const std::shared_ptr<ITokenCacher>& cacher, const TTokenCache& tokens);
+
+std::optional<TTokenCache> ReadCache(const std::shared_ptr<ITokenCacher>& cacher) {
+    try {
+        return cacher != nullptr ? cacher->Read() : std::nullopt;
+    } catch (...) {
+        // A broken cache must not prevent a fresh authorization attempt.
+        return std::nullopt;
+    }
+}
+
+void WriteCache(const std::shared_ptr<ITokenCacher>& cacher, const TTokenCache& tokens) {
+    try {
+        if (cacher != nullptr) {
+            cacher->Write(tokens);
+        }
+    } catch (...) {
+        // Persistence is optional; keep the acquired token usable in memory.
+        // User-supplied exception messages may contain credentials.
+        return;
+    }
+}
+
+} // namespace
 
 TProviderBase::TProviderBase(TOidcConfig config)
     : Config(std::move(config))
@@ -122,11 +168,11 @@ TRefreshingProviderBase::TRefreshingProviderBase(const TOidcConfig& config)
 }
 
 void TRefreshingProviderBase::RunTokens() {
-    TTokenCache current = ReadCache().value_or(TTokenCache{});
+    TTokenCache current = ReadCache(Config.Cacher_).value_or(TTokenCache{});
 
     const bool unknownRefresh = !current.AccessToken.ExpiresAt.has_value() && current.RefreshToken.has_value();
     if (current.AccessToken.IsValid(TInstant::Now()) && !unknownRefresh) {
-        Publish(current);
+        Publish(current, false);
         if (!WaitForRefresh(current)) {
             return;
         }
@@ -140,8 +186,7 @@ void TRefreshingProviderBase::RunTokens() {
         }
         try {
             current = Update(current);
-            Write(current);
-            Publish(current);
+            Publish(current, true);
             retryDelay = TDuration::MilliSeconds(200);
             if (!WaitForRefresh(current)) {
                 return;
@@ -202,18 +247,6 @@ bool TRefreshingProviderBase::WaitForRefresh(const TTokenCache& current) {
     return Wait(std::max((*current.AccessToken.ExpiresAt - now) / 2, TDuration::MilliSeconds(1)));
 }
 
-void TProviderBase::Write(const TTokenCache& tokens) const {
-    try {
-        if (Config.Cacher_ != nullptr) {
-            Config.Cacher_->Write(tokens);
-        }
-    } catch (...) {
-        // Persistence is optional; keep the acquired token usable in memory.
-        // User-supplied exception messages may contain credentials.
-        return;
-    }
-}
-
 TTokenCache TRefreshingProviderBase::Update(const TTokenCache& current) {
     if (current.RefreshToken.has_value() && current.RefreshToken->IsValid(TInstant::Now())) {
         try {
@@ -235,7 +268,10 @@ bool TProviderBase::CompleteDiscardedDeliveries() {
     return pending;
 }
 
-void TProviderBase::Publish(const TTokenCache& current) {
+void TProviderBase::Publish(const TTokenCache& current, bool writeCache) {
+    if (writeCache) {
+        WriteCache(Config.Cacher_, current);
+    }
     std::vector<std::pair<std::shared_ptr<TProviderContext>, NThreading::TPromise<std::string>>> pending;
     with_lock (Mutex) {
         if (Stopping) {
@@ -266,15 +302,6 @@ void TProviderBase::Fail(std::exception_ptr error) {
     }
     for (auto& [context, promise] : pending) {
         context->Complete(promise, std::nullopt, error);
-    }
-}
-
-std::optional<TTokenCache> TProviderBase::ReadCache() const {
-    try {
-        return Config.Cacher_ != nullptr ? Config.Cacher_->Read() : std::nullopt;
-    } catch (...) {
-        // A broken cache must not prevent a fresh authorization attempt.
-        return std::nullopt;
     }
 }
 

@@ -1,8 +1,16 @@
 #pragma once
 
-#include "private.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+
+#include <library/cpp/threading/future/future.h>
 
 #include <util/system/mutex.h>
+
+#include <exception>
+#include <list>
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
@@ -33,7 +41,7 @@ private:
     bool Stopping = false;
     std::shared_ptr<void> Lifetime;
     NThreading::TPromise<std::string> Pending;
-    std::vector<TDelivery> Deliveries;
+    std::list<TDelivery> Deliveries;
 };
 
 class TCredentialsProvider final: public ICredentialsProvider {

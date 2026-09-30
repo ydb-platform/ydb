@@ -1,9 +1,23 @@
 #include "provider.h"
-#include "provider_base.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/provider_base.h>
 
-#include <algorithm>
+#include <library/cpp/threading/future/future.h>
+
+#include <util/datetime/base.h>
+#include <util/system/compiler.h>
+#include <util/system/guard.h>
+
+#include <exception>
+#include <list>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 namespace {
@@ -113,8 +127,7 @@ bool TProviderContext::CompleteDiscardedDeliveries() {
     std::vector<NThreading::TPromise<std::string>> discarded;
     bool pending;
     with_lock (Mutex) {
-        auto it = Deliveries.begin();
-        while (it != Deliveries.end()) {
+        for (auto it = Deliveries.begin(); it != Deliveries.end();) {
             if (it->Promise.GetFuture().IsReady()) {
                 it = Deliveries.erase(it);
             } else if (it->CallbackLifetime.expired()) {
@@ -134,7 +147,7 @@ bool TProviderContext::CompleteDiscardedDeliveries() {
 
 void TProviderContext::Stop() {
     NThreading::TPromise<std::string> pending;
-    std::vector<TDelivery> deliveries;
+    std::list<TDelivery> deliveries;
     with_lock (Mutex) {
         if (Stopping) {
             return;

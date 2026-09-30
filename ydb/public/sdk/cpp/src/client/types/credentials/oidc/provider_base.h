@@ -1,12 +1,22 @@
 #pragma once
 
-#include "private.h"
-#include "protocol.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
+#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/protocol.h>
 
+#include <library/cpp/threading/cancellation/cancellation_token.h>
+#include <library/cpp/threading/future/future.h>
+
+#include <util/datetime/base.h>
 #include <util/system/mutex.h>
 
 #include <condition_variable>
+#include <exception>
+#include <list>
+#include <memory>
+#include <optional>
+#include <string>
 #include <thread>
+#include <vector>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
@@ -21,16 +31,16 @@ public:
     TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility);
     NThreading::TFuture<std::string> GetAuthInfoAsync(const std::shared_ptr<TProviderContext>& context) const;
     bool IsValid(const std::shared_ptr<TProviderContext>& context) const;
+    // Derived destructors must join the worker before virtual dispatch changes
+    // and the refresh protocol is destroyed.
     void Stop();
 
 protected:
     virtual void RunTokens() = 0;
 
     bool Wait(TDuration delay);
-    std::optional<TTokenCache> ReadCache() const;
-    void Write(const TTokenCache& tokens) const;
     void Fail(std::exception_ptr error);
-    void Publish(const TTokenCache& current);
+    void Publish(const TTokenCache& current, bool writeCache);
     bool IsStopped() const;
     void RequestStop();
 
@@ -49,7 +59,7 @@ private:
     bool Stopping = false;
     std::optional<TTokenCache> Tokens;
     std::exception_ptr Error;
-    std::vector<std::weak_ptr<TProviderContext>> Contexts;
+    std::list<std::weak_ptr<TProviderContext>> Contexts;
     std::thread Worker;
 };
 

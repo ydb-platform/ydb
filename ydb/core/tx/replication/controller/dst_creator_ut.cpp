@@ -83,8 +83,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated", EReplicationMode::ReadOnly, EConsistencyLevel::Global);
     }
 
-    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType) {
-        TEnv env(TFeatureFlags().SetEnableChangefeedsOnIndexTables(true));
+    void WithIndex(const TString& replicatedPath, NKikimrSchemeOp::EIndexType indexType, bool enableAsyncIndexReplication = false) {
+        TFeatureFlags featureFlags;
+        featureFlags.SetEnableChangefeedsOnIndexTables(true);
+        if (enableAsyncIndexReplication) {
+            featureFlags.SetEnableAsyncIndexReplication(true);
+        }
+        TEnv env(featureFlags);
         env.GetRuntime().SetLogPriority(NKikimrServices::REPLICATION_CONTROLLER, NLog::PRI_TRACE);
 
         const auto tableDesc = TTestTableDescription{
@@ -116,9 +121,15 @@ Y_UNIT_TEST_SUITE(DstCreator) {
 
         CheckTableReplica(tableDesc, replicatedDesc);
 
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync && !enableAsyncIndexReplication) {
+            UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 0);
+            return;
+        }
+
         switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             UNIT_ASSERT_VALUES_EQUAL(replicatedDesc.TableIndexesSize(), 1);
             break;
         default:
@@ -126,13 +137,13 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             return;
         }
 
-        env.GetRuntime().Register(CreateDstCreator(
-            env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
-            "/Root", env.GetPathId("/Root"),
-            1 /* rid */, 2 /* tid */, TReplication::ETargetKind::IndexTable,
-            "/Root/Table/" + indexName + "/indexImplTable", replicatedPath + "/" + indexName + "/indexImplTable"
-        ));
-        {
+        if (indexType != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"),
+                1 /* rid */, 2 /* tid */, TReplication::ETargetKind::IndexTable,
+                "/Root/Table/" + indexName + "/indexImplTable", replicatedPath + "/" + indexName + "/indexImplTable"
+            ));
             auto ev = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrScheme::StatusSuccess);
         }
@@ -148,6 +159,9 @@ Y_UNIT_TEST_SUITE(DstCreator) {
             Cerr << desc.DebugString() << Endl;
             const auto& indexTableDesc = desc.GetPathDescription().GetTable();
             UNIT_ASSERT_VALUES_EQUAL(indexTableDesc.KeyColumnNamesSize(), 2);
+            if (indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                UNIT_ASSERT(!indexTableDesc.HasReplicationConfig());
+            }
         }
     }
 
@@ -160,6 +174,10 @@ Y_UNIT_TEST_SUITE(DstCreator) {
     }
 
     Y_UNIT_TEST(WithAsyncIndex) {
+        WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync, true);
+    }
+
+    Y_UNIT_TEST(WithAsyncIndexDisabled) {
         WithIndex("/Root/Replicated", NKikimrSchemeOp::EIndexTypeGlobalAsync);
     }
 

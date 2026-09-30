@@ -197,6 +197,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 ++it;
                 continue;
+            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                if (AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
+                    ++it;
+                } else {
+                    it = indexes.erase(it);
+                }
+                continue;
             default:
                 it = indexes.erase(it);
                 break;
@@ -237,7 +244,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
-                FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                // Async indexes are maintained by the destination's own change exchange.
+                // Only synchronous index tables have independent replication targets.
+                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                    FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                }
             }
         }
 

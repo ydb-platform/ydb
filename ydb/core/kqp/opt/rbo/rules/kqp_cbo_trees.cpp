@@ -114,16 +114,6 @@ TCBOLeaf BuildCBOLeaf(
     return leaf;
 }
 
-NKqp::TColumnStatistics ConvertYqlColumnStatistics(const NYql::TColumnStatistics& src) {
-    NKqp::TColumnStatistics result;
-    result.NumUniqueVals = src.NumUniqueVals;
-    result.HyperLogLog = src.HyperLogLog;
-    result.CountMinSketch = src.CountMinSketch;
-    result.EqWidthHistogramEstimator = src.EqWidthHistogramEstimator;
-    result.Type = src.Type;
-    return result;
-}
-
 TVector<TString> BuildTranslatedKeyColumns(const TCBOLeaf& leaf) {
     TVector<TString> keyColumns;
     if (!leaf.Op->Props.Metadata) {
@@ -150,11 +140,15 @@ TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> BuildTranslatedColumnStatist
 
     auto result = MakeIntrusive<TOptimizerStatistics::TColumnStatMap>();
 
+    THashMap<TString, THashMap<TString, TString>> cboColumnByTableColumn;
+
     for (const auto column : leaf.Op->GetOutputIUs()) {
         const auto* source = FindSourceStatistics(*leaf.Op, column, lineage);
         if (!source || source->TableName.empty()) {
             continue;
         }
+
+        cboColumnByTableColumn[source->TableName][source->ColumnName] = ToString(column);
 
         const auto tableStatsIt = typeCtx.ColumnStatisticsByTableName.find(source->TableName);
         if (tableStatsIt == typeCtx.ColumnStatisticsByTableName.end()) {
@@ -166,10 +160,37 @@ TIntrusivePtr<TOptimizerStatistics::TColumnStatMap> BuildTranslatedColumnStatist
             continue;
         }
 
-        result->Data[ToString(column)] = ConvertYqlColumnStatistics(columnStatsIt->second);
+        result->Data[ToString(column)] = NKqp::TColumnStatistics(columnStatsIt->second);
     }
 
-    if (result->Data.empty()) {
+    for (const auto& [tableName, cboColumnByColumn] : cboColumnByTableColumn) {
+        const auto tableStatsIt = typeCtx.ColumnStatisticsByTableName.find(tableName);
+        if (tableStatsIt == typeCtx.ColumnStatisticsByTableName.end()) {
+            continue;
+        }
+
+        for (const auto& [_, multiColumnStats] : tableStatsIt->second->MultiData) {
+            TVector<TString> translatedColumns;
+            for (const auto& column : multiColumnStats.Columns) {
+                const auto it = cboColumnByColumn.find(column);
+                if (it == cboColumnByColumn.end()) {
+                    translatedColumns.clear();
+                    break;
+                }
+                translatedColumns.push_back(it->second);
+            }
+
+            if (translatedColumns.empty()) {
+                continue;
+            }
+
+            NKqp::TMultiColumnStatistics translated(multiColumnStats);
+            translated.Columns = translatedColumns;
+            result->MultiData[MakeMultiColumnKey(translatedColumns)] = std::move(translated);
+        }
+    }
+
+    if (result->Data.empty() && result->MultiData.empty()) {
         return {};
     }
     return result;

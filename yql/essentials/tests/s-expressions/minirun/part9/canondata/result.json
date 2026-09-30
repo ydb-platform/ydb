@@ -432,5 +432,19 @@
             "size": 1750,
             "uri": "https://{canondata_backend}/1937367/d830b2d1fda4887e670f554aae360552aab48da2/resource.tar.gz#test.test_Optimizers-SkipWhileOverLiterals-default.txt-Results_/results.txt"
         }
+    ],
+    "test.test[Pure-NestedWorldDependencies-default.txt-Debug]": [
+        {
+            "checksum": "bfee180b6ac0ac1701b0ff7ee5df0326",
+            "size": 202,
+            "uri": "https://{canondata_backend}/1924537/dcb493b79d354dc9d6ce5e81ecf78cd6c426997d/resource.tar.gz#test.test_Pure-NestedWorldDependencies-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Pure-NestedWorldDependencies-default.txt-Results]": [
+        {
+            "checksum": "58f03f10ba8907d9c996b1b6910cb630",
+            "size": 481,
+            "uri": "https://{canondata_backend}/1924537/dcb493b79d354dc9d6ce5e81ecf78cd6c426997d/resource.tar.gz#test.test_Pure-NestedWorldDependencies-default.txt-Results_/results.txt"
+        }
     ]
 }

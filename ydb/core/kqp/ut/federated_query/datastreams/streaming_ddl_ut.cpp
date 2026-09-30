@@ -66,6 +66,10 @@ public:
         CreatePqSource("hoppingSource");
     }
 
+    void DropTopics() {
+        DropTopic("hoppingInput");
+    }
+
     void WriteEvent(i32 key, TInstant time) {
         WriteTopicMessage("hoppingInput", fmt::format(R"({{"Key":{},"Ts":"{}"}})", key, time.ToString()));
     }
@@ -82,7 +86,13 @@ public:
 
     void CheckEvictedKeysAfterRestart(bool watermarks) {
         Init(/* enabled */ true, watermarks);
+        Y_DEFER {
+            DropTopics();
+        };
         CreateTopic("hoppingOutput");
+        Y_DEFER {
+            DropTopic("hoppingOutput");
+        };
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY hoppingQuery AS DO BEGIN
                 PRAGMA ydb.MaxTasksPerStage = "1";
@@ -147,6 +157,9 @@ public:
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysInOrdinaryQuery, Enabled, THoppingWindowTestFixture) {
         Init(Enabled);
+        Y_DEFER {
+            DropTopics();
+        };
         const auto base = TInstant::ParseIso8601("2026-09-24T00:00:00Z");
         for (ui32 day = 1; day <= 3; ++day) {
             WriteEvent(1, base);

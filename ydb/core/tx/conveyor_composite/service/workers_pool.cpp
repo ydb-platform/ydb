@@ -7,6 +7,7 @@
 #include <iterator>
 #include <numeric>
 #include <tuple>
+#include <util/generic/scope.h>
 #include <util/generic/ylimits.h>
 
 namespace NKikimr::NConveyorComposite {
@@ -327,6 +328,14 @@ bool TWorkersPool::DrainTasks(TDrainContext& context) {
         return false;
     }
 
+    Y_DEFER {
+        for (auto&& link : CategoryLinks) {
+            if (!link.GetCategory()->HasTasks()) {
+                link.GetCounters()->NoTasks->Add(1);
+            }
+        }
+    };
+
     const auto candidates = BuildQueryCandidates(context);
     if (candidates.empty()) {
         return false;
@@ -356,11 +365,6 @@ bool TWorkersPool::DrainTasks(TDrainContext& context) {
             }
         }
         newTask = DrainOnWorkers(band, candidates, context, throttledQueries) || newTask;
-    }
-    for (auto&& i : CategoryLinks) {
-        if (!i.GetCategory()->HasTasks()) {
-            i.GetCounters()->NoTasks->Add(1);
-        }
     }
     return newTask;
 }

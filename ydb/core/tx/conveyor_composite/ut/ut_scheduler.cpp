@@ -914,7 +914,7 @@ namespace NKikimr::NConveyorComposite {
         /* Scenario:
             - An unset/false feature flag or disabled local scheduler routes credentialed processes to service.
             - Processes share service identity, but preserve their scopes, queues and accounting.
-            - Late accounting and subsequent registrations preserve service; the empty managed pool does not update NoTasks.
+            - Late accounting and subsequent registrations preserve service; the empty managed pool still updates NoTasks.
          */
         Y_UNIT_TEST(DisabledSchedulingKeepsSharedServiceIdentity) {
             for (const auto flag : {std::optional<bool>{}, {false}, {true}}) {
@@ -968,8 +968,43 @@ namespace NKikimr::NConveyorComposite {
                 fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
                 UNIT_ASSERT_VALUES_EQUAL(fixture.HdrfEvents, 0);
                 UNIT_ASSERT(batches > 0);
-                UNIT_ASSERT_VALUES_EQUAL(noTasks->Val(), 0);
+                UNIT_ASSERT(noTasks->Val() > 0);
             }
+        }
+
+        /* Scenario:
+            - Empty candidates still update NoTasks once for each category without queued tasks.
+            - A category with scope-blocked tasks is not counted as empty.
+         */
+        Y_UNIT_TEST(NoTasksCountsEmptyCategoriesWithoutCandidates) {
+            TManagerFixture fixture;
+            TAtomicCounter executed;
+            fixture.Run(BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}}),
+                        [&](TTasksManager& manager) {
+                            const auto& counters = manager.MutableWorkersPool(2).GetCounters();
+                            const auto scan = counters->GetCategorySignals(ESpecialTaskCategory::Scan)->NoTasks;
+                            const auto insert = counters->GetCategorySignals(ESpecialTaskCategory::Insert)->NoTasks;
+                            UNIT_ASSERT(!manager.DrainTasks());
+                            UNIT_ASSERT_VALUES_EQUAL(scan->Val(), 1);
+                            UNIT_ASSERT_VALUES_EQUAL(insert->Val(), 1);
+
+                            manager.RegisterProcess(ESpecialTaskCategory::Scan, "blocked", 1, TCPULimitsConfig(1), kServiceQueryIdentity);
+                            auto& category = manager.MutableCategoryVerified(ESpecialTaskCategory::Scan);
+                            auto& scope = category.MutableProcessScope("blocked");
+                            scope.IncInFlight();
+                            category.RegisterTask(1, std::make_shared<TCounterTask>(executed));
+                            UNIT_ASSERT(!manager.DrainTasks());
+                            UNIT_ASSERT_VALUES_EQUAL(scan->Val(), 1);
+                            UNIT_ASSERT_VALUES_EQUAL(insert->Val(), 2);
+                            UNIT_ASSERT_VALUES_EQUAL(category.GetWaitingQueueSize(), 1);
+
+                            scope.DecInFlight();
+                            manager.UnregisterProcess(ESpecialTaskCategory::Scan, 1);
+                            UNIT_ASSERT(!manager.DrainTasks());
+                            UNIT_ASSERT_VALUES_EQUAL(scan->Val(), 2);
+                            UNIT_ASSERT_VALUES_EQUAL(insert->Val(), 3);
+                            UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 0);
+                        });
         }
 
         /* Scenario:

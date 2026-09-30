@@ -296,8 +296,10 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
         Links.emplace_back(std::move(link));
     }
     if (!PoolName || PoolName == "WP::DEFAULT") {
-        PoolName = "WP::" + JoinSeq("-", categories) + "-"
-            + NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(proto.GetSchedulingMode());
+        PoolName = "WP::" + JoinSeq("-", categories);
+        if (SchedulingMode != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable) {
+            PoolName += "-" + NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(SchedulingMode);
+        }
     }
     if (Links.empty()) {
         return TConclusionStatus::Fail("no links for workers pool");

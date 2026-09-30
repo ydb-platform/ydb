@@ -73,8 +73,10 @@ EValidationResult ValidateCompositeConveyorConfig(
 
         TString poolName = pool.GetName();
         if (!poolName || poolName == "WP::DEFAULT") {
-            poolName = "WP::" + JoinSeq("-", linkedCategories) + "-"
-                + NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(pool.GetSchedulingMode());
+            poolName = "WP::" + JoinSeq("-", linkedCategories);
+            if (pool.GetSchedulingMode() != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable) {
+                poolName += "-" + NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(pool.GetSchedulingMode());
+            }
         }
         if (!poolNames.emplace(poolName).second) {
             return Fail(errors, "duplicate composite conveyor worker pool name: " + poolName);

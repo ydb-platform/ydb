@@ -25,7 +25,7 @@ namespace NKikimr::NConfig {
 
     Y_UNIT_TEST_SUITE(TCompositeConveyorConfigValidationTest) {
         /* Scenario:
-            Generated pool names include sorted categories and scheduling mode.
+            Generated pool names include sorted categories and non-default scheduling modes.
             Same-mode duplicates and the reserved schedulable fallback name are rejected.
          */
         Y_UNIT_TEST(SchedulingModeNames) {
@@ -40,7 +40,7 @@ namespace NKikimr::NConfig {
             UNIT_ASSERT(ValidateConfig(config, errors) == EValidationResult::Ok);
             conveyor->MutableWorkerPools(1)->SetSchedulingMode(TPool::NonSchedulable);
             UNIT_ASSERT(ValidateConfig(config, errors) == EValidationResult::Error);
-            UNIT_ASSERT_STRING_CONTAINS(errors.back(), "WP::insert-scan-NonSchedulable");
+            UNIT_ASSERT_VALUES_EQUAL(errors.back(), "duplicate composite conveyor worker pool name: WP::insert-scan");
             errors.clear();
             conveyor->MutableWorkerPools(1)->SetName("WP::DEFAULT_SCHEDULABLE");
             UNIT_ASSERT(ValidateConfig(config, errors) == EValidationResult::Error);

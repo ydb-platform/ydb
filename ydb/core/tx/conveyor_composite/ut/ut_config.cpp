@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
     }
 
     /* Scenario:
-        Generated names include the mode; explicit names are stable and fallback names are reserved.
+        Generated names include non-default modes; explicit names are stable and fallback names are reserved.
         Missing mode is NonSchedulable, including in a full replacement snapshot.
      */
     Y_UNIT_TEST(SchedulingModeNamesAndDefaults) {
@@ -136,6 +136,31 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
         config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
         UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[2].GetName(), "WP::scan-All");
         UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[3].GetName(), "WP::scan-Schedulable");
+    }
+
+    /* Scenario:
+        Missing and explicit NonSchedulable preserve legacy names and metric labels.
+        Other modes append a suffix; internal fallback names remain fixed.
+     */
+    Y_UNIT_TEST(GeneratedPoolNamesPreserveLegacyNonSchedulableNames) {
+        using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+        for (const auto mode : {std::optional<TPool::ESchedulingMode>{}, {TPool::NonSchedulable}, {TPool::Schedulable}, {TPool::All}}) {
+            for (const auto& name : {std::optional<TString>{}, {TString()}, {TString("WP::DEFAULT")}}) {
+                NKikimrConfig::TCompositeConveyorConfig proto;
+                AddPool(proto, name, {{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}});
+                if (mode) {
+                    proto.MutableWorkerPools(0)->SetSchedulingMode(*mode);
+                }
+                const auto config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
+                TString expected = "WP::insert-scan";
+                if (mode && *mode != TPool::NonSchedulable) {
+                    expected += "-" + TPool::ESchedulingMode_Name(*mode);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[2].GetName(), expected);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[0].GetName(), "WP::DEFAULT");
+                UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[1].GetName(), "WP::DEFAULT_SCHEDULABLE");
+            }
+        }
     }
 
     /* Scenario:
@@ -197,7 +222,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
             NKikimrConfig::TCompositeConveyorConfig proto;
             AddPool(proto, name, {{ESpecialTaskCategory::Scan, 1}});
             auto config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
-            UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[2].GetName(), "WP::scan-NonSchedulable");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[2].GetName(), "WP::scan");
         }
     }
 

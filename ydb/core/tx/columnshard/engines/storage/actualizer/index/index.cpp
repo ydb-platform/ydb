@@ -10,10 +10,11 @@
 namespace NKikimr::NOlap::NActualizer {
 
 void TGranuleActualizationIndex::ExtractActualizationTasks(
-    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, const bool moveDataOnly) const {
+    TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, const EActualizationScope scope) const {
     TInternalTasksContext internalContext;
     for (auto&& i : Actualizers) {
-        if (moveDataOnly && i != MoveDataActualizer) {
+        const bool isMove = (i == MoveDataActualizer);
+        if ((scope == EActualizationScope::MoveDataOnly && !isMove) || (scope == EActualizationScope::ExceptMoveData && isMove)) {
             continue;
         }
         i->ExtractTasks(tasksContext, externalContext, internalContext);
@@ -71,12 +72,6 @@ void TGranuleActualizationIndex::StartMoveData(const THashSet<ui32>& targetGroup
 void TGranuleActualizationIndex::OnUncommittedPortionAborted(const ui64 portionId) {
     if (MoveDataActualizer) {
         MoveDataActualizer->RemovePortion(portionId);
-    }
-}
-
-void TGranuleActualizationIndex::OnPortionImported(const std::shared_ptr<TPortionInfo>& portion) {
-    if (MoveDataActualizer) {
-        MoveDataActualizer->AddImportedPortion(*portion);
     }
 }
 

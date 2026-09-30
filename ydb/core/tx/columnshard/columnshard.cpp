@@ -688,61 +688,48 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
         return;
     }
     MoveDataState.HiveSender = ev->Sender;
-
-    if (MoveDataState.Active) {
-        // Hive retry or re-assignment: merge here, so a gate check already queued cannot answer for the old set.
-        bool newGroups = false;
-        for (const auto groupId : requested) {
-            newGroups |= MoveDataState.TargetGroups.emplace(groupId).second;
-        }
-        LOG_S_INFO("TColumnShard::Handle TEvMoveData: reseed newGroups=" << newGroups << " totalGroups=" << MoveDataState.TargetGroups.size()
-                                                                         << " at tablet " << TabletID());
-        if (newGroups && HasIndex()) {
-            // Stop and rerun rather than extend in place: Refresh rebuilds the queues from scratch.
-            auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
-            index.StopMoveData();
-            index.StartMoveData(MoveDataState.TargetGroups);
-            MoveDataState.CleanupWatermark.reset();
-        }
-        AFL_VERIFY(!!MoveDataDriverId);
-        ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
-        return;
+    if (!MoveDataState.Active) {
+        MoveDataState.TargetGroups.clear();
     }
-
-    MoveDataState.TargetGroups.clear();
-    for (const auto groupId : record.GetGroups()) {
-        MoveDataState.TargetGroups.emplace(groupId);
+    bool changed = !MoveDataState.Active;
+    for (const auto groupId : requested) {
+        changed |= MoveDataState.TargetGroups.emplace(groupId).second;
     }
-    if (MoveDataState.TargetGroups.empty()) {
-        LOG_S_INFO("TColumnShard::Handle TEvMoveData: empty group list, vacuum-only at tablet " << TabletID());
+    if (!MoveDataState.Active) {
         MoveDataState.Active = true;
         MoveDataState.VacuumCompleted = false;
         Counters.GetCSCounters().OnMoveDataStarted();
+        // The vacuum leg belongs to the executor; everything else to the driver.
         Executor()->StartMoveDataVacuumFromOwner();
-        StartMoveDataDriver(ctx);
+    }
+    LOG_S_INFO("TColumnShard::Handle TEvMoveData: groups=" << MoveDataState.TargetGroups.size() << " changed=" << changed << " at tablet "
+                                                           << TabletID());
+    // Marked synchronously: a gate check already queued must not answer for a stale target set.
+    MoveDataState.TargetsChanged |= changed;
+    StartMoveDataDriver(ctx);
+    ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
+}
+
+void TColumnShard::RestartMoveDataActualizer() {
+    AFL_VERIFY(MoveDataState.Active);
+    MoveDataState.TargetsChanged = false;
+    MoveDataState.CleanupWatermark.reset();
+    if (!HasIndex()) {
         return;
     }
-    MoveDataState.Active = true;
-    MoveDataState.VacuumCompleted = false;
-    MoveDataState.CleanupWatermark.reset();
-
-    LOG_S_INFO(
-        "TColumnShard::Handle TEvMoveData: starting move for " << MoveDataState.TargetGroups.size() << " groups at tablet " << TabletID());
-
-    Counters.GetCSCounters().OnMoveDataStarted();
-    if (HasIndex()) {
-        MutableIndexAs<NOlap::TColumnEngineForLogs>().StartMoveData(MoveDataState.TargetGroups);
+    auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
+    // Stop and rerun rather than extend in place: Refresh rebuilds the queues from scratch.
+    index.StopMoveData();
+    if (!MoveDataState.TargetGroups.empty()) {
+        index.StartMoveData(MoveDataState.TargetGroups);
     }
-    // Vacuum runs in parallel with rewriting; the response waits on the driver's gate check.
-    Executor()->StartMoveDataVacuumFromOwner();
-    StartMoveDataDriver(ctx);
 }
 
 void TColumnShard::StartMoveDataDriver(const TActorContext& ctx) {
     if (!!MoveDataDriverId) {
         return;
     }
-    MoveDataDriverId = ctx.RegisterWithSameMailbox(new TMoveDataDriver(this));
+    MoveDataDriverId = ctx.RegisterWithSameMailbox(new TMoveDataDriver(this, TabletActivityImpl));
 }
 
 void TColumnShard::StopMoveDataDriver(const TActorContext& ctx) {
@@ -768,6 +755,10 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
 
 void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
     if (!MoveDataState.Active) {
+        return;
+    }
+    if (MoveDataState.TargetsChanged) {
+        Counters.GetCSCounters().OnMoveDataGateBlockedByReseed();
         return;
     }
 

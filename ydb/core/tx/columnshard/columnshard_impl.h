@@ -351,6 +351,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     virtual void MoveDataCompleted(const TActorContext& ctx) override;
     // Split out of MoveDataCompleted so the wakeup can drive it without claiming vacuum finished.
     void CheckMoveDataGate(const TActorContext& ctx);
+    // Driver-side: stops and starts the actualizer for the current target set, clearing TargetsChanged.
+    void RestartMoveDataActualizer();
+    bool SetupMoveDataRewrites();
     void StartMoveDataDriver(const TActorContext& ctx);
     void StopMoveDataDriver(const TActorContext& ctx);
 
@@ -557,10 +560,12 @@ private:
         ui64 ReportedRejections = 0;
         // Newest pending cleanup when the queues last drained; the gate waits for cleanup to pass it.
         std::optional<TInstant> CleanupWatermark;
+        // The driver restarts the actualizer for the new set before any gate check may pass.
+        bool TargetsChanged = false;
     };
 
     TMoveDataState MoveDataState;
-    // Drives the move on its own cadence; the tablet only starts and reseeds it.
+    // Owns the move; the tablet records requests, starts the vacuum leg and pokes it.
     TActorId MoveDataDriverId;
 
     // Number of metadata-accessor requests this tablet has in flight; gates SetupMetadata.
@@ -634,6 +639,7 @@ private:
     void StartMetadataRequests(
         std::vector<NOlap::TCSMetadataRequest>&& requests, const NOlap::NResourceBroker::NSubscribe::TTaskContext& taskContext);
     bool SetupTtl();
+    void StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges);
     void SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHolders);
     void SetupCleanupSchemas();

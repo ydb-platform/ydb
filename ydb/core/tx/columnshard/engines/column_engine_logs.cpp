@@ -665,7 +665,8 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
 }
 
 std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
-    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit, const bool moveDataOnly) noexcept {
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit,
+    const NActualizer::EActualizationScope scope) noexcept {
     AFL_VERIFY(dataLocksManager);
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
         {"event", "StartTtl"},
@@ -683,7 +684,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             }
             g->RefreshTiering(i.second);
             context.ResetActualInstantForTest();
-            g->BuildActualizationTasks(context, actualizationLag, moveDataOnly);
+            g->BuildActualizationTasks(context, actualizationLag, scope);
         }
     }
 
@@ -693,7 +694,7 @@ std::vector<std::shared_ptr<TTTLColumnEngineChanges>> TColumnEngineForLogs::Star
             if (pathEviction.contains(i.first)) {
                 continue;
             }
-            i.second->BuildActualizationTasks(context, actualizationLag, moveDataOnly);
+            i.second->BuildActualizationTasks(context, actualizationLag, scope);
         }
     } else {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION, "",
@@ -747,10 +748,6 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
         AddCleanupPortion(portionInfo);
     }
     SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
-}
-
-void TColumnEngineForLogs::OnPortionImported(const std::shared_ptr<TPortionInfo>& portionInfo) {
-    GetGranulePtrVerified(portionInfo->GetPathId())->OnPortionImported(portionInfo);
 }
 
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo) {

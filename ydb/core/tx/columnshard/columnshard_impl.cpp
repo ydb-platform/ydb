@@ -522,6 +522,10 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupCleanupTables(*snapshotHolders);
     SetupMetadata();
     SetupTtl();
+    // The move is the driver's: a tablet wakeup only nudges it.
+    if (!!MoveDataDriverId) {
+        Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
+    }
     SetupGC();
 
     RecheckForcedCompactions(NActors::TActivationContext::AsActorContext());
@@ -918,19 +922,17 @@ void TColumnShard::SetupMoveDataMetadata() {
 bool TColumnShard::SetupTtl() {
     const bool ttlEnabled = AppDataVerified().ColumnShardConfig.GetTTLEnabled() &&
                             NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL);
-    // The move extracts tasks from this loop: TTL off must not stop the move, nor resume tiering.
-    if (!ttlEnabled && !MoveDataState.Active) {
+    if (!ttlEnabled) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_ttl"},
             {"reason", "disabled"});
         return false;
     }
-    const bool moveDataOnly = !ttlEnabled;
     Counters.GetCSCounters().OnSetupTtl();
 
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
-    std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges =
-        TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit, moveDataOnly);
+    std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
+        {}, DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::ExceptMoveData);
 
     if (indexChanges.empty()) {
         YDB_LOG_DEBUG_COMP(NActors::NStructuredLog::TLogStack::GetComponent(), "Dump background, skipReason",
@@ -938,7 +940,25 @@ bool TColumnShard::SetupTtl() {
             {"skipReason", "no_changes"});
         return false;
     }
+    StartTtlChanges(std::move(indexChanges));
+    return true;
+}
 
+bool TColumnShard::SetupMoveDataRewrites() {
+    if (!MoveDataState.Active || !TablesManager.HasPrimaryIndex()) {
+        return false;
+    }
+    const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
+    std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges = TablesManager.MutablePrimaryIndex().StartTtl(
+        {}, DataLocksManager, memoryUsageLimit, NOlap::NActualizer::EActualizationScope::MoveDataOnly);
+    if (indexChanges.empty()) {
+        return false;
+    }
+    StartTtlChanges(std::move(indexChanges));
+    return true;
+}
+
+void TColumnShard::StartTtlChanges(std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>>&& indexChanges) {
     auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
     const ui64 tieringStageMemoryLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringStageMemoryLimit() : 1000000000;
     for (auto&& i : indexChanges) {
@@ -959,7 +979,6 @@ bool TColumnShard::SetupTtl() {
                     GetLastCompletedTx(), TabletActivityImpl, false), env, NConveyorComposite::ESpecialTaskCategory::Compaction);
         }
     }
-    return true;
 }
 
 void TColumnShard::SetupCleanupPortions(const NOlap::ISnapshotHolders& snapshotHolders) {

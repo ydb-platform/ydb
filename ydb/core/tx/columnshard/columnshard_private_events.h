@@ -525,8 +525,7 @@ struct TEvPrivate {
     // The move's own cadence, so it no longer rides the tablet's periodic wakeup.
     struct TEvMoveDataWakeup: public TEventLocal<TEvMoveDataWakeup, EvMoveDataWakeup> {};
 
-    // Hive resent TEvMoveData: merge the groups and restart the actualizer, without re-handling.
-    // An accessor batch landed: re-arm the move's requests on the driver's turn, not the tablet's.
+    // Run one driver turn now instead of waiting for the cadence tick.
     struct TEvMoveDataPoke: public TEventLocal<TEvMoveDataPoke, EvMoveDataPoke> {};
 };
 

@@ -214,7 +214,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(mgr->HasCollectedBeforeCurrentGeneration(), "the committed first round covers every earlier generation");
     }
 
-    // A failed rewrite returns its portion through AddPortion; it must re-enter Pending even past the admission deadline.
+    // A failed rewrite returns its portion through AddPortion; it must re-enter Pending however late that happens.
     Y_UNIT_TEST(SubmittedPortionReentersPendingWhenItsChangeFails) {
         static constexpr ui64 PortionId = 7;
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         actualizer.SimulateTaskSubmissionForTest(PortionId);
 
-        // Past the deadline only InitialPortionIds membership admits the returned portion, so it must have survived submission.
+        // Only InitialPortionIds membership admits the returned portion, so it must have survived submission.
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
         actualizer.AddPortion(
             MakeDefaultTierPortion(PortionId), NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
@@ -319,8 +319,8 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             FreezeCleanupWatermark(kT, kT - TDuration::Seconds(1)), kT, "a running cleanup older than pending does not lower it");
     }
 
-    // A local write after Refresh cannot hold a target blob; an import keeps the source's blob ids and must be admitted.
-    Y_UNIT_TEST(LocalWriteAfterRefreshIsNotAdoptedButAnImportIs) {
+    // Live groups are rejected, so a portion created after the session started cannot hold a target blob.
+    Y_UNIT_TEST(PortionCreatedAfterTheSessionStartedIsNotAdopted) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
         TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, schema.Index);
         const TInstant start = TInstant::Seconds(1000);
@@ -328,17 +328,8 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
         actualizer.AddPortion(MakeDefaultTierPortion(1), NOlap::NActualizer::TAddExternalContext(start + TDuration::Minutes(1), noPortions));
-        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(1), "a local write the session did not start with must not be adopted");
+        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(1), "a portion the session did not start with must not be adopted");
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0, "adopting it would hold the response back");
-
-        const auto imported = MakeDefaultTierPortion(2);
-        actualizer.AddImportedPortion(*imported);
-        UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(2), "an imported portion may sit in a target group and must be checked");
-        UNIT_ASSERT_VALUES_EQUAL_C(
-            actualizer.GetMoveDataQueueSizes().GetTotal(), 1, "the import must hold the response until its blobs are checked");
-
-        actualizer.AddPortion(imported, NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
-        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 1, "re-adding the import must not count it twice");
     }
 
     // A compaction-level move removes and re-adds the same portion; it stays ours however late it returns.

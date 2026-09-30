@@ -202,16 +202,20 @@ void TGranuleMeta::UpsertPortionOnLoad(const std::shared_ptr<TPortionInfo>& port
 }
 
 void TGranuleMeta::BuildActualizationTasks(
-    NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const bool moveDataOnly) const {
-    if (context.GetActualInstant() < NextActualizations) {
+    NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const NActualizer::EActualizationScope scope) const {
+    // The lag paces tiering; the move runs on its own cadence and a tiering pass must not starve it.
+    const bool paced = (scope != NActualizer::EActualizationScope::MoveDataOnly);
+    if (paced && context.GetActualInstant() < NextActualizations) {
         YDB_LOG_DEBUG("",
             {"event", "skip_actualization"},
             {"waiting", NextActualizations - context.GetActualInstant()});
         return;
     }
     NActualizer::TExternalTasksContext extTasks(Portions);
-    ActualizationIndex->ExtractActualizationTasks(context, extTasks, moveDataOnly);
-    NextActualizations = context.GetActualInstant() + actualizationLag;
+    ActualizationIndex->ExtractActualizationTasks(context, extTasks, scope);
+    if (paced) {
+        NextActualizations = context.GetActualInstant() + actualizationLag;
+    }
 }
 
 void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,

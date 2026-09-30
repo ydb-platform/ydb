@@ -21,7 +21,7 @@ class TMoveDataActualizer: public IActualizer {
 private:
     const THashSet<ui32> TargetGroups;
     const TVersionedIndex& VersionedIndex;
-    // Fixed at Refresh: live groups are rejected, so only a data-sharing import (AddImportedPortion) can join later.
+    // Fixed at Refresh: Handle(TEvMoveData) rejects live groups, so a portion created afterwards cannot hold a target blob.
     THashSet<ui64> InitialPortionIds;
     // Portions waiting for accessor-load so we can check their DsGroup.
     THashSet<ui64> PendingPortionIds;
@@ -67,10 +67,6 @@ protected:
         return PendingPortionIds.contains(portionId);
     }
 
-    bool IsInPortionsToMove(ui64 portionId) const {
-        return PortionAddress.contains(portionId);
-    }
-
     void AddToInitialAndPendingForTest(ui64 portionId) {
         InitialPortionIds.emplace(portionId);
         InFlightPortionIds.erase(portionId);
@@ -94,8 +90,6 @@ public:
     static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);
 
     void Refresh(const TAddExternalContext& externalContext, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
-    // A portion imported by data sharing keeps the source's blob ids, so it may sit in a target group.
-    void AddImportedPortion(const TPortionInfo& info);
 
     TMoveDataActualizer(const THashSet<ui32>& targetGroups, const TVersionedIndex& versionedIndex)
         : TargetGroups(targetGroups)

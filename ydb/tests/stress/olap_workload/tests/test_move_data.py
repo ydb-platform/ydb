@@ -2,6 +2,7 @@
 import os
 
 import pytest
+import requests
 import yatest
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.fixtures import ydb_database_ctx
@@ -30,6 +31,19 @@ class TestOlapWorkloadMoveData(StressFixture):
             },
         )
 
+    # Hive counts every TEvMoveDataResponse it gets back; a ColumnShard answers only after its blobs left the group.
+    def _moves_answered(self):
+        total = 0
+        for node in list(self.cluster.nodes.values()) + list(self.cluster.slots.values()):
+            try:
+                data = requests.get(f"http://localhost:{node.mon_port}/counters/counters=tablets/json", timeout=10).json()
+            except Exception:
+                continue
+            for sensor in data.get("sensors", []):
+                if sensor.get("labels", {}).get("sensor") == "Hive/ShrinkMoveDataAnswered":
+                    total += int(sensor.get("value", 0))
+        return total
+
     def test_move_data(self):
         # Two units: removing one has to leave a unit behind.
         with ydb_database_ctx(
@@ -43,3 +57,4 @@ class TestOlapWorkloadMoveData(StressFixture):
                     "--duration", self.base_duration,
                 ]
             )
+            assert self._moves_answered() > 0, "the workload ran but no ColumnShard answered a MoveData request"

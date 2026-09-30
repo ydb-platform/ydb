@@ -267,6 +267,48 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         UNIT_ASSERT_VALUES_EQUAL_C(f.ReadRows(), 1000, "a refused move must not touch the data");
     }
 
+    // A poke queued behind the tablet's death but ahead of the driver's poison must not touch the dead tablet.
+    Y_UNIT_TEST(PokeQueuedDuringTabletShutdownDoesNotTouchTheDeadTablet) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        f.ReassignPastWrittenData();
+
+        // Rewriting off keeps the session active, so the driver is alive when the tablet dies.
+        f.Controller->DisableBackground(EBackground::MoveData);
+        f.StartMove();
+        TActorId driver;
+        f.Runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->HasEvent() && (dynamic_cast<const TEvPrivate::TEvMoveDataWakeup*>(ev->GetBase()) ||
+                                      dynamic_cast<const TEvPrivate::TEvMoveDataPoke*>(ev->GetBase()))) {
+                driver = ev->GetRecipientRewrite();
+            }
+            // Delivered before the tablet handles its death: the poke lands ahead of the poison from CleanupActors.
+            if (ev->GetTypeRewrite() == TEvTablet::EvTabletDead && driver) {
+                f.Runtime.Send(new IEventHandle(driver, f.Sender, new TEvPrivate::TEvMoveDataPoke()));
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        UNIT_ASSERT_C(!f.DriveGate(10), "the move must stay open while rewriting is disabled");
+        UNIT_ASSERT_C(driver, "the driver never ticked, so the shutdown race cannot be arranged");
+
+        f.Restart();
+        f.Runtime.DispatchEvents({}, TDuration::Seconds(1));
+
+        // The next incarnation must still be able to run a whole session.
+        f.Runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+        f.Controller->EnableBackground(EBackground::MoveData);
+        f.StartMove();
+        const auto response = f.DriveGate(150, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(2, 1000, 1001);
+            }
+        });
+        UNIT_ASSERT_C(response, "no TEvMoveDataResponse from the incarnation after the shutdown race");
+        f.AssertDrainedSuccess(response);
+    }
+
     // A second request naming a further historical group is merged on receipt, so the answer covers both groups.
     Y_UNIT_TEST(ExpandedRequestIsAnsweredOnlyAfterEveryNamedGroupIsDrained) {
         TMoveDataFixture f;

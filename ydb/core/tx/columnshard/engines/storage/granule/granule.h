@@ -250,10 +250,6 @@ public:
         it->second->CommitToDatabase(wrapper);
     }
 
-    void OnPortionImported(const std::shared_ptr<TPortionInfo>& portion) {
-        ActualizationIndex->OnPortionImported(portion);
-    }
-
     void AbortPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
         // Actualizers never see a portion that carries a remove snapshot, so the move session learns of the abort here.
         ActualizationIndex->OnUncommittedPortionAborted(GetInsertedPortionVerifiedPtr(insertWriteId)->GetPortionId());
@@ -313,8 +309,8 @@ public:
         return OptimizerPlanner->GetBucketPositions();
     }
 
-    void BuildActualizationTasks(
-        NActualizer::TTieringProcessContext& context, const TDuration actualizationLag, const bool moveDataOnly = false) const;
+    void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag,
+        const NActualizer::EActualizationScope scope = NActualizer::EActualizationScope::All) const;
 
     std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {

@@ -98,18 +98,16 @@ class WorkloadMoveData(WorkloadBase):
         self.initial_units = self.unit_count
         return True
 
-    def _restore_units(self, timeout=None):
-        # A rejected grow leaves the pool small; a shrink must never start from that state.
+    def _restore_units(self):
+        # Read CMS first: a cached count is stale after any alter whose status read failed.
+        units = self._storage_units()
+        if units is None:
+            return False
+        self.unit_count = units.count
         if self.unit_count >= self.initial_units:
             return True
         self._alter_units(self.initial_units - self.unit_count)
-        saved = self.converge_timeout
-        if timeout is not None:
-            self.converge_timeout = timeout
-        try:
-            return self._wait_units(self.initial_units)
-        finally:
-            self.converge_timeout = saved
+        return self._wait_units(self.initial_units)
 
     def _cycle(self):
         if not self._restore_units():

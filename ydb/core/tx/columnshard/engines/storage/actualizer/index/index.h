@@ -44,8 +44,8 @@ public:
     TGranuleActualizationIndex(
         const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
-    void ExtractActualizationTasks(
-        TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext, const bool moveDataOnly = false) const;
+    void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext,
+        const EActualizationScope scope = EActualizationScope::All) const;
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
@@ -54,7 +54,6 @@ public:
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
     void StopMoveData();
     void OnUncommittedPortionAborted(const ui64 portionId);
-    void OnPortionImported(const std::shared_ptr<TPortionInfo>& portion);
     TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);

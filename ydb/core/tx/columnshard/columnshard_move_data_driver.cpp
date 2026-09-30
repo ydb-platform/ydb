@@ -3,21 +3,33 @@
 
 namespace NKikimr::NColumnShard {
 
-void TMoveDataDriver::Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx) {
-    if (Self->MoveDataState.Active) {
-        Self->SetupMoveDataMetadata();
-        Self->CheckMoveDataGate(ctx);
+void TMoveDataDriver::StartAndCheckGate(const TActorContext& ctx) {
+    if (!Self->MoveDataState.Active) {
+        return;
     }
-    // Keep ticking even when idle: a reseed may arrive before the tablet restarts us.
+    if (Self->MoveDataState.TargetsChanged) {
+        Self->RestartMoveDataActualizer();
+    }
+    Self->SetupMoveDataMetadata();
+    Self->SetupMoveDataRewrites();
+    Self->CheckMoveDataGate(ctx);
+}
+
+void TMoveDataDriver::Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx) {
+    if (!IsOwnerAlive()) {
+        PassAway();
+        return;
+    }
+    StartAndCheckGate(ctx);
     ScheduleWakeup(ctx);
 }
 
 void TMoveDataDriver::Handle(TEvPrivate::TEvMoveDataPoke::TPtr&, const TActorContext& ctx) {
-    if (!Self->MoveDataState.Active) {
+    if (!IsOwnerAlive()) {
+        PassAway();
         return;
     }
-    Self->SetupMoveDataMetadata();
-    Self->CheckMoveDataGate(ctx);
+    StartAndCheckGate(ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

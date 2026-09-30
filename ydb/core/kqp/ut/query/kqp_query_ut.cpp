@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
     Y_UNIT_TEST_TWIN(SqlPathAliasesWithNewRbo, NewRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
-        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
         auto* rule = appConfig.MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc("/kfront");
         rule->SetDst("/Root");
@@ -102,6 +102,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_C(queryReadResult.IsSuccess(), queryReadResult.GetIssues().ToString());
         CompareYson(R"([[1u]])", FormatResultSetYson(queryReadResult.GetResultSet(0)));
 
+        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+        UNIT_ASSERT_VALUES_EQUAL(
+            counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val() > 0, NewRbo);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val(), 0);
+
         for (const auto& query : {
             R"(
                 CREATE VIEW `/kfront/InnerView` WITH (security_invoker = true) AS
@@ -126,10 +131,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             viewQuery, NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(queryViewResult.IsSuccess(), queryViewResult.GetIssues().ToString());
         CompareYson(R"([[1u]])", FormatResultSetYson(queryViewResult.GetResultSet(0)));
-
-        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-        UNIT_ASSERT_VALUES_EQUAL(
-            counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val() > 0, NewRbo);
     }
 
     Y_UNIT_TEST(PreparedQueryInvalidate) {

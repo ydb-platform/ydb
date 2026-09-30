@@ -7,6 +7,8 @@
 #include <util/generic/vector.h>
 #include <util/system/mutex.h>
 
+#include <optional>
+
 namespace NKikimr::NPDisk {
 
 ////////////////////////////////////////////////////////////////////////////
@@ -26,6 +28,14 @@ constexpr ui64 OverestimationWindowNs = OverestimationWindowMs * 1'000'000ull;
 // Fixed-point scale for the overestimation ratio counters (e.g. a value of
 // 1000 in the counter means a ratio of 1.0).
 constexpr ui64 OverestimationRatioScale = 1000ull;
+
+// A device is considered chronically slow after the published overestimation
+// ratio stays strictly above this limit for the whole duration below.  These
+// values are intentionally expressed in the counter's fixed-point scale and
+// milliseconds so the detector can be driven by a monotonic clock and tested
+// without sleeping.
+constexpr ui64 OverestimationSlowLimit = 100'000ull;
+constexpr ui64 OverestimationSlowDurationMs = 15ull * 60 * 1000;
 
 // Small constant bias added to the actual-cost accumulator (and to the
 // estimated-cost denominator) before computing the ratio, to avoid a
@@ -92,6 +102,33 @@ inline const TOverestimationRatioResult& SelectPublishedOverestimationResult(
         const TOverestimationRatioResult& mergedResult) {
     return useMerged ? mergedResult : legacyResult;
 }
+
+// Tracks one uninterrupted interval above the chronic-slow threshold.  The
+// caller owns the persistent latch: Update() only reports when it should be
+// set, while Reset() is used after an explicit administrative latch reset.
+class TDeviceSlowdownDetector {
+public:
+    bool Update(ui64 overestimationRatio, ui64 nowMs,
+            ui64 slowLimit = OverestimationSlowLimit,
+            ui64 slowDurationMs = OverestimationSlowDurationMs) {
+        if (overestimationRatio <= slowLimit) {
+            SlowSinceMs.reset();
+            return false;
+        }
+
+        if (!SlowSinceMs || nowMs < *SlowSinceMs) {
+            SlowSinceMs = nowMs;
+        }
+        return nowMs - *SlowSinceMs >= slowDurationMs;
+    }
+
+    void Reset() {
+        SlowSinceMs.reset();
+    }
+
+private:
+    std::optional<ui64> SlowSinceMs;
+};
 
 // Aggregates raw TDeviceIoSample-s produced by multiple sources that all issue
 // I/O to the same physical device (PDisk's own block device thread, DDisk's

@@ -5,10 +5,12 @@
 #include "blobstorage_pdisk_params.h"
 #include "blobstorage_pdisk_tools.h"
 #include "blobstorage_pdisk_ut_env.h"
+#include "blobstorage_pdisk_ut_http_request.h"
 
 #include <type_traits>
 #include <library/cpp/logger/record.h>
 #include <library/cpp/logger/stream.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/driver_lib/version/ut/ut_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -1135,6 +1137,60 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::ChunkQuotaError == 12);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::DeviceIoError == 13);
         UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Stopped == 14);
+        UNIT_ASSERT(NKikimrBlobStorage::TPDiskState::Slow == 18);
+    }
+
+    Y_UNIT_TEST(SlowDiskLatchIsPersistentAndCanBeResetOverHttp) {
+        TActorTestContext testCtx({
+            .OverestimationSlowDurationMs = 0,
+        });
+        auto* pdisk = testCtx.GetPDisk();
+
+        const ui32 nodeId = testCtx.GetRuntime()->GetFirstNodeId();
+        testCtx.GetRuntime()->RegisterService(NNodeWhiteboard::MakeNodeWhiteboardServiceId(nodeId), testCtx.Sender);
+        testCtx.GetRuntime()->RegisterService(MakeBlobStorageNodeWardenID(nodeId), testCtx.Sender);
+
+        *pdisk->Mon.DeviceOverestimationRatio = NPDisk::OverestimationSlowLimit + 1;
+        testCtx.Send(new TEvents::TEvWakeup());
+
+        bool slowReported = false;
+        for (ui32 i = 0; i < 10 && !slowReported; ++i) {
+            const auto ev = testCtx.Recv<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate>();
+            slowReported = ev->Record.GetState() == NKikimrBlobStorage::TPDiskState::Slow;
+        }
+        UNIT_ASSERT_C(slowReported, "PDisk did not publish the Slow state to whiteboard");
+
+        const auto metrics = testCtx.Recv<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+        UNIT_ASSERT_VALUES_EQUAL(metrics->Record.PDisksMetricsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics->Record.GetPDisksMetrics(0).GetState(),
+            NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 1);
+        UNIT_ASSERT(pdisk->SysLogRecord.IsSlow());
+
+        testCtx.RestartPDiskSync();
+        pdisk = testCtx.GetPDisk();
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Slow);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 1);
+        UNIT_ASSERT(pdisk->SysLogRecord.IsSlow());
+
+        // Keep the metric healthy while resetting, otherwise the zero-duration
+        // test setting would immediately set the latch again.
+        *pdisk->Mon.DeviceOverestimationRatio = NPDisk::OverestimationRatioScale;
+        THttpRequestMock httpRequest;
+        httpRequest.CgiParameters.emplace("resetSlowPDisk", "");
+        NMonitoring::TMonService2HttpRequest monRequest(nullptr, &httpRequest, nullptr, nullptr, "", nullptr);
+        testCtx.Send(new NMon::TEvHttpInfo(monRequest));
+        testCtx.Recv<NMon::TEvHttpInfoRes>();
+
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 0);
+        UNIT_ASSERT(!pdisk->SysLogRecord.IsSlow());
+
+        testCtx.RestartPDiskSync();
+        pdisk = testCtx.GetPDisk();
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.SlowPDisk->Val(), 0);
+        UNIT_ASSERT(!pdisk->SysLogRecord.IsSlow());
     }
 
     Y_UNIT_TEST(TestPDiskActorErrorState) {

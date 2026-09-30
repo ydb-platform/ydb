@@ -1830,7 +1830,11 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             }
 
             // Now it's ok to write both logs and data.
-            *Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
+            const bool isSlow = SysLogRecord.IsSlow();
+            *Mon.SlowPDisk = isSlow;
+            *Mon.PDiskState = isSlow
+                ? NKikimrBlobStorage::TPDiskState::Slow
+                : NKikimrBlobStorage::TPDiskState::Normal;
             *Mon.PDiskBriefState = TPDiskMon::TPDisk::OK;
             *Mon.PDiskDetailedState = TPDiskMon::TPDisk::EverythingIsOk;
 

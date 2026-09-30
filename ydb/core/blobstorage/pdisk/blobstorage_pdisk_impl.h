@@ -292,6 +292,7 @@ public:
     // stats
     TAtomic NonRealTimeMs = 0;
     TAtomic SlowDeviceMs = 0;
+    TDeviceSlowdownDetector DeviceSlowdownDetector;
 
     const bool UseHugePages;
 
@@ -425,6 +426,8 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Whiteboard and HTTP reports creation
     void WhiteboardReport(TWhiteboardReport &whiteboardReport); // Called by actor
+    bool UpdateSlowDiskState(ui64 nowMs);
+    bool SetSlowDiskState(bool slow);
     void RenderState(IOutputStream &str, THttpInfo &httpInfo);
     void OutputHtmlOwners(TStringStream &str);
     void OutputHtmlLogChunksDetails(TStringStream &str);

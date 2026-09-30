@@ -29,7 +29,13 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                     TString briefStateStr = TPDiskMon::TPDisk::BriefStateToStr(Mon.PDiskBriefState->Val());
                     switch(Mon.PDiskBriefState->Val()) {
                     case TPDiskMon::TPDisk::OK:
-                        TABLED() {GREEN_TEXT(str, stateStr);}
+                        TABLED() {
+                            if (Mon.PDiskState->Val() == NKikimrBlobStorage::TPDiskState::Slow) {
+                                RED_TEXT(str, stateStr);
+                            } else {
+                                GREEN_TEXT(str, stateStr);
+                            }
+                        }
                         TABLED() {GREEN_TEXT(str, briefStateStr);}
                         break;
                     case TPDiskMon::TPDisk::Booting:
@@ -163,6 +169,17 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                             success: reloadPage
                         });
                     }
+
+                    function sendResetSlowRequest() {
+                        if (confirm("Reset the persistent slow-device latch?")) {
+                            $.ajax({
+                                url: "",
+                                data: "resetSlowPDisk=",
+                                method: "POST",
+                                success: function() { window.location.reload(); }
+                            });
+                        }
+                    }
                 </script>
             )___";
 
@@ -197,6 +214,12 @@ void TPDisk::RenderState(IOutputStream &str, THttpInfo &httpInfo) {
                     </div>
                 </div>
             )___";
+
+            if (SysLogRecord.IsSlow()) {
+                str << "<button onclick='sendResetSlowRequest()' class='btn btn-danger' style='margin:5px'>";
+                str << "Reset slow latch";
+                str << "</button>";
+            }
 
             if (Cfg->SectorMap) {
                 str << "<button onclick='sendStopRequest()' name='stopPDisk' class='btn btn-default' ";
@@ -583,6 +606,9 @@ void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
 
 void TPDisk::HttpInfo(THttpInfo &httpInfo) {
     TEvHttpInfoResult *reportResult = new TEvHttpInfoResult(httpInfo.EndCustomer);
+    if (httpInfo.ResetSlowDisk) {
+        SetSlowDiskState(false);
+    }
     if (httpInfo.DoGetSchedule) {
         TStringStream out;
         out << "HTTP/1.1 200 Ok\r\n"

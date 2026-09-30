@@ -407,18 +407,24 @@ struct TNonceSet {
 };
 
 struct TSysLogRecord {
+    enum EFlags : ui32 {
+        FlagSlow = 1 << 0,
+    };
+
     // TODO: use atomics here
     ui64 Version;
     TNonceSet Nonces;
     TChunkIdx LogHeadChunkIdx;
-    ui32 Reserved1;
+    // This field used to be Reserved1 and was always zero. Reusing it keeps
+    // the on-disk record layout compatible with all existing versions.
+    ui32 Flags;
     ui64 LogHeadChunkPreviousNonce;
     TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
         : Version(PDISK_SYS_LOG_RECORD_VERSION_8)
         , LogHeadChunkIdx(0)
-        , Reserved1(0)
+        , Flags(0)
         , LogHeadChunkPreviousNonce((ui64)-1)
     {
         for (size_t i = 0; i < 256; ++i) {
@@ -430,6 +436,18 @@ struct TSysLogRecord {
         return ToString(false);
     }
 
+    bool IsSlow() const {
+        return Flags & FlagSlow;
+    }
+
+    void SetSlow(bool slow) {
+        if (slow) {
+            Flags |= FlagSlow;
+        } else {
+            Flags &= ~FlagSlow;
+        }
+    }
+
     TString ToString(bool isMultiline) const {
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
@@ -437,6 +455,7 @@ struct TSysLogRecord {
         str << " Version# " << Version << x;
         str << " NonceSet# " << Nonces.ToString(isMultiline) << x;
         str << " LogHeadChunkIdx# " << LogHeadChunkIdx << x;
+        str << " Slow# " << IsSlow() << x;
         str << " LogHeadChunkPreviousNonce# " << LogHeadChunkPreviousNonce << x;
         for (ui32 i = 0; i < 256; ++i) {
             if (OwnerVDisks[i] != TVDiskID::InvalidId) {

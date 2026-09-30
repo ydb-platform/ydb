@@ -183,7 +183,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
                 for (const auto& root: roots) {
                     auto opRoot = PlanConverter(TypeCtx, ctx).ConvertRoot(root.first, root.second);
                     opRoot->ComputeParents();
-                    Roots.push_back(opRoot);
+                    Roots.push_back(std::move(opRoot));
                 }
 
                 if (Roots.size() > 1) {
@@ -218,27 +218,27 @@ NThreading::TFuture<void> TKqpNewRBOTransformer::DoGetAsyncFuture(const TExprNod
     return ColumnStatisticsReadiness;
 }
 
-bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(const TIntrusivePtr<IOperator>& op) const {
+bool TKqpNewRBOTransformer::IsSuitableToCollectStatistics(IOperator* op) const {
     return op->Props.Metadata.has_value();
 }
 
-void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TIntrusivePtr<IOperator>& op) {
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(IOperator* op, const TColumnLineage& lineage) {
     if (MatchOperator<TOpFilter>(op)) {
-        CollectTablesAndColumnsNames(CastOperator<TOpFilter>(op)->GetFilterExpression(), op->Props);
+        const auto& filter = CastOperator<TOpFilter>(*op);
+        CollectTablesAndColumnsNames(filter.GetFilterExpression(), *filter.GetInput(), lineage);
     } else if (MatchOperator<TOpJoin>(op)) {
         // Fetching statistics for join cardinality correction.
-        CollectJoinKeysColumns(CastOperator<TOpJoin>(op), op->Props);
+        CollectJoinKeysColumns(CastOperator<TOpJoin>(op), lineage);
     } else if (MatchOperator<TOpRead>(op)) {
         // Fetching statistics for filters already pushed down into the read.
         const auto read = CastOperator<TOpRead>(op);
         if (read->OriginalPredicate.has_value()) {
-            CollectTablesAndColumnsNames(read->OriginalPredicate.value(), op->Props);
+            CollectTablesAndColumnsNames(read->OriginalPredicate.value(), *read, lineage);
         }
     }
 }
 
-void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr, const TPhysicalOpProps& props) {
-    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
+void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr, const IOperator& input, const TColumnLineage& lineage) {
     auto lambda = TCoLambda(expr.GetLambda());
 
     // Request only the statistic each filter predicate actually consumes during selectivity estimation: 
@@ -250,12 +250,15 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
 
     using TUsedMember = TPredicateSelectivityComputer::TColumnStatisticsUsedMembers::TColumnStatisticsUsedMember;
     for (const auto& item : computer.GetColumnStatsUsedMembers().Data) {
-        const auto it = mapping.find(TInfoUnit(item.Member.Name().StringValue()));
-        if (it == mapping.end() || it->second.TableName == "") {
+        if (item.Member.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            continue; // Nested struct fields are not IU IDs, even if numeric.
+        }
+        const auto* entry = FindSourceStatistics(input, GetMemberId(item.Member.Ref()), lineage);
+        if (!entry || entry->TableName == "") {
             continue;
         }
-        const auto& tableName = it->second.TableName;
-        const auto& colName = it->second.ColumnName;
+        const auto& tableName = entry->TableName;
+        const auto& colName = entry->ColumnName;
         switch (item.PredicateType) {
             case TUsedMember::EEquality:
                 CMColumnsByTableName[tableName].insert(colName);
@@ -266,82 +269,82 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(const TExpression& expr
         }
     }
 
-    THashMap<TString, std::pair<TVector<TInfoUnit>, TVector<TInfoUnit>>> keysByTablePair;
+    THashMap<TString, std::pair<TVector<const TColumnLineageEntry*>, TVector<const TColumnLineageEntry*>>> keysByTablePair;
     for (const auto& [lhsMember, rhsMember] : computer.GetMemberEqualities()) {
-        const TInfoUnit lhsUnit(lhsMember.Name().StringValue());
-        const TInfoUnit rhsUnit(rhsMember.Name().StringValue());
-
-        const auto lhsIt = mapping.find(lhsUnit);
-        const auto rhsIt = mapping.find(rhsUnit);
-        if (lhsIt == mapping.end() || rhsIt == mapping.end()) {
+        if (lhsMember.Struct().Raw() != lambda.Args().Arg(0).Raw() || rhsMember.Struct().Raw() != lambda.Args().Arg(0).Raw()) {
+            continue; // Nested struct fields are not IU IDs, even if numeric.
+        }
+        const auto* lhsEntry = FindSourceStatistics(input, GetMemberId(lhsMember.Ref()), lineage);
+        const auto* rhsEntry = FindSourceStatistics(input, GetMemberId(rhsMember.Ref()), lineage);
+        if (!lhsEntry || !rhsEntry) {
             continue;
         }
-        const auto& lhsTable = lhsIt->second.TableName;
-        const auto& rhsTable = rhsIt->second.TableName;
+        const auto& lhsTable = lhsEntry->TableName;
+        const auto& rhsTable = rhsEntry->TableName;
         if (lhsTable.empty() || rhsTable.empty() || lhsTable == rhsTable) {
             continue;
         }
 
-        HistColumnsByTableName[lhsTable].insert(lhsIt->second.ColumnName);
-        HistColumnsByTableName[rhsTable].insert(rhsIt->second.ColumnName);
+        HistColumnsByTableName[lhsTable].insert(lhsEntry->ColumnName);
+        HistColumnsByTableName[rhsTable].insert(rhsEntry->ColumnName);
 
         auto& keys = keysByTablePair[TStringBuilder() << lhsTable << '\0' << rhsTable];
-        keys.first.push_back(lhsUnit);
-        keys.second.push_back(rhsUnit);
+        keys.first.push_back(lhsEntry);
+        keys.second.push_back(rhsEntry);
     }
 
     for (const auto& [_, keys] : keysByTablePair) {
-        CollectJoinKeysTuple(keys.first, props);
-        CollectJoinKeysTuple(keys.second, props);
+        CollectJoinKeysTuple(keys.first);
+        CollectJoinKeysTuple(keys.second);
     }
 }
 
-void TKqpNewRBOTransformer::CollectJoinKeysColumns(const TIntrusivePtr<TOpJoin>& join, const TPhysicalOpProps& props) {
-    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
-
+void TKqpNewRBOTransformer::CollectJoinKeysColumns(TOpJoin* join, const TColumnLineage& lineage) {
     // For join cardinality correction, only the equi-width histogram of both join-key columns are needed.
-    auto requestHistogram = [&](const TInfoUnit& key) {
-        const auto it = mapping.find(key);
-        if (it == mapping.end() || it->second.TableName == "") {
+    // Keys of a side the join does not output are skipped.
+    const auto& outputIUs = join->GetOutputIUs();
+    auto findSource = [&](TInfoUnitId key) {
+        return outputIUs.Contains(key) ? FindSourceStatistics(*join, key, lineage) : nullptr;
+    };
+    auto requestHistogram = [&](const TColumnLineageEntry* entry) {
+        if (!entry || entry->TableName == "") {
             return;
         }
-        const auto& tableName = it->second.TableName;
-        const auto& colName = it->second.ColumnName;
+        const auto& tableName = entry->TableName;
+        const auto& colName = entry->ColumnName;
         HistColumnsByTableName[tableName].insert(colName);
     };
 
-    TVector<TInfoUnit> lhsKeys;
-    TVector<TInfoUnit> rhsKeys;
-    for (const auto& joinKey : join->JoinKeys) {
-        requestHistogram(joinKey.Left);
-        requestHistogram(joinKey.Right);
-        lhsKeys.push_back(joinKey.Left);
-        rhsKeys.push_back(joinKey.Right);
+    TVector<const TColumnLineageEntry*> lhsKeys;
+    TVector<const TColumnLineageEntry*> rhsKeys;
+    for (const auto& [lhsKey, rhsKey, equalNulls] : join->JoinKeys.Items()) {
+        lhsKeys.push_back(findSource(lhsKey));
+        rhsKeys.push_back(findSource(rhsKey));
+        requestHistogram(lhsKeys.back());
+        requestHistogram(rhsKeys.back());
     }
 
-    CollectJoinKeysTuple(lhsKeys, props);
-    CollectJoinKeysTuple(rhsKeys, props);
+    CollectJoinKeysTuple(lhsKeys);
+    CollectJoinKeysTuple(rhsKeys);
 }
 
-void TKqpNewRBOTransformer::CollectJoinKeysTuple(const TVector<TInfoUnit>& joinKeys, const TPhysicalOpProps& props) {
+// Each key is its source column, or null when it has none.
+void TKqpNewRBOTransformer::CollectJoinKeysTuple(const TVector<const TColumnLineageEntry*>& joinKeys) {
     if (joinKeys.size() < 2) {
         return;
     }
 
-    const auto& mapping = props.Metadata->ColumnLineage.Mapping;
-
     TString tableName;
     THashSet<TString> columns;
-    for (const auto& key : joinKeys) {
-        const auto it = mapping.find(key);
-        if (it == mapping.end() || it->second.TableName == "") {
+    for (const auto* entry : joinKeys) {
+        if (!entry || entry->TableName == "") {
             return;
         }
-        if (!tableName.empty() && tableName != it->second.TableName) {
+        if (!tableName.empty() && tableName != entry->TableName) {
             return;
         }
-        tableName = it->second.TableName;
-        columns.insert(it->second.ColumnName);
+        tableName = entry->TableName;
+        columns.insert(entry->ColumnName);
     }
 
     if (columns.size() != joinKeys.size()) {
@@ -389,7 +392,7 @@ void TKqpNewRBOTransformer::CollectTablesAndColumnsNames(TExprContext& ctx) {
         root->ComputePlanMetadata(rboCtx);
         for (const auto& it : *root) {
             if (IsSuitableToCollectStatistics(it.Current)) {
-                CollectTablesAndColumnsNames(it.Current);
+                CollectTablesAndColumnsNames(it.Current, root->PlanProps.ColumnLineage);
             }
         }
     }
@@ -602,28 +605,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     const bool inlineJoinFiltersAfterCBO = KqpCtx.Config->GetEnableInlineJoinFiltersAfterCBO();
     const bool pruneKeyColumns = KqpCtx.Config->GetEnablePruneKeyColumns();
 
-    auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules) {
-        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/true));
-        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
-        rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>(/*pushExpressions*/ false));
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
-        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
-        rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-        rules.emplace_back(std::make_unique<TPushRenameIntoProducerRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/true));
-        rules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
-        rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
-    };
-
     // Prune unused outputs before any rules that require type information.
-    TVector<std::unique_ptr<IRule>> earlyPruningRules;
-    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/true));
-    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
-    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
-    earlyPruningRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/true));
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Early pruning", std::move(earlyPruningRules)));
+    RBO.AddStage(std::make_unique<TGlobalPruningStage>("Early pruning"));
 
     // Expand aggregation.
     TVector<std::unique_ptr<IRule>> expandAggregationRules;
@@ -667,13 +650,19 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughAggregateRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughUnionAllRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughJoinRule>());
+    decorrelationStageRules.emplace_back(std::make_unique<TPushDependentJoinThroughReplicateRule>());
     decorrelationStageRules.emplace_back(std::make_unique<TDependentJoinNotSupportedRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Decorrelation", std::move(decorrelationStageRules)));
 
-    // Normalize aliases and simple maps before the broader logical rewrites start.
-    TVector<std::unique_ptr<IRule>> mapAliasRules;
-    addMapAliasRules(mapAliasRules);
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize maps and aliases", std::move(mapAliasRules)));
+    // Rewrites can introduce new definitions. Remove dead ones and collapse
+    // copies globally.
+    RBO.AddStage(std::make_unique<TGlobalPruningStage>("Prune before inlining"));
+    RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline definitions"));
+
+    TVector<std::unique_ptr<IRule>> pushMapRules;
+    pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+    pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Push map elements", std::move(pushMapRules)));
 
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;
@@ -698,12 +687,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushLimitIntoSortRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites II", std::move(logicalStage_II_Rules)));
 
-    TVector<std::unique_ptr<IRule>> pruningStageRules;
-    pruningStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(pruneKeyColumns));
-    pruningStageRules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
-    pruningStageRules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
-    pruningStageRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(pruneKeyColumns));
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Pruning I", std::move(pruningStageRules)));
+    RBO.AddStage(std::make_unique<TGlobalPruningStage>("Pruning I", pruneKeyColumns));
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
@@ -732,8 +716,11 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     TVector<std::unique_ptr<IRule>> cleanUpCBOStageRules;
     cleanUpCBOStageRules.emplace_back(std::make_unique<TInlineCBOTreeRule>());
     cleanUpCBOStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
-    cleanUpCBOStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/true));
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Clean up after CBO", std::move(cleanUpCBOStageRules)));
+    // Only dead Map elements are pruned here, key columns included.
+    RBO.AddStage(std::make_unique<TGlobalPruningStage>("Prune after CBO", /*pruneKeyColumns=*/true,
+        EPruningScope::MapDefinitions));
+    RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline after CBO"));
 
     if (inlineJoinFiltersAfterCBO) {
         TVector<std::unique_ptr<IRule>> inlineJoinFiltersAfterCBORules;
@@ -743,12 +730,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         inlineJoinFiltersAfterCBORules.emplace_back(std::make_unique<TPushSimpleJoinFilterRule>());
         RBO.AddStage(std::make_unique<TRuleBasedStage>("Inline join filters after CBO", std::move(inlineJoinFiltersAfterCBORules)));
 
-        TVector<std::unique_ptr<IRule>> pruningStage_II_Rules;
-        pruningStage_II_Rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(/*pruneKeyColumns=*/true));
-        pruningStage_II_Rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
-        pruningStage_II_Rules.emplace_back(std::make_unique<TPruneDeadUnionAllColumnsRule>());
-        pruningStage_II_Rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>(/*pruneKeyColumns=*/true));
-        RBO.AddStage(std::make_unique<TRuleBasedStage>("Pruning II", std::move(pruningStage_II_Rules)));
+        RBO.AddStage(std::make_unique<TGlobalPruningStage>("Pruning II"));
+        RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline after join filters"));
     }
 
     // Index lookup join has a different representation from regular join, so we need a special rewrite rule.
@@ -757,9 +740,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Physical rewrites II", std::move(physicalJoinRules)));
 
     // Assign physical stages.
-    TVector<std::unique_ptr<IRule>> assignPhysicalStageRules;
-    assignPhysicalStageRules.emplace_back(std::make_unique<TAssignStagesRule>());
-    RBO.AddStage(std::make_unique<TRuleBasedStage>("Assign physical stages", std::move(assignPhysicalStageRules)));
+    RBO.AddStage(std::make_unique<TAssignStagesStage>());
 
     // Optimize physical stages.
     TVector<std::unique_ptr<IRule>> optimizePhysicalStagesRules;

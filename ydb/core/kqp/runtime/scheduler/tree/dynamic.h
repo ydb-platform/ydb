@@ -109,7 +109,7 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         NSnapshot::TRoot* TakeSnapshot() override;
 
     public:
-        ui64 TotalLimit = Infinity();
+        std::atomic<ui64> TotalLimit = Infinity();
 
     private:
         struct {

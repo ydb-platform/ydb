@@ -20,7 +20,7 @@ namespace server
 {
 
 /**
-  Server domain name if available without reverse DNS lookup; otherwise, IP address or Unix domain
+  Server domain name if available without reverse DNS lookup; otherwise, IP address or UNIX domain
   socket name. <p> When observed from the client side, and when communicating through an
   intermediary, @code server.address @endcode SHOULD represent the server address behind any
   intermediaries, for example proxies, if it's available.

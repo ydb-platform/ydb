@@ -100,6 +100,95 @@ const THashSet<TStringBuf> SYS_COLUMNS = {
 
 } // unnamed
 
+bool ParseWritePrimaryKey(TExprNode& setting, TVector<TString>& keyColumns, TExprContext& ctx) {
+    keyColumns.clear();
+
+    if (!EnsureTupleSize(setting, 2, ctx)) {
+        return false;
+    }
+
+    const auto* primaryKeyNode = setting.Child(1);
+
+    if (!EnsureAtom(*primaryKeyNode, ctx)) {
+        return false;
+    }
+
+    NYT::TNode keyColumnsNode;
+    try {
+        keyColumnsNode = NYT::NodeFromYsonString(primaryKeyNode->Content());
+    } catch (const std::exception& ex) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(primaryKeyNode->Pos()),
+            TStringBuilder()
+                << "Failed to parse setting "
+                << ToString(EYtSettingType::PrimaryKey).Quote()
+                << " as YSON: " << ex.what()));
+
+        return false;
+    }
+
+    if (!keyColumnsNode.IsList()) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(primaryKeyNode->Pos()),
+            TStringBuilder()
+                << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                << " requires a YSON list of strings"));
+
+        return false;
+    }
+
+    if (keyColumnsNode.AsList().empty()) {
+        ctx.AddError(TIssue(
+            ctx.GetPosition(primaryKeyNode->Pos()),
+            TStringBuilder()
+                << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                << " requires at least one column"));
+
+        return false;
+    }
+
+    THashSet<TString> seenKeyColumns;
+
+    for (const auto& keyColumnNode : keyColumnsNode.AsList()) {
+        if (!keyColumnNode.IsString()) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(primaryKeyNode->Pos()),
+                TStringBuilder()
+                    << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                    << " requires a YSON list of strings"));
+
+            return false;
+        }
+
+        const auto& keyColumn = keyColumnNode.AsString();
+
+        if (keyColumn.empty()) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(setting.Pos()),
+                TStringBuilder()
+                    << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                    << " requires non-empty column names"));
+
+            return false;
+        }
+
+        if (!seenKeyColumns.insert(keyColumn).second) {
+            ctx.AddError(TIssue(
+                ctx.GetPosition(setting.Pos()),
+                TStringBuilder()
+                    << "Duplicate column in "
+                    << ToString(EYtSettingType::PrimaryKey).Quote()
+                    << " setting: " << keyColumn.Quote()));
+
+            return false;
+        }
+
+        keyColumns.emplace_back(keyColumn);
+    }
+
+    return true;
+}
+
 bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, TExprContext& ctx) {
     TMaybe<TVector<TString>> sortBy;
     TMaybe<TVector<TString>> reduceBy;
@@ -987,6 +1076,14 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
                 << "Feature '" << nameNode->Content() << "' isn't supported."));
             return false;
+        }
+        case EYtSettingType::PrimaryKey: {
+            TVector<TString> keyColumns;
+            if (!ParseWritePrimaryKey(*setting, keyColumns, ctx)) {
+                return false;
+            }
+
+            break;
         }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false, "Unexpected EYtSettingType");

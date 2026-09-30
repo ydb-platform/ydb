@@ -10,8 +10,8 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalWindowBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalWindowBuilder(TIntrusivePtr<TOpWindow> window, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+    TPhysicalWindowBuilder(TOpWindow& window, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalUnaryOpBuilder(ctx, pos, names)
         , Window(window) {
     }
 
@@ -22,9 +22,10 @@ public:
     static bool UsesRangePeerGroups(const TOpWindow& window);
 
 private:
-    void Prepare(const TVector<TInfoUnit>& inputs);
-    ui32 IndexOf(const TInfoUnit& column) const;
-    const TTypeAnnotationNode* InputItemType(const TInfoUnit& column) const;
+    void Prepare(const TVector<TInfoUnitId>& inputs);
+    ui32 IndexOf(TInfoUnitId column) const;
+    const TTypeAnnotationNode* InputItemType(TInfoUnitId column) const;
+    TExprNode::TPtr BuildOutputRowType() const;
 
     TVector<TExprNode::TPtr> BuildSortKeys() const;
     TExprNode::TPtr BuildKeyExtractorLambda() const;
@@ -48,18 +49,18 @@ private:
 
     TExprNode::TPtr Member(TExprNode::TPtr from, const TString& name) const;
     TExprNode::TPtr BuildStruct(const TVector<std::pair<TString, TExprNode::TPtr>>& members) const;
-    TExprNode::TPtr BuildSumCastTarget(const TInfoUnit& column) const;
-    TExprNode::TPtr BuildAvgAccumulatorDataType(const TInfoUnit& column) const;
-    TExprNode::TPtr BuildAvgAccumulatorType(const TInfoUnit& column) const;
+    TExprNode::TPtr BuildSumCastTarget(TInfoUnitId column) const;
+    TExprNode::TPtr BuildAvgAccumulatorDataType(TInfoUnitId column) const;
+    TExprNode::TPtr BuildAvgAccumulatorType(TInfoUnitId column) const;
     TExprNode::TPtr BuildResultFromAccumulator(const TOpWindowFunc& func, TExprNode::TPtr accumulator) const;
     TExprNode::TPtr MakeOptional(TExprNode::TPtr value, bool alreadyOptional) const;
     TExprNode::TPtr BuildUint64(ui64 value) const;
 
-    TIntrusivePtr<TOpWindow> Window;
-    TVector<TInfoUnit> Inputs;
-    THashMap<TString, ui32> Indexes;
-    const TStructExprType* InputStruct = nullptr;
-    TVector<TInfoUnit> OutputLayout;
+    TOpWindow& Window;
+    TVector<TInfoUnitId> Inputs;
+    TMappedIUs<ui32> Indexes;
+    TVector<TInfoUnitId> Functions;
+    TVector<TInfoUnitId> OutputLayout;
     bool NeedsPeerKey = false;
     bool WholePartition = false;
     bool RangeCarry = false;

@@ -3,7 +3,25 @@
 #include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/translation/sql_translation.h>
 
+#include <array>
+
 using namespace NSQLTranslationV1;
+
+namespace {
+
+struct TWithoutSyntaxCase {
+    TStringBuf Query;
+    bool AnsiLexer = false;
+};
+
+constexpr std::array WithoutSyntaxCases = {
+    TWithoutSyntaxCase{.Query = "SELECT * WITHOUT stream FROM plato.Input;"},
+    TWithoutSyntaxCase{.Query = "SELECT * WITHOUT `column with spaces` FROM plato.Input;"},
+    TWithoutSyntaxCase{.Query = "SELECT * WITHOUT \"column with spaces\" FROM plato.Input;", .AnsiLexer = true},
+    TWithoutSyntaxCase{.Query = "FROM plato.Input SELECT * WITHOUT a;"},
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(YqlSelect) {
 
@@ -100,8 +118,8 @@ Y_UNIT_TEST(AutoFallbackPreservesHints) {
             SELECT k, Avg(v) AS v
             FROM plato.x
             GROUP /*+ COMPACT() */ BY k
-        )
-        SELECT * WITHOUT v;
+        ) AS grouped
+        SELECT grouped.*;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -181,6 +199,43 @@ Y_UNIT_TEST(Asterisk) {
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlStar"], 1);
+}
+
+Y_UNIT_TEST(WithoutSyntax) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    for (const auto& testCase : WithoutSyntaxCases) {
+        const NYql::TAstParseResult result = SqlToYqlWithMode(
+            TString(testCase.Query), NSQLTranslation::ESqlMode::QUERY,
+            /*maxErrors=*/10, /*provider=*/{}, EDebugOutput::None,
+            testCase.AnsiLexer, settings);
+        UNIT_ASSERT_C(
+            result.IsOk(),
+            "Query: " << testCase.Query << '\n'
+                      << Err2Str(result));
+    }
+}
+
+Y_UNIT_TEST(WithoutJoinRequiresCorrelationName) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    const NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+
+        SELECT * WITHOUT b, c
+        FROM (VALUES (1, 'left')) AS lhs(key, b)
+        JOIN (VALUES (1, 'right')) AS rhs(key, c)
+        ON lhs.key = rhs.key;
+    )sql", settings);
+
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_VALUES_EQUAL(result.Issues.Size(), 2);
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(result),
+        "Expected correlation name for WITHOUT in JOIN");
 }
 
 Y_UNIT_TEST(AsteriskInvalidLeft) {

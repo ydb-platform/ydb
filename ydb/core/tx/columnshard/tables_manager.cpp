@@ -750,6 +750,14 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     }
 }
 
+void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId) {
+    // TODO: implement ColumnShard truncate preparation.
+}
+
+void TTablesManager::TruncateTableProgress(NIceDb::TNiceDb&, const NOlap::TSnapshot&, const TSchemeShardLocalPathId) {
+    // TODO: implement ColumnShard truncate at the planned snapshot.
+}
+
 std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {
     const ui64 lastSchemaVersion = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion();
     std::set<TSchemaAddress> toRemove;

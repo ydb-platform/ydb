@@ -859,6 +859,20 @@ class JobDefaultsTest(unittest.TestCase):
             self.assertEqual(pending[0]["labels"]["ya_attempt"], "3")
             self.assertNotIn("cache_mode", pending[0]["labels"])
 
+    def test_enrich_matches_props_ya_attempt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "ci_metrics.jsonl")
+            start("ya_make_try_1", {"ya_attempt": "1"}, file=path)
+            end("ya_make_try_1", file=path, conclusion="success")
+            start("ya_make_try_1", {"ya_attempt": "2"}, file=path)
+            end("ya_make_try_1", file=path, conclusion="success")
+            enrich("ya_make_try_1", {"ya_attempt": "1", "report_url": "try1"}, file=path)
+            with open(path, encoding="utf-8") as handle:
+                rows = [json.loads(line) for line in handle if line.strip()]
+            by_attempt = {row["labels"]["ya_attempt"]: row for row in rows}
+            self.assertEqual(by_attempt["1"]["labels"]["report_url"], "try1")
+            self.assertNotIn("report_url", by_attempt["2"]["labels"])
+
     def test_cli_end_rc(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "ci_metrics.jsonl")

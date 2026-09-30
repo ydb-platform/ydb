@@ -18,16 +18,16 @@ constexpr size_t Base32DecodeBufSize(size_t len) noexcept {
 ///
 /// @brief Decodes only valid Base32 string, behaviour for invalid data is unspecified.
 ///
-/// @param src a base32 encoded string.
-/// @param dst an pointer to allocated memory for writing result.
+/// @param src      a base32 encoded string.
+/// @param[out] dst an pointer to allocated memory for writing result.
 ///
 /// @return Count of written bytes.
 ///
 size_t Base32Decode(std::string_view src, char* dst);
 
 ///
-/// @param src a base32 encoded string.
-/// @param dst a decoded string.
+/// @param src      a base32 encoded string.
+/// @param[out] dst a decoded string.
 ///
 inline void Base32Decode(std::string_view src, std::string& dst)
 {
@@ -53,16 +53,16 @@ inline std::string Base32Decode(std::string_view s)
 ///
 /// @throws Throws exceptions on inputs which contain invalid symbols or incorrect padding.
 ///
-/// @param src a base32 encoded string.
-/// @param dst an pointer to allocated memory for writing result.
+/// @param src      a base32 encoded string.
+/// @param[out] dst an pointer to allocated memory for writing result.
 ///
 /// @return Count of written bytes.
 ///
 size_t Base32StrictDecode(std::string_view src, char* dst);
 
 ///
-/// @param src a base32 encoded string.
-/// @param dst a decoded string.
+/// @param src      a base32 encoded string.
+/// @param[out] dst a decoded string.
 ///
 inline void Base32StrictDecode(std::string_view src, std::string& dst)
 {
@@ -90,16 +90,16 @@ constexpr size_t Base32EncodeBufSize(size_t len) noexcept {
 }
 
 ///
-/// @param src a base32 decoded string.
-/// @param dst an pointer to allocated memory for writing result.
+/// @param src      a base32 decoded string.
+/// @param[out] dst an pointer to allocated memory for writing result.
 ///
 /// @return Count of written bytes.
 ///
 size_t Base32Encode(std::string_view src, char* dst);
 
 ///
-/// @param src a base32 decoded string.
-/// @param dst a encoded string.
+/// @param src      a base32 decoded string.
+/// @param[out] dst a encoded string.
 ///
 inline void Base32Encode(std::string_view src, std::string& dst)
 {

@@ -3,24 +3,24 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> TPhysicalSortBuilder::BuildSortKeySelector(const TVector<TSortElement>& sortElements) {
+std::pair<TExprNode::TPtr, TVector<TExprNode::TPtr>> TPhysicalSortBuilder::BuildSortKeySelector(const TSortIUs& sortElements) {
     auto arg = Build<TCoArgument>(Ctx, Pos).Name("arg").Done().Ptr();
     TVector<TExprNode::TPtr> directions;
     TVector<TExprNode::TPtr> members;
 
-    for (const auto& element : sortElements) {
+    for (const auto& [id, order] : sortElements.Items()) {
         // clang-format off
         members.push_back(Build<TCoMember>(Ctx, Pos)
             .Struct(arg)
-            .Name().Build(element.SortColumn.GetFullName())
+            .Name().Build(Names.Get(id))
         .Done().Ptr());
         // clang-format on
 
-        directions.push_back(Build<TCoBool>(Ctx, Pos).Literal().Build(element.Ascending ? "true" : "false").Done().Ptr());
+        directions.push_back(Build<TCoBool>(Ctx, Pos).Literal().Build(order.Ascending ? "true" : "false").Done().Ptr());
     }
 
     TExprNode::TPtr selector;
-    if (sortElements.size() == 1) {
+    if (sortElements.Items().size() == 1) {
         // clang-format off
         selector = Build<TCoLambda>(Ctx, Pos)
             .Args({arg})
@@ -62,25 +62,24 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildSort(TExprNode::TPtr input, TOrderEnf
     // clang-format on
 }
 
-TVector<TExprNode::TPtr> TPhysicalSortBuilder::BuildSortKeysForWideSort(const TVector<TInfoUnit>& inputs, const TVector<TSortElement>& sortElements) {
+TVector<TExprNode::TPtr> TPhysicalSortBuilder::BuildSortKeysForWideSort(const TVector<TInfoUnitId>& inputs, const TSortIUs& sortElements) {
     // We have to map wide input with sort elements to find a right index.
-    THashMap<TString, ui32> indices;
+    TMappedIUs<ui32> indices;
     for (ui32 i = 0; i < inputs.size(); ++i) {
-        indices.emplace(inputs[i].GetFullName(), i);
+        indices.Add(inputs[i], i);
     }
 
     TVector<TExprNode::TPtr> sortKeys;
-    for (ui32 i = 0; i < sortElements.size(); ++i) {
-        const auto& sortElement = sortElements[i];
-        auto it = indices.find(sortElement.SortColumn.GetFullName());
-        Y_ENSURE(it != indices.end(), "Cannot find a sort element in wide input.");
-        const auto wideIndex = ToString(it->second);
+    for (const auto& [id, order] : sortElements.Items()) {
+        const auto* index = indices.Find(id);
+        Y_ENSURE(index, "Cannot find a sort element in wide input.");
+        const auto wideIndex = ToString(*index);
         // clang-format off
         auto sortKey = Ctx.Builder(Pos)
             .List()
                 .Atom(0, wideIndex)
                 .Callable(1, "Bool")
-                    .Atom(0, sortElement.Ascending ? "true" : "false")
+                    .Atom(0, order.Ascending ? "true" : "false")
                 .Seal()
             .Seal()
         .Build();
@@ -91,8 +90,8 @@ TVector<TExprNode::TPtr> TPhysicalSortBuilder::BuildSortKeysForWideSort(const TV
 }
 
 TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputs = NPhysicalConvertionUtils::GetLiveInputIUs(*Sort, 0);
-    const auto& sortElements = Sort->SortElements;
+    const auto inputs = NPhysicalConvertionUtils::GetLiveInputIUs(Sort, 0);
+    const auto& sortElements = Sort.GetSortElements();
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)
         .Input(input)
@@ -100,13 +99,13 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     // clang-format on
 
     // Expand narrow input.
-    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputs, Ctx);
+    input = NPhysicalConvertionUtils::BuildExpandMapForNarrowInput(input, inputs, Ctx, Names);
 
-    if (Sort->LimitCond.has_value()) {
+    if (Sort.LimitCond.has_value()) {
         // clang-format off
         input = Build<TCoWideTopSort>(Ctx, Pos)
             .Input(input)
-            .Count(Sort->LimitCond->GetExpressionBody())
+            .Count(Sort.LimitCond->GetExpressionBody())
             .Keys<TCoSortKeys>()
                 .Add(BuildSortKeysForWideSort(inputs, sortElements))
             .Build()
@@ -127,8 +126,8 @@ TExprNode::TPtr TPhysicalSortBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(
         input,
         inputs,
-        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(*Sort)),
-        Ctx);
+        NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(Sort), Names),
+        Ctx, Names);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

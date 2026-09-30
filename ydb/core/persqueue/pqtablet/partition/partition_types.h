@@ -128,7 +128,7 @@ struct TMessage {
     size_t GetWriteSize() const {
         if (IsWrite()) {
             auto& w = GetWrite();
-            return w.Msg.SourceId.size() + w.Msg.Data.size();
+            return w.Msg.GetPayloadSize();
         } else {
             return 0;
         }

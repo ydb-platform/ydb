@@ -50,4 +50,5 @@ END()
 
 RECURSE(
     cbo
+    rbo
 )

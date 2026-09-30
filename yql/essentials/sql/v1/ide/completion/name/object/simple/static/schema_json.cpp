@@ -90,6 +90,10 @@ TString Parse(
         return TFolderEntry::Table;
     }
 
+    if (type == TFolderEntry::View) {
+        return TFolderEntry::View;
+    }
+
     if (!type.IsString()) {
         ythrow yexception() << "Unexpected type: " << type;
     }

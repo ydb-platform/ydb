@@ -117,11 +117,35 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
     return std::optional<TString>(policy);
 }
 
+TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TString& value) {
+    NYql::NPq::NProto::StreamingDisposition result;
+
+    if (const auto mode = to_lower(value); mode == "earliest") {
+        result.mutable_oldest();
+    } else if (mode == "latest") {
+        result.mutable_fresh();
+    } else {
+        ui64 timestamp;
+        if (!TryFromString(value, timestamp)) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM must be EARLIEST, LATEST or an expression of type Timestamp");
+        }
+
+        *result.mutable_from_time()->mutable_timestamp() = NProtoInterop::CastToProto(TInstant::MicroSeconds(timestamp));
+    }
+
+    return result;
+}
+
 [[nodiscard]] TYqlConclusionStatus FillStreamingQueryDesc(NKikimrSchemeOp::TStreamingQueryDescription& streamingQueryDesc, const TString& name, const NYql::TObjectSettingsImpl& settings, TActorSystem* actorSystem) {
+    if (!actorSystem) {
+        return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support");
+    }
+
     streamingQueryDesc.SetName(name);
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
     auto& properties = *streamingQueryDesc.MutableProperties()->MutableProperties();
+    const auto readFrom = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::ReadFrom);
 
     // Validation of features values will be performed on execution step
     for (const auto& property : {
@@ -144,13 +168,26 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
     }
 
     if (const auto streamingDisposition = streamingDispositionStatus.DetachResult()) {
-        if (!actorSystem) {
-            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support");
+        if (readFrom) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM and STREAMING_DISPOSITION are mutually exclusive");
         }
         if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryDisposition()) {
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
         }
         properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
+    }
+
+    if (readFrom) {
+        if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryReadFrom()) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query READ_FROM is disabled. Please contact your system administrator to enable it");
+        }
+
+        auto disposition = ParseReadFrom(*readFrom);
+        if (disposition.IsFail()) {
+            return disposition;
+        }
+
+        properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, disposition.DetachResult().SerializeAsString());
     }
 
     auto watermarkLateEventsPolicyStatus = ParseWatermarkLateEventsPolicy(featuresExtractor);

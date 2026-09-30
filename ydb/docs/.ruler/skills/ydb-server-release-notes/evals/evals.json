@@ -1,0 +1,45 @@
+{
+  "skill_name": "ydb-server-release-notes",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Подготовь release notes 26.3. Фича есть в exact tag, но её flag default=false и администратор может включить её. Документация есть только в main.",
+      "expected_output": "Публикует фичу как opt-in после default-on пунктов, без имени флага, со ссылкой ?version=main и записью в таблице исключений документации.",
+      "files": [],
+      "expectations": [
+        "Проверяет default и runtime guard в exact tag, а не доверяет Tracker branch field",
+        "Не скрывает supported opt-in функциональность только из-за default=false",
+        "Не использует implementation PR как fallback ссылки",
+        "Сохраняет одинаковые RU and EN source sets and order"
+      ],
+      "covers": "default-state grouping and main documentation fallback"
+    },
+    {
+      "id": 2,
+      "prompt": "Сделай release notes для RC тега 26.3.1.16.",
+      "expected_output": "Использует RC heading and anchor, проверяет exact tag и создаёт исходный PR в main.",
+      "files": [],
+      "expectations": [
+        "Пишет Version 26.3 RC / Версия 26.3 RC and 26-3-rc",
+        "Не выдаёт 26.3.1.16 за публичную версию документации",
+        "Не открывает первоначальный PR против stable branch"
+      ],
+      "covers": "RC public identity and main-first PR flow"
+    },
+    {
+      "id": 3,
+      "prompt": "Подготовь пункт публичных release notes. В implementation PR есть Tiling++, но в документации v26.3 и main нет страницы, описывающей это поведение. В черновике написано «компакция». Проверь терминологию по приложенному глоссарию.",
+      "expected_output": "Не публикует пункт без точной публичной документации, фиксирует отдельный documentation gap и не использует несуществующий в глоссарии термин «компакция».",
+      "files": [],
+      "expectations": [
+        "Не использует implementation PR или issue как ссылку на документацию",
+        "Не оставляет неподтверждённый пункт без ссылки в public release notes",
+        "Не считает Tracker значение Документация не нужна исключением из documentation gate",
+        "Использует только канонический термин из соответствующего RU или EN glossary",
+        "Не считает glossary заменой страницы, документирующей функциональность",
+        "Сверяет claim с узким разделом документации, а не с общей страницей feature flags"
+      ],
+      "covers": "documentation gate and glossary-controlled terminology"
+    }
+  ]
+}

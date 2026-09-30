@@ -11,6 +11,7 @@ struct TSparkFunction {
     TString BindingName;
     ui32 MinArgs = 0;
     ui32 MaxArgs = 0;
+    TString GetBindingName(ui32 argumentCount) const;
 };
 
 const TSparkFunction* FindFunction(const TString& name);

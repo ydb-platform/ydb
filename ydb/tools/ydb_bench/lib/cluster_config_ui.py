@@ -83,6 +83,19 @@ function ccInherited(base,replacements,path){
   return value&&typeof value==='object'&&!Array.isArray(value)?value:{};
 }
 function ccDomain(record){return record.ydb_config?.domains_config?.domain?.[0]?.name||record.ydb_config?.domain_name||'Root'}
+function ccSetPortRange(record,kind,value){
+  value=value.trim();
+  if(value.length>4096)throw Error('Port list is too long');
+  if(value)for(const part of value.split(',')){
+    if(part.trim().toLowerCase()==='auto')continue;
+    const match=part.match(/^\s*([0-9]+)\s*(?:-\s*([0-9]+)\s*)?$/);
+    if(!match)throw Error('Use ports, ranges or auto, for example 19001-19020, auto');
+    const first=Number(match[1]),last=Number(match[2]||match[1]);
+    if(first<1||last>65535||first>last)throw Error('Ranges must be ascending and within 1-65535');
+  }
+  if(value){record.port_ranges??={};record.port_ranges[kind]=value}
+  else if(record.port_ranges){delete record.port_ranges[kind];if(!Object.keys(record.port_ranges).length)delete record.port_ranges}
+}
 function ccMappingPath(root,target,path=[]){
   if(!root||typeof root!=='object'||Array.isArray(root))return null;
   if(root===target)return path;
@@ -299,7 +312,18 @@ async function renderClusterConfig(record,changeView,active,initialView='configu
       container.innerHTML='<div class=ct-fields><label>Domain name<input id=cc-domain value="'+esc(ccDomain(record))+'"></label>'+
         '<label>Erasure<select id=cc-erasure>'+['none','block-4-2','mirror-3-dc'].map(v=>'<option>'+v+'</option>').join('')+'</select></label></div>'+
         '<p class=muted>Renaming the domain also updates tenant paths in this template. Existing run drafts are unchanged.</p>'+
-        '<p id=cc-placement-warning class=muted></p><div id=cc-cluster-extra></div>';
+        '<p id=cc-placement-warning class=muted></p><h3>Allowed ports</h3><div class=ct-fields>'+
+        [['http','HTTP'],['grpc','gRPC'],['ic','Interconnect (IC)']].map(([kind,label])=>
+          '<label>'+label+'<input data-cc-ports="'+kind+'" value="'+esc(record.port_ranges?.[kind]||'')+'" '+
+          'placeholder="Automatic" aria-describedby=cc-ports-help></label>').join('')+'</div>'+
+        '<p id=cc-ports-help class=muted>Ports or ranges, for example 19001-19020, 19100. '+
+        'Add auto to use OS-assigned ports if the listed ports are unavailable. Without auto, the list is a strict limit. '+
+        'Leave empty or use auto alone for OS-assigned ports.</p>'+
+        '<div id=cc-cluster-extra></div>';
+      for(const input of container.querySelectorAll('[data-cc-ports]'))input.oninput=()=>{
+        try{ccSetPortRange(record,input.dataset.ccPorts,input.value);input.setCustomValidity('')}
+        catch(e){input.setCustomValidity(e.message);error(e)}
+      };
       const domain=container.querySelector('#cc-domain');domain.oninput=()=>{try{ccSetDomain(record,domain.value);domain.setCustomValidity('')}
         catch(e){domain.setCustomValidity(e.message);error(e)}};
       const erasure=container.querySelector('#cc-erasure'),current=config.static_erasure??config.erasure??config.self_management_config?.erasure_species??'none';

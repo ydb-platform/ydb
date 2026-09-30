@@ -347,12 +347,12 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     if (pDiskInfo->Metrics.HasEnforcedDynamicSlotSize()) {
         info->SetEnforcedDynamicSlotSize(pDiskInfo->Metrics.GetEnforcedDynamicSlotSize());
     }
-    ui32 slotCount = 0;
+    ui32 expectedSlotCount = 0;
     ui32 slotSizeInUnits = 0;
-    pDiskInfo->ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
-    info->SetExpectedSlotCount(slotCount);
+    pDiskInfo->ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
+    info->SetExpectedSlotCount(expectedSlotCount);
     info->SetExpectedSlotSize(pDiskInfo->GetEffectiveExpectedSlotSize());
-    info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
+    info->SetNumActiveSlots(pDiskInfo->NumActiveDynamicSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
     info->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(pDiskInfo->MaintenanceStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
@@ -407,6 +407,7 @@ void CopyInfo(NKikimrSysView::TVSlotInfo* info, const THolder<TBlobStorageContro
 void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageController::TGroupInfo>& groupInfo,
         const TBlobStorageController::TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
     info->SetGeneration(groupInfo->Generation);
+    info->SetDDisk(groupInfo->DDisk);
     info->SetErasureSpeciesV2(TErasureType::ErasureSpeciesName(groupInfo->ErasureSpecies));
     info->SetBoxId(std::get<0>(groupInfo->StoragePoolId));
     info->SetStoragePoolId(std::get<1>(groupInfo->StoragePoolId));
@@ -587,11 +588,11 @@ void TBlobStorageController::UpdateSystemViews() {
                 pb->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::E_Name(
                         NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST));
 
-                ui32 slotCount = 0;
+                ui32 expectedSlotCount = 0;
                 ui32 slotSizeInUnits = 0;
-                pdisk.ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+                pdisk.ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
 
-                pb->SetExpectedSlotCount(slotCount);
+                pb->SetExpectedSlotCount(expectedSlotCount);
                 pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
                 pb->SetSlotSizeInUnits(slotSizeInUnits);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);

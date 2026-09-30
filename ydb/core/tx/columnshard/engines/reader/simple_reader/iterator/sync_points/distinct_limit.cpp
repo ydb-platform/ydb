@@ -8,22 +8,21 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
-    const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/)
-{
+ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& /*reader*/) {
+    auto& source = lease.GetSource();
     if (Seen.size() >= Limit) {
         return ESourceAction::Finish;
     }
 
-    AFL_VERIFY(source->HasStageResult());
-    const auto& sr = source->GetStageResult();
+    AFL_VERIFY(source.HasStageResult());
+    const auto& sr = source.GetStageResult();
 
     if (sr.IsEmpty()) {
         // No rows to deduplicate; forward to RESULT (terminal Finish for empty is handled there).
         return ESourceAction::ProvideNext;
     }
 
-    const auto& resolver = *source->GetContext()->GetCommonContext()->GetResolver();
+    const auto& resolver = *source.GetContext()->GetCommonContext()->GetResolver();
     // Must match TAccessorsCollection::ToGeneralContainer (formats/arrow/program/collection.cpp, strictResolver=false):
     // storage columns use resolver names; SSA / projection columns fall back to ascii column id as field name.
     TString columnName = resolver.GetColumnName(KeyColumnId, false);
@@ -43,7 +42,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
         return ESourceAction::ProvideNext;
     }
 
-    const auto existing = source->GetStageResult().GetNotAppliedFilter();
+    const auto existing = source.GetStageResult().GetNotAppliedFilter();
     const bool hasRowFilter = existing && !existing->IsTotalAllowFilter();
     // The key is either the fetched column itself or derived from it (JSON_VALUE over a sub-column). The SSA optimizer
     // enables dictionary-only fetching only when the whole request needs exactly one data column and the DISTINCT key
@@ -100,8 +99,8 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
     if (existing && applyRowFilter) {
         distinctFilter = existing->And(distinctFilter);
     }
-    source->MutableStageResult().SetNotAppliedFilter(std::make_shared<NArrow::TColumnFilter>(std::move(distinctFilter)));
-    source->GetContext()->GetCommonContext()->GetCounters().OnDistinctLimitSyncPointInvocation();
+    source.MutableStageResult().SetNotAppliedFilter(std::make_shared<NArrow::TColumnFilter>(std::move(distinctFilter)));
+    source.GetContext()->GetCommonContext()->GetCounters().OnDistinctLimitSyncPointInvocation();
 
     if (Seen.size() >= Limit) {
         if (Collection) {

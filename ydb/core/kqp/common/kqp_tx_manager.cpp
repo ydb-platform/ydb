@@ -191,6 +191,69 @@ public:
         return true;
     }
 
+    // A shard removed by a split/merge had its participant state moved to every shard
+    // covering its range
+    bool MoveShardTo(ui64 fromShardId, const TVector<ui64>& toShardIds) override {
+        AFL_ENSURE(State == ETransactionState::COLLECTING);
+        AFL_ENSURE(!toShardIds.empty());
+        // The removed shard's tablet id is gone: GetDeletedShards only returns shards
+        // absent from the new partitioning, so the targets cannot contain it. A target
+        // equal to the removed shard would corrupt the participant state on the erase
+        // below — fail closed.
+        AFL_ENSURE(!FindPtr(toShardIds, fromShardId));
+        auto fromIt = ShardsInfo.find(fromShardId);
+        AFL_ENSURE(fromIt != ShardsInfo.end());
+        const TShardInfo from = std::move(fromIt->second);
+        ShardsInfo.erase(fromIt);
+        ShardsIds.erase(fromShardId);
+        AFL_ENSURE(from.State == EShardState::PROCESSING);
+        AFL_ENSURE(!from.IsOlap);
+
+        bool locksConsistent = true;
+        for (const ui64 toShardId : toShardIds) {
+            AFL_ENSURE(toShardId != fromShardId);
+            // MoveShard to may be called for toShardIds several times in case of merge.
+            auto [toIt, inserted] = ShardsInfo.try_emplace(toShardId);
+            auto& to = toIt->second;
+            to.IsOlap = from.IsOlap;
+            // A merge may transfer several removed shards onto the same target:
+            // merge the flags instead of overwriting, or an earlier shard's
+            // flag (e.g. READ, used to build SendingShards in StartPrepare)
+            // would be lost.
+            to.Flags |= from.Flags;
+            to.Pathes.insert(from.Pathes.begin(), from.Pathes.end());
+            for (const ui64 querySpanId : from.BreakerQuerySpanIds) {
+                AddBreakerQuerySpanId(to, querySpanId);
+            }
+            for (const auto& [key, lockInfo] : from.Locks) {
+                if (auto existing = to.Locks.FindPtr(key)) {
+                    // The same ancestor lock reached the target through two removed
+                    // shards (e.g. shards merged back after a split). A WriteSeqNum
+                    // regression means the stored lock no longer matches the shard's
+                    // uncommitted write chain: mirror AddLock and treat it as an
+                    // invalidation instead of crashing — the caller aborts the
+                    // transaction with the recorded locks issue.
+                    if (!existing->Lock.MergeWriteSeqNums(lockInfo.Lock.Proto)) {
+                        // TODO: What if shards merged back after split???
+                        SetVictimQuerySpanId(existing->VictimQuerySpanId != 0
+                            ? existing->VictimQuerySpanId
+                            : lockInfo.VictimQuerySpanId);
+                        existing->Invalidated = true;
+                        if (!LocksIssue && State != ETransactionState::ERROR) {
+                            MakeLocksIssue(to);
+                        }
+                        locksConsistent = false;
+                    }
+                } else {
+                    to.Locks.emplace(key, lockInfo);
+                }
+            }
+            ShardsIds.insert(toShardId);
+        }
+        ShardsTransferred = true;
+        return locksConsistent;
+    }
+
     void BreakLock(ui64 shardId) override {
         if (LocksIssue) {
             return;
@@ -209,6 +272,10 @@ public:
 
     EShardState GetState(ui64 shardId) const override {
         return ShardsInfo.at(shardId).State;
+    }
+
+    bool HasShard(ui64 shardId) const override {
+        return ShardsInfo.contains(shardId);
     }
 
     void SetError(ui64 shardId) override {
@@ -477,7 +544,7 @@ public:
     }
 
     bool NeedCommit() const override {
-        AFL_ENSURE(ActionsCount != 1 || IsSingleShard()); // ActionsCount == 1 then IsSingleShard()
+        AFL_ENSURE(ActionsCount != 1 || IsSingleShard() || ShardsTransferred);
         AFL_ENSURE(HasSnapshot() || IsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW);
         const bool dontNeedCommit = IsEmpty() || (IsReadOnly() && ((ActionsCount == 1) || HasSnapshot()));
         return !dontNeedCommit;
@@ -771,6 +838,7 @@ private:
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
     ui64 ActionsCount = 0;
+    bool ShardsTransferred = false;
 
     THashSet<ui32> ParticipantNodes;
 

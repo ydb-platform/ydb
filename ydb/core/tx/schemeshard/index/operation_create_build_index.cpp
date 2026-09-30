@@ -57,7 +57,8 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     const auto& op = tx.GetInitiateIndexBuild();
     NKikimrSchemeOp::TIndexCreationConfig indexDesc = op.GetIndex();
-    const bool isRebuild = op.GetIsRebuild();
+    const bool isOnlineRebuild = op.GetIsRebuild() && op.HasRebuildIndexName();
+    const bool isRebuild = op.GetIsRebuild() && !isOnlineRebuild;
 
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -92,7 +93,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, InvalidIndexType(indexDesc.GetType()))};
     }
 
-    if (isRebuild && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+    if (op.GetIsRebuild() && GetIndexType(indexDesc) != NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, "REBUILD INDEX is only supported for vector_kmeans_tree indexes")};
     }
 
@@ -104,6 +105,24 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
 
     if (counts.SequenceCount > 0 && domainInfo->GetSequenceShards().empty()) {
         ++counts.IndexTableShards;
+    }
+
+    if (isOnlineRebuild) {
+        const auto source = table.Child(indexDesc.GetName());
+        const auto checks = source.Check();
+        checks.IsAtLocalSchemeShard()
+            .IsResolved()
+            .NotDeleted()
+            .IsTableIndex()
+            .NotUnderDeleting()
+            .NotUnderOperation();
+        if (!checks) {
+            return {CreateReject(opId, checks.GetStatus(), checks.GetError())};
+        }
+        if (context.SS->Indexes.at(source.Base()->PathId)->State != NKikimrSchemeOp::EIndexStateReady) {
+            return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, "REBUILD INDEX requires a Ready index")};
+        }
+        indexDesc.SetName(op.GetRebuildIndexName());
     }
 
     const auto index = table.Child(indexDesc.GetName());
@@ -135,9 +154,10 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 .NotResolved();
         }
 
-        checks
-            .IsValidLeafName(context.UserToken.Get())
-            .PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount)
+        if (!isOnlineRebuild || !tx.GetInternal()) {
+            checks.IsValidLeafName(context.UserToken.Get());
+        }
+        checks.PathsLimit(1 + counts.IndexTableCount + counts.SequenceCount)
             .DirChildrenLimit();
 
         if (!tx.GetInternal()) {
@@ -151,7 +171,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
         }
     }
 
-    if (!isRebuild) {
+    if (!op.GetIsRebuild()) {
         const ui64 aliveIndices = context.SS->GetAliveChildren(table.Base(), NKikimrSchemeOp::EPathTypeTableIndex);
         if (aliveIndices + 1 > domainInfo->GetSchemeLimits().MaxTableIndices) {
             return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()

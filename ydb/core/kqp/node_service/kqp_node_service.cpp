@@ -38,8 +38,9 @@ using namespace NActors;
 
 namespace {
 
-// Min interval between stats send from scan/compute actor to executor
-constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
+// Min interval between stats send from scan/compute actor to executor. A report walks all the channels of the task,
+// and a busy compute actor with hundreds of channels paid for it on every 20 ms
+constexpr TDuration MinStatInterval = TDuration::MilliSeconds(200);
 // Max interval in case of no activity
 constexpr TDuration MaxStatInterval = TDuration::Seconds(1);
 
@@ -146,7 +147,8 @@ private:
     }
 
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
-        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "Dispatch tasks", NWilson::EFlags::AUTO_END);
+        sendTasksSpan.Attribute("ydb.actor.type", TString("TKqpNodeService"));
 
         const auto executerId = ev->Sender;
 

@@ -5085,6 +5085,104 @@ Y_UNIT_TEST_F(EndWriteTimestamp_HeadKeys, TPartitionFixture) {
     UNIT_ASSERT_C(now - TDuration::Seconds(2) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(2)) << " < " << endWriteTimestamp << " < " << now );
 } // EndWriteTimestamp_HeadKeys
 
+Y_UNIT_TEST_F(WriteQuota_ChargesSecondBlob_WhenFirstKvCompletesFirst, TPartitionFixture)
+{
+    // BlobQuotaSize belongs to the in-flight quota cookie. Completing the previous KV write
+    // must not drop it while the next cookie is still waiting, or TEvConsumed charges 0.
+    Ctx->Runtime->GetAppData().PQConfig.MutableQuotingConfig()->SetEnableQuoting(true);
+    Ctx->Runtime->GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    Ctx->Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+
+    CreatePartition({.Partition = TPartitionId{1}});
+
+    struct THeldQuotaRequest {
+        ui64 Cookie = 0;
+        TActorId Partition;
+    };
+    TDeque<THeldQuotaRequest> heldQuotaRequests;
+    TVector<ui64> consumedBytes;
+
+    Ctx->Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvRequestQuota>()) {
+            heldQuotaRequests.push_back(THeldQuotaRequest{.Cookie = event->Cookie, .Partition = ev->Sender});
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvConsumed>(); event && !event->IsOverhead) {
+            consumedBytes.push_back(event->ConsumedBytes);
+            return TTestActorRuntimeBase::EEventAction::DROP;
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    auto approveHeldQuota = [&] {
+        UNIT_ASSERT(!heldQuotaRequests.empty());
+        const auto held = heldQuotaRequests.front();
+        heldQuotaRequests.pop_front();
+        Ctx->Runtime->SingleSys()->Send(new IEventHandle(
+            held.Partition,
+            Ctx->Edge,
+            new TEvPQ::TEvApproveWriteQuota(held.Cookie, TDuration::Zero(), TDuration::Zero())));
+    };
+
+    const TString data1(1024, 'a');
+    const TString data2(4096, 'b');
+    const ui64 expectedSize1 = TString("SourceId").size() + data1.size();
+    const ui64 expectedSize2 = TString("SourceId").size() + data2.size();
+
+    SendWrite(1, 0, "owner", 0, data1, false, 1, true);
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return !heldQuotaRequests.empty();
+        };
+        UNIT_ASSERT_C(
+            Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)),
+            "partition did not request write quota for the first blob");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(heldQuotaRequests.size(), 1u);
+
+    SendWrite(2, 1, "owner", 1, data2, false, 2, true);
+
+    approveHeldQuota();
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return consumedBytes.size() >= 1 && !heldQuotaRequests.empty();
+        };
+        UNIT_ASSERT_C(
+            Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)),
+            "expected first TEvConsumed and a quota request for the second blob");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(consumedBytes.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(consumedBytes[0], expectedSize1);
+    UNIT_ASSERT_VALUES_EQUAL(heldQuotaRequests.size(), 1u);
+
+    WaitCmdWrite();
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+    WaitProxyResponse({.Cookie = 1, .Status = NMsgBusProxy::MSTATUS_OK});
+
+    approveHeldQuota();
+
+    {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&] {
+            return consumedBytes.size() >= 2;
+        };
+        UNIT_ASSERT_C(
+            Ctx->Runtime->DispatchEvents(options, TDuration::Seconds(5)),
+            "partition did not consume quota for the second blob");
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(consumedBytes.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL_C(
+        consumedBytes[1],
+        expectedSize2,
+        "second TEvConsumed must charge the second blob, not 0 after the previous KV response");
+}
+
 Y_UNIT_TEST_F(The_DeletePartition_Message_Arrives_Before_The_ApproveWriteQuota_Message, TPartitionFixture)
 {
     // create a supportive partition

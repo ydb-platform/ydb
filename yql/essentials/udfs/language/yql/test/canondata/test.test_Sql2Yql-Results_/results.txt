@@ -149,7 +149,7 @@
                         [
                             %false;
                             [
-                                "<main>:1:23: Error: YqlSelect unsupported: GROUP COMPACT BY";
+                                "<main>:1:26: Error: YqlSelect unsupported: FLATTEN (OPTIONAL|LIST|DICT)? BY flatten_by_arg";
                                 "<main>:1:1: Error: Translation of the statement to YqlSelect was forced, but unsupported"
                             ]
                         ]

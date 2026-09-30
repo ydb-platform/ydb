@@ -421,8 +421,13 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
             {
             }
 
-            bool AllocateExtraQuota(ui64 size) override {
+            // plays the KQP resource manager: an optional delta is refused when the parent availability cannot cover it
+            bool AllocateExtraQuota(ui64 size, bool isOptional) override {
                 ExtraRequests++;
+                LastOptional = isOptional;
+                if (isOptional && Extra < static_cast<i64>(size)) {
+                    return false;
+                }
                 return ExtraGranted && (Extra -= size, true);
             }
 
@@ -433,6 +438,7 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
             i64 Extra = -1;
             bool ExtraGranted = true;
             size_t ExtraRequests = 0;
+            bool LastOptional = false;
         };
 
         TParentedManager manager;
@@ -442,14 +448,17 @@ Y_UNIT_TEST_SUITE(TDqMemoryQuotaTest) {
         manager.Extra = 5_MB;
         UNIT_ASSERT_VALUES_EQUAL(manager.GetMemoryAvailability(), i64(29_MB + 5_MB));
 
-        // an optional request beyond the limit is refused in advance when the parent cannot cover the delta
+        // an optional request beyond the limit goes to the parent with the flag, the parent refuses it
         manager.Extra = 0;
         UNIT_ASSERT(!manager.AllocateQuota(40_MB, /* isOptional = */ true));
-        UNIT_ASSERT_VALUES_EQUAL(manager.ExtraRequests, 0);
-        // a mandatory one still asks the parent
+        UNIT_ASSERT_VALUES_EQUAL(manager.ExtraRequests, 1);
+        UNIT_ASSERT(manager.LastOptional);
+        UNIT_ASSERT_VALUES_EQUAL(manager.GetCurrentQuota(), 1_MB); // nothing taken on a refusal
+        // a mandatory one goes without it
         manager.Extra = 100_MB;
         UNIT_ASSERT(manager.AllocateQuota(40_MB, /* isOptional = */ false));
-        UNIT_ASSERT_VALUES_EQUAL(manager.ExtraRequests, 1);
+        UNIT_ASSERT_VALUES_EQUAL(manager.ExtraRequests, 2);
+        UNIT_ASSERT(!manager.LastOptional);
         // unlimited parents saturate instead of overflowing
         manager.Extra = std::numeric_limits<i64>::max();
         UNIT_ASSERT_VALUES_EQUAL(manager.GetMemoryAvailability(), std::numeric_limits<i64>::max());

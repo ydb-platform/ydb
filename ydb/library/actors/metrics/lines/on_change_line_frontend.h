@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../line_read.h"
-#include "../line_write.h"
+#include "../metric_line.h"
 #include "raw_line_frontend.h"
 
 #include <util/datetime/base.h>
@@ -11,8 +11,6 @@
 #include <algorithm>
 
 namespace NActors {
-
-    class TInMemoryMetricsBackend;
 
     template<class TFrontend>
     class TLine;
@@ -111,30 +109,29 @@ namespace NActors {
 
     private:
         friend class TLine<TOnChangeLineFrontend<TValue>>;
-        friend class TInMemoryMetricsBackend;
 
-        static bool Append(TInMemoryMetricsBackend& backend, TLineWriterState* state, const TValueType& value) noexcept;
+        static bool Append(IMetricLine& line, const TValueType& value) noexcept;
     };
 
     template<class TValue>
-    bool TOnChangeLineFrontend<TValue>::Append(TInMemoryMetricsBackend& backend, TLineWriterState* state, const TValue& value) noexcept {
+    bool TOnChangeLineFrontend<TValue>::Append(IMetricLine& line, const TValue& value) noexcept {
         const ui64 encoded = NInMemoryMetricsPrivate::EncodeLineValue(value);
-        const std::optional<ui64> lastMaterialized = backend.GetLastMaterializedValue(state);
+        const std::optional<ui64> lastMaterialized = line.GetLastMaterializedValue();
 
         if (lastMaterialized && *lastMaterialized == encoded) {
             return true;
         }
 
-        const NHPTimer::STime nowTs = backend.CurrentTimestampTs();
+        const NHPTimer::STime nowTs = line.CurrentTimestampTs();
 
         typename TRawLineFrontend<TValue>::TStorageRecord record{
             .TimestampTs = nowTs,
             .Value = encoded,
         };
-        if (!backend.AccessChunkMemory(state, &record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
+        if (!line.AccessChunkMemory(&record, &TRawLineFrontend<TValue>::WriteRecordToChunkMemory)) {
             return false;
         }
-        backend.MarkMaterialized(state, encoded);
+        line.MarkMaterialized(encoded);
         return true;
     }
 

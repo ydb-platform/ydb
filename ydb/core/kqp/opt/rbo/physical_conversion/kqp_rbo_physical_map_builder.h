@@ -10,13 +10,13 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalMapBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalMapBuilder(TIntrusivePtr<TOpMap> map, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
+    TPhysicalMapBuilder(TOpMap& map, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names)
+        : TPhysicalUnaryOpBuilder(ctx, pos, names)
         , Map(map) {
     }
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
 
 private:
-    TIntrusivePtr<TOpMap> Map;
+    TOpMap& Map;
 };

@@ -99,6 +99,7 @@ private:
         const auto checks = dstPath.Check();
         checks.IsAtLocalSchemeShard()
             .IsResolved()
+            .NotDeleted()
             .NotUnderDeleting()
             .NotUnderOperation()
             .FailOnWrongType(TPathElement::EPathType::EPathTypeExternalDataSource)
@@ -187,7 +188,7 @@ public:
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory));
 
         const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
-        Y_ABORT_UNLESS(oldExternalDataSourceInfo);
+        AFL_ENSURE(oldExternalDataSourceInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
         const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(
             externalDataSourceDescription,
             oldExternalDataSourceInfo->AlterVersion + 1

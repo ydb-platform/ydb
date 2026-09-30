@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/file_storage/proto/file_storage.pb.h>
 #include <yql/essentials/core/file_storage/download/download_stream.h>
+#include <yql/essentials/core/file_storage/download/download_output_file_stream.h>
 #include <yql/essentials/core/file_storage/download/download_config.h>
 #include <yql/essentials/core/file_storage/defs/downloader.h>
 #include <yql/essentials/utils/fetch/proto/fetch_config.pb.h>
@@ -16,7 +17,6 @@
 
 #include <util/generic/guid.h>
 #include <util/generic/yexception.h>
-#include <util/stream/file.h>
 #include <util/system/file.h>
 #include <util/system/env.h>
 
@@ -55,7 +55,7 @@ public:
         return false;
     }
 
-    std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified) final {
+    std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified, TDownloadLimiter limiter) final {
         TFetchResultPtr fr1 = FetchWithETagAndLastModified(url, token, oldEtag, oldLastModified, TimeoutMs, Redirects_, Policy_);
         switch (fr1->GetRetCode()) {
             case HTTP_NOT_MODIFIED:
@@ -68,8 +68,8 @@ public:
 
         auto pair = ExtractETagAndLastModified(*fr1);
 
-        auto puller = [urlStr = url.PrintS(), fr1, useFakeChecksums = UseFakeChecksums](const TFsPath& dstPath) -> std::pair<ui64, TString> {
-            return CopyToFile(urlStr, *fr1, dstPath, useFakeChecksums);
+        auto puller = [urlStr = url.PrintS(), fr1, useFakeChecksums = UseFakeChecksums, limiter](const TFsPath& dstPath) -> std::pair<ui64, TString> {
+            return CopyToFile(urlStr, *fr1, dstPath, useFakeChecksums, limiter);
         };
 
         return std::make_tuple(puller, pair.first, pair.second);
@@ -98,23 +98,21 @@ private:
         }
     }
 
-    static std::pair<ui64, TString> CopyToFile(const TString& url, IFetchResult& src, const TString& dstFile, bool useFakeChecksums) {
+    static std::pair<ui64, TString> CopyToFile(const TString& url, IFetchResult& src, const TString& dstFile, bool useFakeChecksums, TDownloadLimiter limiter) {
         TFile outFile(dstFile, CreateAlways | ARW | AX);
         THttpInput& httpStream = src.GetStream();
         TDownloadStream input(httpStream);
         ui64 size = 0;
         TString md5;
+        TDownloadOutputFileStream out(outFile, limiter);
         if (useFakeChecksums) {
-            TFileOutput out(outFile);
             size = TransferData(&input, &out);
-            out.Finish();
         } else {
-            TUnbufferedFileOutput out(outFile);
             TMd5OutputStream md5Out(out);
             size = TransferData(&input, &md5Out);
             md5 = md5Out.Finalize();
-            out.Finish();
         }
+        out.Finish();
         outFile.Close();
 
         ui64 contentLength = 0;

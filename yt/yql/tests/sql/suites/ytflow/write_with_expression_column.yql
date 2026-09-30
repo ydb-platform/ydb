@@ -7,10 +7,9 @@ pragma Engine = "ytflow";
 pragma Ytflow.Cluster = "plato";
 pragma Ytflow.PipelinePath = "pipelines/test";
 
-replace into Output
+replace into Output with primary_key = "[key]"
 select
     string_field as key,
     int64_field as kv_value
 from Input
-where int64_field >= 10
-order by key;
+where int64_field >= 10;

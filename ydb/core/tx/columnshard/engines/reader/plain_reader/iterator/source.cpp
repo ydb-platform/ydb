@@ -18,53 +18,39 @@
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
-NO_SANITIZE_THREAD
 void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching) {
     AFL_VERIFY(fetching);
-    //    AFL_VERIFY(!FetchingPlan);
     FetchingPlan = fetching;
 }
 
-NO_SANITIZE_THREAD
-void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::shared_ptr<IDataSource>& sourcePtr) {
-    if (!IsReadyFlag) {
-        AFL_VERIFY(Intervals.emplace(interval.GetIntervalIdx(), &interval).second);
-    }
-    if (AtomicCas(&SourceStartedFlag, 1, 0)) {
-        OnStartProcessing();
-        SetMemoryGroupId(interval.GetIntervalId());
-        AFL_VERIFY(FetchingPlan);
-        InitStageData(std::make_unique<TFetchedData>(GetExclusiveIntervalOnly(), GetRecordsCount()));
+void IDataSource::StartProcessing(std::unique_ptr<NCommon::TDataSourceLease> sourceLease, const ui64 memoryGroupId) {
+    auto& self = *sourceLease->GetSource().MutableAs<IDataSource>();
+    self.OnStartProcessing();
+    self.SetMemoryGroupId(memoryGroupId);
+    AFL_VERIFY(self.FetchingPlan);
+    self.InitStageData(std::make_unique<TFetchedData>(self.GetExclusiveIntervalOnly(), self.GetRecordsCount()));
+    YDB_LOG_DEBUG("",
+        {"initFetchingPlan", self.FetchingPlan->DebugString()},
+        {"sourceIdx", self.GetSourceIdx()});
+    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", self.GetSourceIdx())("method", "StartProcessing"));
+    if (self.GetContext()->IsAborted()) {
         YDB_LOG_DEBUG("",
-            {"initFetchingPlan", FetchingPlan->DebugString()},
-            {"sourceIdx", GetSourceIdx()});
-        NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", GetSourceIdx())("method", "InitFetchingPlan"));
-        if (GetContext()->IsAborted()) {
-            YDB_LOG_DEBUG("",
-                {"event", "InitFetchingPlanAborted"});
-            return;
-        }
-        TFetchingScriptCursor cursor(FetchingPlan, 0);
-        const auto& commonContext = *GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
-        commonContext.SendTaskToExecute(task);
+            {"event", "StartProcessingAborted"});
+        return;
     }
+    TFetchingScriptCursor cursor(self.FetchingPlan, 0);
+    const auto& commonContext = *self.GetContext()->GetCommonContext();
+    auto task = std::make_shared<TStepAction>(std::move(sourceLease), std::move(cursor), commonContext.GetScanActorId(), true);
+    commonContext.SendTaskToExecute(task);
 }
 
-void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& /*owner*/, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
+void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::unique_ptr<NCommon::TDataSourceLease> self) {
     AFL_VERIFY(!IsReadyFlag);
     IsReadyFlag = true;
-    for (auto&& i : Intervals) {
-        i.second->OnSourceFetchStageReady(GetSourceIdx());
-    }
-    YDB_LOG_DEBUG("",
-        {"event", "source_ready"},
-        {"intervalsCount", Intervals.size()},
-        {"sourceIdx", GetSourceIdx()});
-    Intervals.clear();
+    static_cast<TPlainReadData&>(owner).MutableScanner().OnSourceReady(std::move(self));
 }
 
-void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
+void IDataSource::DoOnEmptyStageData() {
     if (ResourceGuards.size()) {
         if (ExclusiveIntervalOnly) {
             ResourceGuards.back()->Update(0);
@@ -82,7 +68,7 @@ void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>
     ClearStageData();
 }
 
-void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
+void IDataSource::DoBuildStageResult() {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
     ClearStageData();
@@ -124,8 +110,7 @@ void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlob
         {"columns", columnIds.size()});
 }
 
-bool TPortionDataSource::DoStartFetchingColumns(
-    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+NCommon::TExecutionResult TPortionDataSource::DoStartFetchingColumns(const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     YDB_LOG_DEBUG("",
         {"event", step.GetName()});
     AFL_VERIFY(columns.GetColumnsCount());
@@ -144,16 +129,11 @@ bool TPortionDataSource::DoStartFetchingColumns(
 
     auto readActions = action.GetReadingActions();
     if (!readActions.size()) {
-        return false;
+        return NCommon::TExecutionResult::Done();
     }
 
-    auto constructor =
-        std::make_shared<NCommon::TBlobsFetcherTask>(readActions, sourcePtr, step, GetContext(), "CS::READ::" + step.GetName(), "");
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(constructor));
-    return true;
-}
-
-void TPortionDataSource::DoAbort() {
+    return NCommon::TExecutionResult::Pending(
+        std::make_shared<NCommon::TBlobsFetcherTask::TStartJob>(readActions, step, "CS::READ::" + step.GetName()));
 }
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) {
@@ -177,7 +157,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     MutableStageData().AddBatch(batch, *GetContext()->GetCommonContext()->GetResolver(), true);
 }
 
-bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
+NCommon::TExecutionResult TPortionDataSource::DoStartFetchingAccessor(const TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -186,9 +166,8 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<NCommon::
     std::shared_ptr<TDataAccessorsRequest> request =
         std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
     request->AddPortion(Portion);
-    request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
-    GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
-    return true;
+    return NCommon::TExecutionResult::Pending(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber::TStartJob>(
+        GetContext()->GetCommonContext()->GetDataAccessorsManager(), std::move(request), step));
 }
 
 bool TPortionDataSource::DoAddTxConflict() {

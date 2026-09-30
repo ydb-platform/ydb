@@ -2,6 +2,7 @@ import csv
 import hashlib
 import inspect
 import io
+import itertools
 import json
 import os
 import plistlib
@@ -31,6 +32,7 @@ from ydb.tools.ydb_bench.lib import (
     actors_core,
     cli,
     common,
+    distributed_builder_ui,
     import_results,
     linux_telemetry,
     load_control,
@@ -457,7 +459,14 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(json.loads(schema_output.getvalue()), CONFIG_SCHEMA)
         self.assertEqual(
             set(CONFIG_SCHEMA["properties"]),
-            {"ping-bench", "star-ping-bench", "memory-bandwidth-bench", "local-ydb", "distributed-ydb"},
+            {
+                "ping-bench",
+                "star-ping-bench",
+                "memory-bandwidth-bench",
+                "local-ydb",
+                "distributed-ydb",
+                "dedicated-ydb",
+            },
         )
         local_load_schema = CONFIG_SCHEMA["properties"]["local-ydb"]["additionalProperties"]["properties"]["load"]
         self.assertEqual(local_load_schema["properties"]["allow-errors"], {"type": "boolean"})
@@ -1103,7 +1112,7 @@ class YdbBenchTest(unittest.TestCase):
             local-ydb:
               geometry-best:
                 workload: {type: kv, operation: upsert}
-                actor-system: {use-shared-threads: true, use-united-pool: true, use-ring-queue: false}
+                actor-system: {use-shared-threads: true, use-united-pool: true, use-ring-queue: false, use-waker: true}
                 geometry: {preset: storage, static-nodes: 1, dynamic-nodes: 1, max-dynamic-nodes: 2}
                 load: {parameter: threads, values: [1]}
                 measurement: {warmup: 0, duration: 1, repetitions: 1, verification-repetitions: 2}
@@ -1140,11 +1149,11 @@ class YdbBenchTest(unittest.TestCase):
         for call in self.last_local_ydb_cluster_constructor.call_args_list:
             self.assertEqual(
                 call.kwargs["actor_system"],
-                {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+                {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False, "use_waker": True},
             )
         self.assertEqual(
             manifest["parameters"]["actor_system"],
-            {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False},
+            {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False, "use_waker": True},
         )
         verification_cluster = self.last_local_ydb_cluster_constructor.call_args_list[1]
         self.assertEqual(verification_cluster.args[3], self.root / "geometry-best" / "verification-cluster")
@@ -2462,29 +2471,39 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
                 "use_shared_threads": False,
                 "use_united_pool": False,
                 "use_ring_queue": True,
+                "use_waker": False,
             },
         )
-        for shared in (False, True):
-            for united in (False, True):
-                for ring in (False, True):
-                    with self.subTest(shared=shared, united=united, ring=ring):
-                        profile["actor-system"] = {
-                            "use-shared-threads": shared,
-                            "use-united-pool": united,
-                            "use-ring-queue": ring,
-                        }
-                        flags = load().parameters["local_ydb"]["actor_system"]
-                        self.assertEqual(
-                            flags, {"use_shared_threads": shared, "use_united_pool": united, "use_ring_queue": ring}
-                        )
-                        cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
-                        self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **flags})
+        for shared, united, ring, waker in itertools.product((False, True), repeat=4):
+            with self.subTest(shared=shared, united=united, ring=ring, waker=waker):
+                profile["actor-system"] = {
+                    "use-shared-threads": shared,
+                    "use-united-pool": united,
+                    "use-ring-queue": ring,
+                    "use-waker": waker,
+                }
+                flags = load().parameters["local_ydb"]["actor_system"]
+                expected = {
+                    "use_shared_threads": shared,
+                    "use_united_pool": united,
+                    "use_ring_queue": ring,
+                    "use_waker": waker,
+                }
+                self.assertEqual(flags, expected)
+                cluster = local_ydb._cluster_config([{"ic_port": 19001}], 64, "host", flags)
+                if not waker:
+                    del expected["use_waker"]
+                self.assertEqual(cluster["config"]["actor_system_config"], {"use_auto_config": True, **expected})
         self.assertTrue(
             local_ydb._cluster_config([{"ic_port": 19001}], 64, "host")["config"]["actor_system_config"][
                 "use_ring_queue"
             ]
         )
-        for key in ("use-shared-threads", "use-united-pool", "use-ring-queue"):
+        self.assertNotIn(
+            "use_waker",
+            local_ydb._cluster_config([{"ic_port": 19001}], 64, "host")["config"]["actor_system_config"],
+        )
+        for key in ("use-shared-threads", "use-united-pool", "use-ring-queue", "use-waker"):
             for value in (0, 1, "true", "false", None, [], {}):
                 with self.subTest(key=key, value=value):
                     profile["actor-system"] = {key: value}
@@ -2505,6 +2524,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
                   use-shared-threads: true
                   use-united-pool: false
                   use-ring-queue: false
+                  use-waker: true
                   static-nodes: {cpu-count: 8}
                   dynamic-nodes: {cpu-count: 4}
         """))
@@ -2520,6 +2540,7 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             const old={parameters:{}},current={parameters:profile.local_ydb};
             const legacy=JSON.parse(JSON.stringify(profile)),legacyYaml=[];
             delete legacy.local_ydb.actor_system.use_ring_queue;
+            delete legacy.local_ydb.actor_system.use_waker;
             serializeLocalYdb(legacyYaml,legacy);
             process.stdout.write(JSON.stringify({
               yaml:'local-ydb:\\n  flags:\\n'+yaml.join('\\n'),
@@ -2542,7 +2563,8 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             load_config(self._config(result["yaml"])).runs[0].parameters["local_ydb"]["actor_system"], flags
         )
         self.assertEqual(
-            result["defaults"], {"use_shared_threads": False, "use_united_pool": False, "use_ring_queue": True}
+            result["defaults"],
+            {"use_shared_threads": False, "use_united_pool": False, "use_ring_queue": True, "use_waker": False},
         )
         self.assertTrue(result["old"]["use_ring_queue"])
         self.assertTrue(
@@ -2554,6 +2576,11 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
         self.assertFalse(result["old"]["use_shared_threads"])
         self.assertTrue(result["current"]["use_shared_threads"])
         self.assertFalse(result["current"]["use_united_pool"])
+        self.assertFalse(result["old"]["use_waker"])
+        self.assertTrue(result["current"]["use_waker"])
+        self.assertFalse(
+            load_config(self._config(result["legacyYaml"])).runs[0].parameters["local_ydb"]["actor_system"]["use_waker"]
+        )
         self.assertEqual(result["current"]["Static node vCPUs"], 8)
         self.assertEqual(result["current"]["Dynamic node vCPUs"], 4)
 
@@ -2604,12 +2631,13 @@ if(groups[0].cores[0].cpus.length!==2||groups[1].cores[0].cpus[0]!==9)throw Erro
             "local-actor-system-use_united_pool",
             "local-actor-system-use_shared_threads",
             "local-actor-system-use_ring_queue",
+            "local-actor-system-use_waker",
         ):
             self.assertIn('id="' + field + '"' if field != "local-ydbd-version" else "id=" + field, html)
 
     @unittest.skipUnless(shutil.which("node"), "node is required for builder state checks")
     def test_add_profile_preserves_unsupported_benchmark_draft(self):
-        script = """
+        script = distributed_builder_ui.JS + """
 const editor={yaml:'original draft',model:{
   benchmarks:[{name:'distributed-ydb',builder_supported:false}],
   profiles:[{benchmark:'distributed-ydb',name:'cluster'}]
@@ -2667,7 +2695,8 @@ if(!detail.open)throw Error('Expansion leaked between profiles');
 
     @unittest.skipUnless(shutil.which("node"), "node is required for editor rendering checks")
     def test_new_run_layout_preserves_host_and_error_controls(self):
-        script = web._JS[web._JS.index("function editorControls()") : web._JS.index("function parameterCases(")]
+        script = distributed_builder_ui.JS
+        script += web._JS[web._JS.index("function editorControls()") : web._JS.index("function parameterCases(")]
         script += web._JS[web._JS.index("const editorDetailState=") : web._JS.index("function clearRefresh()")]
         script += """
 const app={innerHTML:''},elements=new Map();
@@ -4213,7 +4242,10 @@ const renderRun=(...args)=>{rendered=args};
 
     @unittest.skipUnless(shutil.which("node"), "node is needed for browser logic tests")
     def test_new_run_queue_label_uses_selected_host_and_ignores_stale_response(self):
-        script = web._JS[web._JS.index("async function refreshEditorActivity(") : web._JS.index("function runDisplay(")]
+        script = distributed_builder_ui.JS
+        script += web._JS[
+            web._JS.index("async function refreshEditorActivity(") : web._JS.index("function runDisplay(")
+        ]
         script += """
 const assert=require('node:assert/strict'),location={hash:'#new'};
 const editor={model:{profiles:[]}};
@@ -4237,6 +4269,9 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
   assert.equal(button.textContent,'Add to queue');
   pending=refreshEditorActivity();resolve({queued:1});await pending;
   assert.equal(button.textContent,'Add to queue');
+  pending=refreshEditorActivity();resolve({queued:0});await pending;
+  assert.equal(button.textContent,'Deploy cluster');
+  editor.model.profiles=[{benchmark:'dedicated-ydb',distributed_config:{}}];
   pending=refreshEditorActivity();resolve({queued:0});await pending;
   assert.equal(button.textContent,'Deploy cluster');
   editor.model.profiles=[];
@@ -5474,7 +5509,7 @@ const editorApi=path=>{assert.equal(path,'/api/activity-status');return new Prom
         self.assertEqual(start_process.call_args.kwargs["parent_death_wrapper"], self.root / "process_guard")
 
     def test_local_ydb_actor_system_config_is_used_by_static_dynamic_and_scaled_nodes(self):
-        flags = {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False}
+        flags = {"use_shared_threads": True, "use_united_pool": True, "use_ring_queue": False, "use_waker": True}
         cluster = local_ydb.LocalYdbCluster(
             self.root / "ydbd",
             self.root / "ydb",
@@ -8155,6 +8190,7 @@ class WebTest(unittest.TestCase):
             "use_shared_threads": True,
             "use_united_pool": False,
             "use_ring_queue": False,
+            "use_waker": True,
             "private": "not projected",
         }
         manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -8187,6 +8223,7 @@ class WebTest(unittest.TestCase):
                     "use_shared_threads": True,
                     "use_united_pool": False,
                     "use_ring_queue": False,
+                    "use_waker": True,
                 },
             )
             with self.assertRaisesRegex(BenchmarkError, "between 1 and 20"):
@@ -8950,7 +8987,9 @@ const renderTopology=()=>{rendered='topology'};
                 self.assertIn(b"Recent activity", script)
                 self.assertIn(b"activityScrollTop", script)
                 self.assertIn(b"activityPinned", script)
-                self.assertIn(b"showLiveOutput=!['local-ydb','distributed-ydb'].includes(activeBenchmark)", script)
+                self.assertIn(
+                    b"showLiveOutput=!['local-ydb','distributed-ydb','dedicated-ydb'].includes(activeBenchmark)", script
+                )
                 self.assertIn(b"local-load-allow-errors", script)
                 self.assertIn(b"allow-errors: ", script)
                 self.assertIn(b"Failed workload requests are allowed", script)

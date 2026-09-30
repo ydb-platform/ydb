@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
+#include <ydb/core/tx/scheme_board/events_schemeshard.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
@@ -12,6 +13,7 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/library/testlib/helpers.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -688,12 +690,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
         checkMultiColumnStatistics({"s1"});
 
         // ADD STATISTICS
-        // A stats-only alter is a SchemeShard-local state change: it completes synchronously
-        // (StatusSuccess), without a shard round-trip (StatusAccepted).
+        // A stats-only alter updates SchemeShard-local state without a shard round-trip,
+        // but waits for schema publication before notifying completion.
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
-        )", {NKikimrScheme::StatusSuccess});
+        )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics({"s1", "s2"});
 
@@ -701,7 +703,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             DropMultiColumnStatistics: "s2"
-        )", {NKikimrScheme::StatusSuccess});
+        )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics({"s1"});
 
@@ -716,10 +718,101 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTable"
             UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: COUNT_MIN_SKETCH }
-        )", {NKikimrScheme::StatusSuccess});
+        )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics({"s1"});
         checkStatisticsColumns("s1", {"data"});
+    }
+
+    Y_UNIT_TEST(AlterShardReadFlagsCompletesSynchronously) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", defaultStoreSchema);
+        env.TestWaitNotification(runtime, txId);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto describe = DescribePath(runtime, "/MyRoot/OlapStore/ColumnTable");
+        const auto& sharding = describe.GetPathDescription().GetColumnTableDescription().GetSharding();
+        UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> publicationAcks(runtime,
+            [alterTxId](const auto& ev) {
+                return ev->Cookie == alterTxId;
+            });
+
+        // Reopening the readable shard exercises the same metadata-only update
+        // used by MERGE, which must retain its synchronous completion behavior.
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot/OlapStore", TStringBuilder()
+            << "Name: \"ColumnTable\" AlterShards { Modification { OpenReadIds: "
+            << sharding.GetColumnShards(0) << " } }", {NKikimrScheme::StatusSuccess});
+        env.TestWaitNotification(runtime, alterTxId);
+        publicationAcks.Stop().Unblock();
+    }
+
+    Y_UNIT_TEST_TWIN(MultiColumnStatisticsWaitsForPublication, Restart) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", defaultTableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<NSchemeBoard::NSchemeshardEvents::TEvUpdateAck> publicationAcks(runtime,
+            [alterTxId](const auto& ev) {
+                return ev->Cookie == alterTxId;
+            });
+
+        TestAlterColumnTable(runtime, alterTxId, "/MyRoot", R"(
+            Name: "ColumnTable"
+            UpsertMultiColumnStatistics { Name: "s1" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
+        )", {NKikimrScheme::StatusAccepted});
+
+        runtime.WaitFor("statistics publication acknowledgement", [&] { return !publicationAcks.empty(); });
+        if constexpr (Restart) {
+            const auto previousGeneration = publicationAcks.front()->Get()->Record.GetGeneration();
+            GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+            runtime.WaitFor("statistics publication after restart", [&] {
+                for (const auto& ack : publicationAcks) {
+                    if (ack->Get()->Record.GetGeneration() > previousGeneration) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+        }
+
+        bool registered = false;
+        bool completed = false;
+        auto registeredObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionRegistered>(
+            [&](const auto& ev) {
+                if (ev->Get()->Record.GetTxId() == alterTxId) {
+                    registered = true;
+                }
+            });
+        auto completedObserver = runtime.AddObserver<TEvSchemeShard::TEvNotifyTxCompletionResult>(
+            [&](const auto& ev) {
+                if (ev->Get()->Record.GetTxId() == alterTxId) {
+                    completed = true;
+                }
+            });
+
+        const auto sender = runtime.AllocateEdgeActor();
+        runtime.SendToPipe(TTestTxConfig::SchemeShard, sender,
+            new TEvSchemeShard::TEvNotifyTxCompletion(alterTxId), 0, GetPipeConfigWithRetries());
+        runtime.WaitFor("statistics alter completion subscription", [&] { return registered || completed; });
+        UNIT_ASSERT_C(registered && !completed,
+            "A statistics-only ALTER must wait for SchemeBoard publication before completing");
+
+        publicationAcks.Stop().Unblock();
+        runtime.WaitFor("statistics alter completion", [&] { return completed; });
     }
 
     Y_UNIT_TEST(MultiColumnStatisticsWithoutTypesMeansAllTypes) {
@@ -754,13 +847,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTableNoTypes"
             DropMultiColumnStatistics: "s1"
-        )", {NKikimrScheme::StatusSuccess});
+        )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
 
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "ColumnTableNoTypes"
             UpsertMultiColumnStatistics { Name: "s2" ColumnNames: "data" }
-        )", {NKikimrScheme::StatusSuccess});
+        )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
         checkMultiColumnStatistics("s2");
     }
@@ -808,7 +901,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
             Name: "EqHeightColumnTable"
             UpsertMultiColumnStatistics { Name: "h2" ColumnNames: "data" Types: EQ_HEIGHT_HISTOGRAM }
-        )", {NKikimrScheme::StatusSuccess});
+        )", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
         checkEqHeight({"h1", "h2"});
     }

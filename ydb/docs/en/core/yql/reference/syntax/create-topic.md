@@ -34,6 +34,16 @@ parameters not explicitly specified are also set to defaults (for both the topic
 * `auto_partitioning_up_utilization_percent` — defines the partition load threshold as a percentage of the maximum write speed, upon reaching which an automatic **increase** in the number of partitions will be initiated. Value type — `integer`, default value — `80`.
 * `auto_partitioning_stabilization_window` — defines the time interval during which the load level must remain above the set threshold (`auto_partitioning_up_utilization_percent`) before the number of partitions is automatically increased. Value type — `Interval`, default value — `5m`.
 
+{% note warning %}
+
+Setting `max_active_partitions` to a value greater than
+`min_active_partitions` does not enable autopartitioning. To use different
+minimum and maximum limits, also set `auto_partitioning_strategy` to
+`scale_up`. With the default `disabled` strategy, the topic has a fixed number
+of active partitions.
+
+{% endnote %}
+
 {% if feature_topic_codecs %}
 
 * `supported_codecs` — a list of [codecs](../../../concepts/datamodel/topic.md#message-codec) supported by the topic. The value type is `String`.

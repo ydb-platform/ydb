@@ -315,6 +315,14 @@ struct TEvPQ {
             ui32 LogicalMessageCount = 1;
             bool IsBatch = false;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
+
+            size_t GetPayloadSize() const {
+                return SourceId.size() + Data.size();
+            }
+
+            size_t GetUncompressedPayloadSize() const {
+                return UncompressedSize + SourceId.size();
+            }
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite, std::optional<ui64> initialSeqNo, EWriteExternalDeduplicationStatus externalDeduplicationStatus)

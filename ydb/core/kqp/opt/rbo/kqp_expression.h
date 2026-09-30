@@ -20,15 +20,25 @@ using namespace NYql;
  */
 class TExpression {
   public:
+    // Conversion-only source spellings. Never reconstruct this scope from
+    // mutable registry labels after conversion.
+    using TBindings = THashMap<TString, TInfoUnitId>;
 
-    // Constructs an expression from ExprNode, also save expression context and plan
-    // properties. Plan properties are needed to access subplan IUs
-    // The expression can be constructed from a full lambda as well as any yql expression.
-    // In the former case a new lambda is built automatically
+    // Bind only Members of this lambda's row argument. Whole-row values are
+    // reconstructed from those members, preserving their source struct shape.
+    // Explicit replacements are already ID-bound (e.g. extracted sublinks).
+    static TExpression FromExpr(TExprNode::TPtr lambda, const TBindings& bindings,
+        TExprContext& ctx, TPlanProps& props, TNodeOnNodeOwnedMap replacements = {});
 
+    // Internal construction: references already use decimal IDs. A bare body
+    // is wrapped in a lambda, rebinding free row arguments, not inner locals.
     TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props = nullptr); 
 
     TExpression() = default;
+    TExpression(const TExpression&) = default;
+    TExpression(TExpression&&) noexcept = default;
+    TExpression& operator=(const TExpression&) = default;
+    TExpression& operator=(TExpression&&) noexcept = default;
     ~TExpression() = default;
 
     // Split a conjunct into a vector of expressions. If the is no conjunction at the top level,
@@ -44,9 +54,6 @@ class TExpression {
 
     // Check if the expression is a just a single callable on top of a column expression
     bool IsSingleCallable(const THashSet<TString>& allowedCallables) const;
-
-    // Check if the expression is a cast
-    bool IsCast() const;
 
     // Check if this is a potential equi-join condition
     bool MaybeEquiJoinCondition() const;
@@ -65,22 +72,22 @@ class TExpression {
 
     // Return all column references used in this expression
     // Optionally include columns that bind to subplan results and external columns inside correlated subqueries
-    // If the result list of column references is not empty and plan properties are not set in the expression,
-    // an exception will be thrown. A subsequent GetInputIUs() call on the same
+    // Nonempty expressions need plan properties for subplan classification.
+    // A subsequent GetInputIUs() call on the same
     // TExpression may refresh the returned buffer; do not retain references,
     // pointers, or iterators into it across calls.
-    const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
+    const TUnorderedIUs& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const Y_LIFETIME_BOUND;
 
-    // Return Member names without classifying them against the current subplan registry.
+    // Return direct row-reference IDs without subplan classification.
     // The result depends only on Node and is cached after the first AST traversal.
-    const TVector<TInfoUnit>& GetRawInputIUs() const;
+    const TUnorderedIUs& GetRawInputIUs() const Y_LIFETIME_BOUND;
 
     void BindPlanProps(TPlanProps* props) const {
         PlanProps = props;
     }
 
-    // Rename column references in the expression
-    TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
+    // Simultaneous ID substitution, not a change to registry display labels.
+    TExpression ApplyRenames(const TSubstitutions& substitutions) const;
 
     // Apply a generic replace map to the lambda of the expression
     TExpression ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const;
@@ -88,14 +95,11 @@ class TExpression {
     // Extract common conjuncts from OR branches.
     std::optional<TExpression> TryExtractCommonConjuncts() const;
 
-    // Remove a cast from the expression
-    TExpression PruneCast() const;
-
     // Produce a pretty string for this expression
     TString ToString() const;
 
     // Produce a compact string suitable for explain output. Complex expressions are summarized by dependencies.
-    TString ToExplainString() const;
+    TString ToExplainString(const TInfoUnitRegistry& registry) const;
 
     TExprNode::TPtr Node;
     TExprContext* Ctx = nullptr;
@@ -105,10 +109,10 @@ class TExpression {
     bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
 
     mutable TExprNode::TPtr RawInputIUsCacheKey;
-    mutable std::optional<TVector<TInfoUnit>> RawInputIUs;
+    mutable TUnorderedIUs RawInputIUs;
     // Reusable scratch buffer. Every resolving call refreshes it against the
     // current subplan registry, so registry mutations cannot stale the result.
-    mutable TVector<TInfoUnit> ResolvedInputIUs;
+    mutable TUnorderedIUs ResolvedInputIUs;
 
 };
 
@@ -121,23 +125,23 @@ class TEquiJoinCondition {
     TEquiJoinCondition(const TExpression& expr);
 
     // In case this is a simple predicate that contains a single column reference on each side, return left column
-    TInfoUnit GetLeftIU() const;
+    TInfoUnitId GetLeftIU() const;
 
     // In case this is a simple predicate that contains a single column reference on each side, return right column
-    TInfoUnit GetRightIU() const;
+    TInfoUnitId GetRightIU() const;
 
     // Find all non-column reference expression in this condition and insert them into a map
-    bool ExtractExpressions(TNodeOnNodeOwnedMap& map, TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& exprMap);
+    bool ExtractExpressions(TNodeOnNodeOwnedMap& map, TMappedIUs<TExprNode::TPtr>& expressions);
 
     const TExpression& Expr;
-    TVector<TInfoUnit> LeftIUs;
-    TVector<TInfoUnit> RightIUs;
+    TUnorderedIUs LeftIUs;
+    TUnorderedIUs RightIUs;
 
     bool IncludesExpressions = true;
 };
 
 // Create an expression that accesses a single column
-TExpression MakeColumnAccess(const TInfoUnit& column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
+TExpression MakeColumnAccess(TInfoUnitId column, TPositionHandle pos, TExprContext* ctx, TPlanProps* props = nullptr);
 
 // Create a constant expression. Constant expressions don't need plan properties
 TExpression MakeConstant(const TString& type, const TString& value, TPositionHandle pos, TExprContext* ctx);
@@ -161,14 +165,13 @@ TExpression MakeUnaryCallable(const TString& callable, const TExpression& arg);
 // Make ensure.
 TExpression MakeEnsure(const TExpression& value, const TExpression& predicate, const TString& message);
 
+// The ID a row argument's `Member` refers to.
+TInfoUnitId GetMemberId(const TExprNode& member);
+
 // Get all members from a expression node
 void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs);
 
-// Get all members from an expression node, but also mark subplan context separately and optionally include 
-// dependencies in correlated subqueries
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs, const TPlanProps& props, bool withSubplanContext, bool withDependencies);
-
-TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext& ctx);
+TString PrintRBOExpression(TExprNode::TPtr expr, TExprContext& ctx, const TInfoUnitRegistry* registry = nullptr);
 
 }
 }

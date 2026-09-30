@@ -8,6 +8,7 @@ PY_SRCS(
     factories.py
     hive.py
     logs.py
+    pq.py
     schemeshard.py
 )
 

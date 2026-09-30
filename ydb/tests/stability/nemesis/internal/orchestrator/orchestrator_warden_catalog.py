@@ -9,6 +9,7 @@ from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
 from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
+from ydb.tests.library.wardens.pq import PersQueueHasNoStuckTransactions
 from ydb.tests.library.wardens.schemeshard import SchemeShardHasNoInFlightTransactions
 from ydb.tests.stability.nemesis.internal.orchestrator.unified_agent_verify_failed_aggregated import (
     UnifiedAgentVerifyFailedAggregated,
@@ -108,5 +109,10 @@ ORCHESTRATOR_LIVENESS_CHECKS: Tuple[OrchestratorLivenessCheck, ...] = (
         name="TxCompleteLag",
         description="Check transaction completion lag",
         build=lambda c: TxCompleteLagLivenessWarden(c),
+    ),
+    OrchestratorLivenessCheck(
+        name="PersQueueNoStuckTx",
+        description="Check PersQueue has no stuck transactions (PQ/TxCompleteLag, PQ/TxInFly)",
+        build=lambda c: PersQueueHasNoStuckTransactions(c),
     ),
 )

@@ -125,7 +125,6 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheTtl);
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
-    REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
     REGISTER_SETTING(*this, QueryCacheReportProgress);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);

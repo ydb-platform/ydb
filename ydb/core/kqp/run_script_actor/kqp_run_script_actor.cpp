@@ -42,14 +42,14 @@ class TRunScriptActor final : public TActorBootstrapped<TRunScriptActor>, IActor
         bool WaitCreation = false;
         bool SessionOpen = false;
 
-        void Close(const TActorIdentity& actor, const TScriptExecutionContext& ctx, NWilson::TTraceId traceId) {
+        void Close(const TActorIdentity& actor, const TScriptExecutionContext& ctx) {
             if (!SessionOpen) {
                 return;
             }
 
             auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(ctx.UserRequestContext->SessionId);
-            actor.Send(MakeKqpProxyID(actor.NodeId()), ev.release(), 0, 0, std::move(traceId));
+            actor.Send(MakeKqpProxyID(actor.NodeId()), ev.release());
             SessionOpen = false;
         }
     };
@@ -167,7 +167,7 @@ private:
         auto ev = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
         ev->Record.SetTraceId(Ctx->UserRequestContext->TraceId);
         ev->Record.MutableRequest()->SetDatabase(Ctx->UserRequestContext->Database);
-        Send(MakeKqpProxyID(SelfId().NodeId()), ev.release(), 0, 0, NWilson::TTraceId(TraceId));
+        Send(MakeKqpProxyID(SelfId().NodeId()), ev.release());
         SessionState.WaitCreation = true;
     }
 
@@ -420,7 +420,7 @@ private:
         if (SessionState.SessionOpen) {
             YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Close session",
                 {"logPrefix", LogPrefix()});
-            SessionState.Close(SelfId(), *Ctx, NWilson::TTraceId(TraceId));
+            SessionState.Close(SelfId(), *Ctx);
         }
 
         if (ScriptLeaseWatcherActor.Id) {

@@ -755,7 +755,22 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
                 }
             };
             auto mvccObserver = runtime.AddObserver<NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot>(checkTrace);
-            auto persistentObserver = runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>(checkTrace);
+            bool refreshed = false;
+            bool discarded = false;
+            auto persistentObserver = runtime.AddObserver<TEvTxUserProxy::TEvProposeTransaction>(
+                [&](TEvTxUserProxy::TEvProposeTransaction::TPtr& ev) {
+                    if (ev->Sender != manager) {
+                        return;
+                    }
+                    const auto& transaction = ev->Get()->Record.GetTransaction();
+                    if (transaction.HasCreateVolatileSnapshot()) {
+                        checkTrace(ev);
+                    } else {
+                        UNIT_ASSERT(!ev->TraceId);
+                        refreshed |= transaction.HasRefreshVolatileSnapshot();
+                        discarded |= transaction.HasDiscardVolatileSnapshot();
+                    }
+                });
             std::unique_ptr<NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest> request;
             if constexpr (Mvcc) {
                 request = std::make_unique<NKqp::TEvKqpSnapshot::TEvCreateSnapshotRequest>(TVector<TTableId>{}, 0);
@@ -767,8 +782,11 @@ Y_UNIT_TEST_SUITE(TKqpQueryTrace) {
             UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(result->Get()->Status), static_cast<int>(NKikimrIssues::TStatusIds::SUCCESS));
             UNIT_ASSERT(forwarded);
             if constexpr (!Mvcc) {
+                runtime.SimulateSleep(TDuration::Seconds(11));
+                UNIT_ASSERT(refreshed);
                 runtime.Send(new IEventHandle(manager, sender, new NKqp::TEvKqpSnapshot::TEvDiscardSnapshot()));
                 runtime.SimulateSleep(TDuration::Seconds(1));
+                UNIT_ASSERT(discarded);
             }
         }
     }

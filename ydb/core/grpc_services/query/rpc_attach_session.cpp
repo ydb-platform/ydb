@@ -64,7 +64,7 @@ private:
    void DoAbortTx() {
        auto ev = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
        ev->Record.MutableRequest()->SetSessionId(SessionId);
-       Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.release(), 0, 0, Request->GetWilsonTraceId());
+       Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.release());
    }
 
     void DoAttach() {
@@ -84,7 +84,7 @@ private:
             return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST);
         }
 
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.release(), 0, 0, Request->GetWilsonTraceId());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.release());
     }
 
     void HandleReady(TEvents::TEvWakeup::TPtr&) {

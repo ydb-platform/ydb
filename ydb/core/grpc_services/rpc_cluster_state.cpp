@@ -206,14 +206,14 @@ public:
         auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCreateSessionRequest>();
         remoteRequest->Record.MutableRequest()->SetDatabase("/Root");
         ++Requested;
-        Send(kqpProxyId, remoteRequest.release(), 0, 0, Request->GetWilsonTraceId());
+        Send(kqpProxyId, remoteRequest.release());
     }
 
     void CloseSession() {
         auto kqpProxyId = NKqp::MakeKqpProxyID(SelfId().NodeId());
         auto remoteRequest = std::make_unique<NKqp::TEvKqp::TEvCloseSessionRequest>();
         remoteRequest->Record.MutableRequest()->SetSessionId(SessionId);
-        Send(kqpProxyId, remoteRequest.release(), 0, 0, Request->GetWilsonTraceId());
+        Send(kqpProxyId, remoteRequest.release());
     }
 
     void DoQueryRequest() {
@@ -233,7 +233,7 @@ public:
         request->Record.MutableRequest()->SetKeepSession(true);
         request->Record.MutableRequest()->MutableTxControl()->Mutablebegin_tx()->Mutablestale_read_only();
         ++Requested;
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release(), 0, 0, Request->GetWilsonTraceId());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), request.release());
     }
     void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr ev) {
         ++Received;

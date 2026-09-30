@@ -690,7 +690,7 @@ public:
         remoteRequest->Record.SetSupportsBalancing(event.GetSupportsBalancing());
         remoteRequest->Record.MutableRequest()->SetDatabase(event.GetRequest().GetDatabase());
 
-        Send(MakeKqpProxyID(nodeId), remoteRequest.release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
+        Send(MakeKqpProxyID(nodeId), remoteRequest.release(), IEventHandle::FlagTrackDelivery, requestId);
         TDuration timeout = DEFAULT_CREATE_SESSION_TIMEOUT;
         StartQueryTimeout(requestId, timeout);
         return true;
@@ -918,12 +918,12 @@ public:
 
         if (sessionInfo) {
             LocalSessions->SetSessionClosing(sessionInfo);
-            Send(sessionInfo->WorkerId, ev->Release().Release(), 0, 0, std::move(ev->TraceId));
+            Send(sessionInfo->WorkerId, ev->Release().Release());
         } else {
             if (!sessionId.empty()) {
                 TActorId targetId = TryGetSessionTargetActor(sessionId, requestInfo, 0);
                 if (targetId) {
-                    Send(targetId, ev->Release().Release(), 0, 0, std::move(ev->TraceId));
+                    Send(targetId, ev->Release().Release());
                 }
             }
         }
@@ -1016,7 +1016,7 @@ public:
 
         PendingRequests.SetSessionId(requestId, sessionId, dbCounters);
         StartQueryTimeout(requestId, timeout);
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
     }
 
     void Handle(TEvKqp::TEvCancelQueryRequest::TPtr& ev) {

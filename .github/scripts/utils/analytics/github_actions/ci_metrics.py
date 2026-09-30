@@ -131,7 +131,7 @@ def github_env_defaults() -> Dict[str, Any]:
         if run_id is not None and repository
         else None
     )
-    job_name = os.environ.get("CI_JOB_TITLE") or os.environ.get("GITHUB_JOB") or None
+    job_name = os.environ.get("ANALYTICS_JOB_NAME") or os.environ.get("GITHUB_JOB") or None
     return {
         "run_id": run_id,
         "github_job_id": _as_uint(os.environ.get("GITHUB_NUMERIC_JOB_ID")),

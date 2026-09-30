@@ -306,13 +306,15 @@ class WorkflowRunMetricsTest(unittest.TestCase):
 
 
 class GithubEnvDefaultsTest(unittest.TestCase):
-    def test_prefers_ci_job_title(self):
+    def test_prefers_analytics_job_name(self):
         old = {
-            "CI_JOB_TITLE": os.environ.get("CI_JOB_TITLE"),
+            "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
+            "GITHUB_JOB": os.environ.get("GITHUB_JOB"),
             "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID"),
         }
         try:
-            os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
+            os.environ["ANALYTICS_JOB_NAME"] = "Build and test relwithdebinfo"
+            os.environ["GITHUB_JOB"] = "build"
             os.environ["GITHUB_RUN_ID"] = "12345"
             defaults = github_env_defaults()
             self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo")
@@ -334,7 +336,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             "GITHUB_BASE_REF",
             "GITHUB_REF_NAME",
             "BUILD_PRESET",
-            "CI_JOB_TITLE",
+            "ANALYTICS_JOB_NAME",
             "GITHUB_JOB",
         )}
         try:
@@ -355,7 +357,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                         handle,
                     )
                 os.environ["GITHUB_EVENT_PATH"] = path
-                os.environ["CI_JOB_TITLE"] = "Build and test relwithdebinfo"
+                os.environ["ANALYTICS_JOB_NAME"] = "Build and test relwithdebinfo"
                 os.environ["BUILD_PRESET"] = "relwithdebinfo"
                 defaults = github_env_defaults()
             self.assertEqual(defaults["pr_number"], 53660)
@@ -379,7 +381,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
             "PR_NUMBER",
             "ORIGINAL_HEAD",
             "BRANCH_NAME",
-            "CI_JOB_TITLE",
+            "ANALYTICS_JOB_NAME",
             "GITHUB_TOKEN",
             "GITHUB_REPOSITORY",
             "GITHUB_NUMERIC_JOB_ID",
@@ -405,7 +407,7 @@ class GithubEnvDefaultsTest(unittest.TestCase):
                 os.environ["GITHUB_EVENT_NAME"] = "pull_request_target"
                 os.environ["GITHUB_WORKFLOW"] = "PR-check"
                 os.environ["GITHUB_RUN_ID"] = "99"
-                os.environ["CI_JOB_TITLE"] = "build_and_test"
+                os.environ["ANALYTICS_JOB_NAME"] = "build_and_test"
                 record = attach_context({"name": "ya_make_try_1", "source": "ya_phase"})
             self.assertEqual(record["pr_number"], 53660)
             self.assertEqual(record["event_name"], "pull_request_target")

@@ -92,7 +92,7 @@ WHERE run_id = 123 AND name = "compile";
 | `github_job_id` | `$GITHUB_NUMERIC_JOB_ID` | `456` |
 | `run_attempt` | `$GITHUB_RUN_ATTEMPT` | `1` |
 | `workflow` | `$GITHUB_WORKFLOW` | `PR-check` |
-| `job_name` | `$CI_JOB_TITLE` или `$GITHUB_JOB` | `build-relwithdebinfo` |
+| `job_name` | `$ANALYTICS_JOB_NAME` или `$GITHUB_JOB` | `build-relwithdebinfo` |
 | `event_name` | `$GITHUB_EVENT_NAME` | `pull_request` |
 | `branch` | `$BRANCH_NAME` / `$GITHUB_BASE_REF` / event | `main` |
 | `commit` | `$ORIGINAL_HEAD` / `$GITHUB_SHA` | `abc…` |

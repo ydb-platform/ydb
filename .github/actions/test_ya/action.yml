@@ -123,7 +123,6 @@ runs:
         ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
         echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
-        echo "CI_JOB_TITLE=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
         if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
           echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
         else

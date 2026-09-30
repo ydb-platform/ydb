@@ -295,6 +295,8 @@ public:
 
     void AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo);
     void AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo);
+    // Data sharing keeps the source's blob ids, so an imported portion may still sit in a MoveData target group.
+    void OnPortionImported(const std::shared_ptr<TPortionInfo>& portionInfo);
 
 private:
     ui64 TabletId;

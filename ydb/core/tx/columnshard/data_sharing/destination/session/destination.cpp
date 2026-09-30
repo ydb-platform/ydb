@@ -21,6 +21,7 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
         for (auto&& portion : i.second.DetachPortions()) {
             portion->MutablePortionInfo().SetPathId(it->second);
             index.AppendPortion(portion);
+            index.OnPortionImported(portion->MutablePortionInfoPtr());
         }
     }
     return TConclusionStatus::Success();

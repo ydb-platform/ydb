@@ -74,6 +74,12 @@ void TGranuleActualizationIndex::OnUncommittedPortionAborted(const ui64 portionI
     }
 }
 
+void TGranuleActualizationIndex::OnPortionImported(const std::shared_ptr<TPortionInfo>& portion) {
+    if (MoveDataActualizer) {
+        MoveDataActualizer->AddImportedPortion(*portion);
+    }
+}
+
 void TGranuleActualizationIndex::StopMoveData() {
     if (!MoveDataActualizer) {
         return;

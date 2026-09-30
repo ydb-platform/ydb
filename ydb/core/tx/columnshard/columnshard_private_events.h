@@ -95,7 +95,6 @@ struct TEvPrivate {
         EvRetryConfigSubscription,
 
         EvMoveDataWakeup,
-        EvMoveDataReseed,
         EvMoveDataPoke,
 
         EvEnd
@@ -527,17 +526,6 @@ struct TEvPrivate {
     struct TEvMoveDataWakeup: public TEventLocal<TEvMoveDataWakeup, EvMoveDataWakeup> {};
 
     // Hive resent TEvMoveData: merge the groups and restart the actualizer, without re-handling.
-    struct TEvMoveDataReseed: public TEventLocal<TEvMoveDataReseed, EvMoveDataReseed> {
-        const THashSet<ui32> Groups;
-        const TActorId HiveSender;
-
-        TEvMoveDataReseed(THashSet<ui32> groups, const TActorId& hiveSender)
-            : Groups(std::move(groups))
-            , HiveSender(hiveSender)
-        {
-        }
-    };
-
     // An accessor batch landed: re-arm the move's requests on the driver's turn, not the tablet's.
     struct TEvMoveDataPoke: public TEventLocal<TEvMoveDataPoke, EvMoveDataPoke> {};
 };

@@ -690,10 +690,22 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     MoveDataState.HiveSender = ev->Sender;
 
     if (MoveDataState.Active) {
-        // Hive retry or re-assignment.
-        // Reseed rather than re-handle: the driver merges the groups and restarts the actualizer.
+        // Hive retry or re-assignment: merge here, so a gate check already queued cannot answer for the old set.
+        bool newGroups = false;
+        for (const auto groupId : requested) {
+            newGroups |= MoveDataState.TargetGroups.emplace(groupId).second;
+        }
+        LOG_S_INFO("TColumnShard::Handle TEvMoveData: reseed newGroups=" << newGroups << " totalGroups=" << MoveDataState.TargetGroups.size()
+                                                                         << " at tablet " << TabletID());
+        if (newGroups && HasIndex()) {
+            // Stop and rerun rather than extend in place: Refresh rebuilds the queues from scratch.
+            auto& index = MutableIndexAs<NOlap::TColumnEngineForLogs>();
+            index.StopMoveData();
+            index.StartMoveData(MoveDataState.TargetGroups);
+            MoveDataState.CleanupWatermark.reset();
+        }
         AFL_VERIFY(!!MoveDataDriverId);
-        ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataReseed(std::move(requested), ev->Sender));
+        ctx.Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
         return;
     }
 

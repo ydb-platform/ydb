@@ -84,6 +84,17 @@ void TMoveDataActualizer::RemoveFromActiveQueue(ui64 portionId) {
     PortionAddress.erase(it);
 }
 
+void TMoveDataActualizer::AddImportedPortion(const TPortionInfo& info) {
+    const ui64 portionId = info.GetPortionId();
+    if (!InitialPortionIds.emplace(portionId).second || PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {
+        return;
+    }
+    if (!HasEntityInDefaultStorage(info, VersionedIndex)) {
+        return;
+    }
+    PendingPortionIds.emplace(portionId);
+}
+
 void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExternalContext& /*context*/) {
     const ui64 portionId = info.GetPortionId();
     // A seeded uncommitted portion has committed, so from here on it moves like any other.
@@ -92,7 +103,7 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     // An aborted task returns the portion here; leaving it in flight past any check below freezes the gate.
     InFlightPortionIds.erase(portionId);
     if (!InitialPortionIds.contains(portionId)) {
-        // Not ours: the session set is fixed at Refresh and a later portion cannot hold a target blob.
+        // Not ours: a later local write cannot hold a target blob, and imports arrive via AddImportedPortion.
         return;
     }
     if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {

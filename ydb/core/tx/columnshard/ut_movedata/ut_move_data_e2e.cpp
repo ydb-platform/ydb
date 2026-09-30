@@ -30,6 +30,8 @@ using EBackground = NYDBTest::ICSController::EBackground;
 
 constexpr ui32 OldGroup = 2181038080;
 constexpr ui32 NewGroup = 2181038081;
+// A second historical group, for requests that name more than one.
+constexpr ui32 MidGroup = 2181038082;
 constexpr ui64 TabletId = TTestTxConfig::TxTablet0;
 constexpr ui64 TableId = 1;
 
@@ -88,6 +90,7 @@ public:
     TTestBasicRuntime Runtime;
     TIntrusivePtr<NFake::TProxyDS> OldGroupProxy = new NFake::TProxyDS(TGroupId::FromValue(OldGroup));
     TIntrusivePtr<NFake::TProxyDS> NewGroupProxy = new NFake::TProxyDS(TGroupId::FromValue(NewGroup));
+    TIntrusivePtr<NFake::TProxyDS> MidGroupProxy = new NFake::TProxyDS(TGroupId::FromValue(MidGroup));
     NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> Controller;
     TActorId Sender;
     // The cutter sends TEvCutTabletHistory here, so it must be a real actor.
@@ -135,24 +138,31 @@ public:
 
     // Reassign past everything written so far: those portions stay behind in OldGroup.
     size_t ReassignPastWrittenData() {
-        const std::vector<TLogoBlobID> before = LivePortionBlobs(*OldGroupProxy, TabletId);
-        UNIT_ASSERT_C(before.size(), "nothing was written into OldGroup - the test would pass vacuously");
+        return ReassignPastWrittenData(*OldGroupProxy, *NewGroupProxy);
+    }
+
+    // Reassign past everything written so far into `from`: those portions stay behind there.
+    size_t ReassignPastWrittenData(const NFake::TProxyDS& from, const NFake::TProxyDS& to) {
+        const std::vector<TLogoBlobID> before = LivePortionBlobs(from, TabletId);
+        UNIT_ASSERT_C(before.size(), "nothing was written into the group being left - the test would pass vacuously");
+        ui32 fromGeneration = 0;
         for (const auto& id : before) {
-            ReassignedFrom = Max(ReassignedFrom, id.Generation() + 1);
+            fromGeneration = Max(fromGeneration, id.Generation() + 1);
         }
+        History.emplace_back(fromGeneration, to.GetGroupId().GetRawId());
         Restart();
-        UNIT_ASSERT_VALUES_EQUAL_C(LivePortionBlobs(*NewGroupProxy, TabletId).size(), 0u, "no portion data may exist in the target group yet");
+        UNIT_ASSERT_VALUES_EQUAL_C(LivePortionBlobs(to, TabletId).size(), 0u, "no portion data may exist in the target group yet");
         return before.size();
     }
 
     // Boots the next generation with the current channel history, as Hive does after MoveData.
     void Restart() {
         Runtime.Send(new IEventHandle(TabletActorId, TabletActorId, new TKikimrEvents::TEvPoisonPill));
-        TabletActorId = BootTablet(Runtime, MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignedFrom, NewGroup } }), Launcher);
+        TabletActorId = BootTablet(Runtime, MakeTabletInfo(TabletId, History), Launcher);
     }
 
-    void StartMove() {
-        Runtime.SendToPipe(TabletId, Sender, new TEvTablet::TEvMoveData(std::vector<ui32>{ OldGroup }), 0, GetPipeConfigWithRetries());
+    void StartMove(const std::vector<ui32>& groups = { OldGroup }) {
+        Runtime.SendToPipe(TabletId, Sender, new TEvTablet::TEvMoveData(groups), 0, GetPipeConfigWithRetries());
     }
 
     // Each step is a wakeup, which reruns the background work and the MoveData gate.
@@ -188,12 +198,12 @@ private:
     TActorId TabletActorId;
     TestTableDescription Table;
     TPlanStep ReadStep;
-    // First generation in NewGroup, once ReassignPastWrittenData has run.
-    ui32 ReassignedFrom = 0;
+    // Channel history as Hive would carry it: one entry per ReassignPastWrittenData.
+    std::vector<std::pair<ui32, ui32>> History{ { 0, OldGroup } };
 
     NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> SetupRuntime(const bool moveDataEnabled) {
         Runtime.SetScheduledLimit(10'000);
-        TTester::Setup(Runtime, { new NFake::TProxyDS(TGroupId::FromValue(0)), OldGroupProxy, NewGroupProxy,
+        TTester::Setup(Runtime, { new NFake::TProxyDS(TGroupId::FromValue(0)), OldGroupProxy, NewGroupProxy, MidGroupProxy,
                                     new NFake::TProxyDS(TGroupId::FromValue(Max<ui32>())) });
         Runtime.GetAppData().FeatureFlags.SetEnableColumnshardMoveData(moveDataEnabled);
         return NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -255,6 +265,43 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
         UNIT_ASSERT_VALUES_EQUAL_C((int)response->Get()->Record.GetStatus(), (int)NKikimrTabletBase::TEvMoveDataResponse::ErrorGroupIdMismatch,
             "expected ErrorGroupIdMismatch");
         UNIT_ASSERT_VALUES_EQUAL_C(f.ReadRows(), 1000, "a refused move must not touch the data");
+    }
+
+    // A second request naming a further historical group is merged on receipt, so the answer covers both groups.
+    Y_UNIT_TEST(ExpandedRequestIsAnsweredOnlyAfterEveryNamedGroupIsDrained) {
+        TMoveDataFixture f;
+        f.Controller->DisableBackground(EBackground::TTL);
+        f.Write(1, 0, 1000);
+        f.Controller->WaitCompactions(TDuration::Seconds(10));
+        // Compaction off from here: a boot-time merge would otherwise carry both batches into the active group.
+        f.Controller->DisableBackground(EBackground::Compaction);
+        f.ReassignPastWrittenData(*f.OldGroupProxy, *f.MidGroupProxy);
+        f.Write(2, 1000, 2000);
+        f.ReassignPastWrittenData(*f.MidGroupProxy, *f.NewGroupProxy);
+        UNIT_ASSERT_C(LivePortionBlobs(*f.MidGroupProxy, TabletId).size(), "the second batch must have landed in MidGroup");
+
+        // GC off: the first session drains OldGroup but its last gate clause cannot pass, so it stays active.
+        f.Controller->DisableBackground(EBackground::GC);
+        f.StartMove({ OldGroup });
+        UNIT_ASSERT_C(!f.DriveGate(60, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(3, 2000, 2001);
+            }
+        }), "answered with GC disabled: the gate did not wait for the old blobs to be collected");
+
+        f.StartMove({ OldGroup, MidGroup });
+        f.Controller->EnableBackground(EBackground::GC);
+        const auto response = f.DriveGate(200, [&](const ui32 i) {
+            if (i == 25) {
+                f.Write(4, 3000, 3001);
+            }
+        });
+        UNIT_ASSERT_C(response, "no TEvMoveDataResponse after the expanded request");
+        f.AssertDrainedSuccess(response);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            LivePortionBlobs(*f.MidGroupProxy, TabletId).size(), 0u, "answered Success with portion data still live in MidGroup");
+        // Writes 1-3 are visible at ReadStep; write 4 sits in the latest plan step and is skipped.
+        UNIT_ASSERT_VALUES_EQUAL(f.ReadRows(), 2001);
     }
 
     // An uncommitted write cannot be rewritten, yet its blobs sit in the old group until it commits and moves.

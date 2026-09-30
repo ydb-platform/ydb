@@ -26,7 +26,6 @@ private:
     }
 
     void Handle(TEvPrivate::TEvMoveDataWakeup::TPtr&, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvMoveDataReseed::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvMoveDataPoke::TPtr&, const TActorContext& ctx);
 
 public:
@@ -46,7 +45,6 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvMoveDataWakeup, Handle);
-            HFunc(TEvPrivate::TEvMoveDataReseed, Handle);
             HFunc(TEvPrivate::TEvMoveDataPoke, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

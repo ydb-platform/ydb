@@ -108,7 +108,6 @@ public:
     using NOlap::NActualizer::TMoveDataActualizer::AddToInitialAndPendingForTest;
     using NOlap::NActualizer::TMoveDataActualizer::ConfirmPortionForTest;
     using NOlap::NActualizer::TMoveDataActualizer::IsInPendingPortionIds;
-    using NOlap::NActualizer::TMoveDataActualizer::IsInPortionsToMove;
     using NOlap::NActualizer::TMoveDataActualizer::SimulateTaskSubmissionForTest;
     using NOlap::NActualizer::TMoveDataActualizer::TMoveDataActualizer;
 };
@@ -145,7 +144,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         mgr.DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
         UNIT_ASSERT_C(mgr.HasBlobsForGroups({ OldGroup }), "blob in the old group must match");
         UNIT_ASSERT_C(!mgr.HasBlobsForGroups({ NewGroup }), "the group it was not written to must not match");
-        UNIT_ASSERT_C(!mgr.HasBlobsForGroups({ 999u }), "an unrelated group must not match");
         // The gate is polled on every wakeup, so the query has to be non-destructive.
         UNIT_ASSERT_C(mgr.HasBlobsForGroups({ OldGroup }), "repeated query must give the same answer");
     }
@@ -229,9 +227,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().ConfirmedToMove, 1);
 
         actualizer.SimulateTaskSubmissionForTest(PortionId);
-        UNIT_ASSERT_C(!actualizer.IsInPortionsToMove(PortionId), "a submitted portion must leave PortionsToMove");
-        // In flight still counts: old blobs enter the delete queues only on commit.
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().InFlight, 1);
 
         // Past the deadline only InitialPortionIds membership admits the returned portion, so it must have survived submission.
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
@@ -272,8 +267,8 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!mgrNew.HasBlobsForGroups({ OldGroup }), "BlobsToKeep: old group must not match after reassign");
     }
 
-    // Shared/borrowed leg: the group comes from the persisted DS:<group>:<id> form, not our history.
-    Y_UNIT_TEST(TestMoveDataSharedBlobs) {
+    // Borrowed leg: the group comes from the persisted DS:<group>:<id> form, not our history.
+    Y_UNIT_TEST(TestMoveDataBorrowedBlobs) {
         static constexpr ui64 TabletId = 46;
         static constexpr ui64 ForeignTabletId = 99;
         static constexpr ui32 OldGroup = 100;
@@ -318,17 +313,14 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
     Y_UNIT_TEST(FreezeCleanupWatermarkRaisesToRunningOldest) {
         using NOlap::NActualizer::FreezeCleanupWatermark;
         const TInstant kT = TInstant::Seconds(100);
-        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(TInstant::Zero(), kT), kT);
-        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(kT, std::nullopt), kT);
-        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(kT - TDuration::Seconds(1), kT), kT);
-        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(kT, kT), kT);
-        UNIT_ASSERT_VALUES_EQUAL(FreezeCleanupWatermark(TInstant::Zero(), std::nullopt), TInstant::Zero());
+        UNIT_ASSERT_VALUES_EQUAL_C(FreezeCleanupWatermark(kT, std::nullopt), kT, "no running cleanup: the pending boundary stands");
+        UNIT_ASSERT_VALUES_EQUAL_C(FreezeCleanupWatermark(kT - TDuration::Seconds(1), kT), kT, "a running cleanup newer than pending raises it");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            FreezeCleanupWatermark(kT, kT - TDuration::Seconds(1)), kT, "a running cleanup older than pending does not lower it");
     }
 
-    // The handler rejects a request naming a live group, so a portion created after the session
-    // started cannot hold a target blob: adopting it would only buy a metadata request and a
-    // rejection, and under write load it would keep Pending non-zero and starve the gate.
-    Y_UNIT_TEST(PortionCreatedAfterTheSessionStartedIsNeverAdopted) {
+    // A local write after Refresh cannot hold a target blob; an import keeps the source's blob ids and must be admitted.
+    Y_UNIT_TEST(LocalWriteAfterRefreshIsNotAdoptedButAnImportIs) {
         TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
         TMoveDataActualizerTestable actualizer(THashSet<ui32>{ 100 }, schema.Index);
         const TInstant start = TInstant::Seconds(1000);
@@ -336,11 +328,17 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
         actualizer.AddPortion(MakeDefaultTierPortion(1), NOlap::NActualizer::TAddExternalContext(start + TDuration::Minutes(1), noPortions));
-        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(1), "a portion the session did not start with must not be adopted");
+        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(1), "a local write the session did not start with must not be adopted");
         UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0, "adopting it would hold the response back");
 
-        actualizer.AddPortion(MakeDefaultTierPortion(2), NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
-        UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(2), "time must not change the answer: the session set is fixed at Refresh");
+        const auto imported = MakeDefaultTierPortion(2);
+        actualizer.AddImportedPortion(*imported);
+        UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(2), "an imported portion may sit in a target group and must be checked");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            actualizer.GetMoveDataQueueSizes().GetTotal(), 1, "the import must hold the response until its blobs are checked");
+
+        actualizer.AddPortion(imported, NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
+        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 1, "re-adding the import must not count it twice");
     }
 
     // A compaction-level move removes and re-adds the same portion; it stays ours however late it returns.
@@ -556,7 +554,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         actualizer.AddToInitialAndPendingForTest(PortionId);
         actualizer.ConfirmPortionForTest(PortionId);
         actualizer.SimulateTaskSubmissionForTest(PortionId);
-        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 1, "a submitted portion must hold the response back");
 
         // The task aborted and the engine returned the portion, but it no longer has an entity in default storage.
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;

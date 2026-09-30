@@ -749,6 +749,10 @@ void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionInfo>& po
     SignalCounters.OnPortionAdded((TAppData::TimeProvider->Now() - appendPortionStart));
 }
 
+void TColumnEngineForLogs::OnPortionImported(const std::shared_ptr<TPortionInfo>& portionInfo) {
+    GetGranulePtrVerified(portionInfo->GetPathId())->OnPortionImported(portionInfo);
+}
+
 void TColumnEngineForLogs::AppendPortion(const std::shared_ptr<TPortionDataAccessor>& portionInfo) {
     TInstant appendPortionStart = TAppData::TimeProvider->Now();
     auto granule = GetGranulePtrVerified(portionInfo->GetPortionInfo().GetPathId());

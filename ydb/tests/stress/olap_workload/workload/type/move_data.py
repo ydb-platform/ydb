@@ -27,12 +27,14 @@ class WorkloadMoveData(WorkloadBase):
         self.database = database
         self.settle_time = settle_time
         self.converge_timeout = converge_timeout
-        # kikimr_client_factory speaks plaintext message bus, so grpcs:// cannot work here.
+        # kikimr_client_factory speaks plaintext message bus, so on grpcs:// only this workload stands down.
         scheme, sep, address = endpoint.rpartition("://")
+        self.kikimr_client = None
         if sep and scheme != "grpc":
-            raise ValueError(f"move_data needs a grpc:// endpoint, got {endpoint}")
-        host, _, port = address.partition(":")
-        self.kikimr_client = kikimr_client_factory(host, port or "2135")
+            logger.warning("move_data: needs a grpc:// endpoint, got %s; workload disabled", endpoint)
+        else:
+            host, _, port = address.partition(":")
+            self.kikimr_client = kikimr_client_factory(host, port or "2135")
         self.unit_kind = None
         self.unit_count = 0
         # The size every cycle returns to and the cleanup restores; set once the pool is ready.
@@ -44,6 +46,7 @@ class WorkloadMoveData(WorkloadBase):
     def get_stat(self):
         return f"Shrinks: {self.shrinks}, Grows: {self.grows}, Errors: {self.errors}, Units: {self.unit_count}"
 
+    # required_resources is the accepted request, not the evacuated pool: enough as the MoveData trigger; removal needs the history cutter.
     def _storage_units(self):
         request = GetTenantStatusRequest(self.database)
         response = self.kikimr_client.console_request(text_format.MessageToString(request.protobuf))
@@ -72,6 +75,8 @@ class WorkloadMoveData(WorkloadBase):
         return False
 
     def _pre_start(self):
+        if self.kikimr_client is None:
+            return False
         # A domain path like /Root has no storage units and takes no CMS alter: disable instead.
         try:
             units = self._storage_units()

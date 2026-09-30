@@ -38,6 +38,7 @@ struct TSamplingPos {
     bool IsPosInf() const { return !Key && !Before; }
 };
 
+// Finite keys are full-width; supported request prefixes are padded with NULLs.
 int CompareSamplingPos(
         const TSamplingPos& left,
         const TSamplingPos& right,

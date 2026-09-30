@@ -2503,7 +2503,7 @@ message TReadSamplingBounds {
     optional bool LastInclusive = 4 [default = false];
 }
 
-// Carries sampling progress to TEvRead.Sampling.Continuation.
+// On restart, copy to TEvRead.Sampling.Continuation and honor cursor inclusivity.
 message TReadSamplingContinuation {
     // LastProcessedKey is an inclusive resume point when this is set.
     optional bool LastProcessedKeyInclusive = 1 [default = false];
@@ -2528,11 +2528,11 @@ message TReadSamplingStats {
     optional uint64 OwnerRowsPerUnitMax = 4;
     // Owner-page sizes encountered during unit discovery, including skips and retries.
     optional uint64 OwnerMainGroupBytes = 5;
-    optional uint64 IndexPagesTouched = 7;
-    optional uint32 Parts = 8;
-    optional uint32 Memtables = 9;
-    optional uint32 Slices = 10;
-    optional uint32 Executions = 11;
+    optional uint64 IndexPagesTouched = 6;
+    optional uint32 Parts = 7;
+    optional uint32 Memtables = 8;
+    optional uint32 Slices = 9;
+    optional uint32 Executions = 10;
 }
 
 message TReadContinuationToken {

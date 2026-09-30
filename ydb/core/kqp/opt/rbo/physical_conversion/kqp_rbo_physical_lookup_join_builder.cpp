@@ -214,7 +214,35 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical lookup join keys] " << KqpExprToPrettyString(TExprBase(newInputStage), ctx);
 
-    return {newInputStage, NYql::ExpandType(pos, *keysType, ctx)};
+    return {newInputStage, NYql::ExpandType(pos, *keysType, ctx), ctx.MakeType<TStructExprType>(leftItems)};
+}
+
+TExprNode::TPtr BuildKeysFromInputLookupType(const TOpTableLookup& inputLookup, const TStructExprType* leftRowType,
+                                             const TPhysicalNames& names, const TInfoUnitRegistry& registry, TExprContext& ctx) {
+    Y_ENSURE(inputLookup.IsJoin(), "Keys are taken from a table lookup in join mode only");
+    Y_ENSURE(leftRowType, "Type of the left rows of the input lookup is not available");
+    Y_ENSURE(inputLookup.Type, "Type of the input lookup is not available");
+
+    // The logical type of the input lookup names fetched columns by display name, the stream lookup
+    // returns them by storage name.
+    const auto* tupleType = inputLookup.Type->Cast<TListExprType>()->GetItemType()->Cast<TTupleExprType>();
+    const auto* fetchedRowType = tupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TItemExprType*> keyItems;
+    for (const auto id : inputLookup.GetColumns()) {
+        // The logical type of a lookup names its fetched columns by information-unit ID.
+        const auto* type = fetchedRowType->FindItemType(ToString(id));
+        Y_ENSURE(type, "Type of the fetched column " << names.Get(id) << " is not available");
+        keyItems.push_back(ctx.MakeType<TItemExprType>(registry.Get(id).GetColumnName(), type));
+    }
+
+    // Tuple: (left row, lookup key, cookie).
+    const TTypeAnnotationNode::TListType tupleItems{
+        leftRowType,
+        ctx.MakeType<TOptionalExprType>(ctx.MakeType<TStructExprType>(keyItems)),
+        ctx.MakeType<TDataExprType>(EDataSlot::Uint64),
+    };
+    const auto* keysType = ctx.MakeType<TListExprType>(ctx.MakeType<TTupleExprType>(tupleItems));
+    return NYql::ExpandType(inputLookup.Pos, *keysType, ctx);
 }
 
 } // namespace NKikimr::NKqp::NLookupJoinBuilder

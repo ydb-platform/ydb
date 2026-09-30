@@ -8,6 +8,8 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/service.h>
+#include <ydb/core/nbs/nbs1_compat_api/cloud/blockstore/libs/storage/api/volume.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -74,6 +76,18 @@ private:
 
     void HandleUpdateVolumeConfigResponse(
         const NKikimr::TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // TODO: NBS-7763 answer with the volume state; nbsd gets an empty OK.
+    void HandleStatVolume(
+        const NNbs1CompatApi::NBlockStore::TEvService::TEvStatVolumeRequest::
+            TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // TODO: NBS-7763 wait for the partition; nbsd gets an empty OK.
+    void HandleWaitReady(
+        const NNbs1CompatApi::NBlockStore::TEvVolume::TEvWaitReadyRequest::TPtr&
+            ev,
         const NActors::TActorContext& ctx);
 
     void ReportTabletState(const TActorContext& ctx);

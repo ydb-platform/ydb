@@ -907,6 +907,45 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         }
     }
 
+    Y_UNIT_TEST(CollectAffectedRows_BatchDelete) {
+        NKikimrConfig::TAppConfig app = GetAppConfig();
+        app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(10000);
+        app.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetPartitionExecutionLimit(10);
+        TKikimrRunner kikimr(app);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
+                VALUES (1u, "a", 0u, ""), (2u, "b", 0u, ""), (3u, "c", 0u, "");
+            )"), BeginReadCommittedRW(), GetQuerySettingsBasic()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                BATCH DELETE FROM `/Root/TestTable` WHERE Group < 3u;
+            )"), NYdb::NQuery::TTxControl::NoTx(), GetQuerySettingsBasic()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, 2u);
+        }
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                BATCH DELETE FROM `/Root/TestTable` WHERE Group < 3u;
+            )"), NYdb::NQuery::TTxControl::NoTx(), GetQuerySettingsBasicNoAffectedRows()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            UNIT_ASSERT_C(!HasAnyAffectedRowsField(result),
+                "affected_rows field must be absent when collect_affected_rows is disabled");
+        }
+    }
+
     Y_UNIT_TEST(CollectAffectedRows_EraseExistenceReadIsAccounted) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();

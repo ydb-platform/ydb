@@ -3943,48 +3943,24 @@ public:
             const bool isRelevance = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
 
             // Ensure write actor exists for this index table
-            if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
-                    return false;
-                }
-            } else {
-                if (!CheckSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return false;
-                }
+            if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
+                return false;
             }
 
             // Fulltext relevance: ensure docs/dict/stats tables
             if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
-                if (!writeInfo.Actors.contains(indexSettings.DocsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
-                            indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor,
-                    indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
+                        indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
                     return false;
                 }
                 if (indexSettings.DictTableId.PathId != TPathId()) {
-                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
-                            return false;
-                        }
-                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
                         return false;
                     }
                 }
-                if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
-                            indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
-                    indexSettings.StatsTableId, indexSettings.StatsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
+                        indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
                     return false;
                 }
             }

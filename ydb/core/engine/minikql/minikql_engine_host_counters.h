@@ -1,6 +1,7 @@
 #pragma once
 
 #include "util/string/builder.h"
+#include "util/string/cast.h"
 #include "util/system/types.h"
 
 #include <optional>
@@ -60,7 +61,7 @@ struct TEngineHostCounters {
             << ", SelectRangeDeletedRowSkips: " << SelectRangeDeletedRowSkips
             << ", InvisibleRowSkips: " << InvisibleRowSkips
             << ", NAffectedRows: "
-            << (NAffectedRows ? TStringBuilder() << *NAffectedRows : TString("null"))
+            << (NAffectedRows ? ::ToString(*NAffectedRows) : TString("null"))
             << "}";
     }
 };

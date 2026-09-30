@@ -503,6 +503,49 @@ Y_UNIT_TEST(MoveDataOneBlob) {
     CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME, {tc.Value}, {}, tc);
 }
 
+Y_UNIT_TEST(CopyBlobChecksReaderGeneration) {
+    for (bool blocked : {false, true}) {
+        TTestContext tc;
+        TFinalizer finalizer(tc);
+        tc.Prepare([](TTestActorRuntime &){});
+
+        CmdWrite("key", tc.Value, NKikimrClient::TKeyValueRequest::MAIN,
+            NKikimrClient::TKeyValueRequest::REALTIME, tc);
+
+        TLogoBlobID blobId;
+        for (const auto& [id, _] : tc.DsProxies[1]->AllMyBlobs()) {
+            if (id.Channel() == 2) {
+                blobId = id;
+                break;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(blobId.TabletID(), tc.TabletId);
+
+        const ui32 readerGeneration = blobId.Generation() + 100;
+        TEvBlobStorage::TEvBlock block(tc.TabletId,
+            blocked ? readerGeneration : readerGeneration - 1, TInstant::Max());
+        THolder<TEvBlobStorage::TEvBlockResult> blockResult(tc.DsProxies[1]->Handle(&block));
+        UNIT_ASSERT_VALUES_EQUAL(blockResult->Status, NKikimrProto::OK);
+
+        auto info = CreateReassignedTabletInfo(tc.TabletId, TTabletTypes::KeyValue,
+            TErasureType::ErasureNone, 2181038080, 2181038081, readerGeneration);
+        const TLogoBlobID newBlobId(tc.TabletId, readerGeneration, 1, 2, tc.Value.size(), 0);
+        tc.Runtime->Register(NKeyValue::CreateKeyValueCopyBlobActor(
+            tc.Edge, info.Get(), blobId, newBlobId, 1));
+
+        TAutoPtr<IEventHandle> handle;
+        if (blocked) {
+            tc.Runtime->GrabEdgeEvent<TEvents::TEvPoisonPill>(handle);
+            UNIT_ASSERT(!tc.DsProxies[2]->AllMyBlobs().contains(newBlobId));
+        } else {
+            auto* result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvBlobCopied>(handle);
+            UNIT_ASSERT(result->Result == TEvKeyValue::TEvBlobCopied::EResult::OK);
+            UNIT_ASSERT_VALUES_EQUAL(result->NewBlobId, newBlobId);
+            UNIT_ASSERT(tc.DsProxies[2]->AllMyBlobs().contains(newBlobId));
+        }
+    }
+}
+
 Y_UNIT_TEST(MoveDataOneOfTwoBlobs) {
     TTestContext tc;
     TFinalizer finalizer(tc);

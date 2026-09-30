@@ -75,6 +75,84 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         Basic("/Root/Replicated");
     }
 
+    Y_UNIT_TEST(ColumnFamilies) {
+        TEnv env;
+        auto source = MakeTableDescription({
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        });
+        source->MutableColumns(1)->SetFamilyName("archive");
+        auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
+        family->SetName("archive");
+        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        env.CreateTable("/Root", *source);
+
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"),
+                1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+                "/Root/Table", "/Root/Replicated"));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+        }
+
+        const auto description = env.GetDescription("/Root/Replicated");
+        const auto& table = description.GetPathDescription().GetTable();
+        ui32 archiveId = 0;
+        for (const auto& item : table.GetPartitionConfig().GetColumnFamilies()) {
+            if (item.GetName() == "archive") {
+                archiveId = item.GetId();
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(item.GetColumnCodec()),
+                    static_cast<ui32>(NKikimrSchemeOp::ColumnCodecLZ4));
+            }
+        }
+        UNIT_ASSERT(archiveId);
+        for (const auto& column : table.GetColumns()) {
+            if (column.GetName() == "value") {
+                UNIT_ASSERT_VALUES_EQUAL(column.GetFamily(), archiveId);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ImplicitDefaultFamilyFromProfile) {
+        TEnv env;
+
+        NKikimrConfig::TTableProfilesConfig profiles;
+        auto* policy = profiles.AddStoragePolicies();
+        policy->SetName("default");
+        auto* family = policy->AddColumnFamilies();
+        family->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind("test");
+        family->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind("test");
+        family->MutableStorageConfig()->MutableData()->SetPreferredPoolKind("test");
+        auto* profile = profiles.AddTableProfiles();
+        profile->SetName("default");
+        profile->SetStoragePolicy("default");
+        env.ConfigureTableProfiles(profiles);
+
+        env.CreateTable("/Root", *MakeTableDescription({
+            .Name = "Table",
+            .KeyColumns = {"key"},
+            .Columns = {{.Name = "key", .Type = "Uint32"}},
+            .ReplicationConfig = Nothing(),
+        }));
+
+        for (ui32 attempt = 0; attempt < 2; ++attempt) {
+            env.GetRuntime().Register(CreateDstCreator(
+                env.GetSender(), env.GetSchemeshardId("/Root/Table"), env.GetYdbProxy(),
+                "/Root", env.GetPathId("/Root"),
+                1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+                "/Root/Table", "/Root/Replicated"));
+            const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrScheme::StatusSuccess, result->Get()->Error);
+        }
+    }
+
     Y_UNIT_TEST(WithIntermediateDir) {
         Basic("/Root/Dir/Replicated");
     }

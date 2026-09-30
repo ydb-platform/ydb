@@ -255,6 +255,10 @@ public:
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 
+    virtual TMessageMetadata PrepareMessageMetadata(ui64 shardId) = 0;
+
+    virtual ui64 AllocateMessageCookie(ui64 shardId) = 0;
+
     struct TSerializationResult {
         i64 TotalDataSize = 0;
         TVector<ui64> PayloadIndexes;
@@ -291,6 +295,10 @@ struct TShardedWriteControllerSettings {
     bool EnableWriteSeqNum = false;
     ui64 WriterIndex = 0;
 };
+
+bool IsSupersededWriteResult(ui64 cookie, const std::optional<IShardedWriteController::TMessageMetadata>& metadata);
+
+bool IsIgnorableSupersededStatus(NKikimrDataEvents::TEvWriteResult::EStatus status);
 
 IShardedWriteControllerPtr CreateShardedWriteController(
     const TShardedWriteControllerSettings& settings,

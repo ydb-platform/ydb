@@ -1690,10 +1690,10 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 splitShard, 0, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR,
                 "late result for a shard removed by a reroute");
             runtime.Send(new IEventHandle(
-                writeActorId, writeActorId, lateError.release()));
+                writeActorId, writeActorId, lateError.release(), /*flags*/ 0, /*cookie*/ 1));
             auto lateCompleted = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(splitShard);
             runtime.Send(new IEventHandle(
-                writeActorId, writeActorId, lateCompleted.release()));
+                writeActorId, writeActorId, lateCompleted.release(), /*flags*/ 0, /*cookie*/ 1));
 
             // Release the held re-routed batch: the write proceeds to the new shard
             // and the query completes.
@@ -3211,10 +3211,10 @@ Y_UNIT_TEST_SUITE(KqpSinkTx) {
                 splitShard, 0, NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR,
                 "late result for a shard removed by a reroute");
             runtime.Send(new IEventHandle(
-                writeActorId, writeActorId, lateError.release()));
+                writeActorId, writeActorId, lateError.release(), /*flags*/ 0, /*cookie*/ 1));
             auto lateCompleted = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(splitShard);
             runtime.Send(new IEventHandle(
-                writeActorId, writeActorId, lateCompleted.release()));
+                writeActorId, writeActorId, lateCompleted.release(), /*flags*/ 0, /*cookie*/ 1));
 
             // Release the held re-routed batch: the write proceeds to the new shard
             // and the transaction completes.

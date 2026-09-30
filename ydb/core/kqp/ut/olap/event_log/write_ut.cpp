@@ -90,16 +90,20 @@ namespace {
     std::optional<TQueryResult> ExecuteQueryAndFetchData(TKikimrRunner& kikimr, const TString& query) {
         for(unsigned i = 10;i > 0;i--) {
             auto client = kikimr.GetTableClient();
+            Cerr << "DEBUG: Execute" << query << Endl;
             auto it = client.StreamExecuteScanQuery(query).GetValueSync();
             if (!it.IsSuccess()) {
+                Cerr << "DEBUG: Execute failed" << Endl;
                 Sleep(TDuration::Seconds(1));
                 continue;
             }
             auto result = FetchStreamData(it, i == 1);
             if (!result.has_value()) {
+                Cerr << "DEBUG: Execute failed" << Endl;
                 Sleep(TDuration::Seconds(1));
                 continue;
             }
+            Cerr << "DEBUG: Execute done count=" << result.value().size() << Endl;
             return result.value();
         }
         return {};
@@ -502,12 +506,21 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
         });
 
         env.AddSinks.push_back(std::make_shared<TKqpEventLogWriter>());
-        env.ExecuteQuery("SELECT 1;");
+
+        Cerr << "DEBUG: SELECT 1;" << Endl;
+        env.ExecuteQuery("SELECT 1");
+        env.AddSinks[0]->Flush();
+
+        Cerr << "DEBUG: Wait" << Endl;
+        Sleep(TDuration::Seconds(5));
 
         // Dump
+        Cerr << "DEBUG: Dump" << Endl;
         auto result = ExecuteQueryAndFetchData(env.Kikimr, "SELECT * FROM `/Root/kqp_requests/kqp_requests`");
-        Cerr << "RESULT:" << Endl;
+        Cerr << " " << Endl;
+        Cerr << "KQP_RESULT:" << Endl;
         Dump(result.value());
+        Cerr << " " << Endl;
     }
 }
 

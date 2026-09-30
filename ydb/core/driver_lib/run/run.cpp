@@ -1825,8 +1825,9 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         size_t firstDot = fullHostName.find_first_of('.');
         LogSettings->ShortHostName = fullHostName.substr(0, firstDot);
     }
-    /* auto ptr = std::make_shared<NKikimr::NKqp::NSchematizedLog::TKqpEventLogWriter>(*this);
-    LogSettings->Sinks.push_back(ptr); */
+
+    auto ptr = std::make_shared<NKikimr::NKqp::NSchematizedLog::TKqpEventLogWriter>();
+    LogSettings->Sinks.push_back(ptr);
 }
 
 void TKikimrRunner::ApplyLogSettings(const TKikimrRunConfig& runConfig)

@@ -244,7 +244,7 @@ public:
         std::vector<arrow::Datum> Scalars;
         using TPart = std::variant<arrow::Datum, std::shared_ptr<TDictionaryArray>>;
 
-        // A single dictionary will become {IsComposite=false, Parts=[TDictionaryArray{}]
+        // A single dictionary will become {IsComposite=false, Parts=[TDictionaryArray{}]}
         // A composite with a single dictionary inside will become {IsComposite=true, Parts=[TDictionaryArray{}]}
         // A composite with a dictionary and a plain array inside will become {IsComposite=true, Parts=[TDictionaryArray{}, Datum{}]}
         struct TSpecialArgument {

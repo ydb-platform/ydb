@@ -22,7 +22,6 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/load_test/common
     ydb/core/protos
-    ydb/core/tx/columnshard
     ydb/core/tx/datashard
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy

@@ -1121,6 +1121,8 @@ class TJsonNodes : public TViewerPipeClient {
             "node_id",
             "with",
         };
+
+        // Resricted query parameters
         for (TStringBuf forbiddenParam : ForbiddenQueryParams) {
             if (Params.Has(forbiddenParam)) {
                 DenyStrictDatabaseOnlyQueryParam(forbiddenParam,
@@ -1129,7 +1131,6 @@ class TJsonNodes : public TViewerPipeClient {
             }
         }
 
-        // Presentation params are parsed once in the constructor into GroupBy, FilterGroupBy, SortBy.
         if (NeedGroup && IsClusterLevelNodeField(GroupBy)) {
             DenyStrictDatabaseOnlyQueryParam("group",
                 "group must not use cluster-level field names for database-level users");
@@ -1146,7 +1147,7 @@ class TJsonNodes : public TViewerPipeClient {
             return true;
         }
 
-        // Query parameters with restricted allowed values.
+        // Query parameters with restricted allowed values
         const TStringBuf filterPeerRole = Params.Get("filter_peer_role");
         if (filterPeerRole && filterPeerRole != "database") {
             YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER,

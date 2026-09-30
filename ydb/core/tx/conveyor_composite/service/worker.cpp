@@ -9,16 +9,19 @@ TDuration TWorker::GetWakeupDuration() const {
     return (*ExecutionDuration) * (1 - CPULimit) / CPULimit;
 }
 
-void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
+void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks, TSchedulerLease schedulerLease) {
     AFL_VERIFY(!ExecutionDuration && Results.empty());
     std::vector<TWorkerTaskResult> results;
     results.reserve(workerTasks.size());
     const TMonotonic startGlobal = TMonotonic::Now();
-    for (auto&& t : workerTasks) {
-        const TMonotonic start = TMonotonic::Now();
-        t.GetTask()->OnAssignedToWorker(WorkerIdx);
-        t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
-        results.emplace_back(t.GetResult(start, TMonotonic::Now()));
+    {
+        auto executionLease = std::move(schedulerLease);
+        for (auto&& t : workerTasks) {
+            const TMonotonic start = TMonotonic::Now();
+            t.GetTask()->OnAssignedToWorker(WorkerIdx);
+            t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
+            results.emplace_back(t.GetResult(start, TMonotonic::Now()));
+        }
     }
     if (CPULimit < 1) {
         YDB_LOG_DEBUG("",
@@ -69,7 +72,7 @@ void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     QueryIdentity = ev->Get()->GetQueryIdentity();
     const TMonotonic now = TMonotonic::Now();
     ForwardDuration = now - ev->Get()->GetConstructInstant();
-    ExecuteTask(ev->Get()->ExtractTasks());
+    ExecuteTask(ev->Get()->ExtractTasks(), ev->Get()->ExtractSchedulerLease());
 }
 
 void TWorker::HandleMain(NActors::TEvents::TEvPoisonPill::TPtr& /*ev*/) {

@@ -50,7 +50,6 @@ private:
         YDB_READONLY_DEF(NActors::TActorId, WorkerId);
         YDB_READONLY(double, CPULimit, 1);
         YDB_ACCESSOR(bool, StopPrepare, false);
-        std::optional<TSchedulerLease> SchedulerLease;
 
     public:
         TWorkerInfo(std::unique_ptr<TWorker>&& worker, const double cpuLimit)
@@ -62,7 +61,7 @@ private:
             CPULimit = value;
         }
 
-        void OnStartTask(TSchedulerLease&& schedulerLease);
+        void OnStartTask();
         void OnStopTask();
     };
 

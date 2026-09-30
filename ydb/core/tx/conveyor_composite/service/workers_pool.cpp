@@ -17,19 +17,14 @@ void TWeightedCategory::SetWeight(const double weight) {
     Counters->ValueWeight->Set(weight);
 }
 
-void TWorkersPool::TWorkerInfo::OnStartTask(TSchedulerLease&& schedulerLease) {
+void TWorkersPool::TWorkerInfo::OnStartTask() {
     Y_ENSURE(!RunningTask, "worker already has a running task");
     Y_ENSURE(!StopPrepare, "cannot assign a task to a worker prepared for removal");
-    Y_ENSURE(schedulerLease, "cannot assign a task without a scheduler lease");
-    Y_ENSURE(!SchedulerLease, "worker already has a scheduler lease");
-    SchedulerLease.emplace(std::move(schedulerLease));
     RunningTask = true;
 }
 
 void TWorkersPool::TWorkerInfo::OnStopTask() {
     Y_ENSURE(RunningTask, "worker has no running task to stop");
-    Y_ENSURE(SchedulerLease, "running worker has no scheduler lease");
-    SchedulerLease.reset();
     RunningTask = false;
 }
 
@@ -186,14 +181,16 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TSchedulerLeas
 
     Y_ENSURE(workerIdx < Workers.size(), "worker index is out of range: " << workerIdx);
     auto& worker = Workers[workerIdx];
-    worker.OnStartTask(std::move(schedulerLease));
+    Y_ENSURE(schedulerLease, "cannot assign a task without a scheduler lease");
+    worker.OnStartTask();
     for (const auto& task : tasksBatch) {
         auto& link = FindCategoryLink(task.GetCategory());
         Y_ENSURE(!link.GetStopPrepare(), "cannot assign a task to a link prepared for removal");
         link.OnTaskStarted();
     }
     TActivationContext::Send(
-        worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch), worker.GetCPULimit(), identity));
+        worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(
+            std::move(tasksBatch), std::move(schedulerLease), worker.GetCPULimit(), identity));
 }
 
 void TWorkersPool::ReleaseWorker(const ui64 workerIdx) {

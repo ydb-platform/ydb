@@ -29,7 +29,7 @@ private:
     std::vector<TWorkerTaskResult> Results;
     TSchedulerQueryIdentity QueryIdentity = kServiceQueryIdentity;
     TDuration GetWakeupDuration() const;
-    void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
+    void ExecuteTask(std::vector<TWorkerTask>&& workerTasks, TSchedulerLease schedulerLease);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvPoisonPill::TPtr& ev);

@@ -6,9 +6,20 @@
 #include <util/generic/yexception.h>
 
 #include <algorithm>
+#include <array>
+#include <mutex>
 #include <utility>
 
 namespace NKikimr::NConveyorComposite {
+
+    // Cells can outlive the registry. This block owns no cells and is shared with their leases.
+    struct TSchedulableWorkControl {
+        std::mutex Mutex;
+        std::array<ui64, GetEnumItemsCount<ESchedulableWorkStatus>()> StatusCounts{};
+        bool Closed = false;
+
+        void SetStatus(TSchedulableWorkCell& cell, ESchedulableWorkStatus status);
+    };
 
     namespace {
 
@@ -45,8 +56,8 @@ namespace NKikimr::NConveyorComposite {
 
     } // namespace
 
-    TSchedulerLease::TSchedulerLease(TSchedulableWorkCell& cell)
-        : Cell(&cell)
+    TSchedulerLease::TSchedulerLease(std::shared_ptr<TSchedulableWorkCell> cell)
+        : Cell(std::move(cell))
     {
     }
 
@@ -72,55 +83,51 @@ namespace NKikimr::NConveyorComposite {
     }
 
     void TSchedulerLease::Reset() {
-        if (!Cell) {
+        auto cell = std::exchange(Cell, nullptr);
+        if (!cell) {
             return;
         }
-        Y_ENSURE(Cell->Status == ESchedulableWorkStatus::STARTED, "scheduler lease does not own a started work");
-        Cell->Work->StopExecution();
-        Cell->Owner->SetStatus(*Cell, ESchedulableWorkStatus::IDLE);
-        Cell = nullptr;
+        std::lock_guard guard(cell->Control->Mutex);
+        if (cell->Control->Closed) {
+            return; // Forced stop already ran; the HDRF tree may no longer exist.
+        }
+        Y_ENSURE(cell->Status == ESchedulableWorkStatus::STARTED, "scheduler lease does not own a started work");
+        cell->Work->StopExecution();
+        cell->Control->SetStatus(*cell, ESchedulableWorkStatus::IDLE);
     }
 
-    TSchedulableWorkState::TSchedulableWorkState() = default;
+    TSchedulableWorkState::TSchedulableWorkState()
+        : Control(std::make_shared<TSchedulableWorkControl>())
+    {
+    }
     TSchedulableWorkState::TSchedulableWorkState(TSchedulableWorkState&& other) noexcept
         : Cells(std::exchange(other.Cells, {}))
-        , StatusCounts(std::exchange(other.StatusCounts, {}))
+        , Control(std::move(other.Control))
     {
-        for (auto& cell : Cells) {
-            cell->Owner = this;
-        }
     }
 
     TSchedulableWorkState& TSchedulableWorkState::operator=(TSchedulableWorkState&& other) noexcept {
         if (this != &other) {
             PrepareForRemoval();
             Cells = std::exchange(other.Cells, {});
-            StatusCounts = std::exchange(other.StatusCounts, {});
-            for (auto& cell : Cells) {
-                cell->Owner = this;
-            }
+            Control = std::move(other.Control);
         }
         return *this;
     }
 
     TSchedulableWorkState::~TSchedulableWorkState() {
-        for (auto& cell : Cells) {
-            if (cell->Status != ESchedulableWorkStatus::IDLE) {
-                cell->Work->StopExecution();
-            }
-        }
-        Cells.clear();
-        StatusCounts.fill(0);
+        Close(true);
     }
 
-    void TSchedulableWorkState::SetStatus(TSchedulableWorkCell& cell, const ESchedulableWorkStatus status) {
-        AFL_VERIFY(cell.Owner == this);
+    void TSchedulableWorkControl::SetStatus(TSchedulableWorkCell& cell, const ESchedulableWorkStatus status) {
+        AFL_VERIFY(cell.Control.get() == this);
         AFL_VERIFY(static_cast<size_t>(cell.Status) < StatusCounts.size());
         AFL_VERIFY(static_cast<size_t>(status) < StatusCounts.size());
         if (cell.Status == status) {
             return;
         }
         auto& oldCount = StatusCounts[static_cast<size_t>(cell.Status)];
+        AFL_VERIFY(oldCount);
         --oldCount;
         ++StatusCounts[static_cast<size_t>(status)];
         cell.Status = status;
@@ -129,10 +136,13 @@ namespace NKikimr::NConveyorComposite {
     void TSchedulableWorkState::StopThrottled(TSchedulableWorkCell& cell) {
         Y_ENSURE(cell.Status == ESchedulableWorkStatus::THROTTLED, "only a throttled work can be stopped by this path");
         cell.Work->StopExecution();
-        SetStatus(cell, ESchedulableWorkStatus::IDLE);
+        Control->SetStatus(cell, ESchedulableWorkStatus::IDLE);
     }
 
     TTryStartResult TSchedulableWorkState::TryStart(const TMonotonic now) {
+        Y_ENSURE(Control, "schedulable work state was moved");
+        std::lock_guard guard(Control->Mutex);
+        Y_ENSURE(!Control->Closed, "schedulable work state is closed");
         Y_ENSURE(!Cells.empty(), "query has no schedulable works");
 
         for (const auto status : {ESchedulableWorkStatus::THROTTLED, ESchedulableWorkStatus::IDLE}) {
@@ -144,11 +154,11 @@ namespace NKikimr::NConveyorComposite {
                     cell->Work->NotifyResumed(false);
                 }
                 if (const auto delay = cell->Work->TryStartExecution(now)) {
-                    SetStatus(*cell, ESchedulableWorkStatus::THROTTLED);
+                    Control->SetStatus(*cell, ESchedulableWorkStatus::THROTTLED);
                     return now + *delay;
                 }
-                SetStatus(*cell, ESchedulableWorkStatus::STARTED);
-                return TSchedulerLease(*cell);
+                Control->SetStatus(*cell, ESchedulableWorkStatus::STARTED);
+                return TSchedulerLease(cell);
             }
         }
 
@@ -161,14 +171,14 @@ namespace NKikimr::NConveyorComposite {
         while (Cells.size() < workersCount) {
             auto work = factory.CreateSchedulableWork();
             Y_ENSURE(work, "schedulable work factory returned null");
-            Cells.emplace_back(std::make_unique<TSchedulableWorkCell>(std::move(work), this));
-            ++StatusCounts[static_cast<size_t>(ESchedulableWorkStatus::IDLE)];
+            Cells.emplace_back(std::make_shared<TSchedulableWorkCell>(std::move(work), Control));
+            ++Control->StatusCounts[static_cast<size_t>(ESchedulableWorkStatus::IDLE)];
         }
     }
 
     void TSchedulableWorkState::DecreaseCapacity(const ui64 workersCount) {
         Y_ENSURE(workersCount < Cells.size(), "schedulable work capacity decrease has no removed workers");
-        Y_ENSURE(GetCount(ESchedulableWorkStatus::STARTED) <= workersCount,
+        Y_ENSURE(Control->StatusCounts[static_cast<size_t>(ESchedulableWorkStatus::STARTED)] <= workersCount,
                  "cannot shrink schedulable work capacity below the number of started works");
         ui64 toRemove = Cells.size() - workersCount;
         for (auto it = Cells.begin(); it != Cells.end() && toRemove;) {
@@ -180,7 +190,7 @@ namespace NKikimr::NConveyorComposite {
             if (cell.Status == ESchedulableWorkStatus::THROTTLED) {
                 StopThrottled(cell);
             }
-            --StatusCounts[static_cast<size_t>(cell.Status)];
+            --Control->StatusCounts[static_cast<size_t>(cell.Status)];
             it = Cells.erase(it);
             --toRemove;
         }
@@ -189,6 +199,9 @@ namespace NKikimr::NConveyorComposite {
 
     void TSchedulableWorkState::ForcedUpdateWorkCapacity(
         const ui64 workersCount, NYql::NDq::IDqSchedulableWorkFactory& factory) {
+        Y_ENSURE(Control, "schedulable work state was moved");
+        std::lock_guard guard(Control->Mutex);
+        Y_ENSURE(!Control->Closed, "schedulable work state is closed");
         if (Cells.size() > workersCount) {
             DecreaseCapacity(workersCount);
             return;
@@ -200,19 +213,34 @@ namespace NKikimr::NConveyorComposite {
     }
 
     void TSchedulableWorkState::PrepareForRemoval() {
-        Y_ENSURE(GetCount(ESchedulableWorkStatus::STARTED) == 0, "cannot remove query with started schedulable works");
+        Close(false);
+    }
+
+    void TSchedulableWorkState::Close(const bool force) {
+        if (!Control) {
+            return;
+        }
+        std::lock_guard guard(Control->Mutex);
+        Y_ENSURE(force || Control->StatusCounts[static_cast<size_t>(ESchedulableWorkStatus::STARTED)] == 0,
+                 "cannot remove query with started schedulable works");
+        Control->Closed = true;
         for (auto& cell : Cells) {
-            if (cell->Status == ESchedulableWorkStatus::THROTTLED) {
-                StopThrottled(*cell);
+            if (cell->Status != ESchedulableWorkStatus::IDLE) {
+                cell->Work->StopExecution();
+                Control->SetStatus(*cell, ESchedulableWorkStatus::IDLE);
             }
         }
         Cells.clear();
-        StatusCounts.fill(0);
+        Control->StatusCounts.fill(0);
     }
 
     ui64 TSchedulableWorkState::GetCount(const ESchedulableWorkStatus status) const {
-        Y_ENSURE(static_cast<size_t>(status) < StatusCounts.size());
-        return StatusCounts[static_cast<size_t>(status)];
+        if (!Control) {
+            return 0;
+        }
+        std::lock_guard guard(Control->Mutex);
+        Y_ENSURE(static_cast<size_t>(status) < Control->StatusCounts.size());
+        return Control->StatusCounts[static_cast<size_t>(status)];
     }
 
     void TSchedulerQueryState::RegisterProcess() {
@@ -297,7 +325,11 @@ namespace NKikimr::NConveyorComposite {
     }
 
     bool TQueryRegistry::TryReleaseQuery(const TSchedulerQueryIdentity& identity) {
-        auto& state = GetStateVerified(identity);
+        auto it = Queries.find(identity);
+        if (it == Queries.end()) {
+            return false;
+        }
+        auto& state = it->second;
         if (!state.IsWaitRelease() || !state.IsReadyToRelease()) {
             return false;
         }

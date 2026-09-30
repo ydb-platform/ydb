@@ -1,5 +1,6 @@
 #pragma once
 #include "counters.h"
+#include "query.h"
 #include "scope.h"
 
 #include <ydb/core/tx/conveyor_composite/usage/common.h>
@@ -118,20 +119,24 @@ struct TEvInternal {
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
         std::vector<TWorkerTask> Tasks;
+        TSchedulerLease SchedulerLease;
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
         YDB_READONLY(double, CPULimit, 1);
         YDB_READONLY(TSchedulerQueryIdentity, QueryIdentity, kServiceQueryIdentity);
 
     public:
-        TEvNewTask() = default;
-
         std::vector<TWorkerTask>&& ExtractTasks() {
             return std::move(Tasks);
         }
 
-        TEvNewTask(std::vector<TWorkerTask>&& tasks, const double cpuLimit,
+        TSchedulerLease ExtractSchedulerLease() {
+            return std::move(SchedulerLease);
+        }
+
+        TEvNewTask(std::vector<TWorkerTask>&& tasks, TSchedulerLease&& schedulerLease, const double cpuLimit,
             const TSchedulerQueryIdentity& identity = kServiceQueryIdentity)
             : Tasks(std::move(tasks))
+            , SchedulerLease(std::move(schedulerLease))
             , CPULimit(cpuLimit)
             , QueryIdentity(identity) {
         }

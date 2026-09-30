@@ -10,7 +10,6 @@
 
 #include <util/generic/hash.h>
 
-#include <array>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -24,19 +23,19 @@ namespace NKikimr::NConveyorComposite {
         TMonotonic AverageWakeUpDeadline;
     };
 
-    class TSchedulableWorkState;
+    struct TSchedulableWorkControl;
 
     struct TSchedulableWorkCell {
         std::unique_ptr<NYql::NDq::IDqSchedulableWork> Work;
-        TSchedulableWorkState* Owner;
+        std::shared_ptr<TSchedulableWorkControl> Control;
         ESchedulableWorkStatus Status = ESchedulableWorkStatus::IDLE;
     };
 
     class TSchedulerLease {
     private:
-        TSchedulableWorkCell* Cell = nullptr;
+        std::shared_ptr<TSchedulableWorkCell> Cell;
 
-        explicit TSchedulerLease(TSchedulableWorkCell& cell);
+        explicit TSchedulerLease(std::shared_ptr<TSchedulableWorkCell> cell);
 
         void Reset();
 
@@ -59,11 +58,10 @@ namespace NKikimr::NConveyorComposite {
     class TSchedulableWorkState {
     private:
         friend class TSchedulerQueryState;
-        friend class TSchedulerLease;
-        std::vector<std::unique_ptr<TSchedulableWorkCell>> Cells;
-        std::array<ui64, GetEnumItemsCount<ESchedulableWorkStatus>()> StatusCounts{};
+        std::vector<std::shared_ptr<TSchedulableWorkCell>> Cells;
+        std::shared_ptr<TSchedulableWorkControl> Control;
 
-        void SetStatus(TSchedulableWorkCell& cell, ESchedulableWorkStatus status);
+        void Close(bool force);
         void StopThrottled(TSchedulableWorkCell& cell);
         ui64 GetCount(ESchedulableWorkStatus status) const;
         void IncreaseCapacity(ui64 workersCount, NYql::NDq::IDqSchedulableWorkFactory& factory);

@@ -273,8 +273,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 .InitKikimrRunConfig();
         settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
         TServer server(settings);
-        TClient client(settings);
-        client.InitRootScheme();
         auto& runtime = *server.GetRuntime();
 
         const std::pair<TString, TString> databases[] = {
@@ -310,7 +308,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 auto sender = runtime.AllocateEdgeActor();
                 runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
                 TAutoPtr<IEventHandle> handle;
-                runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+                UNIT_ASSERT(runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle, TDuration::Seconds(30)));
                 UNIT_ASSERT_VALUES_EQUAL(navigatedPaths.size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(navigatedPaths.front(), enableRelativePaths ? resolved : JoinPath(SplitPath(database)));
             }

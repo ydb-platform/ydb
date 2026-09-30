@@ -81,11 +81,7 @@ system_tablet_backup_config:
 
 ### Шаг 1. Переведите таблетку в Recovery-режим {#enable-recovery-mode}
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/backup-and-recovery/system-tablet-backup.md
-Таблетку, которую требуется восстановить, необходимо перевести в Recovery-режим. В этом режиме таблетка запускается и доступна через [Embedded UI](../../reference/embedded-ui/index.md), но **не работает штатно** и **не вычитывает данные из распределённого хранилища**, что позволяет выполнять операции восстановления. Остальные таблетки продолжат работать в штатном режиме, что позволит кластеру продолжать функционировать, но некоторые control-plane операции могут быть недоступны.
-=======
-Таблетку, которую требуется восстановить, необходимо перевести в [Recovery-режим](../../../concepts/glossary.md#tablet-recovery-mode).
->>>>>>> 07893113b75 (Add enhancements found in drills to system tablet backup docs (#42314)):ydb/docs/ru/core/recipes/backup/system-tablet-backup/recovery.md
+Таблетку, которую требуется восстановить, необходимо перевести в [Recovery-режим](../../concepts/glossary.md#tablet-recovery-mode).
 
 {% note warning %}
 
@@ -93,20 +89,11 @@ system_tablet_backup_config:
 
 {% endnote %}
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/backup-and-recovery/system-tablet-backup.md
 1. Определите идентификатор системной таблетки, которую требуется восстановить. Идентификатор таблетки можно найти в разделе Tablets в [Embedded UI](../../reference/embedded-ui/index.md).
-2. Определите список узлов, на которых может работать восстанавливаемая системная таблетка. Этот список находится в секции `bootstrap_config` соответствующей таблетки в [конфигурации кластера](../configuration-management/index.md). Если секция `bootstrap_config` отсутствует в конфигурации, используйте список всех [статических узлов](../../concepts/glossary.md#static-node) кластера, указанных в секции `hosts` конфигурации кластера.
-3. Измените конфигурацию, добавив `boot_mode: RECOVERY` в секцию `bootstrap_config` восстанавливаемой таблетки.
-    - При использовании конфигурации V1, необходимо изменить [статическую конфигурацию](../configuration-management/configuration-v1/static-config.md) на всех узлах, на которых может работать восстанавливаемая таблетка.
+2. Сохраните текущую [конфигурацию кластера](../configuration-management/index.md) в файл `config.yaml`.
+    - При использовании конфигурации V1, необходимо сохранить [статическую конфигурацию](../configuration-management/configuration-v1/static-config.md).
     - При использовании конфигурации V2, воспользуйтесь [инструкцией](../configuration-management/configuration-v2/update-config.md).
-    - Пример для таблетки `Hive` с идентификатором `72057594037968897`:
-=======
-1. Определите идентификатор системной таблетки, которую требуется восстановить. Идентификатор таблетки можно найти в разделе Tablets в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md).
-2. Сохраните текущую [конфигурацию кластера](../../../devops/configuration-management/index.md) в файл `config.yaml`.
-    - При использовании конфигурации V1, необходимо сохранить [статическую конфигурацию](../../../devops/configuration-management/configuration-v1/static-config.md).
-    - При использовании конфигурации V2, воспользуйтесь [инструкцией](../../../devops/configuration-management/configuration-v2/update-config.md).
 3. Определите список хостов, на которых может работать восстанавливаемая системная таблетка по конфигурации кластера. Этот список будет использован в дальнейших шагах для перезапуска узлов и обновления конфигурации.
->>>>>>> 07893113b75 (Add enhancements found in drills to system tablet backup docs (#42314)):ydb/docs/ru/core/recipes/backup/system-tablet-backup/recovery.md
 
     Для этого удобно воспользоваться скриптом, который принимает на вход идентификатор таблетки и файл конфигурации кластера, в котором хранится список узлов, где могут работать системные таблетки, и отображение из узлов в хосты. Скрипт объединяет эту информацию, и в результате выдает список хостов, на которых может работать переданная системная таблетка, в пригодном для pssh формате.
 
@@ -215,13 +202,13 @@ system_tablet_backup_config:
 5. Обновите конфигурацию в кластере.
     - При использовании конфигурации V1 необходимо обновить статическую конфигурацию на всех хостах, полученных на шаге 3, с помощью команды:
 
-        {% include [pssh-config-update](_includes/pssh-config-update.md) %}
+        {% include [pssh-config-update](../../recipes/backup/system-tablet-backup/_includes/pssh-config-update.md) %}
 
-    - При использовании конфигурации V2, воспользуйтесь [инструкцией](../../../devops/configuration-management/configuration-v2/update-config.md).
+    - При использовании конфигурации V2, воспользуйтесь [инструкцией](../configuration-management/configuration-v2/update-config.md).
 
 6. Перезапустите все узлы, на которых может работать восстанавливаемая таблетка. Если какой-либо узел недоступен и не может быть перезапущен, изолируйте его от кластера по сети — например, с помощью firewall.
 
-    {% include [pssh-restart-nodes](_includes/pssh-restart-nodes.md) %}
+    {% include [pssh-restart-nodes](../../recipes/backup/system-tablet-backup/_includes/pssh-restart-nodes.md) %}
 
     {% note warning %}
 
@@ -229,55 +216,22 @@ system_tablet_backup_config:
 
     {% endnote %}
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/backup-and-recovery/system-tablet-backup.md
-5. Убедитесь, что:
-    - С таблеткой нет проблем в [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
-=======
 7. Убедитесь, что:
-    - С таблеткой нет проблем в [HealthCheck](../../../reference/ydb-sdk/health-check-api.md).
->>>>>>> 07893113b75 (Add enhancements found in drills to system tablet backup docs (#42314)):ydb/docs/ru/core/recipes/backup/system-tablet-backup/recovery.md
+    - С таблеткой нет проблем в [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
     - Таблетка не перезапускается.
     - В App таблетки в [Embedded UI](../../reference/embedded-ui/index.md) доступна форма восстановления.
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/backup-and-recovery/system-tablet-backup.md
-### Шаг 2. Найдите файлы резервной копии {#find-backup-files}
-=======
-## Шаг 2. Найдите файлы резервных копий {#find-backup-files}
->>>>>>> 07893113b75 (Add enhancements found in drills to system tablet backup docs (#42314)):ydb/docs/ru/core/recipes/backup/system-tablet-backup/recovery.md
+### Шаг 2. Найдите файлы резервных копий {#find-backup-files}
 
-1. На каждом хосте, полученном на шаге 3, проверьте наличие резервных копий. Путь к резервным копиям определяется параметром `path` в секции конфигурации [`system_tablet_backup_config`](../../../reference/configuration/system_tablet_backup_config.md).
+1. На каждом хосте, полученном на шаге 3, проверьте наличие резервных копий. Путь к резервным копиям определяется параметром `path` в секции конфигурации [`system_tablet_backup_config`](../../reference/configuration/system_tablet_backup_config.md).
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/backup-and-recovery/system-tablet-backup.md
-    Если определить конкретные хосты не удалось, проверьте все хосты, на которых таблетка могла работать. Этот список находится в секции `bootstrap_config` соответствующей таблетки в [конфигурации кластера](../configuration-management/index.md). Если секция `bootstrap_config` отсутствует в конфигурации, используйте список всех [статических узлов](../../concepts/glossary.md#static-node) кластера, указанных в секции `hosts` конфигурации кластера.
-
-2. Найдите директорию с резервными копиями. На каждом хосте-кандидате проверьте наличие резервных копий. Путь к резервным копиям определяется параметром `path` в конфигурации `system_tablet_backup_config`:
-
-    ```bash
-    ls /path/to/backup/directory/<tablet_type>/<tablet_id>/
-    ```
-
-    Пример для таблетки `Hive` с идентификатором `72057594037968897`:
-
-    ```bash
-    ls /tablet/hive/72057594037968897/
-    ```
-
-    ```text
-    backup_20251007T181003_g213_s1001
-    backup_20251007T191002_g214_s1040
-    backup_20251007T193502_g214_s1222
-    ```
-
-3. Выберите наиболее актуальную резервную копию. Имя каждой резервной копии содержит ключевую информацию: `backup_<timestamp>_g<generation>_s<step>`, где:
-=======
     Имя каждой резервной копии содержит ключевую информацию: `backup_<timestamp>_g<generation>_s<step>`, где:
->>>>>>> 07893113b75 (Add enhancements found in drills to system tablet backup docs (#42314)):ydb/docs/ru/core/recipes/backup/system-tablet-backup/recovery.md
 
     - `timestamp` — время создания резервной копии;
     - `generation` — [поколение таблетки](../../concepts/glossary.md#tablet-generation), увеличивается при каждом перезапуске таблетки;
     - `step` — шаг таблетки в рамках поколения, увеличивается при каждом изменении состояния таблетки.
 
-    {% include [pssh-find-backups](_includes/pssh-find-backups.md) %}
+    {% include [pssh-find-backups](../../recipes/backup/system-tablet-backup/_includes/pssh-find-backups.md) %}
 
 2. Выберите наиболее актуальную резервную копию, пригодную для восстановления.
 
@@ -285,7 +239,7 @@ system_tablet_backup_config:
 
    Убедитесь, что резервная копия полностью записана. Выбранная резервная копия должна содержать директорию `snapshot`, а **не** `snapshot.tmp`. Наличие `snapshot.tmp` означает, что запись снапшота не была завершена и копия непригодна для восстановления. В этом случае выберите предыдущую по актуальности копию.
 
-   {% include [check-backup](_includes/check-backup.md) %}
+   {% include [check-backup](../../recipes/backup/system-tablet-backup/_includes/check-backup.md) %}
 
    В случае, если чексуммы отличаются, то возможны две ситуации:
    - Последняя запись в `changelog.json` не была полностью записана. В этом случае, чексумма, хранящаяся в `changelog.json.sha256` находится в одной из записей в `changelog.json` в поле `prev_sha256`. Для восстановления необходимо отредактировать файлы: удалить/дополнить не полностью записанные записи в `changelog.json` и обновить чексумму в `changelog.json.sha256`.
@@ -294,16 +248,12 @@ system_tablet_backup_config:
 
 ### Шаг 3. Перенесите файлы резервной копии {#transfer-backup-files}
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/backup-and-recovery/system-tablet-backup.md
-1. Определите, на каком хосте запущена таблетка в Recovery-режиме. Для этого откройте [Embedded UI](../../reference/embedded-ui/index.md) и найдите узел, на котором работает таблетка.
-=======
-1. Определите, на каком хосте запущена таблетка в Recovery-режиме. Для этого откройте [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md) и найдите хост, на котором работает таблетка.
->>>>>>> 07893113b75 (Add enhancements found in drills to system tablet backup docs (#42314)):ydb/docs/ru/core/recipes/backup/system-tablet-backup/recovery.md
+1. Определите, на каком хосте запущена таблетка в Recovery-режиме. Для этого откройте [Embedded UI](../../reference/embedded-ui/index.md) и найдите хост, на котором работает таблетка.
 2. Если файлы резервной копии находятся на другом хосте, скопируйте их на хост с таблеткой в Recovery-режиме с помощью `scp`, `rsync` или любого другого доступного инструмента:
 
     Скопируйте бекап из директории с бекапами в свою домашнюю директорию:
 
-   {% include [copy-backup](_includes/copy-backup.md) %}
+   {% include [copy-backup](../../recipes/backup/system-tablet-backup/_includes/copy-backup.md) %}
 
     Скопируйте бекап на целевой хост:
 
@@ -320,7 +270,7 @@ system_tablet_backup_config:
     scp -r backup_20251007T193502_g214_s1222 target-host:~/backup_20251007T193502_g214_s1222
     ```
 
-    {% include [chown-backup](_includes/chown-backup.md) %}
+    {% include [chown-backup](../../recipes/backup/system-tablet-backup/_includes/chown-backup.md) %}
 
 ### Шаг 4. Выполните восстановление {#perform-recovery}
 
@@ -386,31 +336,19 @@ system_tablet_backup_config:
 
 После успешного восстановления:
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/backup-and-recovery/system-tablet-backup.md
-1. Определите список узлов, на которых может работать восстанавливаемая системная таблетка. Этот список находится в секции `bootstrap_config` соответствующей таблетки в [конфигурации кластера](../configuration-management/index.md). Если секция `bootstrap_config` отсутствует в конфигурации, используйте список всех [статических узлов](../../concepts/glossary.md#static-node) кластера, указанных в секции `hosts` конфигурации кластера.
-2. Измените конфигурацию, удалив `boot_mode: RECOVERY` из секции `bootstrap_config` восстанавливаемой таблетки.
-    - При использовании конфигурации V1, необходимо изменить [статическую конфигурацию](../configuration-management/configuration-v1/static-config.md) на всех узлах, на которых может работать восстанавливаемая таблетка.
-    - При использовании конфигурации V2, воспользуйтесь [инструкцией](../configuration-management/configuration-v2/update-config.md).
-3. Перезапустите все узлы, на которых может работать восстанавливаемая таблетка. Если какие-либо узлы были изолированы от кластера по сети на предыдущих шагах, снимите сетевую изоляцию.
-4. Убедитесь, что:
-    - С таблеткой нет проблем в [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
-    - Таблетка не перезапускается.
-    - В App таблетки в [Embedded UI](../../reference/embedded-ui/index.md) отсутствует форма восстановления.
-=======
 1. Верните конфигурацию в исходное состояние, удалив `boot_type: RECOVERY` из секции конфигурации запуска восстанавливаемой таблетки и восстановив изначальный список узлов, где может запускаться восстанавливаемая таблетка.
     - При использовании конфигурации V1 необходимо обновить статическую конфигурацию на всех хостах, полученных на шаге 3, с помощью команды:
 
-        {% include [pssh-config-rollback](_includes/pssh-config-rollback.md) %}
+        {% include [pssh-config-rollback](../../recipes/backup/system-tablet-backup/_includes/pssh-config-rollback.md) %}
 
-    - При использовании конфигурации V2, воспользуйтесь [инструкцией](../../../devops/configuration-management/configuration-v2/update-config.md).
+    - При использовании конфигурации V2, воспользуйтесь [инструкцией](../configuration-management/configuration-v2/update-config.md).
 2. Перезапустите все узлы, на которых может работать восстанавливаемая таблетка. Если какие-либо узлы были изолированы от кластера по сети на предыдущих шагах, снимите сетевую изоляцию.
 
-    {% include [pssh-restart-nodes](_includes/pssh-restart-nodes.md) %}
+    {% include [pssh-restart-nodes](../../recipes/backup/system-tablet-backup/_includes/pssh-restart-nodes.md) %}
 
 3. Убедитесь, что:
-    - С таблеткой нет проблем в [HealthCheck](../../../reference/ydb-sdk/health-check-api.md).
+    - С таблеткой нет проблем в [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
     - Таблетка не перезапускается.
-    - В App таблетки в [{{ ydb-ui-name }}](../../../reference/ydb-ui/index.md) отсутствует форма восстановления.
+    - В App таблетки в [Embedded UI](../../reference/embedded-ui/index.md) отсутствует форма восстановления.
 
-4. Поочерёдно перезапустите все узлы кластера для синхронизации состояния внутренних кешей в памяти с состоянием таблетки. После перезапуска каждого узла дождитесь его возвращения в рабочее состояние и убедитесь в отсутствии проблем в [HealthCheck](../../../reference/ydb-sdk/health-check-api.md); только после этого переходите к следующему узлу.
->>>>>>> 07893113b75 (Add enhancements found in drills to system tablet backup docs (#42314)):ydb/docs/ru/core/recipes/backup/system-tablet-backup/recovery.md
+4. Поочерёдно перезапустите все узлы кластера для синхронизации состояния внутренних кешей в памяти с состоянием таблетки. После перезапуска каждого узла дождитесь его возвращения в рабочее состояние и убедитесь в отсутствии проблем в [HealthCheck](../../reference/ydb-sdk/health-check-api.md); только после этого переходите к следующему узлу.

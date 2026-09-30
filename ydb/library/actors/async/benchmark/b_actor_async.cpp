@@ -87,10 +87,17 @@ public:
     void Bootstrap() {
         Become(&TThis::StateWork);
 
+        for (size_t i = 0; i < 64; ++i) {
+            co_await Step();
+        }
+        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             co_await Step();
         }
 
+        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+        State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
+        State.counters["retained_bytes"] = stats.CachedBytes;
         PassAway();
     }
 
@@ -112,8 +119,10 @@ private:
 };
 
 template<class TDriver>
-void BM_PingActor(benchmark::State& state) {
+void BM_PingActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
+
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    setup->AsyncFrameCacheSizeBytes = budget;
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -144,6 +153,11 @@ void BM_AsyncPingActor(benchmark::State& state) {
 
 BENCHMARK(BM_ManualPingActor)->MeasureProcessCPUTime();
 BENCHMARK(BM_AsyncPingActor)->MeasureProcessCPUTime();
+
+void BM_AsyncPingActorDisabled(benchmark::State& state) {
+    BM_PingActor<TPingDriverAsyncActor>(state, 0);
+}
+BENCHMARK(BM_AsyncPingActorDisabled)->MeasureProcessCPUTime();
 
 class TManualYieldActor : public TActorBootstrapped<TManualYieldActor> {
 public:
@@ -216,8 +230,10 @@ private:
 };
 
 template<class TDriver>
-void BM_YieldActor(benchmark::State& state) {
+void BM_YieldActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
+
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
+    setup->AsyncFrameCacheSizeBytes = budget;
     setup->NodeId = 0;
     setup->ExecutorsCount = 1;
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[ setup->ExecutorsCount ]);
@@ -262,10 +278,18 @@ public:
     void Bootstrap() {
         Become(&TThis::StateWork);
 
+        for (size_t i = 0; i < 64; ++i) {
+            benchmark::DoNotOptimize(co_await Step());
+        }
+        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             benchmark::DoNotOptimize(co_await Step());
         }
 
+        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+        // Step is inline: allocation elision is allowed in this control.
+        State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
+        State.counters["retained_bytes"] = stats.CachedBytes;
         PassAway();
     }
 
@@ -305,6 +329,117 @@ void BM_CallAsync(benchmark::State& state) {
 }
 
 BENCHMARK(BM_CallAsync)->MeasureProcessCPUTime();
+
+// Keep the entry points out of line so these benchmarks measure allocated
+// frames, including the short-lived child, rather than allocation elision.
+class TFrameCacheBenchmarkActor : public TActorBootstrapped<TFrameCacheBenchmarkActor> {
+    benchmark::State& State;
+    TPromise<void> Promise;
+    ui64 Value = 0;
+
+public:
+    TFrameCacheBenchmarkActor(benchmark::State& state, TPromise<void> promise)
+        : State(state)
+        , Promise(std::move(promise))
+    {}
+
+    ~TFrameCacheBenchmarkActor() { Promise.SetValue(); }
+
+    void Bootstrap() {
+        Become(&TFrameCacheBenchmarkActor::StateWork);
+        // Google Benchmark warmup invocations create new workers. Warm this
+        // worker before timing and before snapshotting heap allocations.
+        for (size_t i = 0; i < 64; ++i) {
+            Root();
+        }
+        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
+        for (auto _ : State) {
+            Root();
+        }
+        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+        State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
+        State.counters["frame_allocations_per_op"] = 2;
+        State.counters["retained_bytes"] = stats.CachedBytes;
+        PassAway();
+    }
+
+    Y_NO_INLINE void Root() {
+        benchmark::DoNotOptimize(co_await Child());
+    }
+
+    Y_NO_INLINE async<ui64> Child() {
+        co_return ++Value;
+    }
+
+    STFUNC(StateWork) { Y_UNUSED(ev); }
+};
+
+void BM_FrameCacheDisabled(benchmark::State& state) {
+    BM_YieldActor<TFrameCacheBenchmarkActor>(state, 0);
+}
+
+void BM_FrameCacheEnabled(benchmark::State& state) {
+    BM_YieldActor<TFrameCacheBenchmarkActor>(state);
+}
+
+BENCHMARK(BM_FrameCacheDisabled)->MeasureProcessCPUTime();
+BENCHMARK(BM_FrameCacheEnabled)->MeasureProcessCPUTime();
+
+struct TChurnState {
+    benchmark::State& State;
+    TPromise<void> Promise;
+    size_t WarmupLeft = 64;
+    size_t HeapBefore = 0;
+};
+
+class TFrameCacheChurnActor : public TActorBootstrapped<TFrameCacheChurnActor> {
+    std::shared_ptr<TChurnState> Context;
+    ui64 Value = 0;
+public:
+    TFrameCacheChurnActor(benchmark::State& state, TPromise<void> promise)
+        : Context(std::make_shared<TChurnState>(TChurnState{state, std::move(promise)}))
+    {}
+    explicit TFrameCacheChurnActor(std::shared_ptr<TChurnState> context)
+        : Context(std::move(context))
+    {}
+
+    void Bootstrap() {
+        Become(&TFrameCacheChurnActor::StateWork);
+        auto& context = *Context;
+        if (context.WarmupLeft) {
+            Root();
+            if (!--context.WarmupLeft) {
+                context.HeapBefore = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
+            }
+        } else if (context.State.KeepRunning()) {
+            Root();
+        } else {
+            const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
+            context.State.counters["heap_allocations_per_op"] =
+                double(stats.HeapAllocations - context.HeapBefore) / context.State.iterations();
+            context.State.counters["frame_allocations_per_op"] = 2;
+            context.State.counters["retained_bytes"] = stats.CachedBytes;
+            context.Promise.SetValue();
+            PassAway();
+            return;
+        }
+        Register(new TFrameCacheChurnActor(Context));
+        PassAway();
+    }
+
+    Y_NO_INLINE void Root() { benchmark::DoNotOptimize(co_await Child()); }
+    Y_NO_INLINE async<ui64> Child() { co_return ++Value; }
+    STFUNC(StateWork) { Y_UNUSED(ev); }
+};
+
+void BM_FrameCacheChurnDisabled(benchmark::State& state) {
+    BM_YieldActor<TFrameCacheChurnActor>(state, 0);
+}
+void BM_FrameCacheChurnEnabled(benchmark::State& state) {
+    BM_YieldActor<TFrameCacheChurnActor>(state);
+}
+BENCHMARK(BM_FrameCacheChurnDisabled)->MeasureProcessCPUTime();
+BENCHMARK(BM_FrameCacheChurnEnabled)->MeasureProcessCPUTime();
 
 class TAsyncRescheduleRunnableActor : public TActorBootstrapped<TAsyncRescheduleRunnableActor> {
 public:

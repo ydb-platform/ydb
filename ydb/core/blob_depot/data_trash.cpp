@@ -97,13 +97,9 @@ namespace NKikimr::NBlobDepot {
 
         if (TGenStep(leastExpectedBlobId) <= nextGenStep) {
             // remove invalidated step from allocations
-            auto blobSeqId = TBlobSeqId::FromSequentalNumber(record.Channel, generation, channel.NextBlobSeqId);
+            const auto blobSeqId = TBlobSeqId::FromSequentalNumber(record.Channel, generation, channel.NextBlobSeqId);
             Y_ABORT_UNLESS(record.LastConfirmedGenStep < TGenStep(blobSeqId));
-            if (blobSeqId.Step <= invalidatedStep) {
-                blobSeqId.Step = invalidatedStep + 1;
-                blobSeqId.Index = 0;
-                channel.NextBlobSeqId = blobSeqId.ToSequentialNumber();
-            }
+            channel.AdvanceNextBlobSeqId(generation, invalidatedStep);
 
             // recalculate least expected blob id -- it may change if the given id set was empty
             leastExpectedBlobId = channel.GetLeastExpectedBlobId(generation);

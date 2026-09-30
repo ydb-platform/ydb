@@ -115,7 +115,7 @@ def _benchmark_record(benchmark):
         "csv_columns": list(benchmark.csv_columns),
         "examples": (
             []
-            if benchmark.profile_kind == "distributed-ydb"
+            if benchmark.profile_kind in ("distributed-ydb", "dedicated-ydb")
             else [
                 {
                     benchmark.name: {
@@ -206,7 +206,7 @@ def _run(arguments, resource_loader, tool_revision):
         perf_frequency=arguments.perf_frequency,
     )
     if any(configuration.benchmark.executor == "distributed-ydb" for configuration in loaded_config.runs):
-        raise BenchmarkError("distributed-ydb requires the web coordinator; submit this YAML through New run")
+        raise BenchmarkError("Multi-host YDB clusters require the web coordinator; submit this YAML through New run")
     planned_runs = len(loaded_config.runs)
     plan = build_run_plan(loaded_config)
     output_directory = _prepare_output(arguments.output)

@@ -32,7 +32,7 @@
 (let $24 (DqPqTopicSink $23 '($13) $16))
 (let $25 (DqPhyStage '($22) (lambda '($38) (block '(
   (let $39 (lambda '($49) $49))
-  (let $40 (MultiHoppingCore (FromFlow (NarrowMap (ToFlow $38) (lambda '($41 $42 $43) (AsStruct '('k $41) '('"t" $42) '('"v" $43))))) (lambda '($44) (Member $44 'k)) (lambda '($45) (SafeCast (Member $45 '"t") (OptionalType $17))) (Interval '"5000") (Interval '"10000") (Interval '"5000000") 'true (lambda '($46) (AsStruct '('Sum0 (Member $46 '"v")))) (lambda '($47 $48) (AsStruct '('Sum0 (AggrAdd (Member $47 '"v") (Member $48 'Sum0))))) $39 $39 (lambda '($50 $51) (AsStruct '('Sum0 (AggrAdd (Member $50 'Sum0) (Member $51 'Sum0))))) (lambda '($52 $53 $54) (AsStruct '('Sum0 (Member $53 'Sum0)) '('"group0" $54) '('k $52))) '"1" '"group0"))
+  (let $40 (MultiHoppingCore (FromFlow (NarrowMap (ToFlow $38) (lambda '($41 $42 $43) (AsStruct '('k $41) '('"t" $42) '('"v" $43))))) (lambda '($44) (Member $44 'k)) (lambda '($45) (SafeCast (Member $45 '"t") (OptionalType $17))) (Interval '"5000") (Interval '"10000") (Interval '"5000000") 'true (lambda '($46) (AsStruct '('Sum0 (Member $46 '"v")))) (lambda '($47 $48) (AsStruct '('Sum0 (AggrAdd (Member $47 '"v") (Member $48 'Sum0))))) $39 $39 (lambda '($50 $51) (AsStruct '('Sum0 (AggrAdd (Member $50 'Sum0) (Member $51 'Sum0))))) (lambda '($52 $53 $54) (AsStruct '('Sum0 (Member $53 'Sum0)) '('"group0" $54) '('k $52))) '"1" '"group0" (Void) (Void) (Void) (Void) 'true))
   (return (Map $40 (lambda '($55) (block '(
     (let $56 (ResourceType '"Yson2.Node"))
     (let $57 '($56 '"" '"1"))

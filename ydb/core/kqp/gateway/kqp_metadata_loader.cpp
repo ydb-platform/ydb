@@ -17,10 +17,10 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <yql/essentials/utils/signals/utils.h>
 
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 #include <memory>
+#include <type_traits>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
@@ -444,11 +444,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
         tableMeta->ColumnOrder.push_back(columnName);
     }
 
-    tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalTable;
-    tableMeta->ExternalSource.Type = description.GetSourceType();
-    tableMeta->ExternalSource.TableLocation = description.GetLocation();
-    tableMeta->ExternalSource.TableContent = description.GetContent();
-    tableMeta->ExternalSource.DataSourcePath = description.GetDataSourcePath();
+    tableMeta->ExternalSource = NYql::TExternalTable::CreateFromDescription(description);
     return result;
 }
 
@@ -471,13 +467,7 @@ TTableMetadataResult GetExternalDataSourceMetadataResult(const NSchemeCache::TSc
 
     tableMeta->Attributes = entry.Attributes;
 
-    tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalDataSource;
-    tableMeta->ExternalSource.Type = description.GetSourceType();
-    tableMeta->ExternalSource.DataSourceLocation = description.GetLocation();
-    tableMeta->ExternalSource.DataSourceInstallation = description.GetInstallation();
-    tableMeta->ExternalSource.DataSourceAuth = description.GetAuth();
-    tableMeta->ExternalSource.Properties = description.GetProperties();
-    tableMeta->ExternalSource.DataSourcePath = tableName;
+    tableMeta->ExternalSource = NYql::TExternalDataSource::CreateFromDescription(description, tableName);
     return result;
 }
 
@@ -574,19 +564,8 @@ TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavi
     metadata->Kind = NYql::EKikimrTableKind::External; // Local topics are handled through PQ provider, same as external topics
     metadata->TableType = NYql::ETableType::ExternalTable;
 
-    auto& source = metadata->ExternalSource;
-    source.SourceType = NYql::ESourceType::ExternalDataSource;
-    source.Type = ToString(NYql::EDatabaseType::YdbTopics);
-    source.TableLocation = topicName;
-    source.DataSourcePath = cluster;
-    source.DataSourceAuth.MutableNone();
-
-    auto& properties = *source.Properties.mutable_properties();
-    properties.emplace("database_name", database);
-
-    if (userToken && userToken->GetSerializedToken()) {
-        properties.emplace("transient_token", userToken->GetSerializedToken());
-    }
+    const TString transientToken = userToken ? userToken->GetSerializedToken() : TString{};
+    metadata->ExternalSource = NYql::TExternalDataSource::CreateForLocalTopic(cluster, database, transientToken);
 
     TTableMetadataResult result = {.Metadata = metadata};
     result.SetSuccess();
@@ -661,40 +640,6 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
     return result;
 }
 
-TTableMetadataResult EnrichExternalTable(const TTableMetadataResult& externalTable, const TTableMetadataResult& externalDataSource) {
-    TTableMetadataResult result;
-
-    if (!externalTable.Success()) {
-        result.AddIssues(externalTable.Issues());
-        return result;
-    }
-
-    if (!externalDataSource.Success()) {
-        result.AddIssues(externalDataSource.Issues());
-        return result;
-    }
-
-    if (externalTable.Metadata->ExternalSource.Type != externalDataSource.Metadata->ExternalSource.Type) {
-        result.AddIssue(YqlIssue({}, TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder()
-            << "Internal error. External table type mismatch, expected: " << externalTable.Metadata->ExternalSource.Type
-            << ", but underlying external data source has type: " << externalDataSource.Metadata->ExternalSource.Type
-        ));
-        return result;
-    }
-
-    result.SetSuccess();
-    result.Metadata = externalTable.Metadata;
-    auto tableMeta = result.Metadata;
-    tableMeta->ExternalSource.DataSourceLocation = externalDataSource.Metadata->ExternalSource.DataSourceLocation;
-    tableMeta->ExternalSource.DataSourceInstallation = externalDataSource.Metadata->ExternalSource.DataSourceInstallation;
-    tableMeta->ExternalSource.DataSourceAuth = externalDataSource.Metadata->ExternalSource.DataSourceAuth;
-    tableMeta->ExternalSource.ServiceAccountIdSignature = externalDataSource.Metadata->ExternalSource.ServiceAccountIdSignature;
-    tableMeta->ExternalSource.AwsAccessKeyId = externalDataSource.Metadata->ExternalSource.AwsAccessKeyId;
-    tableMeta->ExternalSource.AwsSecretAccessKey = externalDataSource.Metadata->ExternalSource.AwsSecretAccessKey;
-    tableMeta->ExternalSource.UnderlyingExternalSourceMetadata = externalDataSource.Metadata;
-    return result;
-}
-
 TString GetDebugString(const TString& id) {
     return TStringBuilder() << " Path: " << id;
 }
@@ -713,126 +658,6 @@ void UpdateMetadataIfSuccess(NYql::TKikimrTableMetadataPtr* implTable, TTableMet
     *implTable = std::move(value.Metadata);
 }
 
-void SetError(TTableMetadataResult& externalDataSourceMetadata, const TString& error) {
-    externalDataSourceMetadata.AddIssues({ NYql::TIssue(error) });
-    externalDataSourceMetadata.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
-}
-
-void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSourceMetadata, const TEvDescribeSecretsResponse::TDescription& objectDescription) {
-    if (objectDescription.Status != Ydb::StatusIds::SUCCESS) {
-        externalDataSourceMetadata.AddIssues(objectDescription.Issues);
-        externalDataSourceMetadata.SetStatus(NYql::YqlStatusFromYdbStatus(objectDescription.Status));
-    } else {
-        const auto& authDescription = externalDataSourceMetadata.Metadata->ExternalSource.DataSourceAuth;
-        switch (authDescription.identity_case()) {
-            case NKikimrSchemeOp::TAuth::kServiceAccount: {
-                if (objectDescription.SecretValues.size() != 1) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "Service account auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
-                    return;
-                }
-                if (authDescription.GetServiceAccount().GetId().empty()) {
-                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty SERVICE_ACCOUNT_ID");
-                    return;
-                }
-                if (objectDescription.SecretValues[0].empty()) {
-                    SetError(externalDataSourceMetadata, "Service account auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
-                    return;
-                }
-                externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
-                return;
-            }
-
-            case NKikimrSchemeOp::TAuth::kIam: {
-                // SERVICE_ACCOUNT_ID and RESOURCE_ID are not user-provided here:
-                // RESOURCE_ID is auto-resolved from the database's cloud_id at CREATE
-                // time, and post-creation INITIAL_TOKEN_SECRET is not resolved into
-                // SecretValues. Emptiness of these fields/secret list is therefore an
-                // internal-contract violation and not an actionable BAD_REQUEST.
-                return;
-            }
-
-            case NKikimrSchemeOp::TAuth::kNone: {
-                if (objectDescription.SecretValues.size() != 0) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "None auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 0");
-                    return;
-                }
-                return;
-            }
-
-            case NKikimrSchemeOp::TAuth::kBasic: {
-                if (objectDescription.SecretValues.size() != 1) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "Basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
-                    return;
-                }
-                if (authDescription.GetBasic().GetLogin().empty()) {
-                    SetError(externalDataSourceMetadata, "Basic auth requires non-empty LOGIN");
-                    return;
-                }
-                externalDataSourceMetadata.Metadata->ExternalSource.Password = objectDescription.SecretValues[0];
-                return;
-            }
-            case NKikimrSchemeOp::TAuth::kMdbBasic: {
-                if (objectDescription.SecretValues.size() != 2) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "Mdb basic auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
-                    return;
-                }
-                if (authDescription.GetMdbBasic().GetServiceAccountId().empty()) {
-                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty SERVICE_ACCOUNT_ID");
-                    return;
-                }
-                if (authDescription.GetMdbBasic().GetLogin().empty()) {
-                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty LOGIN");
-                    return;
-                }
-                if (objectDescription.SecretValues[0].empty()) {
-                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by SERVICE_ACCOUNT_SECRET_NAME");
-                    return;
-                }
-                if (objectDescription.SecretValues[1].empty()) {
-                    SetError(externalDataSourceMetadata, "Mdb basic auth requires non-empty value for the secret referenced by PASSWORD_SECRET_NAME");
-                    return;
-                }
-                externalDataSourceMetadata.Metadata->ExternalSource.ServiceAccountIdSignature = objectDescription.SecretValues[0];
-                externalDataSourceMetadata.Metadata->ExternalSource.Password = objectDescription.SecretValues[1];
-                return;
-            }
-            case NKikimrSchemeOp::TAuth::kAws: {
-                if (objectDescription.SecretValues.size() != 2) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "Aws auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 2");
-                    return;
-                }
-                if (objectDescription.SecretValues[0].empty()) {
-                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_ACCESS_KEY_ID_SECRET_NAME");
-                    return;
-                }
-                if (objectDescription.SecretValues[1].empty()) {
-                    SetError(externalDataSourceMetadata, "AWS auth requires non-empty value for the secret referenced by AWS_SECRET_ACCESS_KEY_SECRET_NAME");
-                    return;
-                }
-                externalDataSourceMetadata.Metadata->ExternalSource.AwsAccessKeyId = objectDescription.SecretValues[0];
-                externalDataSourceMetadata.Metadata->ExternalSource.AwsSecretAccessKey = objectDescription.SecretValues[1];
-                return;
-            }
-            case NKikimrSchemeOp::TAuth::kToken: {
-                if (objectDescription.SecretValues.size() != 1) {
-                    SetError(externalDataSourceMetadata, TStringBuilder{} << "Token auth contains invalid count of secrets: " << objectDescription.SecretValues.size() << " instead of 1");
-                    return;
-                }
-                if (objectDescription.SecretValues[0].empty()) {
-                    SetError(externalDataSourceMetadata, "Token auth requires non-empty value for the secret referenced by TOKEN_SECRET_NAME");
-                    return;
-                }
-                externalDataSourceMetadata.Metadata->ExternalSource.Token = objectDescription.SecretValues[0];
-                return;
-            }
-            case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET: {
-                SetError(externalDataSourceMetadata, "identity case is not specified in case of update external data source secrets");
-                return;
-            }
-        }
-    }
-}
-
 NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(
     const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
@@ -841,39 +666,6 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSo
 ) {
     const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
     return DescribeExternalDataSourceSecrets(authDescription, userToken, database, actorSystem);
-}
-
-} // anonymous namespace
-
-NExternalSource::TAuth MakeAuth(const NYql::TExternalSource& metadata) {
-    switch (metadata.DataSourceAuth.identity_case()) {
-    case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
-    case NKikimrSchemeOp::TAuth::kNone:
-        return NExternalSource::NAuth::MakeNone();
-    case NKikimrSchemeOp::TAuth::kServiceAccount:
-        return NExternalSource::NAuth::MakeServiceAccount(metadata.DataSourceAuth.GetServiceAccount().GetId(), metadata.ServiceAccountIdSignature);
-    case NKikimrSchemeOp::TAuth::kAws:
-        return NExternalSource::NAuth::MakeAws(metadata.AwsAccessKeyId, metadata.AwsSecretAccessKey, metadata.DataSourceAuth.GetAws().GetAwsRegion());
-    case NKikimrSchemeOp::TAuth::kIam:
-        return NExternalSource::NAuth::MakeIamImpersonate(metadata.DataSourceAuth.GetIam().GetServiceAccountId(), metadata.DataSourceAuth.GetIam().GetResourceId());
-    case NKikimrSchemeOp::TAuth::kBasic:
-    case NKikimrSchemeOp::TAuth::kMdbBasic:
-    case NKikimrSchemeOp::TAuth::kToken:
-        Y_ABORT("Unimplemented external source auth: %d", metadata.DataSourceAuth.identity_case());
-        break;
-    }
-    Y_UNREACHABLE();
-}
-
-std::shared_ptr<NExternalSource::TMetadata> ConvertToExternalSourceMetadata(const NYql::TKikimrTableMetadata& tableMetadata) {
-    auto metadata = std::make_shared<NExternalSource::TMetadata>();
-    metadata->TableLocation = tableMetadata.ExternalSource.TableLocation;
-    metadata->DataSourceLocation = tableMetadata.ExternalSource.DataSourceLocation;
-    metadata->DataSourcePath = tableMetadata.ExternalSource.DataSourcePath;
-    metadata->Type = tableMetadata.ExternalSource.Type;
-    metadata->Attributes = tableMetadata.Attributes;
-    metadata->Auth = MakeAuth(tableMetadata.ExternalSource);
-    return metadata;
 }
 
 // dynamic metadata from IExternalSource here is propagated into TKikimrTableMetadata, which will be returned as a result of LoadTableMetadata()
@@ -901,13 +693,12 @@ bool EnrichMetadata(NYql::TKikimrTableMetadata& tableMetadata, const NExternalSo
         ++id;
     }
     tableMetadata.Attributes = dynamicMetadata.Attributes;
-    tableMetadata.ExternalSource.TableLocation = dynamicMetadata.TableLocation;
-    tableMetadata.ExternalSource.DataSourceLocation = dynamicMetadata.DataSourceLocation;
-    tableMetadata.ExternalSource.DataSourcePath = dynamicMetadata.DataSourcePath;
-    tableMetadata.ExternalSource.Type = dynamicMetadata.Type;
+    tableMetadata.ExternalDataSource().ApplyInferredMetadata(
+        dynamicMetadata.Type, dynamicMetadata.DataSourcePath);
     return true;
 }
 
+} // anonymous namespace
 
 TVector<NKikimrKqp::TKqpTableMetadataProto> TKqpTableMetadataLoader::GetCollectedSchemeData() {
     TVector<NKikimrKqp::TKqpTableMetadataProto> result(std::move(CollectedSchemeData));
@@ -1140,50 +931,6 @@ NSchemeCache::TSchemeCacheNavigate::TEntry& InferEntry(NKikimr::NSchemeCache::TS
         : resultSet[0];
 }
 
-namespace {
-TString ComposeStructuredTokenJsonForExternalDataSource(const NYql::TExternalSource& externalSource) {
-    const auto& dataSourceAuth = externalSource.DataSourceAuth;
-    switch (dataSourceAuth.identity_case()) {
-        case NKikimrSchemeOp::TAuth::kNone:
-            return NYql::ComposeStructuredTokenJsonForServiceAccount("", "", "");
-
-        case NKikimrSchemeOp::TAuth::kBasic:
-            return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
-                    dataSourceAuth.GetBasic().GetLogin(),
-                    dataSourceAuth.GetBasic().GetPasswordSecretName(),
-                    externalSource.Password);
-
-        case NKikimrSchemeOp::TAuth::kMdbBasic:
-            return NYql::ComposeStructuredTokenJsonForBasicAuthWithSecret(
-                    dataSourceAuth.GetMdbBasic().GetLogin(),
-                    dataSourceAuth.GetMdbBasic().GetPasswordSecretName(),
-                    externalSource.Password);
-
-        case NKikimrSchemeOp::TAuth::kServiceAccount:
-            return NYql::ComposeStructuredTokenJsonForServiceAccountWithSecret(
-                    dataSourceAuth.GetServiceAccount().GetId(),
-                    dataSourceAuth.GetServiceAccount().GetSecretName(),
-                    externalSource.ServiceAccountIdSignature);
-
-        case NKikimrSchemeOp::TAuth::kToken:
-            return NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(
-                    dataSourceAuth.GetToken().GetTokenSecretName(),
-                    externalSource.Token);
-
-        case NKikimrSchemeOp::TAuth::kIam:
-            return NYql::ComposeStructuredTokenJsonForIamAuth(
-                    dataSourceAuth.GetIam().GetServiceAccountId(),
-                    dataSourceAuth.GetIam().GetResourceId());
-
-        case NKikimrSchemeOp::TAuth::kAws:
-            throw yexception() << "Unhandled auth method: Aws";
-
-        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
-            throw yexception() << "Unhandled auth method: unset";
-    }
-}
-} // anonymous namespace
-
 // The type is TString or std::pair<TIndexId, TString>
 template<typename TPath>
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadataCache(
@@ -1307,13 +1054,22 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             promise.SetValue(externalDataSourceMetadata);
                             return;
                         }
-                        if (externalPath) {
-                            externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
-                        }
                         LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
                             .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
-                            UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
+                            const auto& objectDescription = result.GetValue();
+                            if (objectDescription.Status != Ydb::StatusIds::SUCCESS) {
+                                externalDataSourceMetadata.AddIssues(objectDescription.Issues);
+                                externalDataSourceMetadata.SetStatus(NYql::YqlStatusFromYdbStatus(objectDescription.Status));
+                            } else {
+                                try {
+                                    externalDataSourceMetadata.Metadata->ExternalDataSource()
+                                        .InitSecretValues(objectDescription.SecretValues);
+                                } catch (const std::exception& exception) {
+                                    externalDataSourceMetadata.AddIssues({NYql::TIssue(exception.what())});
+                                    externalDataSourceMetadata.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
+                                }
+                            }
                             if (!externalDataSourceMetadata.Success()) {
                                 promise.SetValue(externalDataSourceMetadata);
                                 return;
@@ -1323,17 +1079,21 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 NExternalSource::IExternalSource::TPtr externalSource;
                                 if (settings.ExternalSourceFactory) {
                                     try {
-                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalDataSource().GetType());
                                     } catch (const std::exception& exception) {
                                         TTableMetadataResult wrapper;
-                                        wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
+                                        wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalDataSource().GetType() << ", " <<  exception.what());
                                         promise.SetValue(wrapper);
                                         return;
                                     }
                                 }
 
                                 if (externalSource && externalSource->CanLoadDynamicMetadata()) {
-                                    auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
+                                    auto externalSourceMeta = std::make_shared<NExternalSource::TMetadata>(
+                                        externalDataSourceMetadata.Metadata->ExternalDataSource().MakeExternalSourceMetadata());
+                                    if (externalPath) {
+                                        externalSourceMeta->TableLocation = *externalPath;
+                                    }
                                     externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
                                     externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
                                         .Subscribe([promise, externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
@@ -1361,7 +1121,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     wrapper.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
                                     wrapper.AddIssue(NYql::TIssue(TStringBuilder()
                                         << "Schema inference (with_infer) is not enabled for external source '"
-                                        << externalDataSourceMetadata.Metadata->ExternalSource.Type
+                                        << externalDataSourceMetadata.Metadata->ExternalDataSource().GetType()
                                         << "'. Please contact your system administrator to enable the "
                                         << "EnableExternalSourceSchemaInference feature flag."));
                                     promise.SetValue(wrapper);
@@ -1369,15 +1129,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                     promise.SetValue(externalDataSourceMetadata);
                                 }
                             };
-                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath &&
+
+                            if (externalDataSourceMetadata.Metadata->ExternalDataSource().IsYdb() && externalPath &&
                                 settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
-                                auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
-                                THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
-                                auto structuredTokenJson = ComposeStructuredTokenJsonForExternalDataSource(source);
-                                auto databaseName = properties.Value("database_name", "");
-                                TString useTlsStr = properties.Value("use_tls", "false");
-                                useTlsStr.to_lower();
-                                bool useTls = useTlsStr == "true"sv;
+                                const auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
+                                auto structuredTokenJson = source.ComposeStructuredTokenJson();
+                                auto databaseName = source.GetDatabaseName();
+                                bool useTls = source.IsTlsEnabled();
 
                                 auto path = databaseName + "/" + *externalPath;
                                 auto locked = ptr.lock();
@@ -1388,7 +1146,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                                 GetSchemeEntryType(
                                     locked->FederatedQuerySetup,
-                                    source.DataSourceLocation,
+                                    source.GetLocation(),
                                     databaseName,
                                     useTls,
                                     structuredTokenJson,
@@ -1409,7 +1167,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
 
                                         if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
-                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                                            externalDataSourceMetadata.Metadata->ExternalDataSource().SetYdbTopicType();
                                         }
                                         f(externalDataSourceMetadata);
                                     });
@@ -1432,9 +1190,22 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         locked->LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken, "external_data_source")
                             .Apply([promise, externalTableMetadata](const TFuture<TTableMetadataResult>& result) mutable
                         {
-                            auto externalDataSourceMetadata = result.GetValue();
-                            auto newMetadata = EnrichExternalTable(externalTableMetadata, externalDataSourceMetadata);
-                            promise.SetValue(std::move(newMetadata));
+                            TTableMetadataResult enriched;
+                            try {
+                                auto externalDataSourceMetadata = result.GetValue();
+                                if (!externalDataSourceMetadata.Success()) {
+                                    enriched.AddIssues(externalDataSourceMetadata.Issues());
+                                } else {
+                                    enriched.Metadata = externalTableMetadata.Metadata;
+                                    enriched.Metadata->ExternalTable().InitExternalDataSource(externalDataSourceMetadata.Metadata);
+                                    enriched.SetSuccess();
+                                }
+                            } catch (const std::exception& exception) {
+                                enriched.SetStatus(TIssuesIds::KIKIMR_INTERNAL_ERROR);
+                                enriched.AddIssue(YqlIssue({}, TIssuesIds::KIKIMR_INTERNAL_ERROR, TStringBuilder()
+                                    << "Internal error. " << exception.what()));
+                            }
+                            promise.SetValue(std::move(enriched));
                         });
                         break;
                     }

@@ -10,8 +10,6 @@ bool TExtractJoinExpressionsRule::QuickMatch(const TIntrusivePtr<IOperator>& inp
 }
 
 bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
-    Y_UNUSED(props);
-
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -28,7 +26,7 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     auto conjuncts = filter->GetFilterExpression().SplitConjunct();
 
     TVector<TExpression> newConjuncts;
-    TVector<TMapElement> mapElements;
+    TMapIUs mapElements;
 
     for (auto & c : conjuncts) {
         if (c.MaybeEquiJoinCondition()) {
@@ -37,17 +35,17 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
         else if (c.MaybeExprEquiJoinCondition()) {
             // Check that the condition won't be pushed to either side of the join
             auto exprIUs = c.GetInputIUs();
-            if (IUIsSubset(exprIUs, leftInput->GetOutputIUs()) || IUIsSubset(exprIUs, rightInput->GetOutputIUs())){
+            if (exprIUs.IsSubsetOf(leftInput->GetOutputIUs()) || exprIUs.IsSubsetOf(rightInput->GetOutputIUs())){
                 newConjuncts.push_back(c);
                 continue;
             }
 
             TEquiJoinCondition cond(c);
-            TVector<std::pair<TInfoUnit, TExprNode::TPtr>> renameMap;
+            TMappedIUs<TExprNode::TPtr> definitions;
             TNodeOnNodeOwnedMap replaceMap;
-            if (cond.ExtractExpressions(replaceMap, renameMap)) {
-                for (auto const & [iu, expr] : renameMap) {
-                    mapElements.emplace_back(iu, TExpression(expr, &ctx.ExprCtx, &props));
+            if (cond.ExtractExpressions(replaceMap, definitions)) {
+                for (const auto& [iu, expr] : definitions.Items()) {
+                    mapElements.Add(iu, TExpression(expr, &ctx.ExprCtx, &props));
                 }
                 newConjuncts.push_back(c.ApplyReplaceMap(replaceMap, ctx));
             } else {
@@ -58,13 +56,13 @@ bool TExtractJoinExpressionsRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
         }
     }
 
-    if (mapElements.empty()) {
+    if (mapElements.Keys().Empty()) {
         return false;
     }
 
     filter->SetFilterExpression(MakeConjunction(newConjuncts, props.PgSyntax));
-    auto newMap = MakeIntrusive<TOpMap>(filter->GetInput(), input->Pos, mapElements);
-    filter->SetInput(newMap);
+    auto newMap = MakeIntrusive<TOpMap>(join, input->Pos, std::move(mapElements));
+    filter->SetInput(std::move(newMap));
     return true;
 }
 }

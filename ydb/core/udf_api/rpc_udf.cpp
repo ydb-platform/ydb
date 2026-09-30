@@ -143,16 +143,15 @@ public:
 constexpr ui64 MaxModuleBodySize = 256ull * 1024 * 1024;
 
 class TUploadModuleStreamActor: public TActorBootstrapped<TUploadModuleStreamActor> {
-    using IContext = IUploadModuleStreamContext;
+    using IContext = TEvUploadModuleRequest::IStreamCtx;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TUploadModuleStreamActor(TIntrusivePtr<IContext> context, const TActorId& grpcRequestProxyId)
+    TUploadModuleStreamActor(std::unique_ptr<TEvUploadModuleRequest> context)
         : Context_(std::move(context))
-        , GRpcRequestProxyId_(grpcRequestProxyId)
     {
     }
 
@@ -160,20 +159,23 @@ public:
         Become(&TUploadModuleStreamActor::StateWork);
         Context_->Attach(SelfId());
 
-        Database_ = ExtractDatabaseName(Context_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER))
-            .GetOrElse(TString());
-        Send(GRpcRequestProxyId_, new TEvRequestAuthAndCheck(
-            Database_,
-            ExtractYdbToken(Context_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER)),
-            SelfId(),
-            TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin),
-            Context_->GetPeerName(),
-            TString()));
+        Database_ = Context_->GetDatabaseName().GetOrElse(TString());
+        TString error;
+        if (!NUdfApi::IsDatabaseServedHere(Database_, error)) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, error);
+            return;
+        }
+
+        UserToken_ = Context_->GetInternalToken();
+        if (NUdfApi::CanDecideWithoutDatabaseOwner(UserToken_.Get())) {
+            Authorize(TString());
+            return;
+        }
+        Send(MakeSchemeCacheID(), NUdfApi::MakeDatabaseOwnerRequest(Database_));
     }
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvRequestAuthAndCheckResult, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(IContext::TEvReadFinished, Handle);
             hFunc(IContext::TEvNotifiedWhenDone, Handle);
@@ -184,29 +186,6 @@ public:
     }
 
 private:
-    void Handle(TEvRequestAuthAndCheckResult::TPtr& ev) {
-        const auto* msg = ev->Get();
-        if (msg->Status != Ydb::StatusIds::SUCCESS) {
-            Reply(msg->Status, msg->Issues.ToOneLineString());
-            return;
-        }
-
-        TString error;
-        if (!NUdfApi::IsDatabaseServedHere(Database_, error)) {
-            Reply(Ydb::StatusIds::BAD_REQUEST, error);
-            return;
-        }
-
-        UserToken_ = msg->UserToken;
-        // With no database to resolve there is no owner and so no database
-        // administrator; only a cluster administrator can get through.
-        if (Database_.empty() || NUdfApi::CanDecideWithoutDatabaseOwner(UserToken_.Get())) {
-            Authorize(TString());
-            return;
-        }
-        Send(MakeSchemeCacheID(), NUdfApi::MakeDatabaseOwnerRequest(Database_));
-    }
-
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         TString owner;
         if (!NUdfApi::ParseDatabaseOwner(*ev->Get()->Request, owner)) {
@@ -285,6 +264,8 @@ private:
     }
 
     void Handle(IContext::TEvNotifiedWhenDone::TPtr&) {
+        Context_->AuditLogRequestEnd(Ydb::StatusIds::CANCELLED);
+        Context_->FinishSpan(Ydb::StatusIds::CANCELLED);
         PassAway();
     }
 
@@ -332,13 +313,12 @@ private:
             NYql::IssueToMessage(NYql::TIssue(error), operation.add_issues());
         }
 
-        Context_->WriteAndFinish(std::move(response), grpc::Status::OK);
+        Context_->WriteAndFinish(std::move(response), status);
         PassAway();
     }
 
 private:
-    const TIntrusivePtr<IContext> Context_;
-    const TActorId GRpcRequestProxyId_;
+    const std::unique_ptr<TEvUploadModuleRequest> Context_;
 
     TString Database_;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken_;
@@ -363,11 +343,18 @@ void DoDescribeModuleRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPr
     f.RegisterActor(new TDescribeModuleRPC(p.release()));
 }
 
-IActor* CreateUploadModuleStreamActor(
-    TIntrusivePtr<IUploadModuleStreamContext> context,
-    const TActorId& grpcRequestProxyId)
+void TEvUploadModuleRequest::Pass(const IFacilityProvider& facility) {
+    facility.RegisterActor(new TUploadModuleStreamActor(std::unique_ptr<TEvUploadModuleRequest>(this)));
+}
+
+template <>
+void FillYdbStatus(Ydb::Udf::UploadModuleResponse& response,
+    const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status)
 {
-    return new TUploadModuleStreamActor(std::move(context), grpcRequestProxyId);
+    auto& operation = *response.mutable_operation();
+    operation.set_ready(true);
+    operation.set_status(status);
+    NYql::IssuesToMessage(issues, operation.mutable_issues());
 }
 
 } // namespace NKikimr::NGRpcService

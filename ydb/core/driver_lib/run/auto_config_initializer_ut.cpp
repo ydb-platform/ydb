@@ -20,6 +20,29 @@ Y_UNIT_TEST_SUITE(AutoConfig) {
 using namespace NKikimr;
 using namespace NAutoConfigInitializer;
 
+Y_UNIT_TEST(AsyncFrameCacheBudgetSurvivesAutoConfig) {
+    NKikimrConfig::TActorSystemConfig defaults;
+    UNIT_ASSERT_VALUES_EQUAL(defaults.GetAsyncFrameCacheSizeBytes(), 4194304);
+    UNIT_ASSERT_VALUES_EQUAL(NActors::TActorSystemSetup().AsyncFrameCacheSizeBytes,
+        defaults.GetAsyncFrameCacheSizeBytes());
+    for (ui64 budget : {ui64(0), ui64(8192), ui64(4194304)}) {
+        for (bool dynamic : {false, true}) {
+            for (bool tiny : {false, true}) {
+                NKikimrConfig::TActorSystemConfig config;
+                config.SetCpuCount(8);
+                config.SetUseAutoConfig(true);
+                config.SetAsyncFrameCacheSizeBytes(budget);
+                ApplyAutoConfig(&config, dynamic, tiny);
+                UNIT_ASSERT_VALUES_EQUAL(config.GetAsyncFrameCacheSizeBytes(), budget);
+            }
+        }
+    }
+    defaults.SetCpuCount(8);
+    defaults.SetUseAutoConfig(true);
+    ApplyAutoConfig(&defaults, false, false);
+    UNIT_ASSERT_VALUES_EQUAL(defaults.GetAsyncFrameCacheSizeBytes(), 4194304);
+}
+
 namespace {
 
 class TDelayedSignalActor : public NActors::TActorBootstrapped<TDelayedSignalActor> {

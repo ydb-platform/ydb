@@ -46,10 +46,10 @@ items:
     mode: link
     path: local-indexes/toc_p.yaml
 - name: Query execution optimization
-  href: query-execution-optimization/index.md
+  href: optimization/index.md
   include:
     mode: link
-    path: query-execution-optimization/toc_p.yaml
+    path: optimization/toc_p.yaml
 - name: Batch upload
   href: batch-upload.md
 - name: Paging

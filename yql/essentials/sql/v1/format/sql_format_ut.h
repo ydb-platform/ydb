@@ -497,6 +497,17 @@ Y_UNIT_TEST(CreateTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(KillSession) {
+    TCases cases = {
+        {"kill session `ydb://session/3?node_id=1&id=test`",
+         "KILL SESSION `ydb://session/3?node_id=1&id=test`;\n"},
+        {"KiLl SeSsIoN $session_id", "KILL SESSION $session_id;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(ObjectOperations) {
     TCases cases = {
         {"alter oBject usEr (TYpe abcde) Set (a = b)",

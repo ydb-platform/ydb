@@ -125,6 +125,8 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
 
     Counters = TPoolCounters();
     Counters->Limit        = group->GetCounter("Limit",        false);
+    Counters->Guarantee    = group->GetCounter("Guarantee",    false);
+    Counters->EffectiveGuarantee = group->GetCounter("EffectiveGuarantee", true); // snapshot
     Counters->Demand       = group->GetCounter("Demand",       false); // snapshot
     Counters->ActualDemand = group->GetCounter("ActualDemand", true);  // snapshot
     Counters->InFlight     = group->GetCounter("InFlight",     false);
@@ -147,6 +149,7 @@ NSnapshot::TPool* TPool::TakeSnapshot() {
 
     if (Counters) {
         Counters->Limit->Set(GetCpuLimit() * 1'000'000);
+        Counters->Guarantee->Set(GetCpuGuarantee() * 1'000'000);
         Counters->InFlight->Set(CpuUsage * 1'000'000);
         Counters->Waiting->Set(CpuThrottle * 1'000'000);
         Counters->Usage->Set(CpuBurstUsage);
@@ -217,9 +220,11 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     auto* newRoot = new NSnapshot::TRoot();
 
-    Counters.TotalLimit->Set(TotalLimit * 1'000'000);
+    const ui64 totalLimit = TotalLimit.load();
 
-    newRoot->TotalLimit = TotalLimit;
+    Counters.TotalLimit->Set(totalLimit * 1'000'000);
+
+    newRoot->TotalLimit = totalLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });

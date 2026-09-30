@@ -562,41 +562,16 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Scan), 256 * 1024);
     }
 
-    Y_UNIT_TEST(RemovedLinkResetsWeightCounter) {
-        auto initial = BuildTopologyConfig(
-            {{{ESpecialTaskCategory::Scan, 7}, {ESpecialTaskCategory::Insert, 1}}});
-        TRuntimeFixture fixture(initial);
-        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 7);
-
-        auto withoutScan = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}});
-        fixture.Update(withoutScan);
-        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 0);
-    }
-
-    Y_UNIT_TEST(ValidConfigUpdateAppliesAtomically) {
-        auto initial = BuildTopologyConfig(
-            {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Normalizer, 1}},
-                {{ESpecialTaskCategory::Insert, 1}}},
-            {1, 1});
-        TRuntimeFixture fixture(initial);
-
-        auto candidate = initial;
-        candidate.MutableWorkerPools(0)->ClearLinks();
-        auto* retainedLink = candidate.MutableWorkerPools(0)->AddLinks();
-        retainedLink->SetCategory(::ToString(ESpecialTaskCategory::Normalizer));
-        retainedLink->SetWeight(1);
-        auto* movedLink = candidate.MutableWorkerPools(1)->AddLinks();
-        movedLink->SetCategory(::ToString(ESpecialTaskCategory::Scan));
-        movedLink->SetWeight(1);
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 3);
-    }
-
+    /* Scenario:
+        Apply reordered named pools, move a category and clear its old link's counter atomically.
+        Retained pool names preserve runtime IDs.
+     */
     Y_UNIT_TEST(PoolReorderKeepsRuntimeIdentity) {
         auto initial = BuildTopologyConfig(
-            {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Normalizer, 1}},
+            {{{ESpecialTaskCategory::Scan, 7}, {ESpecialTaskCategory::Normalizer, 1}},
                 {{ESpecialTaskCategory::Insert, 1}}});
         TRuntimeFixture fixture(initial);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 7);
 
         auto candidate = initial;
         candidate.MutableWorkerPools()->SwapElements(0, 1);
@@ -610,6 +585,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         scanLink->SetWeight(1);
 
         fixture.Update(candidate);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 0);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 3);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 3);

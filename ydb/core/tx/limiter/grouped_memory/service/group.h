@@ -40,6 +40,18 @@ public:
 
     std::vector<std::shared_ptr<TAllocationInfo>> AllocatePossible(const ui32 allocationsLimit);
 
+    template <typename TPred>
+    std::shared_ptr<TAllocationInfo> TakeOne(TPred&& pred) {
+        for (auto it = Allocations.begin(); it != Allocations.end(); ++it) {
+            if (pred(*it->second)) {
+                auto result = std::move(it->second);
+                Allocations.erase(it);
+                return result;
+            }
+        }
+        return nullptr;
+    }
+
     TString DebugString() const;
 };
 
@@ -88,6 +100,33 @@ public:
 
     void AddAllocationExt(const ui64 externalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
         Groups[externalGroupId].AddAllocation(allocation);
+    }
+
+    template <typename TPred>
+    bool ContainsIf(const ui64 externalGroupId, TPred&& pred) const {
+        auto groupIt = Groups.find(externalGroupId);
+        if (groupIt == Groups.end()) {
+            return false;
+        }
+        for (const auto& [_, allocation] : groupIt->second.GetAllocations()) {
+            if (pred(*allocation)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template <typename TPred>
+    std::shared_ptr<TAllocationInfo> TakeOne(const ui64 externalGroupId, TPred&& pred) {
+        auto groupIt = Groups.find(externalGroupId);
+        if (groupIt == Groups.end()) {
+            return nullptr;
+        }
+        auto allocation = groupIt->second.TakeOne(std::forward<TPred>(pred));
+        if (groupIt->second.IsEmpty()) {
+            Groups.erase(groupIt);
+        }
+        return allocation;
     }
 
     TString DebugString() const;

@@ -26,8 +26,18 @@ private:
     TIdsControl ProcessIds;
 
     void TryAllocateWaiting();
+    // One admitted allocation. Scopes with no admission are served before scopes that already hold one.
+    bool ScheduleOneUnconstrained();
+    void RelinkProcess(TProcessMemory& process, const TProcessMemoryUsage& oldAddress);
     void RefreshSignals() const {
         Signals->ProcessesCount->Set(Processes.size());
+        ui64 admittedGroups = 0;
+        ui64 admittedBytes = 0;
+        for (const auto& [_, process] : Processes) {
+            process.CollectAdmitted(admittedGroups, admittedBytes);
+        }
+        Signals->AdmittedGroupsCount->Set(admittedGroups);
+        Signals->AdmittedBytes->Set(admittedBytes);
     }
 
     class TOrderedProcessesGuard {
@@ -113,7 +123,7 @@ public:
     void AllocationUpdated(const ui64 externalProcessId, const ui64 externalScopeId, const ui64 allocationId);
 
     void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
-    void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit);
+    void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, const std::optional<ui64>& unconstrainedSoft = std::nullopt);
 
     bool IsEmpty() const {
         return Processes.empty();

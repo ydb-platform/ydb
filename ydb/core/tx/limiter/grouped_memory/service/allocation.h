@@ -27,6 +27,7 @@ public:
     ~TAllocationInfo();
 
     bool IsAllocatable(const ui64 additional) const;
+    bool IsAllocatableUnconstrained(const ui64 additional) const;
 
     void SetAllocatedVolume(const ui64 value);
 

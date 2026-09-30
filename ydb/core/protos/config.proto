@@ -857,6 +857,11 @@ message TGroupedMemoryLimiterConfig {
     optional uint64 MemoryLimit = 2;
     optional uint64 HardMemoryLimit = 3;
     optional uint64 CountBuckets = 4;
+    // Fraction of the hard limit. Unset keeps today's priority-head behavior.
+    // When set, admitted groups may allocate up to hard * coefficient.
+    optional double UnconstrainedSoftLimitCoefficient = 5;
+    // How many groups of one scope may use the band above soft. Used only when the coefficient is set.
+    optional uint32 MaxUnrestrictedGroupsPerScope = 6 [default = 1];
 }
 
 message TExternalIndexConfig {

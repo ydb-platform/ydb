@@ -65,6 +65,10 @@ bool TAllocationInfo::IsAllocatable(const ui64 additional) const {
     return Stage->IsAllocatable(AllocatedVolume, additional);
 }
 
+bool TAllocationInfo::IsAllocatableUnconstrained(const ui64 additional) const {
+    return Stage->IsAllocatableUnconstrained(AllocatedVolume, additional);
+}
+
 TAllocationInfo::~TAllocationInfo() {
     if (GetAllocationStatus() != EAllocationStatus::Failed && GetAllocationStatus() != EAllocationStatus::Allocated) {
         Stage->Free(AllocatedVolume, false);

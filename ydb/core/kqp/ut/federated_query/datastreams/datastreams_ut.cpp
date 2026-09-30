@@ -168,6 +168,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const std::string topicName = "topicName";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
 
         const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
             SELECT * FROM `{source}`.`{topic}` WITH (
@@ -239,6 +242,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         CreateTopic(topicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
+        Y_DEFER {
+            DropTopic(topicName);
+        };
 
         CreatePqSource(sourceName);
 
@@ -280,6 +286,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const std::string sourceName = "sourceName";
         const std::string topicName = "topicName";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
 
         CreatePqSourceBasicAuth(sourceName);
 
@@ -311,7 +320,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const std::string tableName = "tableName";
 
         CreateTopic(outputTopicName);
+        Y_DEFER {
+            DropTopic(outputTopicName);
+        };
         CreateTopic(inputTopicName);
+        Y_DEFER {
+            DropTopic(inputTopicName);
+        };
 
         CreatePqSourceBasicAuth(sourceName);
 
@@ -353,6 +368,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(ReadTopicWithColumnOrder, TStreamingTestFixture) {
         constexpr char topicName[] = "readTopicWithColumnOrder";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -397,6 +415,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(ReadTopicWithDefaultSchema, TStreamingTestFixture) {
         constexpr char topicName[] = "readTopicWithDefaultSchema";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -423,6 +444,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -473,7 +497,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto sourceTopicName = TStringBuilder() << Name_ << "TopicSource";
         const auto sinkTopicName = TStringBuilder() << Name_ << "TopicSink";
         CreateTopic(sourceTopicName);
+        Y_DEFER {
+            DropTopic(sourceTopicName);
+        };
         CreateTopic(sinkTopicName);
+        Y_DEFER {
+            DropTopic(sinkTopicName);
+        };
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -536,6 +566,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto topicName = TStringBuilder() << Name_ << "Topic";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -586,8 +619,14 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         CreateTopic(inputTopicName);
+        Y_DEFER {
+            DropTopic(inputTopicName);
+        };
         constexpr char outputTopicName[] = "outputTopicName";
         CreateTopic(outputTopicName);
+        Y_DEFER {
+            DropTopic(outputTopicName);
+        };
 
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
@@ -643,7 +682,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
         CreateTopic(inputTopicName);
+        Y_DEFER {
+            DropTopic(inputTopicName);
+        };
         CreateTopic(outputTopicName);
+        Y_DEFER {
+            DropTopic(outputTopicName);
+        };
 
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
@@ -711,7 +756,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
         CreateTopic(inputTopicName);
+        Y_DEFER {
+            DropTopic(inputTopicName);
+        };
         CreateTopic(outputTopicName);
+        Y_DEFER {
+            DropTopic(outputTopicName);
+        };
 
         constexpr char sourceName[] = "sourceName";
         CreatePqSource(sourceName);
@@ -824,6 +875,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
         CreateTopic(inputTopicName);
+        Y_DEFER {
+            DropTopic(inputTopicName);
+        };
         CreatePqSource(pqSourceName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
@@ -914,7 +968,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
         constexpr char pqSource[] = "pqSourceName";
         CreateTopic(firstOutputTopic);
+        Y_DEFER {
+            DropTopic(firstOutputTopic);
+        };
         CreateTopic(secondOutputTopic);
+        Y_DEFER {
+            DropTopic(secondOutputTopic);
+        };
         CreatePqSource(pqSource);
 
         constexpr char solomonSink[] = "solomonSinkName";
@@ -1129,7 +1189,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateTopic(inputTopic, std::nullopt, /* local */ true);
         CreateTopic(outputTopic, std::nullopt, /* local */ true);
         CreateTopic(inputTopic);
+        Y_DEFER {
+            DropTopic(inputTopic);
+        };
         CreateTopic(outputTopic);
+        Y_DEFER {
+            DropTopic(outputTopic);
+        };
 
         constexpr char pqSource[] = "pqSourceName";
         CreatePqSource(pqSource);
@@ -1158,7 +1224,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char pqSource1[] = "pqSourceName1";
         constexpr char pqSource2[] = "pqSourceName2";
         CreateTopic(firstOutputTopic);
+        Y_DEFER {
+            DropTopic(firstOutputTopic);
+        };
         CreateTopic(secondOutputTopic);
+        Y_DEFER {
+            DropTopic(secondOutputTopic);
+        };
         CreatePqSource(pqSource1);
         CreatePqSource(pqSource2);
 
@@ -1276,7 +1348,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         constexpr char topicName[] = "inReadSystemMetadataFields";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, std::nullopt, /*local=*/true);
 
         WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
 
@@ -1306,7 +1378,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         constexpr char topicName[] = "inReadSystemColumnsWithoutRename";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, std::nullopt, /*local=*/true);
 
         WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
 
@@ -1347,7 +1419,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         auto& config = SetupAppConfig();
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         constexpr char topicName[] = "inWriteToSystemColumnsIsProhibited";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, std::nullopt, /*local=*/true);
 
         // Attempt to insert into a topic referencing a system column should fail
         ExecQuery(fmt::format(R"(
@@ -1926,7 +1998,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char input1[] = "streamingConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingConstraintsValidationSecondInputTopic";
         CreateTopic(input1);
+        Y_DEFER {
+            DropTopic(input1);
+        };
         CreateTopic(input2);
+        Y_DEFER {
+            DropTopic(input2);
+        };
 
         constexpr char source[] = "sourceName";
         CreatePqSource(source);
@@ -2060,7 +2138,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char input1[] = "streamingJoinConstraintsValidationFirstInputTopic";
         constexpr char input2[] = "streamingJoinConstraintsValidationSecondInputTopic";
         CreateTopic(input1);
+        Y_DEFER {
+            DropTopic(input1);
+        };
         CreateTopic(input2);
+        Y_DEFER {
+            DropTopic(input2);
+        };
 
         constexpr char source[] = "sourceName";
         CreatePqSource(source);
@@ -2260,8 +2344,17 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char input2[] = "streamingQueryJoinTypesSecondInputTopic";
         constexpr char outputTopic[] = "streamingQueryJoinTypesOutputTopic";
         CreateTopic(outputTopic);
+        Y_DEFER {
+            DropTopic(outputTopic);
+        };
         CreateTopic(input1);
+        Y_DEFER {
+            DropTopic(input1);
+        };
         CreateTopic(input2);
+        Y_DEFER {
+            DropTopic(input2);
+        };
 
         constexpr char source[] = "sourceName";
         CreatePqSource(source);
@@ -2514,6 +2607,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "forbidSysSourceStreaming";
         constexpr char topicName[] = "forbidSysTopicStreaming";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
         CreatePqSource(sourceName);
 
         // SystemMetadata callable should be rejected
@@ -2542,7 +2638,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
 
         constexpr char topicName[] = "forbidSysTableModeTopic";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, /*settings=*/std::nullopt, /*local=*/true);
 
         // SystemMetadata callable should be rejected in table mode too
         ExecQuery(fmt::format(R"(
@@ -2567,7 +2663,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);
 
         constexpr char topicName[] = "forbidSysAllowYdbTopic";
-        CreateTopic(topicName, std::nullopt, true);
+        CreateTopic(topicName, /*settings=*/std::nullopt, /*local=*/true);
 
         WriteTopicMessage(topicName, R"({"key": 1, "value": "value1"})", 0, /* local */ true);
 
@@ -2596,6 +2692,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         constexpr char sourceName[] = "yqlSysColsStreamSource";
         constexpr char topicName[] = "yqlSysColsStreamTopic";
         CreateTopic(topicName);
+        Y_DEFER {
+            DropTopic(topicName);
+        };
         CreatePqSource(sourceName);
 
         for (const char* column : {"_yql_sys_offset", "_yql_sys_partition_id", "_yql_sys_write_time"}) {
@@ -2664,6 +2763,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
         CreateTopic(outputTopic);
+        Y_DEFER {
+            DropTopic(outputTopic);
+        };
         CreatePqSource(pqSourceName);
 
         ExecQuery(fmt::format(R"(

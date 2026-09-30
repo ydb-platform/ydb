@@ -17,7 +17,7 @@ QUERY_TABLE_NAME = "vector_query_table"
 
 class YdbVectorWorkload(WorkloadBase):
     def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=10000, threads=10, index_type=None, clusters=None, levels=None,
-                 s3_endpoint=None, s3_bucket=None, s3_source=None, s3_destination=None, s3_query_source=None, s3_query_destination=None):
+                 s3_endpoint=None, s3_bucket=None, s3_source=None, s3_destination=None, s3_query_source=None, s3_query_destination=None, min_rows=None):
         super().__init__(None, '', 'vector_workload', None)
         self.endpoint = endpoint
         self.database = database
@@ -29,6 +29,7 @@ class YdbVectorWorkload(WorkloadBase):
         self.rows = str(rows)
         self.threads = str(threads)
         self.index_type = index_type
+        self.min_rows = str(min_rows) if min_rows is not None else None
         self.clusters = str(clusters) if clusters is not None else None
         self.levels = str(levels) if levels is not None else None
         self.s3_endpoint = s3_endpoint
@@ -159,6 +160,8 @@ class YdbVectorWorkload(WorkloadBase):
         subcmds = ['build-index', '--distance', 'cosine', '--table', self.table_name]
         if self.index_type is not None:
             subcmds += ['--index-type', self.index_type]
+        if self.min_rows is not None:
+            subcmds += ["--min-rows", self.min_rows]
         if self.mode == "s3":
             # An imported dataset has a fixed, externally-defined vector dimension
             # and type. Pass 0 so the CLI omits them from the DDL and the server

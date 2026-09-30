@@ -255,6 +255,8 @@ class TestCompareIndexPerformance:
         self.threads = yatest.common.get_param('compare_threads', default='10')
         self.targets = yatest.common.get_param('compare_targets', default='1000')
         self.index_type = yatest.common.get_param('compare_index_type', default='')
+        self.baseline_index_type = yatest.common.get_param(
+            'compare_baseline_index_type', default='') or self.index_type
         # Vector index structure params; None → server auto-detects
         _clusters = yatest.common.get_param('compare_vector_clusters', default='')
         _levels = yatest.common.get_param('compare_vector_levels', default='')
@@ -680,6 +682,10 @@ class TestCompareIndexPerformance:
             f.write(f"#### Performance Comparison: {baseline_heading} vs {current_heading} ({workload_name})\n\n")
             f.write(f"**Build preset:** `{self.build_preset}` | **Duration:** {self.duration}s "
                     f"per workload | **Iterations:** {self.iterations} (median reported)\n\n")
+            if slug == "vector":
+                f.write(f"**Index types:** baseline `{self.baseline_index_type or 'KmeansTree'}` | "
+                        f"current `{self.index_type or 'KmeansTree'}`. "
+                        "HNSW uses min_rows=1 and ef_search=15.\n\n")
             n_sigmas = res["n_sigmas"]
             sigmas_cell = ("%.2fσ" % n_sigmas) if n_sigmas is not None else "N/A"
             f.write(f"| Workload | {self.ref} (Txs/Sec) | {current_label} (Txs/Sec)"
@@ -709,12 +715,23 @@ class TestCompareIndexPerformance:
         current_values = []
 
         vector_index_args = []
-        if self.index_type:
-            vector_index_args += ["--index-type", self.index_type]
         if self.vector_clusters is not None:
             vector_index_args += ["--clusters", self.vector_clusters]
         if self.vector_levels is not None:
             vector_index_args += ["--levels", self.vector_levels]
+
+        def index_args(index_type):
+            args = list(vector_index_args)
+            if index_type:
+                args += ["--index-type", index_type]
+            if index_type.lower() == "hnsw":
+                # Exercise HNSW even when the generated dataset has fewer than
+                # the production default of 10000 rows in each partition.
+                args += ["--min-rows", "1"]
+            return args
+
+        baseline_index_args = index_args(self.baseline_index_type)
+        current_index_args = index_args(self.index_type)
 
         if self.dataset_source == "s3":
             # S3 mode: import the same fixed dataset from S3 on every iteration
@@ -737,14 +754,14 @@ class TestCompareIndexPerformance:
                         "--mode", "s3",
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args + s3_args)
+                    ] + baseline_index_args + s3_args)
 
                 def s3_current_workload(endpoint, out, err):
                     self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
                         "--mode", "s3",
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args + s3_args)
+                    ] + current_index_args + s3_args)
 
                 collect_value(main_values, self._run_one(
                     self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
@@ -769,14 +786,14 @@ class TestCompareIndexPerformance:
                         "--mode", mode, "--data-dir", data_dir,
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args)
+                    ] + baseline_index_args)
 
                 def current_workload(endpoint, out, err):
                     self._exec_workload("YDB_VECTOR_WORKLOAD_PATH", endpoint, out, err, [
                         "--mode", "load", "--data-dir", data_dir,
                         "--targets", self.targets, "--warmup", self.warmup,
                         "--rows", self.rows, "--threads", self.threads,
-                    ] + vector_index_args)
+                    ] + current_index_args)
 
                 collect_value(main_values, self._run_one(
                     self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
@@ -801,23 +818,25 @@ class TestCompareIndexPerformance:
         for i in range(1, self.iterations + 1):
             print(f"=== Fulltext iteration {i}/{self.iterations} ===")
 
-            def fulltext_workload(endpoint, out, err):
+            def fulltext_workload(endpoint, out, err, index_type):
                 workload_args = [
                     "--rows", self.rows, "--targets", self.targets,
                     "--threads", self.threads,
                 ]
-                if self.index_type:
-                    workload_args += ["--index-type", self.index_type]
+                if index_type:
+                    workload_args += ["--index-type", index_type]
                 self._exec_workload(
                     "YDB_FULLTEXT_WORKLOAD_PATH", endpoint, out, err, workload_args)
 
             collect_value(main_values, self._run_one(
                 self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
-                fulltext_workload, f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg",
+                lambda endpoint, out, err: fulltext_workload(endpoint, out, err, self.baseline_index_type),
+                f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg",
                 required_feature_flags=("enable_fulltext_index",)))
             collect_value(current_values, self._run_one(
                 "current", current_ydbd, self.current_tsc, self.current_config,
-                fulltext_workload, f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg",
+                lambda endpoint, out, err: fulltext_workload(endpoint, out, err, self.index_type),
+                f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg",
                 required_feature_flags=("enable_fulltext_index",)))
             if self.flamegraph:
                 self._flamegraph_diff("fulltext", i)

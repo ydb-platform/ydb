@@ -38,10 +38,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableTopicDeferredPublish(true);
 
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(outputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         if constexpr (!LocalTopics) {
@@ -244,15 +241,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(firstOutputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(secondOutputTopicName, std::nullopt, LocalTopics);
-
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(firstOutputTopicName, LocalTopics);
-            DropTopic(secondOutputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(firstOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(secondOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -363,14 +354,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopic = TStringBuilder() << Name_ << "Input";
         const TString outputTopic1 = TStringBuilder() << Name_ << "Output1";
         const TString outputTopic2 = TStringBuilder() << Name_ << "Output2";
-        CreateTopic(inputTopic, std::nullopt, LocalTopics);
-        CreateTopic(outputTopic1, std::nullopt, LocalTopics);
-        CreateTopic(outputTopic2, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopic, LocalTopics);
-            DropTopic(outputTopic1, LocalTopics);
-            DropTopic(outputTopic2, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopic, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic1, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic2, std::nullopt, LocalTopics);
         std::shared_ptr<TDeferredPublishClient> client;
         TString source;
         if constexpr (LocalTopics) {
@@ -536,12 +522,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
         const auto inputTopic = TStringBuilder() << Name_ << "Input";
         const auto outputTopic = TStringBuilder() << Name_ << "Output";
-        CreateTopic(inputTopic, std::nullopt, LocalTopics);
-        CreateTopic(outputTopic, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopic, LocalTopics);
-            DropTopic(outputTopic, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopic, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic, std::nullopt, LocalTopics);
 
         std::shared_ptr<TDeferredPublishClient> client;
         TString source;
@@ -609,12 +591,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(outputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -677,15 +655,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
         const auto finiteOutputTopicName = TStringBuilder() << Name_ << "OutputTopicNameFinite";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(finiteOutputTopicName, std::nullopt, LocalTopics);
-
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(outputTopicName, LocalTopics);
-            DropTopic(finiteOutputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(finiteOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "streamingQuerySubgraphWithoutCheckpointsInputTable";
         ExecQuery(fmt::format(R"(
@@ -752,14 +724,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
-        CreateTopic(firstOutputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(secondOutputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(firstOutputTopicName, LocalTopics);
-            DropTopic(secondOutputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
+        CreateScopedTopicExt(firstOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(secondOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -889,16 +856,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto outputTopicName1 = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto outputTopicName2 = TStringBuilder() << Name_ << "OutputTopicName2";
         const auto outputTopicName3 = TStringBuilder() << Name_ << "OutputTopicName3";
-        CreateTopic(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
-        CreateTopic(outputTopicName1, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName2, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName3, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(outputTopicName1, LocalTopics);
-            DropTopic(outputTopicName2, LocalTopics);
-            DropTopic(outputTopicName3, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
+        CreateScopedTopicExt(outputTopicName1, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName2, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName3, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "exactlyOnceWritingWithMultipleSinkOutputTable";
         ExecQuery(fmt::format(R"(
@@ -1003,12 +964,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2));
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopicExt(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char tableName[] = "exactlyOnceWritingWithMultipleSinksAndSameTopicOutputTable";
         ExecQuery(fmt::format(R"(
@@ -1112,14 +1069,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(firstOutputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(secondOutputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(firstOutputTopicName, LocalTopics);
-            DropTopic(secondOutputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(firstOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(secondOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -1280,12 +1232,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopic = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-            DropTopic(outputTopic);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
         constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
@@ -1349,12 +1297,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopic = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-            DropTopic(outputTopic);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
         constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
@@ -1443,12 +1387,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(outputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -1540,12 +1480,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopicName, LocalTopics);
-            DropTopic(outputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -1622,12 +1558,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
@@ -1699,12 +1631,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
@@ -1767,12 +1695,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);

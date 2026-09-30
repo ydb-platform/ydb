@@ -89,10 +89,7 @@ public:
         Y_DEFER {
             DropTopics();
         };
-        CreateTopic("hoppingOutput");
-        Y_DEFER {
-            DropTopic("hoppingOutput");
-        };
+        CreateScopedTopic("hoppingOutput");
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY hoppingQuery AS DO BEGIN
                 PRAGMA ydb.MaxTasksPerStage = "1";
@@ -342,14 +339,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -479,14 +470,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndDropStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndDropStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -540,15 +525,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 10;
         constexpr char inputTopicName[] = "maxPartitionReadSkewRestartInputTopic";
         constexpr char outputTopicName[] = "maxPartitionReadSkewRestartOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -632,15 +611,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 2;
         constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
         constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -688,14 +661,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingPartitionBalancingDisabledInputTopic";
         constexpr char outputTopicName[] = "streamingPartitionBalancingDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -722,14 +689,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui64 executionsLimit = 3;
         constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";
         constexpr char outputTopicName[] = "maxStreamingQueryExecutionsLimitOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -805,18 +766,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto firstInputTopicName = TStringBuilder() << Name_ << "InputTopicName1";
         const auto secondInputTopicName = TStringBuilder() << Name_ << "InputTopicName2";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(firstInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
-        Y_DEFER {
-            DropTopic(firstInputTopicName, LocalTopics);
-        };
-        CreateTopic(secondInputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(secondInputTopicName, LocalTopics);
-        };
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(outputTopicName, LocalTopics);
-        };
+        CreateScopedTopicExt(firstInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
+        CreateScopedTopicExt(secondInputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -952,22 +904,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto mainInputTopicName = TStringBuilder() << Name_ << "InputTopicNameMain";
         const auto auxInputTopicName = TStringBuilder() << Name_ << "InputTopicNameAux";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(limitedInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        Y_DEFER {
-            DropTopic(limitedInputTopicName);
-        };
-        CreateTopic(mainInputTopicName);
-        Y_DEFER {
-            DropTopic(mainInputTopicName);
-        };
-        CreateTopic(auxInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        Y_DEFER {
-            DropTopic(auxInputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopicExt(limitedInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(mainInputTopicName);
+        CreateScopedTopicExt(auxInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char outputTableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -1209,18 +1149,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(firstOutputTopicName);
-        Y_DEFER {
-            DropTopic(firstOutputTopicName);
-        };
-        CreateTopic(secondOutputTopicName);
-        Y_DEFER {
-            DropTopic(secondOutputTopicName);
-        };
+        CreateScopedTopicExt(inputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(firstOutputTopicName);
+        CreateScopedTopic(secondOutputTopicName);
 
         constexpr char tableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -1381,14 +1312,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateStreamingQueryWithDefineAction, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1426,14 +1351,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateStreamingQueryMatchRecognize, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createStreamingQueryMatchRecognizeInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryMatchRecognizeOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1486,14 +1405,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryReplaceAfterError, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1547,14 +1460,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryTextChangeWithCreateOrReplace, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndReplaceStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndReplaceStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1613,14 +1520,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryCreateOrReplaceFailure, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createOrReplaceStreamingQueryFailInputTopic";
         constexpr char outputTopicName[] = "createOrReplaceStreamingQueryFailOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1667,10 +1568,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto pqGateway = SetupMockPqGateway();
 
         constexpr char inputTopicName[] = "streamingQuerySolomonInsertInputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1760,10 +1658,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryS3InsertInputTopic";
         constexpr char pqSourceName[] = "sourceName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert";
@@ -1829,14 +1724,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char s3SourceName[] = "s3Source";
@@ -1908,14 +1797,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -2024,14 +1907,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "doubleYdbJoinInputTopicName";
         constexpr char outputTopicName[] = "doubleYdbJoinOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -2134,14 +2011,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljInputTopicName";
         constexpr char outputTopicName[] = "sljOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -2352,14 +2223,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljShuffleInputTopicName";
         constexpr char outputTopicName[] = "sljShuffleOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -2540,14 +2405,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljShuffleHashInputTopicName";
         constexpr char outputTopicName[] = "sljShuffleHashOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -2729,14 +2588,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljInputTopicName";
         constexpr char outputTopicName[] = "sljOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSource(pqSourceName);
@@ -2864,14 +2717,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char streamLookupTableName[] = "oltpStreamLookupTable";
@@ -2976,14 +2823,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnRetryInputTopic";
         constexpr char outputTopicName[] = "streamingQueryJoinRecalculationOnRetryOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char oltpTableName[] = "oltpTable";
@@ -3064,14 +2905,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartInputTopic";
         constexpr char outputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char oltpTableName[] = "oltpTable";
@@ -3171,14 +3006,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(10, 10));
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(10, 10));
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char tableName[] = "oltpTable";
@@ -3278,14 +3107,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryPrecomputeRecalculationOnRetryInputTopic";
         constexpr char outputTopicName[] = "streamingQueryPrecomputeRecalculationOnRetryOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char tableName[] = "oltpTable";
@@ -3405,14 +3228,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesInputTopicName";
         constexpr char outputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         for (const auto& sourceName : {oltpTableName, olapTableName, externalTableName}) {
             constexpr char queryName[] = "streamingQuery";
@@ -3452,14 +3269,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryUnderSecureScriptExecutionsInputTopic";
         constexpr char outputTopicName[] = "streamingQueryUnderSecureScriptExecutionsOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -3569,14 +3380,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,InputTopic";
         constexpr char outputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,OutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -3677,14 +3482,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "internalRetryInputTopicName";
         constexpr char outputTopicName[] = "internalRetryOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char s3SourceName[] = "s3Source";
@@ -4112,14 +3911,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljInputTopicName";
         constexpr char outputTopicName[] = "sljOutputTopicName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -4236,10 +4029,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CheckpointPropagationWithS3Insert, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "s3InsertCheckpointsInputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert_checkpoint_propagation";
@@ -4312,10 +4102,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         for (const bool rowTables : {true, false}) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbInputTopicName" << rowTables;
-            CreateTopic(inputTopicName);
-            Y_DEFER {
-                DropTopic(inputTopicName);
-            };
+            CreateScopedTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -4393,10 +4180,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         for (const bool rowTables : {true, false}) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
-            CreateTopic(inputTopicName);
-            Y_DEFER {
-                DropTopic(inputTopicName);
-            };
+            CreateScopedTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -4453,10 +4237,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         for (const bool rowTables : {true, false}) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
-            CreateTopic(inputTopicName);
-            Y_DEFER {
-                DropTopic(inputTopicName);
-            };
+            CreateScopedTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -4580,14 +4361,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4624,14 +4399,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "createStreamingQueryDispositionDisabledInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryDispositionDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4939,14 +4708,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
         featureFlags->SetEnableStreamingQueryDisposition(true);
         featureFlags->SetEnableStreamingQueryReadFrom(false);
-        CreateTopic("readFromDisabledInput");
-        Y_DEFER {
-            DropTopic("readFromDisabledInput");
-        };
-        CreateTopic("readFromDisabledOutput");
-        Y_DEFER {
-            DropTopic("readFromDisabledOutput");
-        };
+        CreateScopedTopic("readFromDisabledInput");
+        CreateScopedTopic("readFromDisabledOutput");
         CreatePqSource("sourceName");
 
         for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
@@ -4975,14 +4738,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
         constexpr char inputTopic[] = "readFromInput";
         constexpr char outputTopic[] = "readFromOutput";
-        CreateTopic(inputTopic, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(inputTopic, LocalTopics);
-        };
-        CreateTopic(outputTopic, std::nullopt, LocalTopics);
-        Y_DEFER {
-            DropTopic(outputTopic, LocalTopics);
-        };
+        CreateScopedTopicExt(inputTopic, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic, std::nullopt, LocalTopics);
         if constexpr (!LocalTopics) {
             CreatePqSource("sourceName");
         }
@@ -5092,14 +4849,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "createStreamingQueryDispositionInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryDispositionOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5212,18 +4963,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";
         constexpr char outputTopic2[] = "createStreamingQueryWithMultipleWritesOutputTopic2";
         constexpr char pqSource[] = "sourceName";
-        CreateTopic(inputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-        };
-        CreateTopic(outputTopic1);
-        Y_DEFER {
-            DropTopic(outputTopic1);
-        };
-        CreateTopic(outputTopic2);
-        Y_DEFER {
-            DropTopic(outputTopic2);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char sinkBucket[] = "test_bucket_streaming_query_multi_insert";
@@ -5393,18 +5135,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "streamingQueryMultiOutputRestartOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputRestartOutputTopic2";
         constexpr char pqSource[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-        };
-        CreateTopic(outputTopic1);
-        Y_DEFER {
-            DropTopic(outputTopic1);
-        };
-        CreateTopic(outputTopic2);
-        Y_DEFER {
-            DropTopic(outputTopic2);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char rowTable[] = "rowSink";
@@ -5452,18 +5185,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic2";
         constexpr char pqSource[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-        };
-        CreateTopic(outputTopic1);
-        Y_DEFER {
-            DropTopic(outputTopic1);
-        };
-        CreateTopic(outputTopic2);
-        Y_DEFER {
-            DropTopic(outputTopic2);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char rowTable[] = "rowSink";
@@ -5515,18 +5239,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "streamingQueryMultiOutputConsistencyOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputConsistencyOutputTopic2";
         constexpr char pqSource[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-        };
-        CreateTopic(outputTopic1);
-        Y_DEFER {
-            DropTopic(outputTopic1);
-        };
-        CreateTopic(outputTopic2);
-        Y_DEFER {
-            DropTopic(outputTopic2);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char rowTable[] = "rowSink";
@@ -5561,14 +5276,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic[] = "streamingQueryMultiOutputInvalidOutputTopic";
         constexpr char pqSource[] = "pqSourceName";
         constexpr char otherPqSource[] = "otherPqSourceName";
-        CreateTopic(inputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-        };
-        CreateTopic(outputTopic);
-        Y_DEFER {
-            DropTopic(outputTopic);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSource(pqSource);
         CreatePqSource(otherPqSource);
 
@@ -5748,14 +5457,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
         constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";
         constexpr char pqSourceName[] = "sourceName";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         GetRuntime().Register(new TTabletKiller(Tests::SchemeRoot, TDuration::MilliSeconds(500)));
@@ -5809,14 +5512,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryRestartAfterShutdownInputTopic";
         constexpr char outputTopicName[] = "streamingQueryRestartAfterShutdownOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5884,18 +5581,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithTwoGroupByHopsInputTopic";
         constexpr char outputTopicName1[] = "streamingQueryWithTwoGroupByHopsOutputTopic1";
         constexpr char outputTopicName2[] = "streamingQueryWithTwoGroupByHopsOutputTopic2";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName1);
-        Y_DEFER {
-            DropTopic(outputTopicName1);
-        };
-        CreateTopic(outputTopicName2);
-        Y_DEFER {
-            DropTopic(outputTopicName2);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName1);
+        CreateScopedTopic(outputTopicName2);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5983,18 +5671,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithTwoGroupByHopsOnSameKeyInputTopic";
         constexpr char outputTopicName1[] = "streamingQueryWithTwoGroupByHopsOnSameKeyOutputTopic1";
         constexpr char outputTopicName2[] = "streamingQueryWithTwoGroupByHopsOnSameKeyOutputTopic2";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName1);
-        Y_DEFER {
-            DropTopic(outputTopicName1);
-        };
-        CreateTopic(outputTopicName2);
-        Y_DEFER {
-            DropTopic(outputTopicName2);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName1);
+        CreateScopedTopic(outputTopicName2);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6113,18 +5792,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName1[] = "unionAllTwoTopicsInputTopic1";
         constexpr char inputTopicName2[] = "unionAllTwoTopicsInputTopic2";
         constexpr char outputTopicName[] = "unionAllTwoTopicsOutputTopic";
-        CreateTopic(inputTopicName1);
-        Y_DEFER {
-            DropTopic(inputTopicName1);
-        };
-        CreateTopic(inputTopicName2);
-        Y_DEFER {
-            DropTopic(inputTopicName2);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName1);
+        CreateScopedTopic(inputTopicName2);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6178,14 +5848,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(UnionAllTopicWithItself, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "unionAllTopicWithItselfInputTopic";
         constexpr char outputTopicName[] = "unionAllTopicWithItselfOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6237,14 +5901,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithFlattenListBy, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithFlattenListByInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithFlattenListByOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6273,14 +5931,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithOffsetAndLimit, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithOffsetAndLimitInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithOffsetAndLimitOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6315,14 +5967,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryWithProcessInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithProcessOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6369,10 +6015,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(UseLocalTopics);
 
         constexpr char outputTopic[] = "outputTopicName";
-        CreateTopic(outputTopic, std::nullopt, UseLocalTopics);
-        Y_DEFER {
-            DropTopic(outputTopic, UseLocalTopics);
-        };
+        CreateScopedTopicExt(outputTopic, std::nullopt, UseLocalTopics);
 
         constexpr char outPqSource[] = "outSourceName";
         CreatePqSource(outPqSource);
@@ -6463,10 +6106,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(sourceName);
 
         const std::string topicName = "schema_with_ydb_prefix_topic";
-        CreateTopic(topicName);
-        Y_DEFER {
-            DropTopic(topicName);
-        };
+        CreateScopedTopic(topicName);
 
         // Schema column name starting with __ydb_ should be rejected
         ExecQuery(fmt::format(R"(
@@ -6490,14 +6130,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryInvalidationAfterCreationInputTopic1";
         constexpr char outputTopicName[] = "streamingQueryInvalidationAfterCreationOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6571,14 +6205,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 1000;
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -6630,10 +6258,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTableName[] = "sqRestartsUpsertMissingTableRuntime";
         constexpr char queryName[] = "sqRestartsUpsertMissingTableRuntimeQuery";
 
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
         ExecQuery(fmt::format(R"(
@@ -6697,14 +6322,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "checkpointSupportValidationForCallablesInputTopic";
         constexpr char outputTopicName[] = "checkpointSupportValidationForCallablesOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -7105,14 +6724,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
         constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -7176,14 +6789,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
         constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         constexpr char pqSourceNameNoAuth[] = "sourceNameNoAuth";
@@ -7236,14 +6843,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "backPressureOnWritingIntoTopicsInputTopic";
         constexpr char outputTopicName[] = "backPressureOnWritingIntoTopicsOutputTopic";
-        CreateTopic(inputTopicName);
-        Y_DEFER {
-            DropTopic(inputTopicName);
-        };
-        CreateTopic(outputTopicName);
-        Y_DEFER {
-            DropTopic(outputTopicName);
-        };
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);

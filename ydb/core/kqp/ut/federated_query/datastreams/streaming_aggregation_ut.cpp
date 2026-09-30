@@ -326,10 +326,7 @@ public:
         AggregationAppConfig.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
         CreateStateTable(useStateTable);
         InputTopic = TStringBuilder() << "finiteAggregationInput_" << CreateGuidAsString();
-        CreateTopic(InputTopic);
-        Y_DEFER {
-            DropTopic(InputTopic);
-        };
+        CreateScopedTopic(InputTopic);
         CreatePqSource("source");
         const std::vector<std::string> messages = {
             R"({"key":"a","value":5})", R"({"key":"b","value":10})",
@@ -700,10 +697,7 @@ public:
         };
         const TString secondOutput = TStringBuilder() << OutputTopic << "_subkey";
         const TString rawOutput = TStringBuilder() << OutputTopic << "_raw";
-        CreateTopic(secondOutput);
-        Y_DEFER {
-            DropTopic(secondOutput);
-        };
+        CreateScopedTopic(secondOutput);
         TString sinks;
         if (extraSinks) {
             CreateTopic(rawOutput);
@@ -2005,14 +1999,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingAggregation) {
         )");
         const TString inputTopic = TStringBuilder() << "aggregationInput_" << CreateGuidAsString();
         const TString outputTopic = TStringBuilder() << "aggregationOutput_" << CreateGuidAsString();
-        CreateTopic(inputTopic);
-        Y_DEFER {
-            DropTopic(inputTopic);
-        };
-        CreateTopic(outputTopic);
-        Y_DEFER {
-            DropTopic(outputTopic);
-        };
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSource("source");
 
         // A relative state table path must resolve in the serverless query's database.

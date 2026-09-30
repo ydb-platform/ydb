@@ -588,6 +588,61 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
             ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
     }
+
+    // A follower serving no requests syncs its scheme periodically, so it
+    // reports its table and follows level changes without a single read.
+    Y_UNIT_TEST(TestSetTableInfoIdleFollowerUsesSubDomainMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(level);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // The scheme is synced on one tick and reported on the next one
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(11));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+    }
 }
 
 }

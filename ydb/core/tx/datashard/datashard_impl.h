@@ -169,6 +169,7 @@ class TDataShard
     class TTxInitRestored;
     class TTxInitSchema;
     class TTxInitSchemaDefaults;
+    class TTxSyncSchemeOnFollower;
     class TTxPlanStep;
     class TTxPlanPredictedTxs;
     class TTxProgressResendRS;
@@ -1593,6 +1594,7 @@ class TDataShard
     NTabletFlatExecutor::ITransaction* CreateTxInitRestored(THashMap<ui64, TOperation::TPtr> migratedTxs);
     NTabletFlatExecutor::ITransaction* CreateTxInitSchema();
     NTabletFlatExecutor::ITransaction* CreateTxInitSchemaDefaults();
+    NTabletFlatExecutor::ITransaction* CreateTxSyncSchemeOnFollower();
     NTabletFlatExecutor::ITransaction* CreateTxSchemaChanged(TEvDataShard::TEvSchemaChangedResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxStartSplit();
     NTabletFlatExecutor::ITransaction* CreateTxSplitSnapshotComplete(TIntrusivePtr<TSplitSnapshotContext> snapContext);
@@ -2901,6 +2903,7 @@ private:
     THashSet<TActorId> Actors;
     TLoanReturnTracker LoanReturnTracker;
     TFollowerState FollowerState;
+    bool SyncSchemeOnFollowerPending = false;
 
     // Non-persistent flag that is set just after we waited for all pending transactions to finish
     // and are starting the split.

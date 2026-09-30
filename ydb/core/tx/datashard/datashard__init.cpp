@@ -1026,6 +1026,37 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     return true;
 }
 
+// Requests sync the scheme of a follower on their own, while an idle follower
+// needs this periodic sync to learn its tables and their metrics levels
+class TDataShard::TTxSyncSchemeOnFollower : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxSyncSchemeOnFollower(TDataShard* self)
+        : TTransactionBase(self)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_SYNC_SCHEME_ON_FOLLOWER; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        // The follower might have been promoted to the leader meanwhile
+        if (!Self->IsFollower()) {
+            return true;
+        }
+
+        // An error means the follower has not been initialized yet, the next tick retries
+        NKikimrTxDataShard::TError::EKind status;
+        TString errMessage;
+        return Self->SyncSchemeOnFollower(txc, ctx, status, errMessage);
+    }
+
+    void Complete(const TActorContext&) override {
+        Self->SyncSchemeOnFollowerPending = false;
+    }
+};
+
+ITransaction* TDataShard::CreateTxSyncSchemeOnFollower() {
+    return new TTxSyncSchemeOnFollower(this);
+}
+
 }}
 
 

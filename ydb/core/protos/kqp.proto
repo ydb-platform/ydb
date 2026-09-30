@@ -205,9 +205,6 @@ message TQueryRequest {
     // relayed by proxies across nodes; this flag is ignored for forwarded
     // requests. Notifications retain the request cookie.
     optional bool ReportWmStateChanges = 44;
-    // Absolute client RPC deadline; remains unchanged across proxy/node queues.
-    // This is request metadata, never part of a cached query plan.
-    optional uint64 RequestDeadlineUs = 45;
 }
 
 message TVectorIndexKmeansTreeDescription {

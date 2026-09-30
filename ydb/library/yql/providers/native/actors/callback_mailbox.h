@@ -21,8 +21,8 @@ public:
                 return;
             }
         }
-        // Destroy outside the lock: an event may own the last attempt lease,
-        // whose destructor itself sends a final notification to this mailbox.
+        // Destroy outside the lock: an event payload destructor may itself
+        // send a final notification to this mailbox.
         delete event;
     }
 
@@ -32,8 +32,8 @@ public:
     }
 
 private:
-    // Send may synchronously destroy an undeliverable event. Its last lease can
-    // re-enter Send to report provider attempt release while we still guard System_.
+    // Send may synchronously destroy an undeliverable event. Payload cleanup
+    // can re-enter Send while we still guard System_.
     std::recursive_mutex Mutex_;
     NActors::TActorSystem* System_;
     const NActors::TActorId Actor_;

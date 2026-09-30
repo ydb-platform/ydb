@@ -5,13 +5,8 @@
 #include <yql/essentials/core/yql_data_provider.h>
 
 #include <util/datetime/base.h>
-#include <memory>
 
 namespace NYql {
-
-namespace NNative {
-class IAsyncMemoryQuota;
-}
 
 TDataProviderInfo CreateYdbRemoteDataProviders(
     TTypeAnnotationContext* types,
@@ -19,7 +14,6 @@ TDataProviderInfo CreateYdbRemoteDataProviders(
     const NYdb::TDriver& driver,
     const NYdb::TDriver& tlsDriver,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory = CreateStructuredTokenCredentialsFactory(),
-    TInstant metadataDeadline = TInstant::Max(),
-    std::shared_ptr<NNative::IAsyncMemoryQuota> metadataQuota = {});
+    TInstant metadataDeadline = TInstant::Max());
 
 } // namespace NYql

@@ -147,8 +147,6 @@ public:
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
 
         bool UseBatchPool = false;
-        // RPC/admission budget, independent of the compute actor's timeout timer.
-        TInstant SourceDeadline = TInstant::Max();
     };
 
     virtual TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;

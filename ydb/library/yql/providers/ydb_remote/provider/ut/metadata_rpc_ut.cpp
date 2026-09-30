@@ -1,5 +1,4 @@
 #include <ydb/library/yql/providers/ydb_remote/provider/yql_ydb_remote_provider_impl.h>
-#include <ydb/library/yql/providers/native/operation_context.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -13,8 +12,8 @@
 #include <grpcpp/server_context.h>
 #include <grpcpp/support/async_unary_call.h>
 
-#include <atomic>
 #include <chrono>
+#include <thread>
 
 namespace NYql::NYdbRemote {
 namespace {
@@ -120,49 +119,6 @@ private:
     std::unique_ptr<grpc::Server> Server_;
 };
 
-class TTrackingQuota final : public NNative::IAsyncMemoryQuota {
-    struct TCounters {
-        std::atomic<ui64> Bytes = 0;
-        std::atomic<ui64> ResponseLeases = 0;
-        std::atomic<bool> Overlap = false;
-        NThreading::TPromise<void> Released = NThreading::NewPromise<void>();
-    };
-
-public:
-    NThreading::TFuture<std::shared_ptr<void>> Acquire(
-        ui64 bytes, TInstant deadline, NThreading::TCancellationToken cancellation) override {
-        UNIT_ASSERT(deadline > TInstant::Now());
-        cancellation.ThrowIfCancellationRequested();
-        Counters->Bytes.fetch_add(bytes);
-        if (bytes == MetadataResponseReservation && Counters->ResponseLeases.fetch_add(1)) {
-            Counters->Overlap = true;
-        }
-        auto lease = std::shared_ptr<void>(new int(0), [counters = Counters, bytes](void* value) {
-            delete static_cast<int*>(value);
-            if (bytes == MetadataResponseReservation) {
-                counters->ResponseLeases.fetch_sub(1);
-            }
-            if (counters->Bytes.fetch_sub(bytes) == bytes) {
-                counters->Released.TrySetValue();
-            }
-        });
-        return NThreading::MakeFuture(std::move(lease));
-    }
-
-    ui64 Bytes() const { return Counters->Bytes.load(); }
-
-    void Shutdown() override {}
-
-    void WaitForRelease() const {
-        UNIT_ASSERT(Counters->Released.GetFuture().Wait(WaitTimeout));
-        UNIT_ASSERT_VALUES_EQUAL(Counters->Bytes.load(), 0);
-        UNIT_ASSERT(!Counters->Overlap);
-    }
-
-private:
-    const std::shared_ptr<TCounters> Counters = std::make_shared<TCounters>();
-};
-
 void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false) {
     TMetadataServer server;
     NYdb::TDriver driver(NYdb::TDriverConfig().SetEndpoint(server.Endpoint)
@@ -171,10 +127,9 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
     NYdb::TDriver tlsDriver(NYdb::TDriverConfig().SetEndpoint(server.Endpoint)
         .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetDatabase("/Remote")
         .SetNetworkThreadsNum(1).SetClientThreadsNum(1));
-    auto quota = std::make_shared<TTrackingQuota>();
     auto types = MakeIntrusive<TTypeAnnotationContext>();
     auto state = MakeIntrusive<TState>(types.Get(), driver, tlsDriver, CreateStructuredTokenCredentialsFactory(),
-        TInstant::Now() + TDuration::Seconds(expireDeadline ? 5 : 30), quota);
+        TInstant::Now() + TDuration::Seconds(expireDeadline ? 5 : 30));
     AddCluster(*state, "remote", {{"location", server.Endpoint}, {"database_name", "/Remote"},
         {"authMethod", "NONE"}, {"use_tls", "false"}});
     TExprContext ctx;
@@ -192,17 +147,26 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
     server.WaitFor(server.Create.Accepted);
     UNIT_ASSERT(server.Create.Accepted.Ok);
     if (cancelDescribe) {
+        if (expireDeadline) {
+            // Make a fresh phase timeout measurably different from the original.
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+        }
         server.ReturnSession();
         server.WaitFor(server.Describe.Accepted);
         UNIT_ASSERT(server.Describe.Accepted.Ok);
+        // Advancing to Describe must not grant a fresh metadata timeout.
+        UNIT_ASSERT(server.Describe.Context.deadline() <=
+            server.Create.Context.deadline() + std::chrono::milliseconds(100));
     }
     UNIT_ASSERT(!future.HasValue());
     if (!expireDeadline) {
         transformer->Rewind();
         UNIT_ASSERT(!future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(quota->Bytes(), MetadataSchemaReservation + MetadataResponseReservation);
-        // Rewind stops local work, but the existing SDK cannot cancel the
-        // outstanding unary RPC. Complete it late to release the provider lease.
+        transformer.Reset();
+        types.Reset();
+        // The callback must remain safe after the transformer and type context
+        // disappear. The existing SDK cannot cancel the outstanding unary RPC;
+        // its late response must not populate the schema or start the next phase.
         if (cancelDescribe) {
             server.ReturnSchema();
         } else {
@@ -223,7 +187,6 @@ void CheckMetadataCancellation(bool cancelDescribe, bool expireDeadline = false)
         UNIT_ASSERT(!server.WaitFor(server.Describe.Accepted, TDuration::MilliSeconds(100), false));
     }
     UNIT_ASSERT(state->Tables.empty());
-    quota->WaitForRelease();
     driver.Stop(true);
     tlsDriver.Stop(true);
 }
@@ -235,12 +198,16 @@ Y_UNIT_TEST_SUITE(TYdbRemoteMetadataRpc) {
         CheckMetadataCancellation(false);
     }
 
-    Y_UNIT_TEST(RewindDiscardsLateSchemaAndReleasesCallbackReservation) {
+    Y_UNIT_TEST(RewindDiscardsLateSchemaAfterTransformerDestruction) {
         CheckMetadataCancellation(true);
     }
 
-    Y_UNIT_TEST(SharedDeadlineCancelsPendingTransportAndReleasesProviderReservation) {
+    Y_UNIT_TEST(LocalDeadlineCancelsPendingTransport) {
         CheckMetadataCancellation(false, true);
+    }
+
+    Y_UNIT_TEST(LocalDeadlineIsSharedByMetadataPhases) {
+        CheckMetadataCancellation(true, true);
     }
 }
 

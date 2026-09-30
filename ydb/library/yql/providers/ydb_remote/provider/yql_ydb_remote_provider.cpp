@@ -220,9 +220,8 @@ THolder<IGraphTransformer> CreatePhysicalOptimizer() {
 TDataProviderInfo CreateYdbRemoteDataProviders(TTypeAnnotationContext* types, const NYdb::TDriver& driver,
                                               const NYdb::TDriver& tlsDriver,
                                               IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-                                              TInstant metadataDeadline,
-                                              std::shared_ptr<NNative::IAsyncMemoryQuota> metadataQuota) {
-    auto state = MakeIntrusive<TState>(types, driver, tlsDriver, std::move(credentialsFactory), metadataDeadline, std::move(metadataQuota));
+                                              TInstant metadataDeadline) {
+    auto state = MakeIntrusive<TState>(types, driver, tlsDriver, std::move(credentialsFactory), metadataDeadline);
     TDataProviderInfo info;
     info.Names.insert(TString(YdbRemoteProviderName));
     info.Source = new TDataSource(state);

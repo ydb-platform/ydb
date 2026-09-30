@@ -155,14 +155,6 @@ public:
         return RequestCtx ? OperationTimeout : TDuration::MilliSeconds(Record.GetRequest().GetTimeoutMs());
     }
 
-    TInstant GetRequestDeadline() const {
-        if (RequestCtx) {
-            return RequestCtx->GetDeadline();
-        }
-        const auto& request = Record.GetRequest();
-        return request.HasRequestDeadlineUs() ? TInstant::MicroSeconds(request.GetRequestDeadlineUs()) : TInstant::Max();
-    }
-
     bool HasAction() const {
         return RequestCtx ? true : Record.GetRequest().HasAction();
     }

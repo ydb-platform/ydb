@@ -22,25 +22,6 @@ namespace {
 using namespace NActors;
 using namespace NDq;
 
-// The stream and provider callbacks retain this wrapper through their attempt.
-// This does not imply SDK transport quiescence. The underlying governor lease
-// returns quota in the original mailbox.
-struct TEvAttemptReleased : TEventLocal<TEvAttemptReleased, EventSpaceBegin(TEvents::ES_PRIVATE) + 2> {
-    explicit TEvAttemptReleased(ui64 generation) : Generation(generation) {}
-    ui64 Generation;
-};
-
-struct TAttemptLease {
-    TAttemptLease(std::shared_ptr<void> memory, std::shared_ptr<TCallbackMailbox> mailbox, ui64 generation)
-        : Memory(std::move(memory)), Mailbox(std::move(mailbox)), Generation(generation) {}
-    ~TAttemptLease() {
-        Mailbox->Send(new TEvAttemptReleased(Generation));
-    }
-    std::shared_ptr<void> Memory;
-    std::shared_ptr<TCallbackMailbox> Mailbox;
-    ui64 Generation;
-};
-
 std::shared_ptr<arrow::ArrayData> CopyToTaskAllocator(const std::shared_ptr<arrow::ArrayData>& input) {
     auto copy = input->Copy();
     for (auto& buffer : copy->buffers) {
@@ -69,20 +50,14 @@ class TNativeReadActor final : public TActorBootstrapped<TNativeReadActor>, publ
         explicit TEvRead(TReadResult result) : Result(std::move(result)) {}
         TReadResult Result;
     };
-    struct TEvAdmitted : TEventLocal<TEvAdmitted, EventSpaceBegin(TEvents::ES_PRIVATE) + 1> {
-        std::shared_ptr<void> Lease;
-        bool Failed = false;
-    };
 
 public:
     TNativeReadActor(TReadStreamFactory factory, TReadActorSettings settings, IDqAsyncIoFactory::TSourceArguments&& args)
         : Factory_(std::move(factory))
         , Settings_(std::move(settings))
-        , QueryDeadline_(args.Deadline)
         , InputIndex_(args.InputIndex)
         , ComputeActorId_(args.ComputeActorId)
         , HolderFactory_(args.HolderFactory)
-        , Quota_(std::move(args.MemoryQuotaManager))
         , ValidationMode_(args.DatumValidationMode)
     {
         IngressStats_.Level = args.StatsLevel;
@@ -98,7 +73,7 @@ public:
     void Bootstrap() {
         Become(&TNativeReadActor::StateFunc);
         Mailbox_ = std::make_shared<TCallbackMailbox>(TActivationContext::ActorSystem(), SelfId());
-        Context_.Deadline = Min(QueryDeadline_, TActivationContext::Now() + Settings_.Timeout);
+        Context_.Deadline = TActivationContext::Now() + Settings_.Timeout;
         Context_.MaxBatchBytes = Settings_.MaxBatchBytes;
         Context_.Cancellation = Cancellation_.Token();
         Context_.Cancellation.SetDeadline(Context_.Deadline);
@@ -107,8 +82,6 @@ public:
             Fail("Native source read deadline exceeded");
             return;
         }
-        Admission_ = CreateAsyncMemoryQuota(TActivationContext::ActorSystem(), Quota_, Settings_.MemoryReservation,
-            [this](IActor* actor) { return RegisterWithSameMailbox(actor); });
         DeadlineTimer_.Reset(ISchedulerCookie::Make2Way());
         Schedule(Context_.Deadline, new TEvents::TEvWakeup(DeadlineTag), DeadlineTimer_.Get());
         Notify();
@@ -125,8 +98,6 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRead, Handle);
-        hFunc(TEvAdmitted, Handle);
-        hFunc(TEvAttemptReleased, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
     )
@@ -150,9 +121,9 @@ public:
             NUdf::TUnboxedValue* items = nullptr;
             auto value = HolderFactory_.CreateDirectArrayHolder(Settings_.Columns.size() + 1, items);
             for (size_t i = 0; i < ColumnPositions_.size(); ++i) {
-                // Imported SDK buffers are charged to the source reservation. Once
-                // delivered, buffers must belong to the task allocator so operators
-                // retaining many input batches remain subject to their memory quota.
+                // Output buffers belong to the task allocator so operators retaining
+                // many batches remain subject to their memory quota. The single
+                // prefetched SDK batch is size checked, but has no RM reservation.
                 items[ColumnPositions_[i]] = HolderFactory_.CreateArrowBlock(
                     arrow::Datum(arrow::MakeArray(CopyToTaskAllocator(batch.column_data(i)))), ValidationMode_);
             }
@@ -174,8 +145,8 @@ public:
     void PassAway() override {
         Stopping_ = true;
         CloseOperation();
-        // The governor and callback leases outlive the compute/source actors. No future
-        // callback captures either actor or calls its non-thread-safe quota manager.
+        // Future callbacks own only the shared mailbox; Detach prevents access
+        // to the actor system after this actor is destroyed.
         TActorBootstrapped::PassAway();
     }
 
@@ -191,7 +162,6 @@ private:
             Stream_->Cancel();
             Stream_.reset();
         }
-        AttemptLease_.reset();
     }
 
     void CloseOperation() {
@@ -200,12 +170,7 @@ private:
         RetryTimer_.Detach();
         Ready_.reset();
         CloseStream();
-        MemoryLease_.reset();
         Factory_ = {};
-        if (Admission_) {
-            Admission_->Shutdown();
-            Admission_.reset();
-        }
     }
 
     void Notify() {
@@ -221,6 +186,8 @@ private:
         Send(ComputeActorId_, new TEvAsyncInputError(InputIndex_, TIssues{TIssue(message)}, NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
+    // At most one outstanding Next and one ready batch. SDK parsing and the
+    // prefetched batch are not reserved against the resource manager in this stage.
     void Pull() {
         if (!Demand_ || InFlight_ || Ready_ || RetryPending_ || Finished_ || Failed_ || Stopping_) {
             return;
@@ -229,69 +196,23 @@ private:
             Fail("Native source read deadline exceeded");
             return;
         }
-        if (!MemoryLease_) {
-            if (!AdmissionPending_) {
-                AdmissionPending_ = true;
-                Admission_->Acquire(Settings_.MemoryReservation, Context_.Deadline, Context_.Cancellation).Subscribe(
-                    [mailbox = Mailbox_](const auto& future) {
-                        auto event = MakeHolder<TEvAdmitted>();
-                        try {
-                            event->Lease = future.GetValue();
-                        } catch (...) {
-                            event->Failed = true;
-                        }
-                        mailbox->Send(event.Release());
-                    });
-            }
-            return;
-        }
         try {
             if (!Stream_) {
-                if (AttemptActive_) {
-                    return; // Previous stream/provider callbacks still own the attempt lease.
-                }
-                AttemptActive_ = true;
-                auto context = Context_;
-                context.MemoryLease = std::make_shared<TAttemptLease>(MemoryLease_, Mailbox_, ++AttemptGeneration_);
-                AttemptLease_ = context.MemoryLease;
-                Stream_ = Factory_(context);
+                Stream_ = Factory_(Context_);
             }
             InFlight_ = true;
-            Stream_->Next().Subscribe([mailbox = Mailbox_, lease = AttemptLease_](const auto& future) {
+            Stream_->Next().Subscribe([mailbox = Mailbox_](const auto& future) {
                 TReadResult result;
                 try {
                     result = future.GetValue();
                 } catch (...) {
                     result.Error = "Native source read failed unexpectedly";
                 }
-                result.MemoryLease = lease;
                 mailbox->Send(new TEvRead(std::move(result)));
             });
         } catch (...) {
             InFlight_ = false;
             Fail("Native source could not start the read");
-        }
-    }
-
-    void Handle(TEvAdmitted::TPtr& ev) {
-        AdmissionPending_ = false;
-        if (Failed_ || Stopping_) {
-            return;
-        }
-        if (ev->Get()->Failed) {
-            Fail("Native source memory admission failed or exceeded its deadline");
-            return;
-        }
-        if (Demand_) {
-            MemoryLease_ = std::move(ev->Get()->Lease);
-            Pull();
-        }
-    }
-
-    void Handle(TEvAttemptReleased::TPtr& ev) {
-        if (ev->Get()->Generation == AttemptGeneration_) {
-            AttemptActive_ = false;
-            Pull();
         }
     }
 
@@ -304,8 +225,9 @@ private:
         if (result.Error) {
             Ready_.reset();
             CloseStream();
-            // A retry opens a new snapshot and waits for both backoff and complete
-            // release of the previous stream/provider callback lease.
+            // A retry opens a new snapshot and is allowed only before any row was
+            // delivered. Late SDK callbacks may still be releasing the old stream;
+            // they cannot complete its Next twice or access this actor directly.
             if (result.Retryable && !Delivered_ && Retries_ < Settings_.MaxRetries &&
                 TActivationContext::Now() < Context_.Deadline) {
                 ++Retries_;
@@ -351,30 +273,22 @@ private:
     static constexpr ui64 RetryTag = 2;
     TReadStreamFactory Factory_;
     const TReadActorSettings Settings_;
-    const TInstant QueryDeadline_;
     TReadContext Context_;
     NThreading::TCancellationTokenSource Cancellation_;
     const ui64 InputIndex_;
     const TActorId ComputeActorId_;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
-    const IMemoryQuotaManager::TPtr Quota_;
     const EDatumValidationMode ValidationMode_;
     TVector<size_t> ColumnPositions_;
     size_t LengthPosition_ = 0;
     TDqAsyncStats IngressStats_;
     std::shared_ptr<TCallbackMailbox> Mailbox_;
-    std::shared_ptr<IAsyncMemoryQuota> Admission_;
-    std::shared_ptr<void> MemoryLease_;
-    std::shared_ptr<void> AttemptLease_;
     std::shared_ptr<IReadStream> Stream_;
     std::optional<TReadResult> Ready_;
     TSchedulerCookieHolder DeadlineTimer_;
     TSchedulerCookieHolder RetryTimer_;
-    ui64 AttemptGeneration_ = 0;
     ui32 Retries_ = 0;
     bool Initialized_ = false;
-    bool AdmissionPending_ = false;
-    bool AttemptActive_ = false;
     bool InFlight_ = false;
     bool Demand_ = false;
     bool Delivered_ = false;

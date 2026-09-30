@@ -328,11 +328,6 @@ public:
     void MakeNewQueryState(TEvKqp::TEvQueryRequest::TPtr& ev) {
         ++QueryId;
         YQL_ENSURE(!QueryState);
-        if (AppData()->FeatureFlags.GetEnableNativeYdbProvider()) {
-            // A cancelled compilation from a previous query must retain its
-            // cancelled cookie when a long-lived session starts another query.
-            CompilationCookie = std::make_shared<std::atomic<bool>>(true);
-        }
         auto selfId = SelfId();
         auto as = TActivationContext::ActorSystem();
         ev->Get()->SetClientLostAction(selfId, as);
@@ -1035,9 +1030,6 @@ public:
     }
 
     void Handle(TEvKqp::TEvParseResponse::TPtr& ev) {
-        if (AppData()->FeatureFlags.GetEnableNativeYdbProvider() && ev->Cookie < QueryId) {
-            return;
-        }
         QueryState->SaveAndCheckParseResult(std::move(*ev->Get()));
         CompileStatement();
     }
@@ -3875,9 +3867,8 @@ public:
         if (isFinal)
             Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
 
-        if (isFinal || (QueryState && AppData()->FeatureFlags.GetEnableNativeYdbProvider())) {
-            // Native metadata belongs to the query, including when the session
-            // itself is kept alive. Compile/split replies carry QueryId cookies.
+        if (isFinal) {
+            // no longer intrested in any compilation responses
             CompilationCookie->store(false);
         }
 

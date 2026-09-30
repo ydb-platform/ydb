@@ -4,7 +4,6 @@ SIZE(MEDIUM)
 FORK_SUBTESTS()
 
 SRCS(
-    kqp_native_ydb_metadata_ut.cpp
     kqp_native_ydb_ut.cpp
 )
 

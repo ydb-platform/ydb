@@ -1,7 +1,6 @@
 #include <ydb/library/yql/providers/ydb_remote/provider/yql_ydb_remote_provider_impl.h>
 #include <ydb/library/yql/providers/ydb_remote/expr_nodes/yql_ydb_remote_expr_nodes.h>
 #include <ydb/library/yql/providers/ydb_remote/proto/source.pb.h>
-#include <ydb/library/yql/providers/native/operation_context.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -22,8 +21,8 @@ struct TFixture {
     NYdb::TDriver TlsDriver{NYdb::TDriverConfig().SetNetworkThreadsNum(1).SetClientThreadsNum(1)};
     TState::TPtr State;
 
-    explicit TFixture(TInstant deadline = TInstant::Max(), std::shared_ptr<NNative::IAsyncMemoryQuota> quota = {})
-        : State(MakeIntrusive<TState>(Types.Get(), Driver, TlsDriver, CreateStructuredTokenCredentialsFactory(), deadline, std::move(quota)))
+    explicit TFixture(TInstant deadline = TInstant::Max())
+        : State(MakeIntrusive<TState>(Types.Get(), Driver, TlsDriver, CreateStructuredTokenCredentialsFactory(), deadline))
     {
         AddCluster(*State, "remote", {
             {"location", "localhost:2135"}, {"database_name", "/Remote/"},
@@ -77,33 +76,6 @@ struct TFixture {
             typedRead.World().Ptr(), typedRead.DataSource().Ptr(), std::move(key),
             Ctx.NewCallable(pos, "Void", {}), Ctx.NewList(pos, {})});
     }
-};
-
-class TWaitingMetadataQuota final : public NNative::IAsyncMemoryQuota {
-public:
-    NThreading::TFuture<std::shared_ptr<void>> Acquire(
-        ui64 bytes, TInstant deadline, NThreading::TCancellationToken cancellation) override {
-        Requested.push_back(bytes);
-        Deadline = deadline;
-        Cancellation = cancellation;
-        if (bytes == MetadataSchemaReservation) {
-            auto lease = std::make_shared<int>(0);
-            SchemaLease = lease;
-            return NThreading::MakeFuture<std::shared_ptr<void>>(std::move(lease));
-        }
-        auto promise = NThreading::NewPromise<std::shared_ptr<void>>();
-        cancellation.Future().Subscribe([promise](const NThreading::TFuture<void>&) mutable {
-            promise.TrySetException(std::make_exception_ptr(yexception() << "cancelled admission"));
-        });
-        return promise.GetFuture();
-    }
-
-    void Shutdown() override {}
-
-    TVector<ui64> Requested;
-    TInstant Deadline;
-    NThreading::TCancellationToken Cancellation = NThreading::TCancellationToken::Default();
-    std::weak_ptr<void> SchemaLease;
 };
 
 } // namespace
@@ -189,16 +161,7 @@ Y_UNIT_TEST_SUITE(TYdbRemoteProvider) {
         UNIT_ASSERT(f.Ctx.IssueManager.GetIssues().ToString().Contains("metadata deadline exceeded"));
     }
 
-    Y_UNIT_TEST(MetadataRequiresAdmissionForUncachedTables) {
-        TFixture f;
-        auto transformer = CreateLoadMetadataTransformer(f.State);
-        TExprNode::TPtr output;
-        UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(f.MakeRawRead(false, 1, "uncached"), output, f.Ctx).Level,
-            IGraphTransformer::TStatus::Error);
-        UNIT_ASSERT(f.Ctx.IssueManager.GetIssues().ToString().Contains("memory quota is unavailable"));
-    }
-
-    Y_UNIT_TEST(MetadataBoundsDistinctTableCountBeforeAdmission) {
+    Y_UNIT_TEST(MetadataBoundsDistinctTableCountBeforeStartingNetwork) {
         TFixture f;
         TExprNode::TListType reads;
         for (ui64 i = 0; i < MaxMetadataTables; ++i) {
@@ -209,27 +172,6 @@ Y_UNIT_TEST_SUITE(TYdbRemoteProvider) {
         UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(f.Ctx.NewList(f.Ctx.AppendPosition({}), std::move(reads)),
             output, f.Ctx).Level, IGraphTransformer::TStatus::Error);
         UNIT_ASSERT(f.Ctx.IssueManager.GetIssues().ToString().Contains("metadata table limit exceeded"));
-    }
-
-    Y_UNIT_TEST(MetadataRewindCancelsAdmissionAndRetainsTheSharedDeadline) {
-        auto quota = std::make_shared<TWaitingMetadataQuota>();
-        const auto deadline = TInstant::Now() + TDuration::Minutes(3);
-        TFixture f(deadline, quota);
-        auto transformer = CreateLoadMetadataTransformer(f.State);
-        TExprNode::TPtr output;
-        const auto input = f.MakeRawRead(false, 1, "uncached");
-        UNIT_ASSERT_VALUES_EQUAL(transformer->Transform(input, output, f.Ctx).Level, IGraphTransformer::TStatus::Async);
-        auto future = transformer->GetAsyncFuture(*input);
-        UNIT_ASSERT(!future.HasValue());
-        UNIT_ASSERT_VALUES_EQUAL(quota->Requested.size(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(quota->Requested[0], MetadataSchemaReservation);
-        UNIT_ASSERT_VALUES_EQUAL(quota->Requested[1], MetadataResponseReservation);
-        UNIT_ASSERT_VALUES_EQUAL(quota->Deadline, deadline);
-        UNIT_ASSERT(!quota->SchemaLease.expired());
-        transformer->Rewind();
-        UNIT_ASSERT(quota->Cancellation.IsCancellationRequested());
-        UNIT_ASSERT(future.HasValue());
-        UNIT_ASSERT(quota->SchemaLease.expired());
     }
 
     Y_UNIT_TEST(MetadataSchemaLimitsAreCheckedBeforeCopying) {

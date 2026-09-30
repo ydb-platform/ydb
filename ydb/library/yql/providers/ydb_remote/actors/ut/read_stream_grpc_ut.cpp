@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <thread>
 #include <vector>
 
 namespace NYql::NYdbRemote {
@@ -229,20 +230,13 @@ void AssertError(NThreading::TFuture<TReadResult>& result) {
     UNIT_ASSERT(!value.Batch);
 }
 
-class TQuota final : public IMemoryQuotaManager {
-public:
-    bool AllocateQuota(ui64 bytes, bool optional) override {
-        UNIT_ASSERT(optional);
-        Allocated += bytes;
-        return true;
+void AssertStreamReleased(const std::weak_ptr<IReadStream>& stream) {
+    const auto deadline = TInstant::Now() + WaitTimeout;
+    while (!stream.expired() && TInstant::Now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
-    void FreeQuota(ui64 bytes) override { Allocated -= bytes; }
-    ui64 GetCurrentQuota() const override { return Allocated; }
-    ui64 GetMaxMemorySize() const override { return Allocated; }
-    i64 GetMemoryAvailability() const override { return ReadMemoryReservation; }
-    TString MemoryConsumptionDetails() const override { return {}; }
-    std::atomic<ui64> Allocated = 0;
-};
+    UNIT_ASSERT(stream.expired());
+}
 
 // Count public Next invocations while using the real SDK below the adapter.
 class TCountingStream final : public IReadStream {
@@ -267,17 +261,19 @@ public:
             THashMap<TString, TString> params;
             TVector<TString> ranges;
             auto [asyncInput, readActor] = CreateNativeReadActor([this](const auto& context) {
-                UNIT_ASSERT_VALUES_EQUAL(context.Deadline, Deadline);
-                ++Attempts;
+                if (++Attempts == 1) {
+                    Deadline = context.Deadline;
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(context.Deadline, Deadline);
+                }
                 return std::make_shared<TCountingStream>(CreateReadStream(Server.Client, Source(), context), Reads);
             }, {.Timeout = TDuration::Seconds(60), .MaxBatchBytes = 1024 * 1024,
-                .MemoryReservation = ReadMemoryReservation, .MaxRetries = 2, .Columns = {"value"}},
+                .MaxRetries = 2, .Columns = {"value"}},
             IDqAsyncIoFactory::TSourceArguments{
                 .InputDesc = input, .InputIndex = 0, .StatsLevel = {}, .TxId = {}, .TaskId = 1,
                 .SecureParams = params, .TaskParams = params, .ReadRanges = ranges,
                 .ComputeActorId = actor.SelfId(), .TypeEnv = actor.TypeEnv,
                 .HolderFactory = actor.HolderFactory, .ProgramBuilder = actor.ProgramBuilder,
-                .MemoryQuotaManager = Quota, .Deadline = Deadline,
             });
             actor.InitAsyncInput(asyncInput, readActor);
         });
@@ -302,8 +298,7 @@ public:
     // Destruction order keeps the actor system alive until the SDK driver stops.
     TFakeCASetup Setup;
     TQueryServer Server;
-    const TInstant Deadline = TInstant::Now() + TDuration::Seconds(30);
-    const std::shared_ptr<TQuota> Quota = std::make_shared<TQuota>();
+    TInstant Deadline;
     std::atomic<ui32> Attempts = 0;
     std::atomic<ui32> Reads = 0;
 };
@@ -374,14 +369,9 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         TQueryServer server;
         auto& call = server.ExpectCall();
         auto credentials = std::make_shared<TDeferredCredentialsFactory>();
-        auto released = NThreading::NewPromise();
         auto context = Context();
-        context.MemoryLease = std::shared_ptr<void>(new int, [released](void* value) mutable {
-            delete static_cast<int*>(value);
-            released.SetValue();
-        });
         auto stream = CreateReadStream(server.CreateClient(false, credentials), Source(), context);
-        context.MemoryLease.reset();
+        std::weak_ptr<IReadStream> lifetime = stream;
         auto result = stream->Next();
         credentials->WaitUntilRequested();
         UNIT_ASSERT(!result.HasValue());
@@ -390,14 +380,14 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         UNIT_ASSERT(result.HasValue());
         AssertError(result);
         stream.reset();
-        UNIT_ASSERT(!released.HasValue());
+        UNIT_ASSERT(!lifetime.expired());
         // The SDK creates its iterator at RPC start, before initial metadata.
         // Pending credentials hold that start deterministically. Releasing them
         // after local cancellation must discard the late iterator without ReadNext.
         credentials->SetReady();
-        // No server response was sent. The opening callback releases the provider
-        // reservation even while the cancelled result future remains alive.
-        UNIT_ASSERT(released.GetFuture().Wait(WaitTimeout));
+        // No server response was sent. The opening callback releases the stream
+        // even while the cancelled result future remains alive.
+        AssertStreamReleased(lifetime);
         // Reader destruction can cancel the RPC before the server dispatches it.
         // If it was dispatched, cancellation must also reach the server.
         if (server.AcceptedWithin(call, TDuration::MilliSeconds(100))) {
@@ -436,17 +426,12 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         AssertError(next);
     }
 
-    Y_UNIT_TEST(CancelledProviderRetainsLeaseUntilPendingSdkCallbackReturns) {
+    Y_UNIT_TEST(CancelledStreamSurvivesUntilPendingSdkCallbackReturns) {
         TQueryServer server;
         auto& call = server.ExpectCall();
-        auto released = NThreading::NewPromise();
         auto context = Context();
-        context.MemoryLease = std::shared_ptr<void>(new int, [released](void* value) mutable {
-            delete static_cast<int*>(value);
-            released.SetValue();
-        });
         auto stream = CreateReadStream(server.Client, Source(), context);
-        context.MemoryLease.reset();
+        std::weak_ptr<IReadStream> lifetime = stream;
         auto first = stream->Next();
         server.Open(call);
         server.Write(call, Batch());
@@ -456,17 +441,17 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         first = {};
         // The iterator is established and ReadNext is now definitely in flight.
         auto result = stream->Next();
-        UNIT_ASSERT(!released.HasValue());
+        UNIT_ASSERT(!lifetime.expired());
         stream->Cancel();
         UNIT_ASSERT(result.HasValue());
         stream.reset();
         AssertError(result);
-        UNIT_ASSERT(!released.HasValue());
+        UNIT_ASSERT(!lifetime.expired());
         // The result future stays alive: only the late SDK callback should own
-        // the stream/lease now. This does not assert SDK-internal quiescence.
+        // the stream now. This does not assert SDK-internal quiescence.
         server.Write(call, Batch(), false);
         server.Cancelled(call);
-        UNIT_ASSERT(released.GetFuture().Wait(WaitTimeout));
+        AssertStreamReleased(lifetime);
         server.Finish(call);
         AssertError(result);
     }
@@ -537,14 +522,9 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
     Y_UNIT_TEST(OversizedCompressedResponseFailsAfterSdkProcessing) {
         TQueryServer server;
         auto& call = server.ExpectCall();
-        auto released = NThreading::NewPromise();
         auto context = Context();
-        context.MemoryLease = std::shared_ptr<void>(new int, [released](void* value) mutable {
-            delete static_cast<int*>(value);
-            released.SetValue();
-        });
         auto stream = CreateReadStream(server.Client, Source(), context);
-        context.MemoryLease.reset();
+        std::weak_ptr<IReadStream> lifetime = stream;
         auto result = stream->Next();
         server.Accept(call);
         call.Context.set_compression_algorithm(GRPC_COMPRESS_GZIP);
@@ -566,7 +546,7 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         stream.reset();
         result = {};
         server.Cancelled(call);
-        UNIT_ASSERT(released.GetFuture().Wait(WaitTimeout));
+        AssertStreamReleased(lifetime);
         server.Finish(call);
     }
 

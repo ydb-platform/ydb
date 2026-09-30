@@ -506,7 +506,11 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
-            state->StreamProcessor->Read([actorSystem, selfId, state = std::move(state)](Ydb::Query::ExecuteQueryResponsePart&& response) mutable {
+            state->StreamProcessor->Read([actorSystem, selfId, weakState = std::weak_ptr(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
+                auto state = weakState.lock();
+                if (!state) {
+                    return;
+                }
                 actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
             });
         }
@@ -565,7 +569,11 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
-            session->StreamProcessor->Read([actorSystem, selfId, session = std::move(session)](Ydb::Query::SessionState&& response) mutable {
+            session->StreamProcessor->Read([actorSystem, selfId, weakSession = std::weak_ptr(session)](Ydb::Query::SessionState&& response) {
+                auto session = weakSession.lock();
+                if (!session) {
+                    return;
+                }
                 actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
             });
         }

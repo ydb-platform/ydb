@@ -436,13 +436,14 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
     auto obs = MakeObservation("CreateSession");
     const auto createStartTime = std::chrono::steady_clock::now();
 
-    auto createSessionExtractor = [createSessionPromise, self, standalone, obs, createStartTime]
+    auto createSessionExtractor = [createSessionPromise, self, standalone, obs, createStartTime, autoClose = settings.AutoCloseSession_]
         (google::protobuf::Any* any, TPlainStatus status) mutable {
             Ydb::Table::CreateSessionResult result;
             if (any) {
                 any->UnpackTo(&result);
             }
             auto session = TSession(self, result.session_id(), status.Endpoint, !standalone);
+            session.SessionImpl_->AutoCloseSession_ = !standalone || autoClose;
             if (status.Ok()) {
                 if (!standalone) {
                     session.SessionImpl_->MarkActive();
@@ -459,13 +460,18 @@ TAsyncCreateSessionResult TTableClient::TImpl::CreateSession(const TCreateSessio
             createSessionPromise.SetValue(std::move(val));
         };
 
+    auto boundedRpcSettings = rpcSettings;
+    if (settings.BoundedResponse_) {
+        boundedRpcSettings.BoundedResponseMethod = "/Ydb.Table.V1.TableService/CreateSession";
+    }
+
     Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>(
         std::move(request),
         createSessionExtractor,
         &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
         DbDriverState_,
         INITIAL_DEFERRED_CALL_DELAY,
-        rpcSettings);
+        boundedRpcSettings);
 
     return createSessionPromise.GetFuture();
 }
@@ -616,6 +622,10 @@ TFuture<TStatus> TTableClient::TImpl::DropTable(const TSession& session, const s
 TAsyncDescribeTableResult TTableClient::TImpl::DescribeTable(const TSession& session, const std::string& path, const TDescribeTableSettings& settings) {
     auto rpcSettings = TRpcRequestSettings::Make(settings)
         .TryUpdateDeadline(session.GetPropagatedDeadline());
+
+    if (settings.BoundedResponse_) {
+        rpcSettings.BoundedResponseMethod = "/Ydb.Table.V1.TableService/DescribeTable";
+    }
 
     auto request = MakeOperationRequest<Ydb::Table::DescribeTableRequest>(settings);
     request.set_session_id(TStringType{session.GetId()});
@@ -1108,6 +1118,10 @@ TAsyncStatus TTableClient::TImpl::Close(const TKqpSessionCommon* sessionImpl, co
     auto rpcSettings = TRpcRequestSettings::Make(settings, sessionImpl->GetEndpointKey())
         .TryUpdateDeadline(sessionImpl->PropagatedDeadline_);
 
+    if (settings.BoundedResponse_) {
+        rpcSettings.BoundedResponseMethod = "/Ydb.Table.V1.TableService/DeleteSession";
+    }
+
     auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
     request.set_session_id(TStringType{sessionImpl->GetId()});
     return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
@@ -1164,7 +1178,9 @@ void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     }
 
     if (!sessionImpl->GetId().empty()) {
-        CloseInternal(sessionImpl);
+        if (static_cast<TSession::TImpl*>(sessionImpl)->AutoCloseSession_) {
+            CloseInternal(sessionImpl);
+        }
         DbDriverState_->StatCollector.DecSessionsOnHost(sessionImpl->GetEndpoint());
     }
 

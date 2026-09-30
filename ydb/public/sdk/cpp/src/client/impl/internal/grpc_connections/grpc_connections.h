@@ -15,6 +15,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/request_control.h>
 
 #include <atomic>
 #include <mutex>
@@ -46,6 +47,7 @@ using NYdbGrpc::IQueueClientContextProvider;
 using NYdbGrpc::TQueueClientCallbackGuardFactory;
 
 class ICredentialsProvider;
+
 
 // Deferred callbacks
 using TDeferredResultCb = std::function<void(google::protobuf::Any*, TPlainStatus status)>;
@@ -95,6 +97,27 @@ public:
     IQueueClientContextPtr CreateContext() override;
     TQueueClientCallbackGuardFactory GetCallbackGuardFactory() override;
     bool TryCreateContext(IQueueClientContextPtr& context);
+
+    static TPlainStatus MakeClientCancelledStatus() {
+        return TPlainStatus(EStatus::CLIENT_CANCELLED, "Request cancelled");
+    }
+
+    bool PrepareRequestContext(IQueueClientContextPtr& context, const TRpcRequestSettings& settings) {
+        if (!TryCreateContext(context)) {
+            return false;
+        }
+        if (settings.RequestControl) {
+            auto registration = TRequestControlAccess::Subscribe(settings.RequestControl, [weak = std::weak_ptr(context)] {
+                if (auto current = weak.lock()) {
+                    current->Cancel();
+                }
+            });
+            // The context owns the registration; the cancellation callback owns
+            // only a weak context, so completed requests leave no retained closures.
+            context->SubscribeCancel([registration = std::move(registration)] {});
+        }
+        return !context->IsCancelled();
+    }
     void Stop(bool wait = false);
 
     template<typename TService>
@@ -140,6 +163,7 @@ public:
             clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
         }
 
+        clientConfig.BoundedResponseTransport = BoundedResponseTransport_;
         clientConfig.LoadBalancingPolicy = GRpcLoadBalancingPolicy_;
 
         SetGrpcCompressionAlgorithm(clientConfig, GRpcCompressionAlgorithm_);
@@ -284,6 +308,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         Y_ABORT_UNLESS(dbState);
 
+        if (requestSettings.RequestControl && !PrepareRequestContext(context, requestSettings)) {
+            RunResponseCallback<TResponse>(userResponseCb, nullptr, MakeClientCancelledStatus(), DriverScope_);
+            return;
+        }
+
         if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
                 [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb),
@@ -314,6 +343,13 @@ public:
             return;
         }
 
+        if (requestSettings.RequestLifetime) {
+            userResponseCb = [lifetime = requestSettings.RequestLifetime, callback = std::move(userResponseCb)]
+                (TResponse* response, TPlainStatus status) mutable {
+                    callback(response, std::move(status));
+                };
+        }
+
         if (dbState->StatCollector.IsCollecting()) {
             std::weak_ptr<TDbDriverState> weakState = dbState;
             const auto startTime = TInstant::Now();
@@ -329,9 +365,9 @@ public:
             });
         }
 
-        WithServiceConnection<TService>(
+        WithCancellableServiceConnection<TService>(context, requestSettings,
             [this, requestWrapper = std::move(requestWrapper), userResponseCb = std::move(userResponseCb), rpc, 
-             requestSettings, context = std::move(context), dbState]
+             requestSettings, context, dbState]
                 (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable -> void {
                     if (!status.Ok()) {
                         context.reset();
@@ -425,13 +461,16 @@ public:
             return;
         }
 
-        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, delay, deadline = requestSettings.Deadline, poll, context]
+        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, delay, deadline = requestSettings.Deadline, bounded = !requestSettings.BoundedResponseMethod.empty(), poll, context]
             (TResponse* response, TPlainStatus status) mutable
         {
             if (response) {
                 Ydb::Operations::Operation* operation = response->mutable_operation();
                 Y_ABORT_UNLESS(operation);
-                if (!operation->ready() && poll) {
+                if (!operation->ready() && bounded) {
+                    context.reset();
+                    userResponseCb(nullptr, TPlainStatus(EStatus::CLIENT_INTERNAL_ERROR, "Bounded request returned a pending operation"));
+                } else if (!operation->ready() && poll) {
                     auto action = MakeIntrusive<TDeferredAction>(
                         operation->id(),
                         std::move(userResponseCb),
@@ -542,6 +581,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
 
+        if (requestSettings.RequestControl && !PrepareRequestContext(context, requestSettings)) {
+            RunStreamCallback(responseCb, MakeClientCancelledStatus(), nullptr, DriverScope_);
+            return;
+        }
+
         if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
                 [this, request, responseCb = std::move(responseCb), rpc, dbState, requestSettings, context]
@@ -571,8 +615,8 @@ public:
             return;
         }
 
-        WithServiceConnection<TService>(
-            [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context = std::move(context), dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
+        WithCancellableServiceConnection<TService>(context, requestSettings,
+            [this, request, responseCb = std::move(responseCb), rpc, requestSettings, context, dbState](TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                 if (!status.Ok()) {
                     context.reset();
                     RunStreamCallback(responseCb, std::move(status), nullptr, DriverScope_);
@@ -597,14 +641,17 @@ public:
                 dbState->StatCollector.IncGRpcInFlight();
                 dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                auto lowCallback = [responseCb = std::move(responseCb), dbState, endpoint, driverScope = DriverScope_]
+                auto lowCallback = [responseCb = std::move(responseCb), dbState, endpoint, context, driverScope = DriverScope_]
                     (TGrpcStatus grpcStatus, TProcessor processor) mutable {
                         dbState->StatCollector.DecGRpcInFlight();
                         dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                         if (grpcStatus.Ok()) {
                             Y_ABORT_UNLESS(processor);
-                            auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
+                            // The child retains the underlying context, but not
+                            // the SDK wrapper targeted by RequestControl.
+                            auto finishedCallback = [dbState, endpoint, context] (TGrpcStatus grpcStatus) {
+                                Y_UNUSED(context);
                                 if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                     dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                                 }
@@ -649,6 +696,11 @@ public:
         using TConnection = std::unique_ptr<TServiceConnection<TService>>;
         using TProcessor = typename NYdbGrpc::IStreamRequestReadWriteProcessor<TRequest, TResponse>::TPtr;
 
+        if (requestSettings.RequestControl && !PrepareRequestContext(context, requestSettings)) {
+            RunStreamCallback(connectedCallback, MakeClientCancelledStatus(), nullptr, DriverScope_);
+            return;
+        }
+
         if (auto ready = CredentialsReadyToWaitFor(dbState, requestSettings, context); ready.Initialized()) {
             DeferUntilCredentialsReady(requestSettings, context, std::move(ready),
                 [this, connectedCallback = std::move(connectedCallback), rpc, dbState, requestSettings, context]
@@ -677,8 +729,8 @@ public:
             return;
         }
 
-        WithServiceConnection<TService>(
-            [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context = std::move(context), dbState]
+        WithCancellableServiceConnection<TService>(context, requestSettings,
+            [this, connectedCallback = std::move(connectedCallback), rpc, requestSettings, context, dbState]
                 (TPlainStatus status, TConnection serviceConnection, TEndpointKey endpoint) mutable {
                     if (!status.Ok()) {
                         context.reset();
@@ -704,14 +756,15 @@ public:
                     dbState->StatCollector.IncGRpcInFlight();
                     dbState->StatCollector.IncGRpcInFlightByHost(endpoint.GetEndpoint());
 
-                    auto lowCallback = [connectedCallback = std::move(connectedCallback), dbState, endpoint, driverScope = DriverScope_]
+                    auto lowCallback = [connectedCallback = std::move(connectedCallback), dbState, endpoint, context, driverScope = DriverScope_]
                         (TGrpcStatus grpcStatus, TProcessor processor) {
                             dbState->StatCollector.DecGRpcInFlight();
                             dbState->StatCollector.DecGRpcInFlightByHost(endpoint.GetEndpoint());
 
                             if (grpcStatus.Ok()) {
                                 Y_ABORT_UNLESS(processor);
-                                auto finishedCallback = [dbState, endpoint] (TGrpcStatus grpcStatus) {
+                                auto finishedCallback = [dbState, endpoint, context] (TGrpcStatus grpcStatus) {
+                                    Y_UNUSED(context);
                                     if (!grpcStatus.Ok() && grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                         dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                                     }
@@ -778,6 +831,49 @@ private:
             msg += detail;
         }
         return TPlainStatus(EStatus::TRANSPORT_UNAVAILABLE, msg);
+    }
+
+    template<typename TService, typename TCallback>
+    void WithCancellableServiceConnection(const IQueueClientContextPtr& context,
+        const TRpcRequestSettings& settings, TCallback callback, TDbDriverStatePtr dbState,
+        const TEndpointKey& preferredEndpoint, TRpcRequestSettings::TEndpointPolicy endpointPolicy)
+    {
+        if (!settings.RequestControl) {
+            WithServiceConnection<TService>(std::move(callback), std::move(dbState), preferredEndpoint, endpointPolicy);
+            return;
+        }
+        using TConnection = std::unique_ptr<TServiceConnection<TService>>;
+        struct TPending {
+            std::mutex Mutex;
+            std::optional<TCallback> Callback;
+
+            void Complete(TPlainStatus status, TConnection connection, TEndpointKey endpoint) {
+                std::optional<TCallback> callback;
+                {
+                    std::lock_guard guard(Mutex);
+                    if (Callback) {
+                        callback.emplace(std::move(*Callback));
+                        Callback.reset();
+                    }
+                }
+                if (callback) {
+                    (*callback)(std::move(status), std::move(connection), std::move(endpoint));
+                }
+            }
+        };
+        auto pending = std::make_shared<TPending>();
+        pending->Callback.emplace(std::move(callback));
+        if (settings.RequestControl) {
+            context->SubscribeCancel([weak = std::weak_ptr(pending)] {
+                if (auto current = weak.lock()) {
+                    current->Complete(MakeClientCancelledStatus(), nullptr, {});
+                }
+            });
+        }
+        WithServiceConnection<TService>(
+            [pending](TPlainStatus status, TConnection connection, TEndpointKey endpoint) {
+                pending->Complete(std::move(status), std::move(connection), std::move(endpoint));
+            }, std::move(dbState), preferredEndpoint, endpointPolicy);
     }
 
     template <typename TService, typename TCallback>
@@ -911,6 +1007,7 @@ private:
     const std::string GRpcLoadBalancingPolicy_;
     const EGrpcCompressionAlgorithm GRpcCompressionAlgorithm_;
     const std::uint64_t MemoryQuota_;
+    const bool BoundedResponseTransport_;
     const std::uint64_t MaxInboundMessageSize_;
     const std::uint64_t MaxOutboundMessageSize_;
     const std::uint64_t MaxMessageSize_;

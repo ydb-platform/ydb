@@ -1,0 +1,21 @@
+# Bounded response mode
+
+This opt-in mode is used by the native remote-read provider. Ordinary SDK calls retain their existing wire parser and channel defaults.
+
+The unary methods are CreateSession, DescribeTable and DeleteSession. ExecuteQuery uses the streaming adapter. Both adapters invoke the official method on the SDK-managed channel and receive a `ByteBuffer`. The adapters validate before the generated protobuf parser runs:
+
+- At most 8 MiB per ExecuteQuery part, or 256 KiB per unary response.
+- At most 4096 wire fields per stream part or 8192 per unary response, including every packed scalar element. The larger unary structural budget accommodates 1024 primitive metadata columns.
+- At most 32 nested messages; a generated message's empty `SpaceUsedLong()` must not exceed 1024 bytes.
+- Unknown fields, groups, mismatched wire types, invalid lengths/varints, duplicate singular messages and duplicate Any fields are rejected.
+- Any payloads are recursively checked against the official CreateSessionResult or DescribeTableResult descriptor, using the same field budget. Unknown Any types are rejected.
+
+The validation pass allocates only a bounded list of singular field numbers and one contiguous wire slice. It does not instantiate response protobufs. Repeated empty messages and packed scalar amplification therefore fail before materialization. A rejected stream response preserves the decoder error through Finish, rather than becoming a successful EOF. A non-ready bounded unary operation is rejected, so it cannot enter an unbounded GetOperation polling path.
+
+The limits bound response wire size, protobuf structure and recursion. They are not an allocator-enforced upper bound for the entire gRPC stack. A 64 MiB native request-data reservation is a conservative envelope for wire copies, protobuf objects and the SDK's typed response conversion, not a proof about arbitrary transport allocations. Caller-retained result values must remain covered by the caller's lease.
+
+The native driver also configures an 8 MiB incoming message limit and a 16 MiB gRPC resource quota, and uses `SetBoundedResponseTransport(true)`: adaptive BDP windows are disabled, stream read-ahead is 64 KiB, and both incoming metadata limits are 16 KiB. Only identity compression is enabled, and incoming decompression is disabled: gRPC checks the wire length before decompression, so compressed responses must be rejected without expanding them before protobuf preflight. These transport settings override generic channel parameters. Native clients disable discovery to avoid additional discovery responses. `SetNetworkThreadsNum(1)` is part of this envelope: it prevents successive stream decoding callback stacks from overlapping when the consumer requests another part before the previous callback returns. Caller-retained results still require their own lease coverage. Channel buffers, HTTP/2 framing/slice bookkeeping and shared credentials/channel machinery belong to shared transport infrastructure. gRPC's resource quota applies memory pressure; it is not a hard per-request allocation limiter. A hard allocator guarantee would require accounting hooks in gRPC's resource-quota memory owner, slice-buffer growth, HTTP/2 receive metadata and channel/call arena allocation, before allocation occurs.
+
+`RequestLifetime` is copied into the low-level processor before a call starts. Its member is destroyed after the response buffers, reader and gRPC context. Queued unary responses and streaming reader callbacks retain it independently, including after future completion. Cancellation is request-scoped, works before stream creation completes, and never shuts down the shared driver. Callers release their own settings/stream/result leases before waiting for the final destructor notification; the notification can post an event to the quota owner's mailbox.
+
+Metadata sessions created with `AutoCloseSession(false)` require explicit Close. Each metadata phase, including Close, retains its own request-data lease through transport quiescence. If cancellation prevents cleanup transport, the server's session expiry handles the abandoned session; the SDK does not launch a hidden destructor RPC.

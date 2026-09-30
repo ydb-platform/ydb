@@ -118,6 +118,71 @@ struct TProcessorFixture {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(ChannelPoolTests) {
+    Y_UNIT_TEST(TlsChangesReplaceCachedChannelWithoutInvalidatingExistingOwners) {
+        TChannelPool pool({false, 0, 0, 0});
+        TGRpcClientConfig config("localhost:1");
+        const auto getChannel = [&] {
+            std::shared_ptr<grpc::ChannelInterface> channel;
+            pool.GetStubsHolderLocked(config.Locator, config, [&](TStubsHolder& holder) {
+                channel = holder.GetChannelInterface();
+            });
+            return channel;
+        };
+
+        auto plaintext = getChannel();
+        UNIT_ASSERT(plaintext == getChannel());
+        std::weak_ptr<grpc::ChannelInterface> oldPlaintext = plaintext;
+
+        config.EnableSsl = true;
+        auto tls = getChannel();
+        UNIT_ASSERT(tls != plaintext);
+        UNIT_ASSERT(tls == getChannel());
+        UNIT_ASSERT(!oldPlaintext.expired());
+        plaintext.reset();
+        UNIT_ASSERT(oldPlaintext.expired());
+
+        config.SslTargetNameOverride = "other.example";
+        auto otherTarget = getChannel();
+        UNIT_ASSERT(otherTarget != tls);
+        UNIT_ASSERT(otherTarget == getChannel());
+
+        config.EnableSsl = false;
+        auto plaintextAgain = getChannel();
+        UNIT_ASSERT(plaintextAgain != otherTarget);
+        UNIT_ASSERT(plaintextAgain == getChannel());
+        std::weak_ptr<grpc::ChannelInterface> removed = plaintextAgain;
+        plaintextAgain.reset();
+        pool.DeleteChannel(config.Locator);
+        UNIT_ASSERT(removed.expired());
+    }
+
+    Y_UNIT_TEST(SecurityIdentityIncludesEveryTlsCredentialAndTargetName) {
+        TGRpcClientConfig config("localhost:1");
+        // These are comparison fixtures, never passed to a TLS parser.
+        config.SslCredentials.pem_root_certs = "root";
+        config.SslCredentials.pem_cert_chain = "certificate";
+        config.SslCredentials.pem_private_key = "key";
+        config.SslTargetNameOverride = "target.example";
+        TStubsHolder holder(nullptr, config);
+        UNIT_ASSERT(holder.HasMatchingSecuritySettings(config));
+
+        auto changed = config;
+        changed.EnableSsl = true; // Nonempty roots already enabled TLS.
+        UNIT_ASSERT(holder.HasMatchingSecuritySettings(changed));
+        changed = config;
+        changed.SslCredentials.pem_root_certs = "other root";
+        UNIT_ASSERT(!holder.HasMatchingSecuritySettings(changed));
+        changed = config;
+        changed.SslCredentials.pem_cert_chain = "other certificate";
+        UNIT_ASSERT(!holder.HasMatchingSecuritySettings(changed));
+        changed = config;
+        changed.SslCredentials.pem_private_key = "other key";
+        UNIT_ASSERT(!holder.HasMatchingSecuritySettings(changed));
+        changed = config;
+        changed.SslTargetNameOverride = "other.example";
+        UNIT_ASSERT(!holder.HasMatchingSecuritySettings(changed));
+    }
+
     Y_UNIT_TEST(UnusedStubsHoldersDeletion) {
         TGRpcClientConfig clientConfig("invalid_host:invalid_port");
         TTcpKeepAliveSettings tcpKeepAliveSettings =

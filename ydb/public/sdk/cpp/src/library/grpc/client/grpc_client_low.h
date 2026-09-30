@@ -1,6 +1,7 @@
 #pragma once
 
 #include "grpc_common.h"
+#include "bounded_response.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
@@ -17,6 +18,7 @@
 #include <functional>
 #include <memory>
 #include <typeinfo>
+#include <type_traits>
 #include <variant>
 #include <vector>
 #include <unordered_map>
@@ -238,6 +240,8 @@ struct TCallMeta {
     std::shared_ptr<grpc::CallCredentials> CallCredentials;
     std::vector<std::pair<std::string, std::string>> Aux;
     std::variant<std::monostate, NYdb::TDeadline, NYdb::TDeadline::Duration> Timeout; // timeout as duration from now or time point in future
+    std::shared_ptr<void> RequestLifetime = {};
+    std::string BoundedResponseMethod = {};
 };
 
 class TGRpcRequestProcessorCommon {
@@ -255,6 +259,10 @@ protected:
         RunQueueClientCallback(CallbackGuardFactory_, std::forward<F>(f));
     }
 
+    // Declared first: released after derived buffers, streams and the gRPC context.
+    std::shared_ptr<void> RequestLifetime_;
+    std::string BoundedResponseMethod_;
+    grpc::Status BoundedDecodeStatus_;
     grpc::Status Status;
     grpc::ClientContext Context;
     std::shared_ptr<IQueueClientContext> LocalContext;
@@ -270,7 +278,7 @@ class TSimpleRequestProcessor
     template<typename> friend class TServiceConnection;
 public:
     using TPtr = TIntrusivePtr<TSimpleRequestProcessor>;
-    using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*);
+    using TAsyncRequest = std::unique_ptr<grpc::ClientAsyncResponseReader<TResponse>> (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*);
 
     explicit TSimpleRequestProcessor(TResponseCallback<TResponse>&& callback)
         : Callback_(std::move(callback))
@@ -291,7 +299,9 @@ public:
             LocalContext.reset();
         }
         TGrpcStatus status;
-        if (ok) {
+        if (!BoundedDecodeStatus_.ok()) {
+            status = BoundedDecodeStatus_;
+        } else if (ok) {
             status = Status;
         } else {
             status = TGrpcStatus::Internal("Unexpected error");
@@ -314,7 +324,8 @@ private:
         return this;
     }
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider,
+        grpc::ChannelInterface* channel) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
         if (!context) {
@@ -328,8 +339,19 @@ private:
         {
             std::unique_lock<std::mutex> guard(Mutex_);
             LocalContext = context;
-            Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
-            Reader_->Finish(&Reply_, &Status, FinishedEvent());
+            grpc::ClientAsyncResponseReaderInterface<TResponse>* reader = nullptr;
+            if constexpr (std::is_base_of_v<google::protobuf::Message, TResponse>) {
+                if (!BoundedResponseMethod_.empty()) {
+                    BoundedReader_ = std::make_unique<TBoundedAsyncResponseReader<TResponse>>(channel, context->CompletionQueue(),
+                        BoundedResponseMethod_, &Context, request, &BoundedDecodeStatus_);
+                    reader = BoundedReader_.get();
+                }
+            }
+            if (!reader) {
+                Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
+                reader = Reader_.get();
+            }
+            reader->Finish(&Reply_, &Status, FinishedEvent());
         }
         context->SubscribeStop([self = TPtr(this)] {
             self->Stop();
@@ -344,6 +366,9 @@ private:
     TResponse Reply_;
     std::mutex Mutex_;
     TAsyncReaderPtr Reader_;
+    // gRPC's unary-reader default deleter is a no-op for arena-owned readers.
+    // The heap-owned adapter needs its own concrete owner with normal deletion.
+    std::unique_ptr<TBoundedAsyncResponseReader<TResponse>> BoundedReader_;
 
     bool Replied_ = false;
 };
@@ -357,7 +382,7 @@ class TAdvancedRequestProcessor
     template<typename> friend class TServiceConnection;
 public:
     using TPtr = TIntrusivePtr<TAdvancedRequestProcessor>;
-    using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*);
+    using TAsyncRequest = std::unique_ptr<grpc::ClientAsyncResponseReader<TResponse>> (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*);
 
     explicit TAdvancedRequestProcessor(TAdvancedResponseCallback<TResponse>&& callback)
         : Callback_(std::move(callback))
@@ -378,7 +403,9 @@ public:
             LocalContext.reset();
         }
         TGrpcStatus status;
-        if (ok) {
+        if (!BoundedDecodeStatus_.ok()) {
+            status = BoundedDecodeStatus_;
+        } else if (ok) {
             status = Status;
         } else {
             status = TGrpcStatus::Internal("Unexpected error");
@@ -401,7 +428,8 @@ private:
         return this;
     }
 
-    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, TAsyncRequest asyncRequest, const TRequest& request, IQueueClientContextProvider* provider,
+        grpc::ChannelInterface* channel) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
         if (!context) {
@@ -415,8 +443,19 @@ private:
         {
             std::unique_lock<std::mutex> guard(Mutex_);
             LocalContext = context;
-            Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
-            Reader_->Finish(&Reply_, &Status, FinishedEvent());
+            grpc::ClientAsyncResponseReaderInterface<TResponse>* reader = nullptr;
+            if constexpr (std::is_base_of_v<google::protobuf::Message, TResponse>) {
+                if (!BoundedResponseMethod_.empty()) {
+                    BoundedReader_ = std::make_unique<TBoundedAsyncResponseReader<TResponse>>(channel, context->CompletionQueue(),
+                        BoundedResponseMethod_, &Context, request, &BoundedDecodeStatus_);
+                    reader = BoundedReader_.get();
+                }
+            }
+            if (!reader) {
+                Reader_ = (stub.*asyncRequest)(&Context, request, context->CompletionQueue());
+                reader = Reader_.get();
+            }
+            reader->Finish(&Reply_, &Status, FinishedEvent());
         }
         context->SubscribeStop([self = TPtr(this)] {
             self->Stop();
@@ -431,6 +470,8 @@ private:
     TResponse Reply_;
     std::mutex Mutex_;
     TAsyncReaderPtr Reader_;
+    // Keep heap-owned adapters separate from gRPC's arena-owned readers.
+    std::unique_ptr<TBoundedAsyncResponseReader<TResponse>> BoundedReader_;
 
     bool Replied_ = false;
 };
@@ -529,9 +570,20 @@ class TStubsHolder : public TNonCopyable {
         }
     };
 public:
-    TStubsHolder(std::shared_ptr<grpc::ChannelInterface> channel)
-        : ChannelInterface_(channel)
+    TStubsHolder(std::shared_ptr<grpc::ChannelInterface> channel, const TGRpcClientConfig& config = {})
+        : ChannelInterface_(std::move(channel))
+        , EnableSsl_(config.EnableSsl || !config.SslCredentials.pem_root_certs.empty())
+        , SslCredentials_(config.SslCredentials)
+        , SslTargetNameOverride_(config.SslTargetNameOverride)
     {}
+
+    bool HasMatchingSecuritySettings(const TGRpcClientConfig& config) const {
+        return EnableSsl_ == (config.EnableSsl || !config.SslCredentials.pem_root_certs.empty()) &&
+            SslCredentials_.pem_root_certs == config.SslCredentials.pem_root_certs &&
+            SslCredentials_.pem_cert_chain == config.SslCredentials.pem_cert_chain &&
+            SslCredentials_.pem_private_key == config.SslCredentials.pem_private_key &&
+            SslTargetNameOverride_ == config.SslTargetNameOverride;
+    }
 
     // Returns true if channel can't be used to perform request now
     bool IsChannelBroken() const {
@@ -562,6 +614,10 @@ public:
         }
     }
 
+    const std::shared_ptr<grpc::ChannelInterface>& GetChannelInterface() const {
+        return ChannelInterface_;
+    }
+
     const TInstant& GetLastUseTime() const {
         return LastUsed_;
     }
@@ -574,6 +630,9 @@ private:
     std::shared_mutex RWMutex_;
     std::unordered_map<TypeInfoRef, std::shared_ptr<void>, THasher, TEqualTo> Stubs_;
     std::shared_ptr<grpc::ChannelInterface> ChannelInterface_;
+    const bool EnableSsl_;
+    const grpc::SslCredentialsOptions SslCredentials_;
+    const std::string SslTargetNameOverride_;
 };
 
 class TChannelPool {
@@ -603,10 +662,11 @@ class TStreamRequestReadProcessor
     : public IStreamRequestReadProcessor<TResponse>
     , public TGRpcRequestProcessorCommon {
     template<typename> friend class TServiceConnection;
+    friend struct TStreamRequestReadProcessorTestAccess;
 public:
     using TSelf = TStreamRequestReadProcessor;
-    using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncReader<TResponse>>;
-    using TAsyncRequest = TAsyncReaderPtr (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*, void*);
+    using TAsyncReaderPtr = std::unique_ptr<grpc::ClientAsyncReaderInterface<TResponse>>;
+    using TAsyncRequest = std::unique_ptr<grpc::ClientAsyncReader<TResponse>> (TStub::*)(grpc::ClientContext*, const TRequest&, grpc::CompletionQueue*, void*);
     using TReaderCallback = TStreamReaderCallback<TResponse>;
     using TPtr = TIntrusivePtr<TSelf>;
     using TBase = IStreamRequestReadProcessor<TResponse>;
@@ -680,7 +740,9 @@ public:
                 }
                 return;
             }
-            if (FinishedOk) {
+            if (!BoundedDecodeStatus_.ok()) {
+                status = BoundedDecodeStatus_;
+            } else if (FinishedOk) {
                 status = Status;
             } else {
                 status = TGrpcStatus::Internal("Unexpected error");
@@ -711,7 +773,9 @@ public:
                 Stream->Finish(&Status, OnFinishedTag.Prepare());
                 return;
             }
-            if (FinishedOk) {
+            if (!BoundedDecodeStatus_.ok()) {
+                status = BoundedDecodeStatus_;
+            } else if (FinishedOk) {
                 status = Status;
             } else {
                 status = TGrpcStatus::Internal("Unexpected error");
@@ -735,7 +799,9 @@ public:
                 return;
             }
 
-            if (FinishedOk) {
+            if (!BoundedDecodeStatus_.ok()) {
+                status = BoundedDecodeStatus_;
+            } else if (FinishedOk) {
                 status = Status;
             } else if (Cancelled) {
                 status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Stream cancelled");
@@ -750,7 +816,8 @@ public:
     }
 
 private:
-    void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider) {
+    void Start(TStub& stub, const TRequest& request, TAsyncRequest asyncRequest, IQueueClientContextProvider* provider,
+        grpc::ChannelInterface* channel) {
         InitCallbackGuard(provider);
         auto context = provider->CreateContext();
         if (!context) {
@@ -765,7 +832,15 @@ private:
         {
             std::unique_lock<std::mutex> guard(Mutex);
             LocalContext = context;
-            Stream = (stub.*asyncRequest)(&Context, request, context->CompletionQueue(), OnStartDoneTag.Prepare());
+            if constexpr (std::is_base_of_v<google::protobuf::Message, TResponse>) {
+                if (!BoundedResponseMethod_.empty()) {
+                    Stream = std::make_unique<TBoundedAsyncReader<TResponse>>(channel, context->CompletionQueue(),
+                        BoundedResponseMethod_, &Context, request, OnStartDoneTag.Prepare(), &BoundedDecodeStatus_);
+                }
+            }
+            if (!Stream) {
+                Stream = (stub.*asyncRequest)(&Context, request, context->CompletionQueue(), OnStartDoneTag.Prepare());
+            }
         }
 
         context->SubscribeStop([self = TPtr(this)] {
@@ -774,6 +849,12 @@ private:
     }
 
     void OnReadDone(bool ok) {
+        if (!BoundedDecodeStatus_.ok()) {
+            // A peer can keep a malformed stream open indefinitely. Cancel the
+            // transport before Finish, retaining the original decoder status.
+            Context.TryCancel();
+            ok = false;
+        }
         TGrpcStatus status;
         TReadCallback callback;
         std::unordered_multimap<std::string, std::string>* initialMetadata = nullptr;
@@ -845,7 +926,9 @@ private:
             FinishedOk = ok;
             LocalContext.reset();
 
-            if (ok) {
+            if (!BoundedDecodeStatus_.ok()) {
+                status = BoundedDecodeStatus_;
+            } else if (ok) {
                 status = Status;
             } else if (Cancelled) {
                 status = TGrpcStatus(grpc::StatusCode::CANCELLED, "Stream cancelled");
@@ -1448,7 +1531,7 @@ public:
     {
         auto processor = MakeIntrusive<TSimpleRequestProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_);
+        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_, Channel_.get());
     }
 
     /*
@@ -1463,7 +1546,7 @@ public:
     {
         auto processor = MakeIntrusive<TAdvancedRequestProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_);
+        processor->Start(*Stub_, asyncRequest, request, provider ? provider : Provider_, Channel_.get());
     }
 
     /*
@@ -1492,13 +1575,14 @@ public:
     {
         auto processor = MakeIntrusive<TStreamRequestReadProcessor<TStub, TRequest, TResponse>>(std::move(callback));
         processor->ApplyMeta(metas);
-        processor->Start(*Stub_, request, std::move(asyncRequest), provider ? provider : Provider_);
+        processor->Start(*Stub_, request, std::move(asyncRequest), provider ? provider : Provider_, Channel_.get());
     }
 
 private:
     TServiceConnection(std::shared_ptr<grpc::ChannelInterface> ci,
                        IQueueClientContextProvider* provider)
-        : Stub_(TGRpcService::NewStub(ci))
+        : Channel_(ci)
+        , Stub_(TGRpcService::NewStub(ci))
         , Provider_(provider)
     {
         Y_ABORT_UNLESS(Provider_, "Connection does not have a queue provider");
@@ -1506,12 +1590,14 @@ private:
 
     TServiceConnection(TStubsHolder& holder,
                        IQueueClientContextProvider* provider)
-        : Stub_(holder.GetOrCreateStub<TStub>())
+        : Channel_(holder.GetChannelInterface())
+        , Stub_(holder.GetOrCreateStub<TStub>())
         , Provider_(provider)
     {
         Y_ABORT_UNLESS(Provider_, "Connection does not have a queue provider");
     }
 
+    std::shared_ptr<grpc::ChannelInterface> Channel_;
     std::shared_ptr<TStub> Stub_;
     IQueueClientContextProvider* Provider_;
 };

@@ -44,6 +44,7 @@ public:
     virtual TDuration GetSocketIdleTimeout() const = 0;
     virtual const TLog& GetLog() const = 0;
     virtual uint64_t GetMemoryQuota() const = 0;
+    virtual bool GetBoundedResponseTransport() const { return false; }
     virtual uint64_t GetMaxInboundMessageSize() const = 0;
     virtual uint64_t GetMaxOutboundMessageSize() const = 0;
     virtual uint64_t GetMaxMessageSize() const = 0;

@@ -1585,7 +1585,12 @@ using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {};
+struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {
+    //! If false, the caller must close the standalone session explicitly.
+    FLUENT_SETTING_DEFAULT(bool, AutoCloseSession, true);
+    //! Limits response wire size to 256 KiB and validates protobuf complexity before parsing.
+    FLUENT_SETTING_DEFAULT(bool, BoundedResponse, false);
+};
 
 using TBackoffSettings = NYdb::NRetry::TBackoffSettings;
 using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
@@ -2316,6 +2321,8 @@ struct TCopyTablesSettings : public TOperationRequestSettings<TCopyTablesSetting
 struct TRenameTablesSettings : public TOperationRequestSettings<TRenameTablesSettings> {};
 
 struct TDescribeTableSettings : public TOperationRequestSettings<TDescribeTableSettings> {
+    //! Limits response wire size to 256 KiB and validates protobuf complexity before parsing.
+    FLUENT_SETTING_DEFAULT(bool, BoundedResponse, false);
     FLUENT_SETTING_DEFAULT(bool, WithKeyShardBoundary, false);
     FLUENT_SETTING_DEFAULT(bool, WithTableStatistics, false);
     FLUENT_SETTING_DEFAULT(bool, WithPartitionStatistics, false);
@@ -2351,7 +2358,10 @@ struct TCommitTxSettings : public TOperationRequestSettings<TCommitTxSettings> {
 
 struct TRollbackTxSettings : public TOperationRequestSettings<TRollbackTxSettings> {};
 
-struct TCloseSessionSettings : public TOperationRequestSettings<TCloseSessionSettings> {};
+struct TCloseSessionSettings : public TOperationRequestSettings<TCloseSessionSettings> {
+    //! Uses the same bounded metadata decoder as CreateSession and DescribeTable.
+    FLUENT_SETTING_DEFAULT(bool, BoundedResponse, false);
+};
 
 struct TKeepAliveSettings : public TOperationRequestSettings<TKeepAliveSettings> {};
 

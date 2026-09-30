@@ -26,6 +26,7 @@ struct TGRpcClientConfig {
     grpc::SslCredentialsOptions SslCredentials;
     grpc_compression_algorithm CompressionAlgorithm = GRPC_COMPRESS_NONE;
     ui64 MemQuota = 0;
+    bool BoundedResponseTransport = false;
     std::unordered_map<std::string, std::string> StringChannelParams;
     std::unordered_map<std::string, int> IntChannelParams;
     std::string LoadBalancingPolicy = { };
@@ -64,12 +65,38 @@ inline std::shared_ptr<grpc::ChannelInterface> CreateChannelInterface(const TGRp
     args.SetCompressionAlgorithm(config.CompressionAlgorithm);
     args.SetUserAgentPrefix(NYdb::TStringType{config.UserAgentPrefix});
 
+    // ChannelArguments appends duplicate keys, and gRPC keeps the first value.
+    // Omit protected overrides before installing the bounded transport settings.
+    const auto isBoundedParameter = [&](const std::string& name) {
+        return config.BoundedResponseTransport &&
+            (name == GRPC_ARG_HTTP2_BDP_PROBE ||
+             name == GRPC_ARG_HTTP2_STREAM_LOOKAHEAD_BYTES ||
+             name == GRPC_ARG_MAX_METADATA_SIZE ||
+             name == GRPC_ARG_ABSOLUTE_MAX_METADATA_SIZE ||
+             name == GRPC_COMPRESSION_CHANNEL_ENABLED_ALGORITHMS_BITSET ||
+             name == GRPC_ARG_ENABLE_PER_MESSAGE_DECOMPRESSION);
+    };
     for (const auto& kvp: config.StringChannelParams) {
-        args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});
+        if (!isBoundedParameter(kvp.first)) {
+            args.SetString(NYdb::TStringType{kvp.first}, NYdb::TStringType{kvp.second});
+        }
     }
 
     for (const auto& kvp: config.IntChannelParams) {
-        args.SetInt(NYdb::TStringType{kvp.first}, kvp.second);
+        if (!isBoundedParameter(kvp.first)) {
+            args.SetInt(NYdb::TStringType{kvp.first}, kvp.second);
+        }
+    }
+
+    if (config.BoundedResponseTransport) {
+        args.SetInt(GRPC_ARG_HTTP2_BDP_PROBE, 0);
+        args.SetInt(GRPC_ARG_HTTP2_STREAM_LOOKAHEAD_BYTES, 64 * 1024);
+        args.SetInt(GRPC_ARG_MAX_METADATA_SIZE, 16 * 1024);
+        args.SetInt(GRPC_ARG_ABSOLUTE_MAX_METADATA_SIZE, 16 * 1024);
+        // The receive-size check precedes decompression in gRPC. Reject every
+        // compressed encoding and prevent expansion before protobuf preflight.
+        args.SetInt(GRPC_COMPRESSION_CHANNEL_ENABLED_ALGORITHMS_BITSET, 1 << GRPC_COMPRESS_NONE);
+        args.SetInt(GRPC_ARG_ENABLE_PER_MESSAGE_DECOMPRESSION, 0);
     }
 
     if (config.MemQuota) {

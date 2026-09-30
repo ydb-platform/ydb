@@ -3,6 +3,7 @@
 #include "fwd.h"
 
 #include "fluent_settings_helpers.h"
+#include "request_control.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/time/time.h>
 
@@ -11,6 +12,7 @@
 #include <vector>
 #include <utility>
 #include <string>
+#include <memory>
 
 namespace NYdb::inline Dev {
 
@@ -27,6 +29,13 @@ struct TRequestSettings {
     FLUENT_SETTING(THeader, Header);
     FLUENT_SETTING(std::string, TraceParent);
 
+    //! Transport cancellation, independent of driver shutdown. See TRequestControl
+    //! for supported operations and the GetSession pool-wait restriction.
+    FLUENT_SETTING(std::shared_ptr<TRequestControl>, RequestControl);
+    //! Retained through transport and callback destruction. Drop all caller-owned
+    //! copies to observe quiescence through the lifetime object's destructor.
+    FLUENT_SETTING(std::shared_ptr<void>, RequestLifetime);
+
     TRequestSettings() = default;
 
     template <typename T>
@@ -37,6 +46,8 @@ struct TRequestSettings {
         , RequestType_(other.RequestType_)
         , Header_(other.Header_)
         , TraceParent_(other.TraceParent_)
+        , RequestControl_(other.RequestControl_)
+        , RequestLifetime_(other.RequestLifetime_)
     {}
 };
 

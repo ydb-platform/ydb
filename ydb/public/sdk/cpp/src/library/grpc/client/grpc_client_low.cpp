@@ -123,6 +123,8 @@ grpc_socket_mutator_vtable TGRpcSocketMutator::VTable =
 #endif
 
 void TGRpcRequestProcessorCommon::ApplyMeta(const TCallMeta& meta) {
+    RequestLifetime_ = meta.RequestLifetime;
+    BoundedResponseMethod_ = meta.BoundedResponseMethod;
     for (const auto& rec : meta.Aux) {
         Context.AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
     }
@@ -161,7 +163,8 @@ void TChannelPool::GetStubsHolderLocked(
         std::shared_lock readGuard(RWMutex_);
         const auto it = Pool_.find(channelId);
         if (it != Pool_.end()) {
-            if (!it->second.IsChannelBroken() && !(Now() > it->second.GetLastUseTime() + UpdateReUseTime_)) {
+            if (it->second.HasMatchingSecuritySettings(config) && !it->second.IsChannelBroken() &&
+                !(Now() > it->second.GetLastUseTime() + UpdateReUseTime_)) {
                 return cb(it->second);
             }
         }
@@ -171,14 +174,15 @@ void TChannelPool::GetStubsHolderLocked(
         {
             auto it = Pool_.find(channelId);
             if (it != Pool_.end()) {
-                if (!it->second.IsChannelBroken()) {
+                if (it->second.HasMatchingSecuritySettings(config) && !it->second.IsChannelBroken()) {
                     EraseFromQueueByTime(it->second.GetLastUseTime(), channelId);
                     auto now = Now();
                     LastUsedQueue_.emplace(now, channelId);
                     it->second.SetLastUseTime(now);
                     return cb(it->second);
                 } else {
-                    // This channel can't be used. Remove from pool to create new one
+                    // A broken channel or changed TLS identity needs a new entry.
+                    // Existing requests retain ownership of the previous channel.
                     EraseFromQueueByTime(it->second.GetLastUseTime(), channelId);
                     Pool_.erase(it);
                 }
@@ -186,7 +190,7 @@ void TChannelPool::GetStubsHolderLocked(
         }
         auto mutator = NImpl::CreateGRpcSocketMutator(TcpKeepAliveSettings_, TcpNoDelay_);
         // will be destroyed inside grpc
-        cb(Pool_.emplace(channelId, CreateChannelInterface(config, mutator)).first->second);
+        cb(Pool_.try_emplace(channelId, CreateChannelInterface(config, mutator), config).first->second);
         LastUsedQueue_.emplace(Pool_.at(channelId).GetLastUseTime(), channelId);
     }
 }

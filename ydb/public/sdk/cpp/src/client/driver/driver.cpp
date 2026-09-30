@@ -51,6 +51,7 @@ public:
     EGrpcCompressionAlgorithm GetGRpcCompressionAlgorithm() const override { return GRpcCompressionAlgorithm; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     uint64_t GetMemoryQuota() const override { return MemoryQuota; }
+    bool GetBoundedResponseTransport() const override { return BoundedResponseTransport; }
     uint64_t GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
     uint64_t GetMaxOutboundMessageSize() const override { return MaxOutboundMessageSize; }
     uint64_t GetMaxMessageSize() const override { return MaxMessageSize; }
@@ -86,6 +87,7 @@ public:
     EGrpcCompressionAlgorithm GRpcCompressionAlgorithm = EGrpcCompressionAlgorithm::None;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     uint64_t MemoryQuota = 0;
+    bool BoundedResponseTransport = false;
     uint64_t MaxInboundMessageSize = 0;
     uint64_t MaxOutboundMessageSize = 0;
     uint64_t MaxMessageSize = 0;
@@ -230,6 +232,11 @@ TDriverConfig& TDriverConfig::SetGRpcCompressionAlgorithm(EGrpcCompressionAlgori
 
 TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     Impl_->SocketIdleTimeout = timeout;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetBoundedResponseTransport(bool enabled) {
+    Impl_->BoundedResponseTransport = enabled;
     return *this;
 }
 
@@ -403,6 +410,7 @@ TDriverConfig TDriver::GetConfig() const {
     config.SetGRpcCompressionAlgorithm(Impl_->GRpcCompressionAlgorithm_);
     config.SetSocketIdleTimeout(std::chrono::duration_cast<std::chrono::microseconds>(Impl_->SocketIdleTimeout_));
     config.SetMaxInboundMessageSize(Impl_->MaxInboundMessageSize_);
+    config.SetBoundedResponseTransport(Impl_->BoundedResponseTransport_);
     config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);
     config.SetMaxMessageSize(Impl_->MaxMessageSize_);
     config.Impl_->Log = Impl_->Log;

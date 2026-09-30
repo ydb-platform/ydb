@@ -63,6 +63,7 @@ public:
         ui32 counter, bool needUpdateActiveSessionCounter);
 
 private:
+    bool AutoCloseSession_ = true;
     bool UseQueryCache_;
     TLRUCache<std::string, TDataQueryInfo> QueryCache_;
 };

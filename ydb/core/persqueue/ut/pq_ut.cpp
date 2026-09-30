@@ -2128,8 +2128,12 @@ void CheckPersistedMixedHeadCompaction(bool enableAfterFirstWrite, bool multipar
     CompactOrdinaryMessages(tc);
     PQGetPartInfo(100, 102, tc);
     const auto mergedKey = FindOrdinaryHeadKey(tc, 100, 2);
-    // Mixed head keys: Compact clears OffsetDelta (cannot sum Count as delta).
-    UNIT_ASSERT(!mergedKey.HasOffsetDelta());
+    // Compaction writes the merged key in the current format, preserving the packed batch headers.
+    UNIT_ASSERT_VALUES_EQUAL(mergedKey.HasOffsetDelta(), enableAfterFirstWrite);
+    if (enableAfterFirstWrite) {
+        // offset=100, endOffset=102, offsetDelta=2, including a multipart message's tail.
+        UNIT_ASSERT_VALUES_EQUAL(*mergedKey.GetOffsetDelta(), 2);
+    }
     UNIT_ASSERT_VALUES_EQUAL(mergedKey.GetPartNo(), firstKey.GetPartNo());
     const TString mergedBlob = ReadOrdinaryStoredBlob(tc, mergedKey);
     // This is the path that copies packed head batches without rewriting them.
@@ -4730,7 +4734,9 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
 
 Y_UNIT_TEST(PQ_Tablet_Removes_Blobs_Asynchronously)
 {
-    const TString firstMessageKey = "d0000000000_00000000000000000000_00000_0000000001_00000|";
+    // type=Data, partition=0, offset=0, partNo=0, count=1
+    // internalPartsCount=0, offsetDelta=1, suffix='|' (head)
+    const TString firstMessageKey = "d0000000000_00000000000000000000_00000_0000000001_00000_0000000001|";
 
     TTestContext tc;
     TFinalizer finalizer(tc);
@@ -4929,10 +4935,18 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
 
     Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
 
-    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
-    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
-    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
-    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+    // type=Data, partition=0, offset=1, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=2, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=3, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=4, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014_0000000001"));
 
     // We are reading from topic 2 messages from offset 2
     TPQCmdSettings sessionSettings{0, user, sessionId};
@@ -4976,10 +4990,18 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
 
     // We make sure that the blobs with messages on offsets 2 and 3 have not been deleted
-    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014"));
-    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
-    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
-    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+    // type=Data, partition=0, offset=1, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000001_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=2, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=3, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=4, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014_0000000001"));
 
     tc.Runtime->Send(blobResponseEvent);
 
@@ -4994,9 +5016,15 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     Cerr << "keys: " << JoinRange(", ", keys.begin(), keys.end()) << Endl;
 
     // Making sure that the blobs for messages with offsets 2 and 3 are removed
-    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014"));
-    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014"));
-    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014"));
+    // type=Data, partition=0, offset=2, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000002_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=3, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000003_00000_0000000001_00014_0000000001"));
+    // type=Data, partition=0, offset=4, partNo=0, count=1
+    // internalPartsCount=14, offsetDelta=1, suffix=none (body)
+    UNIT_ASSERT(!keys.contains("d0000000000_00000000000000000004_00000_0000000001_00014_0000000001"));
 }
 
 Y_UNIT_TEST(IncompleteProxyResponse) {
@@ -5133,17 +5161,26 @@ Y_UNIT_TEST(Large_Message_On_The_Border_Of_The_Zones) {
         PQGetPartInfo(3, 6, tc);
 
         // эмулируем, что CompactedZone.Head пустая
-        CmdRenameKey("d0000000000_00000000000000000004_00004_0000000002_00006|",
-                     "d0000000000_00000000000000000004_00004_0000000002_00006?",
-                     tc);
+        CmdRenameKey(
+            // type=Data, partition=0, offset=4, partNo=4, count=2
+            // internalPartsCount=6, offsetDelta=2, suffix='|' (head)
+            "d0000000000_00000000000000000004_00004_0000000002_00006_0000000002|",
+            // type=Data, partition=0, offset=4, partNo=4, count=2
+            // internalPartsCount=6, offsetDelta=2, suffix='?' (fast write)
+            "d0000000000_00000000000000000004_00004_0000000002_00006_0000000002?",
+            tc);
 
         PQTabletRestart(tc);
         PQGetPartInfo(3, 6, tc);
 
         //
         // остались ключи:
-        // d0000000000_00000000000000000002_00002_0000000002_00014
-        // d0000000000_00000000000000000004_00004_0000000002_00006?
+        // type=Data, partition=0, offset=2, partNo=2, count=2
+        // internalPartsCount=14, offsetDelta=3, suffix=none (body)
+        // d0000000000_00000000000000000002_00002_0000000002_00014_0000000003
+        // type=Data, partition=0, offset=4, partNo=4, count=2
+        // internalPartsCount=6, offsetDelta=2, suffix='?' (fast write)
+        // d0000000000_00000000000000000004_00004_0000000002_00006_0000000002?
         //
 
         // проверям, что можем перейти на любое из оставшихся сообщений
@@ -5196,17 +5233,26 @@ Y_UNIT_TEST(Large_Message_On_The_Border_Of_The_Zones_2) {
 
         // Эмулируем, что CompactedZone.Head пустая. В отличие от предыдущего теста
         // здесь нет сообщений в FWZ. Только "хвост" последнего сообщения из CZ
-        CmdRenameKey("d0000000000_00000000000000000004_00004_0000000001_00001|",
-                     "d0000000000_00000000000000000004_00004_0000000001_00001?",
-                     tc);
+        CmdRenameKey(
+            // type=Data, partition=0, offset=4, partNo=4, count=1
+            // internalPartsCount=1, offsetDelta=1, suffix='|' (head)
+            "d0000000000_00000000000000000004_00004_0000000001_00001_0000000001|",
+            // type=Data, partition=0, offset=4, partNo=4, count=1
+            // internalPartsCount=1, offsetDelta=1, suffix='?' (fast write)
+            "d0000000000_00000000000000000004_00004_0000000001_00001_0000000001?",
+            tc);
 
         PQTabletRestart(tc);
         PQGetPartInfo(3, 5, tc);
 
         //
         // остались ключи:
-        // d0000000000_00000000000000000002_00002_0000000002_00014
-        // d0000000000_00000000000000000004_00004_0000000001_00001?
+        // type=Data, partition=0, offset=2, partNo=2, count=2
+        // internalPartsCount=14, offsetDelta=3, suffix=none (body)
+        // d0000000000_00000000000000000002_00002_0000000002_00014_0000000003
+        // type=Data, partition=0, offset=4, partNo=4, count=1
+        // internalPartsCount=1, offsetDelta=1, suffix='?' (fast write)
+        // d0000000000_00000000000000000004_00004_0000000001_00001_0000000001?
         //
 
         // проверям, что можем перейти на любое из оставшихся сообщений

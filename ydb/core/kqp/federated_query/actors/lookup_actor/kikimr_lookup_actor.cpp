@@ -167,8 +167,10 @@ namespace {
             TResponse Response;
         };
 
-        template <typename TResponse, typename TEvState, enum EEventIds EvId>
-        struct TEvStreamResponse: NActors::TEventLocal<TEvStreamResponse<TResponse, TEvState, EvId>, EvId> {
+        template <typename TResponse_, typename TEvState_, enum EEventIds EvId>
+        struct TEvStreamResponse: NActors::TEventLocal<TEvStreamResponse<TResponse_, TEvState_, EvId>, EvId> {
+            using TEvState = TEvState_;
+            using TResponse = TResponse_;
             explicit TEvStreamResponse(TResponse response, TEvState state)
                 : State(std::move(state))
                 , Response(std::move(response))
@@ -493,7 +495,7 @@ namespace {
             using TResponse = Ydb::Query::ExecuteQueryResponsePart;
             using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
             state->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(FillQuery(state), LookupSource.GetDatabase(), Token, ActorContext(), false, ChannelBufferSize);
-            ReadNextResponsePart(state);
+            ReadNext<TEvQueryExecuteQueryResponsePart>(state);
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
             if (CpuTime) {
                 CpuTime->Add(cputime);
@@ -501,21 +503,6 @@ namespace {
             YDB_LOG_TRACE("SendRequest finished",
                     COMMON_LOG,
                     {"cpuTime", cputime});
-        }
-
-        void ReadNextResponsePart(TLookupState::TPtr state) {
-            auto actorSystem = TActivationContext::ActorSystem();
-            auto selfId = SelfId();
-            Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
-            state->StreamProcessor->Read([actorSystem, selfId, weakState = std::weak_ptr(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
-                auto state = weakState.lock();
-                if (!state) {
-                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakState is dead",
-                            {"actorId", selfId});
-                    return;
-                }
-                actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
-            });
         }
 
         void Handle(TEvQueryExecuteQueryResponsePart::TPtr ev) {
@@ -549,7 +536,7 @@ namespace {
             }
             ProcessReceivedData(response, state);
             if (state->StreamProcessor->HasData()) {
-                ReadNextResponsePart(std::move(state));
+                ReadNext<TEvQueryExecuteQueryResponsePart>(std::move(state));
             } else {
                 FinalizeRequest(std::move(state));
             }
@@ -565,21 +552,23 @@ namespace {
             if (ActiveSessions) {
                 ActiveSessions->Inc();
             }
-            ReadNextSessionState(std::move(session));
+            ReadNext<TEvQuerySessionState>(std::move(session));
         }
 
-        void ReadNextSessionState(TSessionState::TPtr session) {
+        template <typename TEvStream>
+        void ReadNext(typename TEvStream::TEvState state) {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
-            Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
-            session->StreamProcessor->Read([actorSystem, selfId, weakSession = std::weak_ptr(session)](Ydb::Query::SessionState&& response) {
-                auto session = weakSession.lock();
-                if (!session) {
-                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakSession is dead",
+            Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
+            state->StreamProcessor->Read([actorSystem, selfId, weakState = std::weak_ptr(state)](typename TEvStream::TResponse&& response) {
+                auto state = weakState.lock();
+                if (!state) {
+                    // state must be owned by actor and remain alive while actor is alive
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakState is dead",
                             {"actorId", selfId});
                     return;
                 }
-                actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
+                actorSystem->Send(selfId, new TEvStream(std::move(response), std::move(state)));
             });
         }
 
@@ -633,7 +622,7 @@ namespace {
                     return;
             }
             if (session->StreamProcessor->HasData()) {
-                ReadNextSessionState(std::move(session));
+                ReadNext<TEvQuerySessionState>(std::move(session));
             } else {
                 FinalizeSession(std::move(session));
             }

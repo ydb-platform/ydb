@@ -635,7 +635,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
     }
 
     Y_UNIT_TEST(RebuildNonVectorIndex) {
-        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // REBUILD INDEX is only supported for vector indexes; rebuilding a
         // plain secondary index must be rejected on the schemeshard side too.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -690,7 +690,7 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
             "rebuild of a non-vector index must fail");
         UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()),
-            "only supported for vector_kmeans_tree");
+            "only supported for vector indexes");
     }
 
     Y_UNIT_TEST(VectorIndexAutodetect) {

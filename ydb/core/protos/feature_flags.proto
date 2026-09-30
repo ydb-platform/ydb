@@ -427,4 +427,5 @@ message TFeatureFlags {
     optional bool EnableAnalyzeSampling = 348 [default = true];
     // Applies to new processes; existing processes keep their scheduling mode.
     optional bool EnableCompositeConveyorScheduling = 349 [default = false];
+    optional bool EnableCsIndexReadMemoryTracking = 350 [default = false];
 }

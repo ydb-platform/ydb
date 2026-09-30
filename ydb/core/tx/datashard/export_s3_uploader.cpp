@@ -1047,6 +1047,7 @@ private:
     bool ForceNewUpload = false;
     TVector<TString> Parts;
     TMaybe<TString> Error;
+    TString CurrentObjectKey;
 
     bool EnableChecksums;
     bool EnablePermissions;

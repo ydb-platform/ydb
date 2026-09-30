@@ -281,6 +281,7 @@ struct TCmsConfig {
     TDuration DefaultPermissionDuration;
     TDuration DefaultWalleCleanupPeriod = TDuration::Minutes(1);
     TDuration InfoCollectionTimeout;
+    TDuration Nbs2MaintenanceCheckTimeout;
     NKikimrCms::TLimits TenantLimits;
     NKikimrCms::TLimits ClusterLimits;
     TCmsSentinelConfig SentinelConfig;
@@ -299,6 +300,7 @@ struct TCmsConfig {
         config.SetDefaultRetryTime(DefaultRetryTime.GetValue());
         config.SetDefaultPermissionDuration(DefaultPermissionDuration.GetValue());
         config.SetInfoCollectionTimeout(InfoCollectionTimeout.GetValue());
+        config.SetNbs2MaintenanceCheckTimeout(Nbs2MaintenanceCheckTimeout.GetValue());
         config.MutableTenantLimits()->CopyFrom(TenantLimits);
         config.MutableClusterLimits()->CopyFrom(ClusterLimits);
         SentinelConfig.Serialize(*config.MutableSentinelConfig());
@@ -310,6 +312,7 @@ struct TCmsConfig {
         DefaultRetryTime = TDuration::MicroSeconds(config.GetDefaultRetryTime());
         DefaultPermissionDuration = TDuration::MicroSeconds(config.GetDefaultPermissionDuration());
         InfoCollectionTimeout = TDuration::MicroSeconds(config.GetInfoCollectionTimeout());
+        Nbs2MaintenanceCheckTimeout = TDuration::MicroSeconds(config.GetNbs2MaintenanceCheckTimeout());
         TenantLimits.CopyFrom(config.GetTenantLimits());
         ClusterLimits.CopyFrom(config.GetClusterLimits());
         SentinelConfig.Deserialize(config.GetSentinelConfig());

@@ -525,6 +525,7 @@ message TCmsConfig {
     optional TLogConfig LogConfig = 7;
     optional TSentinelConfig SentinelConfig = 8;
     optional bool DisableMaintenance = 9;
+    optional uint64 Nbs2MaintenanceCheckTimeout = 10 [default = 15000000];
 }
 
 message TPDiskID {

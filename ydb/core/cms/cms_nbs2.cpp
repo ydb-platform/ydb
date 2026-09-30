@@ -139,7 +139,7 @@ void TCms::StartNbs2MaintenanceCheck(TAutoPtr<IEventHandle> request,
     }
     pending->Continue = std::move(continuation);
     pending->Checker = RegisterWithSameMailbox(CreateNbs2MaintenanceChecker(
-        SelfId(), pending->AttemptId, pending->NodeIds, State->Config.InfoCollectionTimeout));
+        SelfId(), pending->AttemptId, pending->NodeIds, State->Config.Nbs2MaintenanceCheckTimeout));
     PendingNbs2MaintenanceCheck = std::move(pending);
 }
 

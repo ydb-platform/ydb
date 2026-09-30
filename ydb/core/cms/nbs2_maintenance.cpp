@@ -35,11 +35,6 @@ public:
     }
 
     void Bootstrap() {
-        if (Timeout == TDuration::Zero() || Timeout == TDuration::Max()) {
-            ReplyAndDie(TStatus::ERROR_TEMP, "Invalid DBSController request timeout");
-            return;
-        }
-
         Become(&TThis::StateWork);
         Schedule(Timeout, new TEvents::TEvWakeup());
 

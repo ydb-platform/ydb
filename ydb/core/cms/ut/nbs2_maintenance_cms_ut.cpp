@@ -66,6 +66,7 @@ public:
                 const bool drop = PreviousScheduledFilter(runtime, ev, delay, deadline);
                 if (!drop && ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
                     WakeupDeadlines[ev->GetRecipientRewrite()] = deadline;
+                    WakeupTimeouts[ev->GetRecipientRewrite()] = delay;
                 }
                 return drop;
             });
@@ -142,7 +143,7 @@ public:
         UNIT_ASSERT_C(!HasResponse(client), "CMS must wait for DBSC before replying");
         const auto& request = State.Requests.back();
         UNIT_ASSERT_VALUES_EQUAL(State.Clients.size(), count);
-        UNIT_ASSERT_C(WakeupDeadlines.contains(request->Sender), "Checker must have a finite timeout");
+        UNIT_ASSERT_C(WakeupDeadlines.contains(request->Sender), "Checker must schedule a timeout");
         return {request->Cookie, request->Sender, State.Clients.back(), WakeupDeadlines.at(request->Sender)};
     }
 
@@ -264,6 +265,7 @@ public:
     TControllerState State;
     THashMap<TActorId, TVector<TAutoPtr<IEventHandle>>> Responses;
     THashMap<TActorId, TInstant> WakeupDeadlines;
+    THashMap<TActorId, TDuration> WakeupTimeouts;
     TCmsTestEnv Env;
     TActorId Cms;
     TActorId Controller;
@@ -279,6 +281,51 @@ private:
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
+    Y_UNIT_TEST(MaintenanceCheckTimeout) {
+        TCmsFixture fixture;
+        auto config = fixture.Config();
+        config.SetInfoCollectionTimeout(TDuration::Seconds(1).MicroSeconds());
+        config.ClearNbs2MaintenanceCheckTimeout();
+        fixture.Env.SetCmsConfig(config);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Config().GetNbs2MaintenanceCheckTimeout(),
+            TDuration::Seconds(15).MicroSeconds());
+
+        const auto first = fixture.Request(0);
+        const auto firstAttempt = fixture.WaitForCheck(1, first);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.WakeupTimeouts.at(firstAttempt.Checker), TDuration::Seconds(15));
+
+        // Config changes affect the next check, not an already running timer.
+        config.SetInfoCollectionTimeout(TDuration::Max().MicroSeconds());
+        config.SetNbs2MaintenanceCheckTimeout(TDuration::Seconds(3).MicroSeconds());
+        fixture.Env.SetCmsConfig(config);
+        const auto second = fixture.Request(1);
+        fixture.AdvanceTo(firstAttempt.Deadline - TDuration::Seconds(1));
+        UNIT_ASSERT(!fixture.HasResponse(first));
+        UNIT_ASSERT(!fixture.HasResponse(second));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 1);
+
+        fixture.Complete(firstAttempt, EOutcome::Allow);
+        fixture.Response<TEvCms::TEvPermissionResponse>(first, TStatus::ALLOW);
+        fixture.Permissions(1);
+
+        const auto secondAttempt = fixture.WaitForCheck(2, second);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.WakeupTimeouts.at(secondAttempt.Checker), TDuration::Seconds(3));
+        fixture.AdvanceTo(secondAttempt.Deadline - TDuration::Seconds(1));
+        UNIT_ASSERT(!fixture.HasResponse(second));
+        fixture.Complete(secondAttempt, EOutcome::Timeout);
+        const auto timedOut = fixture.Response<TEvCms::TEvPermissionResponse>(second, TStatus::ERROR_TEMP);
+        UNIT_ASSERT_C(timedOut.GetStatus().GetReason().Contains("DBSController maintenance check timed out"),
+            timedOut.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(timedOut.PermissionsSize(), 0);
+        fixture.Permissions(1);
+
+        const auto next = fixture.Request(2);
+        const auto nextAttempt = fixture.WaitForCheck(3, next);
+        fixture.Complete(nextAttempt, EOutcome::Allow);
+        fixture.Response<TEvCms::TEvPermissionResponse>(next, TStatus::ALLOW);
+        fixture.Permissions(2);
+    }
+
     Y_UNIT_TEST(QueueAndCompletion) {
         for (const auto outcome : {EOutcome::Allow, EOutcome::Deny, EOutcome::Timeout}) {
             TCmsFixture fixture;

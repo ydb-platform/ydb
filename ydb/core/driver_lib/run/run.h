@@ -40,6 +40,21 @@ struct TGRpcServersWrapper {
     }
 };
 
+// Factories for tablet services supplied by the full YDB runner.
+// Storage servers use their own local tablets and leave these factories empty.
+struct TServiceInitializerFactories {
+    using TFactory = IServiceInitializer* (*)(const TKikimrRunConfig&);
+
+    TFactory LocalService = nullptr;
+    TFactory BlobCache = nullptr;
+    TFactory CompPriorities = nullptr;
+    TFactory CompositeConveyor = nullptr;
+    TFactory GeneralCachePortionsMetadata = nullptr;
+    TFactory GeneralCacheColumnData = nullptr;
+    TFactory OverloadManager = nullptr;
+    TFactory FlowControlManager = nullptr;
+};
+
 class TKikimrRunner : public virtual TThrRefBase, private IGlobalObjectStorage {
 protected:
     static TProgramShouldContinue KikimrShouldContinue;
@@ -131,6 +146,11 @@ protected:
     TIntrusivePtr<TServiceInitializersList> CreateServiceInitializersList(
         const TKikimrRunConfig& runConfig,
         const TBasicKikimrServicesMask& serviceMask = {});
+
+    TIntrusivePtr<TServiceInitializersList> CreateServiceInitializersList(
+        const TKikimrRunConfig& runConfig,
+        const TBasicKikimrServicesMask& serviceMask,
+        const TServiceInitializerFactories& tabletServices);
 
 private:
     void AddGlobalObject(std::shared_ptr<void> object) override;

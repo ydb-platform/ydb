@@ -10889,6 +10889,117 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.WaitFor("TEvShrinkStoragePoolDone after registrar reconnect replayed CutTabletHistory", [&] { return done; });
     }
 
+    Y_UNIT_TEST(TestManualMoveData) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, true, 3);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        runtime.EnableScheduleForActor(hiveActor);
+        const TActorId sender = runtime.AllocateEdgeActor(0);
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500, TTabletTypes::Dummy, {3, GetChannelBind("def1")}));
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        auto getChannelHistory = [&](ui32 channel) {
+            runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo({
+                .TabletId = tabletId,
+                .ReturnChannelHistory = true,
+            }));
+            TAutoPtr<IEventHandle> handle;
+            auto* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+            return response->Record.GetTablets(0).GetTabletChannels(channel).GetHistory();
+        };
+
+        const ui32 oldGroup = getChannelHistory(0).Get(0).GetGroup();
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvBootTablet);
+            SendReassignTablet(runtime, hiveTablet, tabletId, TVector<ui32>{0});
+            runtime.DispatchEvents(options);
+        }
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(getChannelHistory(0).size(), 2);
+
+        auto sendMoveData = [&](const TString& method, const TVector<std::pair<TString, TString>>& params) {
+            NActorsProto::TRemoteHttpInfo pb;
+            pb.SetMethod(method == "POST" ? HTTP_METHOD_POST : HTTP_METHOD_GET);
+            pb.SetPath("/app");
+            auto* p1 = pb.AddQueryParams();
+            p1->SetKey("TabletID");
+            p1->SetValue(TStringBuilder() << hiveTablet);
+            auto* p2 = pb.AddQueryParams();
+            p2->SetKey("page");
+            p2->SetValue("MoveData");
+            for (const auto& [key, value] : params) {
+                auto* p = pb.AddQueryParams();
+                p->SetKey(key);
+                p->SetValue(value);
+            }
+            runtime.SendToPipe(hiveTablet, sender, new NMon::TEvRemoteHttpInfo(std::move(pb)), 0, GetPipeConfigWithRetries());
+        };
+        auto getBinaryAnswer = [&] {
+            TAutoPtr<IEventHandle> handle;
+            auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteBinaryInfoRes>(handle);
+            auto lines = SplitString(resp->Blob, "\r\n");
+            NJson::TJsonValue value;
+            ReadJsonTree(lines.back(), &value, false);
+            return std::make_pair(lines.front(), value);
+        };
+
+        {
+            sendMoveData("POST", {});
+            auto [status, value] = getBinaryAnswer();
+            UNIT_ASSERT_STRING_CONTAINS(status, "400");
+            UNIT_ASSERT_VALUES_EQUAL(value["error"].GetStringSafe(), "must specify group");
+        }
+        {
+            sendMoveData("GET", {{"group", ToString(oldGroup)}});
+            auto [status, value] = getBinaryAnswer();
+            UNIT_ASSERT_STRING_CONTAINS(status, "400");
+        }
+        {
+            sendMoveData("GET", {{"group", ToString(oldGroup)}, {"dryRun", "1"}});
+            auto [status, value] = getBinaryAnswer();
+            UNIT_ASSERT_STRING_CONTAINS(status, "200");
+            UNIT_ASSERT_VALUES_EQUAL(value["tablets"].GetUIntegerSafe(), 1);
+        }
+        {
+            sendMoveData("GET", {{"group", ToString(oldGroup)}, {"storagePool", "def2"}, {"dryRun", "1"}});
+            auto [status, value] = getBinaryAnswer();
+            UNIT_ASSERT_VALUES_EQUAL(value["tablets"].GetUIntegerSafe(), 0);
+        }
+        {
+            // the group only present as the current one does not need moving data
+            const ui32 currentGroup = getChannelHistory(0).Get(1).GetGroup();
+            if (currentGroup != oldGroup) {
+                sendMoveData("GET", {{"group", ToString(currentGroup)}, {"dryRun", "1"}});
+                auto [status, value] = getBinaryAnswer();
+                UNIT_ASSERT_VALUES_EQUAL(value["tablets"].GetUIntegerSafe(), 0);
+            }
+        }
+
+        std::vector<ui32> moveDataGroups;
+        auto observer = runtime.AddObserver<TEvTablet::TEvMoveData>([&](auto&& ev) {
+            const auto& groups = ev->Get()->Record.GetGroups();
+            moveDataGroups.assign(groups.begin(), groups.end());
+        });
+        bool shrinkPoolNotified = false;
+        auto shrinkObserver = runtime.AddObserver<NHive::TEvPrivate::TEvMoveDataComplete>([&](auto&&) { shrinkPoolNotified = true; });
+
+        sendMoveData("POST", {{"group", ToString(oldGroup)}, {"wait", "1"}});
+        TAutoPtr<IEventHandle> handle;
+        auto resp = runtime.GrabEdgeEventRethrow<NMon::TEvRemoteJsonInfoRes>(handle);
+        NJson::TJsonValue value;
+        ReadJsonTree(resp->Json, &value, false);
+        UNIT_ASSERT(value["success"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(value["total"].GetUIntegerSafe(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(moveDataGroups, std::vector<ui32>{oldGroup});
+        UNIT_ASSERT(!shrinkPoolNotified);
+    }
+
     enum class ELocalTabletReport {
         OnlineTablets,
         InbootTablets,

@@ -22,19 +22,24 @@ public:
     std::vector<TTabletId> Tablets;
     std::vector<TTabletId>::const_iterator NextTablet;
     std::vector<TStorageGroupId> Groups;
-    TString PoolName;
+    const TActorId Source;
+    const TString Description;
+    std::unique_ptr<IMoveDataCallback> Callback;
     std::vector<TPipeClient> PipeClients;
     i64 MoveDataInFlight = 0;
     // Sends, not iterator position: NextTablet is advanced before SendMoveData in one caller and after in the other.
     size_t SentCount = 0;
+    ui64 TabletsDone = 0;
     THive* Hive;
 
-    TMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName, ui64 maxInFlight, THive* hive)
+    TMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui64 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, THive* hive)
         : Tablets(std::move(tablets))
         , NextTablet(Tablets.begin())
         , Groups(groups)
-        , PoolName(poolName)
-        , PipeClients(maxInFlight)
+        , Source(source)
+        , Description(std::move(description))
+        , Callback(std::move(callback))
+        , PipeClients(std::max<ui64>(maxInFlight, 1))
         , Hive(hive)
     {
     }
@@ -54,7 +59,14 @@ public:
     }
 
     TString GetDescription() const override {
-        return TStringBuilder() << "MoveData(" << PoolName << ")";
+        return TStringBuilder() << "MoveData(" << Description << "): " << TabletsDone << "/" << Tablets.size();
+    }
+
+    void ReplyAndPassAway(bool success) {
+        if (Source) {
+            Send(Source, Callback->MakeEvent(success, TabletsDone));
+        }
+        return PassAway();
     }
 
     size_t Queued() const {
@@ -71,7 +83,7 @@ public:
         ++SentCount;
         Hive->OnShrinkMoveDataSent(MoveDataInFlight, Queued());
         YDB_LOG_NOTICE("ShrinkPool: MoveData sent",
-            {"pool", PoolName},
+            {"description", Description},
             {"tablet", tablet},
             {"sent", SentCount},
             {"total", Tablets.size()},
@@ -81,8 +93,7 @@ public:
 
     void CheckCompletion() {
         if (MoveDataInFlight == 0 && NextTablet == Tablets.end()) {
-            Send(Hive->SelfId(), new TEvPrivate::TEvMoveDataComplete(PoolName, true));
-            return PassAway();
+            return ReplyAndPassAway(true);
         }
     }
 
@@ -102,11 +113,12 @@ public:
                 --MoveDataInFlight;
                 Hive->OnShrinkMoveDataAnswered(MoveDataInFlight, Queued());
                 YDB_LOG_NOTICE("ShrinkPool: MoveData answered",
-                    {"pool", PoolName},
+                    {"description", Description},
                     {"tablet", tablet},
                     {"status", (ui32)ev->Get()->Record.GetStatus()},
                     {"queued", Queued()},
                     {"inFlight", MoveDataInFlight});
+                ++TabletsDone;
                 Hive->Execute(Hive->CreateRestartTablet(ToFullTabletId(tablet)));
                 if (NextTablet != Tablets.end()) {
                     SendMoveData(i, *(NextTablet++));
@@ -120,8 +132,7 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             if (ev->Get()->Dead) {
-                Send(Hive->SelfId(), new TEvPrivate::TEvMoveDataComplete(PoolName, false));
-                return PassAway();
+                return ReplyAndPassAway(false);
             } else {
                 Retry(ev->Get()->TabletId);
             }
@@ -139,7 +150,7 @@ public:
                 --MoveDataInFlight;
                 Hive->OnShrinkMoveDataRetried();
                 YDB_LOG_NOTICE("ShrinkPool: MoveData retried",
-                    {"pool", PoolName},
+                    {"description", Description},
                     {"tablet", tablet});
                 SendMoveData(i, tablet);
                 break;
@@ -157,8 +168,8 @@ public:
     }
 };
 
-void THive::StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName) {
-    auto* actor = new TMoveDataActor(std::move(tablets), groups, poolName, 1, this);
+void THive::StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback) {
+    auto* actor = new TMoveDataActor(std::move(tablets), groups, source, maxInFlight, std::move(description), std::move(callback), this);
     SubActors.emplace_back(actor);
     RegisterWithSameMailbox(actor);
 }

@@ -34,8 +34,8 @@ constexpr size_t EstimatedBytesPerNodeOverhead = 256;
 // batch pool. Keep NMSLIB single-threaded so it does not create unmanaged
 // std::threads outside that pool.
 constexpr unsigned BuildThreadsPerIndex = 1;
-constexpr ui32 DefaultHnswConnectivity = 16;
-constexpr ui32 DefaultHnswConstructionCandidates = 200;
+constexpr ui32 DefaultHnswM = 16;
+constexpr ui32 DefaultHnswEfConstruction = 200;
 constexpr ui64 DefaultHnswMinRows = 10000;
 constexpr ui64 DefaultHnswDeltaRows = 10000;
 
@@ -108,11 +108,11 @@ bool AreHnswIndexSettingsCompatible(
         const VectorIndexSettings& requested) {
     const auto connectivity = [](const auto& settings) {
         return settings.has_m()
-            ? settings.m() : DefaultHnswConnectivity;
+            ? settings.m() : DefaultHnswM;
     };
     const auto constructionCandidates = [](const auto& settings) {
         return settings.has_ef_construction()
-            ? settings.ef_construction() : DefaultHnswConstructionCandidates;
+            ? settings.ef_construction() : DefaultHnswEfConstruction;
     };
     return cached.metric() == requested.metric()
         && cached.vector_type() == requested.vector_type()
@@ -231,11 +231,11 @@ public:
         Index = std::make_unique<similarity::Hnsw<float>>(/* PrintProgress */ false, *Space, Objects);
 
         Connectivity = settings.has_m()
-            ? settings.m() : DefaultHnswConnectivity;
+            ? settings.m() : DefaultHnswM;
         similarity::AnyParams buildParams(std::vector<std::string>{
             "M=" + std::to_string(Connectivity),
             "efConstruction=" + std::to_string(settings.has_ef_construction()
-                ? settings.ef_construction() : DefaultHnswConstructionCandidates),
+                ? settings.ef_construction() : DefaultHnswEfConstruction),
             "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
         });
         Index->CreateIndex(buildParams);
@@ -386,7 +386,7 @@ public:
 private:
     std::unique_ptr<similarity::Space<float>> Space;
     size_t Dimension = 0;
-    ui32 Connectivity = DefaultHnswConnectivity;
+    ui32 Connectivity = DefaultHnswM;
     size_t KeyBytes = 0;
     std::vector<const similarity::Object*> Objects;
     std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
@@ -459,7 +459,7 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
 
     if (maxMemoryBytes != 0) {
         const ui32 connectivity = settings.has_m()
-            ? settings.m() : DefaultHnswConnectivity;
+            ? settings.m() : DefaultHnswM;
         size_t keyBytes = 0;
         for (const auto& [key, _] : keysAndVectors) {
             if (key.size() > Max<size_t>() - keyBytes) {

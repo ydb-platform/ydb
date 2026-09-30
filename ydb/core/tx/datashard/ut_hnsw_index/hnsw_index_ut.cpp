@@ -460,7 +460,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
             Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
             Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
             2);
-        settings.set_m(NKMeans::MaxHnswConnectivity + 1);
+        settings.set_m(NKMeans::MaxHnswM + 1);
         std::vector<std::pair<TString, TString>> data = {
             {"a", SerializeFloatVector({1.0f, 0.0f})},
         };

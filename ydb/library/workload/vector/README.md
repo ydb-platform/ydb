@@ -25,7 +25,7 @@ Run `workload vector import --help` for available data initializers.
 `run select` reads vector settings from the named index and uses the same query,
 throughput, latency, and optional recall measurements for either index type.
 `--query-table` selects predefined query vectors. `--non-indexed` measures the
-brute-force baseline; `--stale-ro` uses stale reads, including configured replicas. Distributed HNSW
+brute-force baseline; `--stale-ro` uses stale reads, including configured replicas. HNSW
 selects use read-only snapshots by default: SerializableRW reads may take locks
 that force scan fallback. Each concurrent worker atomically selects its next
 query vector.

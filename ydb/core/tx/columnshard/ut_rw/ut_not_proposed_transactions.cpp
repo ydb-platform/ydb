@@ -1,7 +1,10 @@
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
+#include <ydb/core/tx/columnshard/operations/events.h>
 #include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 #include <ydb/core/tx/columnshard/test_helper/shard_writer.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -63,6 +66,19 @@ public:
         const auto& tables = Shard().GetIndexAs<NOlap::TColumnEngineForLogs>().GetTables();
         UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
         return tables.begin()->second->GetInsertedPortions().size();
+    }
+
+    bool IsWritePrepared() {
+        const auto* lock = Shard().GetOperationsManager().GetLockOptional(LockId);
+        if (!lock) {
+            return false;
+        }
+        for (const auto& operation : lock->GetWriteOperations()) {
+            if (operation->GetStatus() == EOperationStatus::Prepared) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void WaitTransactionsAborted() {
@@ -199,6 +215,35 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         shard.PassReadWindow();
         shard.TryCleanupTables(pathId, 60);
         UNIT_ASSERT(!shard.IsPendingDrop(pathId));
+        UNIT_ASSERT(!shard.HasTable(pathId));
+    }
+
+    Y_UNIT_TEST(DroppedTableKeptWhileWriteIsBeingPersisted) {
+        TShardFixture shard;
+        TBlockEvents<NPrivateEvents::NWrite::TEvWritePortionResult> blockedWrittenPortions(shard.Runtime);
+        shard.SendWriteUnderLock();
+        shard.Runtime.WaitFor("portion written", [&] {
+            return !blockedWrittenPortions.empty();
+        }, TDuration::Seconds(30));
+        const auto pathId = shard.DropTable();
+
+        TBlockEvents<TEvTablet::TEvCommitResult> blockedCommits(shard.Runtime);
+        blockedWrittenPortions.Stop().Unblock();
+        shard.Runtime.WaitFor("write persisting", [&] {
+            return shard.IsWritePrepared();
+        }, TDuration::Seconds(30));
+        shard.PassReadWindow();
+        shard.TryCleanupTables(pathId, 1);
+        blockedCommits.Stop().Unblock();
+
+        UNIT_ASSERT_VALUES_EQUAL(shard.Writer.WaitWriteResult().GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        shard.TryCleanupTables(pathId, 10);
+        UNIT_ASSERT(shard.HasTable(pathId));
+
+        shard.NotifyTransactionGone();
+        shard.WaitTransactionsAborted();
+        shard.PassReadWindow();
+        shard.TryCleanupTables(pathId, 60);
         UNIT_ASSERT(!shard.HasTable(pathId));
     }
 }

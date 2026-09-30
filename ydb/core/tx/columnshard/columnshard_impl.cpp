@@ -994,6 +994,10 @@ void TColumnShard::SetupCleanupTables(const NOlap::ISnapshotHolders& snapshotHol
                 ("event", "CleanupTableMetadataDeferredByActiveScan")("path_id", pathId)("drop_snapshot", dropSnapshot.DebugString());
                 continue;
             }
+            if (OperationsManager->HasWriteOperations(pathId)) {
+                AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "CleanupTableMetadataDeferredByWriteOperations")("path_id", pathId);
+                continue;
+            }
             pathIdsToCleanup.insert(pathId);
         }
     }

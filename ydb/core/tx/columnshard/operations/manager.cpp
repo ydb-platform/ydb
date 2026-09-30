@@ -109,6 +109,15 @@ std::vector<ui64> TOperationsManager::GetLockIdsOfNotProposedTransactions() cons
     return result;
 }
 
+bool TOperationsManager::HasWriteOperations(const TInternalPathId pathId) const {
+    for (const auto& [_, operation] : Operations) {
+        if (operation->GetPathId().InternalPathId == pathId) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
     for (auto&& lockIdToBreak : lock.GetBreakOnCommit()) {
         if (auto lockToBreak = GetLockOptional(lockIdToBreak)) {

@@ -170,8 +170,11 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             ui64 curOffset = offset;
 
             AFL_ENSURE(pno == blobs[i].GetPartNo());
+            // For a client batch covering [100, 105), a read at (103, 1)
+            // must skip part 0 even though the batch starts at 100, not 103.
+            // Do not apply this part filter to later messages (offset > startOffset).
             bool skip = (offset + blobs[i].LogicalMessageCount <= startOffset)
-                || (offset == startOffset && blobs[i].GetPartNo() < partNo);
+                || (offset <= startOffset && blobs[i].GetPartNo() < partNo);
 
             if (0 < lastOffset && lastOffset <= offset) {
                 break;

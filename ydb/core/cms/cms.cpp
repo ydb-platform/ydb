@@ -360,10 +360,20 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     bool allowPartial = request.GetPartialPermissionAllowed();
     bool schedule = (request.GetSchedule() || request.GetEvictVDisks()) && !request.GetDryRun();
 
-    if (request.GetEvictVDisks() && request.ActionsSize() > 1) {
-        response.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
-        response.MutableStatus()->SetReason("Cannot perform several actions and evict vdisks");
-        return false;
+    if (request.GetEvictVDisks()) {
+        if (request.ActionsSize() > 1) {
+            response.MutableStatus()->SetCode(TStatus::WRONG_REQUEST);
+            response.MutableStatus()->SetReason("Cannot perform several actions and evict vdisks");
+            return false;
+        }
+        for (const auto &action : request.GetActions()) {
+            TErrorInfo error;
+            if (!ValidateEvictVDisks(action, error)) {
+                response.MutableStatus()->SetCode(error.Code);
+                response.MutableStatus()->SetReason(error.Reason.GetMessage());
+                return false;
+            }
+        }
     }
 
     response.MutableStatus()->SetCode(TStatus::ALLOW);
@@ -464,7 +474,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
         bool prepared = !request.GetEvictVDisks();
         if (!prepared) {
-            prepared = CheckEvictVDisks(action, error);
+            prepared = CheckVDisksEvicted(action, error);
         }
 
         if (prepared && CheckAction(action, opts, error, ctx)) {
@@ -700,7 +710,7 @@ bool TCms::CheckAccess(const TString &token,
     return false;
 }
 
-bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
+bool TCms::ValidateEvictVDisks(const TAction &action, TErrorInfo &error) const {
     if (!State->Sentinel) {
         error.Code = TStatus::ERROR;
         error.Reason = "Unable to evict vdisks while Sentinel (self heal) is disabled";
@@ -724,6 +734,10 @@ bool TCms::CheckEvictVDisks(const TAction &action, TErrorInfo &error) const {
             return false;
     }
 
+    return true;
+}
+
+bool TCms::CheckVDisksEvicted(const TAction &action, TErrorInfo &error) const {
     for (const auto node : ClusterInfo->HostNodes(action.GetHost())) {
         if (!node->VDisks.empty()) {
             error.Code = TStatus::DISALLOW_TEMP;

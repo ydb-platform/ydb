@@ -1,6 +1,7 @@
 #include "nbs2_maintenance_helpers.h"
 
 #include <ydb/core/cms/cms_ut_common.h>
+#include <ydb/core/cms/sentinel.h>
 #include <ydb/core/cms/walle.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
@@ -871,6 +872,101 @@ Y_UNIT_TEST_SUITE(TCmsNbs2MaintenanceIntegrationTest) {
         UNIT_ASSERT_VALUES_EQUAL(legacy.PermissionsSize(), 1);
         fixture.Permissions(2);
         UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 9);
+    }
+
+    Y_UNIT_TEST(EvictVDisksValidationBeforeNbs2Denial) {
+        TCmsFixture fixture;
+        const auto nodeId = fixture.Env.GetNodeId(0);
+        TActorId sentinel;
+        size_t stateUpdates = 0;
+        bool faultyRequested = false;
+        auto observer = fixture.Env.AddObserver([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetRecipientRewrite() == sentinel
+                && ev->GetTypeRewrite() == NCms::TEvSentinel::TEvStateUpdated::EventType)
+            {
+                ++stateUpdates;
+            }
+            if (ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& record = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record;
+                for (const auto& command : record.GetRequest().GetCommand()) {
+                    if (command.HasUpdateDriveStatus()) {
+                        const auto& update = command.GetUpdateDriveStatus();
+                        if (update.GetHostKey().GetNodeId() == nodeId && update.GetStatus() == NKikimrBlobStorage::FAULTY) {
+                            faultyRequested = true;
+                        }
+                    }
+                }
+            }
+        });
+
+        auto config = fixture.Config();
+        auto* sentinelConfig = config.MutableSentinelConfig();
+        sentinelConfig->SetEnable(true);
+        sentinelConfig->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        sentinelConfig->SetUpdateStateInterval(TDuration::Seconds(1).MicroSeconds());
+        sentinelConfig->SetDryRun(false);
+        fixture.Env.SetCmsConfig(config);
+        const auto probe = fixture.Send(new TEvCms::TEvGetSentinelStateRequest(), 0);
+        fixture.Response<TEvCms::TEvGetSentinelStateResponse>(probe, TStatus::OK);
+        sentinel = fixture.Responses.at(probe.Actor).front()->Sender;
+
+        const auto hostState = [&] {
+            NKikimrCms::TClusterStateRequest request;
+            request.AddHosts(ToString(nodeId));
+            const auto state = fixture.Env.RequestState(request);
+            UNIT_ASSERT_VALUES_EQUAL(state.HostsSize(), 1);
+            return state.GetHosts(0);
+        };
+        const auto checkNoEviction = [&] {
+            fixture.Permissions(0);
+            fixture.Env.CheckListRequests(fixture.User, 0);
+            UNIT_ASSERT_VALUES_EQUAL(hostState().MarkersSize(), 0);
+            // Observe completed Sentinel cycles, not just the immediate CMS response.
+            const auto before = stateUpdates;
+            fixture.Await([&] { return stateUpdates >= before + 2; }, "Sentinel did not update disk states");
+            fixture.Drain();
+            UNIT_ASSERT(!faultyRequested);
+        };
+
+        auto replace = MakePermissionRequest(TRequestOptions(fixture.User).WithEvictVDisks(),
+            MakeAction(NKikimrCms::TAction::REPLACE_DEVICES, nodeId, fixture.Duration.MicroSeconds(), fixture.Env.PDiskName(0)));
+        const auto invalid = fixture.Send(replace.Release());
+        const auto denied = fixture.WaitForCheck(1, invalid);
+        fixture.CheckNodes(0, {0});
+        fixture.Complete(denied, EOutcome::Deny);
+        const auto rejected = fixture.Response<TEvCms::TEvPermissionResponse>(invalid, TStatus::WRONG_REQUEST);
+        UNIT_ASSERT_C(rejected.GetStatus().GetReason().Contains("Unable to evict vdisks to perform action"),
+            rejected.ShortDebugString());
+        checkNoEviction();
+
+        const auto disabled = fixture.Send(MakePermissionRequest(
+            TRequestOptions(fixture.User).WithEvictVDisks(), fixture.Shutdown(0)).Release());
+        const auto disabledAttempt = fixture.WaitForCheck(2, disabled);
+        // Configuration must be checked again after waiting for DBSC.
+        sentinelConfig->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::DISABLED);
+        fixture.Env.SetCmsConfig(config);
+        fixture.Complete(disabledAttempt, EOutcome::Deny);
+        const auto disabledResponse = fixture.Response<TEvCms::TEvPermissionResponse>(disabled, TStatus::ERROR);
+        UNIT_ASSERT_C(disabledResponse.GetStatus().GetReason().Contains("Evict vdisks is disabled"),
+            disabledResponse.ShortDebugString());
+        checkNoEviction();
+
+        // A valid request must still start eviction and wait for VDisks to move.
+        sentinelConfig->SetEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig::FAULTY);
+        fixture.Env.SetCmsConfig(config);
+        const auto valid = fixture.Send(MakePermissionRequest(
+            TRequestOptions(fixture.User).WithEvictVDisks(), fixture.Shutdown(0)).Release());
+        const auto allowed = fixture.WaitForCheck(3, valid);
+        fixture.Complete(allowed, EOutcome::Allow);
+        const auto pending = fixture.Response<TEvCms::TEvPermissionResponse>(valid, TStatus::DISALLOW_TEMP);
+        UNIT_ASSERT_C(pending.GetStatus().GetReason().Contains("has not yet been completed"), pending.ShortDebugString());
+        fixture.Permissions(0);
+        fixture.Env.CheckListRequests(fixture.User, 1);
+        const auto host = hostState();
+        UNIT_ASSERT_VALUES_EQUAL(host.MarkersSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(host.GetMarkers(0), NKikimrCms::MARKER_DISK_FAULTY);
+        fixture.Await([&] { return faultyRequested; }, "Sentinel did not request FAULTY for a valid eviction");
+        UNIT_ASSERT_VALUES_EQUAL(fixture.State.Requests.size(), 3);
     }
 
     Y_UNIT_TEST(WalleCreateTaskTimeoutAndRetry) {

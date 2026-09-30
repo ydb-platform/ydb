@@ -401,7 +401,9 @@ private:
         NKikimrCms::TStatus::ECode &code,
         TString &error,
         const TActorContext &ctx);
-    bool CheckEvictVDisks(const NKikimrCms::TAction &action,
+    bool ValidateEvictVDisks(const NKikimrCms::TAction &action,
+        TErrorInfo &error) const;
+    bool CheckVDisksEvicted(const NKikimrCms::TAction &action,
         TErrorInfo &error) const;
     bool CheckAction(const NKikimrCms::TAction &action,
         const TActionOptions &opts,

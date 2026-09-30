@@ -29,6 +29,17 @@ struct TEvService
         EvStatVolumeResponse = SERVICE_START + 10,
     };
 
+    static_assert(
+        EvStatVolumeRequest ==
+            EventSpaceBegin(NKikimr::TKikimrEvents::ES_BLOCKSTORE) + 111,
+        "EvStatVolumeRequest expected to be == EventSpaceBegin(ES_BLOCKSTORE) "
+        "+ 111");
+    static_assert(
+        EvStatVolumeResponse ==
+            EventSpaceBegin(NKikimr::TKikimrEvents::ES_BLOCKSTORE) + 112,
+        "EvStatVolumeResponse expected to be == EventSpaceBegin(ES_BLOCKSTORE) "
+        "+ 112");
+
     using TEvStatVolumeRequest = NYdb::NBS::NBlockStore::
         TProtoRequestEvent<NProto::TStatVolumeRequest, EvStatVolumeRequest>;
 

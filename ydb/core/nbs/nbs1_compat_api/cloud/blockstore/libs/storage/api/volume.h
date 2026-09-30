@@ -29,6 +29,17 @@ struct TEvVolume
         EvWaitReadyResponse = VOLUME_START + 10,
     };
 
+    static_assert(
+        EvWaitReadyRequest ==
+            EventSpaceBegin(NKikimr::TKikimrEvents::ES_BLOCKSTORE) + 313,
+        "EvWaitReadyRequest expected to be == EventSpaceBegin(ES_BLOCKSTORE) + "
+        "313");
+    static_assert(
+        EvWaitReadyResponse ==
+            EventSpaceBegin(NKikimr::TKikimrEvents::ES_BLOCKSTORE) + 314,
+        "EvWaitReadyResponse expected to be == EventSpaceBegin(ES_BLOCKSTORE) "
+        "+ 314");
+
     using TEvWaitReadyRequest = NYdb::NBS::NBlockStore::
         TProtoRequestEvent<NProto::TWaitReadyRequest, EvWaitReadyRequest>;
 

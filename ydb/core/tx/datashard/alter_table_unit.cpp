@@ -41,10 +41,11 @@ TMap<TFamilyKey, TFamilySettings> FamilySettings(const TUserTable& table) {
 
     for (const auto& [id, family] : table.Families) {
         const auto key = FamilyKey(table, id);
+        const auto& data = family.StorageConfig.GetData();
         const TFamilySettings settings{
             .Codec = family.Codec,
             .CacheMode = family.CacheMode,
-            .DataPoolKind = family.StorageConfig.GetData().GetPreferredPoolKind(),
+            .DataPoolKind = data.GetAllowOtherKinds() ? TString{} : data.GetPreferredPoolKind(),
         };
 
         if (key == TFamilyKey{"default", 0}) {

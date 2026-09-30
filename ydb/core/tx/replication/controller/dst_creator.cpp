@@ -283,6 +283,16 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         Y_ABORT_UNLESS(desc);
+        for (const auto& family : desc->GetPartitionConfig().GetColumnFamilies()) {
+            const auto codec = GetColumnCodec(family);
+            if (codec != NKikimrSchemeOp::ColumnCodecPlain && codec != NKikimrSchemeOp::ColumnCodecLZ4) {
+                return Error(NKikimrScheme::StatusSchemeError,
+                    TStringBuilder() << "Unsupported column family codec"
+                        << ": name: " << GetFamilyName(family)
+                        << ", codec: " << static_cast<ui32>(codec));
+            }
+        }
+
         desc->SetName(pathPair.second);
 
         FillReplicationConfig(*desc->MutableReplicationConfig());
@@ -505,6 +515,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         gotFamilyNames.emplace(0, DefaultFamilyName);
         for (const auto& family : got.GetPartitionConfig().GetColumnFamilies()) {
             const auto name = GetFamilyName(family);
+            if (name.empty()) {
+                error = TStringBuilder() << "Unnamed non-default destination column family"
+                    << ": id: " << family.GetId();
+                return false;
+            }
             gotFamilyNames[family.GetId()] = name;
             families.emplace(name, &family);
         }

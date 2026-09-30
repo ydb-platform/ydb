@@ -336,6 +336,33 @@ Y_UNIT_TEST_SUITE(JsonChangeRecord) {
         UNIT_ASSERT_STRING_CONTAINS(error, "duplicate column family: archive");
     }
 
+    Y_UNIT_TEST(SchemaChangeRejectsDuplicateMedia) {
+        auto record = TChangeRecordBuilder()
+            .WithBody(R"json({
+                "ts": [10, 20],
+                "tableChanges": [{
+                    "table": {
+                        "schemaVersion": 3,
+                        "primaryKeyColumnNames": ["key"],
+                        "columns": {"key": {"type": "Uint64", "family": "archive"}},
+                        "columnFamilies": {
+                            "default": {"compression": "off", "cacheMode": "regular"},
+                            "archive": {
+                                "data": {"media": "ssd", "media": "rot"},
+                                "compression": "lz4", "cacheMode": "regular"
+                            }
+                        }
+                    }
+                }]
+            })json")
+            .Build();
+
+        NKikimrReplication::TSchemaChange schema;
+        TString error;
+        UNIT_ASSERT(!record->TryGetSchemaChange(schema, error));
+        UNIT_ASSERT_STRING_CONTAINS(error, "duplicate column family setting: media");
+    }
+
     Y_UNIT_TEST(SchemaChangeRejectsIncompleteFamilyMetadata) {
         for (const auto* fragment : {
             R"json("columnFamilies": {

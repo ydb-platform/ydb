@@ -401,7 +401,7 @@ struct TSchemaAltererTestEnv {
             new TEvTxUserProxy::TEvAllocateTxIdResult(dstAlterTxId + 1, services, {}));
     }
 
-    void ReplyMatchingDescription() {
+    void ReplyMatchingDescription(bool withExtraFamily = false) {
         const auto request = Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(PipeCache);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(),
             NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
@@ -416,6 +416,11 @@ struct TSchemaAltererTestEnv {
         }
         for (const auto& key : Schema.GetPrimaryKeyColumnNames()) {
             table->AddKeyColumnNames(key);
+        }
+        if (withExtraFamily) {
+            auto* family = table->MutablePartitionConfig()->AddColumnFamilies();
+            family->SetId(1);
+            family->SetName("manual");
         }
         Runtime.Send(Alterer, PipeCache, description.Release());
     }
@@ -482,6 +487,21 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         UNIT_ASSERT_VALUES_EQUAL(alter.GetColumns(0).GetName(), "value");
         UNIT_ASSERT_VALUES_EQUAL(alter.GetColumns(0).GetFamilyName(), "archive");
         UNIT_ASSERT_VALUES_EQUAL(alter.GetPartitionConfig().ColumnFamiliesSize(), 2);
+        env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvPoison());
+        env.ExpectUnlink();
+    }
+
+    Y_UNIT_TEST(ExtraUnusedDestinationFamilyDoesNotBlockAlter) {
+        TSchemaAltererTestEnv env(MakeFamilySchemaChange("ssd"), 100);
+        env.ReplyMatchingDescription(true);
+
+        const auto proposal = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(),
+            NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+        const auto& transaction = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(
+            proposal->Get()->Ev.Get())->Record.GetTransaction(0);
+        UNIT_ASSERT_VALUES_EQUAL(transaction.GetAlterTable().GetPartitionConfig().ColumnFamiliesSize(), 2);
+
         env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvPoison());
         env.ExpectUnlink();
     }

@@ -120,6 +120,37 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         }
     }
 
+    Y_UNIT_TEST(UnnamedNonDefaultDestinationFamily) {
+        TEnv env;
+        const auto table = TTestTableDescription{
+            .Name = "Src",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        };
+        env.CreateTable("/Root", *MakeTableDescription(table));
+
+        auto destination = table;
+        destination.Name = "Dst";
+        destination.ReplicationConfig = TTestTableDescription::TReplicationConfig::Default();
+        auto description = MakeTableDescription(destination);
+        description->MutableColumns(1)->SetFamily(1);
+        description->MutablePartitionConfig()->AddColumnFamilies()->SetId(1);
+        env.CreateTable("/Root", *description);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Src"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+            "/Root/Src", "/Root/Dst"));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, "Unnamed non-default destination column family: id: 1");
+    }
+
     Y_UNIT_TEST(ImplicitDefaultFamilyFromProfile) {
         TEnv env;
 
@@ -348,6 +379,69 @@ Y_UNIT_TEST_SUITE(DstCreator) {
         if (error) {
             UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Error, error);
         }
+    }
+
+    template <typename T>
+    void ExistingDstFamily(const TString& error, T&& modify) {
+        TEnv env;
+        auto source = MakeTableDescription({
+            .Name = "Src",
+            .KeyColumns = {"key"},
+            .Columns = {
+                {.Name = "key", .Type = "Uint32"},
+                {.Name = "value", .Type = "Utf8"},
+            },
+            .ReplicationConfig = Nothing(),
+        });
+        source->MutableColumns(1)->SetFamilyName("archive");
+        auto* family = source->MutablePartitionConfig()->AddColumnFamilies();
+        family->SetName("archive");
+        family->SetColumnCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+        auto* data = family->MutableStorageConfig()->MutableData();
+        data->SetPreferredPoolKind("test");
+        data->SetAllowOtherKinds(false);
+        env.CreateTable("/Root", *source);
+
+        auto destination = *source;
+        destination.SetName("Dst");
+        TTestTableDescription::TReplicationConfig::Default().SerializeTo(*destination.MutableReplicationConfig());
+        modify(destination);
+        env.CreateTable("/Root", destination);
+
+        env.GetRuntime().Register(CreateDstCreator(
+            env.GetSender(), env.GetSchemeshardId("/Root/Src"), env.GetYdbProxy(),
+            "/Root", env.GetPathId("/Root"),
+            1 /* rid */, 1 /* tid */, TReplication::ETargetKind::Table,
+            "/Root/Src", "/Root/Dst"));
+        const auto result = env.GetRuntime().GrabEdgeEvent<TEvPrivate::TEvCreateDstResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrScheme::StatusSchemeError);
+        UNIT_ASSERT_STRING_CONTAINS(result->Get()->Error, error);
+    }
+
+    Y_UNIT_TEST(ColumnFamilyCodecMismatch) {
+        ExistingDstFamily("Column family codec mismatch", [](auto& destination) {
+            destination.MutablePartitionConfig()->MutableColumnFamilies(0)->SetColumnCodec(NKikimrSchemeOp::ColumnCodecPlain);
+        });
+    }
+
+    Y_UNIT_TEST(ColumnFamilyCacheModeMismatch) {
+        ExistingDstFamily("Column family cache mode mismatch", [](auto& destination) {
+            destination.MutablePartitionConfig()->MutableColumnFamilies(0)->SetColumnCacheMode(
+                NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory);
+        });
+    }
+
+    Y_UNIT_TEST(ColumnFamilyMediaMismatch) {
+        ExistingDstFamily("Column family media mismatch", [](auto& destination) {
+            destination.MutablePartitionConfig()->MutableColumnFamilies(0)
+                ->MutableStorageConfig()->MutableData()->SetAllowOtherKinds(true);
+        });
+    }
+
+    Y_UNIT_TEST(ColumnFamilyAssignmentMismatch) {
+        ExistingDstFamily("Column family mismatch", [](auto& destination) {
+            destination.MutableColumns(1)->ClearFamilyName();
+        });
     }
 
     Y_UNIT_TEST(ExistingDst) {

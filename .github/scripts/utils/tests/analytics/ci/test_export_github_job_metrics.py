@@ -169,6 +169,123 @@ class OpenRunsToSaveTest(unittest.TestCase):
         )
 
 
+class CancelledJobExportTest(unittest.TestCase):
+    """cancel-in-progress: export the job and every step that started before cancel."""
+
+    def test_exports_started_steps_on_a_cancelled_job(self):
+        run = {
+            "id": 20,
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "cancelled",
+            "event": "pull_request_target",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "feature",
+            "created_at": "2026-09-28T10:00:00Z",
+            "html_url": "https://example.test/run/20",
+            "pull_requests": [{"number": 1, "base": {"ref": "main"}}],
+        }
+        jobs = [
+            {
+                "id": 201,
+                "name": "Build and test relwithdebinfo",
+                "created_at": "2026-09-28T10:00:00Z",
+                "started_at": "2026-09-28T10:02:00Z",
+                "completed_at": "2026-09-28T10:10:00Z",
+                "conclusion": "cancelled",
+                "steps": [
+                    {
+                        "name": "Checkout",
+                        "started_at": "2026-09-28T10:02:00Z",
+                        "completed_at": "2026-09-28T10:03:00Z",
+                        "conclusion": "success",
+                    },
+                    {
+                        "name": "Build and test",
+                        "started_at": "2026-09-28T10:03:00Z",
+                        "completed_at": "2026-09-28T10:10:00Z",
+                        "conclusion": "cancelled",
+                    },
+                    {
+                        "name": "Post Cancel",
+                        "started_at": None,
+                        "completed_at": None,
+                        "conclusion": "skipped",
+                    },
+                ],
+            },
+            {
+                "id": 202,
+                "name": "Build and test release-asan",
+                "created_at": "2026-09-28T10:00:00Z",
+                "started_at": None,
+                "completed_at": None,
+                "conclusion": "cancelled",
+                "steps": [
+                    {
+                        "name": "Checkout",
+                        "started_at": None,
+                        "completed_at": None,
+                        "conclusion": "skipped",
+                    },
+                ],
+            },
+        ]
+        rows = metrics_from_workflow_run(run, jobs)
+        names = {(row["github_job_id"], row["name"], row.get("conclusion")) for row in rows}
+        self.assertIn((201, "job", "cancelled"), names)
+        self.assertIn((201, "queue", None), names)
+        self.assertIn((201, "Checkout", "success"), names)
+        self.assertIn((201, "Build and test", "cancelled"), names)
+        self.assertFalse(any(row["name"] == "Post Cancel" for row in rows))
+        self.assertFalse(any(row["github_job_id"] == 202 for row in rows))
+
+    def test_held_cancelled_run_is_exported(self):
+        run = {
+            "id": 21,
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "cancelled",
+            "event": "pull_request_target",
+            "name": "PR-check",
+            "head_sha": "abc",
+            "head_branch": "feature",
+            "created_at": "2026-09-28T10:00:00Z",
+            "html_url": "https://example.test/run/21",
+            "pull_requests": [{"number": 1, "base": {"ref": "main"}}],
+        }
+        jobs = [
+            {
+                "id": 210,
+                "name": "Build and test relwithdebinfo",
+                "created_at": "2026-09-28T10:00:00Z",
+                "started_at": "2026-09-28T10:02:00Z",
+                "completed_at": "2026-09-28T10:04:00Z",
+                "conclusion": "cancelled",
+                "steps": [],
+            }
+        ]
+
+        def fake_fetch(_org, _repo, _run_id, attempt=None):
+            return run
+
+        def fake_jobs(_org, _repo, _run_id, per_page=100, attempt=None):
+            return jobs
+
+        with patch.object(export_github_job_metrics, "fetch_run", fake_fetch), patch.object(
+            export_github_job_metrics, "list_run_jobs", fake_jobs
+        ):
+            rows, held = export_github_job_metrics.export_held_runs(
+                "ydb-platform", "ydb", [(21, 1)], [], set(), {}
+            )
+        self.assertEqual(held, [])
+        job_rows = [row for row in rows if row.get("name") == "job"]
+        self.assertEqual(len(job_rows), 1)
+        self.assertEqual(job_rows[0]["conclusion"], "cancelled")
+        self.assertEqual(job_rows[0]["github_job_id"], 210)
+
+
 class AlreadyExportedTest(unittest.TestCase):
     def test_skips_known_attempt_and_keeps_a_new_one(self):
         exported = {(10, 1)}

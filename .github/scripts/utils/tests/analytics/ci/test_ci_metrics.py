@@ -21,6 +21,7 @@ from github_actions.ci_metrics import (
     apply_job_defaults,
     attach_context,
     github_env_defaults,
+    github_job_display_name,
     main,
     normalize_metric,
     rows_from_jsonl,
@@ -305,16 +306,48 @@ class WorkflowRunMetricsTest(unittest.TestCase):
         self.assertTrue(all(row.get("branch") == "main" for row in rows))
 
 
+class GithubJobDisplayNameTest(unittest.TestCase):
+    def test_pr_check_build_and_test(self):
+        self.assertEqual(
+            github_job_display_name("build_and_test", "relwithdebinfo", "PR-check"),
+            "Build and test relwithdebinfo",
+        )
+
+    def test_pr_check_postcommit(self):
+        self.assertEqual(
+            github_job_display_name(
+                "postcommit_build_and_test", "release-asan", "PR-check"
+            ),
+            "Postcommit · Build and test release-asan",
+        )
+
+    def test_ignores_analytics_job_name_alias(self):
+        self.assertEqual(
+            github_job_display_name("build_and_test", "relwithdebinfo", "Nightly-Build"),
+            "build_and_test",
+        )
+
+    def test_unknown_job_keeps_yaml_id(self):
+        self.assertEqual(
+            github_job_display_name("check-running-allowed", None, "PR-check"),
+            "check-running-allowed",
+        )
+
+
 class GithubEnvDefaultsTest(unittest.TestCase):
-    def test_prefers_analytics_job_name(self):
+    def test_maps_pr_check_job_not_analytics_job_name(self):
         old = {
             "ANALYTICS_JOB_NAME": os.environ.get("ANALYTICS_JOB_NAME"),
             "GITHUB_JOB": os.environ.get("GITHUB_JOB"),
+            "GITHUB_WORKFLOW": os.environ.get("GITHUB_WORKFLOW"),
+            "BUILD_PRESET": os.environ.get("BUILD_PRESET"),
             "GITHUB_RUN_ID": os.environ.get("GITHUB_RUN_ID"),
         }
         try:
-            os.environ["ANALYTICS_JOB_NAME"] = "Build and test relwithdebinfo"
-            os.environ["GITHUB_JOB"] = "build"
+            os.environ["ANALYTICS_JOB_NAME"] = "PR-check"
+            os.environ["GITHUB_JOB"] = "build_and_test"
+            os.environ["GITHUB_WORKFLOW"] = "PR-check"
+            os.environ["BUILD_PRESET"] = "relwithdebinfo"
             os.environ["GITHUB_RUN_ID"] = "12345"
             defaults = github_env_defaults()
             self.assertEqual(defaults["job_name"], "Build and test relwithdebinfo")

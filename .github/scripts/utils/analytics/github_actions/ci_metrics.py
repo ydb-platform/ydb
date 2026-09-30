@@ -119,6 +119,30 @@ def _event_pr_number(event: Dict[str, Any]) -> Optional[int]:
     return None
 
 
+def github_job_display_name(
+    github_job: Optional[str],
+    build_preset: Optional[str] = None,
+    workflow: Optional[str] = None,
+) -> Optional[str]:
+    """GitHub Actions job.name (API / UI). Not ANALYTICS_JOB_NAME.
+
+    ANALYTICS_JOB_NAME is the mute / test-history id (PR-check, Postcommit_*).
+    ci_metrics.job_name must match the collector's github_job rows, which use
+    the workflow `name:` field. Nightly reuses yaml id build_and_test with a
+    different display name (`… on {branch}`), so only PR-check is mapped.
+    """
+    job = (github_job or "").strip()
+    if not job:
+        return None
+    preset = (build_preset or "").strip()
+    if (workflow or "").strip() == "PR-check" and preset:
+        if job == "build_and_test":
+            return f"Build and test {preset}"
+        if job == "postcommit_build_and_test":
+            return f"Postcommit · Build and test {preset}"
+    return job
+
+
 def github_env_defaults() -> Dict[str, Any]:
     event = github_event_payload()
     pull = _event_pull(event)
@@ -131,7 +155,11 @@ def github_env_defaults() -> Dict[str, Any]:
         if run_id is not None and repository
         else None
     )
-    job_name = os.environ.get("ANALYTICS_JOB_NAME") or os.environ.get("GITHUB_JOB") or None
+    job_name = github_job_display_name(
+        os.environ.get("GITHUB_JOB"),
+        os.environ.get("BUILD_PRESET"),
+        os.environ.get("GITHUB_WORKFLOW"),
+    )
     return {
         "run_id": run_id,
         "github_job_id": _as_uint(os.environ.get("GITHUB_NUMERIC_JOB_ID")),

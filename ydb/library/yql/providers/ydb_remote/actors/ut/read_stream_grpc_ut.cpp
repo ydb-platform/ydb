@@ -3,6 +3,7 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <library/cpp/testing/common/network.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -54,6 +55,38 @@ Ydb::Query::ExecuteQueryResponsePart Batch() {
     return part;
 }
 
+class TDeferredCredentialsFactory final : public NYdb::ICredentialsProviderFactory {
+    class TProvider final : public NYdb::ICredentialsProvider {
+    public:
+        std::string GetAuthInfo() const override {
+            UNIT_ASSERT(Ready.HasValue());
+            return Ready.GetValue();
+        }
+
+        NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+            Requested.TrySetValue();
+            return Ready.GetFuture();
+        }
+
+        bool IsValid() const override { return true; }
+
+        NThreading::TPromise<std::string> Ready = NThreading::NewPromise<std::string>();
+        mutable NThreading::TPromise<void> Requested = NThreading::NewPromise<void>();
+    };
+
+public:
+    NYdb::TCredentialsProviderPtr CreateProvider() const override { return Provider_; }
+
+    void WaitUntilRequested() const {
+        UNIT_ASSERT(Provider_->Requested.GetFuture().Wait(WaitTimeout));
+    }
+
+    void SetReady() { Provider_->Ready.SetValue("test-token"); }
+
+private:
+    const std::shared_ptr<TProvider> Provider_ = std::make_shared<TProvider>();
+};
+
 // Each RPC is controlled from the test's completion queue. In particular, an
 // accepted RPC can withhold even initial metadata until cancellation arrives.
 class TQueryServer {
@@ -71,7 +104,7 @@ public:
         TTag Accepted, Metadata, Written, Finished, Done;
     };
 
-    explicit TQueryServer(bool boundedTransport = true) {
+    TQueryServer() {
         NTesting::InitPortManagerFromEnv();
         const auto endpoint = TStringBuilder() << "127.0.0.1:" << NTesting::GetFreePort();
         grpc::ServerBuilder builder;
@@ -80,10 +113,11 @@ public:
         Queue_ = builder.AddCompletionQueue();
         Server_ = builder.BuildAndStart();
         UNIT_ASSERT(Server_);
-        Driver_ = std::make_unique<NYdb::TDriver>(NYdb::TDriverConfig()
-            .SetEndpoint(endpoint).SetDatabase("/Remote")
+        auto config = NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Remote")
             .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetNetworkThreadsNum(1)
-            .SetMaxInboundMessageSize(MaxInboundMessageBytes).SetBoundedResponseTransport(boundedTransport));
+            .SetMaxInboundMessageSize(MaxInboundMessageBytes);
+        Driver_ = std::make_unique<NYdb::TDriver>(config);
+        TlsDriver_ = std::make_unique<NYdb::TDriver>(config);
         Client = CreateClient(false);
     }
 
@@ -95,6 +129,7 @@ public:
         while (Queue_->Next(&tag, &ok)) {}
         Client.reset();
         Driver_->Stop(true);
+        TlsDriver_->Stop(true);
     }
 
     TCall& ExpectCall() {
@@ -139,10 +174,15 @@ public:
         return WaitFor(call.Accepted, timeout, false);
     }
 
-    std::shared_ptr<NYdb::NQuery::TQueryClient> CreateClient(bool useTls) {
-        return std::make_shared<NYdb::NQuery::TQueryClient>(*Driver_,
-            NYdb::NQuery::TClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off)
-                .SslCredentials(NYdb::TSslCredentials(useTls)));
+    std::shared_ptr<NYdb::NQuery::TQueryClient> CreateClient(bool useTls,
+            NYdb::TCredentialsProviderFactoryPtr credentials = {}) {
+        auto settings = NYdb::NQuery::TClientSettings().DiscoveryMode(NYdb::EDiscoveryMode::Off)
+            .SslCredentials(NYdb::TSslCredentials(useTls));
+        if (credentials) {
+            settings.CredentialsProviderFactory(std::move(credentials));
+        }
+        return std::make_shared<NYdb::NQuery::TQueryClient>(useTls ? *TlsDriver_ : *Driver_,
+            settings);
     }
 
     std::shared_ptr<NYdb::NQuery::TQueryClient> Client;
@@ -171,6 +211,7 @@ private:
     std::unique_ptr<grpc::Server> Server_;
     std::vector<std::unique_ptr<TCall>> Calls_;
     std::unique_ptr<NYdb::TDriver> Driver_;
+    std::unique_ptr<NYdb::TDriver> TlsDriver_;
 };
 
 TReadContext Context(TDuration timeout = TDuration::Seconds(30)) {
@@ -270,7 +311,7 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
-    Y_UNIT_TEST(SameDriverCannotReusePlaintextChannelForTlsClient) {
+    Y_UNIT_TEST(IndependentDriversCannotReusePlaintextChannelForTlsClient) {
         TQueryServer server;
         auto readPlain = [&](TQueryServer::TCall& call) {
             auto stream = CreateReadStream(server.CreateClient(false), Source(), Context());
@@ -310,33 +351,92 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         UNIT_ASSERT(!server.AcceptedWithin(call, TDuration::MilliSeconds(100)));
     }
 
-    Y_UNIT_TEST(CancelPendingInitialOpen) {
+    Y_UNIT_TEST(ConcurrentPullDoesNotReplacePendingRead) {
         TQueryServer server;
         auto& call = server.ExpectCall();
         auto stream = CreateReadStream(server.Client, Source(), Context());
-        auto result = stream->Next();
-        server.Accept(call);
-        UNIT_ASSERT(!result.HasValue());
-        stream->Cancel();
-        AssertError(result);
-        server.Cancelled(call);
-        server.Finish(call);
-    }
-
-    Y_UNIT_TEST(CancelPendingRead) {
-        TQueryServer server;
-        auto& call = server.ExpectCall();
-        auto stream = CreateReadStream(server.Client, Source(), Context());
-        auto result = stream->Next();
+        auto first = stream->Next();
         server.Open(call);
-        UNIT_ASSERT(!result.HasValue());
+        auto concurrent = stream->Next();
+        UNIT_ASSERT(concurrent.HasValue());
+        AssertError(concurrent);
+        UNIT_ASSERT(!first.HasValue());
+        server.Write(call, Batch());
+        UNIT_ASSERT(first.Wait(WaitTimeout));
+        UNIT_ASSERT(!first.GetValue().Error);
+        UNIT_ASSERT(first.GetValue().Batch);
         stream->Cancel();
-        AssertError(result);
         server.Cancelled(call);
         server.Finish(call);
     }
 
-    Y_UNIT_TEST(CancelledTransportReleasesItsRequestLease) {
+    Y_UNIT_TEST(CancelPendingInitialOpenCompletesLocallyAndDiscardsLateIterator) {
+        TQueryServer server;
+        auto& call = server.ExpectCall();
+        auto credentials = std::make_shared<TDeferredCredentialsFactory>();
+        auto released = NThreading::NewPromise();
+        auto context = Context();
+        context.MemoryLease = std::shared_ptr<void>(new int, [released](void* value) mutable {
+            delete static_cast<int*>(value);
+            released.SetValue();
+        });
+        auto stream = CreateReadStream(server.CreateClient(false, credentials), Source(), context);
+        context.MemoryLease.reset();
+        auto result = stream->Next();
+        credentials->WaitUntilRequested();
+        UNIT_ASSERT(!result.HasValue());
+        UNIT_ASSERT(!server.AcceptedWithin(call, TDuration::MilliSeconds(100)));
+        stream->Cancel();
+        UNIT_ASSERT(result.HasValue());
+        AssertError(result);
+        stream.reset();
+        UNIT_ASSERT(!released.HasValue());
+        // The SDK creates its iterator at RPC start, before initial metadata.
+        // Pending credentials hold that start deterministically. Releasing them
+        // after local cancellation must discard the late iterator without ReadNext.
+        credentials->SetReady();
+        // No server response was sent. The opening callback releases the provider
+        // reservation even while the cancelled result future remains alive.
+        UNIT_ASSERT(released.GetFuture().Wait(WaitTimeout));
+        // Reader destruction can cancel the RPC before the server dispatches it.
+        // If it was dispatched, cancellation must also reach the server.
+        if (server.AcceptedWithin(call, TDuration::MilliSeconds(100))) {
+            server.Cancelled(call);
+            server.Finish(call);
+        }
+        AssertError(result);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().Error, "YdbRemote read cancelled");
+    }
+
+    Y_UNIT_TEST(CancelPendingReadCompletesLocallyAndDiscardsLateBatch) {
+        TQueryServer server;
+        auto& call = server.ExpectCall();
+        NThreading::TCancellationTokenSource cancellation;
+        auto context = Context();
+        context.Cancellation = cancellation.Token();
+        auto stream = CreateReadStream(server.Client, Source(), context);
+        auto first = stream->Next();
+        server.Open(call);
+        server.Write(call, Batch());
+        UNIT_ASSERT(first.Wait(WaitTimeout));
+        UNIT_ASSERT(!first.GetValue().Error);
+        UNIT_ASSERT(first.GetValue().Batch);
+        first = {};
+        // The iterator is established and ReadNext is now definitely in flight.
+        auto result = stream->Next();
+        UNIT_ASSERT(!result.HasValue());
+        cancellation.Cancel();
+        UNIT_ASSERT(result.HasValue());
+        AssertError(result);
+        server.Write(call, Batch(), false);
+        server.Cancelled(call);
+        server.Finish(call);
+        AssertError(result);
+        auto next = stream->Next();
+        AssertError(next);
+    }
+
+    Y_UNIT_TEST(CancelledProviderRetainsLeaseUntilPendingSdkCallbackReturns) {
         TQueryServer server;
         auto& call = server.ExpectCall();
         auto released = NThreading::NewPromise();
@@ -347,18 +447,28 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         });
         auto stream = CreateReadStream(server.Client, Source(), context);
         context.MemoryLease.reset();
-        auto result = stream->Next();
+        auto first = stream->Next();
         server.Open(call);
+        server.Write(call, Batch());
+        UNIT_ASSERT(first.Wait(WaitTimeout));
+        UNIT_ASSERT(!first.GetValue().Error);
+        UNIT_ASSERT(first.GetValue().Batch);
+        first = {};
+        // The iterator is established and ReadNext is now definitely in flight.
+        auto result = stream->Next();
         UNIT_ASSERT(!released.HasValue());
         stream->Cancel();
+        UNIT_ASSERT(result.HasValue());
         stream.reset();
         AssertError(result);
-        result = {};
+        UNIT_ASSERT(!released.HasValue());
+        // The result future stays alive: only the late SDK callback should own
+        // the stream/lease now. This does not assert SDK-internal quiescence.
+        server.Write(call, Batch(), false);
         server.Cancelled(call);
-        // Cancellation must release client buffers even while the server has not
-        // cooperatively completed the response stream.
         UNIT_ASSERT(released.GetFuture().Wait(WaitTimeout));
         server.Finish(call);
+        AssertError(result);
     }
 
     Y_UNIT_TEST(AbsoluteDeadlineCancelsPendingInitialOpen) {
@@ -367,6 +477,24 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         auto stream = CreateReadStream(server.Client, Source(), Context(TDuration::Seconds(1)));
         auto result = stream->Next();
         server.Accept(call);
+        AssertError(result);
+        server.Cancelled(call);
+        server.Finish(call);
+    }
+
+    Y_UNIT_TEST(AbsoluteDeadlineCancelsPendingRead) {
+        TQueryServer server;
+        auto& call = server.ExpectCall();
+        auto stream = CreateReadStream(server.Client, Source(), Context(TDuration::Seconds(1)));
+        auto first = stream->Next();
+        server.Open(call);
+        server.Write(call, Batch());
+        UNIT_ASSERT(first.Wait(WaitTimeout));
+        UNIT_ASSERT(!first.GetValue().Error);
+        UNIT_ASSERT(first.GetValue().Batch);
+        first = {};
+        // The iterator is established and ReadNext is now definitely in flight.
+        auto result = stream->Next();
         AssertError(result);
         server.Cancelled(call);
         server.Finish(call);
@@ -387,53 +515,26 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         server.Finish(call);
     }
 
-    Y_UNIT_TEST(RejectsProtobufObjectAmplificationBeforeArrowDecode) {
+    Y_UNIT_TEST(CompressedResponseIsValidatedAfterSdkDecode) {
         TQueryServer server;
         auto& call = server.ExpectCall();
         auto stream = CreateReadStream(server.Client, Source(), Context());
         auto result = stream->Next();
-        server.Open(call);
-        auto part = Batch();
-        // Each empty submessage takes only two wire bytes, but allocates a
-        // generated C++ object. Keep this below the transport byte-size limit.
-        for (ui32 i = 0; i < 4097; ++i) {
-            part.mutable_result_set()->add_columns();
-        }
-        UNIT_ASSERT(part.ByteSizeLong() < MaxInboundMessageBytes);
-        server.Write(call, part);
-        AssertError(result);
+        server.Accept(call);
+        // The baseline transport accepts compression. Provider Arrow validation
+        // runs only after gRPC decompression and SDK protobuf decoding.
+        call.Context.set_compression_algorithm(GRPC_COMPRESS_GZIP);
+        server.Write(call, Batch());
+        UNIT_ASSERT(result.Wait(WaitTimeout));
+        UNIT_ASSERT(!result.GetValue().Error);
+        UNIT_ASSERT(result.GetValue().Batch);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().Batch->num_rows(), 1);
         stream->Cancel();
         server.Cancelled(call);
         server.Finish(call);
     }
 
-    Y_UNIT_TEST(BoundedTransportRejectsEvenSmallValidGzipResponse) {
-        for (bool boundedTransport : {false, true}) {
-            TQueryServer server(boundedTransport);
-            auto& call = server.ExpectCall();
-            auto stream = CreateReadStream(server.Client, Source(), Context());
-            auto result = stream->Next();
-            server.Accept(call);
-            // Explicit algorithm selection forces compression even if the peer
-            // advertised identity only; a compression level would negotiate.
-            call.Context.set_compression_algorithm(GRPC_COMPRESS_GZIP);
-            server.Write(call, Batch(), false);
-            if (boundedTransport) {
-                AssertError(result);
-            } else {
-                // Prove that this fixture really sends a usable gzip response.
-                UNIT_ASSERT(result.Wait(WaitTimeout));
-                UNIT_ASSERT(!result.GetValue().Error);
-                UNIT_ASSERT(result.GetValue().Batch);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetValue().Batch->num_rows(), 1);
-            }
-            stream->Cancel();
-            server.Cancelled(call);
-            server.Finish(call);
-        }
-    }
-
-    Y_UNIT_TEST(BoundedTransportRejectsGzipExpansionAndReleasesLease) {
+    Y_UNIT_TEST(OversizedCompressedResponseFailsAfterSdkProcessing) {
         TQueryServer server;
         auto& call = server.ExpectCall();
         auto released = NThreading::NewPromise();
@@ -486,6 +587,9 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         fixture.Pull(1);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Reads.load(), 2);
         fixture.Setup.Terminate();
+        // ReadNext is pending: deliver a late part so the baseline SDK can
+        // release its reader before the original request deadline.
+        fixture.Server.Write(call, Batch(), false);
         fixture.Server.Cancelled(call);
         fixture.Server.Finish(call);
     }

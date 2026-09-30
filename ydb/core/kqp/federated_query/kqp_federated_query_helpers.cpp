@@ -138,7 +138,6 @@ namespace {
         config.SetDiscoveryMode(NYdb::EDiscoveryMode::Off);
         config.SetMaxInboundMessageSize(8ULL << 20);
         config.SetGrpcMemoryQuota(16ULL << 20);
-        config.SetBoundedResponseTransport(true);
         // Keep response callback stacks serialized: a new read can be requested
         // as soon as its predecessor's future is ready, before that callback exits.
         config.SetNetworkThreadsNum(1);
@@ -260,6 +259,7 @@ namespace {
         ActorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
         Driver = MakeYdbDriver(ActorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
         NativeYdbDriver = MakeNativeYdbDriver();
+        NativeYdbTlsDriver = MakeNativeYdbDriver();
 
         if (appConfig.GetFeatureFlags().GetEnableTopicsSqlIoOperations()) {
             LocalTopicClientSettings.emplace();
@@ -322,6 +322,7 @@ namespace {
         auto result = TKqpFederatedQuerySetup{
             Driver,
             NativeYdbDriver,
+            NativeYdbTlsDriver,
             HttpGateway,
             ConnectorClient,
             CredentialsFactory,

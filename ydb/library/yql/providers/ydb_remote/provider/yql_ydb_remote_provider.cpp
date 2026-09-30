@@ -218,10 +218,11 @@ THolder<IGraphTransformer> CreatePhysicalOptimizer() {
 } // namespace NYdbRemote
 
 TDataProviderInfo CreateYdbRemoteDataProviders(TTypeAnnotationContext* types, const NYdb::TDriver& driver,
+                                              const NYdb::TDriver& tlsDriver,
                                               IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
                                               TInstant metadataDeadline,
                                               std::shared_ptr<NNative::IAsyncMemoryQuota> metadataQuota) {
-    auto state = MakeIntrusive<TState>(types, driver, std::move(credentialsFactory), metadataDeadline, std::move(metadataQuota));
+    auto state = MakeIntrusive<TState>(types, driver, tlsDriver, std::move(credentialsFactory), metadataDeadline, std::move(metadataQuota));
     TDataProviderInfo info;
     info.Names.insert(TString(YdbRemoteProviderName));
     info.Source = new TDataSource(state);

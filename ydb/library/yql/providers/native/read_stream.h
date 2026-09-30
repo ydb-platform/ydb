@@ -27,7 +27,8 @@ class IReadStream {
 public:
     virtual ~IReadStream() = default;
     virtual NThreading::TFuture<TReadResult> Next() = 0;
-    // Thread safe, idempotent; completes an outstanding Next, including stream creation.
+    // Thread safe, idempotent; completes an outstanding Next locally, including
+    // stream creation. Transport cancellation depends on the stream implementation.
     virtual void Cancel() = 0;
 };
 

@@ -33,7 +33,7 @@ public:
 
 private:
     // Send may synchronously destroy an undeliverable event. Its last lease can
-    // re-enter Send to report quiescence while we still guard System_.
+    // re-enter Send to report provider attempt release while we still guard System_.
     std::recursive_mutex Mutex_;
     NActors::TActorSystem* System_;
     const NActors::TActorId Actor_;

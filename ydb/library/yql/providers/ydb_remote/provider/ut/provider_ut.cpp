@@ -19,10 +19,11 @@ struct TFixture {
     TExprContext Ctx;
     TIntrusivePtr<TTypeAnnotationContext> Types = MakeIntrusive<TTypeAnnotationContext>();
     NYdb::TDriver Driver{NYdb::TDriverConfig().SetNetworkThreadsNum(1).SetClientThreadsNum(1)};
+    NYdb::TDriver TlsDriver{NYdb::TDriverConfig().SetNetworkThreadsNum(1).SetClientThreadsNum(1)};
     TState::TPtr State;
 
     explicit TFixture(TInstant deadline = TInstant::Max(), std::shared_ptr<NNative::IAsyncMemoryQuota> quota = {})
-        : State(MakeIntrusive<TState>(Types.Get(), Driver, CreateStructuredTokenCredentialsFactory(), deadline, std::move(quota)))
+        : State(MakeIntrusive<TState>(Types.Get(), Driver, TlsDriver, CreateStructuredTokenCredentialsFactory(), deadline, std::move(quota)))
     {
         AddCluster(*State, "remote", {
             {"location", "localhost:2135"}, {"database_name", "/Remote/"},
@@ -41,6 +42,7 @@ struct TFixture {
 
     ~TFixture() {
         Driver.Stop(true);
+        TlsDriver.Stop(true);
     }
 
     TYdbRemoteReadTable MakeRead() {
@@ -148,7 +150,7 @@ Y_UNIT_TEST_SUITE(TYdbRemoteProvider) {
 
     Y_UNIT_TEST(ProviderDispatchChecksDataSourceAndDataSinkCategories) {
         TFixture f;
-        auto providers = CreateYdbRemoteDataProviders(f.Types.Get(), f.Driver);
+        auto providers = CreateYdbRemoteDataProviders(f.Types.Get(), f.Driver, f.TlsDriver);
         const auto nativeRead = f.MakeRawRead(false);
         const auto pos = nativeRead->Pos();
         auto foreignChildren = nativeRead->ChildrenList();

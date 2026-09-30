@@ -15,6 +15,8 @@
 #include <util/string/builder.h>
 #include <mutex>
 #include <cstring>
+#include <optional>
+#include <utility>
 
 namespace NYql::NYdbRemote {
 namespace {
@@ -120,12 +122,14 @@ NNative::TReadResult Error(const NYdb::TStatus& status) {
 class TYdbReadStream final : public NNative::IReadStream, public std::enable_shared_from_this<TYdbReadStream> {
 public:
     TYdbReadStream(std::shared_ptr<NYdb::NQuery::TQueryClient> client, TSource source, NNative::TReadContext context)
-        : Client_(std::move(client)), Source_(std::move(source)), Context_(context)
-        , Control_(std::make_shared<NYdb::TRequestControl>()) {
+        : Client_(std::move(client)), Source_(std::move(source)), Context_(context) {
+    }
+
+    void SubscribeCancellation() {
         if (Context_.Cancellation.Future().StateId() != NThreading::TCancellationToken::Default().Future().StateId()) {
-            Context_.Cancellation.Future().Subscribe([weak = std::weak_ptr<NYdb::TRequestControl>(Control_)](const auto&) {
-                if (auto control = weak.lock()) {
-                    control->Cancel();
+            Context_.Cancellation.Future().Subscribe([weak = weak_from_this()](const auto&) {
+                if (auto self = weak.lock()) {
+                    self->Cancel();
                 }
             });
         }
@@ -144,89 +148,138 @@ public:
                 promise.SetValue({.Error = "YdbRemote read cancelled"});
                 return promise.GetFuture();
             }
-            iterator = Iterator_;
-        }
-        if (iterator) {
-            Read(iterator, promise);
-        } else {
-            const auto now = TInstant::Now();
-            if (now >= Context_.Deadline) {
+            if (TInstant::Now() >= Context_.Deadline) {
                 promise.SetValue({.Error = "YdbRemote read deadline exceeded"});
                 return promise.GetFuture();
             }
-            NYdb::NQuery::TExecuteQuerySettings settings;
-            settings.ClientTimeout(Context_.Deadline - now);
-            settings.Deadline(NYdb::TDeadline::AfterDuration(Context_.Deadline - now));
-            settings.RequestControl(Control_);
-            settings.RequestLifetime(Context_.MemoryLease);
-            settings.BoundedResponse(true);
-            settings.OutputChunkMaxSize(Context_.MaxBatchBytes);
-            settings.Format(NYdb::TResultSet::EFormat::Arrow);
-            settings.SchemaInclusionMode(NYdb::NQuery::ESchemaInclusionMode::Always);
-            settings.ConcurrentResultSets(false);
-            settings.ArrowFormatSettings(NYdb::NQuery::TArrowFormatSettings().CompressionCodec(
-                NYdb::NQuery::TArrowFormatSettings::TCompressionCodec().Type(
-                    NYdb::NQuery::TArrowFormatSettings::TCompressionCodec::EType::None)));
-            auto future = Client_->StreamExecuteQuery(std::string(BuildReadQuery(Source_)),
-                NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRO()).CommitTx(), settings);
-            future.Subscribe([self = shared_from_this(), promise](const auto& result) mutable {
-                try {
-                    auto iterator = std::make_shared<NYdb::NQuery::TExecuteQueryIterator>(result.GetValue());
-                    bool cancelled;
-                    {
-                        std::lock_guard lock(self->Mutex_);
-                        cancelled = self->Cancelled_;
-                        self->Iterator_ = iterator;
-                    }
-                    if (cancelled) {
-                        iterator->Cancel();
-                        promise.SetValue({.Error = "YdbRemote read cancelled"});
-                    } else if (!iterator->IsSuccess()) {
-                        promise.SetValue(Error(*iterator));
-                    } else {
-                        self->Read(iterator, promise);
-                    }
-                } catch (...) {
-                    promise.SetValue({.Error = "YdbRemote could not open the query stream"});
+            if (Pending_) {
+                promise.SetValue({.Error = "YdbRemote concurrent reads are unsupported"});
+                return promise.GetFuture();
+            }
+            Pending_ = promise;
+            iterator = Iterator_;
+        }
+        try {
+            if (iterator) {
+                Read(iterator, promise);
+            } else {
+                const auto now = TInstant::Now();
+                if (now >= Context_.Deadline) {
+                    Complete(promise, {.Error = "YdbRemote read deadline exceeded"});
+                    return promise.GetFuture();
                 }
-            });
+                NYdb::NQuery::TExecuteQuerySettings settings;
+                settings.ClientTimeout(Context_.Deadline - now);
+                settings.Deadline(NYdb::TDeadline::AfterDuration(Context_.Deadline - now));
+                settings.OutputChunkMaxSize(Context_.MaxBatchBytes);
+                settings.Format(NYdb::TResultSet::EFormat::Arrow);
+                settings.SchemaInclusionMode(NYdb::NQuery::ESchemaInclusionMode::Always);
+                settings.ConcurrentResultSets(false);
+                settings.ArrowFormatSettings(NYdb::NQuery::TArrowFormatSettings().CompressionCodec(
+                    NYdb::NQuery::TArrowFormatSettings::TCompressionCodec().Type(
+                        NYdb::NQuery::TArrowFormatSettings::TCompressionCodec::EType::None)));
+                {
+                    std::lock_guard lock(Mutex_);
+                    if (Cancelled_ || Context_.Cancellation.IsCancellationRequested()) {
+                        return promise.GetFuture();
+                    }
+                }
+                // Dispatch is accepted at the check above. A concurrent Cancel
+                // can complete locally before the SDK call returns; its callback
+                // must still discard that result. Do not call SDK credential code
+                // under Mutex_: a credentials provider may cancel reentrantly.
+                auto future = Client_->StreamExecuteQuery(std::string(BuildReadQuery(Source_)),
+                    NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SnapshotRO()).CommitTx(), settings);
+                // Keep the provider reservation until this callback returns, even
+                // if local cancellation has already completed the caller's future.
+                future.Subscribe([self = shared_from_this(), promise](const auto& result) mutable {
+                    try {
+                        auto iterator = std::make_shared<NYdb::NQuery::TExecuteQueryIterator>(result.GetValue());
+                        {
+                            std::lock_guard lock(self->Mutex_);
+                            if (self->Cancelled_ || self->Context_.Cancellation.IsCancellationRequested()) {
+                                return; // Dropping a late iterator requests SDK cleanup.
+                            }
+                            self->Iterator_ = iterator;
+                        }
+                        if (!iterator->IsSuccess()) {
+                            self->Complete(promise, Error(*iterator));
+                        } else {
+                            self->Read(iterator, promise);
+                        }
+                    } catch (...) {
+                        self->Complete(promise, {.Error = "YdbRemote could not open the query stream"});
+                    }
+                });
+            }
+        } catch (...) {
+            Complete(promise, {.Error = "YdbRemote could not start the query read"});
         }
         return promise.GetFuture();
     }
 
     void Cancel() override {
-        Control_->Cancel();
+        std::optional<NThreading::TPromise<NNative::TReadResult>> pending;
         std::shared_ptr<NYdb::NQuery::TExecuteQueryIterator> iterator;
         {
             std::lock_guard lock(Mutex_);
             Cancelled_ = true;
-            iterator = Iterator_;
+            pending = std::exchange(Pending_, {});
+            iterator = std::move(Iterator_);
         }
-        if (iterator) {
-            iterator->Cancel();
+        if (pending) {
+            pending->TrySetValue({.Error = "YdbRemote read cancelled"});
         }
+        // The existing SDK cancels on reader destruction. During initial open or
+        // ReadNext it still owns the reader: the RPC can outlive local cancellation
+        // until its absolute deadline. No transport-quiescence guarantee is made.
     }
 
 private:
+    void Complete(NThreading::TPromise<NNative::TReadResult> promise, NNative::TReadResult result) {
+        {
+            std::lock_guard lock(Mutex_);
+            if (Cancelled_ || Context_.Cancellation.IsCancellationRequested()) {
+                result = {.Error = "YdbRemote read cancelled"};
+            } else if (TInstant::Now() >= Context_.Deadline) {
+                result = {.Error = "YdbRemote read deadline exceeded"};
+            }
+            Pending_.reset();
+        }
+        promise.TrySetValue(std::move(result));
+    }
+
     void Read(const std::shared_ptr<NYdb::NQuery::TExecuteQueryIterator>& iterator,
               NThreading::TPromise<NNative::TReadResult> promise) {
+        {
+            std::lock_guard lock(Mutex_);
+            if (Cancelled_ || Context_.Cancellation.IsCancellationRequested()) {
+                return;
+            }
+        }
         iterator->ReadNext().Subscribe([self = shared_from_this(), promise](const auto& future) mutable {
             try {
+                {
+                    std::lock_guard lock(self->Mutex_);
+                    if (self->Cancelled_ || self->Context_.Cancellation.IsCancellationRequested()) {
+                        return; // Do not decode a late result after cancellation.
+                    }
+                }
                 const auto& part = future.GetValue();
                 if (part.EOS()) {
-                    promise.SetValue({.Finished = true});
+                    self->Complete(promise, {.Finished = true});
                 } else if (!part.IsSuccess()) {
-                    promise.SetValue(Error(part));
+                    self->Complete(promise, Error(part));
                 } else if (part.HasResultSet()) {
                     YQL_ENSURE(part.GetResultSetIndex() == 0, "YdbRemote unexpected result set");
                     auto batch = DecodeArrowResult(part.GetResultSet(), self->Source_, self->Context_.MaxBatchBytes);
                     const ui64 bytes = NUdf::GetSizeOfArrowBatchInBytes(*batch);
-                    promise.SetValue({.MemoryLease = self->Context_.MemoryLease, .Batch = std::move(batch), .Bytes = bytes});
+                    self->Complete(promise, {.MemoryLease = self->Context_.MemoryLease, .Batch = std::move(batch), .Bytes = bytes});
                 } else {
-                    promise.SetValue({});
+                    self->Complete(promise, {});
                 }
             } catch (...) {
-                promise.SetValue({.Error = "YdbRemote invalid, unsupported or oversized response"});
+                self->Complete(promise, {.Error = "YdbRemote invalid, unsupported or oversized response"});
             }
         });
     }
@@ -234,9 +287,9 @@ private:
     const std::shared_ptr<NYdb::NQuery::TQueryClient> Client_;
     const TSource Source_;
     const NNative::TReadContext Context_;
-    const std::shared_ptr<NYdb::TRequestControl> Control_;
     std::mutex Mutex_;
     bool Cancelled_ = false;
+    std::optional<NThreading::TPromise<NNative::TReadResult>> Pending_;
     std::shared_ptr<NYdb::NQuery::TExecuteQueryIterator> Iterator_;
 };
 
@@ -422,7 +475,9 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
 
 std::shared_ptr<NNative::IReadStream> CreateReadStream(std::shared_ptr<NYdb::NQuery::TQueryClient> client,
     const TSource& source, const NNative::TReadContext& context) {
-    return std::make_shared<TYdbReadStream>(std::move(client), source, context);
+    auto stream = std::make_shared<TYdbReadStream>(std::move(client), source, context);
+    stream->SubscribeCancellation();
+    return stream;
 }
 
 } // namespace NYql::NYdbRemote

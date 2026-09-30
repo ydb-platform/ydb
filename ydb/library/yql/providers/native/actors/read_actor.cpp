@@ -22,8 +22,9 @@ namespace {
 using namespace NActors;
 using namespace NDq;
 
-// The SDK owns this wrapper until the transport and its last callback are gone.
-// A separate underlying governor lease returns quota in the original mailbox.
+// The stream and provider callbacks retain this wrapper through their attempt.
+// This does not imply SDK transport quiescence. The underlying governor lease
+// returns quota in the original mailbox.
 struct TEvAttemptReleased : TEventLocal<TEvAttemptReleased, EventSpaceBegin(TEvents::ES_PRIVATE) + 2> {
     explicit TEvAttemptReleased(ui64 generation) : Generation(generation) {}
     ui64 Generation;
@@ -173,7 +174,7 @@ public:
     void PassAway() override {
         Stopping_ = true;
         CloseOperation();
-        // The governor and SDK leases outlive the compute/source actors. No future
+        // The governor and callback leases outlive the compute/source actors. No future
         // callback captures either actor or calls its non-thread-safe quota manager.
         TActorBootstrapped::PassAway();
     }
@@ -247,7 +248,7 @@ private:
         try {
             if (!Stream_) {
                 if (AttemptActive_) {
-                    return; // Previous transport still owns buffers/callbacks.
+                    return; // Previous stream/provider callbacks still own the attempt lease.
                 }
                 AttemptActive_ = true;
                 auto context = Context_;
@@ -304,7 +305,7 @@ private:
             Ready_.reset();
             CloseStream();
             // A retry opens a new snapshot and waits for both backoff and complete
-            // destruction of the previous attempt's transport-owned lease.
+            // release of the previous stream/provider callback lease.
             if (result.Retryable && !Delivered_ && Retries_ < Settings_.MaxRetries &&
                 TActivationContext::Now() < Context_.Deadline) {
                 ++Retries_;

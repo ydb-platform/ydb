@@ -15,7 +15,9 @@ class IAsyncMemoryQuota;
 
 TDataProviderInfo CreateYdbRemoteDataProviders(
     TTypeAnnotationContext* types,
+    // Independently constructed drivers isolate the baseline SDK channel caches.
     const NYdb::TDriver& driver,
+    const NYdb::TDriver& tlsDriver,
     IStructuredTokenCredentialsFactory::TPtr credentialsFactory = CreateStructuredTokenCredentialsFactory(),
     TInstant metadataDeadline = TInstant::Max(),
     std::shared_ptr<NNative::IAsyncMemoryQuota> metadataQuota = {});

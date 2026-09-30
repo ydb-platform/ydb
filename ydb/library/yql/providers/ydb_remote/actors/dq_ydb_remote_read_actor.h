@@ -6,8 +6,9 @@
 
 namespace NYql::NDq {
 
-// The supplied dedicated driver must enforce MaxInboundMessageSize <= 8 MiB.
+// The dedicated drivers must be independently constructed (not copies) to
+// isolate plaintext/TLS channel caches, with MaxInboundMessageSize <= 8 MiB.
 void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
-    const NYdb::TDriver& driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
+    const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq

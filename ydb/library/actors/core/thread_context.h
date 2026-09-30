@@ -17,7 +17,6 @@ namespace NActors {
     struct TExecutionStats;
 
     class IExecutorPool;
-    class TAsyncFrameCache;
 
     template <typename T>
     struct TWaitingStats;
@@ -84,8 +83,8 @@ namespace NActors {
         TExecutionContext ExecutionContext;
         TMailboxContext MailboxContext;
         TExecutionStats *ExecutionStats = nullptr;
-        // Cache owned by the executor thread. Null when this context is not a worker.
-        TAsyncFrameCache* AsyncFrameCache = nullptr;
+        // Generic cache set for the current physical worker, or a scoped binding.
+
 
 
         bool IsEnoughCpu = true;

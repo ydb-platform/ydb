@@ -14,12 +14,16 @@ IF (ALLOCATOR == "B" OR ALLOCATOR == "BS" OR ALLOCATOR == "C")
 ENDIF()
 
 SRCS(
+    allocation_cache.cpp
+    allocation_cache.h
+    async_frame_cache.h
     inmemory_metrics.cpp
     metric_system.cpp
     stats.cpp
 )
 
 PEERDIR(
+    library/cpp/lwtrace
     ydb/library/actors/metrics
     ydb/library/actors/util
     ydb/library/actors/protos

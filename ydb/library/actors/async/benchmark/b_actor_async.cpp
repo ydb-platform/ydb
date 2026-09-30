@@ -119,7 +119,7 @@ private:
 };
 
 template<class TDriver>
-void BM_PingActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
+void BM_PingActor(benchmark::State& state, size_t budget = DefaultAsyncFrameCacheSizeBytes) {
 
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->AsyncFrameCacheSizeBytes = budget;
@@ -230,7 +230,7 @@ private:
 };
 
 template<class TDriver>
-void BM_YieldActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
+void BM_YieldActor(benchmark::State& state, size_t budget = DefaultAsyncFrameCacheSizeBytes) {
 
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->AsyncFrameCacheSizeBytes = budget;

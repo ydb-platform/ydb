@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "subsystems/allocation_cache.h"
 #include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
@@ -178,6 +179,12 @@ namespace NActors {
     {
         ServiceMap.Reset(new TServiceMap());
         SubSystems = std::move(SystemSetup->SubSystems);
+        if (!GetSubSystem<TAllocationCacheSubSystem>()) {
+            RegisterSubSystem(std::unique_ptr<TAllocationCacheSubSystem>(new TAllocationCacheSubSystem));
+        }
+        if (!GetSubSystem<TAsyncFrameCacheFrontend>()) {
+            RegisterSubSystem(std::make_unique<TAsyncFrameCacheFrontend>(AsyncFrameCacheSizeBytes));
+        }
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
         }
@@ -618,8 +625,23 @@ namespace NActors {
         return CpuManager->GetBasicExecutorPools();
     }
 
-    TAsyncFrameCache::TProcessStats TActorSystem::GetAsyncFrameCacheStats() const {
-        return CpuManager->GetAsyncFrameCacheStats();
+    void TActorSystem::InitializeExecutorThread(TThreadContext* context) {
+        ForEachSubSystem(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadStart(context);
+        });
+    }
+
+    void TActorSystem::CleanupExecutorThread(TThreadContext* context) {
+        ForEachSubSystemReverse(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadStop(context);
+        });
+    }
+
+    TAllocationCacheProcessStats TActorSystem::GetAsyncFrameCacheStats() const {
+        if (const auto* system = GetSubSystem<TAllocationCacheSubSystem>()) {
+            return system->GetCachedStats(TAsyncFrameCacheFrontend::FamilyId());
+        }
+        return {};
     }
 
 }

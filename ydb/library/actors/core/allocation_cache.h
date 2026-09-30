@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstddef>
 #include <new>
+#include <memory>
 
 #if defined(_asan_enabled_)
 #include <sanitizer/asan_interface.h>
@@ -18,49 +19,109 @@
 
 namespace NActors {
 
-// Worker-local idle (free) allocations only. Frames in use are owned by user, not this cache.
+// Legacy counter names are preserved; CachedFrames counts raw idle blocks.
+struct TAllocationCacheStats {
+    size_t SizeClasses = 0;
+    size_t CachedFrames = 0;
+    size_t CachedBytes = 0;
+    size_t HeapAllocations = 0;
+};
+
+// Idle blocks only; safe to sample from any thread and to sum across caches.
+struct TAllocationCacheProcessStats {
+    size_t CachedFrames = 0;
+    size_t CachedBytes = 0;
+
+    void Add(const TAllocationCacheProcessStats& other) noexcept {
+        CachedFrames += other.CachedFrames;
+        CachedBytes += other.CachedBytes;
+    }
+};
+
+// Concrete atomic records. The subsystem owns worker records; standalone caches
+// own their records locally. Readers receive only value snapshots.
+class alignas(64) TAllocationCacheCounters {
+public:
+    TAllocationCacheCounters(size_t binCount, size_t minimumSize)
+        : Counts(std::make_unique<std::atomic<size_t>[]>(binCount))
+        , BinCount(binCount)
+        , MinimumSize(minimumSize)
+    {}
+
+    TAllocationCacheProcessStats GetCachedStats() const noexcept {
+        TAllocationCacheProcessStats stats;
+        for (size_t index = 0; index < BinCount; ++index) {
+            const auto count = Counts[index].load(std::memory_order_relaxed);
+            stats.CachedFrames += count;
+            stats.CachedBytes += count * (MinimumSize << index);
+        }
+        return stats;
+    }
+
+    std::unique_ptr<std::atomic<size_t>[]> Counts;
+    const size_t BinCount;
+    const size_t MinimumSize;
+};
+
+// Raw blocks only: clients construct/destroy objects and must return blocks allocated
+// by this same tag, with the original requested size. Ordinary new/malloc blocks
+// must never be returned here. Tags define immutable power-of-two size classes;
+// budgets may vary across systems without changing block compatibility.
 // Preserves default new alignment (__STDCPP_DEFAULT_NEW_ALIGNMENT__, usually 16);
 // extended frame alignment is unsupported.
-class TAsyncFrameCache : TNonCopyable {
+template<class TTag>
+class TAllocationCache : TNonCopyable {
 public:
-    static constexpr size_t DefaultSizeBytes = 4_MB;
+    // Power-of-two buckets from the tag's minimum to maximum size.
+    static constexpr size_t MinAllocationSize = TTag::MinAllocationSize;
+    static constexpr size_t MinAllocationSizeLog2 = MostSignificantBitCT(MinAllocationSize);
+    static constexpr size_t MaxAllocationSize = TTag::MaxAllocationSize;
+    static constexpr size_t BinCount = MostSignificantBitCT(MaxAllocationSize / MinAllocationSize) + 1;
 
-    // cache buckets are 1 KiB, 2 KiB, 4 KiB, ..., 64 KiB
-    static constexpr size_t MinCachedFrameSize = 1_KB;
-    static constexpr size_t MinCachedFrameSizeLog2 = MostSignificantBitCT(MinCachedFrameSize);
-    static constexpr size_t MaxCachedFrameSize = 64_KB;
-    static constexpr size_t BinCount = MostSignificantBitCT(MaxCachedFrameSize / MinCachedFrameSize) + 1;
+    static_assert((MinAllocationSize & (MinAllocationSize - 1)) == 0);
+    static_assert((MaxAllocationSize & (MaxAllocationSize - 1)) == 0);
+    static_assert(MaxAllocationSize >= MinAllocationSize);
+    static_assert(MinAllocationSize >= sizeof(void*));
 
-    static_assert((MinCachedFrameSize & (MinCachedFrameSize - 1)) == 0);
-    static_assert((MaxCachedFrameSize & (MaxCachedFrameSize - 1)) == 0);
-    static_assert(MaxCachedFrameSize >= MinCachedFrameSize);
+    using TStats = TAllocationCacheStats;
+    using TProcessStats = TAllocationCacheProcessStats;
 
-    struct TStats {
-        size_t SizeClasses = 0;
-        size_t CachedFrames = 0;
-        size_t CachedBytes = 0;
-        size_t HeapAllocations = 0;
-    };
+public:
+    using TCounters = TAllocationCacheCounters;
 
-    // Idle frames only; safe to sample from any thread and to sum across caches.
-    struct TProcessStats {
-        size_t CachedFrames = 0;
-        size_t CachedBytes = 0;
-
-        void Add(const TProcessStats& other) noexcept {
-            CachedFrames += other.CachedFrames;
-            CachedBytes += other.CachedBytes;
+    explicit TAllocationCache(size_t sizeBytes, TCounters* counters = nullptr)
+        : OwnedCounters(counters ? nullptr : std::make_unique<TCounters>(BinCount, MinAllocationSize))
+        , Counters(counters ? counters : OwnedCounters.get())
+        , SizeBytes(sizeBytes)
+    {}
+    ~TAllocationCache() {
+        for (size_t index = 0; index < BinCount; ++index) {
+            auto& head = Bins[index];
+            while (auto* frame = head) {
+                UnpoisonMemory(frame, sizeof(TIdleFrameLink));
+                head = frame->Next;
+                DeleteFrame(frame, BinCapacity(index));
+            }
+            Counters->Counts[index].store(0, std::memory_order_relaxed);
         }
-    };
-
-public:
-    explicit TAsyncFrameCache(size_t sizeBytes = DefaultSizeBytes) noexcept;
-    ~TAsyncFrameCache();
+    }
 
     [[nodiscard]] void* Allocate(size_t size);
     void Release(void* frame, size_t size) noexcept;
 
-    TStats GetStats() const noexcept;
+    // Owner-thread diagnostics; off-thread readers must use GetCachedStats.
+    TStats GetStats() const noexcept {
+        TStats stats;
+        stats.CachedBytes = CachedBytes;
+        stats.HeapAllocations = HeapAllocations;
+        for (size_t index = 0; index < BinCount; ++index) {
+            if (const auto frames = Counters->Counts[index].load(std::memory_order_relaxed)) {
+                ++stats.SizeClasses;
+                stats.CachedFrames += frames;
+            }
+        }
+        return stats;
+    }
 
     size_t GetSizeBytes() const noexcept {
         return SizeBytes;
@@ -69,10 +130,13 @@ public:
     // Safe from any thread. Reads only the per-bin idle frame counts, so it is
     // approximate while the owner allocates or releases and exact when the
     // owner is quiescent.
-    TProcessStats GetCachedStats() const noexcept;
+    TProcessStats GetCachedStats() const noexcept {
+        return Counters->GetCachedStats();
+    }
+
 
 public:
-    static TAsyncFrameCache* GetCurrent() noexcept;
+    static TAllocationCache* GetCurrent() noexcept;
 
     [[nodiscard]] static void* AllocateCurrent(size_t size) {
         if (auto* cache = GetCurrent()) {
@@ -85,7 +149,7 @@ public:
         // Round even without a worker cache: another worker may later return
         // this frame to cache (might be another thread local) without
         // knowing where it was allocated.
-        if (size > MaxCachedFrameSize) {
+        if (size > MaxAllocationSize) {
             return ::operator new(size);
         }
         const auto capacity = BinCapacity(BinIndex(size));
@@ -109,16 +173,16 @@ private:
     };
 
     static size_t BinIndex(size_t size) noexcept {
-        return size <= MinCachedFrameSize ? 0 : CeilLog2(size) - MinCachedFrameSizeLog2;
+        return size <= MinAllocationSize ? 0 : CeilLog2(size) - MinAllocationSizeLog2;
     }
 
     static size_t BinCapacity(size_t index) noexcept {
         // note, that buckets are both power of 2 and >= 1 KiB
-        return MinCachedFrameSize << index;
+        return MinAllocationSize << index;
     }
 
     static size_t AllocationCapacity(size_t size) noexcept {
-        return size > MaxCachedFrameSize ? size : BinCapacity(BinIndex(size));
+        return size > MaxAllocationSize ? size : BinCapacity(BinIndex(size));
     }
 
     static void UnpoisonMemory(void* frame, size_t size) noexcept {
@@ -167,7 +231,8 @@ private:
     // The cache owner is the only writer. Use loads/stores, not atomic
     // read-modify-write operations, on the allocation and release paths.
     // Other threads may only load these counts (see GetCachedStats).
-    std::array<std::atomic<size_t>, BinCount> Counts{};
+    std::unique_ptr<TCounters> OwnedCounters;
+    TCounters* Counters;
 
     const size_t SizeBytes;
     size_t CachedBytes = 0;
@@ -176,8 +241,9 @@ private:
 
 // has to be inline, so that compiler fold it in the coroutine allocation path
 // (allocation size in that case is not runtime and rather a constant)
-inline void* TAsyncFrameCache::Allocate(size_t size) {
-    if (size <= MaxCachedFrameSize) {
+template<class TTag>
+inline void* TAllocationCache<TTag>::Allocate(size_t size) {
+    if (size <= MaxAllocationSize) {
         const auto index = BinIndex(size);
         auto& head = Bins[index];
         if (head) {
@@ -185,7 +251,7 @@ inline void* TAsyncFrameCache::Allocate(size_t size) {
             UnpoisonMemory(frame, sizeof(TIdleFrameLink));
             head = frame->Next;
             CachedBytes -= BinCapacity(index);
-            auto& count = Counts[index];
+            auto& count = Counters->Counts[index];
             count.store(count.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
             PrepareAllocatedFrame(frame, size, BinCapacity(index));
             return frame;
@@ -198,8 +264,9 @@ inline void* TAsyncFrameCache::Allocate(size_t size) {
 
 // has to be inline, so that compiler fold it in the coroutine allocation path
 // (allocation size in that case is not runtime and rather a constant)
-inline void TAsyncFrameCache::Release(void* frame, size_t size) noexcept {
-    if (size <= MaxCachedFrameSize) {
+template<class TTag>
+inline void TAllocationCache<TTag>::Release(void* frame, size_t size) noexcept {
+    if (size <= MaxAllocationSize) {
         const auto index = BinIndex(size);
         const auto capacity = BinCapacity(index);
         if (capacity <= SizeBytes - CachedBytes) {
@@ -208,7 +275,7 @@ inline void TAsyncFrameCache::Release(void* frame, size_t size) noexcept {
             head = ::new (frame) TIdleFrameLink{head};
             PoisonIdleFrame(frame, capacity);
             CachedBytes += capacity;
-            auto& count = Counts[index];
+            auto& count = Counters->Counts[index];
             count.store(count.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
             return;
         }
@@ -216,23 +283,5 @@ inline void TAsyncFrameCache::Release(void* frame, size_t size) noexcept {
     DeleteFrame(frame, AllocationCapacity(size));
 }
 
-// Test helper. Workers publish the cache through TlsThreadContext directly.
-// On a thread that already has a context, replaces AsyncFrameCache and restores
-// it. Otherwise installs a context for the scope. Nested bindings restore the
-// previous cache. Never share a cache between concurrently executing threads.
-struct TThreadContext;
-
-class TScopedAsyncFrameCache : TNonCopyable {
-public:
-    explicit TScopedAsyncFrameCache(TAsyncFrameCache& cache);
-    ~TScopedAsyncFrameCache();
-
-private:
-    TThreadContext* PreviousContext;
-    TAsyncFrameCache* PreviousCache;
-
-    // Non-null only when this guard installed a context because the thread had none.
-    TThreadContext* OwnedContext;
-};
 
 } // namespace NActors

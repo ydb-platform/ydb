@@ -1,6 +1,6 @@
 #include "collector_counters.h"
 
-#include <ydb/library/actors/core/async_frame_cache.h>
+#include <ydb/library/actors/core/allocation_cache.h>
 #include <ydb/library/actors/core/mon_stats.h>
 #include <ydb/library/actors/core/harmonizer/harmonizer_stats.h>
 
@@ -297,7 +297,7 @@ void TActorSystemCounters::Init(NMonitoring::TDynamicCounters* group) {
     AsyncFrameCacheCachedBytes = frameCacheGroup->GetCounter("CachedBytes", false);
 }
 
-void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TAsyncFrameCache::TProcessStats& frameCacheStats) {
+void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TAllocationCacheProcessStats& frameCacheStats) {
     *AsyncFrameCacheCachedFrames = frameCacheStats.CachedFrames;
     *AsyncFrameCacheCachedBytes = frameCacheStats.CachedBytes;
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS

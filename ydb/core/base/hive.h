@@ -6,6 +6,7 @@
 #include "subdomain.h"
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/base/tablet.h>
+#include <util/generic/hash_set.h>
 #include <util/stream/str.h>
 
 namespace NKikimr {
@@ -165,12 +166,11 @@ namespace NKikimr {
                 if (record.HasOwnerIdx()) {
                     return false;
                 }
-                // The list is bounded; avoid allocating a hash table for validation.
-                for (int i = 0; i < record.OwnerIdxsSize(); ++i) {
-                    for (int j = 0; j < i; ++j) {
-                        if (record.GetOwnerIdxs(i) == record.GetOwnerIdxs(j)) {
-                            return false;
-                        }
+                THashSet<ui64> seenOwnerIdxs;
+                seenOwnerIdxs.reserve(record.OwnerIdxsSize());
+                for (const ui64 ownerIdx : record.GetOwnerIdxs()) {
+                    if (!seenOwnerIdxs.insert(ownerIdx).second) {
+                        return false;
                     }
                 }
                 return true;

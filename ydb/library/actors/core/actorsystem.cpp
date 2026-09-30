@@ -162,6 +162,7 @@ namespace NActors {
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
+        , AsyncFrameCacheSizeBytes(setup->AsyncFrameCacheSizeBytes)
         , CpuManager(new TCpuManager(setup))
         , ExecutorPoolCount(CpuManager->GetExecutorsCount())
         , Scheduler(setup->Scheduler)
@@ -615,6 +616,10 @@ namespace NActors {
 
     TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
         return CpuManager->GetBasicExecutorPools();
+    }
+
+    TAsyncFrameCache::TProcessStats TActorSystem::GetAsyncFrameCacheStats() const {
+        return CpuManager->GetAsyncFrameCacheStats();
     }
 
 }

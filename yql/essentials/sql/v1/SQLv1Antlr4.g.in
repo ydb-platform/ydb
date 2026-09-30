@@ -378,7 +378,7 @@ export_stmt: EXPORT bind_parameter_list;
 call_action: (bind_parameter | EMPTY_ACTION) LPAREN expr_list? RPAREN;
 inline_action: BEGIN define_action_or_subquery_body END DO;
 do_stmt: DO (call_action | inline_action);
-pragma_stmt: PRAGMA opt_id_prefix_or_type an_id (EQUALS pragma_value | LPAREN pragma_value (COMMA pragma_value)* RPAREN)?;
+pragma_stmt: PRAGMA opt_id_prefix_or_type an_id (EQUALS pragma_value | LPAREN pragma_value (COMMA pragma_value)* RPAREN | EQUALS LPAREN expr RPAREN)?;
 
 pragma_value:
     signed_number

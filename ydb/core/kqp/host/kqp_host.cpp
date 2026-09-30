@@ -22,6 +22,8 @@
 #include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
+#include <yql/essentials/core/type_ann/type_ann_core.h>
+#include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/services/yql_plan.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
@@ -530,10 +532,50 @@ private:
     TString Cluster;
 };
 
+bool IsRelativePathPrefixValue(const TExprNode& node) {
+    return node.IsCallable("Untag") && node.ChildrenSize() == 2 &&
+        node.Tail().IsAtom("RelativePathPrefix") && node.Head().IsCallable("AsTagged") &&
+        node.Head().ChildrenSize() == 2 && node.Head().Tail().IsAtom("RelativePathPrefix");
+}
+
+bool IsRelativePathPrefixEvaluation(const TExprNode& node) {
+    if (!node.IsCallable("EvaluateAtom") || node.ChildrenSize() != 1) {
+        return false;
+    }
+    if (node.Head().IsCallable("BuildTablePath") && node.Head().ChildrenSize() == 2 &&
+        node.Head().Head().IsCallable("String") && node.Head().Head().ChildrenSize() == 1 &&
+        node.Head().Head().Head().IsCallable("EvaluateAtom")) {
+        return IsRelativePathPrefixEvaluation(node.Head().Head().Head());
+    }
+    if (!node.Head().IsCallable("Ensure") || node.Head().ChildrenSize() != 3) {
+        return false;
+    }
+    const auto& ensure = node.Head();
+    const auto& path = ensure.Head();
+    if (!path.IsCallable("BuildTablePath") || path.ChildrenSize() != 2) {
+        return false;
+    }
+    const auto& prefixPath = path.Tail().IsCallable("String") ? path.Head() : path;
+    if (!prefixPath.IsCallable("BuildTablePath") || prefixPath.ChildrenSize() != 2 ||
+        !prefixPath.Head().IsCallable("String") || !IsRelativePathPrefixValue(prefixPath.Tail())) {
+        return false;
+    }
+    const auto& predicate = *ensure.Child(1);
+    if (!predicate.IsCallable("Not") || predicate.ChildrenSize() != 1 ||
+        !predicate.Head().IsCallable("StartsWith") || predicate.Head().ChildrenSize() != 2 ||
+        !IsRelativePathPrefixValue(predicate.Head().Head()) || !predicate.Head().Tail().IsCallable("String") ||
+        predicate.Head().Tail().ChildrenSize() != 1 || !predicate.Head().Tail().Head().IsAtom("/")) {
+        return false;
+    }
+    return ensure.Tail().IsCallable("String");
+}
+
 class TFailExpressionEvaluation : public TSyncTransformerBase {
 public:
-    TFailExpressionEvaluation(EKikimrQueryType queryType)
+    TFailExpressionEvaluation(EKikimrQueryType queryType, bool allowRelativePathPrefix = false, bool onlyRelativePathPrefix = false)
         : QueryType(queryType)
+        , AllowRelativePathPrefix(allowRelativePathPrefix)
+        , OnlyRelativePathPrefix(onlyRelativePathPrefix)
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
@@ -543,8 +585,15 @@ public:
             return TStatus::Ok;
         }
 
-        auto evaluateNode = FindNode(input, [](const TExprNode::TPtr& node) {
-            return node->IsCallable({"EvaluateIf!", "EvaluateFor!", "EvaluateAtom"});
+        if (OnlyRelativePathPrefix && (!AllowRelativePathPrefix || !FindNode(input, [](const TExprNode::TPtr& node) {
+            return IsRelativePathPrefixValue(*node);
+        }))) {
+            return TStatus::Ok;
+        }
+
+        auto evaluateNode = FindNode(input, [this](const TExprNode::TPtr& node) {
+            return node->IsCallable({"EvaluateIf!", "EvaluateFor!", "EvaluateAtom"}) &&
+                (!AllowRelativePathPrefix || !IsRelativePathPrefixEvaluation(*node));
         });
 
         if (!evaluateNode)
@@ -575,6 +624,8 @@ public:
     }
 
     const EKikimrQueryType QueryType;
+    const bool AllowRelativePathPrefix;
+    const bool OnlyRelativePathPrefix;
 };
 
 class TPrepareDataQueryAstTransformer : public TGraphTransformerBase {
@@ -799,6 +850,89 @@ private:
 private:
     static constexpr ui32 WriteSettingsChildIndex = 4;
     TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+};
+
+class TRelativePathPrefixParametersTransformer {
+public:
+    TRelativePathPrefixParametersTransformer(TIntrusivePtr<TKikimrQueryContext> queryCtx, TIntrusivePtr<TTypeAnnotationContext> typesCtx, bool enabled)
+        : QueryCtx(queryCtx)
+        , TypesCtx(typesCtx)
+        , Enabled(enabled)
+    {}
+
+    IGraphTransformer::TStatus operator()(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (!Enabled) {
+            output = input;
+            return IGraphTransformer::TStatus::Ok;
+        }
+        TOptimizeExprSettings settings(nullptr);
+        settings.VisitChanges = false;
+
+        bool hasRelativePathPrefix = false;
+        auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            if (!IsRelativePathPrefixValue(*node)) {
+                return node;
+            }
+            hasRelativePathPrefix = true;
+
+            const auto& prefixExpr = node->Child(0)->HeadPtr();
+            TNodeOnNodeOwnedMap replacements;
+            auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypesCtx);
+            auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, *TypesCtx);
+            bool valid = true;
+            VisitExpr(prefixExpr, [&](const TExprNode::TPtr& parameter) {
+                if (!parameter->IsCallable("Parameter")) {
+                    return true;
+                }
+
+                auto typedParameter = parameter;
+                typeTransformer->Rewind();
+                if (InstantTransform(*typeTransformer, typedParameter, ctx).Level == IGraphTransformer::TStatus::Error ||
+                    !typedParameter->GetTypeAnn()) {
+                    valid = false;
+                    return false;
+                }
+
+                const TString name(parameter->Head().Content());
+                auto value = ValidateParameter(name, *typedParameter->GetTypeAnn(), parameter->Pos(), *QueryCtx->QueryData, ctx);
+                if (!value) {
+                    valid = false;
+                    return false;
+                }
+
+                auto literal = NCommon::ValueToExprLiteral(typedParameter->GetTypeAnn(), value->second, ctx, parameter->Pos());
+                if (!literal) {
+                    valid = false;
+                    return false;
+                }
+                replacements.emplace(parameter.Get(), std::move(literal));
+                return true;
+            });
+
+            if (!valid) {
+                return nullptr;
+            }
+            if (replacements.empty()) {
+                return node;
+            }
+
+            auto tagged = ctx.ChangeChild(*node->Child(0), 0, ctx.ReplaceNodes(TExprNode::TPtr(prefixExpr), replacements));
+            return ctx.ChangeChild(*node, 0, std::move(tagged));
+        }, ctx, settings);
+        if (status.Level != IGraphTransformer::TStatus::Error && hasRelativePathPrefix && ctx.Step.IsDone(TExprStep::ExprEval)) {
+            ctx.Step.Repeat(TExprStep::ExprEval);
+        }
+        return status;
+    }
+
+    static TAutoPtr<IGraphTransformer> Sync(TIntrusivePtr<TKikimrQueryContext> queryCtx, TIntrusivePtr<TTypeAnnotationContext> typesCtx, bool enabled) {
+        return CreateFunctorTransformer(TRelativePathPrefixParametersTransformer(queryCtx, typesCtx, enabled));
+    }
+
+private:
+    TIntrusivePtr<TKikimrQueryContext> QueryCtx;
+    TIntrusivePtr<TTypeAnnotationContext> TypesCtx;
+    bool Enabled;
 };
 
 class TCollectParametersTransformer {
@@ -1572,7 +1706,7 @@ private:
     IAsyncQueryResultPtr PrepareDataQueryInternal(const TKqpQueryRef& query, const TPrepareSettings& settings,
         TExprContext& ctx)
     {
-        SetupYqlTransformer(EKikimrQueryType::Dml);
+        SetupYqlTransformer(EKikimrQueryType::Dml, settings.CompileParameters);
 
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().PreparingQuery = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -1675,7 +1809,7 @@ private:
     IAsyncQueryResultPtr PrepareQueryInternal(const TKqpQueryRef& query, NYql::TExprNode::TPtr expr, EKikimrQueryType queryType,
         const TPrepareSettings& settings, TExprContext& ctx)
     {
-        SetupYqlTransformer(queryType);
+        SetupYqlTransformer(queryType, settings.CompileParameters);
         auto sqlVersion = SetupQueryParameters(settings, queryType);
 
         if (!expr) {
@@ -1752,7 +1886,7 @@ private:
     IAsyncQueryResultPtr PrepareScanQueryInternal(const TKqpQueryRef& query, TExprContext& ctx, const TPrepareSettings& prepareSettings,
         EKikimrStatsMode statsMode = EKikimrStatsMode::None)
     {
-        SetupYqlTransformer(EKikimrQueryType::Scan);
+        SetupYqlTransformer(EKikimrQueryType::Scan, prepareSettings.CompileParameters);
 
         SessionCtx->Query().PrepareOnly = true;
         SessionCtx->Query().StatsMode = statsMode;
@@ -2198,6 +2332,8 @@ private:
                 NYql::NLog::ELevel::TRACE), "LogYqlTransform")
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
+            .Add(TRelativePathPrefixParametersTransformer::Sync(SessionCtx->QueryPtr(), TypesCtx, CompileRelativePathPrefix), "RelativePathPrefixParameters")
+            .Add(new TFailExpressionEvaluation(queryType, CompileRelativePathPrefix, true), "ValidateRelativePathPrefixEvaluation")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
@@ -2260,6 +2396,8 @@ private:
                 NYql::NLog::ELevel::TRACE), "LogYqlTransformNewRBO")
             .AddPreTypeAnnotation()
             .Add(TSecretValueExprTransformer::Sync(SessionCtx->QueryPtr()), "SecretValueExpr")
+            .Add(TRelativePathPrefixParametersTransformer::Sync(SessionCtx->QueryPtr(), TypesCtx, CompileRelativePathPrefix), "RelativePathPrefixParameters")
+            .Add(new TFailExpressionEvaluation(queryType, CompileRelativePathPrefix, true), "ValidateRelativePathPrefixEvaluation")
             .AddExpressionEvaluation(*FuncRegistry)
             .Add(new TFailExpressionEvaluation(queryType), "FailExpressionEvaluation")
             .AddIOAnnotation(false)
@@ -2303,8 +2441,14 @@ private:
         std::get<2>(TypesCtx->CachedRandom).reset();
     }
 
-    void SetupYqlTransformer(EKikimrQueryType queryType) {
+    void SetupYqlTransformer(EKikimrQueryType queryType,
+        const std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>>& compileParameters = nullptr) {
+        CompileRelativePathPrefix = compileParameters != nullptr;
         SetupSession(queryType);
+
+        if (compileParameters) {
+            SessionCtx->Query().QueryData->ParseParameters(*compileParameters);
+        }
 
         YqlTransformer->Rewind();
         YqlTransformerNewRBO->Rewind();
@@ -2331,6 +2475,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
     bool KeepConfigChanges;
     bool IsInternalCall;
+    bool CompileRelativePathPrefix = false;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
     TIntrusivePtr<TKikimrSessionContext> SessionCtx;

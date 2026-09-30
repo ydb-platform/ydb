@@ -1697,18 +1697,42 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
                                      std::vector<std::pair<TString, TString>>&& targets,
                                      std::map<TString, TNodePtr>&& settings,
                                      const TObjectOperatorContext& context);
+TNodePtr BuildCreateAsyncReplication(TPosition pos, const TDeferredAtom& id,
+                                     std::vector<std::pair<TString, TString>>&& targets,
+                                     std::map<TString, TNodePtr>&& settings,
+                                     const TObjectOperatorContext& context);
+TNodePtr BuildCreateAsyncReplication(TPosition pos, const TDeferredAtom& id,
+                                     std::vector<std::pair<TString, TDeferredAtom>>&& targets,
+                                     std::map<TString, TNodePtr>&& settings,
+                                     const TObjectOperatorContext& context);
 TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context);
+TNodePtr BuildAlterAsyncReplication(TPosition pos, const TDeferredAtom& id,
+                                    std::map<TString, TNodePtr>&& settings,
+                                    const TObjectOperatorContext& context);
 TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TDeferredAtom& id, bool cascade, const TObjectOperatorContext& context);
 TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
+                             std::map<TString, TNodePtr>&& settings,
+                             const TObjectOperatorContext& context);
+TNodePtr BuildCreateTransfer(TPosition pos, const TDeferredAtom& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
+                             std::map<TString, TNodePtr>&& settings,
+                             const TObjectOperatorContext& context);
+TNodePtr BuildCreateTransfer(TPosition pos, const TDeferredAtom& id, const TDeferredAtom& source, const TDeferredAtom& target,
                              const TString& transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context);
 TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
                             std::map<TString, TNodePtr>&& settings,
                             const TObjectOperatorContext& context);
+TNodePtr BuildAlterTransfer(TPosition pos, const TDeferredAtom& id, std::optional<TString>&& transformLambda,
+                            std::map<TString, TNodePtr>&& settings,
+                            const TObjectOperatorContext& context);
 TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
+TNodePtr BuildDropTransfer(TPosition pos, const TDeferredAtom& id, bool cascade, const TObjectOperatorContext& context);
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
 TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped);
 TNodePtr BuildCommitClusters(TPosition pos);
@@ -1734,6 +1758,14 @@ TNodePtr BuildCreateSecret(
     TScopedStatePtr scoped,
     bool replaceIfExists = false,
     bool existingOk = false);
+TNodePtr BuildCreateSecret(
+    TPosition pos,
+    const TDeferredAtom& objectId,
+    const TSecretParameters& secretParams,
+    const TObjectOperatorContext& context,
+    TScopedStatePtr scoped,
+    bool replaceIfExists = false,
+    bool existingOk = false);
 TNodePtr BuildAlterSecret(
     TPosition pos,
     const TString& objectId,
@@ -1741,9 +1773,22 @@ TNodePtr BuildAlterSecret(
     const TObjectOperatorContext& context,
     TScopedStatePtr scoped,
     bool missingOk = false);
+TNodePtr BuildAlterSecret(
+    TPosition pos,
+    const TDeferredAtom& objectId,
+    const TSecretParameters& secretParams,
+    const TObjectOperatorContext& context,
+    TScopedStatePtr scoped,
+    bool missingOk = false);
 TNodePtr BuildDropSecret(
     TPosition pos,
     const TString& objectId,
+    const TObjectOperatorContext& context,
+    TScopedStatePtr scoped,
+    bool missingOk = false);
+TNodePtr BuildDropSecret(
+    TPosition pos,
+    const TDeferredAtom& objectId,
     const TObjectOperatorContext& context,
     TScopedStatePtr scoped,
     bool missingOk = false);

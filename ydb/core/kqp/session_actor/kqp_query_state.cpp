@@ -219,6 +219,10 @@ bool TKqpQueryState::TryGetFromCache(
         return true;
     }
 
+    if (GetAction() != NKikimrKqp::QUERY_ACTION_PREPARE && MayUseRelativePathPrefix(GetQuery())) {
+        return false;
+    }
+
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -324,6 +328,10 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
             YQL_ENSURE(false);
     }
 
+    if (GetAction() != NKikimrKqp::QUERY_ACTION_PREPARE && MayUseRelativePathPrefix(GetQuery())) {
+        keepInCache = false;
+    }
+
     auto compileDeadline = QueryDeadlines.TimeoutAt;
     if (QueryDeadlines.CancelAt) {
         compileDeadline = Min(compileDeadline, QueryDeadlines.CancelAt);
@@ -340,7 +348,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), keepInCache,
         isQueryActionPrepare, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks);
+        false, nullptr, nullptr, IsWarmupCompilation_, settings.UsePessimisticLocks, GetCompileParameters());
 }
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx) {
@@ -386,7 +394,7 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
 
     return std::make_unique<TEvKqp::TEvRecompileRequest>(UserToken, ClientAddress, CompileResult->Uid, query, isQueryActionPrepare,
         compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie), UserRequestContext, std::move(Orbit), TempTablesState,
-        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics());
+        CompileResult->QueryAst, false, nullptr, nullptr, settings.UsePessimisticLocks, GetCollectDiagnostics(), GetCompileParameters());
 }
 
 std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildSplitRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
@@ -443,7 +451,14 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx, std::move(SplittedExprs.at(NextSplittedExpr)), false, settings.UsePessimisticLocks);
+        false, SplittedCtx, std::move(SplittedExprs.at(NextSplittedExpr)), false, settings.UsePessimisticLocks, GetCompileParameters());
+}
+
+std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> TKqpQueryState::GetCompileParameters() const {
+    if (GetAction() == NKikimrKqp::QUERY_ACTION_EXECUTE_PREPARED || !MayUseRelativePathPrefix(GetQuery())) {
+        return nullptr;
+    }
+    return std::make_shared<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>>(GetYdbParameters());
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {

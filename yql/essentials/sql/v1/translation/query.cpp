@@ -740,9 +740,13 @@ public:
                 each = L(each, key);
             }
             if (ctx.PragmaUseTablePrefixForEach) {
-                TStringBuf prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
-                if (prefixPath) {
-                    each = L(each, BuildQuotedAtom(Pos_, TString(prefixPath)));
+                if (ctx.HasDynamicRelativePathPrefix()) {
+                    each = L(each, ctx.GetPrefixPathAtom(Service_, Cluster_).Build());
+                } else {
+                    TStringBuf prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
+                    if (prefixPath) {
+                        each = L(each, BuildQuotedAtom(Pos_, TString(prefixPath)));
+                    }
                 }
             }
             return each;
@@ -958,9 +962,13 @@ public:
 
             auto partitionList = Y(func.EndsWith("strict") ? "MrPartitionListStrict" : "MrPartitionList", Y("EvaluateExpr", arg.Expr));
             if (ctx.PragmaUseTablePrefixForEach) {
-                TStringBuf prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
-                if (prefixPath) {
-                    partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
+                if (ctx.HasDynamicRelativePathPrefix()) {
+                    partitionList = L(partitionList, ctx.GetPrefixPathAtom(Service_, Cluster_).Build());
+                } else {
+                    TStringBuf prefixPath = ctx.GetPrefixPath(Service_, Cluster_);
+                    if (prefixPath) {
+                        partitionList = L(partitionList, BuildQuotedAtom(Pos_, TString(prefixPath)));
+                    }
                 }
             }
             return partitionList;
@@ -2463,7 +2471,7 @@ TNodePtr BuildDropTopic(TPosition pos, const TTopicRef& topic, const TDropTopicP
 
 class TAlterSequence final: public TAstListNode {
 public:
-    TAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, TString id, TSequenceParameters params, TScopedStatePtr scoped)
+    TAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, TDeferredAtom id, TSequenceParameters params, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Service_(service)
         , Cluster_(cluster)
@@ -2541,7 +2549,7 @@ public:
         Add("block", Q(Y(
                          Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, TString(KikimrProviderName)),
                                             Scoped_->WrapCluster(Cluster_, ctx))),
-                         Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("sequence"), Y("String", BuildQuotedAtom(Pos_, Id_))))), Y("Void"), Q(options))),
+                         Y("let", "world", Y(TString(WriteName), "world", "sink", Y("Key", Q(Y(Q("sequence"), Y("String", Id_.Build())))), Y("Void"), Q(options))),
                          Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")))));
 
         return TAstListNode::DoInit(ctx, src);
@@ -2554,7 +2562,7 @@ public:
 private:
     const TString Service_;
     TDeferredAtom Cluster_;
-    TString Id_;
+    TDeferredAtom Id_;
     const TSequenceParameters Params_;
 
     TScopedStatePtr Scoped_;
@@ -2562,6 +2570,10 @@ private:
 };
 
 TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped) {
+    return BuildAlterSequence(pos, service, cluster, TDeferredAtom(pos, id), params, scoped);
+}
+
+TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& id, const TSequenceParameters& params, TScopedStatePtr scoped) {
     return new TAlterSequence(pos, service, cluster, id, params, scoped);
 }
 
@@ -2592,7 +2604,7 @@ protected:
     virtual INode::TPtr FillOptions(INode::TPtr options) const = 0;
 
 public:
-    explicit TAsyncReplication(TPosition pos, TString id, TString mode, const TObjectOperatorContext& context)
+    explicit TAsyncReplication(TPosition pos, TDeferredAtom id, TString mode, const TObjectOperatorContext& context)
         : TAstListNode(pos)
         , TObjectOperatorContext(context)
         , Id_(std::move(id))
@@ -2603,7 +2615,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         Scoped_->UseCluster(ServiceId, Cluster);
 
-        auto keys = Y("Key", Q(Y(Q("replication"), Y("String", BuildQuotedAtom(Pos_, Id_)))));
+        auto keys = Y("Key", Q(Y(Q("replication"), Y("String", Id_.Build()))));
         auto options = FillOptions(Y(Q(Y(Q("mode"), Q(Mode_)))));
 
         Add("block", Q(Y(
@@ -2619,15 +2631,15 @@ public:
     }
 
 private:
-    const TString Id_;
+    const TDeferredAtom Id_;
     const TString Mode_;
 
 }; // TAsyncReplication
 
 class TCreateAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TCreateAsyncReplication(TPosition pos, const TString& id,
-                                     std::vector<std::pair<TString, TString>>&& targets,
+    explicit TCreateAsyncReplication(TPosition pos, const TDeferredAtom& id,
+                                     std::vector<std::pair<TString, TDeferredAtom>>&& targets,
                                      std::map<TString, TNodePtr>&& settings,
                                      const TObjectOperatorContext& context)
         : TAsyncReplication(pos, id, "create", context)
@@ -2643,7 +2655,7 @@ protected:
             for (auto&& [remote, local] : Targets_) {
                 auto target = Y();
                 target = L(target, Q(Y(Q("remote"), Q(remote))));
-                target = L(target, Q(Y(Q("local"), Q(local))));
+                target = L(target, Q(Y(Q("local"), local.Build())));
                 targets = L(targets, Q(target));
             }
             options = L(options, Q(Y(Q("targets"), Q(targets))));
@@ -2665,7 +2677,7 @@ protected:
     }
 
 private:
-    std::vector<std::pair<TString, TString>> Targets_; // (remote, local)
+    std::vector<std::pair<TString, TDeferredAtom>> Targets_; // (remote, local)
     std::map<TString, TNodePtr> Settings_;
 
 }; // TCreateAsyncReplication
@@ -2675,12 +2687,33 @@ TNodePtr BuildCreateAsyncReplication(TPosition pos, const TString& id,
                                      std::map<TString, TNodePtr>&& settings,
                                      const TObjectOperatorContext& context)
 {
+    return BuildCreateAsyncReplication(pos, TDeferredAtom(pos, id), std::move(targets), std::move(settings), context);
+}
+
+TNodePtr BuildCreateAsyncReplication(TPosition pos, const TDeferredAtom& id,
+                                     std::vector<std::pair<TString, TString>>&& targets,
+                                     std::map<TString, TNodePtr>&& settings,
+                                     const TObjectOperatorContext& context)
+{
+    std::vector<std::pair<TString, TDeferredAtom>> deferredTargets;
+    deferredTargets.reserve(targets.size());
+    for (auto& [remote, local] : targets) {
+        deferredTargets.emplace_back(std::move(remote), TDeferredAtom(pos, local, NYql::TAstNodeFlags::Default));
+    }
+    return BuildCreateAsyncReplication(pos, id, std::move(deferredTargets), std::move(settings), context);
+}
+
+TNodePtr BuildCreateAsyncReplication(TPosition pos, const TDeferredAtom& id,
+                                     std::vector<std::pair<TString, TDeferredAtom>>&& targets,
+                                     std::map<TString, TNodePtr>&& settings,
+                                     const TObjectOperatorContext& context)
+{
     return new TCreateAsyncReplication(pos, id, std::move(targets), std::move(settings), context);
 }
 
 class TDropAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
+    explicit TDropAsyncReplication(TPosition pos, const TDeferredAtom& id, bool cascade, const TObjectOperatorContext& context)
         : TAsyncReplication(pos, id, cascade ? "dropCascade" : "drop", context)
     {
     }
@@ -2693,12 +2726,16 @@ protected:
 }; // TDropAsyncReplication
 
 TNodePtr BuildDropAsyncReplication(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
+    return BuildDropAsyncReplication(pos, TDeferredAtom(pos, id), cascade, context);
+}
+
+TNodePtr BuildDropAsyncReplication(TPosition pos, const TDeferredAtom& id, bool cascade, const TObjectOperatorContext& context) {
     return new TDropAsyncReplication(pos, id, cascade, context);
 }
 
 class TAlterAsyncReplication final: public TAsyncReplication {
 public:
-    explicit TAlterAsyncReplication(TPosition pos, const TString& id,
+    explicit TAlterAsyncReplication(TPosition pos, const TDeferredAtom& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context)
         : TAsyncReplication(pos, id, "alter", context)
@@ -2732,6 +2769,13 @@ TNodePtr BuildAlterAsyncReplication(TPosition pos, const TString& id,
                                     std::map<TString, TNodePtr>&& settings,
                                     const TObjectOperatorContext& context)
 {
+    return BuildAlterAsyncReplication(pos, TDeferredAtom(pos, id), std::move(settings), context);
+}
+
+TNodePtr BuildAlterAsyncReplication(TPosition pos, const TDeferredAtom& id,
+                                    std::map<TString, TNodePtr>&& settings,
+                                    const TObjectOperatorContext& context)
+{
     return new TAlterAsyncReplication(pos, id, std::move(settings), context);
 }
 
@@ -2742,7 +2786,7 @@ protected:
     virtual INode::TPtr FillOptions(INode::TPtr options) const = 0;
 
 public:
-    explicit TTransfer(TPosition pos, TString id, TString mode, const TObjectOperatorContext& context)
+    explicit TTransfer(TPosition pos, TDeferredAtom id, TString mode, const TObjectOperatorContext& context)
         : TAstListNode(pos)
         , TObjectOperatorContext(context)
         , Id_(std::move(id))
@@ -2753,7 +2797,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override {
         Scoped_->UseCluster(ServiceId, Cluster);
 
-        auto keys = Y("Key", Q(Y(Q("transfer"), Y("String", BuildQuotedAtom(Pos_, Id_)))));
+        auto keys = Y("Key", Q(Y(Q("transfer"), Y("String", Id_.Build()))));
         auto options = FillOptions(Y(Q(Y(Q("mode"), Q(Mode_)))));
 
         Add("block", Q(Y(
@@ -2769,14 +2813,14 @@ public:
     }
 
 private:
-    const TString Id_;
+    const TDeferredAtom Id_;
     const TString Mode_;
 
 }; // TTransfer
 
 class TCreateTransfer final: public TTransfer {
 public:
-    explicit TCreateTransfer(TPosition pos, TString id, TString source, TString target,
+    explicit TCreateTransfer(TPosition pos, TDeferredAtom id, TDeferredAtom source, TDeferredAtom target,
                              TString transformLambda,
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context)
@@ -2790,8 +2834,8 @@ public:
 
 protected:
     INode::TPtr FillOptions(INode::TPtr options) const override {
-        options = L(options, Q(Y(Q("source"), Q(Source_))));
-        options = L(options, Q(Y(Q("target"), Q(Target_))));
+        options = L(options, Q(Y(Q("source"), Source_.Build())));
+        options = L(options, Q(Y(Q("target"), Target_.Build())));
         options = L(options, Q(Y(Q("transformLambda"), Q(TransformLambda_))));
 
         if (!Settings_.empty()) {
@@ -2810,8 +2854,8 @@ protected:
     }
 
 private:
-    const TString Source_;
-    const TString Target_;
+    const TDeferredAtom Source_;
+    const TDeferredAtom Target_;
     const TString TransformLambda_;
     std::map<TString, TNodePtr> Settings_;
 
@@ -2822,12 +2866,29 @@ TNodePtr BuildCreateTransfer(TPosition pos, const TString& id, const TString& so
                              std::map<TString, TNodePtr>&& settings,
                              const TObjectOperatorContext& context)
 {
+    return BuildCreateTransfer(pos, TDeferredAtom(pos, id), source, target, transformLambda, std::move(settings), context);
+}
+
+TNodePtr BuildCreateTransfer(TPosition pos, const TDeferredAtom& id, const TString& source, const TString& target,
+                             const TString& transformLambda,
+                             std::map<TString, TNodePtr>&& settings,
+                             const TObjectOperatorContext& context)
+{
+    return BuildCreateTransfer(pos, id, TDeferredAtom(pos, source, NYql::TAstNodeFlags::Default),
+                               TDeferredAtom(pos, target, NYql::TAstNodeFlags::Default), transformLambda, std::move(settings), context);
+}
+
+TNodePtr BuildCreateTransfer(TPosition pos, const TDeferredAtom& id, const TDeferredAtom& source, const TDeferredAtom& target,
+                             const TString& transformLambda,
+                             std::map<TString, TNodePtr>&& settings,
+                             const TObjectOperatorContext& context)
+{
     return new TCreateTransfer(pos, id, source, target, transformLambda, std::move(settings), context);
 }
 
 class TDropTransfer final: public TTransfer {
 public:
-    explicit TDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context)
+    explicit TDropTransfer(TPosition pos, const TDeferredAtom& id, bool cascade, const TObjectOperatorContext& context)
         : TTransfer(pos, id, cascade ? "dropCascade" : "drop", context)
     {
     }
@@ -2840,12 +2901,16 @@ protected:
 }; // TDropTransfer
 
 TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context) {
+    return BuildDropTransfer(pos, TDeferredAtom(pos, id), cascade, context);
+}
+
+TNodePtr BuildDropTransfer(TPosition pos, const TDeferredAtom& id, bool cascade, const TObjectOperatorContext& context) {
     return new TDropTransfer(pos, id, cascade, context);
 }
 
 class TAlterTransfer final: public TTransfer {
 public:
-    explicit TAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
+    explicit TAlterTransfer(TPosition pos, const TDeferredAtom& id, std::optional<TString>&& transformLambda,
                             std::map<TString, TNodePtr>&& settings,
                             const TObjectOperatorContext& context)
         : TTransfer(pos, id, "alter", context)
@@ -2880,6 +2945,13 @@ private:
 }; // TAlterTransfer
 
 TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TString>&& transformLambda,
+                            std::map<TString, TNodePtr>&& settings,
+                            const TObjectOperatorContext& context)
+{
+    return BuildAlterTransfer(pos, TDeferredAtom(pos, id), std::move(transformLambda), std::move(settings), context);
+}
+
+TNodePtr BuildAlterTransfer(TPosition pos, const TDeferredAtom& id, std::optional<TString>&& transformLambda,
                             std::map<TString, TNodePtr>&& settings,
                             const TObjectOperatorContext& context)
 {
@@ -3848,7 +3920,7 @@ class TSecretNode: public TAstListNode {
 public:
     TSecretNode(
         TPosition pos,
-        TString objectId,
+        TDeferredAtom objectId,
         TSecretParameters params,
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
@@ -3869,7 +3941,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) final {
         Scoped_->UseCluster(Context_.ServiceId, Context_.Cluster);
-        const auto keys = Y("Key", Q(Y(Q("secret"), Y("String", BuildQuotedAtom(Pos_, ObjectId_)))));
+        const auto keys = Y("Key", Q(Y(Q("secret"), Y("String", ObjectId_.Build()))));
         const auto options = BuildOptions();
 
         Add("block", Q(Y(
@@ -3932,7 +4004,7 @@ private:
 
 protected:
     TPosition Pos_;
-    const TString ObjectId_;
+    const TDeferredAtom ObjectId_;
     const TSecretParameters Params_;
     const TObjectOperatorContext Context_;
     TScopedStatePtr Scoped_;
@@ -3947,7 +4019,7 @@ class TCreateSecretNode: public TSecretNode {
 public:
     TCreateSecretNode(
         TPosition pos,
-        const TString& objectId,
+        const TDeferredAtom& objectId,
         const TSecretParameters& params,
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
@@ -3975,6 +4047,17 @@ TNodePtr BuildCreateSecret(
     TScopedStatePtr scoped,
     bool replaceIfExists,
     bool existingOk) {
+    return BuildCreateSecret(pos, TDeferredAtom(pos, objectId), secretParams, context, scoped, replaceIfExists, existingOk);
+}
+
+TNodePtr BuildCreateSecret(
+    TPosition pos,
+    const TDeferredAtom& objectId,
+    const TSecretParameters& secretParams,
+    const TObjectOperatorContext& context,
+    TScopedStatePtr scoped,
+    bool replaceIfExists,
+    bool existingOk) {
     return new TCreateSecretNode(pos, objectId, secretParams, context, scoped, replaceIfExists, existingOk);
 }
 
@@ -3984,7 +4067,7 @@ class TAlterSecretNode: public TSecretNode {
 public:
     TAlterSecretNode(
         TPosition pos,
-        const TString& objectId,
+        const TDeferredAtom& objectId,
         const TSecretParameters& params,
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
@@ -4010,6 +4093,16 @@ TNodePtr BuildAlterSecret(
     const TObjectOperatorContext& context,
     TScopedStatePtr scoped,
     bool missingOk) {
+    return BuildAlterSecret(pos, TDeferredAtom(pos, objectId), secretParams, context, scoped, missingOk);
+}
+
+TNodePtr BuildAlterSecret(
+    TPosition pos,
+    const TDeferredAtom& objectId,
+    const TSecretParameters& secretParams,
+    const TObjectOperatorContext& context,
+    TScopedStatePtr scoped,
+    bool missingOk) {
     return new TAlterSecretNode(pos, objectId, secretParams, context, scoped, missingOk);
 }
 
@@ -4019,7 +4112,7 @@ class TDropSecretNode: public TSecretNode {
 public:
     TDropSecretNode(
         TPosition pos,
-        const TString& objectId,
+        const TDeferredAtom& objectId,
         const TObjectOperatorContext& context,
         TScopedStatePtr scoped,
         bool missingOk)
@@ -4040,6 +4133,15 @@ protected:
 TNodePtr BuildDropSecret(
     TPosition pos,
     const TString& objectId,
+    const TObjectOperatorContext& context,
+    TScopedStatePtr scoped,
+    bool missingOk) {
+    return BuildDropSecret(pos, TDeferredAtom(pos, objectId), context, scoped, missingOk);
+}
+
+TNodePtr BuildDropSecret(
+    TPosition pos,
+    const TDeferredAtom& objectId,
     const TObjectOperatorContext& context,
     TScopedStatePtr scoped,
     bool missingOk) {

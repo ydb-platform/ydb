@@ -18,7 +18,7 @@ class TBaseBackupCollectionNode
 public:
     TBaseBackupCollectionNode(
         TPosition pos,
-        TString prefix,
+        TDeferredAtom prefix,
         TString objectId,
         const TObjectOperatorContext& context)
         : TBase(pos)
@@ -30,7 +30,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) final {
         auto keys = Y("Key");
-        keys = L(keys, Q(Y(Q("backupCollection"), Y("String", BuildQuotedAtom(Pos_, Id_)), Y("String", BuildQuotedAtom(Pos_, Prefix_)))));
+        keys = L(keys, Q(Y(Q("backupCollection"), Y("String", BuildQuotedAtom(Pos_, Id_)), Y("String", Prefix_.Build()))));
         auto options = this->FillOptions(ctx, Y());
 
         Add("block", Q(Y(
@@ -44,7 +44,7 @@ public:
     virtual INode::TPtr FillOptions(TContext& ctx, INode::TPtr options) const = 0;
 
 protected:
-    TString Prefix_;
+    TDeferredAtom Prefix_;
     TString Id_;
 };
 
@@ -55,7 +55,7 @@ class TCreateBackupCollectionNode
 public:
     TCreateBackupCollectionNode(
         TPosition pos,
-        const TString& prefix,
+        const TDeferredAtom& prefix,
         const TString& objectId,
         TCreateBackupCollectionParameters params,
         const TObjectOperatorContext& context)
@@ -101,7 +101,7 @@ class TAlterBackupCollectionNode
 public:
     TAlterBackupCollectionNode(
         TPosition pos,
-        const TString& prefix,
+        const TDeferredAtom& prefix,
         const TString& objectId,
         TAlterBackupCollectionParameters params,
         const TObjectOperatorContext& context)
@@ -157,7 +157,7 @@ class TDropBackupCollectionNode
 public:
     TDropBackupCollectionNode(
         TPosition pos,
-        const TString& prefix,
+        const TDeferredAtom& prefix,
         const TString& objectId,
         const TDropBackupCollectionParameters&,
         const TObjectOperatorContext& context)
@@ -184,6 +184,16 @@ TNodePtr BuildCreateBackupCollection(
     const TCreateBackupCollectionParameters& params,
     const TObjectOperatorContext& context)
 {
+    return BuildCreateBackupCollection(pos, TDeferredAtom(pos, prefix), id, params, context);
+}
+
+TNodePtr BuildCreateBackupCollection(
+    TPosition pos,
+    const TDeferredAtom& prefix,
+    const TString& id,
+    const TCreateBackupCollectionParameters& params,
+    const TObjectOperatorContext& context)
+{
     return new TCreateBackupCollectionNode(pos, prefix, id, params, context);
 }
 
@@ -194,12 +204,32 @@ TNodePtr BuildAlterBackupCollection(
     const TAlterBackupCollectionParameters& params,
     const TObjectOperatorContext& context)
 {
+    return BuildAlterBackupCollection(pos, TDeferredAtom(pos, prefix), id, params, context);
+}
+
+TNodePtr BuildAlterBackupCollection(
+    TPosition pos,
+    const TDeferredAtom& prefix,
+    const TString& id,
+    const TAlterBackupCollectionParameters& params,
+    const TObjectOperatorContext& context)
+{
     return new TAlterBackupCollectionNode(pos, prefix, id, params, context);
 }
 
 TNodePtr BuildDropBackupCollection(
     TPosition pos,
     const TString& prefix,
+    const TString& id,
+    const TDropBackupCollectionParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return BuildDropBackupCollection(pos, TDeferredAtom(pos, prefix), id, params, context);
+}
+
+TNodePtr BuildDropBackupCollection(
+    TPosition pos,
+    const TDeferredAtom& prefix,
     const TString& id,
     const TDropBackupCollectionParameters& params,
     const TObjectOperatorContext& context)
@@ -215,7 +245,7 @@ class TBackupNode final
 public:
     TBackupNode(
         TPosition pos,
-        TString prefix,
+        TDeferredAtom prefix,
         TString id,
         const TBackupParameters& params,
         const TObjectOperatorContext& context)
@@ -230,7 +260,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto keys = Y("Key");
-        keys = L(keys, Q(Y(Q("backup"), Y("String", BuildQuotedAtom(Pos_, Id_)), Y("String", BuildQuotedAtom(Pos_, Prefix_)))));
+        keys = L(keys, Q(Y(Q("backup"), Y("String", BuildQuotedAtom(Pos_, Id_)), Y("String", Prefix_.Build()))));
 
         auto opts = Y();
 
@@ -253,7 +283,7 @@ public:
     }
 
 private:
-    TString Prefix_;
+    TDeferredAtom Prefix_;
     TString Id_;
     TBackupParameters Params_;
 };
@@ -261,6 +291,16 @@ private:
 TNodePtr BuildBackup(
     TPosition pos,
     const TString& prefix,
+    const TString& id,
+    const TBackupParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return BuildBackup(pos, TDeferredAtom(pos, prefix), id, params, context);
+}
+
+TNodePtr BuildBackup(
+    TPosition pos,
+    const TDeferredAtom& prefix,
     const TString& id,
     const TBackupParameters& params,
     const TObjectOperatorContext& context)
@@ -276,7 +316,7 @@ class TRestoreNode final
 public:
     TRestoreNode(
         TPosition pos,
-        TString prefix,
+        TDeferredAtom prefix,
         TString id,
         TRestoreParameters params,
         const TObjectOperatorContext& context)
@@ -291,7 +331,7 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         auto keys = Y("Key");
-        keys = L(keys, Q(Y(Q("restore"), Y("String", BuildQuotedAtom(Pos_, Id_)), Y("String", BuildQuotedAtom(Pos_, Prefix_)))));
+        keys = L(keys, Q(Y(Q("restore"), Y("String", BuildQuotedAtom(Pos_, Id_)), Y("String", Prefix_.Build()))));
 
         auto opts = Y();
         opts->Add(Q(Y(Q("mode"), Q("restore"))));
@@ -313,7 +353,7 @@ public:
     }
 
 private:
-    TString Prefix_;
+    TDeferredAtom Prefix_;
     TString Id_;
     TRestoreParameters Params_;
 };
@@ -321,6 +361,16 @@ private:
 TNodePtr BuildRestore(
     TPosition pos,
     const TString& prefix,
+    const TString& id,
+    const TRestoreParameters& params,
+    const TObjectOperatorContext& context)
+{
+    return BuildRestore(pos, TDeferredAtom(pos, prefix), id, params, context);
+}
+
+TNodePtr BuildRestore(
+    TPosition pos,
+    const TDeferredAtom& prefix,
     const TString& id,
     const TRestoreParameters& params,
     const TObjectOperatorContext& context)

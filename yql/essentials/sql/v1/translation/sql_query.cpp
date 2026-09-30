@@ -140,7 +140,7 @@ bool AsyncReplicationSettingsEntry(std::map<TString, TNodePtr>& out,
 
 bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
                               const TRule_replication_settings& in, TSqlExpression& ctx, bool create,
-                              const TStringBuf& tablePathPrefix)
+                              const TDeferredAtom& tablePathPrefix)
 {
     if (!AsyncReplicationSettingsEntry(out, in.GetRule_replication_settings_entry1(), ctx, create)) {
         return false;
@@ -155,17 +155,17 @@ bool AsyncReplicationSettings(std::map<TString, TNodePtr>& out,
     return VerifyAndAdjustSecretSettings(out, ctx.Context(), REPLICATION_AND_TRANSFER_SECRETS_SETTINGS, tablePathPrefix);
 }
 
-bool AsyncReplicationTarget(std::vector<std::pair<TString, TString>>& out, TStringBuf prefixPath,
-                            const TRule_replication_target& in, TTranslation& ctx)
+bool AsyncReplicationTarget(std::vector<std::pair<TString, TDeferredAtom>>& out, const TString& service,
+                            const TDeferredAtom& cluster, const TRule_replication_target& in, TTranslation& ctx)
 {
     const TString remote = Id(in.GetRule_object_ref1().GetRule_id_or_at2(), ctx).second;
     const TString local = Id(in.GetRule_object_ref3().GetRule_id_or_at2(), ctx).second;
-    out.emplace_back(remote, BuildTablePath(prefixPath, local));
+    out.emplace_back(remote, ctx.Context().GetPrefixedPathAtom(service, cluster, local));
     return true;
 }
 
 bool AsyncReplicationAlterAction(std::map<TString, TNodePtr>& settings,
-                                 const TRule_alter_replication_action& in, TSqlExpression& ctx, const TStringBuf& tablePathPrefix)
+                                 const TRule_alter_replication_action& in, TSqlExpression& ctx, const TDeferredAtom& tablePathPrefix)
 {
     // TODO(ilnaz): support other actions
     return AsyncReplicationSettings(settings, in.GetRule_alter_replication_set_setting1().GetRule_replication_settings3(), ctx, /*create=*/false,
@@ -276,7 +276,7 @@ bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
 }
 
 bool TransferSettings(std::map<TString, TNodePtr>& out,
-                      const TRule_transfer_settings& in, TSqlExpression& ctx, bool create, const TStringBuf& tablePathPrefix)
+                      const TRule_transfer_settings& in, TSqlExpression& ctx, bool create, const TDeferredAtom& tablePathPrefix)
 {
     if (!TransferSettingsEntry(out, in.GetRule_transfer_settings_entry1(), ctx, create)) {
         return false;
@@ -295,6 +295,7 @@ bool TransferSettings(std::map<TString, TNodePtr>& out,
 
 bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& core, size_t statementNumber) {
     TStatementName statementName = TStatementName::From(core);
+    const size_t blocksBeforeStatement = blocks.size();
 
     const auto& altCase = core.Alt_case();
     if (Mode_ == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
@@ -387,7 +388,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             TVector<TNodePtr> nodes;
             auto subquery = nodeExpr->GetSource();
-            if (auto source = GetYqlSource(nodeExpr)) {
+            auto yqlSource = GetYqlSource(nodeExpr);
+            HasSqlStatements_ = HasSqlStatements_ || subquery || yqlSource;
+            if (auto source = yqlSource) {
                 const auto alias = Ctx_.MakeName("yqlsubquerynode");
                 const auto ref = Ctx_.MakeName("yqlsubquery");
 
@@ -963,12 +966,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     IS_TOKEN(node.GetBlock6().GetToken3().GetId(), EXISTS));
             }
 
-            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            const auto prefixPath = Ctx_.GetPrefixPathAtom(context.ServiceId, context.Cluster);
             std::map<TString, TDeferredAtom> kv;
             if (!ParseExternalDataSourceSettings(kv, node.GetRule_with_table_settings8())) {
                 return false;
             }
-            AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
+            AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, Ctx_, prefixPath);
 
             AddStatementToBlocks(blocks, BuildCreateObjectOperation(Ctx_.Pos(), *objectId, "EXTERNAL_DATA_SOURCE", existingOk, replaceIfExists, new TObjectFeatureNode(Ctx_.Pos(), kv), context));
             break;
@@ -996,8 +999,8 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
-            AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, prefixPath);
+            const auto prefixPath = Ctx_.GetPrefixPathAtom(context.ServiceId, context.Cluster);
+            AdjustSecretPaths(kv, EDS_SECRETS_SETTINGS, Ctx_, prefixPath);
 
             auto operation = BuildAlterObjectOperation(
                 Ctx_.Pos(), *objectId, "EXTERNAL_DATA_SOURCE",
@@ -1036,14 +1039,14 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            auto prefixPath = Ctx_.GetPrefixPathAtom(context.ServiceId, context.Cluster);
 
-            std::vector<std::pair<TString, TString>> targets;
-            if (!AsyncReplicationTarget(targets, prefixPath, node.GetRule_replication_target6(), *this)) {
+            std::vector<std::pair<TString, TDeferredAtom>> targets;
+            if (!AsyncReplicationTarget(targets, context.ServiceId, context.Cluster, node.GetRule_replication_target6(), *this)) {
                 return false;
             }
             for (auto& block : node.GetBlock7()) {
-                if (!AsyncReplicationTarget(targets, prefixPath, block.GetRule_replication_target2(), *this)) {
+                if (!AsyncReplicationTarget(targets, context.ServiceId, context.Cluster, block.GetRule_replication_target2(), *this)) {
                     return false;
                 }
             }
@@ -1055,7 +1058,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
-            AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx_.Pos(), BuildTablePath(prefixPath, id),
+            AddStatementToBlocks(blocks, BuildCreateAsyncReplication(Ctx_.Pos(), Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id),
                                                                      std::move(targets), std::move(settings), context));
             break;
         }
@@ -1072,7 +1075,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropAsyncReplication(Ctx_.Pos(),
-                                                                   BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                                                                   Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id),
                                                                    node.HasBlock5(), context));
             break;
         }
@@ -1318,7 +1321,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                     return false;
                 }
             }
-            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            const auto prefixPath = Ctx_.GetPrefixPathAtom(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(*this);
@@ -1333,7 +1336,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref4().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildAlterAsyncReplication(Ctx_.Pos(),
-                                                                    BuildTablePath(prefixPath, id),
+                                                                    Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id),
                                                                     std::move(settings), context));
             break;
         }
@@ -1506,7 +1509,12 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            AddStatementToBlocks(blocks, BuildAlterSequence(pos, service, cluster, id, params, Ctx_.Scoped));
+            if (Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+                AddStatementToBlocks(blocks, BuildAlterSequence(pos, context.ServiceId, context.Cluster,
+                                                                Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id), params, Ctx_.Scoped));
+            } else {
+                AddStatementToBlocks(blocks, BuildAlterSequence(pos, service, cluster, id, params, Ctx_.Scoped));
+            }
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore58: {
@@ -1521,7 +1529,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 }
             }
 
-            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            const auto prefixPath = Ctx_.GetPrefixPathAtom(context.ServiceId, context.Cluster);
 
             std::map<TString, TNodePtr> settings;
             TSqlExpression expr(*this);
@@ -1538,8 +1546,15 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 return false;
             }
 
-            AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx_.Pos(), BuildTablePath(prefixPath, id),
-                                                             source, target, transformLambda, std::move(settings), context));
+            if (Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+                AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx_.Pos(), Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id),
+                                                                 Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, source),
+                                                                 Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, target),
+                                                                 transformLambda, std::move(settings), context));
+            } else {
+                AddStatementToBlocks(blocks, BuildCreateTransfer(Ctx_.Pos(), Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id),
+                                                                 source, target, transformLambda, std::move(settings), context));
+            }
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore59: {
@@ -1557,7 +1572,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             std::optional<TString> transformLambda;
             TSqlExpression expr(*this);
 
-            const auto prefixPath = Ctx_.GetPrefixPath(context.ServiceId, context.Cluster);
+            const auto prefixPath = Ctx_.GetPrefixPathAtom(context.ServiceId, context.Cluster);
 
             auto transferAlterAction = [&](std::optional<TString>& transformLambda, const TRule_alter_transfer_action& in)
             {
@@ -1587,7 +1602,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildAlterTransfer(Ctx_.Pos(),
-                                                            BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                                                            Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id),
                                                             std::move(transformLambda), std::move(settings), context));
             break;
         }
@@ -1604,7 +1619,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
 
             const TString id = Id(node.GetRule_object_ref3().GetRule_id_or_at2(), *this).second;
             AddStatementToBlocks(blocks, BuildDropTransfer(Ctx_.Pos(),
-                                                           BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), id),
+                                                           Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, id),
                                                            node.HasBlock4(), context));
             break;
         }
@@ -1837,7 +1852,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 blocks,
                 BuildCreateSecret(
                     Ctx_.Pos(),
-                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                    Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, objectId),
                     secretParams,
                     context,
                     Ctx_.Scoped,
@@ -1887,7 +1902,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 blocks,
                 BuildAlterSecret(
                     Ctx_.Pos(),
-                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                    Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, objectId),
                     secretParams,
                     context,
                     Ctx_.Scoped,
@@ -1927,7 +1942,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
                 blocks,
                 BuildDropSecret(
                     Ctx_.Pos(),
-                    BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId),
+                    Ctx_.GetPrefixedPathAtom(context.ServiceId, context.Cluster, objectId),
                     context,
                     Ctx_.Scoped,
                     missingOk));
@@ -2037,6 +2052,9 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             YQL_ENSURE(false, "Unreachable");
     }
 
+    if (altCase != TRule_sql_stmt_core::kAltSqlStmtCore1 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore3 && blocks.size() > blocksBeforeStatement) {
+        HasSqlStatements_ = true;
+    }
     Ctx_.IncrementMonCounter("sql_features", statementName.Internal);
     return !Ctx_.HasPendingErrors;
 }
@@ -3295,6 +3313,31 @@ THashMap<TString, TPragmaDescr> PragmaDescrs{
         },
     }),
     TableElemExt({
+        .CanonicalName = "RelativePathPrefix",
+        .IsYqlSelectCompatible = true,
+        .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
+            auto& ctx = query.Context();
+            if (query.HasSqlStatements()) {
+                query.Error() << "RelativePathPrefix must be specified before SQL statements";
+                return {};
+            }
+            if (values.size() != 1) {
+                query.Error() << "Expected one relative path for: " << pragma;
+                return {};
+            }
+            if (const auto* value = values.front().GetLiteral()) {
+                if (value->StartsWith('/')) {
+                    query.Error() << "Expected a relative path for: " << pragma;
+                    return {};
+                }
+                ctx.SetRelativePathPrefix(*value);
+            } else {
+                ctx.SetRelativePathPrefix(values.front());
+            }
+            return TNodePtr{};
+        },
+    }),
+    TableElemExt({
         .CanonicalName = "TablePathPrefix",
         .IsYqlSelectCompatible = true,
         .Cb = [](CB_SIG) -> TMaybe<TNodePtr> {
@@ -4098,6 +4141,26 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         return {};
     }
 
+    if (normalizedPragma == "relativepathprefix" && !TopLevel_) {
+        Error() << "RelativePathPrefix is allowed only at the top level";
+        Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
+        return {};
+    }
+
+    if (prefix.empty() && (normalizedPragma == "relativepathprefix" || normalizedPragma == "tablepathprefix")) {
+        const auto& activePragmas = Ctx_.Scoped->ActivePragmas;
+        if (normalizedPragma == "relativepathprefix" && activePragmas.contains(std::make_pair(lowerPrefix, normalizedPragma))) {
+            Error() << "RelativePathPrefix must be specified only once";
+            Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
+            return {};
+        }
+        const TString otherPragma = normalizedPragma == "relativepathprefix" ? "tablepathprefix" : "relativepathprefix";
+        if (activePragmas.contains(std::make_pair(lowerPrefix, otherPragma))) {
+            Error() << "RelativePathPrefix cannot be combined with TablePathPrefix";
+            Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
+            return {};
+        }
+    }
     Ctx_.Scoped->ActivePragmas.insert(std::make_pair(lowerPrefix, normalizedPragma));
 
     TVector<TDeferredAtom> values;
@@ -4116,7 +4179,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         }
     }
 
-    const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf" || normalizedPragma == "layer";
+    const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf" || normalizedPragma == "layer" || normalizedPragma == "relativepathprefix";
     static const THashSet<TStringBuf> LexicalScopePragmas = {
         "classicdivision",
         "strictjoinkeytypes",
@@ -4129,7 +4192,7 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
         "simplepg",
         "disablesimplepg",
     };
-    const bool hasLexicalScope = withConfigure || LexicalScopePragmas.contains(normalizedPragma);
+    const bool hasLexicalScope = (withConfigure && normalizedPragma != "relativepathprefix") || LexicalScopePragmas.contains(normalizedPragma);
     const bool withFileAlias = normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "library" || normalizedPragma == "udf";
     const bool allowTopLevelPragmas = TopLevel_ || AllowTopLevelPragmas_;
     for (auto pragmaValue : pragmaValues) {
@@ -4168,13 +4231,31 @@ TMaybe<TNodePtr> TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt) {
             }
 
             TDeferredAtom atom;
-            MakeTableFromExpression(Ctx_.Pos(), Ctx_, namedNode, atom, prefix);
+            if (normalizedPragma == "relativepathprefix") {
+                atom = TDeferredAtom(namedNode, Ctx_);
+            } else {
+                MakeTableFromExpression(Ctx_.Pos(), Ctx_, namedNode, atom, prefix);
+            }
             values.push_back(atom);
         } else {
             Error() << "Expected string" << (withConfigure ? ", named parameter" : "") << " or 'default' keyword as pragma value for pragma: " << pragma;
             Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
             return {};
         }
+    }
+
+    if (stmt.GetBlock4().HasAlt3()) {
+        if (!prefix.empty() || normalizedPragma != "relativepathprefix") {
+            Error() << "Expected a pragma value for pragma: " << pragma;
+            Ctx_.IncrementMonCounter("sql_errors", "BadPragmaValue");
+            return {};
+        }
+        TSqlExpression sqlExpr(*this);
+        auto expr = Unwrap(sqlExpr.Build(stmt.GetBlock4().GetAlt3().GetRule_expr3()));
+        if (!expr) {
+            return {};
+        }
+        values.emplace_back(expr, Ctx_);
     }
 
     if (prefix.empty()) {

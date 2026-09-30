@@ -44,6 +44,11 @@ bool VerifyAndAdjustSecretSettings(
     TContext& ctx,
     const TVector<TSecretSettingsNames>& secretSettings,
     TStringBuf tablePathPrefix);
+bool VerifyAndAdjustSecretSettings(
+    std::map<TString, TNodePtr>& out,
+    TContext& ctx,
+    const TVector<TSecretSettingsNames>& secretSettings,
+    const TDeferredAtom& tablePathPrefix);
 
 /**
  * Adds @tablePathPrefix value to secret path if path is not absolute
@@ -52,6 +57,11 @@ void AdjustSecretPaths(
     std::map<TString, TDeferredAtom>& out,
     const TVector<TSecretSettingsNames>& secretSettings,
     TStringBuf tablePathPrefix);
+void AdjustSecretPaths(
+    std::map<TString, TDeferredAtom>& out,
+    const TVector<TSecretSettingsNames>& secretSettings,
+    TContext& ctx,
+    const TDeferredAtom& tablePathPrefix);
 
 // TODO(YQL-20095): Explore real problem to fix this.
 // NOLINTNEXTLINE(bugprone-exception-escape)

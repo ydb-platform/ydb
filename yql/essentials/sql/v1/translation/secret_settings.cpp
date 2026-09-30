@@ -11,6 +11,15 @@ inline TString GetMixingSecretTypesError(const TString& name, const TString& pat
     return TStringBuilder() << "Usage secrets of different types is not allowed: "
                             << to_upper(name) << " and " << to_upper(path) << " are set";
 }
+
+TDeferredAtom BuildPrefixedSecretPath(TContext& ctx, const TDeferredAtom& prefix, TNodePtr path) {
+    const auto pos = path->GetPos();
+    auto prefixValue = new TCallNodeImpl(pos, "String", {prefix.Build()});
+    auto expression = new TCallNodeImpl(pos, "BuildTablePath", {prefixValue, path});
+    TDeferredAtom result;
+    MakeTableFromExpression(pos, ctx, expression, result);
+    return result;
+}
 } // namespace
 
 bool VerifyAndAdjustSecretSettings(
@@ -36,6 +45,32 @@ bool VerifyAndAdjustSecretSettings(
     return true;
 }
 
+bool VerifyAndAdjustSecretSettings(
+    std::map<TString, TNodePtr>& out,
+    TContext& ctx,
+    const TVector<TSecretSettingsNames>& secretSettings,
+    const TDeferredAtom& tablePathPrefix)
+{
+    if (const auto* prefix = tablePathPrefix.GetLiteral()) {
+        return VerifyAndAdjustSecretSettings(out, ctx, secretSettings, *prefix);
+    }
+
+    for (const auto& settings : secretSettings) {
+        auto nameIt = out.find(settings.Name);
+        auto pathIt = out.find(settings.Path);
+        if (nameIt != out.end() && pathIt != out.end()) {
+            ctx.Error() << to_upper(settings.Name) << " and " << to_upper(settings.Path) << " are mutually exclusive";
+            return false;
+        }
+
+        if (pathIt != out.end()) {
+            pathIt->second = BuildPrefixedSecretPath(ctx, tablePathPrefix, pathIt->second).Build();
+        }
+    }
+
+    return true;
+}
+
 void AdjustSecretPaths(
     std::map<TString, TDeferredAtom>& out,
     const TVector<TSecretSettingsNames>& secretSettings,
@@ -49,6 +84,26 @@ void AdjustSecretPaths(
                                                BuildTablePath(tablePathPrefix, *literal));
                 continue;
             }
+        }
+    }
+}
+
+void AdjustSecretPaths(
+    std::map<TString, TDeferredAtom>& out,
+    const TVector<TSecretSettingsNames>& secretSettings,
+    TContext& ctx,
+    const TDeferredAtom& tablePathPrefix)
+{
+    if (const auto* prefix = tablePathPrefix.GetLiteral()) {
+        AdjustSecretPaths(out, secretSettings, *prefix);
+        return;
+    }
+
+    for (const auto& setting : secretSettings) {
+        auto pathIt = out.find(setting.Path);
+        if (pathIt != out.end() && pathIt->second.HasNode() && pathIt->second.GetLiteral()) {
+            auto path = new TCallNodeImpl(pathIt->second.Build()->GetPos(), "String", {pathIt->second.Build()});
+            pathIt->second = BuildPrefixedSecretPath(ctx, tablePathPrefix, path);
         }
     }
 }

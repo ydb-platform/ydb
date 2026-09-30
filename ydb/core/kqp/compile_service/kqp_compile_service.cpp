@@ -66,7 +66,8 @@ struct TKqpCompileRequest {
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
         NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false, bool collectDiagnostics = false)
+        bool usePessimisticLocks = false, bool collectDiagnostics = false,
+        std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> compileParameters = nullptr)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -87,6 +88,7 @@ struct TKqpCompileRequest {
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
         , CollectDiagnostics(collectDiagnostics)
+        , CompileParameters(std::move(compileParameters))
     {}
 
     TActorId Sender;
@@ -113,6 +115,7 @@ struct TKqpCompileRequest {
 
     bool UsePessimisticLocks;
     bool CollectDiagnostics = false;
+    std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> CompileParameters;
 
     bool FindInCache = true;
 
@@ -548,17 +551,21 @@ private:
         auto userSid = request.UserToken->GetUserSID();
         auto dbCounters = request.DbCounters;
 
-        auto compileResult = QueryCache->Find(
-            request.Uid,
-            request.Query,
-            request.TempTablesState,
-            request.KeepInCache,
-            request.UserToken->GetUserSID(),
-            Counters,
-            dbCounters,
-            ev->Sender,
-            ctx,
-            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
+        const bool mayUseRelativePathPrefix = !request.IsQueryActionPrepare && request.Query && MayUseRelativePathPrefix(request.Query->Text);
+        TKqpCompileResult::TConstPtr compileResult;
+        if (!mayUseRelativePathPrefix) {
+            compileResult = QueryCache->Find(
+                request.Uid,
+                request.Query,
+                request.TempTablesState,
+                request.KeepInCache,
+                request.UserToken->GetUserSID(),
+                Counters,
+                dbCounters,
+                ev->Sender,
+                ctx,
+                request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
+        }
 
         if (request.Uid) {
             if (compileResult) {
@@ -618,7 +625,9 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks, request.CollectDiagnostics);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks, request.CollectDiagnostics,
+            std::move(request.CompileParameters));
+        compileRequest.FindInCache = !mayUseRelativePathPrefix;
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
@@ -657,7 +666,7 @@ private:
             NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, ev->Get() ? std::move(ev->TraceId) : NWilson::TTraceId(), "Get query plan");
 
             TKqpCompileSettings compileSettings(
-                true,
+                request.IsQueryActionPrepare || !(request.Query && MayUseRelativePathPrefix(request.Query->Text)),
                 request.IsQueryActionPrepare,
                 false,
                 request.Deadline,
@@ -681,7 +690,7 @@ private:
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
                 std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr,
-                request.UsePessimisticLocks, request.CollectDiagnostics);
+                request.UsePessimisticLocks, request.CollectDiagnostics, std::move(request.CompileParameters));
             compileRequest.FindInCache = false;
 
             if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
@@ -744,7 +753,9 @@ private:
                     QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                 }
 
-                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
+                auto requests = MayUseRelativePathPrefix(compileResult->Query->Text)
+                    ? TVector<TKqpCompileRequest>()
+                    : RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     MarkJoinedCompilation(request.CompileServiceSpan, compileRequest.CompileServiceSpan);
@@ -983,7 +994,8 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), request.CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks,
+            std::move(request.CompileParameters));
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 

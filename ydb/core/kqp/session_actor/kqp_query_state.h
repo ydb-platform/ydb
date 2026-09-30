@@ -663,6 +663,8 @@ public:
         return RequestEv->GetYdbParameters();
     }
 
+    std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> GetCompileParameters() const;
+
     Ydb::Table::QueryStatsCollection::Mode GetStatsMode() const {
         if (!RequestEv->HasCollectStats()) {
             return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;

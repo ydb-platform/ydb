@@ -5781,7 +5781,13 @@ TMaybe<TDeferredAtom> TSqlTranslation::DoParseObjectPath(const TRule_object_ref&
         Error() << "'@' is not allowed prefix for object name";
         return Nothing();
     }
-    return TDeferredAtom(Ctx_.Pos(), useTablePrefix ? BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId) : objectId);
+    if (useTablePrefix || Ctx_.Scoped->ActivePragmas.contains(std::make_pair(TString(), TString("relativepathprefix")))) {
+        if (Ctx_.HasDynamicRelativePathPrefix()) {
+            return TDeferredAtom(Ctx_.GetPrefixedPath(context.ServiceId, context.Cluster, TDeferredAtom(Ctx_.Pos(), objectId)), Ctx_);
+        }
+        return TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId));
+    }
+    return TDeferredAtom(Ctx_.Pos(), objectId);
 }
 
 TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_ref_core& node, TObjectOperatorContext& context) {
@@ -5810,7 +5816,11 @@ TMaybe<TDeferredAtom> TSqlTranslation::ParseObjectPath(const TRule_simple_table_
             Error() << "Temporary object is not supported";
             return {};
         }
-        result = TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId));
+        if (Ctx_.HasDynamicRelativePathPrefix()) {
+            result = TDeferredAtom(Ctx_.GetPrefixedPath(context.ServiceId, context.Cluster, TDeferredAtom(Ctx_.Pos(), objectId)), Ctx_);
+        } else {
+            result = TDeferredAtom(Ctx_.Pos(), BuildTablePath(Ctx_.GetPrefixPath(context.ServiceId, context.Cluster), objectId));
+        }
     } else {
         // (cluster_expr DOT)? COMMAT? bind_parameter
         TString bindName;

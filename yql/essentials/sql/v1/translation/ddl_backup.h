@@ -48,15 +48,33 @@ TNodePtr BuildCreateBackupCollection(
     const TString& id,
     const TCreateBackupCollectionParameters& params,
     const TObjectOperatorContext& context);
+TNodePtr BuildCreateBackupCollection(
+    TPosition pos,
+    const TDeferredAtom& prefix,
+    const TString& id,
+    const TCreateBackupCollectionParameters& params,
+    const TObjectOperatorContext& context);
 TNodePtr BuildAlterBackupCollection(
     TPosition pos,
     const TString& prefix,
     const TString& id,
     const TAlterBackupCollectionParameters& params,
     const TObjectOperatorContext& context);
+TNodePtr BuildAlterBackupCollection(
+    TPosition pos,
+    const TDeferredAtom& prefix,
+    const TString& id,
+    const TAlterBackupCollectionParameters& params,
+    const TObjectOperatorContext& context);
 TNodePtr BuildDropBackupCollection(
     TPosition pos,
     const TString& prefix,
+    const TString& id,
+    const TDropBackupCollectionParameters& params,
+    const TObjectOperatorContext& context);
+TNodePtr BuildDropBackupCollection(
+    TPosition pos,
+    const TDeferredAtom& prefix,
     const TString& id,
     const TDropBackupCollectionParameters& params,
     const TObjectOperatorContext& context);
@@ -67,9 +85,21 @@ TNodePtr BuildBackup(
     const TString& id,
     const TBackupParameters& params,
     const TObjectOperatorContext& context);
+TNodePtr BuildBackup(
+    TPosition pos,
+    const TDeferredAtom& prefix,
+    const TString& id,
+    const TBackupParameters& params,
+    const TObjectOperatorContext& context);
 TNodePtr BuildRestore(
     TPosition pos,
     const TString& prefix,
+    const TString& id,
+    const TRestoreParameters& params,
+    const TObjectOperatorContext& context);
+TNodePtr BuildRestore(
+    TPosition pos,
+    const TDeferredAtom& prefix,
     const TString& id,
     const TRestoreParameters& params,
     const TObjectOperatorContext& context);

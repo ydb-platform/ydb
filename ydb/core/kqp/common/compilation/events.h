@@ -22,7 +22,8 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {},
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr, bool collectDiagnostics = false, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool isWarmupCompilation = false, bool usePessimisticLocks = false)
+        bool isWarmupCompilation = false, bool usePessimisticLocks = false,
+        std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> compileParameters = nullptr)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -45,6 +46,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
         , SplitExpr(std::move(splitExpr))
         , IsWarmupCompilation(isWarmupCompilation)
         , UsePessimisticLocks(usePessimisticLocks)
+        , CompileParameters(std::move(compileParameters))
     {
         Y_ENSURE(Uid.Defined() != Query.Defined());
     }
@@ -79,6 +81,7 @@ struct TEvCompileRequest: public TEventLocal<TEvCompileRequest, TKqpEvents::EvCo
 
     bool IsWarmupCompilation = false;
     bool UsePessimisticLocks = false;
+    std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> CompileParameters;
 };
 
 struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
@@ -88,7 +91,8 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         std::shared_ptr<std::atomic<bool>> intrestedInResult, const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         NLWTrace::TOrbit orbit = {}, TKqpTempTablesState::TConstPtr tempTablesState = nullptr, TMaybe<TQueryAst> queryAst = Nothing(),
         bool split = false, std::shared_ptr<NYql::TExprContext> splitCtx = nullptr, NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false, bool collectDiagnostics = false)
+        bool usePessimisticLocks = false, bool collectDiagnostics = false,
+        std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> compileParameters = nullptr)
         : UserToken(userToken)
         , ClientAddress(clientAddress)
         , Uid(uid)
@@ -108,6 +112,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
         , CollectDiagnostics(collectDiagnostics)
+        , CompileParameters(std::move(compileParameters))
     {
     }
 
@@ -135,6 +140,7 @@ struct TEvRecompileRequest: public TEventLocal<TEvRecompileRequest, TKqpEvents::
     NYql::TExprNode::TPtr SplitExpr = nullptr;
     bool UsePessimisticLocks = false;
     bool CollectDiagnostics = false;
+    std::shared_ptr<const google::protobuf::Map<TProtoStringType, Ydb::TypedValue>> CompileParameters;
 };
 
 struct TEvCompileResponse: public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {

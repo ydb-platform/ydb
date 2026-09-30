@@ -1156,13 +1156,13 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         auto commit = tx->Commit().GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
 
-        auto final = session.ExecuteQuery(Q_(R"(
+        auto finalResult = session.ExecuteQuery(Q_(R"(
             PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
             UPSERT INTO `/Root/repro_affected_deferred2` (id) VALUES (7), (8), (9);
         )"), BeginSerializableRW(), GetQuerySettingsBasic()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(final.GetStatus(), EStatus::SUCCESS, final.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(final, "/Root/repro_affected_deferred2"), 3u);
-        UNIT_ASSERT_C(HasAnyAffectedRowsField(final),
+        UNIT_ASSERT_VALUES_EQUAL_C(finalResult.GetStatus(), EStatus::SUCCESS, finalResult.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(GetAffectedRowsForTable(finalResult, "/Root/repro_affected_deferred2"), 3u);
+        UNIT_ASSERT_C(HasAnyAffectedRowsField(finalResult),
             "affected_rows must be present for a statement with collect_affected_rows");
     }
 }

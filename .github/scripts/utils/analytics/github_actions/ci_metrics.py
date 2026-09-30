@@ -222,12 +222,9 @@ def apply_job_defaults(
     target = os.environ.get("CI_BUILD_TARGET")
     if target:
         properties.setdefault("build_target", target)
-    build_span = os.environ.get("CI_BUILD_SPAN")
-    if name and build_span and name == build_span:
+    if name and name.startswith("ya_make_try_"):
         if command == "start":
             fields.setdefault("runner", True)
-            if not fields.get("source"):
-                fields["source"] = os.environ.get("CI_BUILD_SPAN_SOURCE") or "ya_phase"
         elif command == "end":
             fields.setdefault("usage", True)
     if command in ("start", "track") and not fields.get("source") and not properties.get("source"):

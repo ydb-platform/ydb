@@ -806,7 +806,7 @@ class JobDefaultsTest(unittest.TestCase):
     def setUp(self):
         self._saved = {
             key: os.environ.get(key)
-            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET", "CI_BUILD_SPAN", "CI_BUILD_SPAN_SOURCE")
+            for key in ("CI_YA_ATTEMPT", "CI_BUILD_TARGET")
         }
         for key in self._saved:
             os.environ.pop(key, None)
@@ -829,15 +829,13 @@ class JobDefaultsTest(unittest.TestCase):
         self.assertEqual(fields["source"], "ya_phase")
         self.assertNotIn("runner", fields)
 
-    def test_build_span_gets_runner_and_usage(self):
-        os.environ["CI_BUILD_SPAN"] = "build_wall"
-        os.environ["CI_BUILD_SPAN_SOURCE"] = "custom_src"
+    def test_ya_make_try_gets_runner_and_usage(self):
         start_fields: dict = {}
-        apply_job_defaults("build_wall", {}, start_fields, command="start")
+        apply_job_defaults("ya_make_try_1", {}, start_fields, command="start")
         self.assertTrue(start_fields["runner"])
-        self.assertEqual(start_fields["source"], "custom_src")
+        self.assertEqual(start_fields["source"], "ya_phase")
         end_fields: dict = {}
-        apply_job_defaults("build_wall", {}, end_fields, command="end")
+        apply_job_defaults("ya_make_try_1", {}, end_fields, command="end")
         self.assertTrue(end_fields["usage"])
 
     def test_rc_sets_conclusion_and_error(self):

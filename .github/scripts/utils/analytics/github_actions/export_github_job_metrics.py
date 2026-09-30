@@ -172,7 +172,7 @@ def metrics_from_workflow_run(
 
 
 OVERLAP = timedelta(minutes=30)
-OPEN_RUN_LOOKBACK = timedelta(hours=12)
+OPEN_RUN_LOOKBACK = timedelta(hours=24)
 
 
 def completed_since(hours: int, last_export: Optional[datetime] = None) -> datetime:

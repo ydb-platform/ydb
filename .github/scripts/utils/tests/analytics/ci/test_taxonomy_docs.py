@@ -76,7 +76,7 @@ def _span_names_from_action() -> set:
         text,
     ):
         names.add(match.group(1))
-    # $CI_BUILD_SPAN is supplied by the calling workflow, not a literal name.
+    # ya_make_try_${RETRY} is expanded by the action, not a literal name.
     resolved = set()
     for name in names:
         if "$" in name and "RETRY" in name:

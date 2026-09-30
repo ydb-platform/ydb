@@ -523,11 +523,8 @@ runs:
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
           analytics end prepare_ya_make
-          if [ -n "${CI_BUILD_SPAN:-}" ]; then
-            analytics start "$CI_BUILD_SPAN"
-          else
-            analytics start "ya_make_try_${RETRY}"
-          fi
+          YA_MAKE_NAME="ya_make_try_${RETRY}"
+          analytics start "ya_make_try_${RETRY}"
 
           set +e
           # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
@@ -540,7 +537,6 @@ runs:
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
-          YA_MAKE_NAME="${CI_BUILD_SPAN:-ya_make_try_${RETRY}}"
           if [ $RC -eq 0 ]; then
             analytics end "$YA_MAKE_NAME"
           else

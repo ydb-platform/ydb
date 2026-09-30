@@ -2,10 +2,9 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
-TStaticProvider::TStaticProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility)
-    : TProviderBase(config, std::move(facility))
+TStaticProvider::TStaticProvider(const TOidcConfig& config)
+    : TProviderBase(config)
 {
-    Start();
 }
 
 TStaticProvider::~TStaticProvider() {

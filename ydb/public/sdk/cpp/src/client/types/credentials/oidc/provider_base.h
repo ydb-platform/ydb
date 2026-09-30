@@ -10,23 +10,20 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
-class TProviderBase: public ICredentialsProvider {
-    struct TDelivery {
-        NThreading::TPromise<std::string> Promise;
-        std::weak_ptr<void> CallbackLifetime;
-    };
+class TProviderContext;
 
+// One shared authentication state and worker per factory, independent of drivers.
+class TProviderBase: public std::enable_shared_from_this<TProviderBase> {
 public:
-    TProviderBase(TOidcConfig config, std::weak_ptr<ICoreFacility> facility);
-    ~TProviderBase() override;
+    explicit TProviderBase(TOidcConfig config);
+    virtual ~TProviderBase();
 
-    std::string GetAuthInfo() const override;
-    NThreading::TFuture<std::string> GetAuthInfoAsync() const override;
-    bool IsValid() const override;
+    TCredentialsProviderPtr CreateProvider(std::weak_ptr<ICoreFacility> facility);
+    NThreading::TFuture<std::string> GetAuthInfoAsync(const std::shared_ptr<TProviderContext>& context) const;
+    bool IsValid(const std::shared_ptr<TProviderContext>& context) const;
     void Stop();
 
 protected:
-    void Start();
     virtual void RunTokens() = 0;
 
     bool Wait(TDuration delay);
@@ -41,25 +38,24 @@ protected:
     NThreading::TCancellationTokenSource Cancellation;
 
 private:
+    void Start();
     void Run();
-    void CancelDeliveries();
-    void Complete(NThreading::TPromise<std::string> pending, std::optional<TOAuthToken> token, std::exception_ptr error);
-    void CompleteDiscardedDeliveries();
+    std::vector<std::shared_ptr<TProviderContext>> GetContexts();
+    bool CompleteDiscardedDeliveries();
 
-    std::weak_ptr<ICoreFacility> Facility;
     mutable TMutex Mutex;
     std::condition_variable_any Changed;
+    bool Started = false;
     bool Stopping = false;
     std::optional<TTokenCache> Tokens;
     std::exception_ptr Error;
-    NThreading::TPromise<std::string> Pending;
-    std::vector<TDelivery> Deliveries;
+    std::vector<std::weak_ptr<TProviderContext>> Contexts;
     std::thread Worker;
 };
 
 class TRefreshingProviderBase: public TProviderBase {
 public:
-    TRefreshingProviderBase(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility);
+    explicit TRefreshingProviderBase(const TOidcConfig& config);
 
 protected:
     virtual TTokenCache AcquireToken() = 0;

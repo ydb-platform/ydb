@@ -69,7 +69,7 @@ struct TClientOidcConfig {
 
 struct TDeviceOidcConfig {
     // Expiry or denial ends the current sign-in attempt. To try again after user
-    // interaction, create a new provider (a new factory for parameterless CreateProvider()).
+    // interaction, create a new factory.
     std::string ClientId;
     // The provider adds "openid" if it is not listed.
     std::vector<std::string> Scopes;
@@ -90,15 +90,20 @@ struct TOidcConfig {
 
 // Factory identity is stable for the same credentials and custom hook instances.
 // Different hook instances isolate independent user sessions.
-// Parameterless CreateProvider() reuses one provider; CreateProvider(facility) creates an independent provider for each call.
-// Each device provider can prompt if no usable cached credentials exist. Sharing a
-// cacher reuses stored tokens but does not coalesce concurrent authorization flows.
+// One factory shares tokens, refresh and a device sign-in attempt across its providers.
+// CreateProvider(facility) returns a separate provider bound to the supplied facility;
+// its pending requests are cancelled on provider destruction or when facility
+// expiration is detected. Detection can wait for the current synchronous operation.
+// Parameterless CreateProvider() reuses one provider owning a standalone facility.
+// Authentication state lives while the factory or any of its providers is retained.
+// Different factories do not coalesce authorization flows, even with a shared cacher.
 //
 // GetAuthInfo() blocks until credentials or an error are available; prefer
 // GetAuthInfoAsync() when waiting for interactive sign-in.
 //
-// HTTP runs synchronously on the provider worker. Destruction stops polling and
-// joins that worker; active HTTP may wait for socket/connect timeouts (5 s / 30 s).
+// HTTP runs synchronously on the shared authentication worker. Releasing its last
+// factory/provider owner stops polling and joins that worker; active HTTP may wait
+// for socket/connect timeouts (5 s / 30 s).
 // DNS resolution is subject to the system resolver's timeout. Transport timeouts
 // bound individual socket operations, not the total duration of a streaming response.
 // Keep provider/factory owners alive until their hooks and future callbacks return;

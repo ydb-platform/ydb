@@ -6,7 +6,7 @@ namespace NYdb::inline Dev::NOidc::NPrivate {
 
 class TDeviceProvider final: public TRefreshingProviderBase {
 public:
-    TDeviceProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility);
+    explicit TDeviceProvider(const TOidcConfig& config);
     ~TDeviceProvider() override;
 
 private:

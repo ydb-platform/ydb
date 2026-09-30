@@ -2,10 +2,9 @@
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
 
-TClientProvider::TClientProvider(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility)
-    : TRefreshingProviderBase(config, std::move(facility))
+TClientProvider::TClientProvider(const TOidcConfig& config)
+    : TRefreshingProviderBase(config)
 {
-    Start();
 }
 
 TClientProvider::~TClientProvider() {

@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     credentials.cpp
     private.cpp
+    provider.cpp
     provider_base.cpp
     static_provider.cpp
     client_provider.cpp

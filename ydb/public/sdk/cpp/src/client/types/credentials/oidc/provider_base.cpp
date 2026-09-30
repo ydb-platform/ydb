@@ -1,38 +1,35 @@
 #include "provider_base.h"
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
+#include "provider.h"
 
 #include <algorithm>
 
 namespace NYdb::inline Dev::NOidc::NPrivate {
-namespace {
 
-std::exception_ptr StoppedError();
-void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr error) noexcept;
-
-std::exception_ptr StoppedError() {
-    return std::make_exception_ptr(TError("provider stopped", false, {}));
-}
-
-void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr error) noexcept {
-    try {
-        promise.TrySetException(std::move(error));
-    } catch (...) {
-        // The promise is already settled; a throwing subscriber must not interrupt cleanup.
-    }
-}
-
-} // namespace
-
-TProviderBase::TProviderBase(TOidcConfig config, std::weak_ptr<ICoreFacility> facility)
+TProviderBase::TProviderBase(TOidcConfig config)
     : Config(std::move(config))
-    , Facility(std::move(facility))
-    , Pending(NThreading::NewPromise<std::string>())
 {
 }
 
 TProviderBase::~TProviderBase() {
     Stop();
+}
+
+TCredentialsProviderPtr TProviderBase::CreateProvider(std::weak_ptr<ICoreFacility> facility) {
+    auto context = std::make_shared<TProviderContext>(std::move(facility));
+    auto provider = std::make_shared<TCredentialsProvider>(shared_from_this(), context);
+    bool start = false;
+    with_lock (Mutex) {
+        std::erase_if(Contexts, [](const auto& previous) { return previous.expired(); });
+        Contexts.push_back(context);
+        if (!Started && !Stopping && !context->IsStopped()) {
+            Started = true;
+            start = true;
+        }
+    }
+    if (start) {
+        Start();
+    }
+    return provider;
 }
 
 void TProviderBase::Start() {
@@ -43,33 +40,24 @@ void TProviderBase::Start() {
     }
 }
 
-std::string TProviderBase::GetAuthInfo() const {
-    return GetAuthInfoAsync().GetValueSync();
-}
-
-NThreading::TFuture<std::string> TProviderBase::GetAuthInfoAsync() const {
-    std::string token;
-    std::exception_ptr error;
+NThreading::TFuture<std::string> TProviderBase::GetAuthInfoAsync(const std::shared_ptr<TProviderContext>& context) const {
     with_lock (Mutex) {
-        if (Stopping || Facility.expired()) {
-            error = StoppedError();
-        } else if (Tokens.has_value() && Tokens->AccessToken.IsValid(TInstant::Now())) {
-            token = "Bearer " + Tokens->AccessToken.Token;
-        } else if (Error != nullptr) {
-            error = Error;
-        } else {
-            return Pending.GetFuture();
+        if (Stopping || context->IsStopped()) {
+            return NThreading::MakeErrorFuture<std::string>(StoppedError());
         }
+        if (Tokens.has_value() && Tokens->AccessToken.IsValid(TInstant::Now())) {
+            return NThreading::MakeFuture("Bearer " + Tokens->AccessToken.Token);
+        }
+        if (Error != nullptr) {
+            return NThreading::MakeErrorFuture<std::string>(Error);
+        }
+        return context->GetPending();
     }
-    if (error != nullptr) {
-        return NThreading::MakeErrorFuture<std::string>(error);
-    }
-    return NThreading::MakeFuture(std::move(token));
 }
 
-bool TProviderBase::IsValid() const {
+bool TProviderBase::IsValid(const std::shared_ptr<TProviderContext>& context) const {
     with_lock (Mutex) {
-        return !Stopping && !Facility.expired() &&
+        return !Stopping && !context->IsStopped() &&
                ((Tokens.has_value() && Tokens->AccessToken.IsValid(TInstant::Now())) || Error == nullptr);
     }
 }
@@ -79,53 +67,56 @@ void TProviderBase::Stop() {
     if (Worker.joinable()) {
         Worker.join();
     }
-    CancelDeliveries();
+}
+
+std::vector<std::shared_ptr<TProviderContext>> TProviderBase::GetContexts() {
+    std::vector<std::shared_ptr<TProviderContext>> contexts;
+    with_lock (Mutex) {
+        auto it = Contexts.begin();
+        while (it != Contexts.end()) {
+            if (auto context = it->lock(); context != nullptr) {
+                contexts.push_back(std::move(context));
+                ++it;
+            } else {
+                it = Contexts.erase(it);
+            }
+        }
+    }
+    return contexts;
 }
 
 void TProviderBase::RequestStop() {
-    NThreading::TPromise<std::string> pending;
     with_lock (Mutex) {
         if (Stopping) {
             return;
         }
         Stopping = true;
-        pending = Pending;
     }
     Changed.notify_all();
     Cancellation.Cancel();
-    SetException(pending, StoppedError());
-    CancelDeliveries();
+    for (const auto& context : GetContexts()) {
+        context->Stop();
+    }
 }
 
 void TProviderBase::Run() {
     try {
         if (IsStopped()) {
-            RequestStop();
             return;
         }
         RunTokens();
     } catch (...) {
         Fail(std::current_exception());
     }
-
-    for (;;) {
-        CompleteDiscardedDeliveries();
-        with_lock (Mutex) {
-            const bool finished = std::all_of(Deliveries.begin(), Deliveries.end(), [](const auto& delivery) {
-                return delivery.Promise.GetFuture().HasValue() || delivery.Promise.GetFuture().HasException();
-            });
-            if (finished) {
-                return;
-            }
-        }
+    while (CompleteDiscardedDeliveries()) {
         if (!Wait(TDuration::MilliSeconds(100))) {
             return;
         }
     }
 }
 
-TRefreshingProviderBase::TRefreshingProviderBase(const TOidcConfig& config, std::weak_ptr<ICoreFacility> facility)
-    : TProviderBase(config, std::move(facility))
+TRefreshingProviderBase::TRefreshingProviderBase(const TOidcConfig& config)
+    : TProviderBase(config)
     , Protocol(Config, Cancellation.Token())
 {
 }
@@ -172,7 +163,7 @@ void TRefreshingProviderBase::RunTokens() {
 
 bool TProviderBase::IsStopped() const {
     with_lock (Mutex) {
-        return Stopping || Facility.expired();
+        return Stopping;
     }
 }
 
@@ -180,7 +171,7 @@ bool TProviderBase::Wait(TDuration delay) {
     with_lock (Mutex) {
         auto remaining = std::chrono::microseconds(delay.MicroSeconds());
         const auto end = std::chrono::steady_clock::now() + remaining;
-        while (!Stopping && !Facility.expired()) {
+        while (!Stopping) {
             {
                 auto unguard = Unguard(Mutex);
                 CompleteDiscardedDeliveries();
@@ -195,7 +186,6 @@ bool TProviderBase::Wait(TDuration delay) {
             remaining = std::chrono::duration_cast<std::chrono::microseconds>(end - std::chrono::steady_clock::now());
         }
     }
-    RequestStop();
     return false;
 }
 
@@ -220,6 +210,7 @@ void TProviderBase::Write(const TTokenCache& tokens) const {
     } catch (...) {
         // Persistence is optional; keep the acquired token usable in memory.
         // User-supplied exception messages may contain credentials.
+        return;
     }
 }
 
@@ -236,101 +227,45 @@ TTokenCache TRefreshingProviderBase::Update(const TTokenCache& current) {
     return AcquireToken();
 }
 
-void TProviderBase::Complete(NThreading::TPromise<std::string> pending, std::optional<TOAuthToken> token, std::exception_ptr error) {
-    const auto callbackLifetime = std::make_shared<int>(0);
-    bool stopped;
-    with_lock (Mutex) {
-        stopped = Stopping;
-        Deliveries.erase(std::remove_if(Deliveries.begin(), Deliveries.end(), [](const auto& delivery) {
-                             return delivery.Promise.GetFuture().HasValue() || delivery.Promise.GetFuture().HasException();
-                         }), Deliveries.end());
-        if (!stopped) {
-            Deliveries.push_back({pending, callbackLifetime});
-        }
+bool TProviderBase::CompleteDiscardedDeliveries() {
+    bool pending = false;
+    for (const auto& context : GetContexts()) {
+        pending = context->CompleteDiscardedDeliveries() || pending;
     }
-    if (stopped) {
-        SetException(pending, StoppedError());
-        return;
-    }
-    auto completion = [pending, token = std::move(token), error, callbackLifetime]() mutable {
-        Y_UNUSED(callbackLifetime);
-        try {
-            if (error != nullptr) {
-                SetException(pending, error);
-            } else if (!token->IsValid(TInstant::Now())) {
-                SetException(pending, std::make_exception_ptr(TError("access token expired before delivery", false, {})));
-            } else {
-                pending.TrySetValue("Bearer " + token->Token);
-            }
-        } catch (...) {
-            // Covers both preparation failures and subscribers throwing after
-            // settlement. Neither may escape into the response queue executor.
-            SetException(pending, std::current_exception());
-        }
-    };
-    try {
-        if (auto facility = Facility.lock(); facility != nullptr) {
-            facility->PostToResponseQueue(std::move(completion));
-        } else {
-            SetException(pending, StoppedError());
-        }
-    } catch (...) {
-        SetException(pending, std::current_exception());
-    }
-}
-
-void TProviderBase::CompleteDiscardedDeliveries() {
-    std::vector<NThreading::TPromise<std::string>> discarded;
-    with_lock (Mutex) {
-        auto it = Deliveries.begin();
-        while (it != Deliveries.end()) {
-            const auto future = it->Promise.GetFuture();
-            if (future.HasValue() || future.HasException()) {
-                it = Deliveries.erase(it);
-            } else if (it->CallbackLifetime.expired()) {
-                discarded.push_back(it->Promise);
-                it = Deliveries.erase(it);
-            } else {
-                ++it;
-            }
-        }
-    }
-
-    for (auto& promise : discarded) {
-        SetException(promise, StoppedError());
-    }
+    return pending;
 }
 
 void TProviderBase::Publish(const TTokenCache& current) {
-    NThreading::TPromise<std::string> pending;
+    std::vector<std::pair<std::shared_ptr<TProviderContext>, NThreading::TPromise<std::string>>> pending;
     with_lock (Mutex) {
         if (Stopping) {
             return;
         }
         Tokens = current;
         Error = nullptr;
-        pending = Pending;
-        Pending = NThreading::NewPromise<std::string>();
+        for (const auto& weakContext : Contexts) {
+            if (auto context = weakContext.lock(); context != nullptr) {
+                pending.emplace_back(context, context->TakePending());
+            }
+        }
     }
-    Complete(pending, current.AccessToken, {});
+    for (auto& [context, promise] : pending) {
+        context->Complete(promise, current.AccessToken, {});
+    }
 }
 
 void TProviderBase::Fail(std::exception_ptr error) {
-    NThreading::TPromise<std::string> pending;
+    std::vector<std::pair<std::shared_ptr<TProviderContext>, NThreading::TPromise<std::string>>> pending;
     with_lock (Mutex) {
         Error = error;
-        pending = Pending;
+        for (const auto& weakContext : Contexts) {
+            if (auto context = weakContext.lock(); context != nullptr) {
+                pending.emplace_back(context, context->TakePending());
+            }
+        }
     }
-    Complete(pending, std::nullopt, error);
-}
-
-void TProviderBase::CancelDeliveries() {
-    std::vector<TDelivery> deliveries;
-    with_lock (Mutex) {
-        deliveries.swap(Deliveries);
-    }
-    for (auto& delivery : deliveries) {
-        SetException(delivery.Promise, StoppedError());
+    for (auto& [context, promise] : pending) {
+        context->Complete(promise, std::nullopt, error);
     }
 }
 

@@ -41,6 +41,7 @@ private:
     std::string Identity;
     mutable TMutex Mutex;
     mutable TCredentialsProviderPtr Provider;
+    mutable std::shared_ptr<TProviderBase> State;
 };
 
 TFactory::TFactory(TOidcConfig config)
@@ -52,8 +53,8 @@ TFactory::TFactory(TOidcConfig config)
     // stable and distinguish custom hooks by their process-local instance identity.
     if (Config.Cacher_ != nullptr || Config.Acceptor_ != nullptr) {
         Identity = HashIdentity(Identity + ":" +
-            std::to_string(reinterpret_cast<uintptr_t>(Config.Cacher_.get())) + ":" +
-            std::to_string(reinterpret_cast<uintptr_t>(Config.Acceptor_.get())));
+                                std::to_string(reinterpret_cast<uintptr_t>(Config.Cacher_.get())) + ":" +
+                                std::to_string(reinterpret_cast<uintptr_t>(Config.Acceptor_.get())));
     }
 }
 
@@ -69,7 +70,9 @@ TCredentialsProviderPtr TFactory::CreateProvider() const {
 }
 
 TCredentialsProviderPtr TFactory::CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
-    return CreateProviderImpl(std::move(facility));
+    with_lock (Mutex) {
+        return CreateProviderImpl(std::move(facility));
+    }
 }
 
 std::string TFactory::GetClientIdentity() const {
@@ -77,17 +80,20 @@ std::string TFactory::GetClientIdentity() const {
 }
 
 TCredentialsProviderPtr TFactory::CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const {
-    return std::visit(TOverloaded{
-        [&](const TStaticOidcConfig&) -> TCredentialsProviderPtr {
-            return std::make_shared<TStaticProvider>(Config, std::move(facility));
-        },
-        [&](const TClientOidcConfig&) -> TCredentialsProviderPtr {
-            return std::make_shared<TClientProvider>(Config, std::move(facility));
-        },
-        [&](const TDeviceOidcConfig&) -> TCredentialsProviderPtr {
-            return std::make_shared<TDeviceProvider>(Config, std::move(facility));
-        },
-    }, Config.FlowConfig);
+    if (State == nullptr) {
+        State = std::visit(TOverloaded{
+                               [&](const TStaticOidcConfig&) -> std::shared_ptr<TProviderBase> {
+                                   return std::make_shared<TStaticProvider>(Config);
+                               },
+                               [&](const TClientOidcConfig&) -> std::shared_ptr<TProviderBase> {
+                                   return std::make_shared<TClientProvider>(Config);
+                               },
+                               [&](const TDeviceOidcConfig&) -> std::shared_ptr<TProviderBase> {
+                                   return std::make_shared<TDeviceProvider>(Config);
+                               },
+                           }, Config.FlowConfig);
+    }
+    return State->CreateProvider(std::move(facility));
 }
 
 } // namespace

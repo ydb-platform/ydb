@@ -4,11 +4,11 @@
 #include "test_server.h"
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
-#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/client_provider.h>
-#include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/device_provider.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/string_utils/base64/base64.h>
+
+#include <util/generic/scope.h>
 
 #include <future>
 
@@ -76,22 +76,23 @@ void TGatedOidcAcceptor::Accept(const TDeviceAuthInfo& info) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TOidcCredentials) {
-Y_UNIT_TEST(FactoryReturnsConcreteProviders) {
-    TOidcConfig config;
-    config.Issuer = "https://issuer.example";
-    auto cache = std::make_shared<TMemoryTokenCacher>();
-    cache->Write({{"cached", std::nullopt}, std::nullopt});
-    config.Cacher(cache);
-    auto facility = std::make_shared<TQueuedOidcFacility>();
-    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
-    auto provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
-    UNIT_ASSERT(std::dynamic_pointer_cast<NOidc::NPrivate::TStaticProvider>(provider) != nullptr);
-    config.FlowConfig = TClientOidcConfig{"client", "secret", {}};
-    provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
-    UNIT_ASSERT(std::dynamic_pointer_cast<NOidc::NPrivate::TClientProvider>(provider) != nullptr);
-    config.FlowConfig = TDeviceOidcConfig{"client", {}};
-    provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
-    UNIT_ASSERT(std::dynamic_pointer_cast<NOidc::NPrivate::TDeviceProvider>(provider) != nullptr);
+Y_UNIT_TEST(FactoryCreatesWorkingProvidersForEveryFlow) {
+    for (const TFlowConfig& flow : {
+             TFlowConfig{TStaticOidcConfig{.AccessToken = "opaque"}},
+             TFlowConfig{TClientOidcConfig{"client", "secret", {}}},
+             TFlowConfig{TDeviceOidcConfig{"client", {}}}}) {
+        TOidcConfig config;
+        config.Issuer = "https://issuer.example";
+        config.FlowConfig = flow;
+        auto cache = std::make_shared<TMemoryTokenCacher>();
+        cache->Write({{"cached", std::nullopt}, std::nullopt});
+        config.Cacher(cache);
+        auto facility = CreateSimpleCoreFacility();
+        auto provider = CreateOidcProviderFactory(config)->CreateProvider(facility);
+        const auto expected = std::holds_alternative<TStaticOidcConfig>(flow) ? "Bearer opaque" : "Bearer cached";
+        UNIT_ASSERT_VALUES_EQUAL(provider->GetAuthInfo(), expected);
+        UNIT_ASSERT(provider->IsValid());
+    }
 }
 
 Y_UNIT_TEST(BearerTicketDoesNotChangeCachedToken) {
@@ -531,6 +532,217 @@ Y_UNIT_TEST(ConcurrentRequestsShareInitialGrant) {
     UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
 }
 
+Y_UNIT_TEST(SharedFactoryProvidersUseTheirOwnResponseQueues) {
+    TOidcTestServer server;
+    for (size_t i = 0; i < 2; ++i) {
+        server.Enqueue(R"({"access_token":"shared-access","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    }
+    auto replyGate = NThreading::NewPromise<void>();
+    server.BlockTokenRepliesUntil(replyGate.GetFuture());
+    auto factory = CreateOidcProviderFactory(server.ClientConfig());
+    auto firstFacility = std::make_shared<TQueuedOidcFacility>();
+    auto secondFacility = std::make_shared<TQueuedOidcFacility>();
+    auto first = factory->CreateProvider(firstFacility);
+    auto second = factory->CreateProvider(secondFacility);
+    auto firstPending = first->GetAuthInfoAsync();
+    auto secondPending = second->GetAuthInfoAsync();
+    replyGate.TrySetValue();
+
+    UNIT_ASSERT(first != second);
+    UNIT_ASSERT(firstFacility->WaitForTask());
+    UNIT_ASSERT(secondFacility->WaitForTask());
+    UNIT_ASSERT(!firstPending.IsReady());
+    UNIT_ASSERT(!secondPending.IsReady());
+    firstFacility->RunTasks();
+    UNIT_ASSERT(firstPending.Wait(TDuration::Seconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(firstPending.GetValueSync(), "Bearer shared-access");
+    UNIT_ASSERT(!secondPending.IsReady());
+    secondFacility->RunTasks();
+    UNIT_ASSERT(secondPending.Wait(TDuration::Seconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(secondPending.GetValueSync(), "Bearer shared-access");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 1);
+}
+
+Y_UNIT_TEST(SharedFactoryDestructionCancelsOnlyItsOwnRequests) {
+    for (const bool destroyFacility : {false, true}) {
+        TOidcTestServer server;
+        for (size_t i = 0; i < 3; ++i) {
+            server.Enqueue(R"({"access_token":"shared-access","token_type":"Bearer","expires_in":600})", HTTP_OK);
+        }
+        auto replyGate = NThreading::NewPromise<void>();
+        server.BlockTokenRepliesUntil(replyGate.GetFuture());
+        auto factory = CreateOidcProviderFactory(server.ClientConfig());
+        auto firstFacility = std::make_shared<TQueuedOidcFacility>();
+        auto secondFacility = std::make_shared<TQueuedOidcFacility>();
+        auto first = factory->CreateProvider(firstFacility);
+        auto second = factory->CreateProvider(secondFacility);
+        auto firstPending = first->GetAuthInfoAsync();
+        auto secondPending = second->GetAuthInfoAsync();
+        replyGate.TrySetValue();
+        UNIT_ASSERT(firstFacility->WaitForTask());
+        UNIT_ASSERT(secondFacility->WaitForTask());
+
+        if (destroyFacility) {
+            firstFacility.reset();
+        } else {
+            first.reset();
+        }
+        UNIT_ASSERT(firstPending.Wait(TDuration::Seconds(1)));
+        UNIT_ASSERT(firstPending.HasException());
+        UNIT_ASSERT(!secondPending.IsReady());
+        secondFacility->RunTasks();
+        UNIT_ASSERT(secondPending.Wait(TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(secondPending.GetValueSync(), "Bearer shared-access");
+        if (firstFacility != nullptr) {
+            firstFacility->RunTasks();
+            UNIT_ASSERT(firstPending.HasException());
+        }
+
+        first.reset();
+        firstFacility.reset();
+        second.reset();
+        secondFacility.reset();
+        auto replacementFacility = std::make_shared<TQueuedOidcFacility>();
+        auto replacement = factory->CreateProvider(replacementFacility);
+        auto replacementPending = replacement->GetAuthInfoAsync();
+        if (!replacementPending.IsReady()) {
+            UNIT_ASSERT(replacementFacility->WaitForTask());
+            replacementFacility->RunTasks();
+        }
+        UNIT_ASSERT(replacementPending.Wait(TDuration::Seconds(1)));
+        UNIT_ASSERT_VALUES_EQUAL(replacementPending.GetValueSync(), "Bearer shared-access");
+        UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 1);
+    }
+}
+
+Y_UNIT_TEST(SharedFactoryDeviceLoginSurvivesOneAdapterDestruction) {
+    TOidcTestServer server;
+    server.Enqueue(TString("{\"device_code\":\"private-device\",\"user_code\":\"ABCD\",\"verification_uri\":\"") +
+        server.Issuer() + "/verify\",\"expires_in\":60,\"interval\":1}", HTTP_OK);
+    server.Enqueue(R"({"access_token":"shared-user","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    auto replyGate = NThreading::NewPromise<void>();
+    server.BlockTokenRepliesUntil(replyGate.GetFuture());
+    auto acceptor = std::make_shared<TTestAcceptor>();
+    auto config = server.ClientConfig().Acceptor(acceptor);
+    config.FlowConfig = TDeviceOidcConfig{"public-client", {}};
+    auto factory = CreateOidcProviderFactory(config);
+    // Release the server before the factory joins its worker on any early exit.
+    Y_DEFER {
+        replyGate.TrySetValue();
+    };
+    auto firstFacility = std::make_shared<TQueuedOidcFacility>();
+    auto secondFacility = std::make_shared<TQueuedOidcFacility>();
+    auto first = factory->CreateProvider(firstFacility);
+    auto second = factory->CreateProvider(secondFacility);
+    auto firstPending = first->GetAuthInfoAsync();
+    auto secondPending = second->GetAuthInfoAsync();
+    UNIT_ASSERT_VALUES_EQUAL(acceptor->Wait().UserCode, "ABCD");
+    const bool tokenRequested = server.WaitRequests(2);
+    auto stopped = std::async(std::launch::async,
+        [first = std::move(first), firstFacility = std::move(firstFacility)]() mutable {
+            first.reset();
+            firstFacility.reset();
+        });
+    const bool cancelled = firstPending.Wait(TDuration::Seconds(2));
+    const bool destroyed = stopped.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+    const bool secondWasPending = !secondPending.IsReady();
+    replyGate.TrySetValue();
+    stopped.get();
+
+    UNIT_ASSERT(tokenRequested);
+    UNIT_ASSERT(cancelled);
+    UNIT_ASSERT(destroyed);
+    UNIT_ASSERT(firstPending.HasException());
+    UNIT_ASSERT(secondWasPending);
+    UNIT_ASSERT(secondFacility->WaitForTask());
+    UNIT_ASSERT(!secondPending.IsReady());
+    secondFacility->RunTasks();
+    UNIT_ASSERT(secondPending.Wait(TDuration::Seconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(secondPending.GetValueSync(), "Bearer shared-user");
+    UNIT_ASSERT(firstPending.HasException());
+    const auto requests = server.Requests();
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(requests[0].Path, "/realm/device");
+    UNIT_ASSERT_VALUES_EQUAL(requests[1].Path, "/realm/token");
+    UNIT_ASSERT_VALUES_EQUAL(requests[1].Form.Get("grant_type"), "urn:ietf:params:oauth:grant-type:device_code");
+    UNIT_ASSERT_VALUES_EQUAL(requests[1].Form.Get("device_code"), "private-device");
+    UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 1);
+}
+
+Y_UNIT_TEST(SharedFactoryReusesDeviceAuthorizationAfterFacilityDestruction) {
+    TOidcTestServer server;
+    server.Enqueue(TString("{\"device_code\":\"private-device\",\"user_code\":\"ABCD\",\"verification_uri\":\"") +
+        server.Issuer() + "/verify\",\"expires_in\":60,\"interval\":1}", HTTP_OK);
+    server.Enqueue(R"({"access_token":"shared-user","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    auto acceptor = std::make_shared<TTestAcceptor>();
+    auto config = server.ClientConfig().Acceptor(acceptor);
+    config.FlowConfig = TDeviceOidcConfig{"public-client", {}};
+    auto factory = CreateOidcProviderFactory(config);
+    auto firstFacility = std::make_shared<TQueuedOidcFacility>();
+    auto first = factory->CreateProvider(firstFacility);
+    auto firstPending = first->GetAuthInfoAsync();
+    UNIT_ASSERT(firstFacility->WaitForTask());
+    firstFacility->RunTasks();
+    UNIT_ASSERT(firstPending.Wait(TDuration::Seconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(firstPending.GetValueSync(), "Bearer shared-user");
+    UNIT_ASSERT_VALUES_EQUAL(acceptor->Wait().UserCode, "ABCD");
+    first.reset();
+    firstFacility.reset();
+
+    auto secondFacility = std::make_shared<TQueuedOidcFacility>();
+    auto second = factory->CreateProvider(secondFacility);
+    auto secondPending = second->GetAuthInfoAsync();
+    if (!secondPending.IsReady()) {
+        UNIT_ASSERT(secondFacility->WaitForTask());
+        secondFacility->RunTasks();
+    }
+    UNIT_ASSERT(secondPending.Wait(TDuration::Seconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(secondPending.GetValueSync(), "Bearer shared-user");
+    const auto requests = server.Requests();
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(requests[0].Path, "/realm/device");
+    UNIT_ASSERT_VALUES_EQUAL(requests[1].Form.Get("grant_type"), "urn:ietf:params:oauth:grant-type:device_code");
+    UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 1);
+}
+
+Y_UNIT_TEST(SharedFactoryProvidersShareRefresh) {
+    TOidcTestServer server;
+    for (size_t i = 0; i < 2; ++i) {
+        server.Enqueue(R"({"access_token":"shared-refreshed","token_type":"Bearer","expires_in":600,"refresh_token":"rotated"})", HTTP_OK);
+    }
+    auto replyGate = NThreading::NewPromise<void>();
+    server.BlockTokenRepliesUntil(replyGate.GetFuture());
+    auto cache = std::make_shared<TMemoryTokenCacher>();
+    cache->Write({{"expired", TInstant::Seconds(1)}, TOAuthToken{"initial-refresh", std::nullopt}});
+    auto factory = CreateOidcProviderFactory(server.ClientConfig().Cacher(cache));
+    auto firstFacility = std::make_shared<TQueuedOidcFacility>();
+    auto secondFacility = std::make_shared<TQueuedOidcFacility>();
+    auto first = factory->CreateProvider(firstFacility);
+    auto second = factory->CreateProvider(secondFacility);
+    auto firstPending = first->GetAuthInfoAsync();
+    auto secondPending = second->GetAuthInfoAsync();
+    replyGate.TrySetValue();
+    UNIT_ASSERT(firstFacility->WaitForTask());
+    UNIT_ASSERT(secondFacility->WaitForTask());
+    secondFacility->RunTasks();
+    UNIT_ASSERT(secondPending.Wait(TDuration::Seconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(secondPending.GetValueSync(), "Bearer shared-refreshed");
+    UNIT_ASSERT(!firstPending.IsReady());
+    firstFacility->RunTasks();
+    UNIT_ASSERT(firstPending.Wait(TDuration::Seconds(1)));
+    UNIT_ASSERT_VALUES_EQUAL(firstPending.GetValueSync(), "Bearer shared-refreshed");
+    const auto requests = server.Requests();
+    UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(requests[0].Form.Get("grant_type"), "refresh_token");
+    UNIT_ASSERT_VALUES_EQUAL(requests[0].Form.Get("refresh_token"), "initial-refresh");
+    const auto stored = cache->Read();
+    UNIT_ASSERT(stored.has_value());
+    UNIT_ASSERT(stored->RefreshToken.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(stored->RefreshToken->Token, "rotated");
+}
+
 Y_UNIT_TEST(DeviceAuthorization) {
     TOidcTestServer server;
     server.Enqueue(TString("{\"device_code\":\"private-device\",\"user_code\":\"ABCD\",\"verification_uri\":\"") + server.Issuer() + "/verify\",\"verification_uri_complete\":\"" + server.Issuer() + "/verify?user_code=ABCD\",\"expires_in\":60,\"interval\":1}", HTTP_OK);
@@ -587,14 +799,25 @@ Y_UNIT_TEST(DeviceWithoutAcceptorCanUseCache) {
     UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 0);
 }
 
-Y_UNIT_TEST(ExpiredFacilityCompletesPendingFuture) {
+Y_UNIT_TEST(ExpiredFacilityDoesNotStartOrDisableSharedAuthentication) {
     TOidcTestServer server;
+    server.Enqueue(R"({"access_token":"access","token_type":"Bearer","expires_in":600})", HTTP_OK);
     auto factory = CreateOidcProviderFactory(server.ClientConfig());
     auto provider = factory->CreateProvider(std::weak_ptr<ICoreFacility>{});
     auto pending = provider->GetAuthInfoAsync();
     UNIT_ASSERT(pending.Wait(TDuration::Seconds(1)));
     UNIT_ASSERT(pending.HasException());
+    UNIT_ASSERT(!provider->IsValid());
     UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 0);
+    UNIT_ASSERT(server.Requests().empty());
+
+    auto live = factory->CreateProvider();
+    UNIT_ASSERT_VALUES_EQUAL(live->GetAuthInfo(), "Bearer access");
+    UNIT_ASSERT(live->IsValid());
+    UNIT_ASSERT(pending.HasException());
+    UNIT_ASSERT(provider->GetAuthInfoAsync().HasException());
+    UNIT_ASSERT_VALUES_EQUAL(server.DiscoveryCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
 }
 
 Y_UNIT_TEST(StaticTokenExpiryNeverLeavesPendingRequest) {
@@ -980,10 +1203,11 @@ Y_UNIT_TEST(StopDuringCacheWriteDoesNotPublishToken) {
     config.Issuer = "https://issuer.example";
     config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
     config.Cacher(cache);
-    auto provider = std::make_shared<NOidc::NPrivate::TStaticProvider>(config, facility);
+    auto source = std::make_shared<NOidc::NPrivate::TStaticProvider>(config);
+    auto provider = source->CreateProvider(facility);
     auto pending = provider->GetAuthInfoAsync();
     const bool entered = cache->Entered.GetFuture().Wait(TDuration::Seconds(5));
-    auto stopped = std::async(std::launch::async, [provider] { provider->Stop(); });
+    auto stopped = std::async(std::launch::async, [source] { source->Stop(); });
     const bool cancelled = pending.Wait(TDuration::Seconds(5));
     cache->Release.TrySetValue();
     stopped.get();
@@ -1019,16 +1243,17 @@ Y_UNIT_TEST(StopIgnoresThrowingPendingSubscriber) {
     config.Issuer = "https://issuer.example";
     config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
     config.Cacher(cache);
-    NOidc::NPrivate::TStaticProvider provider(config, facility);
-    auto pending = provider.GetAuthInfoAsync();
+    auto source = std::make_shared<NOidc::NPrivate::TStaticProvider>(config);
+    auto provider = source->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
     pending.Subscribe([](const auto&) { throw std::runtime_error("subscriber failure"); });
-    auto stopped = std::async(std::launch::async, [&] { provider.Stop(); });
+    auto stopped = std::async(std::launch::async, [source] { source->Stop(); });
     const bool cancelled = pending.Wait(TDuration::Seconds(5));
     cache->Release.TrySetValue();
     UNIT_ASSERT_NO_EXCEPTION(stopped.get());
     UNIT_ASSERT(cancelled);
     UNIT_ASSERT(pending.HasException());
-    UNIT_ASSERT(!provider.IsValid());
+    UNIT_ASSERT(!provider->IsValid());
 }
 
 Y_UNIT_TEST(StopIgnoresThrowingQueuedSubscriber) {
@@ -1038,14 +1263,15 @@ Y_UNIT_TEST(StopIgnoresThrowingQueuedSubscriber) {
     config.FlowConfig = TStaticOidcConfig{"access", std::nullopt};
     config.Cacher(cache);
     auto facility = std::make_shared<TQueuedOidcFacility>();
-    NOidc::NPrivate::TStaticProvider provider(config, facility);
-    auto pending = provider.GetAuthInfoAsync();
+    auto source = std::make_shared<NOidc::NPrivate::TStaticProvider>(config);
+    auto provider = source->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
     pending.Subscribe([](const auto&) { throw std::runtime_error("subscriber failure"); });
     cache->Release.TrySetValue();
     const bool queued = facility->WaitForTask();
     std::exception_ptr stopError;
     try {
-        provider.Stop();
+        source->Stop();
     } catch (...) {
         stopError = std::current_exception();
     }

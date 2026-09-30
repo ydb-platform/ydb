@@ -925,10 +925,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 6));
-
-        DropTopic(firstInputTopicName, LocalTopics);
-        DropTopic(secondInputTopicName, LocalTopics);
-        DropTopic(outputTopicName, LocalTopics);
     }
 
     Y_UNIT_TEST_TWIN_F(CheckpointPropagationWithUninitializedStatefulOperator, ModernChannels, TStreamingWithSchemaSecretsTestFixture) {

@@ -919,13 +919,21 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
             {"prev", FollowerState.LastSysUpdate},
             {"current", lastSysUpdate});
 
+        // Followers never watch the subdomain, the database default comes
+        // from the row persisted by the leader
+        ui64 subDomainTablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
         ready &= SysGetUi64(db, Schema::Sys_CurrentSchemeShardId, CurrentSchemeShardId);
+        ready &= SysGetUi64(db, Schema::Sys_SubDomainTablesMetricsLevel, subDomainTablesMetricsLevel);
         ready &= SnapshotManager.ReloadSys(db);
         if (!ready) {
             return false;
         }
+
+        SubDomainTablesMetricsLevel =
+            static_cast<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel>(subDomainTablesMetricsLevel);
 
         FollowerState.LastSysUpdate = lastSysUpdate;
     }

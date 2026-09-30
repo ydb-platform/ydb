@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include "datashard_ut_common_kqp.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -13,6 +14,7 @@
 
 namespace NKikimr {
 
+using namespace NKikimr::NDataShard::NKqpHelpers;
 using namespace NSchemeShard;
 using namespace Tests;
 using NClient::TValue;
@@ -67,6 +69,26 @@ TString GetTablePath(TTestActorRuntime &runtime,
     Y_PROTOBUF_SUPPRESS_NODISCARD desc.ParseFromArray(schema.data(), schema.size());
 
     return desc.GetPath();
+}
+
+// The test runtime sets up the leader Tablet Counters Aggregator only, and
+// events sent to an absent service never reach the observers.
+void SetupFollowerCountersAggregator(TTestActorRuntime &runtime) {
+    runtime.RegisterService(MakeTabletCountersAggregatorID(runtime.GetNodeId(0), true),
+        runtime.Register(CreateTabletCountersAggregator(true)));
+}
+
+// The latest report of the table from its leader or from its follower, if any.
+const TReportedTableInfo* FindLastReport(const TVector<TReportedTableInfo> &reported,
+                                         const TString &tablePath,
+                                         bool follower)
+{
+    for (auto it = reported.rbegin(); it != reported.rend(); ++it) {
+        if (it->TablePath == tablePath && (it->FollowerId != 0) == follower) {
+            return &*it;
+        }
+    }
+    return nullptr;
 }
 
 }
@@ -451,6 +473,120 @@ Y_UNIT_TEST_SUITE(TTxDataShardTestInit) {
         UNIT_ASSERT(!reported.empty());
         UNIT_ASSERT_VALUES_EQUAL(reported.back().MetricsLevel,
             ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    // Followers never watch the subdomain: the database default reaches them
+    // only through the Sys row persisted by the leader, which a follower
+    // reloads when it syncs its scheme.
+    Y_UNIT_TEST(TestSetTableInfoFollowerUsesSubDomainMetricsLevel) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        // A stale read of a single shard table is served by the follower
+        KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+    }
+
+    Y_UNIT_TEST(TestSetTableInfoFollowerSeesSubDomainMetricsLevelChange) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableDataShardDetailedMetrics(true)
+            .SetEnableForceFollowers(true);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        SetupFollowerCountersAggregator(runtime);
+
+        auto level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+        auto patcher = runtime.AddObserver<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(
+            [&](TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr &ev) {
+                auto *msg = ev->Get();
+                NKikimrScheme::TEvDescribeSchemeResult record = *msg->Result;
+                record.MutablePathDescription()->MutableDomainDescription()->SetTablesMetricsLevel(level);
+                msg->Result = NSchemeCache::TDescribeResult::Create(record);
+            });
+
+        CreateShardedTable(server, sender, "/Root", "table-1",
+            TShardedTableOptions().Followers(1));
+
+        TVector<TReportedTableInfo> reported;
+        auto observer = runtime.AddObserver<TEvTabletCounters::TEvTabletSetTableInfo>(
+            [&](TEvTabletCounters::TEvTabletSetTableInfo::TPtr &ev) {
+                reported.push_back(TReportedTableInfo(*ev->Get()));
+            });
+
+        KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        const auto *followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition));
+
+        // Creating a table changes /Root, which republishes the subdomain
+        // description with the new database default
+        level = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        const auto *leaderReport = FindLastReport(reported, "/Root/table-1", false);
+        UNIT_ASSERT_C(leaderReport, "expected a report from the leader");
+        UNIT_ASSERT_VALUES_EQUAL(leaderReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
+
+        // The follower picks up the persisted level on its next scheme sync
+        KqpSimpleStaleRoExec(runtime, "SELECT * FROM `/Root/table-1`", "/Root");
+
+        reported.clear();
+        SimulateSleep(server, TDuration::Seconds(6));
+
+        followerReport = FindLastReport(reported, "/Root/table-1", true);
+        UNIT_ASSERT_C(followerReport, "expected a report from the follower");
+        UNIT_ASSERT_VALUES_EQUAL(followerReport->MetricsLevel,
+            ui32(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable));
     }
 }
 

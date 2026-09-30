@@ -158,13 +158,13 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
                     yaml.AddWorkerPools()->SetName("other"); // Keep the partial-overlay path.
                 }
                 auto merged = NConfig::TConfig::OverlayYamlOnDefaults(defaults, yaml).DetachResult();
-                UNIT_ASSERT_VALUES_EQUAL(merged.GetWorkerPools(0).GetSchedulingMode(), mode.value_or(TPool::All));
+                UNIT_ASSERT(merged.GetWorkerPools(0).GetSchedulingMode() == mode.value_or(TPool::All));
             }
         }
         auto snapshot = defaults;
         snapshot.MutableWorkerPools(0)->ClearSchedulingMode();
         auto replaced = NConfig::TConfig::OverlayYamlOnDefaults(defaults, snapshot).DetachResult();
-        UNIT_ASSERT_VALUES_EQUAL(replaced.GetWorkerPools(0).GetSchedulingMode(), TPool::NonSchedulable);
+        UNIT_ASSERT(replaced.GetWorkerPools(0).GetSchedulingMode() == TPool::NonSchedulable);
         UNIT_ASSERT(NConfig::TConfig::BuildFromProto(replaced).DetachResult().GetWorkerPools()[2].GetSchedulingMode()
             == NConfig::ESchedulingMode::NonSchedulable);
     }

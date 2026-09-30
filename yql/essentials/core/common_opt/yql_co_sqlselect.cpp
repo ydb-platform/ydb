@@ -3,6 +3,7 @@
 #include "yql_co_yqlselect.h"
 
 #include <yql/essentials/core/type_ann/type_ann_pg.h>
+#include <yql/essentials/core/type_ann/type_ann_yql.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_join.h>
@@ -297,14 +298,14 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
         if (it != subLinks.end()) {
             auto linkType = node->Head().Content();
             auto testLambda = node->ChildPtr(3);
-            auto extColumns = NTypeAnnImpl::ExtractExternalColumns(node->Tail());
+            auto extColumns = NTypeAnnImpl::ExtractExternalColumns(*node->Child(4));
 
             const auto subLinkId = it->second;
             const auto* originalNode = originalSubLinks.at(subLinkId);
 
             if (extColumns.empty()) {
                 auto select = ExpandSqlSelectSublink(
-                    node->TailPtr(), originalNode->TailPtr(),
+                    node->ChildPtr(4), originalNode->ChildPtr(4),
                     ctx, optCtx, subLinkId,
                     cleanedInputs, inputAliases);
 
@@ -404,17 +405,24 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                         auto value = ctx.ReplaceNodes(testLambda->Tail().ChildPtr(0), {
                             {testLambda->Head().Child(0), originalArg},
                         });
+                        auto options = node->ChildrenSize() == 6
+                            ? node->ChildPtr(5)
+                            : ctx.NewList(node->Pos(), {});
+                        if (HasSetting(*options, "ansiIn")) {
+                            options = RemoveSetting(*options, "ansiIn", ctx);
+                            options = AddSetting(*options, node->Pos(), "ansi", nullptr, ctx);
+                        } else if (HasSetting(*options, "warnNoAnsiIn")) {
+                            options = RemoveSetting(*options, "warnNoAnsiIn", ctx);
+                            options = AddSetting(*options, node->Pos(), "warnNoAnsi", nullptr, ctx);
+                        }
+                        options = AddSetting(*options, node->Pos(), "tableSource", nullptr, ctx);
 
                         // clang-format off
                         return ctx.Builder(node->Pos())
                             .Callable("SqlIn")
                                 .Add(0, select)
                                 .Add(1, value)
-                                .List(2)
-                                    .List(0)
-                                        .Atom(0, "tableSource", TNodeFlags::Default)
-                                    .Seal()
-                                .Seal()
+                                .Add(2, options)
                             .Seal()
                             .Build();
                         // clang-format on
@@ -514,7 +522,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                 // clang-format on
 
                 auto select = ExpandSqlSelectSublink(
-                    node->TailPtr(), originalNode->TailPtr(),
+                    node->ChildPtr(4), originalNode->ChildPtr(4),
                     ctx, optCtx, subLinkId,
                     cleanedInputs, inputAliases);
 
@@ -617,7 +625,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinksPartial(
                     });
 
                     ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-                    auto status = ExpandApplyNoRepeat(traits, traits, ctx);
+                    auto status = ExpandApplyNoRepeat(traits, traits, ctx, *optCtx.Types);
                     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
 
                     switch (factoryIndex) {
@@ -1074,7 +1082,7 @@ void AddColumnsFromType(const TTypeAnnotationNode* type, TUsedColumns& columns) 
 
 void AddColumnsFromSublinks(const TNodeMap<ui32>& subLinks, TUsedColumns& columns) {
     for (const auto& s : subLinks) {
-        auto extColumns = NTypeAnnImpl::ExtractExternalColumns(s.first->Tail());
+        auto extColumns = NTypeAnnImpl::ExtractExternalColumns(*s.first->Child(4));
         for (const auto& c : extColumns) {
             columns.insert(std::make_pair(c.first, std::make_pair(Max<ui32>(), TString())));
         }
@@ -1289,8 +1297,9 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
                 if (columns.ChildrenSize() > 0) {
                     auto readOrder = optCtx.Types->LookupColumnOrder(read);
                     YQL_ENSURE(readOrder);
+                    TColumnOrder aliases;
                     for (ui32 i = 0; i < columns.ChildrenSize(); ++i) {
-                        if (columns.Child(i)->Content() == column) {
+                        if (aliases.AddColumn(TString(columns.Child(i)->Content())) == column) {
                             foundColumn = true;
                             x.second.second = readOrder->at(i).PhysicalName;
                             break;
@@ -2321,6 +2330,8 @@ TExprNode::TPtr BuildProjectionLambda(
     bool isExternalInputExist,
     bool emitPgStar,
     bool isYql,
+    const TExprNode* without,
+    bool isJoin,
     TExprContext& ctx)
 {
     TMap<TStringBuf, TStringBuf> columnNamesMap;
@@ -2441,6 +2452,9 @@ TExprNode::TPtr BuildProjectionLambda(
                         }
 
                         for (const auto& item : type->GetItems()) {
+                            if (without && NTypeAnnImpl::IsYqlWithoutItem(item->GetName(), *without, isJoin)) {
+                                continue;
+                            }
                             TStringBuf column = item->GetName();
                             auto columnName = isExternalInputExist ? column : NTypeAnnImpl::RemoveAlias(column);
                             auto rightColumnName = order.AddColumn(localOrder.Find(TString(columnName)));
@@ -2585,6 +2599,7 @@ TExprNode::TPtr BuildGroup(
     const TAggs& aggs,
     const TExprNode::TPtr& groupExprs,
     const TExprNode::TPtr& groupSets,
+    bool isCompact,
     const TExprNode::TPtr& finalExtTypes,
     const TExprNode::TPtr& joinedUniqueExt,
     bool isYql,
@@ -2819,6 +2834,14 @@ TExprNode::TPtr BuildGroup(
                 .Add(1, keysNode)
                 .Add(2, payloadsNode)
                 .List(3) // options
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if (isCompact) {
+                            parent.List(0)
+                                .Atom(0, "compact")
+                                .Seal();
+                        }
+                        return parent;
+                    })
                 .Seal()
             .Seal()
             .Build();
@@ -4572,11 +4595,14 @@ TExprNode::TPtr ExpandSqlSelectImpl(
         auto joinOps = GetSetting(setItem->Tail(), "join_ops");
         auto groupExprs = GetSetting(setItem->Tail(), "group_exprs");
         auto groupSets = GetSetting(setItem->Tail(), "group_sets");
+        const bool isCompact = HasSetting(setItem->Tail(), "group_by_compact");
         auto having = GetSetting(setItem->Tail(), "having");
         auto window = GetSetting(setItem->Tail(), "window");
         auto distinctAll = GetSetting(setItem->Tail(), "distinct_all");
         auto distinctOn = GetSetting(setItem->Tail(), "distinct_on");
         auto sort = GetSetting(setItem->Tail(), "sort");
+        auto without = GetSetting(setItem->Tail(), "without");
+        YQL_ENSURE(!without || isYql);
         auto extraSortColumns = GetSetting(setItem->Tail(), "final_extra_sort_columns");
         auto extraSortKeys = GetSetting(setItem->Tail(), "final_extra_sort_keys");
         bool emitPgStar = (GetSetting(setItem->Tail(), "emit_pg_star") != nullptr);
@@ -4606,6 +4632,8 @@ TExprNode::TPtr ExpandSqlSelectImpl(
                 isExternalInputExist,
                 emitPgStar,
                 isYql,
+                without.Get(),
+                from && from->Tail().ChildrenSize() > 1,
                 ctx);
 
             TExprNode::TPtr projectionArg = projectionLambda->Head().HeadPtr();
@@ -4688,7 +4716,7 @@ TExprNode::TPtr ExpandSqlSelectImpl(
             }
 
             if (groupExprs) {
-                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, finalExtTypes, joinedUniqueExt, /*isYql=*/isYql, ctx, optCtx);
+                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, isCompact, finalExtTypes, joinedUniqueExt, /*isYql=*/isYql, ctx, optCtx);
             }
 
             if (having) {

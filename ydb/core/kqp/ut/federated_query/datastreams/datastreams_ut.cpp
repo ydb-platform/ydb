@@ -16,6 +16,86 @@ using namespace NYdb::NQuery;
 using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
+    Y_UNIT_TEST_TWIN_F(ConsumerRewindStatisticsSurviveRestart, LocalClient, TStreamingTestFixture) {
+        constexpr char topicName[] = "consumerRewindStatistics";
+        constexpr char topicPath[] = "/Root/consumerRewindStatistics";
+        constexpr char consumer[] = "test_consumer";
+        // Both clients use this cluster so the test can restart the partition tablet.
+        CreateTopic(topicName, std::nullopt, /* local */ true);
+        const auto tabletClient = GetLocalFlatMsgBusPQClient();
+        const auto description = tabletClient->Ls(topicPath);
+        const auto& partitions = description->Record.GetPathDescription().GetPersQueueGroup().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        const ui64 tabletId = partitions[0].GetTabletId();
+
+        WriteTopicMessages(topicName, {"first", "second", "third"}, 0, /* local */ true);
+
+        NYdb::NTopic::TTopicClientSettings settings;
+        settings.Database(TEST_DATABASE);
+        if constexpr (LocalClient) {
+            settings.CredentialsProviderFactory(NYql::CreateStructuredTokenCredentialsFactory()->Create(
+                NYql::ComposeStructuredTokenJsonForTransientTokenAuth(NACLib::TUserToken(BUILTIN_ACL_ROOT, {}).SerializeAsString())
+            ));
+        } else {
+            settings.DiscoveryEndpoint(GetKikimrRunner()->GetEndpoint());
+            settings.AuthToken(BUILTIN_ACL_ROOT);
+        }
+        const auto gateway = SetupRealPqGateway();
+        const auto client = gateway->GetTopicClient(*PqGatewayDriver, settings);
+        const auto describeConsumer = [&]() {
+            return client->DescribeConsumer(topicName, consumer, NYdb::NTopic::TDescribeConsumerSettings()
+                .IncludeStats(true).IncludeLocation(true)).GetValue(TEST_OPERATION_TIMEOUT);
+        };
+
+        const auto initial = describeConsumer();
+        UNIT_ASSERT_C(initial.IsSuccess(), initial.GetIssues().ToString());
+        const auto& initialPartitions = initial.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(initialPartitions.size(), 1);
+        UNIT_ASSERT(initialPartitions[0].GetPartitionStats());
+        const auto writeTimestamp = initialPartitions[0].GetPartitionStats()->GetLastWriteTime();
+        UNIT_ASSERT_GT(writeTimestamp, TInstant::Zero());
+
+        const auto checkStatistics = [&](ui64 committedOffset, i64 previousGeneration = 0) {
+            i64 generation = 0;
+            WaitFor(TDuration::Seconds(30), "Wait for consumer statistics after partition restart", [&](TString& error) {
+                const auto result = describeConsumer();
+                if (!result.IsSuccess()) {
+                    error = result.GetIssues().ToString();
+                    return false;
+                }
+                const auto& partitions = result.GetConsumerDescription().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                const auto& partition = partitions[0];
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionId(), 0);
+                UNIT_ASSERT(partition.GetPartitionLocation());
+                generation = partition.GetPartitionLocation()->GetGeneration();
+                if (generation <= previousGeneration) {
+                    error = TStringBuilder() << "Partition generation: " << generation << ", previous: " << previousGeneration;
+                    return false;
+                }
+                UNIT_ASSERT(partition.GetPartitionStats());
+                UNIT_ASSERT(partition.GetPartitionConsumerStats());
+                const auto& stats = *partition.GetPartitionStats();
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetStartOffset(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetEndOffset(), 3);
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetLastWriteTime(), writeTimestamp);
+                UNIT_ASSERT_VALUES_EQUAL(partition.GetPartitionConsumerStats()->GetCommittedOffset(), committedOffset);
+                return true;
+            });
+            return generation;
+        };
+
+        for (const ui64 committedOffset : {3, 1}) {
+            // The initial commit and subsequent out-of-session rewind must both persist.
+            const auto committed = client->CommitOffset(topicName, 0, consumer, committedOffset).GetValue(TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT_C(committed.IsSuccess(), committed.GetIssues().ToString());
+            const auto generation = checkStatistics(committedOffset);
+            tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), tabletId);
+            // No writes or reads may repopulate the statistics after either restart.
+            checkStatistics(committedOffset, generation);
+        }
+    }
+
     Y_UNIT_TEST_F(CreateExternalDataSource, TStreamingTestFixture) {
         CreatePqSource("sourceName");
 

@@ -114,6 +114,19 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
         if (!tier.HasEvictToExternalStorage()) {
             continue;
         }
+
+        if (tier.GetEvictToExternalStorage().HasObjectKeyPrefix()) {
+            if (!AppDataVerified().FeatureFlags.GetEnableTieringObjectKeyTree()) {
+                errors.AddError(NKikimrScheme::StatusPreconditionFailed, "Tree object keys are disabled for OLAP tiering");
+                return false;
+            }
+
+            if (tier.GetEvictToExternalStorage().GetObjectKeyPrefix().size() > 800) {
+                errors.AddError("Tiering object key prefix must not exceed 800 bytes");
+                return false;
+            }
+        }
+
         const TString& tierPathString = tier.GetEvictToExternalStorage().GetStorage();
         TPath tierPath = TPath::Resolve(tierPathString, context.SS);
         if (!tierPath.IsResolved() || tierPath.IsDeleted() || tierPath.IsUnderDeleting()) {

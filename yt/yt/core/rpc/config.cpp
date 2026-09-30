@@ -348,7 +348,7 @@ void TDispatcherConfig::Register(TRegistrar registrar)
         .Default(TDuration::MilliSeconds(10));
     registrar.Parameter("default_request_timeout", &TThis::DefaultRequestTimeout)
         .Default(TDuration::Hours(24));
-    registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
+    registrar.Parameter("alert_on_missing_request_annotation", &TThis::AlertOnMissingRequestAnnotation)
         .Default(false);
     registrar.Parameter("alert_on_unset_request_timeout", &TThis::AlertOnUnsetRequestTimeout)
         .Default(false);
@@ -363,7 +363,7 @@ TDispatcherConfigPtr TDispatcherConfig::ApplyDynamic(const TDispatcherDynamicCon
     UpdateYsonStructField(mergedConfig->CompressionPoolSize, dynamicConfig->CompressionPoolSize);
     UpdateYsonStructField(mergedConfig->HeavyPoolPollingPeriod, dynamicConfig->HeavyPoolPollingPeriod);
     UpdateYsonStructField(mergedConfig->DefaultRequestTimeout, dynamicConfig->DefaultRequestTimeout);
-    UpdateYsonStructField(mergedConfig->AlertOnMissingRequestInfo, dynamicConfig->AlertOnMissingRequestInfo);
+    UpdateYsonStructField(mergedConfig->AlertOnMissingRequestAnnotation, dynamicConfig->AlertOnMissingRequestAnnotation);
     UpdateYsonStructField(mergedConfig->AlertOnUnsetRequestTimeout, dynamicConfig->AlertOnUnsetRequestTimeout);
     UpdateYsonStructField(mergedConfig->SendTracingBaggage, dynamicConfig->SendTracingBaggage);
     mergedConfig->Postprocess();
@@ -382,7 +382,7 @@ void TDispatcherDynamicConfig::Register(TRegistrar registrar)
         .GreaterThan(0);
     registrar.Parameter("heavy_pool_polling_period", &TThis::HeavyPoolPollingPeriod)
         .Optional();
-    registrar.Parameter("alert_on_missing_request_info", &TThis::AlertOnMissingRequestInfo)
+    registrar.Parameter("alert_on_missing_request_annotation", &TThis::AlertOnMissingRequestAnnotation)
         .Optional();
     registrar.Parameter("send_tracing_baggage", &TThis::SendTracingBaggage)
         .Optional();

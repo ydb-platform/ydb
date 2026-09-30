@@ -2,6 +2,8 @@
 #include "target_table.h"
 #include "target_transfer.h"
 
+#include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -132,6 +134,11 @@ class TController::TTxInit: public TTxBase {
                 Y_ABORT_UNLESS(barrier.Schema.ParseFromString(
                     rowset.GetValue<Schema::Targets::SchemaBarrierChange>()));
                 barrier.DstAlterTxId = rowset.GetValueOrDefault<Schema::Targets::DstAlterTxId>(0);
+                NKikimrReplicationController::TSchemaBarrierFlushTxIds flushTxIds;
+                Y_ABORT_UNLESS(flushTxIds.ParseFromString(
+                    rowset.GetValueOrDefault<Schema::Targets::SchemaBarrierFlushTxIds>(TString())));
+                Y_ABORT_UNLESS(barrier.Phase != ESchemaBarrierPhase::FlushingTarget || flushTxIds.WriteTxIdsSize());
+                barrier.TargetFlushTxIds.assign(flushTxIds.GetWriteTxIds().begin(), flushTxIds.GetWriteTxIds().end());
             }
 
             if (!rowset.Next()) {

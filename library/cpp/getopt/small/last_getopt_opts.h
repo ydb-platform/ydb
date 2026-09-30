@@ -69,6 +69,9 @@ namespace NLastGetopt {
         TString CustomUsage;        // user defined usage string
 
         TVector<std::pair<TString, TString>> Sections;  // additional help entries to print after usage
+        bool ShowDefaultValuesForNoArgumentOptions_ = true;
+        bool ShowFreeArgTitlesInErrors_ = false;
+        bool ShowExceptionTypeInUsageErrors_ = true;
 
     public:
         /**
@@ -217,6 +220,15 @@ namespace NLastGetopt {
         TOpt& GetOption(const TStringBuf& name) {
             return GetLongOption(name);
         }
+
+        /// @}
+
+        /**
+         * Search for the option with given short name
+         * @param c        short name for search
+         * @return         ref on result (throw exception if not found)
+         */
+        /// @{
 
         const TOpt& GetOption(char c) const {
             return GetCharOption(c);
@@ -431,7 +443,7 @@ namespace NLastGetopt {
         /**
          * Replace help string with given
          *
-         * @param decr        new help string
+         * @param descr     new help string
          */
         void SetCmdLineDescr(const TString& descr) {
             CustomCmdLineDescr = descr;
@@ -444,6 +456,13 @@ namespace NLastGetopt {
          */
         void SetCustomUsage(const TString& usage) {
             CustomUsage = usage;
+        }
+
+        /**
+         * Hide default values for options that take no arguments.
+         */
+        void HideDefaultValuesForNoArgumentOptions() {
+            ShowDefaultValuesForNoArgumentOptions_ = false;
         }
 
         /**
@@ -495,6 +514,29 @@ namespace NLastGetopt {
          */
         ui32 GetFreeArgsMin() const {
             return FreeArgsMin_;
+        }
+
+        /**
+         * Name missing positional arguments in usage errors.
+         */
+        void ShowFreeArgTitlesInErrors() {
+            ShowFreeArgTitlesInErrors_ = true;
+        }
+
+        /**
+         * Hide the exception type prefix in usage error messages.
+         */
+        void HideExceptionTypeInUsageErrors() {
+            ShowExceptionTypeInUsageErrors_ = false;
+        }
+
+        /**
+         * Enable concise help and informative usage errors.
+         */
+        void EnableUserFriendlyUsage() {
+            HideDefaultValuesForNoArgumentOptions();
+            ShowFreeArgTitlesInErrors();
+            HideExceptionTypeInUsageErrors();
         }
 
         /**

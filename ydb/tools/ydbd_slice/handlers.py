@@ -6,6 +6,7 @@ from collections import deque, defaultdict
 from uuid import uuid4
 from ydb.tools.ydbd_slice import config_client
 from ydb.tools.ydbd_slice import blobstorage_init
+from ydb.tools.ydbd_slice import process_profiles
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +49,10 @@ class Slice:
         self.do_clear_logs = do_clear_logs
         self.yav_version = yav_version
         self.walle_provider = walle_provider
-        self._host_dynamic_slot_counts = cluster_details.host_dynamic_slot_counts or {}
-        self._host_storage_enabled_map = cluster_details.host_storage_enabled or {}
+        self._host_dynamic_slot_counts = getattr(cluster_details, 'host_dynamic_slot_counts', None) or {}
+        self._host_storage_enabled_map = getattr(cluster_details, 'host_storage_enabled', None) or {}
+        self._host_storage_profile = getattr(cluster_details, 'host_storage_profile', None) or {}
+        self._host_dynamic_profiles = getattr(cluster_details, 'host_dynamic_profiles', None) or {}
         self.__config_client = config_client.ConfigClient(
             self.nodes.nodes_list[0],
             self.cluster_details.grpc_config.get('port'),
@@ -259,6 +262,20 @@ class Slice:
     def _host_storage_enabled(self, node):
         return self._host_storage_enabled_map.get(node, True)
 
+    def _profile_id_for_slot(self, node, slot):
+        profiles = self._host_dynamic_profiles.get(node) or []
+        domain_slots = [
+            domain_slot
+            for domain_slot in self.cluster_details.dynamic_slots
+            if domain_slot.domain == slot.domain
+        ]
+        for index, domain_slot in enumerate(domain_slots):
+            if domain_slot.slot == slot.slot:
+                if index < len(profiles):
+                    return profiles[index]
+                return None
+        return None
+
     def _storage_hosts(self):
         return [node for node in self.nodes.nodes_list if self._host_storage_enabled(node)]
 
@@ -317,6 +334,13 @@ mon={mon}""".format(
         )
 
         self.nodes.execute_async(cmd, check_retcode=False, nodes=[node])
+
+        profile_id = self._profile_id_for_slot(node, slot)
+        if profile_id:
+            src = os.path.join(self.slice_cfg_path, process_profiles.profile_yaml_filename(profile_id))
+            dst = slot_dir + "/config.yaml"
+            copy_cmd = "sudo cp {src} {dst}".format(src=src, dst=dst)
+            self.nodes.execute_async(copy_cmd, check_retcode=False, nodes=[node])
 
     def _deploy_slot_configs(self):
         if 'dynamic_slots' not in self.components:
@@ -504,6 +528,22 @@ mon={mon}""".format(
 
     def _upload_cfg(self, cfg_path):
         self.nodes.copy(cfg_path, self.slice_cfg_path, directory=True)
+        self._apply_storage_process_profiles()
+
+    def _apply_storage_process_profiles(self):
+        if not getattr(self.configurator, 'enable_process_profiles', False):
+            return
+        if self.v2:
+            return
+        for host, profile_id in self._host_storage_profile.items():
+            filename = process_profiles.profile_yaml_filename(profile_id)
+            cfg_file = os.path.join(self.slice_cfg_path, 'kikimr.cfg')
+            cmd = (
+                "sudo sed -i 's|--yaml-config ${kikimr_config}/config.yaml"
+                "|--yaml-config ${kikimr_config}/%s|' %s"
+                % (filename, cfg_file)
+            )
+            self.nodes.execute_async(cmd, nodes=[host])
 
     def _deploy_secrets(self):
         if not self.yav_version:

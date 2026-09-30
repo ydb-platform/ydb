@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -33,10 +35,6 @@ class TController::TTxAlterReplication: public TTxBase {
     TVector<std::pair<ui64, ui64>> AlterersToStop;
     THashSet<TWorkerId> BarrierWorkersToRestart;
 
-    static bool IsFullyCompleted(const TSchemaBarrier& barrier) {
-        return barrier.CompletedWorkers.size() == barrier.ExpectedWorkers.size();
-    }
-
     static bool ShouldCancelBarrier(const TSchemaBarrier& barrier, bool targetUnavailable) {
         return barrier.Phase == ESchemaBarrierPhase::Error
             || (barrier.Phase == ESchemaBarrierPhase::Collecting && targetUnavailable);
@@ -44,12 +42,14 @@ class TController::TTxAlterReplication: public TTxBase {
 
     static bool NeedsTargetRecovery(const TSchemaBarrier& barrier, bool targetWasError) {
         return targetWasError
-            && (barrier.Phase == ESchemaBarrierPhase::Altering
-                || (barrier.Phase == ESchemaBarrierPhase::Applied && !IsFullyCompleted(barrier)));
+            && barrier.Phase != ESchemaBarrierPhase::Collecting
+            && barrier.IsActive();
     }
 
     bool NeedsWorkerRestart(const TSchemaBarrier& barrier, const TWorkerId& id, bool targetWasError) const {
-        if (barrier.CompletedWorkers.contains(id)) {
+        // Completion only covers the schema handshake. A Verifying barrier
+        // still needs a fresh heartbeat from every worker before it can end.
+        if (barrier.Phase != ESchemaBarrierPhase::Verifying && barrier.CompletedWorkers.contains(id)) {
             return false;
         }
 
@@ -91,6 +91,7 @@ class TController::TTxAlterReplication: public TTxBase {
             db.Table<Schema::SchemaBarrierWorkers>()
                 .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
         }
+        Self->StopSchemaChangeTargetFlush(key);
 
         if (Self->SchemaChangeDstAlterers.contains(key)) {
             AlterersToStop.push_back(key);
@@ -100,7 +101,8 @@ class TController::TTxAlterReplication: public TTxBase {
             db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                 NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
                 NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
-                NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0));
+                NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
         }
     }
 
@@ -125,6 +127,46 @@ class TController::TTxAlterReplication: public TTxBase {
             // the explicit lifecycle request as well.
             CancelBarrier(key, it->second, target, db);
             it = Self->SchemaBarriers.erase(it);
+        }
+
+        // Verification waits for every replication worker, not only members
+        // of the target whose schema changed. Recover failed siblings even
+        // before DDL finishes, since no later lifecycle request may revisit
+        // recovery when this barrier enters Verifying.
+        const bool globalConsistency = Replication->GetConfig().GetConsistencySettings().GetLevelCase()
+            == NKikimrReplication::TConsistencySettings::kGlobal;
+        if (!globalConsistency) {
+            return;
+        }
+
+        const bool needsGlobalVerification = AnyOf(Self->SchemaBarriers, [this](const auto& item) {
+            return item.first.first == Replication->GetId() && item.second.IsInProgress();
+        });
+        if (!needsGlobalVerification) {
+            return;
+        }
+
+        THashSet<ui64> targetsToRecover;
+        for (const auto& [workerId, _] : Self->Workers) {
+            if (workerId.ReplicationId() != Replication->GetId()) {
+                continue;
+            }
+
+            auto* target = Replication->FindTarget(workerId.TargetId());
+            if (target && target->GetDstState() == TReplication::EDstState::Error) {
+                // A heartbeat newer than the schema can still be too old to
+                // retire a snapshotted write ID. DDL completion also resets
+                // heartbeats, so keep every failed sibling recoverable.
+                targetsToRecover.insert(workerId.TargetId());
+                BarrierWorkersToRestart.insert(workerId);
+            }
+        }
+
+        for (const auto targetId : targetsToRecover) {
+            auto* target = Replication->FindTarget(targetId);
+            target->SetDstState(TReplication::EDstState::Ready);
+            db.Table<Schema::Targets>().Key(Replication->GetId(), targetId).Update(
+                NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()));
         }
     }
 

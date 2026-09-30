@@ -31,6 +31,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TUpdateConfigRequest
     {
         NStorage::NPartitionDirect::TVChunkConfig Config;
+        TDirtyMapStateProto Proto;
         TPersistResultPromise Promise;
     };
 
@@ -58,6 +59,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TVector<TAddHostRequest> AddHostRequests;
     TVector<TRemoveHostRequest> RemoveHostRequests;
     ui64 LsnGenerator = 0;
+    size_t InflightWriteCount = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
     size_t CopyRangeBudgetRequestCount = 0;
@@ -85,12 +87,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         executor->ExecuteSimple(std::move(callback));
     }
 
-    TPersistResultFuture UpdateVChunkConfig(
-        const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
+    TPersistResultFuture UpdateVChunkState(
+        const NStorage::NPartitionDirect::TVChunkConfig& cfg,
+        TDirtyMapStateProto state) override
     {
-        UpdateConfigRequests.emplace_back(
-            cfg,
-            NThreading::NewPromise<EPersistResult>());
+        UpdateConfigRequests.emplace_back(TUpdateConfigRequest{
+            .Config = cfg,
+            .Proto = std::move(state),
+            .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateConfigRequests.back().Promise.GetFuture();
     }
 
@@ -133,9 +137,21 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
             .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
     }
 
-    ui64 GenerateLsn() override
+    ui64 OnWriteStarted() override
     {
+        ++InflightWriteCount;
         return ++LsnGenerator;
+    }
+
+    void OnWriteFinished() override
+    {
+        Y_ABORT_UNLESS(InflightWriteCount > 0);
+        --InflightWriteCount;
+    }
+
+    [[nodiscard]] size_t GetInflightWriteCount() const override
+    {
+        return InflightWriteCount;
     }
 
     void StopTablet(const TString& reason) override

@@ -243,6 +243,7 @@ message TVSlotInfo {
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
     optional bool PhantomOnly = 20;
+    optional bool DDisk = 21;
 }
 
 message TVSlotEntry {
@@ -302,6 +303,7 @@ message TGroupInfo {
     optional uint64 BridgeSyncFirstErrorTimestamp = 27; // first error timestamp
     optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
+    optional bool DDisk = 30; // is this a Direct Block Group?
 }
 
 message TGroupEntry {

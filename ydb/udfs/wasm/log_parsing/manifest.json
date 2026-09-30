@@ -1,0 +1,27 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "LogParsing",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk"],
+  "functions": [
+    {
+      "name": "LineBreak",
+      "export": "line_break",
+      "argument_types": ["Optional<String>"],
+      "result_type": "Struct<'Successed':Bool, 'SplitRecords':Optional<List<String>>, 'Context':Optional<Dict<String, String>>, 'Error':Optional<String>, 'RawChunk':Optional<String>>"
+    },
+    {
+      "name": "Protoseq",
+      "export": "protoseq",
+      "argument_types": ["Optional<String>", "Optional<String>"],
+      "result_type": "Struct<'Successed':Bool, 'SplitRecords':Optional<List<String>>, 'Context':Optional<Dict<String, String>>, 'Error':Optional<String>, 'RawChunk':Optional<String>>"
+    },
+    {
+      "name": "ParseTskv",
+      "export": "parse_tskv",
+      "argument_types": ["Optional<String>"],
+      "result_type": "Struct<'Successed':Bool, 'Fields':Dict<String, String>, 'Error':Optional<String>, 'RawRecord':Optional<String>>"
+    }
+  ]
+}

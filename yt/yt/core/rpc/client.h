@@ -201,7 +201,7 @@ public:
     std::string GetMethod() const override;
 
     //! Fluent request annotation: |request->Annotate().With("Key", value)|.
-    NLogging::TLoggingTagListBuilder Annotate();
+    NLogging::TLoggingTagListBuilderGuard<> Annotate();
 
     const NLogging::TLoggingTagList& GetLoggingTags() const override;
 
@@ -525,11 +525,15 @@ struct TMethodDescriptor
     std::string MethodName;
     EMultiplexingBand MultiplexingBand = EMultiplexingBand::Default;
     bool StreamingEnabled = false;
+    bool RequestHeavy = false;
+    bool ResponseHeavy = false;
 
     explicit TMethodDescriptor(std::string methodName);
 
     TMethodDescriptor& SetMultiplexingBand(EMultiplexingBand value);
     TMethodDescriptor& SetStreamingEnabled(bool value);
+    TMethodDescriptor& SetRequestHeavy(bool value);
+    TMethodDescriptor& SetResponseHeavy(bool value);
 };
 
 #define DEFINE_RPC_PROXY_METHOD_GENERIC(method, request, response, ...) \

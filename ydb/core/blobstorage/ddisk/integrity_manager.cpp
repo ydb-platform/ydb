@@ -16,7 +16,7 @@ TIntegrityManager::TIntegrityManager(ui64 dataChunkSizeBytes, ui64 ddiskId, ui64
     , ExtentsPerChunkCount((dataChunkSizeBytes - IntegrityChunkHeaderRegionSize) / ExtentOnDiskSizeBytes)
     , DDiskId(ddiskId)
     , PDiskGuid(pdiskGuid)
-    , MaxBlockStates(Max<size_t>(1, checksumCacheBytes / BlockStateApproxBytes))
+    , MaxBlockStates(checksumCacheBytes ? Max<size_t>(1, checksumCacheBytes / BlockStateApproxBytes) : 0)
 {
     Y_ABORT_UNLESS(dataChunkSizeBytes % IntegrityUnitSize == 0);
     Y_ABORT_UNLESS(dataChunkSizeBytes > IntegrityChunkHeaderRegionSize);
@@ -1174,6 +1174,16 @@ const TIntegrityManager::TExtentRef* TIntegrityManager::FindExtentRef(TDataChunk
 ui64 TIntegrityManager::GetIntegrityChunkGeneration(TChunkIdx chunkIdx) const {
     const auto it = IntegrityChunks.find(chunkIdx);
     return it != IntegrityChunks.end() ? it->second.Generation : 0;
+}
+
+std::vector<TChunkIdx> TIntegrityManager::GetIntegrityChunkIdxs() const {
+    std::vector<TChunkIdx> chunks;
+    chunks.reserve(IntegrityChunks.size());
+    for (const auto& [chunkIdx, info] : IntegrityChunks) {
+        Y_UNUSED(info);
+        chunks.push_back(chunkIdx);
+    }
+    return chunks;
 }
 
 bool TIntegrityManager::IsIntegrityChunkFormatted(TChunkIdx chunkIdx) const {

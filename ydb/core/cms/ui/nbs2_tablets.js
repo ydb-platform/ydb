@@ -48,6 +48,7 @@ const Nbs2Tablets = {
 
     init: function() {
         $('#nbs2-tablets-view').on('change', () => this.resetAndLoad());
+        $('#nbs2-tablets-group-degrade').on('change', () => this.resetAndLoad());
         $('#nbs2-tablets-sort').on('change', () => this.resetAndLoad());
         $('#nbs2-tablets-sort-desc').on('change', () => this.resetAndLoad());
         $('#nbs2-tablets-page-size').on('change', () => this.resetAndLoad());
@@ -104,6 +105,15 @@ const Nbs2Tablets = {
     },
 
     load: function() {
+        const diskView = this.isDDisksView();
+        const sort = $('#nbs2-tablets-sort');
+        sort.find('option').each(function() {
+            const diskOption = ['disk', 'tablets_count', 'ddisk_occupancy', 'persistent_buffer_occupancy'].includes(this.value);
+            $(this).prop('disabled', diskOption !== diskView).prop('hidden', diskOption !== diskView);
+        });
+        if (sort.find('option:selected').prop('disabled')) {
+            sort.val(diskView ? 'disk' : 'degrade');
+        }
         $('#nbs2-tablets-error').text('Loading...');
         this.snapshots = {};
         if (this.isDDisksView()) {
@@ -125,10 +135,11 @@ const Nbs2Tablets = {
     loadTabletsPage: function() {
         const token = ++this.requestToken;
         const sort = $('#nbs2-tablets-sort').val();
-        const sortBy = sort === 'last_changed_at' || sort === 'groups_count' ? sort : 'tablet';
+        const sortBy = ['degrade', 'last_changed_at', 'groups_count'].includes(sort) ? sort : 'tablet';
         const params = Object.assign(this.commonParams(), {
             filter: $('#nbs2-tablets-filter').val() || '',
             sort_by: sortBy,
+            group_by_degrade: $('#nbs2-tablets-group-degrade').prop('checked') ? '1' : '0',
         });
 
         $.getJSON('cms/api/json/ddisk/tablets', params)
@@ -154,7 +165,7 @@ const Nbs2Tablets = {
     loadDisksPage: function() {
         const token = ++this.requestToken;
         const sort = $('#nbs2-tablets-sort').val();
-        const sortBy = sort === 'tablets_count' ? 'tablets_count' : 'disk';
+        const sortBy = ['tablets_count', 'ddisk_occupancy', 'persistent_buffer_occupancy'].includes(sort) ? sort : 'disk';
         const params = Object.assign(this.commonParams(), {
             filter: $('#nbs2-tablets-filter').val() || '',
             sort_by: sortBy,
@@ -269,7 +280,7 @@ const Nbs2Tablets = {
         const pdiskId = this.field(id, 'PDiskId', 'pdiskId') || 0;
         const slotId = this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0;
         const label = nodeId + ':' + pdiskId + ':' + slotId;
-        const hint = 'Node: ' + (nodeId || '—') + '\nState: ' + this.diskStateName(id);
+        const hint = 'Node: ' + (nodeId || '-') + '\nState: ' + this.diskStateName(id);
         const url = role === 'PersistentBuffer'
             ? this.persistentBufferUrl(nodeId, pdiskId, slotId)
             : this.ddiskUrl(nodeId, pdiskId, slotId);
@@ -315,6 +326,7 @@ const Nbs2Tablets = {
 
     render: function() {
         this.updatePagination();
+        $('#nbs2-tablets-group-degrade').prop('disabled', this.isDDisksView());
         if (this.isDDisksView()) {
             this.renderDDisks();
             return;
@@ -323,15 +335,27 @@ const Nbs2Tablets = {
         $('#nbs2-ddisks-table').hide();
         const body = $('#nbs2-tablets-body').empty();
 
+        let previousDegrade;
         this.tablets.forEach((tablet) => {
+            const degrade = Number(this.field(tablet, 'Degrade', 'degrade')) || 0;
+            if ($('#nbs2-tablets-group-degrade').prop('checked') && degrade !== previousDegrade) {
+                body.append('<tr class="table-secondary nbs2-degrade-group"><th colspan="5">Degrade ' + degrade + '</th></tr>');
+                previousDegrade = degrade;
+            }
             const id = this.tabletId(tablet);
             const groupsCount = this.field(tablet, 'GroupsCount', 'groupsCount');
             const lastChangedAt = this.field(tablet, 'LastChangedAt', 'lastChangedAt');
             const unavailableDDisk = Number(this.field(tablet, 'UnavailableDDiskCount', 'unavailableDDiskCount')) || 0;
             const unavailablePersistentBuffer = Number(this.field(tablet, 'UnavailablePersistentBufferCount', 'unavailablePersistentBufferCount')) || 0;
-            body.append('<tr class="nbs2-tablet-row" data-tablet-id="' + id + '"><td><a href="#">' + id + '</a></td><td>' + (groupsCount || '—') + '</td><td class="' + (unavailableDDisk ? 'nbs2-count-unavailable' : '') + '">' + unavailableDDisk + '</td><td class="' + (unavailablePersistentBuffer ? 'nbs2-count-unavailable' : '') + '">' + unavailablePersistentBuffer + '</td><td>' + this.date(lastChangedAt) + '</td></tr>');
+            body.append('<tr class="nbs2-tablet-row" data-tablet-id="' + id + '"><td><a href="#">' + id + '</a></td><td>' + (groupsCount || '-') + '</td><td class="' + (unavailableDDisk ? 'nbs2-count-unavailable' : '') + '">' + unavailableDDisk + '</td><td class="' + (unavailablePersistentBuffer ? 'nbs2-count-unavailable' : '') + '">' + unavailablePersistentBuffer + '</td><td>' + this.date(lastChangedAt) + '</td></tr>');
             if (this.snapshots[id]) this.renderDetails(body, id);
         });
+    },
+
+    formatOccupancy: function(value) {
+        if (value === undefined || value === null || value === '') return '-';
+        const occupancy = Number(value);
+        return Number.isFinite(occupancy) && occupancy >= 0 ? (occupancy * 100).toFixed(1) + '%' : '-';
     },
 
     renderDDisks: function() {
@@ -364,30 +388,42 @@ const Nbs2Tablets = {
             if (ddiskTabletIds.length) roles.push('<div><b>DDisk:</b> ' + this.formatDisk(diskIdObj, 'DDisk', unavailable) + ' (' + ddiskTabletIds.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
             if (persistentBufferTabletIds.length) roles.push('<div><b>Persistent Buffer:</b> ' + this.formatDisk(diskIdObj, 'PersistentBuffer', unavailable) + ' (' + persistentBufferTabletIds.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
             body.append('<tr class="nbs2-ddisk-row" data-ddisk-key="' + this.escapeHtml(key) + '">' +
-                '<td>' + this.formatDisk(diskIdObj, ddiskTabletIds.length ? 'DDisk' : 'PersistentBuffer', unavailable) + '</td><td>' + (this.field(diskIdObj, 'NodeId', 'nodeId') || '—') +
-                '</td><td>' + (this.field(diskIdObj, 'PDiskId', 'pdiskId') || '—') + '</td><td class="' +
+                '<td>' + this.formatDisk(diskIdObj, ddiskTabletIds.length ? 'DDisk' : 'PersistentBuffer', unavailable) + '</td><td>' + (this.field(diskIdObj, 'NodeId', 'nodeId') || '-') +
+                '</td><td>' + (this.field(diskIdObj, 'PDiskId', 'pdiskId') || '-') + '</td><td class="' +
                 (unavailable ? 'nbs2-count-unavailable' : '') + '">' + status +
-                '</td><td>' + tabletIds.size + '</td></tr>' +
-                '<tr id="nbs2-ddisk-details-' + this.escapeHtml(detailsId) + '" style="display: none"><td colspan="5">' +
-                (roles.join('') || '—') + '</td></tr>');
+                '</td><td>' + tabletIds.size + '</td><td>' +
+                this.formatOccupancy(this.field(disk, 'DDiskOccupancy', 'dDiskOccupancy', 'ddiskOccupancy')) + '</td><td>' +
+                this.formatOccupancy(this.field(disk, 'PersistentBufferOccupancy', 'persistentBufferOccupancy')) + '</td></tr>' +
+                '<tr id="nbs2-ddisk-details-' + this.escapeHtml(detailsId) + '" style="display: none"><td colspan="7">' +
+                (roles.join('') || '-') + '</td></tr>');
         });
+    },
+
+    groupDegrade: function(group) {
+        const countUnavailable = (disks) => disks.filter((disk) =>
+            this.diskId(disk) !== '0:0' && this.isDiskUnavailable(disk)).length;
+        const ddisks = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
+        const buffers = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
+        return Math.max(countUnavailable(ddisks), countUnavailable(buffers));
     },
 
     renderDetails: function(body, id) {
         const snapshot = this.snapshots[id];
-        const groups = this.field(snapshot, 'Groups', 'groups') || [];
-        let html = '<tr id="nbs2-tablet-details-' + id + '"><td colspan="5"><table class="table table-sm mb-0"><thead><tr><th>DBG</th><th>DDisk layout</th><th>Persistent buffer</th></tr></thead><tbody>';
-        groups.forEach((group) => {
+        const groups = (this.field(snapshot, 'Groups', 'groups') || []).map((group) => ({
+            group, degrade: this.groupDegrade(group),
+        })).sort((a, b) => b.degrade - a.degrade);
+        let html = '<tr id="nbs2-tablet-details-' + id + '"><td colspan="5"><table class="table table-sm mb-0"><thead><tr><th>DBG</th><th>Degrade</th><th>DDisk layout</th><th>Persistent buffer</th></tr></thead><tbody>';
+        groups.forEach(({group, degrade}) => {
             const groupId = this.field(group, 'DirectBlockGroupId', 'directBlockGroupId');
             const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
             const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
-            html += '<tr><td>' + (groupId || 0) + '</td><td>' + ddiskIds.map((disk) => this.formatDisk(disk, 'DDisk', this.isDiskUnavailable(disk))).join(' ') + '</td><td>' + persistentBufferIds.map((disk) => this.formatDisk(disk, 'PersistentBuffer', this.isDiskUnavailable(disk))).join(' ') + '</td></tr>';
+            html += '<tr><td>' + (groupId || 0) + '</td><td>' + degrade + '</td><td>' + ddiskIds.map((disk) => this.formatDisk(disk, 'DDisk', this.isDiskUnavailable(disk))).join(' ') + '</td><td>' + persistentBufferIds.map((disk) => this.formatDisk(disk, 'PersistentBuffer', this.isDiskUnavailable(disk))).join(' ') + '</td></tr>';
         });
         body.append(html + '</tbody></table></td></tr>').find('#nbs2-tablet-details-' + id).hide();
     },
 
     date: function(micros) {
-        return micros ? new Date(Number(micros) / 1000).toLocaleString() : '—';
+        return micros ? new Date(Number(micros) / 1000).toLocaleString() : '-';
     }
 };
 

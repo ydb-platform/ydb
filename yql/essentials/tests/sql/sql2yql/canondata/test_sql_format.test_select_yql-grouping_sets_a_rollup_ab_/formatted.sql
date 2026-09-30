@@ -19,5 +19,8 @@ FROM (
 )
 GROUP BY
     a,
-    ROLLUP (a, b)
+    ROLLUP (
+        a,
+        b
+    )
 ;

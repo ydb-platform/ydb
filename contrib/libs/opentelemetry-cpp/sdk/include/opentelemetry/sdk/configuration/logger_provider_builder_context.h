@@ -1,0 +1,39 @@
+// Copyright The OpenTelemetry Authors
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+#include "opentelemetry/version.h"
+
+OPENTELEMETRY_BEGIN_NAMESPACE
+namespace sdk
+{
+namespace resource
+{
+class Resource;
+}  // namespace resource
+
+namespace configuration
+{
+
+class AttributeLimitsConfiguration;
+class Registry;
+
+/**
+ * Configuration context for building a logger provider.
+ */
+struct LoggerProviderBuilderContext
+{
+  /** Registry is required and must not be null. */
+  const Registry *registry{nullptr};
+
+  /** Resource is required and must not be null. */
+  const opentelemetry::sdk::resource::Resource *resource{nullptr};
+
+  /** AttributeLimits are optional and may be null. */
+  const AttributeLimitsConfiguration *attribute_limits{nullptr};
+};
+
+}  // namespace configuration
+}  // namespace sdk
+OPENTELEMETRY_END_NAMESPACE

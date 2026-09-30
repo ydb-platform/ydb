@@ -155,6 +155,14 @@ namespace NActors {
         }
     }
 
+    void TIOExecutorPool::CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
+        for (i16 i = 0; i < PoolThreads; ++i) {
+            if (Threads[i].Thread) {
+                Threads[i].Thread->CollectAsyncFrameCacheStats(stats);
+            }
+        }
+    }
+
     void TIOExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         if (Harmonizer) {
             TPoolHarmonizerStats stats = Harmonizer->GetPoolStats(PoolId);

@@ -196,7 +196,7 @@ IActor* CreateKqpSchemeExecuter(
     TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& clientAddress,
     bool temporary, bool createTmpDir, bool isCreateTableAs, TString tempDirName, TIntrusivePtr<TUserRequestContext> ctx,
     bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
-    const TActorId& kqpTempTablesAgentActor = TActorId());
+    const TActorId& kqpTempTablesAgentActor = TActorId(), NWilson::TTraceId traceId = {});
 
 std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);

@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: multidict
-Version: 6.7.1
+Version: 6.8.0
 Summary: multidict implementation
 Home-page: https://github.com/aio-libs/multidict
 Author: Andrew Svetlov
@@ -19,13 +19,12 @@ Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
 Classifier: Programming Language :: Python :: 3.14
-Requires-Python: >=3.9
+Requires-Python: >=3.10
 Description-Content-Type: text/x-rst
 License-File: LICENSE
 Requires-Dist: typing-extensions>=4.1.0; python_version < "3.11"
@@ -92,10 +91,11 @@ Regular mutable (``MultiDict`` and ``CIMultiDict``) classes
 implement ``collections.abc.MutableMapping`` and allows them to change
 their own content.
 
-
 *Case insensitive* (``CIMultiDict`` and
 ``CIMultiDictProxy``) assume the *keys* are case
-insensitive, e.g.::
+insensitive, e.g.
+
+.. code-block:: python
 
    >>> dct = CIMultiDict(key='val')
    >>> 'Key' in dct

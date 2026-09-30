@@ -1,7 +1,5 @@
 LIBRARY()
 
-SRCDIR(ydb/core/tx/columnshard/engines/scheme/indexes/abstract)
-
 SRCS(
     fetcher.cpp
 )

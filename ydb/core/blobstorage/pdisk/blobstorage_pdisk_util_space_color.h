@@ -10,9 +10,7 @@ namespace NKikimr {
 
 // How many more chunks an owner may take while its space color stays strictly
 // better than the named boundary. PDisk reports these along with the current
-// color so that a VDisk can work out for itself what color it would be in once
-// the data it is holding in Fresh has been compacted, instead of finding out
-// only after the compaction has already spent the space.
+// color; a VDisk budgets its level compactions by them.
 //
 // Boundaries better than PRE_ORANGE are not reported: no write is gated below
 // that, so the current color describes them well enough.
@@ -28,26 +26,8 @@ struct TSpaceHeadroom {
     // ToBlack without the static group reserve held back, which is what an allocation
     // marked as housekeeping is judged by. The reserve stops new user data; it must not
     // stop the compaction that is trying to free some, because on a disk this full the
-    // compaction is the only thing that can. Admission uses ToBlack, never this.
+    // compaction is the only thing that can.
     ui64 AllocatableToBlack = 0;
-
-    NKikimrBlobStorage::TPDiskSpaceColor::E Project(ui64 chunks,
-            NKikimrBlobStorage::TPDiskSpaceColor::E current) const {
-        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
-        if (!Valid) {
-            return current;
-        }
-        const TColor::E projected =
-            chunks > ToBlack ? TColor::BLACK :
-            chunks > ToRed ? TColor::RED :
-            chunks > ToOrange ? TColor::ORANGE :
-            chunks > ToPreOrange ? TColor::PRE_ORANGE :
-            current;
-        // Headroom is a snapshot and may lag behind the color, which is refreshed
-        // by every PDisk reply. Taking the worse of the two keeps a stale snapshot
-        // from letting a write through.
-        return projected < current ? current : projected;
-    }
 
     TString ToString() const {
         if (!Valid) {

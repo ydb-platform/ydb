@@ -249,7 +249,7 @@ void FromProto(TQueryStatistics* original, const NProto::TQueryStatistics& seria
     original->IncompleteInput = serialized.incomplete_input();
     original->IncompleteOutput = serialized.incomplete_output();
     original->QueryCount = serialized.query_count();
-    original->ScanOrder = static_cast<EReportedScanOrder>(serialized.scan_order());
+    original->ScanOrder = FromProto<EReportedScanOrder>(serialized.scan_order());
     FromProto(&original->InnerStatistics, serialized.inner_statistics());
 }
 

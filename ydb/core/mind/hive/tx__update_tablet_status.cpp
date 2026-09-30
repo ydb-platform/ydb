@@ -157,7 +157,7 @@ public:
                     }
                 }
                 if (Local) {
-                    if (tablet->IsAliveOnLocal(Local)) {
+                    if (tablet->IsPresentOnLocal(Local) && !(tablet->IsLeader() && tablet->AsLeader().IsBootingSuppressed())) {
                         if (tablet->IsLeader()) {
                             TLeaderTabletInfo& leader(tablet->AsLeader());
                             db.Table<Schema::Tablet>().Key(TabletId).Update(NIceDb::TUpdate<Schema::Tablet::LeaderNode>(0),

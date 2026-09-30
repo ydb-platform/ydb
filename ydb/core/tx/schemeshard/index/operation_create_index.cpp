@@ -134,8 +134,15 @@ public:
                 .IsCommonSensePath()
                 .IsTable();
 
+            // A new replica can have an async index maintained locally from
+            // its base table. Adding one later still requires an index build.
+            const bool isIndexTableReadyForAsyncReplication = !(
+                tableIndexCreation.GetType() == NKikimrSchemeOp::EIndexTypeGlobalAsync &&
+                parentPath.IsUnderCreating());
             if (!internal) {
-                checks.NotAsyncReplicaTable();
+                if (isIndexTableReadyForAsyncReplication) {
+                    checks.NotAsyncReplicaTable();
+                }
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {

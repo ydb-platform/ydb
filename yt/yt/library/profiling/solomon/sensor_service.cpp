@@ -249,7 +249,8 @@ private:
             .ValueOrThrow();
 
         auto attributeKeys = FromProto<THashSet<std::string>>(request->attributes().keys());
-        context->SetRequestInfo("AttributeKeys: %v", attributeKeys);
+        context->AnnotateRequest()
+            .With("AttributeKeys", attributeKeys);
 
         response->set_value(BuildYsonStringFluently()
             .DoListFor(Registry_->ListSensors(), [&] (TFluentList fluent, const TSensorInfo& sensorInfo) {

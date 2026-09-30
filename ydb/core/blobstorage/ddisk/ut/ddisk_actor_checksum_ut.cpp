@@ -1738,12 +1738,16 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
         std::optional<TActorId> destinationPdiskEdge;
         bool sawDestinationPersistence = false;
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
+            // Both the old and restored buffer periodically refresh free space.
+            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType
+                    && (ev->Sender == disk1ActorId
+                        || (disk2PdiskEdge && ev->GetRecipientRewrite() == *disk2PdiskEdge))) {
+                ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                    0, ev->Cookie), NodeId);
+                return false;
+            }
             if (ev->Sender == disk1ActorId) {
-                if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
-                    ctx.Runtime.Send(new IEventHandle(ev->Sender, disk1.PDiskEdge,
-                        new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
-                        0, ev->Cookie), NodeId);
-                }
                 return false;
             }
             if (destinationPdiskEdge
@@ -2742,6 +2746,7 @@ Y_UNIT_TEST_SUITE(TDDiskChecksumTests) {
             ctx.SendPDiskResponse(disk, *first, new NPDisk::TEvChunkReadRawResult(storage.Read(*first->Get())));
             ctx.Runtime.Sim([&] { return !completed; });
             ctx.Runtime.FilterFunction = {};
+            NDDisk::NTesting::IgnoreShutdownChunkForget(ctx.Runtime);
             SendToDDisk(ctx, disk.ServiceId, new TEvents::TEvPoison());
             auto result = WaitFromDDisk<NDDisk::TEvReadResult>(ctx);
             UNIT_ASSERT_VALUES_EQUAL(result->Cookie, 123);

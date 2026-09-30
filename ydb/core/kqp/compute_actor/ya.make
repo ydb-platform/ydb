@@ -18,6 +18,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/tx/columnshard/hooks/abstract
+    ydb/core/kqp/tracing
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/kqp/federated_query

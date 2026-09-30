@@ -83,6 +83,44 @@ void AssertAstItemsLimitBoundToLetUint64(const TString& ast, ui64 limit) {
     UNIT_ASSERT_C(ast.find(letBinding) != TString::npos, ast);
 }
 
+// `nodePos` points at the '(' of an S-expression node that is the first argument of an enclosing callable;
+// returns the text of the next argument (the members list), resolving a `$N` reference through its `(let $N ...)`.
+TString ExtractMembersListAfterNode(const TString& ast, size_t nodePos) {
+    UNIT_ASSERT_C(nodePos < ast.size() && ast[nodePos] == '(', ast);
+    int depth = 0;
+    size_t p = nodePos;
+    for (; p < ast.size(); ++p) {
+        if (ast[p] == '(') {
+            ++depth;
+        } else if (ast[p] == ')') {
+            if (--depth == 0) {
+                ++p;
+                break;
+            }
+        }
+    }
+    while (p < ast.size() && isspace(ast[p])) {
+        ++p;
+    }
+    UNIT_ASSERT_C(p < ast.size(), ast);
+    if (ast[p] == '$') {
+        size_t e = p + 1;
+        while (e < ast.size() && isdigit(ast[e])) {
+            ++e;
+        }
+        const TString var = ast.substr(p, e - p);
+        const size_t letPos = ast.find(TStringBuilder() << "(let " << var << " ");
+        UNIT_ASSERT_C(letPos != TString::npos, ast);
+        const size_t valuePos = letPos + 6 + var.size();
+        const size_t valueEnd = ast.find(")\n", valuePos);
+        UNIT_ASSERT_C(valueEnd != TString::npos, ast);
+        return ast.substr(valuePos, valueEnd - valuePos);
+    }
+    const size_t e = ast.find(')', p);
+    UNIT_ASSERT_C(e != TString::npos, ast);
+    return ast.substr(p, e - p);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
@@ -214,6 +252,155 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         );
         // Distinct-limit sync point counter: see DistinctLimitSyncPoint_IncrementsScanCounter (physical key).
         // SSA/projection distinct keys use numeric field names in the stage batch (same as ToGeneralContainer).
+    }
+
+    // JSON_VALUE alias DISTINCT together with a pushed WHERE on another JSON path of the same column:
+    // KqpOlapDistinct, KqpOlapFilter and a KqpOlapProjection named by the SELECT alias must coexist in the read.
+    Y_UNIT_TEST(JsonValueDistinct_JsonFilterSameColumn_PushesFilterProjectionAndDistinct) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NYdb::NStatusHelpers::ThrowOnError(result);
+        auto querySession = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo_json_distinct_filter` (
+                a Int64 NOT NULL,
+                b Int32,
+                payload JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto insertRes = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_json_distinct_filter` (a, b, payload)
+            VALUES (1, 1, JsonDocument('{"a.b.c" : "a1", "queue" : "q1"}'));
+            INSERT INTO `/Root/foo_json_distinct_filter` (a, b, payload)
+            VALUES (2, 11, JsonDocument('{"a.b.c" : "a2", "queue" : "q2"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT DISTINCT JSON_VALUE(payload, "$.\"a.b.c\"") AS jsonDoc
+            FROM `/Root/foo_json_distinct_filter`
+            WHERE b = 11 AND JSON_VALUE(payload, "$.queue") = "q2"
+            LIMIT 10
+        )";
+
+        auto explainRes = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+        const auto planRes = CollectStreamResult(explainRes);
+
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("KqpOlapProjection") != TString::npos, ast);
+        // Projection is named by the SELECT alias, not by the source column `payload`:
+        // (KqpOlapProjection (KqpOlapJsonValue ...) '"jsonDoc")
+        const size_t projPos = ast.find("(KqpOlapProjection ");
+        UNIT_ASSERT_C(projPos != TString::npos, ast);
+        const TString projTail = ast.substr(projPos, 400);
+        UNIT_ASSERT_C(projTail.find("jsonDoc") != TString::npos, projTail);
+        UNIT_ASSERT_C(ast.find("__kqp_olap_projection_") == TString::npos, ast);
+
+        // The query must also execute (no "bool interpretation" failure in the SSA program).
+        auto execRes = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execRes.IsSuccess(), execRes.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(execRes.GetResultSets().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(execRes.GetResultSet(0).RowsCount(), 1u);
+    }
+
+    // Alias projection when the FlatMap input is `ExtractMembers(KqpReadOlapTableRanges)`: the subselect projects a
+    // strict subset of the stored columns and filters on another one. The alias must survive the ExtractMembers,
+    // the raw JSON column must not be shipped, and the forced DISTINCT key must resolve.
+    Y_UNIT_TEST(JsonValueDistinct_SubselectExtractMembers_PushesProjectionAndDistinct) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NYdb::NStatusHelpers::ThrowOnError(result);
+        auto querySession = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo_json_distinct_extract` (
+                a Int64 NOT NULL,
+                b Int32,
+                c Utf8,
+                payload JsonDocument,
+                primary key(a)
+            )
+            PARTITION BY HASH(a)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto insertRes = querySession.ExecuteQuery(R"(
+            INSERT INTO `/Root/foo_json_distinct_extract` (a, b, c, payload)
+            VALUES (1, 1, "x", JsonDocument('{"k" : "v1"}'));
+            INSERT INTO `/Root/foo_json_distinct_extract` (a, b, c, payload)
+            VALUES (2, 11, "y", JsonDocument('{"k" : "v2"}'));
+            INSERT INTO `/Root/foo_json_distinct_extract` (a, b, c, payload)
+            VALUES (3, 11, "z", JsonDocument('{"k" : "v2"}'));
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(insertRes.IsSuccess(), insertRes.GetIssues().ToString());
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "jsonDoc";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT DISTINCT JSON_VALUE(payload, "$.k") AS jsonDoc
+            FROM (
+                SELECT b, payload FROM `/Root/foo_json_distinct_extract` WHERE b = 11
+            )
+            LIMIT 10
+        )";
+
+        auto explainRes = StreamExplainQuery(query, tableClient);
+        UNIT_ASSERT_C(explainRes.IsSuccess(), explainRes.GetIssues().ToString());
+        const auto planRes = CollectStreamResult(explainRes);
+
+        const TString ast = TString(planRes.QueryStats->Getquery_ast());
+        UNIT_ASSERT_C(ast.find("KqpOlapDistinct") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("KqpOlapProjection") != TString::npos, ast);
+        const size_t projPos = ast.find("(KqpOlapProjection ");
+        UNIT_ASSERT_C(projPos != TString::npos, ast);
+        UNIT_ASSERT_C(ast.substr(projPos, 400).find("jsonDoc") != TString::npos, ast);
+        UNIT_ASSERT_C(ast.find("__kqp_olap_projection_") == TString::npos, ast);
+        // The stored JSON column must be narrowed out of the read output right before the DISTINCT: the in-process
+        // ExtractMembers over the projections keeps only the alias, never `payload`.
+        constexpr TStringBuf distinctPrefix = "(KqpOlapDistinct (TKqpOlapExtractMembers (KqpOlapProjections";
+        const size_t distinctPos = ast.find(distinctPrefix);
+        UNIT_ASSERT_C(distinctPos != TString::npos, ast);
+        const TString outerMembers = ExtractMembersListAfterNode(ast, distinctPos + distinctPrefix.size() - TStringBuf("(KqpOlapProjections").size());
+        UNIT_ASSERT_C(outerMembers.find("jsonDoc") != TString::npos, TStringBuilder() << outerMembers << "\n" << ast);
+        UNIT_ASSERT_C(outerMembers.find("payload") == TString::npos, TStringBuilder() << outerMembers << "\n" << ast);
+
+        auto execRes = querySession.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execRes.IsSuccess(), execRes.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(execRes.GetResultSets().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(execRes.GetResultSet(0).RowsCount(), 1u);
+        NYdb::TResultSetParser parser(execRes.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(*parser.ColumnParser(0).GetOptionalUtf8(), "v2");
     }
 
     Y_UNIT_TEST(ForceDistinctPragmas_DoNotBreak_SumDistinctWithAggPushdown) {
@@ -595,10 +782,41 @@ Y_UNIT_TEST_SUITE(KqpOlapDistinctPushdown) {
         auto it = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         const auto collected = CollectStreamResult(it);
-        UNIT_ASSERT_C(collected.RowsCount > 0, collected.ResultSetYson);
+        UNIT_ASSERT_VALUES_EQUAL_C(collected.RowsCount, 5, collected.ResultSetYson);
 
         const i64 after = ReadDistinctLimitSyncPointInvocations(kikimr);
         UNIT_ASSERT_C(after > before, TStringBuilder() << "sync point counter: before=" << before << " after=" << after);
+    }
+
+    Y_UNIT_TEST(DistinctLimitSyncPoint_IncrementsScanCounter_TrivialReader) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardReaderClassName("TRIVIAL");
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 100);
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto sessionRes = queryClient.GetSession().GetValueSync();
+        UNIT_ASSERT_C(sessionRes.IsSuccess(), sessionRes.GetIssues().ToString());
+        auto session = sessionRes.GetSession();
+
+        const TString query = R"(
+            --!syntax_v1
+            PRAGMA Kikimr.OptEnableOlapPushdown = "true";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinct = "level";
+            PRAGMA Kikimr.OptForceOlapPushdownDistinctLimit = "10";
+
+            SELECT DISTINCT `level` FROM `/Root/olapStore/olapTable` LIMIT 10
+        )";
+
+        const i64 before = ReadDistinctLimitSyncPointInvocations(kikimr);
+        auto it = session.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        const auto collected = CollectStreamResult(it);
+        UNIT_ASSERT_VALUES_EQUAL_C(collected.RowsCount, 5, collected.ResultSetYson);
+
+        const i64 after = ReadDistinctLimitSyncPointInvocations(kikimr);
+        UNIT_ASSERT_C(after > before, TStringBuilder() << "TRIVIAL reader sync point counter: before=" << before << " after=" << after);
     }
 };
 

@@ -2454,6 +2454,29 @@ Y_UNIT_TEST(TestRenameWorksNewApi) {
 }
 
 
+Y_UNIT_TEST(TestRenameOntoItselfKeepsValue) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        ExecuteWrite(tc, {{"blob", "123"}}, 0, NKeyValue::MainStorageChannelInPublicApi,
+            NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteWrite(tc, {{"inline", "456"}}, 0, NKeyValue::InlineStorageChannelInPublicApi,
+            NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+        ExecuteRename(tc, {{"blob", "blob"}, {"inline", "inline"}}, 0);
+        ExecuteRead(tc, "blob", "123", 0, 0, 0);
+        ExecuteRead(tc, "inline", "456", 0, 0, 0);
+
+        CmdRename("blob", "blob", tc);
+        ExecuteReadRange(tc, "", EBorderKind::Without, "", EBorderKind::Without,
+                {{"blob", "123"}, {"inline", "456"}}, 0, true, 0);
+   });
+}
+
+
 Y_UNIT_TEST(TestWriteToExtraChannelThenReadMixedChannelsReturnsOk) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

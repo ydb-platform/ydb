@@ -214,7 +214,6 @@ private:
     std::vector<TIndexChunkFetching> Fetching;
     std::vector<TString> FetchingStorageIds;
     std::vector<TIndexDataAddress> IndexAddressesVector;
-    const std::shared_ptr<ISnapshotSchema> SourceSchema;
 
     virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) override;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override;
@@ -222,10 +221,9 @@ private:
 
 public:
     TIndexFetcherLogic(const THashSet<NRequest::TOriginalDataAddress>& dataAddress, const std::shared_ptr<IIndexMeta>& indexMeta,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<ISnapshotSchema>& sourceSchema = nullptr)
+        const std::shared_ptr<IStoragesManager>& storagesManager)
         : TBase(indexMeta->GetIndexId(), storagesManager)
         , IndexMeta(indexMeta)
-        , SourceSchema(sourceSchema)
     {
         for (auto&& i : dataAddress) {
             const TIndexDataAddress indexAddr(IndexMeta->GetIndexId(), IndexMeta->CalcCategory(i.GetSubColumnName()));

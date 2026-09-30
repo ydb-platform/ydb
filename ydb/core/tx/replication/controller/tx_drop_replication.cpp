@@ -79,6 +79,7 @@ public:
                 db.Table<Schema::SchemaBarrierWorkers>()
                     .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
             }
+            Self->StopSchemaChangeTargetFlush(key);
             if (Self->SchemaChangeDstAlterers.contains(key)) {
                 AlterersToStop.push_back(key);
             }
@@ -86,7 +87,8 @@ public:
                 db.Table<Schema::Targets>().Key(key.first, key.second).Update(
                     NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
                     NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
-                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0));
+                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
             }
             it = Self->SchemaBarriers.erase(it);
         }

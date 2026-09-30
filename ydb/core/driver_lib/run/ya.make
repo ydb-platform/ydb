@@ -7,6 +7,7 @@ ADDINCL(
 SRCS(
     columnshard_services.cpp
     full_runner.cpp
+    local_services.cpp
     main.cpp
 )
 

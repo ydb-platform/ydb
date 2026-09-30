@@ -1,5 +1,6 @@
 #include "direct_block_group_mock.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
@@ -235,6 +236,41 @@ void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
     VChunks.push_back(std::move(vChunk));
 }
 
+THostIndex TDirectBlockGroupMock::AllocateDDiskForPromote(
+    const TVChunkConfig& config)
+{
+    const auto candidates = THostMask::MakeAll(config.GetHostCount())
+                                .Exclude(config.GetDisabledHosts())
+                                .Exclude(config.GetDDisks());
+    const THostIndex selected = candidates.First().value_or(InvalidHostIndex);
+    if (selected != InvalidHostIndex) {
+        AllocateDDiskPromotion(config.GetVChunkIndex(), selected);
+    }
+    return selected;
+}
+
+void TDirectBlockGroupMock::AllocateDDiskPromotion(
+    ui32 vChunkId,
+    THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(!PendingDDiskAllocations.contains(vChunkId));
+    PendingDDiskAllocations.emplace(vChunkId, hostIndex);
+}
+
+void TDirectBlockGroupMock::CommitDDiskPromotion(const TVChunkConfig& config)
+{
+    PendingDDiskAllocations.erase(config.GetVChunkIndex());
+}
+
+THostMask TDirectBlockGroupMock::SelectDDiskForDemote(
+    THostMask candidates) const
+{
+    if (const auto selected = candidates.First()) {
+        return THostMask::MakeOne(*selected);
+    }
+    return THostMask::MakeEmpty();
+}
+
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
 {
     return Executor;
@@ -450,10 +486,18 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
     return DumpHandler();
 }
 
-NThreading::TFuture<TDbgSnapshot>
-TDirectBlockGroupMock::BuildMonSnapshot() const
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
 {
+    Y_UNUSED(detail);
     return NThreading::MakeFuture(TDbgSnapshot{});
+}
+
+void TDirectBlockGroupMock::BalanceDDisks(EDDiskBalanceStrategy strategy)
+{
+    if (BalanceDDisksHandler) {
+        BalanceDDisksHandler(strategy);
+    }
 }
 
 NThreading::TFuture<TVChunkStatsGatherResult>

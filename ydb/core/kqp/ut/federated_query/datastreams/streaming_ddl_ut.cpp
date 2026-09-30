@@ -53,7 +53,141 @@ using namespace NTestUtils;
 using namespace NFederatedQueryTest;
 using namespace NYdb::NConsoleClient::NAi;
 
+namespace {
+
+class THoppingWindowTestFixture : public TStreamingTestFixture {
+public:
+    void Init(bool enabled, bool watermarks = false) {
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableHoppingWindowStartCheck(enabled);
+        config.MutableTableServiceConfig()->SetEnableWatermarks(watermarks);
+        config.MutableTableServiceConfig()->SetEnableWatermarksAdvanced(watermarks);
+        CreateTopic("hoppingInput");
+        CreatePqSource("hoppingSource");
+    }
+
+    void WriteEvent(i32 key, TInstant time) {
+        WriteTopicMessage("hoppingInput", fmt::format(R"({{"Key":{},"Ts":"{}"}})", key, time.ToString()));
+    }
+
+    void WaitCheckpoint() {
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")
+            ->GetCounter("CompletedCheckpoints", true);
+        const auto initial = completed->Val();
+        NTestUtils::WaitFor(TDuration::Seconds(15), "hopping state and source offsets checkpointed", [&](TString& error) {
+            error = TStringBuilder() << "Completed " << completed->Val() << ", need " << initial + 2;
+            return completed->Val() >= initial + 2;
+        });
+    }
+
+    void CheckEvictedKeysAfterRestart(bool watermarks) {
+        Init(/* enabled */ true, watermarks);
+        CreateTopic("hoppingOutput");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY hoppingQuery AS DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 1 }},
+                    {{ "tx": 0, "stage": 1, "tasks": 1 }}
+                ] @@;
+                $windows = SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
+                    FROM hoppingSource.hoppingInput WITH (
+                        FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL) {}
+                    )
+                    GROUP BY {}, Key;
+                INSERT INTO hoppingSource.hoppingOutput
+                    SELECT Unwrap(CAST(Key AS String) || ":" || CAST(Count AS String) || ":" || CAST(Ts AS String))
+                    FROM $windows;
+            END DO
+        )", watermarks
+                ? R"(, WATERMARK = CAST(Ts AS Timestamp) - Interval("PT0S"), WATERMARK_IDLE_TIMEOUT = "PT1H")"
+                : "",
+            watermarks
+                ? R"(HoppingWindow(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S"))"
+                : R"(HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"))"));
+
+        // Keep explicit event-time watermarks within the source's five-minute future limit.
+        const auto base = TInstant::Seconds(TInstant::Now().Seconds());
+        const auto output = [&](i32 key, ui64 count, ui64 second) {
+            return fmt::format("{}:{}:{}", key, count, (base + TDuration::Seconds(second)).ToStringUpToSeconds());
+        };
+        std::vector<std::string> expected = {output(1, 1, 0)};
+        WriteEvent(1, base);
+        WriteEvent(2, base + TDuration::Seconds(20));
+        ReadTopicMessages("hoppingOutput", expected);
+
+        // Key 1 has been removed after its window closed. Neither it nor a new
+        // key may recreate a window behind the global event-time frontier.
+        WriteEvent(1, base);
+        WriteEvent(3, base);
+        WriteEvent(2, base + TDuration::Seconds(40));
+        expected.push_back(output(2, 1, 20));
+        ReadTopicMessages("hoppingOutput", expected);
+        WaitCheckpoint();
+        ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = FALSE)");
+        CheckScriptExecutionsCount(1, 0);
+
+        // No new watermark has arrived after restart: the restored minimum
+        // window start must reject both returning and previously unseen keys.
+        WriteEvent(1, base);
+        WriteEvent(4, base);
+        WriteEvent(2, base + TDuration::Seconds(40));
+        WriteEvent(2, base + TDuration::Seconds(60));
+        ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = TRUE)");
+        CheckScriptExecutionsCount(2, 1);
+        expected.push_back(output(2, 2, 40)); // The open aggregate must also survive the checkpoint.
+        ReadTopicMessages("hoppingOutput", expected);
+        WaitCheckpoint();
+        EnsureTopicEndOffset("hoppingOutput", expected.size());
+    }
+};
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
+    Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysInOrdinaryQuery, Enabled, THoppingWindowTestFixture) {
+        Init(Enabled);
+        const auto base = TInstant::ParseIso8601("2026-09-24T00:00:00Z");
+        for (ui32 day = 1; day <= 3; ++day) {
+            WriteEvent(1, base);
+            WriteEvent(2, base + TDuration::Days(day));
+        }
+        const auto results = ExecQuery(R"(
+            PRAGMA ydb.MaxTasksPerStage = "1";
+            PRAGMA ydb.OverridePlanner = @@ [
+                { "tx": 0, "stage": 0, "tasks": 1 },
+                { "tx": 0, "stage": 1, "tasks": 1 }
+            ] @@;
+            SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
+            FROM hoppingSource.hoppingInput WITH (
+                FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL)
+            )
+            GROUP BY HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"), Key
+            ORDER BY Key, Ts;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        std::vector<std::pair<i32, TInstant>> expected;
+        // With the flag disabled, preserve the old behavior, including reopening
+        // the same already emitted window for key 1 on every late event.
+        for (ui32 i = 0; i < (Enabled ? 1 : 3); ++i) {
+            expected.emplace_back(1, base);
+        }
+        for (ui32 day = 1; day <= 3; ++day) {
+            expected.emplace_back(2, base + TDuration::Days(day));
+        }
+        size_t index = 0;
+        CheckScriptResult(results.front(), 3, expected.size(), [&](NYdb::TResultSetParser& row) {
+            UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("Key").GetInt32(), expected[index].first);
+            UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("Count").GetUint64(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(*row.ColumnParser("Ts").GetOptionalTimestamp(), expected[index].second);
+            ++index;
+        });
+    }
+
+    Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysBeforeAndAfterRestart, Watermarks, THoppingWindowTestFixture) {
+        CheckEvictedKeysAfterRestart(Watermarks);
+    }
+
     void ConfigureRowDispatcherMemoryLimit(TStreamingTestFixture& self, ui64 memoryLimit) {
         auto& appConfig = self.SetupAppConfig();
         appConfig.MutableFeatureFlags()->SetEnableSharedReadingInStreamingQueries(true);
@@ -62,11 +196,17 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         resourceManager.SetQueryMemoryLimit(memoryLimit);
+        resourceManager.SetKqpLevelCacheMaxSizeBytes(0);
+        // the memory arena charges the prepaid memory of the query tasks to the same node total: no headroom, units
+        // almost free and small MKQL limits keep that charge to about 1 MiB next to the row dispatcher allocations
+        resourceManager.SetExecutionUnitMemory(100);
+        resourceManager.SetMemoryArenaMinFreeSize(0);
+        resourceManager.SetMemoryArenaMaxFreeSize(0);
         auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
         queue->SetName(NLocalDb::KqpResourceManagerQueue);
         queue->MutableLimit()->SetMemory(memoryLimit);
-        resourceManager.SetMkqlLightProgramMemoryLimit(1_MB);
-        resourceManager.SetMkqlHeavyProgramMemoryLimit(1_MB);
+        resourceManager.SetMkqlLightProgramMemoryLimit(128_KB);
+        resourceManager.SetMkqlHeavyProgramMemoryLimit(128_KB);
         resourceManager.SetChannelBufferSize(128_KB);
     }
 
@@ -98,6 +238,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnParserCreation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
         constexpr ui64 memoryLimit = 8_MB;
         ConfigureRowDispatcherMemoryLimit(*this, memoryLimit);
         const auto pqGateway = SetupMockPqGateway();
@@ -129,6 +270,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnReadSessionCreation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
         ConfigureRowDispatcherMemoryLimit(*this, 12_MB);
         const auto pqGateway = SetupMockPqGateway();
         CreateRowDispatcherMemoryLimitTopics(*this);
@@ -146,6 +288,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnLargeMessage, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
         ConfigureRowDispatcherMemoryLimit(*this, 64_MB);
         CreateRowDispatcherMemoryLimitTopics(*this);
         ExecQuery(R"(
@@ -3234,7 +3377,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
             const auto& issues = GetStreamingQueryIssues(queryName);
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("no read rule provided for consumer 'test_consumer'");
+            return issues.contains("no read rule provided for consumer 'test_consumer'")
+                || issues.contains("no consumer 'test_consumer' in topic");
         });
 
         ExecExternalQuery(fmt::format(R"(
@@ -3364,10 +3508,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "A-2025-08-24T00:00:00.000000Z-P1-1");
 
         Sleep(TDuration::Seconds(2));
-        auto readDisposition = TInstant::Now();
+        const auto readDisposition = TInstant::Now();
 
-        // Write failure message for key B
-        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
+        // Keep the failure message in the open window so it is not dropped as late after recovery.
+        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
 
         // Wait script execution retry
         WaitFor(TDuration::Seconds(10), "wait retry", [&](TString& error) {
@@ -3395,18 +3539,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 {"fqdn": "host2.example.com", "payload": "P2"             })");
         Sleep(TDuration::Seconds(2));
 
-        // Check that offset is restored
+        // Both B messages must be counted after the failed message is replayed from the restored offset.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
-        ReadTopicMessage(outputTopicName, "B-2025-08-24T00:00:00.000000Z-P2-1", readDisposition);
 
-        Sleep(TDuration::Seconds(1));
-        readDisposition = TInstant::Now();
-
-        // Check that HOP state is restored
+        // Close the window and check both the restored HOP state for A and the replayed input for B.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})");
         ReadTopicMessages(outputTopicName, {
             "A-2025-08-25T00:00:00.000000Z-P1-1",
-            "B-2025-08-25T00:00:00.000000Z-P2-1"
+            "B-2025-08-25T00:00:00.000000Z-P2-2"
         }, readDisposition, /* sort */ true);
     }
 
@@ -4208,6 +4348,412 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "input_topic"_a = inputTopicName,
             "output_topic"_a = outputTopicName
         ), EStatus::GENERIC_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
+    }
+
+    class TConsumerRewindFixture : public TStreamingWithSchemaSecretsTestFixture {
+    public:
+        void InitConsumerRewind(bool sharedReading, bool enableReadFrom = true) {
+            UsesSharedReading = sharedReading;
+            auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+            featureFlags->SetEnableStreamingQueryDisposition(true);
+            featureFlags->SetEnableStreamingQueryReadFrom(enableReadFrom);
+            featureFlags->SetEnableSharedReadingInStreamingQueries(true);
+            ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+            CreateTopic("rewindInput");
+            CreateTopic("rewindOutput");
+            ExecQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE rewindSource WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{endpoint}",
+                    DATABASE_NAME = "{database}",
+                    AUTH_METHOD = "NONE",
+                    SHARED_READING = "{shared_reading}"
+                );)",
+                "endpoint"_a = YDB_ENDPOINT,
+                "database"_a = YDB_DATABASE,
+                "shared_reading"_a = sharedReading ? "true" : "false"));
+        }
+
+        NYdb::NTopic::TPartitionConsumerStats GetConsumerStats() {
+            const auto result = GetTopicClient()->DescribeConsumer("rewindInput", "test_consumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+            return *partitions.front().GetPartitionConsumerStats();
+        }
+
+        void CommitConsumer(ui64 offset) {
+            const auto result = GetTopicClient()->CommitOffset("rewindInput", 0, "test_consumer", offset)
+                .GetValue(TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        void WaitConsumerOffset(ui64 offset) {
+            WaitFor(TDuration::Seconds(30), "consumer committed offset", [&](TString& error) {
+                const auto committed = GetConsumerStats().GetCommittedOffset();
+                error = TStringBuilder() << "Committed offset: " << committed << ", expected: " << offset;
+                return committed == offset;
+            });
+        }
+
+        void WaitConsumerSession(bool running) {
+            WaitFor(TDuration::Seconds(30), "consumer read session", [&](TString& error) {
+                const auto session = GetConsumerStats().GetReadSessionId();
+                error = TStringBuilder() << "Read session: " << session << ", expected running: " << running;
+                return !session.empty() == running;
+            });
+        }
+
+        void CheckReadingMode(bool sharedReading) {
+            WaitConsumerSession(true);
+            const auto counters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
+            const auto filters = counters->FindCounter("ActiveFilters");
+            UNIT_ASSERT_VALUES_EQUAL(bool(filters && filters->Val()), sharedReading);
+        }
+
+        void CreateConsumerQuery(const std::string& disposition) {
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY rewindQuery WITH (STREAMING_DISPOSITION = {disposition}) AS DO BEGIN
+                    PRAGMA pq.Consumer = "test_consumer";
+                    INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
+                END DO;)", "disposition"_a = disposition));
+        }
+
+        void StopConsumerQuery() {
+            ExecQuery("ALTER STREAMING QUERY rewindQuery SET (RUN = FALSE);");
+            WaitConsumerSession(false);
+        }
+
+        void CheckpointAndStopConsumerQuery(ui64 committedOffset) {
+            WaitConsumerCheckpoint();
+            if (!UsesSharedReading) {
+                WaitConsumerOffset(committedOffset);
+            }
+            StopConsumerQuery();
+            if (UsesSharedReading) {
+                // RD persists offsets in checkpoints, but does not commit its
+                // topic consumer. Model an external commit after closing the session.
+                CommitConsumer(committedOffset);
+            }
+            WaitConsumerOffset(committedOffset);
+        }
+
+        void ResumeConsumerQuery(const std::string& disposition = {}) {
+            ExecQuery(fmt::format("ALTER STREAMING QUERY rewindQuery SET (RUN = TRUE{disposition});",
+                "disposition"_a = disposition.empty() ? "" : ", STREAMING_DISPOSITION = " + disposition));
+        }
+
+        void WaitConsumerCheckpoint() {
+            const auto checkpointId = GetStreamingQueryCheckpointId("rewindQuery");
+            // The first completed checkpoint may have started before the last output.
+            WaitCheckpointUpdate(checkpointId);
+            WaitCheckpointUpdate(checkpointId);
+        }
+
+    private:
+        bool UsesSharedReading = false;
+    };
+
+    Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDisabled, SharedReading, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading, /* enableReadFrom */ false);
+        WriteTopicMessage("rewindInput", "committed");
+        CommitConsumer(1);
+
+        CreateConsumerQuery("OLDEST");
+        CheckReadingMode(SharedReading);
+        UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 1);
+        WriteTopicMessage("rewindInput", "live");
+        ReadTopicMessages("rewindOutput", {"live"});
+        StopConsumerQuery();
+        EnsureTopicEndOffset("rewindOutput", 1);
+    }
+
+    Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDispositions, SharedReading, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading);
+        WriteTopicMessage("rewindInput", "old");
+        Sleep(TDuration::Seconds(1));
+        const auto fromTime = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage("rewindInput", "recent");
+
+        CreateConsumerQuery("OLDEST");
+        CheckReadingMode(SharedReading);
+        std::vector<std::string> expected = {"old", "recent"};
+        ReadTopicMessages("rewindOutput", expected);
+
+        const std::vector<std::pair<std::string, std::vector<std::string>>> replays = {
+            {"OLDEST", {"old", "recent"}},
+            {fmt::format("(FROM_TIME = \"{}\")", fromTime.ToString()), {"recent"}},
+            {"(TIME_AGO = \"PT1H\")", {"old", "recent"}},
+        };
+        for (const auto& [disposition, replay] : replays) {
+            // Replay actual payloads after both a completed checkpoint and a
+            // consumer commit. RD uses the external commit in the helper.
+            CheckpointAndStopConsumerQuery(2);
+            ResumeConsumerQuery(disposition);
+            CheckReadingMode(SharedReading);
+            expected.insert(expected.end(), replay.begin(), replay.end());
+            ReadTopicMessages("rewindOutput", expected);
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+        CheckpointAndStopConsumerQuery(2);
+
+        WriteTopicMessage("rewindInput", "skip-on-fresh");
+        ResumeConsumerQuery("FRESH");
+        CheckReadingMode(SharedReading);
+        UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 2);
+        WriteTopicMessage("rewindInput", "live");
+        expected.push_back("live");
+        ReadTopicMessages("rewindOutput", expected);
+        CheckpointAndStopConsumerQuery(4);
+
+        ResumeConsumerQuery(fmt::format("(FROM_TIME = \"{}\")", (TInstant::Now() + TDuration::Hours(1)).ToString()));
+        CheckReadingMode(SharedReading);
+        WriteTopicMessage("rewindInput", "skip-before-future-time");
+        WaitConsumerCheckpoint();
+        UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 4);
+        EnsureTopicEndOffset("rewindOutput", expected.size());
+        StopConsumerQuery();
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryConsumerCheckpointOffsets, SharedReading, CommittedAhead, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading);
+        WriteTopicMessage("rewindInput", "first");
+        CreateConsumerQuery("OLDEST");
+        CheckReadingMode(SharedReading);
+        std::vector<std::string> expected = {"first"};
+        ReadTopicMessages("rewindOutput", expected);
+
+        for (const std::string& disposition : {"", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE"}) {
+            CheckpointAndStopConsumerQuery(expected.size());
+            const ui64 savedOffset = expected.size();
+            expected.push_back("after-checkpoint-" + std::to_string(savedOffset));
+            WriteTopicMessage("rewindInput", expected.back());
+            if constexpr (CommittedAhead) {
+                CommitConsumer(savedOffset + 1);
+            }
+            ResumeConsumerQuery(disposition);
+
+            if constexpr (CommittedAhead) {
+                const TString expectedIssue = TStringBuilder()
+                    << "trying to read from position that is less than committed: read "
+                    << savedOffset << " committed " << savedOffset + 1;
+                WaitFor(TDuration::Seconds(30), "checkpoint offset below consumer commit is rejected", [&](TString& error) {
+                    error = GetStreamingQueryIssues("rewindQuery");
+                    return error.Contains(expectedIssue);
+                });
+                StopConsumerQuery();
+                UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), savedOffset + 1);
+                EnsureTopicEndOffset("rewindOutput", savedOffset);
+                // Repair the external commit; the same checkpoint must then resume normally.
+                CommitConsumer(savedOffset);
+                ResumeConsumerQuery(disposition);
+            }
+
+            CheckReadingMode(SharedReading);
+            ReadTopicMessages("rewindOutput", expected);
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+        CheckpointAndStopConsumerQuery(expected.size());
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryConsumerCheckpointWithoutOffsets, SharedReading, FromCheckpoint, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading);
+        CreateConsumerQuery(FromCheckpoint ? "FROM_CHECKPOINT" : "FRESH");
+        CheckReadingMode(SharedReading);
+        // No data was read, so the checkpoint only contains the starting timestamp.
+        WaitConsumerCheckpoint();
+        StopConsumerQuery();
+        WriteTopicMessage("rewindInput", "while-stopped");
+        CommitConsumer(1);
+        ResumeConsumerQuery();
+        CheckReadingMode(SharedReading);
+        if constexpr (SharedReading) {
+            UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 1);
+        }
+        WriteTopicMessage("rewindInput", "after-restart");
+
+        std::vector<std::string> expected = {"after-restart"};
+        ReadTopicMessages("rewindOutput", expected);
+        CheckpointAndStopConsumerQuery(2);
+        EnsureTopicEndOffset("rewindOutput", expected.size());
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryReadFromConsumerRewind, SharedReading, FromTimestamp, TConsumerRewindFixture) {
+        // Keep checkpoint commits from advancing the offset again before we observe the rewind.
+        CheckpointPeriod = TDuration::Hours(1);
+        InitConsumerRewind(SharedReading);
+        WriteTopicMessage("rewindInput", "first");
+        WriteTopicMessage("rewindInput", "second");
+
+        const std::string readFrom = FromTimestamp
+            ? "CurrentUtcTimestamp() - Interval(\"PT1H\")"
+            : "EARLIEST";
+        std::vector<std::string> expected;
+        for (const bool alter : {false, true}) {
+            CommitConsumer(2);
+            WaitConsumerOffset(2);
+
+            if (alter) {
+                ExecQuery(fmt::format("ALTER STREAMING QUERY rewindQuery SET (RUN = TRUE, READ_FROM = {});", readFrom));
+            } else {
+                ExecQuery(fmt::format(R"(
+                    CREATE STREAMING QUERY rewindQuery WITH (READ_FROM = {read_from}) AS DO BEGIN
+                        PRAGMA pq.Consumer = "test_consumer";
+                        INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
+                    END DO;)", "read_from"_a = readFrom));
+            }
+
+            CheckReadingMode(SharedReading);
+            WaitConsumerOffset(0);
+            expected.insert(expected.end(), {"first", "second"});
+            ReadTopicMessages("rewindOutput", expected);
+            WaitConsumerOffset(0);
+            StopConsumerQuery();
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryReadFromDisabled, TStreamingWithSchemaSecretsTestFixture) {
+        auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+        featureFlags->SetEnableStreamingQueryDisposition(true);
+        featureFlags->SetEnableStreamingQueryReadFrom(false);
+        CreateTopic("readFromDisabledInput");
+        CreateTopic("readFromDisabledOutput");
+        CreatePqSource("sourceName");
+
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
+            ExecQuery(TStringBuilder() << R"(
+                CREATE STREAMING QUERY my_query WITH (RUN = FALSE, READ_FROM = )" << value << R"() AS DO BEGIN
+                    INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
+                END DO;)", EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
+        }
+
+        ExecQuery(R"(
+            CREATE STREAMING QUERY my_query WITH (RUN = FALSE, STREAMING_DISPOSITION = OLDEST) AS DO BEGIN
+                INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
+            END DO;)");
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
+            ExecQuery(TStringBuilder() << "ALTER STREAMING QUERY my_query SET (READ_FROM = " << value << ");",
+                EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
+        }
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryReadFrom, WithConsumer, LocalTopics, TStreamingWithSchemaSecretsTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        // READ_FROM is independent of the legacy syntax flag.
+        auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+        featureFlags->SetEnableStreamingQueryReadFrom(true);
+        featureFlags->SetEnableStreamingQueryDisposition(false);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        constexpr char inputTopic[] = "readFromInput";
+        constexpr char outputTopic[] = "readFromOutput";
+        CreateTopic(inputTopic, std::nullopt, LocalTopics);
+        CreateTopic(outputTopic, std::nullopt, LocalTopics);
+        if constexpr (!LocalTopics) {
+            CreatePqSource("sourceName");
+        }
+
+        WriteTopicMessage(inputTopic, "data1", 0, LocalTopics);
+        Sleep(TDuration::Seconds(1));
+        const auto readFrom = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "data2", 0, LocalTopics);
+
+        if constexpr (WithConsumer) {
+            const auto status = GetTopicClient(LocalTopics)->CommitOffset(inputTopic, 0, "test_consumer", 2).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        const auto describeConsumer = [&]() {
+            const auto result = GetTopicClient(LocalTopics)->DescribeConsumer(inputTopic, "test_consumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            const auto& stats = partitions.front().GetPartitionConsumerStats();
+            UNIT_ASSERT(stats);
+            return *stats;
+        };
+        const auto waitCommitted = [&](ui64 offset) {
+            if constexpr (WithConsumer) {
+                WaitFor(TDuration::Seconds(30), "Wait consumer offset committed", [&](TString& error) {
+                    const auto stats = describeConsumer();
+                    error = TStringBuilder() << "Committed offset: " << stats.GetCommittedOffset();
+                    return stats.GetCommittedOffset() == offset;
+                });
+            }
+        };
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY my_query WITH (READ_FROM = EARLIEST) AS DO BEGIN
+                {consumer}
+                INSERT INTO {source}readFromOutput SELECT * FROM {source}readFromInput
+            END DO;)",
+            "consumer"_a = WithConsumer ? "PRAGMA pq.Consumer = 'test_consumer';" : "",
+            "source"_a = LocalTopics ? "" : "sourceName."
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        ReadTopicMessages(outputTopic, {"data1", "data2"}, TInstant::Zero(), false, LocalTopics);
+        waitCommitted(2);
+        auto writeFrom = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY my_query SET (READ_FROM = Timestamp("{timestamp}"));)",
+            "timestamp"_a = readFrom.ToString()));
+        CheckScriptExecutionsCount(2, 1);
+        ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            $timestamp = Timestamp("{timestamp}");
+            ALTER STREAMING QUERY my_query SET (READ_FROM = $timestamp + Interval("PT1S"));)",
+            "timestamp"_a = (readFrom - TDuration::Seconds(1)).ToString()));
+        CheckScriptExecutionsCount(3, 1);
+        ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        ExecQuery("ALTER STREAMING QUERY my_query SET (READ_FROM = EARLIEST);");
+        CheckScriptExecutionsCount(4, 1);
+        ReadTopicMessages(outputTopic, {"data1", "data2"}, writeFrom, false, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        const auto previousReadSessionId = WithConsumer ? describeConsumer().GetReadSessionId() : std::string{};
+        ExecQuery("ALTER STREAMING QUERY my_query SET (READ_FROM = LATEST);");
+        CheckScriptExecutionsCount(4, 1);
+        Sleep(TDuration::Seconds(1));
+        if constexpr (WithConsumer) {
+            WaitFor(TDuration::Seconds(30), "Wait latest consumer session", [&](TString& error) {
+                const auto stats = describeConsumer();
+                error = TStringBuilder() << "Read session: " << stats.GetReadSessionId();
+                if (stats.GetReadSessionId().empty() || stats.GetReadSessionId() == previousReadSessionId) {
+                    return false;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetCommittedOffset(), 2);
+                return true;
+            });
+        }
+        WriteTopicMessage(inputTopic, "data3", 0, LocalTopics);
+        ReadTopicMessage(outputTopic, "data3", writeFrom, LocalTopics);
+        waitCommitted(3);
+
+        // A normal restart must resume from its checkpoint after a rewind.
+        const auto checkpointId = GetStreamingQueryCheckpointId("my_query");
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+        ExecQuery("ALTER STREAMING QUERY my_query SET (RUN = FALSE);");
+        CheckScriptExecutionsCount(4, 0);
+        WriteTopicMessage(inputTopic, "data4", 0, LocalTopics);
+        writeFrom = TInstant::Now();
+        ExecQuery("ALTER STREAMING QUERY my_query SET (RUN = TRUE);");
+        CheckScriptExecutionsCount(4, 1);
+        ReadTopicMessage(outputTopic, "data4", writeFrom, LocalTopics);
+        waitCommitted(4);
     }
 
     Y_UNIT_TEST_F(StreamingQueryDisposition, TStreamingWithSchemaSecretsTestFixture) {

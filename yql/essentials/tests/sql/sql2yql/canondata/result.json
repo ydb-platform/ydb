@@ -10597,6 +10597,13 @@
             "uri": "https://{canondata_backend}/1597364/fdeffca975c2d2d1bc708528a504feb47b36c5c9/resource.tar.gz#test_sql2yql.test_select_yql-named_node_subquery_scalar_chain_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-nullable_in_nested]": [
+        {
+            "checksum": "a8b4d8296fd38c6e8defddcba66c022c",
+            "size": 3942,
+            "uri": "https://{canondata_backend}/1600758/18e97c3a374b9a4488e0f6ea34e2ffbb65947bbd/resource.tar.gz#test_sql2yql.test_select_yql-nullable_in_nested_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-projection_alias_case_sensivity]": [
         {
             "checksum": "908a3fa534b39c508beb4923c6efab6c",
@@ -19370,6 +19377,11 @@
     "test_sql_format.test[select_yql-named_node_subquery_scalar_chain]": [
         {
             "uri": "file://test_sql_format.test_select_yql-named_node_subquery_scalar_chain_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-nullable_in_nested]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-nullable_in_nested_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-projection_alias_case_sensivity]": [

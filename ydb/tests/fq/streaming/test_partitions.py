@@ -5,6 +5,7 @@ import time
 from typing import Callable
 
 import pytest
+import ydb
 
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 from ydb.tests.library.common.wait_for import wait_for
@@ -12,6 +13,22 @@ from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 
 logger = logging.getLogger(__name__)
+
+
+def create_auto_partitioned_topics(topic_ydb_client, input_topic, output_topic, endpoint, local_topics):
+    statement = f"""
+        CREATE TOPIC `{input_topic}`
+        WITH (
+            AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
+            MIN_ACTIVE_PARTITIONS = 1,
+            MAX_ACTIVE_PARTITIONS = 2,
+            AUTO_PARTITIONING_STABILIZATION_WINDOW = Interval('PT10S'),
+            AUTO_PARTITIONING_UP_UTILIZATION_PERCENT = 2,
+            AUTO_PARTITIONING_DOWN_UTILIZATION_PERCENT = 1
+        );
+        CREATE TOPIC `{output_topic}`;
+    """
+    topic_ydb_client.query(statement)
 
 
 class TestStreamingPartitions(StreamingTestBase):
@@ -88,18 +105,7 @@ class TestStreamingPartitions(StreamingTestBase):
         input_ref = f"`{input_topic}`" if local_topics else f"`{source_name}`.`{input_topic}`"
         output_ref = f"`{output_topic}`" if local_topics else f"`{source_name}`.`{output_topic}`"
 
-        topic_ydb_client.query(f"""
-            CREATE TOPIC `{input_topic}`
-            WITH (
-                AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
-                MIN_ACTIVE_PARTITIONS = 1,
-                MAX_ACTIVE_PARTITIONS = 3,
-                AUTO_PARTITIONING_STABILIZATION_WINDOW = Interval('PT10S'),
-                AUTO_PARTITIONING_UP_UTILIZATION_PERCENT = 2,
-                AUTO_PARTITIONING_DOWN_UTILIZATION_PERCENT = 1
-            );
-            CREATE TOPIC `{output_topic}`;
-        """)
+        create_auto_partitioned_topics(topic_ydb_client, input_topic, output_topic, endpoint, local_topics)
         create_read_rule(output_topic, consumer_name, default_endpoint=endpoint)
 
         topic_client = topic_ydb_client.driver.topic_client
@@ -150,6 +156,12 @@ class TestStreamingPartitions(StreamingTestBase):
             partition.partition_id: partition
             for partition in topic_client.describe_topic(input_topic).partitions
         }
+        logger.info(
+            "Topic %s after auto-split: total partitions=%d, active partition IDs=%s",
+            input_topic,
+            len(partitions),
+            sorted(partition_id for partition_id, partition in partitions.items() if partition.active),
+        )
         child_partition_ids = sorted(partitions[0].child_partition_ids)
 
         kikimr.ydb_client.query(f"""
@@ -170,9 +182,21 @@ class TestStreamingPartitions(StreamingTestBase):
                 [message],
                 partition_id=partition_id,
             )
+        partitions = {
+            partition.partition_id: partition
+            for partition in topic_client.describe_topic(input_topic).partitions
+        }
+        logger.info(
+            "Topic %s after auto-split: total partitions=%d, active partition IDs=%s",
+            input_topic,
+            len(partitions),
+            sorted(partition_id for partition_id, partition in partitions.items() if partition.active),
+        )
 
-        assert sorted(topic_ydb_client.topic_read(output_topic, consumer_name, len(child_partition_ids))) == sorted(child_partition_messages)
-
+        actual_messages = topic_ydb_client.topic_read(output_topic, consumer_name, len(child_partition_ids), timeout=120)
+        assert sorted(actual_messages) == sorted(child_partition_messages), (
+            f"Expected messages: {child_partition_messages!r}; actual messages: {actual_messages!r}"
+        )
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
     @pytest.mark.parametrize("local_topics", [True, False])
@@ -189,18 +213,7 @@ class TestStreamingPartitions(StreamingTestBase):
         input_ref = f"`{input_topic}`" if local_topics else f"`{source_name}`.`{input_topic}`"
         output_ref = f"`{output_topic}`" if local_topics else f"`{source_name}`.`{output_topic}`"
 
-        topic_ydb_client.query(f"""
-            CREATE TOPIC `{input_topic}`
-            WITH (
-                AUTO_PARTITIONING_STRATEGY = 'SCALE_UP',
-                MIN_ACTIVE_PARTITIONS = 1,
-                MAX_ACTIVE_PARTITIONS = 3,
-                AUTO_PARTITIONING_STABILIZATION_WINDOW = Interval('PT10S'),
-                AUTO_PARTITIONING_UP_UTILIZATION_PERCENT = 2,
-                AUTO_PARTITIONING_DOWN_UTILIZATION_PERCENT = 1
-            );
-            CREATE TOPIC `{output_topic}`;
-        """)
+        create_auto_partitioned_topics(topic_ydb_client, input_topic, output_topic, endpoint, local_topics)
         create_read_rule(output_topic, consumer_name, default_endpoint=endpoint)
 
         kikimr.ydb_client.query(f"""
@@ -213,7 +226,7 @@ class TestStreamingPartitions(StreamingTestBase):
         self.wait_completed_checkpoints(kikimr, query_name)
 
         topic_ydb_client.topic_write(input_topic, ["before-split"], partition_id=0)
-        assert sorted(topic_ydb_client.topic_read(output_topic, consumer_name, 1)) == ["before-split"]
+        assert sorted(topic_ydb_client.topic_read(output_topic, consumer_name, 1, timeout=120)) == ["before-split"]
 
         topic_client = topic_ydb_client.driver.topic_client
         load_message_payload = "x" * 1000 * 1000
@@ -265,7 +278,7 @@ class TestStreamingPartitions(StreamingTestBase):
         # The partition-count checker restarts the query after the split so it
         # can create read sessions for the new active partitions.
         self.wait_completed_checkpoints(kikimr, query_name)
-        assert sorted(topic_ydb_client.topic_read(output_topic, consumer_name, len(load_messages))) == sorted(load_messages)
+        assert sorted(topic_ydb_client.topic_read(output_topic, consumer_name, len(load_messages), timeout=120)) == sorted(load_messages)
 
         partitions = topic_client.describe_topic(input_topic).partitions
         active_partition_ids = sorted(partition.partition_id for partition in partitions if partition.active)
@@ -279,6 +292,6 @@ class TestStreamingPartitions(StreamingTestBase):
                 partition_id=partition_id,
             )
 
-        assert sorted(topic_ydb_client.topic_read(output_topic, consumer_name, len(active_partition_ids))) == sorted(active_partition_messages)
+        assert sorted(topic_ydb_client.topic_read(output_topic, consumer_name, len(active_partition_ids), timeout=120)) == sorted(active_partition_messages)
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")

@@ -3,6 +3,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/vm_metadata_emulator/recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/fq/streaming_common/iam_grpc_emulator/recipe/recipe.inc)
+ENV(YDB_DEFAULT_CLUSTERADMIN=root@builtin)
 
 TEST_SRCS(
     test_iam.py

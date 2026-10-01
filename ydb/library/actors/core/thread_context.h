@@ -147,6 +147,11 @@ namespace NActors {
         void ResetMailboxContext();
     };
 
-    extern Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp
+    // Native TLS is constant-initialized; avoid an initialization check on access.
+    extern
+#ifdef Y_HAVE_FAST_POD_TLS
+        constinit
+#endif
+        Y_POD_THREAD(TThreadContext*) TlsThreadContext; // in actor.cpp
 
 }

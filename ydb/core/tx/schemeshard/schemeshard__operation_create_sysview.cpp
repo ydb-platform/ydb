@@ -3,9 +3,9 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -13,13 +13,9 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TPropose : public TSubOperationState {
-    const TOperationId OperationId;
+    virtual const char* Name() const override final { return "TPropose"; }
 
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TCreateSysView::TPropose"
-            << ", opId: " << OperationId;
-    }
+    const TOperationId OperationId;
 
 public:
     TPropose(TOperationId id)
@@ -27,7 +23,7 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -40,8 +36,8 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << " HandleReply TEvPrivate::TEvOperationPlan"
-            << ", step: " << step
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
         );
 
         TTxState* txState = context.SS->FindTx(OperationId);
@@ -65,14 +61,16 @@ public:
     }
 };
 
-TSysViewInfo::TPtr CreateSysView(const NKikimrSchemeOp::TSysViewDescription& desc) {
+TSysViewInfo::TPtr CreateSysView(NKikimrSysView::ESysViewType type) {
     TSysViewInfo::TPtr sysViewInfo = new TSysViewInfo;
     sysViewInfo->AlterVersion = 1;
-    sysViewInfo->Type = desc.GetType();
+    sysViewInfo->Type = type;
     return sysViewInfo;
 }
 
 class TCreateSysView : public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateSysView"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -102,7 +100,7 @@ class TCreateSysView : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         const auto acceptExisting = !Transaction.GetFailOnExist();
@@ -111,15 +109,13 @@ public:
 
         const TString& name = sysViewDescription.GetName();
 
-        LOG_N("TCreateSysView Propose"
-            << ", path: " << parentPathStr << "/" << name
-            << ", opId: " << OperationId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
         );
 
-        LOG_D("TCreateSysView Propose"
-            << ", path: " << parentPathStr << "/" << name
-            << ", opId: " << OperationId
-            << ", sysViewDescription: " << sysViewDescription.ShortDebugString()
+        YDB_LOG_DEBUG_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+            {"sysViewDescription", sysViewDescription.ShortDebugString()},
         );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -181,11 +177,13 @@ public:
             return result;
         }
 
-        if (!NKikimrSysView::ESysViewType_IsValid(sysViewDescription.GetType())) {
+        const auto sysViewType = sysViewDescription.GetType();
+        if (!NKikimrSysView::ESysViewType_IsValid(sysViewType)) {
             errStr = TStringBuilder()
                 << "error: unsupported system view type "
-                << static_cast<uint32_t>(sysViewDescription.GetType());
+                << sysViewDescription.GetType();
             result->SetError(NKikimrScheme::StatusSchemeError, errStr);
+            return result;
         }
 
         auto guard = context.DbGuard();
@@ -215,7 +213,7 @@ public:
             sysViewPath->ApplyACL(acl);
         }
 
-        TSysViewInfo::TPtr sysViewInfo = CreateSysView(sysViewDescription);
+        TSysViewInfo::TPtr sysViewInfo = CreateSysView(static_cast<NKikimrSysView::ESysViewType>(sysViewType));
         context.SS->SysViews.Set(sysViewPathId, sysViewInfo);
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateSysView, sysViewPathId);
@@ -231,16 +229,15 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateSysView AbortPropose"
-            << ", opId: " << OperationId
-        );
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateSysView AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateSysView AbortUnsafe",
+            {"schemeshard", context.SS->SelfTabletId()},
+            {"operationId", OperationId},
+            {"forceDropId", forceDropTxId},
         );
 
         context.OnComplete.DoneOperation(OperationId);
@@ -278,3 +275,5 @@ ISubOperation::TPtr CreateNewSysView(TOperationId id, TTxState::ETxState state) 
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

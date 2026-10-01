@@ -609,15 +609,17 @@ class TTcMallocMonitor : public IAllocMonitor {
 
     THistogramPtr SizeHistogram;
     THistogramPtr CountHistogram;
+    TDynamicCounterPtr ReleaseRequestedBytes;
     std::unordered_map<ui32, std::pair<TDynamicCounterPtr, TDynamicCounterPtr>> TaggedCounters;
 
     struct TControls {
         static constexpr size_t MaxSamplingRate = 4ll << 30;
         static constexpr size_t MaxPageCacheTargetSize = 128ll << 30;
-        static constexpr size_t MaxPageCacheReleaseRate = 128ll << 20;
+        static constexpr size_t MaxPageCacheReleaseRate = 1ll << 30;
 
         static constexpr size_t DefaultPageCacheTargetSize = 512ll << 20;
-        static constexpr size_t DefaultPageCacheReleaseRate = 8ll << 20;
+        // A smaller request is served by the huge page cache alone and never reaches the page heap
+        static constexpr size_t DefaultPageCacheReleaseRate = 128ll << 20;
 
         static constexpr ui64 DefaultUseDwarfBacktracePrinting = 0;
 
@@ -709,8 +711,9 @@ private:
         if (pageHeapSize > Controls.PageCacheTargetSize) {
             auto excess = (ui64)(pageHeapSize - Controls.PageCacheTargetSize);
             auto releaseLimit = (ui64)(Controls.PageCacheReleaseRate * interval.Seconds());
-            tcmalloc::MallocExtension::ReleaseMemoryToSystem(
-                std::min(excess, releaseLimit));
+            auto releaseBytes = std::min(excess, releaseLimit);
+            tcmalloc::MallocExtension::ReleaseMemoryToSystem(releaseBytes);
+            *ReleaseRequestedBytes += releaseBytes;
         }
     }
 
@@ -820,6 +823,8 @@ public:
 
         CountHistogram = CounterGroup->GetHistogram("tcmalloc.sampled_count",
             NMonitoring::ExponentialHistogram(TAllocationStats::MaxSizeIndex, 2, 1), false);
+
+        ReleaseRequestedBytes = CounterGroup->GetCounter("tcmalloc.release_requested_bytes", true);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
         // Setup tcmalloc soft limit handling

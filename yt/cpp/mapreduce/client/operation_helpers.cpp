@@ -72,10 +72,10 @@ bool UseLocalModeOptimization(
         if (!fqdnNode.IsUndefined()) {
             auto fqdn = to_lower(fqdnNode.AsString());
             isLocalMode = (fqdn == to_lower(TProcessState::Get()->FqdnHostName));
-            YT_LOG_DEBUG("Checking local mode; LocalModeFqdn: %v FqdnHostName: %v IsLocalMode: %v",
-                fqdn,
-                TProcessState::Get()->FqdnHostName,
-                isLocalMode ? "true" : "false");
+            YT_TLOG_DEBUG("Checking local mode")
+                .With("LocalModeFqdn", fqdn)
+                .With("FqdnHostName", TProcessState::Get()->FqdnHostName)
+                .With("IsLocalMode", isLocalMode);
         }
     }
 

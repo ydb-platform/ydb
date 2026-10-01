@@ -2898,6 +2898,10 @@ TVectorIndexSettings TVectorIndexSettings::FromProto(const Ydb::Table::VectorInd
         switch (proto.vector_type()) {
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
             return EVectorType::Float;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+            return EVectorType::Float16;
+        case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+            return EVectorType::BFloat16;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8:
             return EVectorType::Uint8;
         case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_INT8:
@@ -2938,6 +2942,10 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
         switch (VectorType) {
         case EVectorType::Float:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT;
+        case EVectorType::Float16:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16;
+        case EVectorType::BFloat16:
+            return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16;
         case EVectorType::Uint8:
             return Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UINT8;
         case EVectorType::Int8:
@@ -3954,7 +3962,9 @@ std::optional<TTtlTierSettings> TTtlTierSettings::FromProto(const Ydb::Table::Tt
         action = TTtlDeleteAction();
         break;
     case Ydb::Table::TtlTier::kEvictToExternalStorage:
-        action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage());
+        action = TTtlEvictToExternalStorageAction(tier.evict_to_external_storage().storage(),
+            tier.evict_to_external_storage().has_object_key_prefix()
+                ? std::make_optional(tier.evict_to_external_storage().object_key_prefix()) : std::nullopt);
         break;
     case Ydb::Table::TtlTier::ACTION_NOT_SET:
         return std::nullopt;
@@ -4071,8 +4081,23 @@ TTtlEvictToExternalStorageAction::TTtlEvictToExternalStorageAction(const std::st
     : Storage_(storageName)
 {}
 
+TTtlEvictToExternalStorageAction::TTtlEvictToExternalStorageAction(
+    const std::string& storageName, const std::optional<std::string>& objectKeyPrefix)
+    : Storage_(storageName)
+    , ObjectKeyPrefix_(objectKeyPrefix)
+{}
+
 void TTtlEvictToExternalStorageAction::SerializeTo(Ydb::Table::EvictionToExternalStorageSettings& proto) const {
     proto.set_storage(Storage_);
+    if (ObjectKeyPrefix_) {
+        proto.set_object_key_prefix(*ObjectKeyPrefix_);
+    } else {
+        proto.clear_object_key_prefix();
+    }
+}
+
+const std::optional<std::string>& TTtlEvictToExternalStorageAction::GetObjectKeyPrefix() const {
+    return ObjectKeyPrefix_;
 }
 
 std::string TTtlEvictToExternalStorageAction::GetStorage() const {

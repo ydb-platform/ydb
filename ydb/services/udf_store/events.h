@@ -77,11 +77,20 @@ struct TEvWasmCompileResponse : public NActors::TEventLocal<TEvWasmCompileRespon
 
 struct TEvLibraryCompileResponse : public NActors::TEventLocal<TEvLibraryCompileResponse, EvLibraryCompileResponse> {
     bool Success;
+    //! The library was re-uploaded while this compile ran, so its result is for
+    //! an upload nobody wants any more. Separate from a real failure because
+    //! only the latter should count against the compile controller's retries.
+    bool Deferred = false;
     TString LibraryName;
     TString ErrorMessage;
 
-    TEvLibraryCompileResponse(bool success, const TString& libraryName, const TString& errorMessage = {})
+    TEvLibraryCompileResponse(
+        bool success,
+        const TString& libraryName,
+        const TString& errorMessage = {},
+        bool deferred = false)
         : Success(success)
+        , Deferred(deferred)
         , LibraryName(libraryName)
         , ErrorMessage(errorMessage)
     {}

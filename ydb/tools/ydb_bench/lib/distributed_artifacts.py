@@ -17,6 +17,7 @@ def snapshot_diagnostics(root):
     root = Path(root).resolve()
     destination = root / "results" / "diagnostics"
     paths = [root / "worker.json"]
+    paths.append(root / "results" / "configuration" / "cluster.yaml")
     paths.extend(sorted((root / "control").glob("*")))
     paths.extend(sorted((root / "nodes").glob("*/cluster.yaml")))
     for name in ("stdout.txt", "stderr.txt"):
@@ -45,7 +46,7 @@ def snapshot_diagnostics(root):
     return result
 
 
-def snapshot_results(root, directory):
+def snapshot_results(root, directory, *, telemetry=False):
     root, directory = Path(root).resolve(), Path(directory)
     if not directory.exists():
         return []
@@ -56,7 +57,8 @@ def snapshot_results(root, directory):
         if not path.is_file():
             continue
         size = path.stat().st_size
-        total += size
+        if not (telemetry and path.parent.name == "ydb-counters" and path.name.endswith(".jsonl.gz")):
+            total += size
         if size > MAX_RESULT_FILE_BYTES or total > MAX_RESULT_BYTES or len(result) >= 1000:
             raise BenchmarkError("Distributed workload artifacts exceed the transfer limit")
         digest = hashlib.sha256()
@@ -67,7 +69,7 @@ def snapshot_results(root, directory):
     return result
 
 
-def copy_results(call, reference, job_id, artifacts, prefix, directory, operation="read-result"):
+def copy_results(call, reference, job_id, artifacts, prefix, directory, operation="read-result", *, telemetry=False):
     prefix = prefix.rstrip("/") + "/"
     if not isinstance(artifacts, list) or len(artifacts) > 1000:
         raise BenchmarkError("Invalid distributed artifact list")
@@ -85,7 +87,8 @@ def copy_results(call, reference, job_id, artifacts, prefix, directory, operatio
         ):
             raise BenchmarkError("Invalid distributed artifact descriptor")
         seen.add(path)
-        total += size
+        if not (telemetry and Path(path).parent.name == "ydb-counters" and path.endswith(".jsonl.gz")):
+            total += size
         if total > MAX_RESULT_BYTES:
             raise BenchmarkError("Distributed workload artifacts exceed the transfer limit")
         relative = path[len(prefix) :].split("/")

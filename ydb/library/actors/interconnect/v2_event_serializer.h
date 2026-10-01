@@ -7,16 +7,31 @@
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/actors/util/rc_buf.h>
 
+#include "xdc_limits.h"
+
 #define XXH_INLINE_ALL
 #include <contrib/libs/xxhash/xxhash.h>
 
 #include <deque>
+#include <exception>
 
 namespace NActorsInterconnect {
     class TSystemPayloadV2;
 }
 
 namespace NActors {
+
+    struct TExEventFormatError : std::exception {
+        const char* what() const noexcept override {
+            return "interconnect v2 event format error";
+        }
+    };
+
+    struct TExEventTooLarge : std::exception {
+        const char* what() const noexcept override {
+            return "interconnect v2 serialized event is too large";
+        }
+    };
 
     // Allocate a section buffer with the requested headroom/tailroom, aligning the payload pointer
     // (TRcBuf::GetData()) to `alignment` when alignment > 1. Used by the v2 XDC receive path so

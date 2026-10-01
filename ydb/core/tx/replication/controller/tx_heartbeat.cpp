@@ -2,6 +2,8 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
@@ -16,6 +18,53 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId
     }
 
     return ev;
+}
+
+bool TController::HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const {
+    if (Workers.empty()) {
+        return false;
+    }
+
+    const auto barrierVersion = TRowVersion::FromProto(barrier.Schema.GetVersion());
+    return AllOf(Workers, [barrierVersion](const auto& item) {
+        return item.second.HasHeartbeat() && item.second.GetHeartbeat() > barrierVersion;
+    });
+}
+
+bool TController::HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const {
+    return AnyOf(AssignedTxIds, [&barrier](const auto& assigned) {
+        return ::Find(barrier.TargetFlushTxIds, assigned.second) != barrier.TargetFlushTxIds.end();
+    });
+}
+
+bool TController::BlocksGlobalCommit(const TSchemaBarrier& barrier) const {
+    switch (barrier.Phase) {
+    case ESchemaBarrierPhase::FlushingTarget:
+    case ESchemaBarrierPhase::Altering:
+        return true;
+    case ESchemaBarrierPhase::Verifying:
+        return !HasFreshHeartbeatQuorum(barrier);
+    case ESchemaBarrierPhase::Collecting:
+    case ESchemaBarrierPhase::Applied:
+    case ESchemaBarrierPhase::Error:
+        return false;
+    }
+    Y_ABORT("Unexpected schema barrier phase");
+}
+
+void TController::AdvanceVerifyingSchemaBarriers(NIceDb::TNiceDb& db) {
+    for (auto& [key, barrier] : SchemaBarriers) {
+        if (barrier.Phase != ESchemaBarrierPhase::Verifying
+            || !HasFreshHeartbeatQuorum(barrier)
+            || HasPendingTargetFlushTxId(barrier))
+        {
+            continue;
+        }
+
+        barrier.Phase = ESchemaBarrierPhase::Applied;
+        db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+            NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(static_cast<ui8>(barrier.Phase)));
+    }
 }
 
 class TController::TTxHeartbeat: public TTxBase {
@@ -100,6 +149,14 @@ public:
             return true; // another commit in progress
         }
 
+        Self->AdvanceVerifyingSchemaBarriers(db);
+
+        if (AnyOf(Self->SchemaBarriers, [this](const auto& item) {
+            return Self->BlocksGlobalCommit(item.second);
+        })) {
+            return true; // global consistency is temporarily degraded
+        }
+
         if (Self->AssignedTxIds.empty()) {
             return true; // nothing to commit
         }
@@ -127,6 +184,12 @@ public:
             YDB_LOG_NOTICE_CTX(ctx, "Propose commit",
                 {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
+        }
+
+        for (const auto replicationId : Self->DeferredAlters) {
+            if (!Self->HasActiveSchemaBarrier(replicationId)) {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
+            }
         }
 
         if (Self->PendingHeartbeats) {
@@ -193,7 +256,15 @@ public:
         it = Self->AssignedTxIds.erase(it);
         Self->CommittingTxId = 0;
 
+        Self->AdvanceVerifyingSchemaBarriers(db);
+
         if (it == Self->AssignedTxIds.end() || Self->WorkersByHeartbeat.empty()) {
+            return true;
+        }
+
+        if (AnyOf(Self->SchemaBarriers, [this](const auto& item) {
+            return Self->BlocksGlobalCommit(item.second);
+        })) {
             return true;
         }
 
@@ -218,6 +289,20 @@ public:
                 {"writeTxId", Self->CommittingTxId});
             ctx.Send(MakeTxProxyID(), std::move(ev), 0, Self->CommittingTxId);
         }
+
+        if (!Self->CommittingTxId) {
+            for (const auto& [key, barrier] : Self->SchemaBarriers) {
+                if (barrier.Phase == ESchemaBarrierPhase::FlushingTarget) {
+                    Self->StartSchemaChangeTargetFlush(key, ctx);
+                }
+            }
+        }
+
+        for (const auto replicationId : Self->DeferredAlters) {
+            if (!Self->HasActiveSchemaBarrier(replicationId)) {
+                ctx.Send(ctx.SelfID, new TEvPrivate::TEvResumeDeferredAlter(replicationId));
+            }
+        }
     }
 
 }; // TTxCommitChanges
@@ -225,6 +310,33 @@ public:
 void TController::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE_CTX(ctx, "Handle",
         {"ev", ev->Get()->ToString()});
+
+    if (auto flush = SchemaTargetFlushes.find(ev->Cookie); flush != SchemaTargetFlushes.end()) {
+        const auto key = flush->second;
+        const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(
+            ev->Get()->Record.GetStatus());
+        if (status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete) {
+            SchemaTargetFlushes.erase(flush);
+            const auto barrier = SchemaBarriers.find(key);
+            if (barrier != SchemaBarriers.end()) {
+                ++barrier->second.NextTargetFlushTxId;
+                StartSchemaChangeTargetFlush(key, ctx);
+            }
+        } else {
+            const auto barrier = SchemaBarriers.find(key);
+            auto replication = Find(key.first);
+            auto* target = FindTarget(TWorkerId(key.first, key.second, 0));
+            if (barrier != SchemaBarriers.end()
+                && replication
+                && replication->GetState() != TReplication::EState::Removing
+                && target)
+            {
+                ctx.Send(MakeTxProxyID(),
+                    MakeCommitProposal(ev->Cookie, {target->GetDstPath()}).Release(), 0, ev->Cookie);
+            }
+        }
+        return;
+    }
 
     if (ev->Cookie != CommittingTxId) {
         YDB_LOG_ERROR_CTX(ctx, "Cookie mismatch",

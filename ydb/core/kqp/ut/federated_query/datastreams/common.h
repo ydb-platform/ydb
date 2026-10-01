@@ -125,6 +125,12 @@ public:
     // Topic client SDK (external YDB recipe)
 
     void CreateTopic(const std::string& topicName, std::optional<NYdb::NTopic::TCreateTopicSettings> settings = std::nullopt, bool local = false);
+#define CreateScopedTopicExt(TOPIC, SETTINGS,...) \
+    CreateTopic((TOPIC), (SETTINGS), ## __VA_ARGS__); \
+    Y_DEFER { \
+        DropTopic((TOPIC), ## __VA_ARGS__); \
+    }
+#define CreateScopedTopic(TOPIC) CreateScopedTopicExt((TOPIC), std::nullopt, false)
 
     void DropTopic(const std::string& topicName, bool local = false);
 

@@ -84,6 +84,7 @@ message TTable {
     optional NKikimrProto.TPathID PathId = 1; // table path
     repeated uint32 ColumnTags = 2; // list of columns to gather statistics from. Empty means asking for every column.
     optional string Path = 3; // full table path string, used for operation metadata
+    optional double SampleRate = 4 [default = 1.0];
 }
 
 // KQP -> SA
@@ -145,3 +146,15 @@ message TSimpleColumnStatistics {
 message TTableSummaryStatistics {
     optional uint64 RowCount = 1;
 };
+
+message TSamplingStatistics {
+    optional double RequestedRate = 2;
+    optional uint64 EligibleUnits = 3;
+    optional uint64 SelectedUnits = 4;
+    optional uint64 SampleRows = 5;
+}
+
+message TSampledStatistic {
+    optional TSamplingStatistics Sampling = 1;
+    optional bytes Data = 2;
+}

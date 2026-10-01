@@ -93,6 +93,29 @@ Y_UNIT_TEST(CheckRetentionPeriod) {
     }
 }
 
+Y_UNIT_TEST(ValidateTopicPartitionCount) {
+    {
+        auto r = ValidateTopicPartitionCount(0, "Partitions count");
+        UNIT_ASSERT(r);
+    }
+    {
+        auto r = ValidateTopicPartitionCount(MAX_TOPIC_PARTITIONS, "Partitions count");
+        UNIT_ASSERT(r);
+    }
+    {
+        auto r = ValidateTopicPartitionCount(MAX_TOPIC_PARTITIONS + 1, "Partitions count");
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "less than");
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), ToString(MAX_TOPIC_PARTITIONS));
+    }
+    {
+        auto r = ValidateTopicPartitionCount(static_cast<i64>(Max<ui32>()), "Max active partitions");
+        UNIT_ASSERT(!r);
+        UNIT_ASSERT_STRING_CONTAINS(r.GetErrorMessage(), "Max active partitions");
+    }
+}
+
 Y_UNIT_TEST(ConvertPositiveDuration) {
     {
         google::protobuf::Duration d;

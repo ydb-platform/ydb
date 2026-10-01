@@ -1,28 +1,28 @@
-#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
 #include <ydb/core/fq/libs/row_dispatcher/memory/memory_quota.h>
+#include <ydb/core/fq/libs/row_dispatcher/topic_session.h>
 
 #include <mutex>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/ut/common/ut_common.h>
 
+#include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/library/testlib/helpers.h>
 #include <ydb/library/testlib/pq_helpers/mock_pq_gateway.h>
 #include <ydb/tests/fq/pq_async_io/ut_helpers.h>
 
-#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
 
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/public/purecalc/common/interface.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
+#include <yql/essentials/public/purecalc/common/interface.h>
 
 namespace NFq::NRowDispatcher::NTests {
 
@@ -137,7 +137,7 @@ public:
         Runtime.EnableScheduleForActor(TopicSession);
     }
 
-    void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false) {
+    void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false, ui64 generation = 17) {
         std::map<ui32, ui64> readOffsets;
         if (readOffset) {
             readOffsets[PartitionId] = *readOffset;
@@ -149,7 +149,8 @@ public:
             readOffsets,
             0,         // StartingMessageTimestamp;
             "QueryId");
-        Runtime.Send(new IEventHandle(TopicSession, readActorId, event));
+        ClientGenerations[readActorId] = generation;
+        Runtime.Send(new IEventHandle(TopicSession, readActorId, event, 0, generation));
 
         const auto& predicate = source.GetPredicate();
         if (predicate && !expectedError) {
@@ -161,7 +162,7 @@ public:
         if constexpr (MockTopicSession) {
             Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
             MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
-            MockReadSession->AddStartSessionEvent();
+            MockReadSession->AddStartSessionEvent(42);
         }
     }
 
@@ -199,6 +200,7 @@ public:
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
             UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+            UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(readActorId));
 
             UNIT_ASSERT_VALUES_EQUAL(1, eventHolder->Get()->Record.MessagesSize());
             NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(0);
@@ -223,6 +225,7 @@ public:
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionError>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(readActorId));
 
         const auto& record = eventHolder->Get()->Record;
         NYql::TIssues issues;
@@ -236,6 +239,7 @@ public:
             auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvNewDataArrived>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
             UNIT_ASSERT(eventHolder.Get() != nullptr);
             UNIT_ASSERT(readActorIds.contains(eventHolder->Get()->ReadActorId));
+            UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(eventHolder->Get()->ReadActorId));
             readActorIds.erase(eventHolder->Get()->ReadActorId);
         }
     }
@@ -245,6 +249,7 @@ public:
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT_VALUES_EQUAL(eventHolder->Get()->ReadActorId, readActorId);
+        UNIT_ASSERT_VALUES_EQUAL(eventHolder->Cookie, ClientGenerations.at(readActorId));
 
         size_t numberMessages = 0;
         for (const auto& message : eventHolder->Get()->Record.GetMessages()) {
@@ -265,6 +270,7 @@ public:
                 if (!clients.contains(client.ReadActorId)) {
                     return false;
                 }
+                UNIT_ASSERT_VALUES_EQUAL(client.Generation, ClientGenerations.at(client.ReadActorId));
                 if (clients[client.ReadActorId] != client.Offset) {
                     return false;
                 }
@@ -316,6 +322,7 @@ public:
     NActors::TActorId ReadActorId1;
     NActors::TActorId ReadActorId2;
     NActors::TActorId ReadActorId3;
+    TMap<TActorId, ui64> ClientGenerations;
     ui32 PartitionId = 0;
     NConfig::TRowDispatcherConfig Config;
     NYql::NDq::IMemoryQuotaManager::TPtr MemoryQuotaManager;
@@ -753,6 +760,30 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
     }
 
+    Y_UNIT_TEST_TWIN_F(ReadOffsetBeforeCommittedFails, ZeroOffset, TRealTopicFixture) {
+        const TString topicName = TStringBuilder() << "ReadOffsetBeforeCommittedFails" << ZeroOffset;
+        PQCreateStream(topicName);
+        Init(topicName);
+        PQWrite({Json1, Json2, Json3});
+        NYdb::NTopic::TTopicClient client(Driver, NYdb::NTopic::TTopicClientSettings()
+            .Database(GetDefaultPqDatabase()).DiscoveryEndpoint(GetDefaultPqEndpoint()));
+        const auto commit = client.CommitOffset(topicName, 0, DefaultPqConsumer, 3).GetValueSync();
+        UNIT_ASSERT_C(commit.IsSuccess(), commit.GetIssues().ToString());
+
+        const ui64 readOffset = ZeroOffset ? 0 : 1;
+        StartSession(ReadActorId1, BuildSource(true), readOffset);
+        ExpectSessionError(ReadActorId1, EStatusId::BAD_REQUEST,
+            TStringBuilder() << "trying to read from position that is less than committed: read " << readOffset << " committed 3");
+
+        const auto describe = client.DescribeConsumer(topicName, DefaultPqConsumer,
+            NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        const auto& partitions = describe.GetConsumerDescription().GetPartitions();
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+        UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+        UNIT_ASSERT_VALUES_EQUAL(partitions.front().GetPartitionConsumerStats()->GetCommittedOffset(), 3);
+    }
+
     Y_UNIT_TEST_F(TwoSessionsWithOffsets, TRealTopicFixture) {
         const TString topicName = "topic4";
         PQCreateStream(topicName);
@@ -814,6 +845,33 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         StopSession(ReadActorId1, source);
         StopSession(ReadActorId2, source);
+    }
+
+    Y_UNIT_TEST_F(RestartForDifferentFormatFlushesBufferedJson, TMockTopicFixture) {
+        // Keep the JSON batch buffered until the new raw client restarts the SDK session.
+        Init("mixed_formats", std::numeric_limits<ui64>::max(), 0, {}, 60000);
+        auto jsonSource = BuildSource(true);
+        StartSession(ReadActorId1, jsonSource);
+        PQWrite({Json1, Json2, Json3});
+        NTestUtils::WaitFor(WAIT_TIMEOUT, "JSON input buffered", [&] {
+            auto event = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvSessionStatistic>(RowDispatcherActorId, WAIT_TIMEOUT);
+            return event && event->Get()->Stat.Common.LastReadedOffset == 2;
+        });
+
+        auto rawSource = BuildSource(true);
+        rawSource.SetFormat("raw");
+        rawSource.ClearColumns();
+        rawSource.ClearColumnTypes();
+        rawSource.AddColumns("data");
+        rawSource.AddColumnTypes("[DataType; String]");
+        StartSession(ReadActorId2, rawSource, 1, false, 23);
+
+        // Restart must flush the other format before historical messages are replayed.
+        ExpectMessageBatch(ReadActorId1, {JsonMessage(1), JsonMessage(2), JsonMessage(3)}, true, {0, 1, 2});
+        PQWrite({Json2, Json3}, 1);
+        ExpectMessageBatch(ReadActorId2, {TRow().AddString(Json2), TRow().AddString(Json3)}, true, {1, 2});
+        ExpectStatistics({{ReadActorId1, 3}, {ReadActorId2, 3}});
+        PassAway();
     }
 
     Y_UNIT_TEST_F(RestartSessionIfNewClientWithOffset, TRealTopicFixture) {
@@ -1006,7 +1064,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StopSession(ReadActorId2, source);
         Runtime.GrabEdgeEvent<TEvMockPqEvents::TEvCreateSession>(PqGatewayNotifier, TDuration::Seconds(GrabTimeoutSec));
         MockReadSession = MockPqGateway->ExtractReadSession(TopicPath);
-        MockReadSession->AddStartSessionEvent();
+        MockReadSession->AddStartSessionEvent(42);
 
         std::vector<TString> data3 = { Json4 };
         PQWrite(data3, 4);
@@ -1096,14 +1154,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         StartSession(ReadActorId1, source);
         ExpectSessionError(ReadActorId1, EStatusId::SCHEME_ERROR, "no path");
         
-        auto event = new NFq::TEvRowDispatcher::TEvStartSession(
-            source,
-            {PartitionId},
-            "Token",
-            {},
-            0,
-            "QueryId");
-        Runtime.Send(new IEventHandle(TopicSession, ReadActorId2, event));
+        StartSession(ReadActorId2, source, Nothing(), true, 23);
 
         ExpectSessionError(ReadActorId2, EStatusId::SCHEME_ERROR, "no path");
     }

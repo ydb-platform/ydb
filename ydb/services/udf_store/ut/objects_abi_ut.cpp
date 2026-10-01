@@ -1,162 +1,117 @@
-#include <ydb/services/udf_store/wasm/compile.h>
-#include <ydb/services/udf_store/wasm/host.h>
-#include <ydb/services/udf_store/wasm/registry_helpers.h>
-
-#include <ydb/library/wasm/api/compartment.h>
-#include <ydb/library/wasm/api/pointer.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-
-#include <bit>
-#include <cstring>
+#include "bridge_test_helpers.h"
+#include <yql/essentials/minikql/mkql_terminator.h>
 
 using namespace NKikimr::NUdfStore::NWasm;
-using namespace NYdb::NWasm;
-using EAbiValueType = NYdb::NUdfStore::NAbi::EValueType;
+using namespace NKikimr::NUdfStore::NWasm::NTest;
 
 namespace {
-
-constexpr TStringBuf SdkStubWast = R"(
-    (module
-        (import "env" "memory" (memory i64 8 2097152))
-        (global $heap (mut i64) (i64.const 1024))
-        (func $malloc (param $n i64) (result i64)
-            (local $p i64)
-            (local.set $p (global.get $heap))
-            (global.set $heap
-                (i64.and
-                    (i64.add (i64.add (local.get $p) (local.get $n)) (i64.const 7))
-                    (i64.const -8)))
-            (local.get $p)
-        )
-        (func $free (param $p i64))
-        (export "malloc" (func $malloc))
-        (export "free" (func $free))
-    )
+constexpr TStringBuf Objects = R"(
+(module
+ (import "env" "memory" (memory i64 8 2097152))
+ (import "env" "BridgeMakeUint64" (func $make (param i64) (result i64)))
+ (import "env" "BridgeGetUint64" (func $get (param i64) (result i64)))
+ (import "env" "BridgeGetStringLen" (func $len (param i64) (result i64)))
+ (global $created (mut i64) (i64.const 0))
+ (global $destroyed (mut i64) (i64.const 0))
+ (func (export "create") (param $ctx i64) (param $res i64) (param $config i64)
+   (global.set $created (i64.add (global.get $created) (i64.const 1)))
+   (i64.store (local.get $res) (call $make (call $len (local.get $config)))))
+ (func (export "call") (param $ctx i64) (param $res i64) (param $object i64) (param $arg i64)
+   (if (i64.ne (call $get (local.get $object)) (i64.const 3)) (then unreachable))
+   (i64.store (local.get $res) (local.get $arg)))
+ (func (export "fail") (param i64 i64 i64 i64) unreachable)
+ (func (export "destroy") (param $ctx i64) (param $res i64) (param $object i64)
+   (drop (call $get (local.get $object)))
+   (global.set $destroyed (i64.add (global.get $destroyed) (i64.const 1)))
+   (i64.store (local.get $res) (i64.const 0)))
+ (func (export "created") (param $ctx i64) (param $res i64)
+   (i64.store (local.get $res) (call $make (global.get $created))))
+ (func (export "destroyed") (param $ctx i64) (param $res i64)
+   (i64.store (local.get $res) (call $make (global.get $destroyed))))
+)
 )";
-
-// Minimal object ABI: create returns monotonic ui64; call returns handle as int64;
-// destroy is a no-op. Mirrors host TypeConfig create/call/destroy exports.
-constexpr TStringBuf ObjectsWast = R"(
-    (module
-        (import "env" "memory" (memory i64 8 2097152))
-        (global $next (mut i64) (i64.const 1))
-
-        (func $prefix_create (param $context i64) (param $result i64) (param $config i64)
-            (local $h i64)
-            (local.set $h (global.get $next))
-            (global.set $next (i64.add (local.get $h) (i64.const 1)))
-            (i32.store8
-                (i64.add (local.get $result) (i64.const 2))
-                (i32.const 4))
-            (i64.store
-                (i64.add (local.get $result) (i64.const 8))
-                (local.get $h))
-        )
-
-        (func $prefix_apply (param $context i64) (param $result i64)
-                (param $handle i64) (param $input i64)
-            (i32.store8
-                (i64.add (local.get $result) (i64.const 2))
-                (i32.const 3))
-            (i64.store
-                (i64.add (local.get $result) (i64.const 8))
-                (i64.load (i64.add (local.get $handle) (i64.const 8))))
-        )
-
-        (func $prefix_destroy (param $context i64) (param $result i64) (param $handle i64)
-            (i32.store8
-                (i64.add (local.get $result) (i64.const 2))
-                (i32.const 2))
-        )
-
-        (export "prefix_create" (func $prefix_create))
-        (export "prefix_apply" (func $prefix_apply))
-        (export "prefix_destroy" (func $prefix_destroy))
-    )
-)";
-
-TNamedModuleBytecode MakeNamedLibrary(TStringBuf name, TStringBuf wast) {
-    const auto objectCode = CompileModuleObjectCode(wast, EBytecodeFormat::HumanReadable);
-    return TNamedModuleBytecode{
-        .Name = TString(name),
-        .Bytecode = MakeModuleBytecode(wast, objectCode, EBytecodeFormat::HumanReadable),
-    };
 }
-
-uintptr_t AllocValue(IWebAssemblyCompartment* compartment, const TUnversionedValue& value) {
-    const auto offset = compartment->AllocateBytes(sizeof(TUnversionedValue));
-    StoreValue(compartment, offset, value);
-    return offset;
-}
-
-} // namespace
 
 Y_UNIT_TEST_SUITE(TWasmUdfObjectsAbiTest) {
-    Y_UNIT_TEST(CreateTwoHandlesAndCall) {
-        EnsureUdfHostIntrinsicsRegistered();
-
-        auto compartment = CreateEmptyImage();
-        compartment->AddSdk(MakeNamedLibrary("sdk", SdkStubWast).Bytecode);
-        TCurrentCompartmentGuard compartmentGuard(compartment.get());
-
-        const auto moduleObjectCode = CompileModuleObjectCode(
-            ObjectsWast,
-            EBytecodeFormat::HumanReadable);
-        AddPrecompiledModule(
-            compartment.get(),
-            MakeModuleBytecode(ObjectsWast, moduleObjectCode, EBytecodeFormat::HumanReadable),
-            "Prefix");
-
-        auto createOnce = [&]() -> ui64 {
-            TUnversionedValue config = MakeEmptyValue();
-            config.Type = EAbiValueType::String;
-            config.Length = 0;
-            config.Data.String = nullptr;
-
-            const auto configOffset = AllocValue(compartment.get(), config);
-            const auto resultOffset = AllocValue(compartment.get(), MakeEmptyValue());
-            InvokeUdfExport(
-                compartment.get(),
-                "prefix_create",
-                /*context*/ 0,
-                resultOffset,
-                {configOffset});
-
-            const auto created = *PtrFromVM(
-                compartment.get(),
-                std::bit_cast<TUnversionedValue*>(resultOffset));
-            UNIT_ASSERT_EQUAL(created.Type, EAbiValueType::Uint64);
-            UNIT_ASSERT(created.Data.Uint64 != 0);
-            return created.Data.Uint64;
-        };
-
-        const ui64 h1 = createOnce();
-        const ui64 h2 = createOnce();
-        UNIT_ASSERT_VALUES_UNEQUAL(h1, h2);
-
-        TUnversionedValue handleValue = MakeEmptyValue();
-        handleValue.Type = EAbiValueType::Uint64;
-        handleValue.Data.Uint64 = h2;
-        TUnversionedValue input = MakeEmptyValue();
-        input.Type = EAbiValueType::String;
-        input.Length = 0;
-        input.Data.String = nullptr;
-
-        const auto handleOffset = AllocValue(compartment.get(), handleValue);
-        const auto inputOffset = AllocValue(compartment.get(), input);
-        const auto callResultOffset = AllocValue(compartment.get(), MakeEmptyValue());
-        InvokeUdfExport(
-            compartment.get(),
-            "prefix_apply",
-            /*context*/ 0,
-            callResultOffset,
-            {handleOffset, inputOffset});
-
-        const auto called = *PtrFromVM(
-            compartment.get(),
-            std::bit_cast<TUnversionedValue*>(callResultOffset));
-        UNIT_ASSERT_EQUAL(called.Type, EAbiValueType::Int64);
-        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui64>(called.Data.Int64), h2);
+    Y_UNIT_TEST(ConfiguredContainerCallAndLifecycle) {
+        TBridgeEnv env;
+        env.AddModule(Objects, {"create", "call", "destroy", "created", "destroyed"});
+        const auto parsed = ParseManifest(R"({"module_name":"Test","module_type":"module","module_kind":"wasm",
+          "objects":[{"name":"X","create_export":"create","destroy_export":"destroy","methods":[
+            {"name":"Apply","export":"call","argument_types":["List<Int64>"],"result_type":"List<Int64>"}]}]})");
+        auto created = env.Function("created", {}, env.Type("Uint64"));
+        auto destroyed = env.Function("destroyed", {}, env.Type("Uint64"));
+        auto builder = env.Builder();
+        TWasmConfiguredCallable::Register(*builder, false, env.State, parsed.Functions[1], "cfg");
+        TFunctionTypeInfo info;
+        builder->Build(&info);
+        UNIT_ASSERT(info.Implementation);
+        TUnboxedValue function(TUnboxedValuePod(info.Implementation.Release()));
+        TUnboxedValue values[] = {TUnboxedValuePod(i64(7)), TUnboxedValuePod(i64(9))};
+        const auto input = env.ValueBuilder.NewList(values, 2);
+        for (size_t i = 0; i < 3; ++i) {
+            const auto output = function.Run(&env.ValueBuilder, &input);
+            UNIT_ASSERT_VALUES_EQUAL(output.GetListLength(), 2);
+            auto it = output.GetListIterator();
+            TUnboxedValue item;
+            UNIT_ASSERT(it.Next(item));
+            UNIT_ASSERT_VALUES_EQUAL(item.Get<i64>(), 7);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(created->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(destroyed->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 0);
+        function.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(destroyed->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Query.BridgeNodes->DebugSize(), 0);
     }
+
+    Y_UNIT_TEST(GenerationChangeRecreatesObject) {
+        TBridgeEnv env;
+        env.AddModule(Objects, {"create", "call", "destroy", "created", "destroyed"});
+        TWasmUdfDescriptor desc;
+        desc.Name = "Apply";
+        desc.CreateExport = "create";
+        desc.CallExport = "call";
+        desc.DestroyExport = "destroy";
+        desc.ArgTypes = {env.Type("Int64?")};
+        desc.ResultType = env.Type("Int64?");
+        auto builder = env.Builder();
+        TWasmConfiguredCallable::Register(*builder, false, env.State, desc, "cfg");
+        TFunctionTypeInfo info;
+        builder->Build(&info);
+        TUnboxedValue function(TUnboxedValuePod(info.Implementation.Release()));
+        const TUnboxedValuePod null;
+        UNIT_ASSERT(!function.Run(&env.ValueBuilder, &null));
+        // A new generation never destroys an old guest handle in the new image.
+        ++env.Query.Generation;
+        UNIT_ASSERT(!function.Run(&env.ValueBuilder, &null));
+        auto created = env.Function("created", {}, env.Type("Uint64"));
+        auto destroyed = env.Function("destroyed", {}, env.Type("Uint64"));
+        UNIT_ASSERT_VALUES_EQUAL(created->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(destroyed->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 0);
+    }
+    Y_UNIT_TEST(FailureDestroysObjectAndReleasesBridgeHandles) {
+        TBridgeEnv env;
+        TOnlyThrowingBindTerminator terminator;
+        env.AddModule(Objects, {"create", "fail", "destroy", "created", "destroyed"});
+        TWasmUdfDescriptor desc;
+        desc.Name = "Fail";
+        desc.CreateExport = "create";
+        desc.CallExport = "fail";
+        desc.DestroyExport = "destroy";
+        desc.ArgTypes = {env.Type("Int64")};
+        desc.ResultType = env.Type("Int64");
+        auto builder = env.Builder();
+        TWasmConfiguredCallable::Register(*builder, false, env.State, desc, "cfg");
+        TFunctionTypeInfo info;
+        builder->Build(&info);
+        TUnboxedValue function(TUnboxedValuePod(info.Implementation.Release()));
+        const TUnboxedValuePod input(i64(1));
+        UNIT_ASSERT_EXCEPTION(function.Run(&env.ValueBuilder, &input), TTerminateException);
+        auto destroyed = env.Function("destroyed", {}, env.Type("Uint64"));
+        UNIT_ASSERT_VALUES_EQUAL(destroyed->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 1);
+        function.Clear();
+        UNIT_ASSERT_VALUES_EQUAL(destroyed->Invoke(&env.ValueBuilder, nullptr).Get<ui64>(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.Query.BridgeNodes->DebugSize(), 0);
+    }
+
 }

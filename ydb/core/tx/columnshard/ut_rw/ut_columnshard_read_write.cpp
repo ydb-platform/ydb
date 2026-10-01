@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
@@ -1758,6 +1759,119 @@ void TestScanResumedByCursorOnOtherReader(const TString& interruptedReader, cons
     AssertResumedScanReadsEveryKeyOnce(interrupted, resumed, portionsCount);
 }
 
+template <class TCheck>
+void WithSysViewPortions(const TString& readerClassName, TCheck&& check, ui64 portionsCount = 25,
+    const std::function<void(NKikimrSchemeOp::TColumnTableSchema&)>& configureSchema = {}, bool overlapPortions = false) {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    runtime.GetAppData(0).ColumnShardConfig.SetReaderClassName(readerClassName);
+    auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+    csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+    {
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+    }
+
+    const TestTableDescription table;
+    const ui64 tableId = 1;
+    const auto ydbSchema = table.Schema;
+    NKikimrTxColumnShard::TSchemaTxBody schemaTx;
+    UNIT_ASSERT(schemaTx.ParseFromString(TTestSchema::CreateStandaloneTableTxBody(tableId, table.Schema, table.Pk)));
+    if (configureSchema) {
+        configureSchema(*schemaTx.MutableInitShard()->MutableTables(0)->MutableSchema());
+    }
+    runtime.GetAppData(0).ColumnShardConfig.SetSmallPortionDetectSizeLimit(0);
+    auto planStep = SetupSchema(runtime, sender, schemaTx.SerializeAsString(), 10);
+
+    // Sys-view sources hold up to 10 portions each: the default 25 make groups of 10, 10, and 5.
+
+    ui64 writeId = 0;
+    ui64 txId = 100;
+    for (ui64 i = 1; i <= portionsCount; ++i) {
+        std::vector<ui64> writeIds;
+        const ui64 key = overlapPortions ? 10 : (portionsCount - i + 1) * 10;
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, MakeTestBlobValues({ key, key + 1 }, ydbSchema), ydbSchema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+    }
+    runtime.SimulateSleep(TDuration::Seconds(2));
+    UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetCompactionStartedCounter().Val(), 0);
+
+    const NOlap::TSnapshot snapshot(planStep, Max<ui64>());
+    check(runtime, tableId, snapshot, portionsCount);
+}
+
+std::shared_ptr<arrow::RecordBatch> ReadSysView(TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, const TString& view,
+    const std::vector<ui32>& columns, ui32 limit) {
+    TShardReader scan(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+    scan.SetTablePath("/.sys/" + view);
+    scan.SetReplyColumnIds(columns);
+    scan.SetLimit(limit);
+    scan.ReadAll();
+    UNIT_ASSERT(scan.IsCorrectlyFinished());
+    auto result = scan.GetResult();
+    UNIT_ASSERT(result);
+    return result;
+}
+
+// DESC source order must survive resuming from a cursor without gaps or repeats.
+void TestSysViewScanResumedByCursorDesc(const TString& readerClassName) {
+    WithSysViewPortions(readerClassName, [](TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, ui64 portionsCount) {
+        using TStats = NKikimr::NSysView::Schema::PrimaryIndexPortionStats;
+        const std::vector<ui32> columnIds = { TStats::PathId::ColumnId, TStats::TabletId::ColumnId, TStats::PortionId::ColumnId };
+        const TString sysViewPath = "/.sys/store_primary_index_portion_stats";
+
+        const auto getPortionIds = [](const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
+            std::vector<ui64> result;
+            for (const auto& batch : batches) {
+                auto array = std::dynamic_pointer_cast<arrow::UInt64Array>(batch->GetColumnByName("PortionId"));
+                UNIT_ASSERT_C(array, batch->schema()->ToString());
+                for (i64 i = 0; i < array->length(); ++i) {
+                    result.push_back(array->Value(i));
+                }
+            }
+            return result;
+        };
+
+        TShardReader reference(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        reference.SetTablePath(sysViewPath);
+        reference.SetReverse(true);
+        reference.SetReplyColumnIds(columnIds);
+        reference.ReadAll();
+        UNIT_ASSERT(reference.IsCorrectlyFinished());
+        const std::vector<ui64> expected = getPortionIds(reference.GetReceivedBatches());
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), portionsCount);
+        // rows keep source-local key order, so DESC shows up as the last source being extracted first
+        UNIT_ASSERT_C(expected.front() > expected.back(), JoinSeq(",", expected));
+
+        TShardReader interrupted(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        interrupted.SetTablePath(sysViewPath);
+        interrupted.SetReverse(true);
+        interrupted.SetReplyColumnIds(columnIds);
+        UNIT_ASSERT(interrupted.InitializeScanner());
+        interrupted.Ack();
+        UNIT_ASSERT_C(interrupted.Receive(), "scan finished too early to resume it from a cursor");
+
+        TShardReader resumed(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+        resumed.SetTablePath(sysViewPath);
+        resumed.SetReverse(true);
+        resumed.SetReplyColumnIds(columnIds);
+        resumed.SetScanCursor(interrupted.GetLastCursor());
+        resumed.ReadAll();
+        UNIT_ASSERT(resumed.IsCorrectlyFinished());
+
+        std::vector<ui64> actual = getPortionIds(interrupted.GetReceivedBatches());
+        const std::vector<ui64> tail = getPortionIds(resumed.GetReceivedBatches());
+        UNIT_ASSERT_C(!tail.empty(), "resumed scan returned nothing");
+        actual.insert(actual.end(), tail.begin(), tail.end());
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", actual), JoinSeq(",", expected));
+    });
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TColumnShardInit) {
@@ -2403,6 +2517,156 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(ScanResumedByCursorOnTrivialReader) {
         TestScanResumedByCursorOnOtherReader("SIMPLE", "TRIVIAL");
+    }
+
+    Y_UNIT_TEST(SysViewScanResumedByCursorDesc) {
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            TestSysViewScanResumedByCursorDesc(reader);
+        }
+    }
+
+    Y_UNIT_TEST(SysViewLimitDrainsEqualPrefixes) {
+        using TStats = NKikimr::NSysView::Schema::PrimaryIndexPortionStats;
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            WithSysViewPortions(reader, [&](TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, ui64 portionsCount) {
+                for (const bool reverse : { false, true }) {
+                    for (const ui32 limit : { 0u, 3u }) {
+                        TShardReader scan(runtime, TTestTxConfig::TxTablet0, tableId, snapshot);
+                        scan.SetTablePath("/.sys/store_primary_index_portion_stats");
+                        scan.SetReverse(reverse);
+                        // Equal (PathId, TabletId) prefixes require <= in DrainToLimit; using < returns more than the limit.
+                        scan.SetReplyColumnIds({ TStats::PathId::ColumnId, TStats::TabletId::ColumnId });
+                        scan.SetLimit(limit);
+                        scan.ReadAll();
+                        UNIT_ASSERT_C(scan.IsCorrectlyFinished(), reader);
+                        UNIT_ASSERT_VALUES_EQUAL_C(
+                            scan.GetRecordsCount(), limit ? limit : portionsCount, reader << ", reverse=" << reverse << ", limit=" << limit);
+                    }
+                }
+            });
+        }
+    }
+
+    Y_UNIT_TEST(SysViewChunksPKPermutation) {
+        constexpr ui32 indexId = 1000;
+        constexpr ui32 trailingColumnId = indexId + 1;
+        using TStats = NSysView::Schema::PrimaryIndexStats;
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            WithSysViewPortions(
+                reader,
+                [](TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, ui64) {
+                    // Two overlapping writes require a real merge, which builds column and index chunks.
+                    auto controller = NYDBTest::TControllers::GetControllerAs<TDefaultTestsController>();
+                    controller->EnableBackground(NYDBTest::ICSController::EBackground::Compaction);
+                    const auto sender = runtime.AllocateEdgeActor();
+                    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCompactTable(1, tableId));
+                    TEvDataShard::TEvCompactTableResult::TPtr compacted;
+                    for (ui32 attempt = 0; attempt < 30 && !compacted; ++attempt) {
+                        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+                        runtime.SimulateSleep(TDuration::Seconds(1));
+                        compacted = runtime.GrabEdgeEvent<TEvDataShard::TEvCompactTableResult>(sender, TDuration::MilliSeconds(1));
+                    }
+                    UNIT_ASSERT(compacted);
+                    UNIT_ASSERT_VALUES_EQUAL(compacted->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+                    controller->DisableBackground(NYDBTest::ICSController::EBackground::Compaction);
+                    const std::vector<ui32> columns = { TStats::PathId::ColumnId, TStats::TabletId::ColumnId, TStats::PortionId::ColumnId,
+                        TStats::InternalEntityId::ColumnId, TStats::ChunkIdx::ColumnId, TStats::EntityName::ColumnId };
+                    const auto getRows = [](const auto& batch) {
+                        std::vector<std::tuple<ui64, ui32, ui64, std::string>> rows;
+                        auto portions = std::static_pointer_cast<arrow::UInt64Array>(batch->GetColumnByName("PortionId"));
+                        auto ids = std::static_pointer_cast<arrow::UInt32Array>(batch->GetColumnByName("InternalEntityId"));
+                        auto chunks = std::static_pointer_cast<arrow::UInt64Array>(batch->GetColumnByName("ChunkIdx"));
+                        auto names = std::static_pointer_cast<arrow::StringArray>(batch->GetColumnByName("EntityName"));
+                        for (i64 i = 0; i < batch->num_rows(); ++i) {
+                            rows.emplace_back(portions->Value(i), ids->Value(i), chunks->Value(i), names->GetString(i));
+                        }
+                        return rows;
+                    };
+                    const auto stored = ReadSysView(runtime, tableId, snapshot, "primary_index_stats", columns, 0);
+                    auto expected = getRows(stored);
+                    const auto sorted = ReadSysView(runtime, tableId, snapshot, "primary_index_stats", columns, expected.size());
+                    const auto actual = getRows(sorted);
+                    // The trailing column precedes the lower-ID index in storage: permute keys and names together.
+                    UNIT_ASSERT_C(actual != expected, stored->ToString());
+                    std::sort(expected.begin(), expected.end());
+                    UNIT_ASSERT_C(actual == expected, "stored: " << stored->ToString() << "sorted: " << sorted->ToString());
+                }, 2,
+                [](auto& schema) {
+                    schema.MutableColumns(schema.ColumnsSize() - 1)->SetId(trailingColumnId);
+                    auto* index = schema.AddIndexes();
+                    index->SetId(indexId);
+                    index->SetName("timestamp_max");
+                    index->SetClassName("MAX");
+                    index->SetStorageId("__LOCAL_METADATA");
+                    index->MutableMaxIndex()->SetColumnId(schema.GetColumns(0).GetId());
+                }, /*overlapPortions=*/true);
+        }
+    }
+
+    Y_UNIT_TEST(SysViewOptimizerTasksOrder) {
+        constexpr ui64 portionsCount = 3;
+        using TStats = NSysView::Schema::PrimaryIndexOptimizerStats;
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            WithSysViewPortions(
+                reader,
+                [](TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, ui64 portionsCount) {
+                    const std::vector<ui32> columns = { TStats::PathId::ColumnId, TStats::TabletId::ColumnId, TStats::TaskId::ColumnId,
+                        TStats::Start::ColumnId };
+                    const auto getRows = [](const auto& batch) {
+                        std::vector<std::pair<ui64, std::string>> rows;
+                        auto ids = std::static_pointer_cast<arrow::UInt64Array>(batch->GetColumnByName("TaskId"));
+                        auto starts = std::static_pointer_cast<arrow::StringArray>(batch->GetColumnByName("Start"));
+                        for (i64 i = 0; i < batch->num_rows(); ++i) {
+                            rows.emplace_back(ids->Value(i), starts->GetString(i));
+                        }
+                        return rows;
+                    };
+                    auto expected = getRows(ReadSysView(runtime, tableId, snapshot, "primary_index_optimizer_stats", columns, 0));
+                    // Portions were written in descending key order; bucket order therefore differs from TaskId order.
+                    UNIT_ASSERT_VALUES_EQUAL(expected.size(), portionsCount);
+                    UNIT_ASSERT(!std::is_sorted(expected.begin(), expected.end()));
+                    std::sort(expected.begin(), expected.end());
+                    const auto actual =
+                        getRows(ReadSysView(runtime, tableId, snapshot, "primary_index_optimizer_stats", columns, expected.size()));
+                    UNIT_ASSERT(actual == expected);
+                }, portionsCount,
+                [](auto& schema) {
+                    auto* planner = schema.MutableOptions()->MutableCompactionPlannerConstructor();
+                    planner->SetClassName("DEPRICATED");
+                    planner->MutableLBuckets();
+                });
+        }
+    }
+
+    Y_UNIT_TEST(SysViewDescRangePruning) {
+        using TStats = NSysView::Schema::PrimaryIndexPortionStats;
+        for (const TString reader : { "SIMPLE", "TRIVIAL" }) {
+            WithSysViewPortions(reader, [](TTestBasicRuntime& runtime, ui64 tableId, const NOlap::TSnapshot& snapshot, ui64) {
+                constexpr ui64 portionsPerSource = 10;
+                constexpr ui64 middleSourceBegin = portionsPerSource;
+                constexpr ui64 rangeBegin = middleSourceBegin + 1;
+                constexpr ui64 rangeEnd = rangeBegin + 2;
+                const std::vector<ui32> columns = { TStats::PathId::ColumnId, TStats::TabletId::ColumnId, TStats::PortionId::ColumnId };
+                auto all = ReadSysView(runtime, tableId, snapshot, "primary_index_portion_stats", columns, 0);
+                auto ids = std::static_pointer_cast<arrow::UInt64Array>(all->GetColumnByName("PortionId"));
+                const ui64 pathId = std::static_pointer_cast<arrow::UInt64Array>(all->GetColumnByName("PathId"))->Value(0);
+                const ui64 tabletId = TTestTxConfig::TxTablet0;
+                const ui64 from = ids->Value(rangeBegin), to = ids->Value(rangeEnd);
+                const std::vector<TCell> lower = { TCell::Make(pathId), TCell::Make(tabletId), TCell::Make(from) };
+                const std::vector<TCell> upper = { TCell::Make(pathId), TCell::Make(tabletId), TCell::Make(to) };
+                TShardReader scan(runtime, tabletId, tableId, snapshot);
+                scan.SetTablePath("/.sys/primary_index_portion_stats");
+                scan.SetReplyColumnIds(columns);
+                scan.SetReverse(true);
+                // The range lies inside the middle source; DESC bounds must be unswapped before pruning.
+                scan.AddRange(TSerializedTableRange(lower, true, upper, true));
+                scan.ReadAll();
+                UNIT_ASSERT(scan.IsCorrectlyFinished());
+                // This range prunes sources; row filtering would be a separate scan program.
+                UNIT_ASSERT_VALUES_EQUAL(scan.GetRecordsCount(), portionsPerSource);
+                UNIT_ASSERT(scan.GetResult()->Equals(*all->Slice(middleSourceBegin, portionsPerSource)));
+            });
+        }
     }
 
     Y_UNIT_TEST(WriteRead) {

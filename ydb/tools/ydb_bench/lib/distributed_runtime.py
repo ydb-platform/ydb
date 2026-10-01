@@ -5,7 +5,7 @@ import json
 
 import yaml
 
-from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json
+from ydb.tools.ydb_bench.lib.common import BenchmarkError, atomic_write_json, atomic_write_text
 from ydb.tools.ydb_bench.lib.distributed_artifacts import copy_results
 from ydb.tools.ydb_bench.lib.distributed_coordinator import DistributedCluster, request_operation
 from ydb.tools.ydb_bench.lib.distributed_telemetry import estimate_clock, summarize_hosts
@@ -207,6 +207,7 @@ class RemoteWorkloadLifecycle:
                 telemetry[host]["artifacts"],
                 "telemetry/" + sample_id,
                 destination,
+                telemetry=True,
             )
             hosts[host] = json.loads((destination / "cpu-samples.json").read_text())
             artifacts[host] = destination.relative_to(directory).as_posix()
@@ -246,6 +247,7 @@ class DistributedRuntime:
                 }
             }
         )
+        atomic_write_text(self.output / "profile.yaml", self.config_yaml)
         # Freeze peer routing for this run. Membership edits must not redirect
         # a generation's renewal or cleanup to a different endpoint.
         self.peers = {
@@ -272,6 +274,8 @@ class DistributedRuntime:
             self.call,
             self.cancelled,
             progress,
+            reset_disks=self.profile["distributed"].get("reset_disks", False),
+            deploy=self.profile.get("mode") == "deploy",
         )
         with self.service._lock:
             if self.cancelled.is_set():

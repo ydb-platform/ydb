@@ -98,7 +98,7 @@ class WorkerTelemetry:
             "counters_error": self.counters.error,
         }
         atomic_write_json(self.directory / "cpu-samples.json", record)
-        return {"sample_id": self.sample_id, "artifacts": snapshot_results(self.root, self.directory)}
+        return {"sample_id": self.sample_id, "artifacts": snapshot_results(self.root, self.directory, telemetry=True)}
 
 
 def estimate_clock(call, samples=3):

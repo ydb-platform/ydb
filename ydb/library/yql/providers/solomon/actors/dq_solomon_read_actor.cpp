@@ -175,7 +175,7 @@ public:
 
         if (UseMetricsQueue) {
             Become(&TDqSolomonReadActor::LimitlessModeState);
-            MetricsQueueEvents.Init(TxId, SelfId(), SelfId());
+            MetricsQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
             MetricsQueueEvents.OnNewRecipientId(MetricsQueueActor);
 
             if (MetricsQueueConsumersCountDelta > 0) {
@@ -209,6 +209,7 @@ public:
         hFunc(TEvSolomonProvider::TEvRetryDataRequest, HandleRetryDataRequest);
         hFunc(TEvSolomonProvider::TEvAck, Handle);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(NActors::TEvents::TEvUndelivered, Handle);
@@ -344,6 +345,12 @@ public:
         MetricsQueueEvents.OnEventReceived(ev);
     }
 
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
+        if (MetricsQueueEvents.Heartbeat()) {
+            MetricsQueueEvents.Send(new TEvSolomonProvider::TEvAck());
+        }
+    }
+
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         SOURCE_LOG_D("Handle MetricsQueue retry");
         MetricsQueueEvents.Retry();
@@ -361,7 +368,11 @@ public:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         SOURCE_LOG_D("Handle MetricsQueue undelivered");
-        if (MetricsQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
+        if (MetricsQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            return;
+        }
+        MetricsQueueEvents.Unsubscribe();
+        if (!(IsMetricsQueueEmpty && IsConfirmedMetricsQueueFinish && !IsWaitingMetricsQueueResponse)) {
             TIssues issues{TIssue{TStringBuilder() << "MetricsQueue was lost"}};
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::UNAVAILABLE));
         }
@@ -442,7 +453,7 @@ public:
             TryRequestData();
         }
 
-        finished = LastMetricProcessed();
+        finished = LastMetricProcessed() && (!UseMetricsQueue || !IsWaitingMetricsQueueResponse);
         if (MetricsData.empty()) {
             IngressStats.TryPause();
         }
@@ -509,7 +520,7 @@ private:
     }
 
     void TryRequestMetrics() {
-        if (ListedMetrics.empty() && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
+        if (UseMetricsQueue && ListedMetrics.empty() && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
             RequestMetrics();
         }
     }

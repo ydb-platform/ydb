@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package Ydb.Udf.V1;
+option java_package = "tech.ydb.udf.v1";
+
+import "ydb/public/api/protos/ydb_udf.proto";
+
+service UdfService {
+    // Bidirectional stream on the wire (YDB streaming infra). Client sends
+    // metadata + data chunks; server replies with a single UploadModuleResponse.
+    rpc UploadModule(stream Udf.UploadModuleChunk) returns (stream Udf.UploadModuleResponse);
+
+    rpc DeleteModule(Udf.DeleteModuleRequest) returns (Udf.DeleteModuleResponse);
+
+    rpc ListModules(Udf.ListModulesRequest) returns (Udf.ListModulesResponse);
+    rpc DescribeModule(Udf.DescribeModuleRequest) returns (Udf.DescribeModuleResponse);
+}

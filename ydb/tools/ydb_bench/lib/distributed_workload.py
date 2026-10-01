@@ -150,6 +150,7 @@ class WorkerWorkload:
             profile["distributed"]["template"] != state["template"]
             or profile["distributed"]["tenant"] != state["tenant"]
             or profile["actor_system"] != state["actor_system"]
+            or profile["distributed"].get("reset_disks", False) != state.get("reset_disks", False)
         ):
             raise BenchmarkError("Workload configuration differs from the prepared cluster")
         self.worker, self.state = worker, state

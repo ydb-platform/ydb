@@ -79,7 +79,8 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     if (record.HasLocks()) {
         KqpLocks = record.GetLocks();
-        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator);
+        const bool allowAncestorLocks = AppData()->FeatureFlags.GetEnableDataShardLocksTransferOnSplit();
+        KqpSetTxLocksKeys(record.GetLocks(), self->SysLocksTable(), KeyValidator, allowAncestorLocks);
     }
     KeyValidator.GetInfo().SetLoaded();
 }
@@ -233,6 +234,13 @@ std::tuple<NKikimrTxDataShard::TError::EKind, TString> TValidatedWriteTxOperatio
     if (recordOperation.HasWriteSeqNum()) {
         WriteSeqNum.WriterIndex = recordOperation.GetWriteSeqNum().GetWriterIndex();
         WriteSeqNum.WriteSeqNum = recordOperation.GetWriteSeqNum().GetWriteSeqNum();
+    }
+
+    OriginalShard = recordOperation.GetOriginalShard();
+    if (OriginalShard && !recordOperation.HasWriteSeqNum()) {
+        return {NKikimrTxDataShard::TError::BAD_ARGUMENT, TStringBuilder()
+            << "Retrying operation performed on OriginalShard " << OriginalShard
+            << " requires WriteSeqNum"};
     }
 
     SetTxKeys(tableInfo, tabletId, keyValidator);

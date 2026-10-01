@@ -510,7 +510,7 @@ void TStreamingTestFixture::EnsureTopicEndOffset(const TString& topicName, ui64 
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;
-    CreateTopic(topicName);
+    CreateScopedTopic(topicName);
 
     CreatePqSourceBasicAuth(sourceName, UseSchemaSecrets());
 

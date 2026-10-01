@@ -15,27 +15,46 @@ public:
     enum class ESourceAction {
         Finish,
         ProvideNext,
+        Continue,
         Wait
+    };
+
+protected:
+    class TSourceEntry {
+    public:
+        const ui32 SourceIdx;
+        const ui64 MemoryGroupIdx;
+        std::unique_ptr<NCommon::TDataSourceLease> Lease;
+
+        explicit TSourceEntry(const NCommon::IDataSource& source)
+            : SourceIdx(source.GetSourceIdx())
+            , MemoryGroupIdx(source.GetSequentialMemoryGroupIdx())
+        {
+        }
     };
 
 private:
     YDB_READONLY(ui32, PointIndex, 0);
     YDB_READONLY_DEF(TString, PointName);
     std::optional<ui32> LastSourceIdx;
-    virtual bool IsSourcePrepared(const std::shared_ptr<NCommon::IDataSource>& source) const = 0;
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) = 0;
+    virtual bool IsSourcePrepared(const NCommon::IDataSource& source) const = 0;
+    virtual ESourceAction OnSourceReady(const NCommon::TDataSourceLease& lease, TPlainReadData& reader) = 0;
     virtual void DoAbort() = 0;
     bool AbortFlag = false;
 
-    void InitSourceTracingMetrics(const std::shared_ptr<NCommon::IDataSource>& source) const;
+    bool IsPrepared(const TSourceEntry& entry) const {
+        return entry.Lease && IsSourcePrepared(entry.Lease->GetSource());
+    }
+
+    void InitSourceTracingMetrics(NCommon::IDataSource& source) const;
 
 protected:
     const std::shared_ptr<TSpecialReadContext> Context;
     const std::shared_ptr<ISourcesCollection> Collection;
     std::shared_ptr<ISyncPoint> Next;
-    std::deque<std::shared_ptr<NCommon::IDataSource>> SourcesSequentially;
+    std::deque<TSourceEntry> SourcesSequentially;
 
-    virtual std::shared_ptr<NCommon::IDataSource> DoOnSourceFinishedOnPreviouse() {
+    virtual std::unique_ptr<NCommon::TDataSourceLease> DoOnSourceFinishedOnPreviouse() {
         return nullptr;
     }
 
@@ -49,12 +68,13 @@ protected:
 public:
     virtual ~ISyncPoint() = default;
 
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
+    virtual std::unique_ptr<NCommon::TDataSourceLease> OnAddSource(std::unique_ptr<NCommon::TDataSourceLease> lease) {
+        auto& source = lease->GetSource();
         SourcesSequentially.emplace_back(source);
-        if (!source->GetAs<IDataSource>()->HasFetchingPlan()) {
-            source->MutableAs<IDataSource>()->InitFetchingPlan(Context->GetColumnsFetchingPlan(source, !Next));
+        if (!source.GetAs<IDataSource>()->HasFetchingPlan()) {
+            source.MutableAs<IDataSource>()->InitFetchingPlan(Context->GetColumnsFetchingPlan(source, !Next));
         }
-        return source;
+        return lease;
     }
 
     void Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& reader);
@@ -95,9 +115,9 @@ public:
     {
     }
 
-    void AddSource(std::shared_ptr<NCommon::IDataSource>&& source);
+    void AddSource(std::unique_ptr<NCommon::TDataSourceLease> lease);
 
-    void OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& sourceInput, TPlainReadData& reader);
+    void OnSourcePrepared(std::unique_ptr<NCommon::TDataSourceLease> lease, TPlainReadData& reader);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

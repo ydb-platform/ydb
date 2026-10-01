@@ -629,6 +629,11 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         UNIT_ASSERT_C(
             !layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
             "Null keys must not compare equal");
+
+        converter->ApplyEqualNulls({0});
+        UNIT_ASSERT_C(
+            layout->KeysEqual(row0, packRes.Overflow.data(), row1, packRes.Overflow.data()),
+            "Null keys must compare equal when EqualNulls is set");
     }
 
     Y_UNIT_TEST(TestBuckets) {

@@ -5,19 +5,18 @@
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
 #include <cstring>
+#include <vector>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
 
 namespace NActors {
 
     TRcBuf AllocateXdcSectionBuffer(size_t size, size_t headroom, size_t tailroom, size_t alignment) {
-        // The geometry reaches here straight off the wire on the receive path, so the invariants the
-        // arithmetic below relies on are enforced unconditionally: a non-power-of-two alignment makes
-        // `extra - shift` wrap, and an oversized sum makes the allocation wrap.
-        Y_ABORT_UNLESS((alignment & (alignment - 1)) == 0, "alignment %zu is not a power of two", alignment);
-        Y_ABORT_UNLESS(size <= EventMaxByteSize && headroom <= EventMaxByteSize && tailroom <= EventMaxByteSize
-            && alignment <= EventMaxByteSize, "section geometry out of range: size# %zu headroom# %zu"
-            " tailroom# %zu alignment# %zu", size, headroom, tailroom, alignment);
+        // Callers on the declare path must reject out-of-range geometry first. This is the last-resort
+        // check so a missed bound cannot wrap the allocation.
+        Y_ABORT_UNLESS(IsXdcSectionGeometryInRange(size, headroom, tailroom, alignment),
+            "section geometry out of range: size# %zu headroom# %zu tailroom# %zu alignment# %zu",
+            size, headroom, tailroom, alignment);
         if (alignment > 1) {
             // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base
             // buffer, but headroom may still shift the visible data away from the requested alignment, so
@@ -447,6 +446,10 @@ namespace NActors {
                     queue.SectionBytesRemain = 0;
                     queue.XdcDeclareIndex = 0;
                     if (queue.UseXdcForEvent) {
+                        if (!IsXdcDeclareWithinLimit(*queue.EvSerInfo, queue.SerializedBytesPending, EventMaxByteSize)) {
+                            ResetEventState(queue);
+                            throw TExEventTooLarge();
+                        }
                         queue.SerializeStage = ESerializeStage::kXdcDeclare;
                     }
                     break;
@@ -681,13 +684,24 @@ namespace NActors {
         Y_ABORT_UNLESS(!ev.EventHeaderOffset);
 
         const size_t count = length / sizeof(TXdcSection);
-        for (size_t i = 0; i < count; ++i) {
-            TXdcSection rec;
-            memcpy(&rec, data + i * sizeof(TXdcSection), sizeof(rec));
+        // Copy out of the wire buffer first: records are packed and may be unaligned.
+        // Validate the whole chunk before allocating so a later record cannot leave a
+        // half-applied event, and tests can cover the limit without allocating EventMaxByteSize.
+        std::vector<TXdcSection> recs(count);
+        if (count) {
+            memcpy(recs.data(), data, length);
+        }
+        size_t declared = ev.DeclaredSize;
+        for (const auto& rec : recs) {
+            if (!CanAddXdcSection(rec.Size, rec.Headroom, rec.Tailroom, rec.Alignment,
+                    declared, EventMaxByteSize)) {
+                throw TExEventFormatError();
+            }
+            declared += rec.Size;
+        }
+        for (const auto& rec : recs) {
             const bool isInline = rec.Flags & TXdcSection::FlagInline;
             ev.DeclaredSize += rec.Size;
-            Y_ABORT_UNLESS(ev.DeclaredSize <= EventMaxByteSize,
-                "declared section sizes total %zu, over the maximum event size", ev.DeclaredSize);
             ev.EvSerInfo.Sections.push_back(TEventSectionInfo{
                 rec.Headroom, rec.Size, rec.Tailroom, rec.Alignment, isInline, false});
             if (!isInline && rec.Size) {

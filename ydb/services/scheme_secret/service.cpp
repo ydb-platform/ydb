@@ -1,13 +1,12 @@
 #include "service.h"
-#include <ydb/services/scheme_secret/resolver.h>
 
 #include <ydb/core/base/appdata.h>
-
 #include <ydb/core/tx/scheme_board/subscriber.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/services/metadata/secret/fetcher.h>
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/services/metadata/service.h>
-#include <ydb/library/actors/core/log.h>
+#include <ydb/services/scheme_secret/resolver.h>
 
 #include <limits>
 
@@ -700,7 +699,7 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
     TDescribeSecretSettings settings
 ) {
     auto promise = NThreading::NewPromise<NKqp::TEvDescribeSecretsResponse::TDescription>();
-    if (UseSchemaSecrets(AppData()->FeatureFlags, secretNames)) {
+    if (UseSchemaSecrets(AppData(actorSystem)->FeatureFlags, secretNames)) {
         actorSystem->Send(
             MakeDescribeSchemaSecretServiceId(actorSystem->NodeId),
             new TDescribeSchemaSecretsService::TEvResolveSecret(
@@ -710,7 +709,7 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
         return promise.GetFuture();
     }
 
-    if (AppData()->FeatureFlags.GetDisableOldSecrets()) {
+    if (AppData(actorSystem)->FeatureFlags.GetDisableOldSecrets()) {
         // Just in case - when we disable old secrets, we'll make sure they are not needed any more
         promise.SetValue(
             NKqp::TEvDescribeSecretsResponse::TDescription(

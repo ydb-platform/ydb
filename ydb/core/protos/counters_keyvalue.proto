@@ -107,6 +107,10 @@ enum ECumulativeCounters {
     COUNTER_WRITE_BYTES_CHANNEL_13 = 80                              [(CounterOpts) = {Name: "WriteBytesChannel13"}];
     COUNTER_WRITE_BYTES_CHANNEL_14 = 81                              [(CounterOpts) = {Name: "WriteBytesChannel14"}];
     COUNTER_WRITE_BYTES_CHANNEL_15 = 82                              [(CounterOpts) = {Name: "WriteBytesChannel15"}];
+
+    COUNTER_MOVE_DATA_BLOBS_MOVED = 83                               [(CounterOpts) = {Name: "MoveDataBlobsMoved"}];
+    COUNTER_MOVE_DATA_BYTES_MOVED = 84                               [(CounterOpts) = {Name: "MoveDataBytesMoved"}];
+    COUNTER_MOVE_DATA_RECORDS_SCANNED = 85                           [(CounterOpts) = {Name: "MoveDataRecordsScanned"}];
 }
 
 enum ESimpleCounters {

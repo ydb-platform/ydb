@@ -17,8 +17,18 @@ enum class EMemoryConsumerKind {
     ColumnTablesPortionsMetaDataCache,
 };
 
+struct TConsumerReport {
+    ui64 Used = 0;
+    ui64 Demand = 0; // total desired footprint, invariant: Demand >= Used
+    ui64 Reclaimable = 0; // releasable asynchronously on request, invariant: Reclaimable <= Used
+};
+
 struct IMemoryConsumer : public TThrRefBase {
-    virtual void SetConsumption(ui64 value) = 0;
+    virtual void SetReport(TConsumerReport report) = 0;
+
+    void SetConsumption(ui64 value) {
+        SetReport({.Used = value, .Demand = value, .Reclaimable = 0});
+    }
 };
 
 enum EEvMemory {
@@ -32,6 +42,8 @@ enum EEvMemory {
     EvMemTableCompacted,
     EvMemTableUnregister,
 
+    EvConsumerUnregister,
+
     EvEnd
 };
 
@@ -41,6 +53,15 @@ struct TEvConsumerRegister : public TEventLocal<TEvConsumerRegister, EvConsumerR
     const EMemoryConsumerKind Kind;
 
     TEvConsumerRegister(EMemoryConsumerKind kind)
+        : Kind(kind)
+    {}
+};
+
+// Sent by the registrant itself: a consumer that stops serving its kind takes its bytes out of the accounting
+struct TEvConsumerUnregister : public TEventLocal<TEvConsumerUnregister, EvConsumerUnregister> {
+    const EMemoryConsumerKind Kind;
+
+    TEvConsumerUnregister(EMemoryConsumerKind kind)
         : Kind(kind)
     {}
 };

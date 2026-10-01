@@ -167,7 +167,10 @@ void TReadSession::StartClusterDiscovery() {
         selfShared->OnClusterDiscovery(st, result);
     };
 
-    auto rpcSettings = TRpcRequestSettings::Make(Settings);
+    auto rpcSettings = TRpcRequestSettings::Make(
+        Settings,
+        {},
+        TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint);
     rpcSettings.Deadline = TDeadline::AfterDuration(std::chrono::seconds(5)); // TODO: make client timeout setting
     Connections->RunDeferred<Ydb::PersQueue::V1::ClusterDiscoveryService,
                              Ydb::PersQueue::ClusterDiscovery::DiscoverClustersRequest,

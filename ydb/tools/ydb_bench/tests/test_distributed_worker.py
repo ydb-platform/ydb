@@ -1,4 +1,5 @@
 import copy
+import errno
 import json
 import socket
 import sys
@@ -16,8 +17,165 @@ import yaml
 from ydb.tools.ydb_bench.lib import distributed_worker, distributed_workload, distributed_runtime, local_ydb, runner
 from ydb.tools.ydb_bench.lib.config import load_config
 from ydb.tools.ydb_bench.lib.distributed_artifacts import DIAGNOSTIC_TAIL_BYTES, copy_results
-from ydb.tools.ydb_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted
 from ydb.tools.ydb_bench.lib.distributed_sessions import HostSessions, LEASE_SECONDS
+
+
+class PortReservationTest(unittest.TestCase):
+    def setUp(self):
+        self.worker = distributed_worker.DistributedWorker(
+            'host', '/unused', SimpleNamespace(lock=threading.RLock()), '/unused'
+        )
+        self.state = {'template': {'port_ranges': {'http': '8000-8002'}}, 'sockets': {}}
+        patch = mock.patch.object(self.worker, '_check')
+        self.check = patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_busy_and_forbidden_ports_are_skipped_and_closed(self):
+        busy, forbidden, free = mock.Mock(), mock.Mock(), mock.Mock()
+        busy.bind.side_effect = OSError(errno.EADDRINUSE, 'busy')
+        forbidden.bind.side_effect = OSError(errno.EACCES, 'permission')
+        free.getsockname.return_value = ('0.0.0.0', 8002)
+        with mock.patch.object(distributed_worker.socket, 'socket', side_effect=[busy, forbidden, free]):
+            self.assertEqual(8002, self.worker._reserve_port(self.state, 's', 'http', iter(range(8000, 8003))))
+        for stream, port in [(busy, 8000), (forbidden, 8001), (free, 8002)]:
+            stream.bind.assert_called_once_with(('0.0.0.0', port))
+        busy.close.assert_called_once()
+        forbidden.close.assert_called_once()
+        free.close.assert_not_called()
+        self.assertEqual({'s': [free]}, self.state['sockets'])
+
+    def test_exhaustion_does_not_fall_back_to_ephemeral_ports(self):
+        stream = mock.Mock()
+        stream.bind.side_effect = OSError(errno.EADDRINUSE, 'busy')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream):
+            with self.assertRaisesRegex(BenchmarkError, 'No available HTTP ports on host host for node s in 8000-8002'):
+                self.worker._reserve_port(self.state, 's', 'http', iter(range(8000, 8003)))
+        self.assertEqual([mock.call(('0.0.0.0', p)) for p in range(8000, 8003)], stream.bind.call_args_list)
+        self.assertEqual(3, stream.close.call_count)
+        self.assertEqual({}, self.state['sockets'])
+
+    def test_unexpected_bind_error_and_cancellation_stop_reservation(self):
+        stream = mock.Mock()
+        stream.bind.side_effect = OSError(errno.EMFILE, 'too many files')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream) as factory:
+            with self.assertRaises(OSError):
+                self.worker._reserve_port(self.state, 's', 'http', [8000, 8001])
+            stream.close.assert_called_once()
+            self.check.side_effect = BenchmarkInterrupted('cancelled')
+            with self.assertRaises(BenchmarkInterrupted):
+                self.worker._reserve_port(self.state, 's', 'http', [8000, 8001])
+            self.assertEqual(1, factory.call_count)
+
+    def test_pools_are_shared_by_host_and_automatic_ports_are_reserved_last(self):
+        self.state['template']['port_ranges'] = {'http': '8000-8001', 'ic': '19001, 19003'}
+        bound = set()
+        streams = []
+
+        def socket_factory(*_args):
+            stream = mock.Mock()
+
+            def bind(address):
+                port = address[1] or (30000 + len(bound))
+                if port in bound:
+                    raise OSError(errno.EADDRINUSE, 'busy')
+                bound.add(port)
+                stream.getsockname.return_value = (address[0], port)
+
+            stream.bind.side_effect = bind
+            streams.append(stream)
+            return stream
+
+        local = [{'name': 's', 'role': 'static'}, {'name': 'd', 'role': 'dynamic'}, {'name': 'cli', 'role': 'cli'}]
+        with mock.patch.object(distributed_worker.socket, 'socket', side_effect=socket_factory):
+            result = self.worker._reserve_node_ports(self.state, local)
+        self.assertEqual((8000, 8001), (result['s']['mon_port'], result['d']['mon_port']))
+        self.assertEqual((19001, 19003), (result['s']['ic_port'], result['d']['ic_port']))
+        self.assertEqual({}, result['cli'])
+        self.assertEqual(6, len(bound))
+        self.assertEqual([mock.call(('0.0.0.0', 0))] * 2, [s.bind.call_args for s in streams[-2:]])
+        self.assertEqual({'s', 'd'}, set(self.state['sockets']))
+        self.assertTrue(all(len(sockets) == 3 for sockets in self.state['sockets'].values()))
+
+    def test_auto_ports_use_explicit_ports_first_then_fallback_for_each_node(self):
+        self.assertTrue(self.worker.capabilities({})['port_auto'])
+        local = [{'name': 's', 'role': 'static'}, {'name': 'd', 'role': 'dynamic'}, {'name': 'cli', 'role': 'cli'}]
+        for policy in ('8000-8002, auto', 'auto, 8000-8002'):
+            with self.subTest(policy=policy):
+                state = {
+                    'template': {'port_ranges': {'grpc': policy, 'http': '8002-8003', 'ic': 'auto'}},
+                    'sockets': {},
+                }
+                bound, calls = set(), []
+
+                def socket_factory(*_args):
+                    stream = mock.Mock()
+
+                    def bind(address):
+                        calls.append(address[1])
+                        port = address[1] or 30000 + len(bound)
+                        if port in bound or port == 8000:
+                            raise OSError(errno.EADDRINUSE, 'busy')
+                        if port == 8001:
+                            raise OSError(errno.EACCES, 'permission')
+                        bound.add(port)
+                        stream.getsockname.return_value = (address[0], port)
+
+                    stream.bind.side_effect = bind
+                    return stream
+
+                with mock.patch.object(distributed_worker.socket, 'socket', side_effect=socket_factory):
+                    result = self.worker._reserve_node_ports(state, local)
+                # The strict HTTP pool wins the overlap, then optional gRPC
+                # exhausts busy/forbidden/reserved ports before any bind(0).
+                self.assertEqual([8002, 8003, 8000, 8001, 8002, 0, 0, 0, 0], calls)
+                self.assertEqual((8002, 8003), (result['s']['mon_port'], result['d']['mon_port']))
+                self.assertEqual(6, len({port for ports in result.values() for port in ports.values()}))
+                self.assertEqual({}, result['cli'])
+                self.assertTrue(all(len(sockets) == 3 for sockets in state['sockets'].values()))
+
+    def test_auto_uses_available_listed_ports_and_defers_os_assignment(self):
+        self.state['template']['port_ranges'] = {'grpc': '8000, auto', 'ic': '9000, auto'}
+        bound, calls = set(), []
+
+        def socket_factory(*_args):
+            stream = mock.Mock()
+
+            def bind(address):
+                calls.append(address[1])
+                port = address[1] or 30000 + len(bound)
+                self.assertNotIn(port, bound)
+                bound.add(port)
+                stream.getsockname.return_value = (address[0], port)
+
+            stream.bind.side_effect = bind
+            return stream
+
+        with mock.patch.object(distributed_worker.socket, 'socket', side_effect=socket_factory):
+            result = self.worker._reserve_node_ports(
+                self.state, [{'name': 's', 'role': 'static'}, {'name': 'd', 'role': 'dynamic'}]
+            )
+        self.assertEqual([8000, 9000, 0, 0, 0, 0], calls)
+        self.assertEqual(8000, result['s']['grpc_port'])
+        self.assertEqual(9000, result['s']['ic_port'])
+        self.assertEqual(6, len(bound))
+
+    def test_auto_does_not_hide_unexpected_or_os_allocation_errors(self):
+        self.state['template']['port_ranges'] = {'http': 'auto'}
+        stream = mock.Mock()
+        stream.bind.side_effect = OSError(errno.EADDRINUSE, 'no ephemeral ports')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream):
+            with self.assertRaises(OSError):
+                self.worker._reserve_node_ports(self.state, [{'name': 's', 'role': 'static'}])
+        stream.bind.assert_called_once_with(('0.0.0.0', 0))
+        stream.close.assert_called_once()
+        self.assertEqual({}, self.state['sockets'])
+        stream.reset_mock()
+        stream.bind.side_effect = OSError(errno.EMFILE, 'too many files')
+        with mock.patch.object(distributed_worker.socket, 'socket', return_value=stream):
+            with self.assertRaises(OSError):
+                self.worker._reserve_port(self.state, 's', 'http', [8000], required=False)
+        stream.close.assert_called_once()
 
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "distributed workers require Linux")
@@ -111,6 +269,53 @@ class DistributedWorkerTest(unittest.TestCase):
             self.finish(worker, "configure")
         return payload, hosts
 
+    def test_configured_ports_reach_saved_yaml_and_node_commands(self):
+        self.template['port_ranges'] = {'http': '8000, auto', 'grpc': '2100-2102', 'ic': '19000-19002'}
+
+        def reserve(_state, _node, _kind, candidates, **_options):
+            port = next(iter(candidates), None)
+            return 31000 if port == 0 else port
+
+        with mock.patch.object(
+            distributed_worker.DistributedWorker,
+            '_reserve_port',
+            side_effect=reserve,
+        ), mock.patch.object(distributed_worker.socket, 'getfqdn', side_effect=['a.test', 'b.test']):
+            _, hosts = self.prepare()
+        self.assertEqual(
+            [8000, 8000, 31000],
+            [node['ports']['mon_port'] for host in hosts for node in host['nodes'] if node['role'] != 'cli'],
+        )
+        for worker in self.workers:
+            worker.configure({**self.reference, 'hosts': hosts})
+            self.finish(worker, 'configure')
+        self.assertEqual(self.template['port_ranges'], self.workers[0].state['template']['port_ranges'])
+        for worker in self.workers:
+            saved = yaml.load(
+                (worker.state['root'] / 'results/configuration/cluster.yaml').read_text(),
+                Loader=distributed_worker.cluster_config._DocumentLoader,
+            )['config']
+            self.assertEqual([19000, 19000], [host['port'] for host in saved['hosts']])
+            with mock.patch.object(distributed_worker, 'start_managed_process') as start, mock.patch.object(
+                worker, '_wait_ports'
+            ):
+                process = mock.Mock(pid=1000000000)
+                process.poll.return_value = 0
+                start.return_value = process
+                for role in ('static', 'dynamic'):
+                    worker._start_nodes(worker.state, role)
+                nodes = [node for node in worker.state['prepared']['nodes'] if node['role'] != 'cli']
+                self.assertEqual(len(nodes), start.call_count)
+                for call, node in zip(start.call_args_list, nodes):
+                    command = call.args[0]
+                    for flag, key in [
+                        ('--mon-port', 'mon_port'),
+                        ('--grpc-port', 'grpc_port'),
+                        ('--ic-port', 'ic_port'),
+                    ]:
+                        self.assertEqual(node['ports'][key], command[command.index(flag) + 1])
+        self.assertEqual({}, next(node for host in hosts for node in host['nodes'] if node['role'] == 'cli')['ports'])
+
     def workload_config(self):
         return yaml.safe_dump(
             {
@@ -126,6 +331,34 @@ class DistributedWorkerTest(unittest.TestCase):
                 }
             }
         )
+
+    def test_configuration_snapshot_is_complete_and_independent(self):
+        dump = distributed_worker.cluster_config.dump_document
+        with mock.patch.object(
+            distributed_worker.cluster_config,
+            "dump_document",
+            side_effect=lambda value: dump(value) + "\n#" + "x" * (DIAGNOSTIC_TAIL_BYTES + 1),
+        ):
+            self.configure()
+        worker = self.workers[0]
+        result = worker.state["jobs"]["configure"]["result"]
+        destination = self.root / "saved-configuration"
+        copy_results(
+            lambda operation, value: worker.read_result(value),
+            self.reference,
+            "configure",
+            result["artifacts"],
+            "configuration",
+            destination,
+        )
+        original = worker.state["root"] / "results/configuration/cluster.yaml"
+        saved = destination / "cluster.yaml"
+        self.assertEqual(original.read_bytes(), saved.read_bytes())
+        self.assertEqual(1, len(result["artifacts"]))
+        self.assertGreater(saved.stat().st_size, DIAGNOSTIC_TAIL_BYTES)
+        before = saved.read_bytes()
+        self.template["ydb_config"] = {"feature_flags": {"enable_views": True}}
+        self.assertEqual(before, saved.read_bytes())
 
     def initialize_workload(self):
         self.configure()
@@ -322,7 +555,10 @@ class DistributedWorkerTest(unittest.TestCase):
         commands = []
         barrier = threading.Barrier(3) if multiple else None
 
-        def start(*_args, **_kwargs):
+        def start(argv, *_args, **_kwargs):
+            path = Path(argv[argv.index("--yaml-config") + 1])
+            self.assertEqual("configuration", path.parent.name)
+            self.assertTrue(path.is_file())
             process = mock.Mock(pid=1000000000 + len(processes))
             process.poll.return_value = None
             process.stop.side_effect = lambda: setattr(process.poll, "return_value", 0)
@@ -390,6 +626,12 @@ class DistributedWorkerTest(unittest.TestCase):
         self.assertTrue(all(process.poll() == 0 for process in processes))
         self.assertTrue(all(worker.sessions.status() is None for worker in self.workers))
         plan = json.loads((output / "cluster/execution-plan.json").read_text())
+        for generation in ("cluster", "verification-cluster"):
+            directory = output / generation
+            if generation == "verification-cluster" and not directory.exists():
+                continue
+            self.assertTrue((directory / "configuration/cluster.yaml").is_file())
+            self.assertEqual(1, len(list((directory / "configuration").rglob("*.yaml"))))
         self.assertEqual({"a", "b"}, {host["host_id"] for host in plan["hosts"]})
         diagnostics = json.loads((output / "cluster/diagnostics.json").read_text())
         self.assertEqual({"a", "b"}, set(diagnostics))
@@ -406,6 +648,7 @@ class DistributedWorkerTest(unittest.TestCase):
         worker = self.workers[0]
         root = worker.state["root"]
         log = root / "nodes/1/stdout.txt"
+        log.parent.mkdir(parents=True, exist_ok=True)
         log.write_bytes(b"old output" + b"x" * DIAGNOSTIC_TAIL_BYTES)
         with self.assertRaisesRegex(BenchmarkError, "stopped"):
             worker.diagnostics(self.reference)
@@ -426,7 +669,7 @@ class DistributedWorkerTest(unittest.TestCase):
         entry = next(item for item in index if item["source"] == "nodes/1/stdout.txt")
         self.assertTrue(entry["truncated"])
         self.assertEqual(DIAGNOSTIC_TAIL_BYTES + len(b"old output"), entry["original_size"])
-        self.assertTrue((destination / "nodes/1/cluster.yaml").is_file())
+        self.assertTrue((destination / "results/configuration/cluster.yaml").is_file())
         with self.assertRaisesRegex(BenchmarkError, "Unknown"):
             worker.read_diagnostic({**self.reference, "path": "../worker.json", "offset": 0})
         with self.assertRaises(BenchmarkError):
@@ -504,17 +747,116 @@ class DistributedWorkerTest(unittest.TestCase):
 
     def test_configuration_preserves_vcpu_location_and_distinct_ports(self):
         self.configure()
+        documents = []
         for worker in self.workers:
+            text = (worker.state["root"] / "results/configuration/cluster.yaml").read_text()
+            documents.append(text)
+            document = yaml.load(text, Loader=distributed_worker.cluster_config._DocumentLoader)
+            config = document["config"]
+            self.assertEqual(2, config["actor_system_config"]["cpu_count"])
+            self.assertEqual(3, document["selector_config"][0]["config"]["actor_system_config"]["cpu_count"])
+            self.assertNotIn("actor_system_config: !inherit", text)
             for node in worker.state["prepared"]["nodes"]:
                 if node["role"] == "cli":
                     continue
-                path = worker.state["root"] / "nodes" / str(node["node_id"]) / "cluster.yaml"
-                config = yaml.safe_load(path.read_text())["config"]
-                expected = 2 if node["role"] == "static" else 3
-                self.assertEqual(expected, config["actor_system_config"]["cpu_count"])
                 self.assertIsNone(node["placement"]["cpus"])
                 self.assertEqual([1, 2], [host["node_id"] for host in config["hosts"]])
                 self.assertEqual(["dc-R1", "dc-R2"], [host["location"]["rack"] for host in config["hosts"]])
+        self.assertEqual(documents[0], documents[1])
+
+    def test_common_yaml_preserves_distinct_tenant_actor_settings(self):
+        self.template["tenants"].append({"path": "/Root/other", "storage_kind": "ssd", "storage_groups": 1})
+        payload = {
+            **self.reference,
+            "template": self.template,
+            "tenant": "/Root/bench",
+            "actor_system": {
+                "static_nodes": {"cpu_count": 2},
+                "tenants": {
+                    "/Root/bench": {"dynamic_nodes": {"cpu_count": 5}, "use_shared_threads": True},
+                    "/Root/other": {"use_ring_queue": False},
+                },
+            },
+        }
+        hosts = []
+        for worker in self.workers:
+            worker.prepare(payload)
+            hosts.append(self.finish(worker, "prepare"))
+        texts = []
+        for worker in self.workers:
+            worker.configure({**self.reference, "hosts": hosts})
+            self.finish(worker, "configure")
+            texts.append((worker.state["root"] / "results/configuration/cluster.yaml").read_text())
+        self.assertEqual(texts[0], texts[1])
+        document = yaml.load(texts[0], Loader=distributed_worker.cluster_config._DocumentLoader)
+        self.assertEqual(2, document["config"]["actor_system_config"]["cpu_count"])
+        tenants = {
+            item["selector"]["tenant"]: item["config"]["actor_system_config"] for item in document["selector_config"]
+        }
+        self.assertEqual(5, tenants["/Root/bench"]["cpu_count"])
+        self.assertTrue(tenants["/Root/bench"]["use_shared_threads"])
+        self.assertFalse(tenants["/Root/other"]["use_ring_queue"])
+        self.assertNotIn("cpu_count", tenants["/Root/other"])
+        self.assertNotIn("actor_system_config: !inherit", texts[0])
+
+    def test_cluster_overrides_reach_generated_yaml(self):
+        overrides = {
+            'domains_config': {
+                'domain': [{'domain_id': 1, 'name': 'Demo'}],
+                'state_storage': [{'ssid': 1, 'ring': {'node': [1, 2], 'nto_select': 1}}],
+            },
+            'self_management_config': {'erasure_species': 'none'},
+        }
+        self.template['ydb_config'] = overrides
+        self.template['tenants'][0]['path'] = '/Demo/bench'
+        for node in self.template['nodes']:
+            if node['role'] == 'dynamic':
+                node['tenant'] = '/Demo/bench'
+        payload = {**self.reference, 'template': self.template, 'tenant': '/Demo/bench'}
+        hosts = []
+        for worker in self.workers:
+            worker.prepare(payload)
+            hosts.append(self.finish(worker, 'prepare'))
+        for worker in self.workers:
+            worker.configure({**self.reference, 'hosts': hosts})
+            self.finish(worker, 'configure')
+            for node in worker.state['prepared']['nodes']:
+                if node['role'] == 'cli':
+                    continue
+                config = yaml.load(
+                    (worker.state['root'] / 'results/configuration/cluster.yaml').read_text(),
+                    Loader=distributed_worker.cluster_config._DocumentLoader,
+                )['config']
+                self.assertEqual(overrides['domains_config'], config['domains_config'])
+                self.assertEqual('none', config['erasure'])
+                self.assertEqual('none', config['storage_pool_types'][0]['pool_config']['erasure_species'])
+                self.assertTrue(config['self_management_config']['enabled'])
+
+    def test_tenant_selectors_reach_generated_yaml(self):
+        self.check_tenant_selectors(False)
+
+    def test_tenant_replacement_reaches_generated_yaml(self):
+        self.check_tenant_selectors(True)
+
+    def check_tenant_selectors(self, replace):
+        from ydb.tools.ydb_bench.lib import cluster_config
+
+        self.template['ydb_tenant_configs'] = {'/Root/bench': {'feature_flags': {'enable_system_views': False}}}
+        if replace:
+            self.template['ydb_tenant_replacements'] = {'/Root/bench': [['feature_flags']]}
+        self.configure()
+        for worker in self.workers:
+            for node in worker.state['prepared']['nodes']:
+                if node['role'] == 'cli':
+                    continue
+                text = (worker.state['root'] / 'results/configuration/cluster.yaml').read_text()
+                self.assertEqual(not replace, 'feature_flags: !inherit' in text)
+                document = yaml.load(text, Loader=cluster_config._DocumentLoader)
+                self.assertEqual({'tenant': '/Root/bench'}, document['selector_config'][0]['selector'])
+                self.assertEqual(
+                    {'enable_system_views': False}, document['selector_config'][0]['config']['feature_flags']
+                )
+                self.assertNotIn('feature_flags', document['config'])
 
     def test_job_thread_survives_until_generation_cleanup(self):
         self.prepare()

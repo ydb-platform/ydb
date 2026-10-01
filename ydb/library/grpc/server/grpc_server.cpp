@@ -141,6 +141,8 @@ void TGRpcServer::AddService(IGRpcServicePtr service) {
 }
 
 void TGRpcServer::Start() {
+    Stopped_.store(false, std::memory_order_release);
+
     TString server_address(Join(":", Options_.Host, Options_.Port)); // https://st.yandex-team.ru/DTCC-695
     using grpc::ServerBuilder;
     using grpc::ResourceQuota;
@@ -277,6 +279,14 @@ void TGRpcServer::Start() {
 }
 
 void TGRpcServer::Stop() {
+    // Stop() may be called more than once on the same instance (e.g. by
+    // TGRpcServersManager::Stop() and then again by KikimrStop()). Make it
+    // idempotent so the second pass does not re-shutdown the server and its
+    // completion queues.
+    if (Stopped_.exchange(true, std::memory_order_acq_rel)) {
+        return;
+    }
+
     NYdbGrpc::GrpcDead = true;
     for (auto& service : Services_) {
         service->StopService();

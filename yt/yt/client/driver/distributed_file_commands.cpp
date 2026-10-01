@@ -162,7 +162,7 @@ void TWriteFileFragmentCommand::DoExecute(ICommandContextPtr context)
             break;
         }
 
-        WriteFileByBatches(fileWriter, data, maxAttachmentSize);
+        WriteInBatches(fileWriter, data, maxAttachmentSize);
     }
 
     WaitFor(fileWriter->Close())

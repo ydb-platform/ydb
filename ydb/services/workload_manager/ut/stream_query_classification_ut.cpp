@@ -39,8 +39,7 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
             CREATE RESOURCE POOL )" << poolId << R"( WITH (
                 CONCURRENT_QUERY_LIMIT = 10,
                 QUEUE_SIZE = 100,
-                TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
-                QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
+                TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10
             );
             )" << classifierSql);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
@@ -129,14 +128,12 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
                 CREATE RESOURCE POOL )" << classifierPoolId << R"( WITH (
                     CONCURRENT_QUERY_LIMIT = 10,
                     QUEUE_SIZE = 100,
-                    TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
-                    QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
+                    TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10
                 );
                 CREATE RESOURCE POOL )" << explicitPoolId << R"( WITH (
                     CONCURRENT_QUERY_LIMIT = 10,
                     QUEUE_SIZE = 100,
-                    TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
-                    QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
+                    TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10
                 );
                 CREATE RESOURCE POOL CLASSIFIER streaming_classifier WITH (
                     RESOURCE_POOL=")" << classifierPoolId << R"(",

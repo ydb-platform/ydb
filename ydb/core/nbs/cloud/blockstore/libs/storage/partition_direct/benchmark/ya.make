@@ -1,12 +1,13 @@
 G_BENCHMARK(nbs_partition_direct_requests_creation_benchmark)
 
-SIZE(SMALL)
+SIZE(MEDIUM)
 
 # Keeps the case inside the SMALL test budget. Run the binary directly without
 # this option (or with a larger --benchmark_min_time) when comparing numbers.
 BENCHMARK_OPTS(--benchmark_min_time=0.05s)
 
 SRCS(
+    dirty_map_benchmark.cpp
     requests_benchmark.cpp
     time_predictor_benchmark.cpp
     ../base_test_fixture.cpp

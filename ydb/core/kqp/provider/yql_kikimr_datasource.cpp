@@ -44,62 +44,6 @@ TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ct
     return ctx.NewList(pos, std::move(items));
 }
 
-TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource) {
-    switch (externalSource.DataSourceAuth.identity_case()) {
-        case NKikimrSchemeOp::TAuth::kServiceAccount:
-            properties["authMethod"] = "SERVICE_ACCOUNT";
-            properties["serviceAccountId"] = externalSource.DataSourceAuth.GetServiceAccount().GetId();
-            properties["serviceAccountIdSignature"] = externalSource.ServiceAccountIdSignature;
-            properties["serviceAccountIdSignatureReference"] = externalSource.DataSourceAuth.GetServiceAccount().GetSecretName();
-            return {};
-
-        case NKikimrSchemeOp::TAuth::kNone:
-            properties["authMethod"] = "NONE";
-            return {};
-
-        case NKikimrSchemeOp::TAuth::kBasic:
-            properties["authMethod"] = "BASIC";
-            properties["login"] = externalSource.DataSourceAuth.GetBasic().GetLogin();
-            properties["password"] = externalSource.Password;
-            properties["passwordReference"] = externalSource.DataSourceAuth.GetBasic().GetPasswordSecretName();
-            return {};
-
-        case NKikimrSchemeOp::TAuth::kMdbBasic:
-            properties["authMethod"] = "MDB_BASIC";
-            properties["serviceAccountId"] = externalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountId();
-            properties["serviceAccountIdSignature"] = externalSource.ServiceAccountIdSignature;
-            properties["serviceAccountIdSignatureReference"] = externalSource.DataSourceAuth.GetMdbBasic().GetServiceAccountSecretName();
-
-            properties["login"] = externalSource.DataSourceAuth.GetMdbBasic().GetLogin();
-            properties["password"] = externalSource.Password;
-            properties["passwordReference"] = externalSource.DataSourceAuth.GetMdbBasic().GetPasswordSecretName();
-            return {};
-
-        case NKikimrSchemeOp::TAuth::kAws:
-            properties["authMethod"] = "AWS";
-            properties["awsAccessKeyId"] = externalSource.AwsAccessKeyId;
-            properties["awsAccessKeyIdReference"] = externalSource.DataSourceAuth.GetAws().GetAwsAccessKeyIdSecretName();
-            properties["awsSecretAccessKey"] = externalSource.AwsSecretAccessKey;
-            properties["awsSecretAccessKeyReference"] = externalSource.DataSourceAuth.GetAws().GetAwsSecretAccessKeySecretName();
-            properties["awsRegion"] = externalSource.DataSourceAuth.GetAws().GetAwsRegion();
-            return {};
-
-        case NKikimrSchemeOp::TAuth::kToken:
-            properties["authMethod"] = "TOKEN";
-            properties["token"] = externalSource.Token;
-            properties["tokenReference"] = externalSource.DataSourceAuth.GetToken().GetTokenSecretName();
-            return {};
-
-        case NKikimrSchemeOp::TAuth::kIam:
-            properties["authMethod"] = "IAM";
-            properties["iamServiceAccountId"] = externalSource.DataSourceAuth.GetIam().GetServiceAccountId();
-            properties["iamResourceId"] = externalSource.DataSourceAuth.GetIam().GetResourceId();
-            return {};
-
-        case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET:
-            return {"Identity case is not specified"};
-    }
-}
 
 namespace {
 
@@ -348,16 +292,14 @@ public:
         return found;
     }
 
-    bool AddCluster(const std::pair<TString, TString>& table, IKikimrGateway::TTableMetadataResult& res, TExprNode::TPtr input, TExprContext& ctx, bool isShowCreate) {
-        const auto& metadata = *res.Metadata;
+    bool AddCluster(const std::pair<TString, TString>& table, IKikimrGateway::TTableMetadataResult& res, TExprNode::TPtr input, TExprContext& ctx, bool isShowCreate, bool needAuthInfo) {
+        auto& metadata = *res.Metadata;
         if (metadata.Kind != EKikimrTableKind::External) {
             return true;
         }
 
-        // SHOW CREATE rewrites the read to point at the .sys/show_create
-        // system view in a later step, so it does not need the external
-        // data source to be available through ExternalSourceFactory.
-        if (isShowCreate) {
+        // Schema-only operations must work without resolved secrets.
+        if (isShowCreate || !needAuthInfo) {
             return true;
         }
 
@@ -368,32 +310,25 @@ public:
             return false;
         }
 
-        auto source = ExternalSourceFactory->GetOrCreate(metadata.ExternalSource.Type);
-        auto it = Types.DataSourceMap.find(source->GetName());
-        if (it == Types.DataSourceMap.end()) {
+        try {
+            const auto& dataSource = metadata.GetResolvedExternalDataSource();
+            auto source = ExternalSourceFactory->GetOrCreate(dataSource.GetType());
+            auto it = Types.DataSourceMap.find(source->GetName());
+            if (it == Types.DataSourceMap.end()) {
+                ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                    << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
+                    << " data source " << source->GetName() << " doesn't exist, please contact internal support"));
+                return false;
+            }
+
+            auto properties = dataSource.BuildConnectorProperties();
+            it->second->AddCluster(dataSource.GetDataSourcePath(), properties);
+        } catch (const std::exception& exception) {
             ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
-                << " data source " << source->GetName() << " doesn't exist, please contact internal support"));
+                << "Failed to add external source cluster for table: " << NCommon::FullTableName(table.first, table.second)
+                << ": " << exception.what()));
             return false;
         }
-
-        THashMap<TString, TString> properties = {{
-            {"location", metadata.ExternalSource.DataSourceLocation },
-            {"installation", metadata.ExternalSource.DataSourceInstallation },
-            {"source_type", metadata.ExternalSource.Type}
-        }};
-
-        properties.insert(metadata.ExternalSource.Properties.GetProperties().begin(), metadata.ExternalSource.Properties.GetProperties().end());
-
-        const auto error = FillAuthProperties(properties, metadata.ExternalSource);
-        if (error) {
-            ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                << "Fill auth properties for table: " << NCommon::FullTableName(table.first, table.second)
-                << " failed: " << error));
-            return false;
-        }
-
-        it->second->AddCluster(metadata.ExternalSource.DataSourcePath, properties);
 
         return true;
     }
@@ -452,7 +387,7 @@ public:
                     }
                 }
 
-                if (!AddCluster(table, res, input, ctx, isShowCreate)) {
+                if (!AddCluster(table, res, input, ctx, isShowCreate, tableDesc->GetNeedAuthInfo())) {
                     LoadResults.clear();
                     return TStatus::Error;
                 }
@@ -463,6 +398,7 @@ public:
                 ) {
                     const auto& viewMetadata = *res.Metadata;
                     auto* viewInfo = preparingQuery->MutablePhysicalQuery()->MutableViewInfos()->Add();
+                    viewInfo->SetTableName(viewMetadata.Name);
                     auto* pathId = viewInfo->MutableTableId();
                     pathId->SetOwnerId(viewMetadata.PathId.OwnerId());
                     pathId->SetTableId(viewMetadata.PathId.TableId());
@@ -525,6 +461,13 @@ protected:
         }
 
         if (!GetDispatcher()->Dispatch(cluster, name, normalizedValue, NCommon::TSettingDispatcher::EStage::STATIC, NCommon::TSettingDispatcher::GetErrorCallback(pos, ctx))) {
+            return false;
+        }
+
+        // Pragma names arrive here normalized (lowercase, no underscores).
+        if (name == "kqpdisablepessimisticlocks" && !SessionCtx->Query().IsolateEffects) {
+            ctx.AddError(YqlIssue(ctx.GetPosition(pos), TIssuesIds::KIKIMR_PRAGMA_NOT_SUPPORTED, TStringBuilder()
+                << "Pragma kikimr.KqpDisablePessimisticLocks is only supported for ReadCommittedRW isolation level"));
             return false;
         }
 
@@ -853,14 +796,14 @@ public:
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
-                if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
+                if (tableDesc.Metadata->IsExternalDataSource() && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
                     ctx.AddError(TIssue(node->Pos(ctx),
                                         TStringBuilder() << "Attempt to read from external data source \"" << tablePath << "\" without table. Please specify table to read from"));
                     return nullptr;
                 }
-                if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+                if (tableDesc.Metadata->IsExternalDataSource()) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->GetExternalSourceType());
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)
@@ -878,15 +821,15 @@ public:
                     auto retChildren = node->ChildrenList();
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
-                } else if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable) {
+                } else if (tableDesc.Metadata->IsExternalTable()) {
                     YQL_ENSURE(ExternalSourceFactory);
-                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
+                    const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->GetExternalSourceType());
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
                             .Repeat(TExprStep::Intents)
                             .Repeat(TExprStep::LoadTablesMetadata)
                             .Repeat(TExprStep::RewriteIO);
-                    TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.TableLocation) });
+                    TExprNode::TPtr path = ctx.NewCallable(node->Pos(), "String", { ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalTable().GetLocation()) });
                     auto table = ctx.NewList(node->Pos(), {ctx.NewAtom(node->Pos(), "table"), path});
                     auto newKey = ctx.NewCallable(node->Pos(), "Key", {table});
                     auto newRead = Build<TCoRead>(ctx, node->Pos())
@@ -895,7 +838,7 @@ public:
                                                 Build<TCoDataSource>(ctx, node->Pos())
                                                     .Category(ctx.NewAtom(node->Pos(), source->GetName()))
                                                     .FreeArgs()
-                                                        .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalSource.DataSourcePath))
+                                                        .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->ExternalTable().GetDataSourcePath()))
                                                         .Add(ctx.NewAtom(node->Pos(), tableDesc.Metadata->Name))
                                                     .Build()
                                                 .Done().Ptr()
@@ -903,7 +846,7 @@ public:
                                             .FreeArgs()
                                                 .Add(ctx.NewCallable(node->Pos(), "MrTableConcat", {newKey}))
                                                 .Add(ctx.NewCallable(node->Pos(), "Void", {}))
-                                                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalSource.TableContent))
+                                                .Add(BuildExternalTableSettings(node->Pos(), ctx, tableDesc.Metadata->Columns, source, tableDesc.Metadata->ExternalTable().GetContent()))
                                             .Build()
                                             .Done().Ptr();
                     auto retChildren = node->ChildrenList();

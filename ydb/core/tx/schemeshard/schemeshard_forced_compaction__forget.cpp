@@ -1,6 +1,9 @@
 #include "schemeshard_impl.h"
 
-#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 namespace NKikimr::NSchemeShard {
 
@@ -18,7 +21,10 @@ struct TSchemeShard::TForcedCompaction::TTxForget: public TRwTxBase {
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
-        LOG_D("TForcedCompaction::TTxForget DoExecute " << request.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "[ForcedCompaction] TForcedCompaction::TTxForget DoExecute",
+            {"schemeshard", Self->SelfTabletId()},
+            {"request", request.ShortDebugString()},
+        );
 
         auto response = MakeHolder<TEvForcedCompaction::TEvForgetResponse>(request.GetTxId());
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -30,7 +36,7 @@ struct TSchemeShard::TForcedCompaction::TTxForget: public TRwTxBase {
             );
         }
         const TPathId subdomainPathId = database.GetPathIdForDomain();
-        
+
         auto compactionId = request.GetForcedCompactionId();
         const auto* forcedCompactionInfoPtr = Self->ForcedCompactions.FindPtr(compactionId);
         if (!forcedCompactionInfoPtr) {
@@ -66,7 +72,10 @@ struct TSchemeShard::TForcedCompaction::TTxForget: public TRwTxBase {
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_D("TForcedCompaction::TTxForget DoComplete " << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "[ForcedCompaction] TForcedCompaction::TTxForget DoComplete",
+            {"schemeshard", Self->SelfTabletId()},
+            {"request", Request->Get()->Record.ShortDebugString()},
+        );
         SideEffects.ApplyOnComplete(Self, ctx);
     }
 
@@ -98,3 +107,5 @@ ITransaction* TSchemeShard::CreateTxForgetForcedCompaction(TEvForcedCompaction::
 }
 
 } // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

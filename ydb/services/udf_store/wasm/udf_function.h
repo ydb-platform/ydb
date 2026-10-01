@@ -15,28 +15,11 @@ namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYql::NUdf;
 
-NYql::NUdf::TUnboxedValue ReadResultUnboxed(
-    const NYql::NUdf::IValueBuilder* valueBuilder,
-    NYdb::NWasm::IWebAssemblyCompartment* compartment,
-    uintptr_t resultOffset,
-    EUdfValueType expectedType);
-
-//! Build MiniKQL/UDF TType* from a recursive manifest type node. A leaf at the
-//! top level of an argument / result becomes Optional<data> (the shape
-//! unversioned_value always had); nested leaves are built verbatim.
-//! `depth` mirrors MaxManifestTypeDepth in the parser so a hand-built tree
-//! cannot blow the stack either.
+//! Build the exact manifest type, with a depth bound for hand-built descriptors.
 TType* BuildTypeFromWasmTypeNode(
     IFunctionTypeInfoBuilder& builder,
     const TWasmTypeNode& node,
-    bool topLevel = true,
     ui32 depth = 0);
-
-//! Map a type node to bridge value/node kinds for registration.
-void BridgeKindsFromTypeNode(
-    const TWasmTypeNode& node,
-    EBridgeNodeKind& outNodeKind,
-    EBridgeValueKind& outValueKind);
 
 //! Declared result reduced to what a returned handle can be checked against.
 //! Optionality is transparent on both sides of the bridge and says nothing
@@ -74,33 +57,16 @@ struct TDeclaredResultShape {
 
 TDeclaredResultShape DeclaredResultShape(const TType* type, const ITypeInfoHelper* helper);
 
-class TWasmUdfFunction: public TBoxedValue {
+class TWasmBridgeFunction: public TBoxedValue {
 public:
-    static TType* BuildYqlType(IFunctionTypeInfoBuilder& builder, EUdfValueType type);
-
-    static TType* BuildFunctionType(
+    static std::unique_ptr<TWasmBridgeFunction> Create(
         IFunctionTypeInfoBuilder& builder,
-        const TWasmUdfDescriptor& descriptor);
-
-    static void Register(
-        IFunctionTypeInfoBuilder& builder,
-        bool typesOnly,
         TWasmCompartmentStatePtr state,
         const TWasmUdfDescriptor& descriptor);
 
-private:
-    TWasmUdfFunction(TWasmCompartmentStatePtr state, const TWasmUdfDescriptor& descriptor);
+    //! Shared bridge invocation for plain calls and object lifecycle callbacks.
+    TUnboxedValue Invoke(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const;
 
-    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override;
-
-    TWasmCompartmentStatePtr State_;
-    TWasmUdfDescriptor Descriptor_;
-};
-
-//! Bridge calling-convention UDF: args/result are ui64 handles into the
-//! per-query TWasmBridgeNodeTable (no TUnversionedValue marshalling).
-class TWasmBridgeFunction: public TBoxedValue {
-public:
     static void Register(
         IFunctionTypeInfoBuilder& builder,
         bool typesOnly,

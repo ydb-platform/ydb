@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/http/fetch
     library/cpp/http/server
     library/cpp/http/io
+    library/cpp/monlib/encode
     library/cpp/logger
     library/cpp/malloc/api
     library/cpp/protobuf/runtime
@@ -24,3 +25,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

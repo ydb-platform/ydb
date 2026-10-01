@@ -93,6 +93,17 @@ namespace NKikimr::NBsController {
         }
     };
 
+    struct TExGroupLayoutIncorrect : TExError {
+        explicit TExGroupLayoutIncorrect(ui32 groupId) {
+            *this << "Group layout is incorrect" << TErrorParams::GroupId(groupId)
+                  << "; set IgnoreGroupLayoutChecks to allow this reassignment";
+        }
+
+        NKikimrBlobStorage::TConfigResponse::TStatus::EFailReason GetFailReason() const override {
+            return NKikimrBlobStorage::TConfigResponse::TStatus::kGroupLayoutIncorrect;
+        }
+    };
+
     struct TExHostNotFound : TExError {
         TExHostNotFound(const NKikimrBlobStorage::THostKey& hostKey) {
             *this << "Host not found";

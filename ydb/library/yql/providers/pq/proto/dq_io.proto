@@ -120,6 +120,7 @@ message TDqPqTopicSource {
     TOffsetPredicate OffsetPredicate = 33;
     TWriteTimePredicate WriteTimePredicate = 34;
     bool UsedPartitionPredicate = 35;
+    bool AllowConsumerRewindForDisposition = 36;
 }
 
 message TDqPqTopicSink {

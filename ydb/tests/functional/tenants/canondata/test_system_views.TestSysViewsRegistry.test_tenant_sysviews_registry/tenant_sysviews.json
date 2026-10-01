@@ -568,6 +568,22 @@
       {
         "name": "WmClassifiedBy",
         "type": "Utf8?"
+      },
+      {
+        "name": "DurationUs",
+        "type": "Uint64?"
+      },
+      {
+        "name": "CpuTimeUs",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ComputeMemoryBytes",
+        "type": "Uint64?"
+      },
+      {
+        "name": "ReadIngressBytesRate",
+        "type": "Uint64?"
       }
     ],
     "primary_key": [

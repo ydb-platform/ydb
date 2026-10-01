@@ -2,7 +2,7 @@
 
 In a {{ ydb-short-name }} cluster, three interconnected subsystems ensure metadata distribution between nodes: **StateStorage**, **Board**, and **SchemeBoard**. Each solves its own task, but all three are built on the same architectural principle — a distributed quorum service with deterministic replica addressing.
 
-This article explains why these subsystems are needed, how they are structured, and how they work. An overview without core details for documentation users is in the [Metadata distribution services](../concepts/architecture/metadata-services.md) section. Instructions for configuring and changing the configuration are described in the Configuring metadata distribution subsystems section.
+This article explains why these subsystems are needed, how they are structured, and how they work. An overview without core details for documentation users is in the [Metadata distribution services](../concepts/architecture/metadata-services.md) section. Instructions for configuring and changing the configuration are described in the [Configuring metadata distribution subsystems](../devops/configuration-management/configuration-v2/state-storage-reconfiguration.md) section.
 
 ## Why metadata distribution subsystems are needed {#why}
 
@@ -287,16 +287,16 @@ The configuration change process consists of several steps:
 
 A pause (at least one minute) must be maintained between steps so that the configuration has time to propagate to all cluster nodes.
 
-Detailed instructions for manual configuration changes are provided in the section Configuring metadata distribution subsystems.
+Detailed instructions for manual configuration changes are provided in the section [Configuring metadata distribution subsystems](../devops/configuration-management/configuration-v2/state-storage-reconfiguration.md).
 
-### Automatic reconfiguration (Self Heal) {#self-heal}
+### Automatic reconfiguration (SelfHeal) {#self-heal}
 
-In clusters with V2 configuration, the **Self Heal State Storage** mechanism is available — automatic management of subsystem configuration. It monitors the state of cluster nodes and, when necessary:
+In clusters with V2 configuration, **Metadata Distribution SelfHeal** automatically manages the State Storage, Board, and SchemeBoard configurations. It monitors the state of cluster nodes and, when necessary:
 
 - Moves replicas from failed nodes to healthy ones.
-- Adds new replicas when the cluster expands.
+- Can add new replicas as the cluster expands, subject to the settings and available nodes.
 
-Self Heal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see the section [Self Heal State Storage](../maintenance/manual/selfheal_statestorage.md).
+SelfHeal works through the same ring group mechanism as manual reconfiguration, but performs all steps automatically. For more details, see [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md).
 
 ### Ring groups in a two-data-center configuration {#two-dc}
 
@@ -320,8 +320,8 @@ The replica placement rule (different rings in different racks; replicas of the 
 ## Related materials {#related}
 
 - [Metadata distribution services](../concepts/architecture/metadata-services.md) — an overview for documentation users.
-- Configuring metadata distribution subsystems — instructions for manually changing the configuration.
-- [Self Heal State Storage](../maintenance/manual/selfheal_statestorage.md) — automatic management of subsystem configuration.
+- [Configuring metadata distribution subsystems](../devops/configuration-management/configuration-v2/state-storage-reconfiguration.md) — instructions for manually changing the configuration.
+- [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) — automatic management of the State Storage, Board, and SchemeBoard configurations.
 - [Bridge mode](../concepts/bridge.md) — a configuration with two data centers and the role of ring groups in it.
 - [Cluster topology](../concepts/topology.md) — the failure model, failure domains, and failure regions.
 - [Glossary](../concepts/glossary.md) — definitions of terms: StateStorage, Board, SchemeBoard, tablet, ActorId.

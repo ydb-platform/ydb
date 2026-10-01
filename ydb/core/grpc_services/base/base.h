@@ -23,6 +23,7 @@
 
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
+#include <ydb/core/grpc_services/base/http_database_access_verdict.h>
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/config.pb.h>
@@ -300,7 +301,7 @@ struct TRpcServices {
         EvGrpcRuntimeRequest,
         EvNodeCheckRequest,
         EvStreamWriteRefreshToken,    // internal call, pair to EvRefreshToken
-        EvRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
+        EvHttpRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
         EvRequestAuthAndCheckResult,
         // !!! DO NOT ADD NEW REQUEST !!!
     };
@@ -480,6 +481,7 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxyHandleMethods;
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -496,12 +498,6 @@ public:
     // tracing
     virtual void StartTracing(NWilson::TSpan&& span) = 0;
     virtual void FinishSpan() = 0;
-    virtual void SetUserFacingTraceId(NWilson::TTraceId id) {
-        UserFacingTraceId = std::move(id);
-    }
-    NWilson::TTraceId GetUserFacingWilsonTraceId() const override {
-        return NWilson::TTraceId(UserFacingTraceId);
-    }
     // Returns pointer to a state that denotes whether this request ever been a subject
     // to tracing decision. CAN be nullptr
     virtual bool* IsTracingDecided() = 0;
@@ -513,6 +509,12 @@ public:
 
     // validation
     virtual bool Validate(TString& error) = 0;
+
+    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer);
+
+    const TMaybe<TString> GetDatabaseName() const final {
+        return PathNormalizationInitialized_ ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
+    }
 
     // counters
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
@@ -551,7 +553,8 @@ public:
     virtual TString GetRpcMethodName() const = 0;
 
 private:
-    NWilson::TTraceId UserFacingTraceId;
+    TMaybe<TString> EffectiveDatabaseName_;
+    bool PathNormalizationInitialized_ = false;
 };
 
 // Request context
@@ -666,7 +669,7 @@ public:
         return false;
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 
@@ -883,10 +886,52 @@ struct TYdbGrpcMethodAccessorTraits {
     }
 };
 
+class TEvProxyRuntimeEvent
+    : public IRequestProxyCtx
+    , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
+{
+public:
+    const TMaybe<TString> GetSdkBuildInfo() const {
+        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    }
+
+    const TMaybe<TString> GetGrpcUserAgent() const {
+        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
+    }
+
+    virtual NRuntimeEvents::EType GetRuntimeEventType() {
+        return NRuntimeEvents::EType::COMMON;
+    }
+};
+
+template <NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
+public:
+    NRuntimeEvents::EType GetRuntimeEventType() override {
+        return RuntimeEventType;
+    }
+};
+
+template <ui32 TRpcId, typename TDerived>
+class TEvProxyLegacyEvent
+    : public IRequestProxyCtx
+    , public TEventLocal<TDerived, TRpcId>
+{
+public:
+    const TMaybe<TString> GetSdkBuildInfo() const {
+        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    }
+
+    const TMaybe<TString> GetGrpcUserAgent() const {
+        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
+    }
+};
+
 template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
-    : public IRequestProxyCtx
-    , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>, TRpcId>
+    : public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
+        TEvProxyRuntimeEvent,
+        TEvProxyLegacyEvent<TRpcId, TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>>>
 {
 private:
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
@@ -908,6 +953,7 @@ public:
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
+        this->EnablePathNormalization();
         if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
@@ -936,7 +982,7 @@ public:
     NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
         return {
             .RequestType = AuxSettings.RequestType,
-            .Database = GetDatabaseName(),
+            .Database = this->GetDatabaseName(),
         };
     }
 
@@ -952,7 +998,7 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1227,47 +1273,6 @@ private:
     }
 };
 
-class TEvProxyRuntimeEvent
-    : public IRequestProxyCtx
-    , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
-{
-public:
-    const TMaybe<TString> GetSdkBuildInfo() const {
-        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-    }
-
-    const TMaybe<TString> GetGrpcUserAgent() const {
-        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
-    }
-
-    virtual NRuntimeEvents::EType GetRuntimeEventType() {
-        return NRuntimeEvents::EType::COMMON;
-    }
-};
-
-template <NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
-class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
-public:
-    NRuntimeEvents::EType GetRuntimeEventType() override {
-        return RuntimeEventType;
-    }
-};
-
-template <ui32 TRpcId, typename TDerived>
-class TEvProxyLegacyEvent
-    : public IRequestProxyCtx
-    , public TEventLocal<TDerived, TRpcId>
-{
-public:
-    const TMaybe<TString> GetSdkBuildInfo() const {
-        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-    }
-
-    const TMaybe<TString> GetGrpcUserAgent() const {
-        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
-    }
-};
-
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
 class TGRpcRequestWrapperImpl
     : public std::conditional_t<IsOperation,
@@ -1290,6 +1295,7 @@ public:
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
     {
+        this->EnablePathNormalization();
         if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
@@ -1303,7 +1309,7 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1406,6 +1412,10 @@ public:
 
     TString GetPeerName() const override {
         return Ctx_->GetPeer();
+    }
+
+    TString GetAuthority() const override {
+        return Ctx_->GetAuthority();
     }
 
     bool SslServer() const {
@@ -1879,31 +1889,30 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts)
+    TEvRequestAuthAndCheckResult(
+        Ydb::StatusIds::StatusCode status,
+        const NYql::TIssues& issues,
+        const TAuditLogParts& auditLogParts,
+        EHttpDatabaseAccessVerdict databaseAccessVerdict
+    )
         : Status(status)
         , Issues(issues)
         , AuditLogParts(auditLogParts)
+        , DatabaseAccessVerdict(databaseAccessVerdict)
     {}
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TAuditLogParts& auditLogParts)
-        : Status(status)
-        , AuditLogParts(auditLogParts)
-    {
-        Issues.AddIssue(issue);
-    }
-
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error, const TAuditLogParts& auditLogParts)
-        : Status(status)
-        , AuditLogParts(auditLogParts)
-    {
-        Issues.AddIssue(error);
-    }
-
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts)
+    TEvRequestAuthAndCheckResult(
+        const TString& database,
+        const TMaybe<TString>& ydbToken,
+        const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+        const TAuditLogParts& auditLogParts,
+        const EHttpDatabaseAccessVerdict databaseAccessVerdict
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
         , AuditLogParts(auditLogParts)
+        , DatabaseAccessVerdict(databaseAccessVerdict)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1912,19 +1921,21 @@ public:
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TAuditLogParts AuditLogParts;
+    EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 };
 
-class TEvRequestAuthAndCheck
+class TEvHttpRequestAuthAndCheck
     : public IRequestProxyCtx
-    , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
+    , public TEventLocal<TEvHttpRequestAuthAndCheck, TRpcServices::EvHttpRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(
+    TEvHttpRequestAuthAndCheck(
         const TString& database,
         const TMaybe<TString>& ydbToken,
         NActors::TActorId sender,
         TAuditMode auditMode,
         TString peerName,
-        TString requestId)
+        TString requestId
+    )
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
@@ -1967,7 +1978,8 @@ public:
                     Database,
                     YdbToken,
                     UserToken,
-                    GetAuditLogParts()
+                    GetAuditLogParts(),
+                    DatabaseAccessVerdict
                 )
             );
         } else {
@@ -1975,7 +1987,8 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     status,
                     IssueManager.GetIssues(),
-                    GetAuditLogParts()
+                    GetAuditLogParts(),
+                    DatabaseAccessVerdict
                 )
             );
         }
@@ -2063,7 +2076,7 @@ public:
         return Span.GetTraceId();
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 
@@ -2139,6 +2152,7 @@ public:
     TAuditMode AuditMode;
     TString PeerName;
     TString RequestId;
+    EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 
     inline static const TString EmptySerializedTokenMessage;
 };

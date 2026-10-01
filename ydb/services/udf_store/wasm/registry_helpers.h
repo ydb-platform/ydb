@@ -5,7 +5,6 @@
 #include <ydb/library/wasm/api/bytecode.h>
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/data_transfer.h>
-#include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -13,13 +12,6 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr::NUdfStore::NWasm {
-
-using EAbiValueType = NYdb::NUdfStore::NAbi::EValueType;
-using EAbiValueFlags = NYdb::NUdfStore::NAbi::EValueFlags;
-
-EUdfValueType ParseValueType(TStringBuf type);
-
-const char* ValueTypeToString(EUdfValueType type);
 
 struct TNamedModuleBytecode {
     TString Name;
@@ -34,21 +26,8 @@ void AddPrecompiledModule(
 std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> CreateRegistryCompartment(
     const TVector<TNamedModuleBytecode>& libraries);
 
-TUnversionedValue MakeEmptyValue();
-
-//! TUnversionedValue.Length is ui32 — reject oversized host strings.
+//! Bridge string builders use ui32 lengths; reject oversized host strings.
 ui32 CheckedAbiLength(size_t size, TStringBuf what);
-
-void StoreValue(
-    NYdb::NWasm::IWebAssemblyCompartment* compartment,
-    uintptr_t offset,
-    const TUnversionedValue& value);
-
-struct TPreparedUdfArg {
-    NYdb::NWasm::TCopyGuard ValueGuard;
-    NYdb::NWasm::TCopyGuard StringGuard;
-    uintptr_t Offset = 0;
-};
 
 class TCurrentCompartmentGuard {
 public:

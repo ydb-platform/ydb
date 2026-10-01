@@ -2,8 +2,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
 namespace NKikimr::NSchemeShard {
@@ -13,6 +12,8 @@ namespace NStreamingQuery {
 namespace {
 
 class TPropose : public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 public:
     explicit TPropose(TOperationId id)
         : OperationId(std::move(id))
@@ -20,7 +21,9 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "",
+            {"step", step},
+        );
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -48,7 +51,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "");
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -59,15 +62,12 @@ public:
     }
 
 private:
-    TString DebugHint() const override {
-        return TStringBuilder() << "TCreateStreamingQuery TPropose, operationId: " << OperationId << ", ";
-    }
-
-private:
     const TOperationId OperationId;
 };
 
 class TCreateStreamingQuery : public TSubOperation {
+    virtual const char* Name() const override final { return "TCreateStreamingQuery"; }
+
     static constexpr ui64 MAX_PROTOBUF_SIZE = 2_MB;
 
     static TTxState::ETxState NextState() {
@@ -155,7 +155,7 @@ class TCreateStreamingQuery : public TSubOperation {
         return true;
     }
 
-    void PersistCreateStreamingQuery(const TPathId& parentPathId, const TPathId& streamingQueryPathId, const TOperationContext& context) const {
+    void PersistCreateStreamingQuery(const TPathId& parentPathId, const TPathId& streamingQueryPathId, const TProposeContext& context) const {
         context.MemChanges.GrabNewPath(context.SS, streamingQueryPathId);
         context.MemChanges.GrabNewStreamingQuery(context.SS, streamingQueryPathId);
         context.MemChanges.GrabPath(context.SS, parentPathId);
@@ -167,7 +167,7 @@ class TCreateStreamingQuery : public TSubOperation {
         context.DbChanges.PersistTxState(OperationId);
     }
 
-    void AddPathIntoSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TPathId& newPathId, const TString& owner, TOperationContext& context) const {
+    void AddPathIntoSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TPathId& newPathId, const TString& owner, TProposeContext& context) const {
         dstPath.MaterializeLeaf(owner, newPathId);
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, dstPath.Parent(), context);
@@ -241,10 +241,12 @@ public:
         return checks;
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateStreamingQuery().GetName();
-        LOG_N("TCreateStreamingQuery Propose: opId# " << OperationId << ", path# " << parentPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", parentPathStr + "/" + name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -270,12 +272,16 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
-        LOG_N("TCreateStreamingQuery AbortPropose: opId# " << OperationId);
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TCreateStreamingQuery AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateStreamingQuery AbortUnsafe",
+            {"operationId", OperationId},
+            {"txId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()},
+        );
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -305,7 +311,11 @@ bool SetName<NStreamingQuery::TTag>(NStreamingQuery::TTag, TTxTransaction& tx, c
 ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateStreamingQuery);
 
-    LOG_I("CreateNewStreamingQuery, opId# " << id  << ", tx# " << tx.ShortDebugString());
+    YDB_LOG_INFO_CTX(context.Ctx, "CreateNewStreamingQuery",
+        {"operationId", id},
+        {"tx", tx.ShortDebugString()},
+        {"schemeshard", context.SS->TabletID()},
+    );
 
     const TPath parentPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (const auto checks = NStreamingQuery::TCreateStreamingQuery::IsParentPathValid(parentPath); !checks) {
@@ -316,6 +326,7 @@ ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransactio
         const TPath dstPath = parentPath.Child(tx.GetCreateStreamingQuery().GetName());
         const auto isAlreadyExists = dstPath.Check()
             .IsResolved()
+            .NotDeleted()
             .NotUnderDeleting();
 
         if (isAlreadyExists) {
@@ -332,3 +343,5 @@ ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, TTxState::ETxState 
 }
 
 }  // namespace NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

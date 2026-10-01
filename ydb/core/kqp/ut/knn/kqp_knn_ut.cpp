@@ -6,6 +6,8 @@
 
 #include <ydb/library/testlib/helpers.h>
 
+#include <util/string/subst.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -363,6 +365,8 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
     enum class EVectorType {
         Float,
+        Float16,
+        BFloat16,
         Bit,
         Uint8,
         Int8
@@ -407,6 +411,8 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
         i64 expectedMatchPk = 0;
         switch (vectorType) {
             case EVectorType::Float:
+            case EVectorType::Float16:
+            case EVectorType::BFloat16:
                 insertQuery = R"(
                     UPSERT INTO `/Root/TestTable` (pk, emb) VALUES
                     (1, Untag(Knn::ToBinaryStringFloat([1.0f, 2.0f, 3.0f]), "FloatVector")),
@@ -418,6 +424,12 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
                 )";
                 targetVector = "Knn::ToBinaryStringFloat([100.0f, 110.0f, 120.0f])";
                 tagName = "FloatVector";
+                if (vectorType != EVectorType::Float) {
+                    const TString type = vectorType == EVectorType::Float16 ? "Float16" : "BFloat16";
+                    SubstGlobal(insertQuery, "Float", type);
+                    SubstGlobal(targetVector, "Float", type);
+                    tagName = type + "Vector";
+                }
                 expectedMatchPk = 6;
                 break;
             case EVectorType::Bit:
@@ -543,6 +555,14 @@ Y_UNIT_TEST_SUITE(KqpKnn) {
 
     Y_UNIT_TEST(FloatVectorKnnPushdown) {
         DoVectorKnnPushdownTest(EVectorType::Float);
+    }
+
+    Y_UNIT_TEST(Float16VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::Float16);
+    }
+
+    Y_UNIT_TEST(BFloat16VectorKnnPushdown) {
+        DoVectorKnnPushdownTest(EVectorType::BFloat16);
     }
 
     Y_UNIT_TEST(BitVectorKnnPushdown) {

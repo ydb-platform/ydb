@@ -1,0 +1,12 @@
+/* custom error: No such column: a */
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    A
+FROM (
+    SELECT
+        1 AS A
+)
+WHERE
+    a == 1
+;

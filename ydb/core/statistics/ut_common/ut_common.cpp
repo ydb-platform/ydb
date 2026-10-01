@@ -977,16 +977,7 @@ void CheckEqHeightHistogram(
     }
 }
 
-ui64 CountStatisticsV2Rows(
-        TTestEnv& env, const TString& databaseName, const TPathId& pathId,
-        EStatType statType, const TString& columnTags) {
-    TStringBuilder script;
-    script << "SELECT COUNT(*) FROM `/Root/" << databaseName << "/.metadata/statistics_v2` "
-        << "WHERE owner_id = " << pathId.OwnerId
-        << " AND local_path_id = " << pathId.LocalPathId
-        << " AND stat_type = " << static_cast<ui32>(statType)
-        << " AND column_tags = \"" << columnTags << "\";";
-
+Ydb::ResultSet ExecuteYqlScriptWithResult(TTestEnv& env, const TString& script) {
     auto& runtime = *env.GetServer().GetRuntime();
     using TEvExecuteYqlRequest = NGRpcService::TGrpcRequestOperationCall<
         Ydb::Scripting::ExecuteYqlRequest,
@@ -1007,7 +998,18 @@ ui64 CountStatisticsV2Rows(
     Ydb::Scripting::ExecuteYqlResult result;
     UNIT_ASSERT(response.operation().result().UnpackTo(&result));
     UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
-    const auto& resultSet = result.result_sets(0);
+    return std::move(*result.mutable_result_sets(0));
+}
+
+ui64 CountStatisticsV2Rows(
+        TTestEnv& env, const TString& databaseName, const TPathId& pathId,
+        EStatType statType, const TString& columnTags) {
+    const auto resultSet = ExecuteYqlScriptWithResult(env, TStringBuilder()
+        << "SELECT COUNT(*) FROM `/Root/" << databaseName << "/.metadata/statistics_v2` "
+        << "WHERE owner_id = " << pathId.OwnerId
+        << " AND local_path_id = " << pathId.LocalPathId
+        << " AND stat_type = " << static_cast<ui32>(statType)
+        << " AND column_tags = \"" << columnTags << "\";");
     UNIT_ASSERT_VALUES_EQUAL(resultSet.rows_size(), 1);
     const auto& cell = resultSet.rows(0).items(0);
     if (cell.has_uint64_value()) {
@@ -1019,28 +1021,7 @@ ui64 CountStatisticsV2Rows(
 }
 
 static TString ExecuteYqlScriptFetchBytes(TTestEnv& env, const TString& script) {
-    auto& runtime = *env.GetServer().GetRuntime();
-
-    using TEvExecuteYqlRequest = NGRpcService::TGrpcRequestOperationCall<
-        Ydb::Scripting::ExecuteYqlRequest,
-        Ydb::Scripting::ExecuteYqlResponse>;
-
-    Ydb::Scripting::ExecuteYqlRequest request;
-    request.set_script(script);
-
-    auto future = NRpcService::DoLocalRpc<TEvExecuteYqlRequest>(
-        std::move(request), "", "", runtime.GetActorSystem(0));
-    auto response = runtime.WaitFuture(std::move(future));
-
-    UNIT_ASSERT(response.operation().ready());
-    UNIT_ASSERT_VALUES_EQUAL_C(
-        response.operation().status(), Ydb::StatusIds::SUCCESS,
-        GetIssuesString(response.operation()));
-
-    Ydb::Scripting::ExecuteYqlResult result;
-    UNIT_ASSERT(response.operation().result().UnpackTo(&result));
-    UNIT_ASSERT_VALUES_EQUAL(result.result_sets_size(), 1);
-    const auto& resultSet = result.result_sets(0);
+    const auto resultSet = ExecuteYqlScriptWithResult(env, script);
     UNIT_ASSERT_VALUES_EQUAL(resultSet.rows_size(), 1);
     return resultSet.rows(0).items(0).bytes_value();
 }

@@ -22,13 +22,14 @@ class ChSqlaType:
     generic_type: None
     _ch_type_cls: type[ClickHouseType] | None = None
     _instance_cache: dict[TypeDef, "ChSqlaType"] | None = None
+    _schema_name: str | None = None
 
     def __init_subclass__(cls):
         """
         Registers ChSqla type in the type map and sets the underlying ClickHouseType class to use to initialize
         ChSqlaType instances
         """
-        base = cls.__name__
+        base = cls.__dict__.get("_schema_name") or cls.__name__
         if not cls._ch_type_cls:
             try:
                 cls._ch_type_cls = type_map[base]

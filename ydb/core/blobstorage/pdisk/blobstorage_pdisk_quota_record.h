@@ -184,6 +184,32 @@ public:
         }
     }
 
+    // Largest allocation that still leaves this record strictly better than `color`.
+    // Mirrors EstimateSpaceColor, which reports a color better than X exactly while
+    // the free space left after the allocation is above the X boundary.
+    i64 GetHeadroomBelow(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        i64 boundary = 0;
+        switch (color) {
+        case TColor::PRE_ORANGE:
+            boundary = AtomicGet(PreOrange);
+            break;
+        case TColor::ORANGE:
+            boundary = AtomicGet(Orange);
+            break;
+        case TColor::RED:
+            boundary = AtomicGet(Red);
+            break;
+        case TColor::BLACK:
+            boundary = AtomicGet(Black);
+            break;
+        default:
+            Y_ABORT("no headroom is reported for color# %d", int(color));
+        }
+        return Max<i64>(0, AtomicGet(Free) - boundary - 1);
+    }
+
     ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) const {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 

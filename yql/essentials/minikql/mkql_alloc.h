@@ -20,6 +20,10 @@
 #include <memory>
 #include <source_location>
 
+namespace arrow {
+class MemoryPool;
+} // namespace arrow
+
 namespace NKikimr::NMiniKQL {
 
 const ui64 MKQL_ALIGNMENT = 16;
@@ -102,6 +106,10 @@ struct TAllocState: public TAlignedPagePool {
     TMkqlArrowHeader* CurrentArrowPages = nullptr; // page arena for small arrow allocations
     std::unordered_set<const void*> ArrowBuffers;
     bool EnableArrowTracking = true;
+    // With the default arrow allocator (see UseDefaultArrowAllocator()), the pool of the arrow buffers instead of
+    // arrow::default_memory_pool(). Assign it before the program runs. A buffer records the pool that allocated it and
+    // is freed to it, whatever state is current at the free
+    arrow::MemoryPool* ArrowMemoryPool = nullptr;
 
     void* MainContext = nullptr;
     void* CurrentContext = nullptr;
@@ -198,13 +206,16 @@ struct TMkqlArrowHeader {
     ui64 Size;
     ui64 Offset;
     std::atomic<ui64> UseCount;
+    // the pool of the default arrow allocator that allocated the buffer, see TAllocState::ArrowMemoryPool
+    arrow::MemoryPool* Pool;
     std::array<
         char,
         ArrowAlignment -
             sizeof(TAllocState::TListEntry) -
             sizeof(ui64) -
             sizeof(ui64) -
-            sizeof(std::atomic<ui64>)>
+            sizeof(std::atomic<ui64>) -
+            sizeof(arrow::MemoryPool*)>
         Padding;
 };
 

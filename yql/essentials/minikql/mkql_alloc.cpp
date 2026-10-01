@@ -68,11 +68,13 @@ void TAllocState::CleanupPAllocList(TListEntry* root) {
 void TAllocState::CleanupArrowList(TListEntry* root) {
     for (auto curr = root->Right; curr != root;) {
         auto next = curr->Right;
-        if (Y_UNLIKELY(TAllocState::IsDefaultAllocatorUsed())) {
-            free(curr);
+        auto* header = (TMkqlArrowHeader*)curr;
+        auto fullSize = header->Size + sizeof(TMkqlArrowHeader);
+        if (Y_UNLIKELY(TAllocState::IsDefaultArrowAllocatorUsed())) {
+            // allocated by the pool of the default arrow allocator, see MKQLArrowAllocateImpl()
+            Y_ABORT_UNLESS(header->Pool);
+            header->Pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));
         } else {
-            auto size = ((TMkqlArrowHeader*)curr)->Size;
-            auto fullSize = size + sizeof(TMkqlArrowHeader);
             ReleaseAlignedPage(curr, fullSize);
         }
 
@@ -306,6 +308,7 @@ void* MKQLArrowAllocateOnArena(ui64 size) {
         page->Offset = 0;
         page->Size = pageSize - sizeof(TMkqlArrowHeader); // for consistency with CleanupArrowList()
         page->UseCount = 1;
+        page->Pool = nullptr;
 
         if (state->EnableArrowTracking) {
             page->Entry.Link(&state->ArrowBlocksRoot);
@@ -343,8 +346,9 @@ void* MKQLArrowAllocateImpl(ui64 size) {
     }
 
     void* ptr;
+    arrow::MemoryPool* pool = nullptr;
     if (TAllocState::IsDefaultArrowAllocatorUsed()) {
-        auto pool = arrow::default_memory_pool();
+        pool = state->ArrowMemoryPool ? state->ArrowMemoryPool : arrow::default_memory_pool();
         Y_ENSURE(pool);
         uint8_t* res;
         if (!pool->Allocate(fullSize, &res).ok()) {
@@ -361,6 +365,7 @@ void* MKQLArrowAllocateImpl(ui64 size) {
     NYql::NUdf::SanitizerMakeRegionAccessible(header, sizeof(TMkqlArrowHeader));
     header->Offset = 0;
     header->UseCount = 0;
+    header->Pool = pool;
 
     if (state->EnableArrowTracking) {
         header->Entry.Link(&state->ArrowBlocksRoot);
@@ -421,7 +426,7 @@ void MKQLArrowFreeImpl(const void* mem, ui64 size) {
     Y_ENSURE(size == header->Size);
 
     if (TAllocState::IsDefaultArrowAllocatorUsed()) {
-        auto pool = arrow::default_memory_pool();
+        auto pool = header->Pool;
         Y_ABORT_UNLESS(pool);
         NYql::NUdf::SanitizerMakeRegionAccessible(reinterpret_cast<void*>(header), fullSize);
         pool->Free(reinterpret_cast<uint8_t*>(header), static_cast<int64_t>(fullSize));

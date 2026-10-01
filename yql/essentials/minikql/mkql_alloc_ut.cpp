@@ -2,6 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <arrow/memory_pool.h>
+
 #include <util/generic/size_literals.h>
 
 namespace NKikimr::NMiniKQL {
@@ -135,6 +137,69 @@ Y_UNIT_TEST(ArrowAllocateWithDefaultArrowAllocator) {
     UNIT_ASSERT(ptr);
 
     MKQLArrowFree(ptr, size);
+}
+
+Y_UNIT_TEST(ArrowAllocateWithStateArrowMemoryPool) {
+    class TCountingPool: public arrow::MemoryPool {
+    public:
+        arrow::Status Allocate(int64_t size, uint8_t** out) override {
+            Allocations++;
+            Bytes += size;
+            return arrow::default_memory_pool()->Allocate(size, out);
+        }
+
+        arrow::Status Reallocate(int64_t oldSize, int64_t newSize, uint8_t** ptr) override {
+            Bytes += newSize - oldSize;
+            return arrow::default_memory_pool()->Reallocate(oldSize, newSize, ptr);
+        }
+
+        void Free(uint8_t* buffer, int64_t size) override {
+            Frees++;
+            Bytes -= size;
+            arrow::default_memory_pool()->Free(buffer, size);
+        }
+
+        int64_t bytes_allocated() const override {
+            return Bytes;
+        }
+
+        std::string backend_name() const override {
+            return "counting";
+        }
+
+        int64_t Allocations = 0;
+        int64_t Frees = 0;
+        int64_t Bytes = 0;
+    };
+
+    UseDefaultArrowAllocator();
+    TCountingPool pool;
+
+    constexpr ui64 size = 1_KB;
+    void* ptr = nullptr;
+    {
+        TScopedAlloc alloc(__LOCATION__);
+        alloc.Ref().ArrowMemoryPool = &pool;
+        // as the compute actors do: the buffer outlives the state, which must not free it
+        alloc.Ref().EnableArrowTracking = false;
+        ptr = MKQLArrowAllocate(size);
+        UNIT_ASSERT(ptr);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Allocations, 1);
+        UNIT_ASSERT(pool.Bytes >= static_cast<int64_t>(size));
+
+        // the state without a pool uses the default one
+        TScopedAlloc other(__LOCATION__);
+        auto* otherPtr = MKQLArrowAllocate(size);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Allocations, 1);
+        MKQLArrowFree(otherPtr, size);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Frees, 0);
+    }
+
+    // freed under another state: back to the pool that allocated it
+    TScopedAlloc alloc(__LOCATION__);
+    MKQLArrowFree(ptr, size);
+    UNIT_ASSERT_VALUES_EQUAL(pool.Frees, 1);
+    UNIT_ASSERT_VALUES_EQUAL(pool.Bytes, 0);
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLAllocTest)

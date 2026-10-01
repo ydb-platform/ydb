@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dq_arrow_memory_pool.h"
 #include "dq_compute_actor_async_io.h"
 #include "dq_compute_actor_channels.h"
 #include "dq_compute_actor_checkpoints.h"
@@ -245,6 +246,13 @@ protected:
                     true,
                     false
         );
+
+        if (MemoryLimits.ArrowQuotaManager) {
+            // the arrow buffers of the program are charged to the per query arrow quota manager bound to the thread
+            // (see TArrowMemoryQuotaScope) instead of the MKQL limit of the compute actor
+            Alloc->Ref().ArrowMemoryPool = GetDqArrowMemoryPool();
+            Alloc->Ref().EnableArrowTracking = false;
+        }
 
         if (ComputeActorSpan) {
             ComputeActorSpan.Attribute("stageLevel", static_cast<int>(Task.GetProgram().GetSettings().GetStageLevel()));

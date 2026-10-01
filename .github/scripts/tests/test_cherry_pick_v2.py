@@ -27,6 +27,12 @@ UTC = datetime.timezone.utc
 LOGGER = logging.getLogger("test_cherry_pick_v2")
 
 
+class FakePage(list):
+    """Stands in for a PyGithub PaginatedList: iterable and get_page()-able"""
+    def get_page(self, page):
+        return self
+
+
 def make_source(title, is_merged=True, merged_at=None, incomplete_note=None):
     return Source(
         type='pr',
@@ -112,7 +118,7 @@ def make_commit(sha, parents=('base',), pr_numbers=(), committer_date=None):
     commit = mock.Mock(sha=sha, parents=[mock.Mock(sha=p) for p in parents])
     commit.commit.message = f'Commit {sha}'
     commit.commit.committer.date = committer_date
-    commit.get_pulls.return_value.get_page.return_value = [mock.Mock(number=n, merged=True) for n in pr_numbers]
+    commit.get_pulls.return_value = FakePage([mock.Mock(number=n, merged=True) for n in pr_numbers])
     return commit
 
 
@@ -314,25 +320,25 @@ class PickLinkedPrTest(unittest.TestCase):
         commit = make_commit('c' * 40)
         open_pr = mock.Mock(number=10, merged=False, merged_at=None)
         merged_pr = mock.Mock(number=11, merged=True, merged_at=MERGED_AT)
-        commit.get_pulls.return_value.get_page.return_value = [open_pr, merged_pr]
+        commit.get_pulls.return_value = FakePage([open_pr, merged_pr])
         self.assertIs(pick_linked_pr(commit, LOGGER), merged_pr)
 
     def test_prefers_most_recently_merged_pr(self):
         commit = make_commit('c' * 40)
         older = mock.Mock(number=10, merged=True, merged_at=datetime.datetime(2026, 1, 1, tzinfo=UTC))
         newer = mock.Mock(number=11, merged=True, merged_at=datetime.datetime(2026, 2, 1, tzinfo=UTC))
-        commit.get_pulls.return_value.get_page.return_value = [newer, older]
+        commit.get_pulls.return_value = FakePage([newer, older])
         self.assertIs(pick_linked_pr(commit, LOGGER), newer)
 
     def test_falls_back_to_first_pr_when_none_merged(self):
         commit = make_commit('c' * 40)
         open_pr = mock.Mock(number=10, merged=False, merged_at=None)
-        commit.get_pulls.return_value.get_page.return_value = [open_pr]
+        commit.get_pulls.return_value = FakePage([open_pr])
         self.assertIs(pick_linked_pr(commit, LOGGER), open_pr)
 
     def test_no_prs(self):
         commit = make_commit('c' * 40)
-        commit.get_pulls.return_value.get_page.return_value = []
+        commit.get_pulls.return_value = FakePage([])
         self.assertIsNone(pick_linked_pr(commit, LOGGER))
 
     def test_api_failure_returns_none(self):
@@ -399,7 +405,7 @@ class CollectSourcesTest(unittest.TestCase):
 
     def test_sha_resolves_to_commit_source(self):
         commit = make_commit('abc123def456', committer_date=COMMITTED_AT)
-        commit.get_pulls.return_value.get_page.return_value = []
+        commit.get_pulls.return_value = FakePage([])
         sources = collect_sources(make_repo_for_commit(commit), ['abc123'], False, LOGGER)
         self.assertEqual(sources[0].commit_shas, ['abc123def456'])
         self.assertTrue(sources[0].is_merged)
@@ -409,13 +415,13 @@ class CollectSourcesTest(unittest.TestCase):
         commit = make_commit('abc123def456', committer_date=COMMITTED_AT)
         open_pr = mock.Mock(number=10, merged=False, merged_at=None)
         merged_pr = mock.Mock(number=11, merged=True, merged_at=MERGED_AT)
-        commit.get_pulls.return_value.get_page.return_value = [open_pr, merged_pr]
+        commit.get_pulls.return_value = FakePage([open_pr, merged_pr])
         sources = collect_sources(make_repo_for_commit(commit), ['abc123'], False, LOGGER)
         self.assertTrue(sources[0].is_merged)
 
     def test_sha_with_unmerged_pr_exits(self):
         commit = make_commit('abc123def456')
-        commit.get_pulls.return_value.get_page.return_value = [mock.Mock(number=10, merged=False, merged_at=None)]
+        commit.get_pulls.return_value = FakePage([mock.Mock(number=10, merged=False, merged_at=None)])
         with self.assertRaises(SystemExit):
             collect_sources(make_repo_for_commit(commit), ['abc123'], False, LOGGER)
 
@@ -428,7 +434,7 @@ class CollectSourcesTest(unittest.TestCase):
     def test_pr_number_and_sha_mixed(self):
         pull = make_pull(True, 'merge', [make_commit('a')])
         commit = make_commit('abc123def456', committer_date=COMMITTED_AT)
-        commit.get_pulls.return_value.get_page.return_value = []
+        commit.get_pulls.return_value = FakePage([])
         merge_commit = make_commit('merge', ['base'])
         repo = make_repo(merge_commit, make_commit('base', ['older'], [2]))
         repo.get_pull.return_value = pull

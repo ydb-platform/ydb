@@ -700,10 +700,24 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
 - Python
 
+<<<<<<< HEAD
+=======
+  {% list tabs %}
+
+  - Recommended approach
+
+    Use `ydb.convert_floats_to_embedding_bytes` from Python SDK 3.33.1 or later to serialize vectors.
+
+    The method accepts an array of dictionaries `items`, where each dictionary contains the fields `id` — identifier, `document` — text, `embedding` — vector representation of the text, pre-serialized into a byte sequence.
+
+    To use the structure in the example below, a `items_struct_type = ydb.StructType()` is created where the types of all fields are specified. To pass a list of such structures, it must be wrapped in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
+
+>>>>>>> b5bd81e8ae1 (docs: use Python embedding helper in vector search recipes (#54671))
     {% list tabs %}
 
     - Recommended approach
 
+<<<<<<< HEAD
         The method accepts an array of dictionaries `items`, where each dictionary contains `id` (identifier), `document` (text), and `embedding` (vector representation of the text, pre-serialized to a byte sequence).
 
         The example below creates `items_struct_type = ydb.StructType()` with field types. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
@@ -732,6 +746,22 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                     document: Utf8,
                     embedding: String
                 >>;
+=======
+      ```python
+      import ydb
+
+      def insert_items_vector_as_bytes(
+          pool: ydb.QuerySessionPool,
+          table_name: str,
+          items: list[dict],
+      ) -> None:
+          query = f"""
+          DECLARE $items AS List<Struct<
+              id: Utf8,
+              document: Utf8,
+              embedding: String
+          >>;
+>>>>>>> b5bd81e8ae1 (docs: use Python embedding helper in vector search recipes (#54671))
 
                 UPSERT INTO `{table_name}`
                 (
@@ -751,8 +781,13 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
+<<<<<<< HEAD
                 for item in items:
                     item["embedding"] = convert_vector_to_bytes(item["embedding"])
+=======
+          for item in items:
+              item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
+>>>>>>> b5bd81e8ae1 (docs: use Python embedding helper in vector search recipes (#54671))
 
                 pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -763,6 +798,7 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
         - Native SDK (Asyncio)
 
+<<<<<<< HEAD
             ```python
             import struct
             import ydb
@@ -782,6 +818,22 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                     document: Utf8,
                     embedding: String
                 >>;
+=======
+      ```python
+      import ydb
+
+      async def insert_items_vector_as_bytes(
+          pool: ydb.aio.QuerySessionPool,
+          table_name: str,
+          items: list[dict],
+      ) -> None:
+          query = f"""
+          DECLARE $items AS List<Struct<
+              id: Utf8,
+              document: Utf8,
+              embedding: String
+          >>;
+>>>>>>> b5bd81e8ae1 (docs: use Python embedding helper in vector search recipes (#54671))
 
                 UPSERT INTO `{table_name}`
                 (
@@ -801,8 +853,13 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                 items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
                 items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
+<<<<<<< HEAD
                 for item in items:
                     item["embedding"] = convert_vector_to_bytes(item["embedding"])
+=======
+          for item in items:
+              item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
+>>>>>>> b5bd81e8ae1 (docs: use Python embedding helper in vector search recipes (#54671))
 
                 await pool.execute_with_retries(
                     query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -1911,6 +1968,250 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+  {% list tabs %}
+
+  - Recommended approach
+
+    {% list tabs %}
+
+    - Native SDK
+
+      ```python
+      import ydb
+
+      def search_items_vector_as_bytes(
+          pool: ydb.QuerySessionPool,
+          table_name: str,
+          embedding: list[float],
+          strategy: str = "CosineSimilarity",
+          limit: int = 1,
+          index_name: str | None = None,
+          top_clusters: int = 10,
+      ) -> list[dict]:
+          view_index = f"VIEW {index_name}" if index_name else ""
+
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+          query = f"""
+          PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
+          DECLARE $embedding as String;
+
+          SELECT
+              id,
+              document,
+              Knn::{strategy}(embedding, $embedding) as score
+          FROM {table_name} {view_index}
+          ORDER BY score {sort_order}
+          LIMIT {limit};
+          """
+
+          result = pool.execute_with_retries(
+              query,
+              {
+                  "$embedding": (
+                      ydb.convert_floats_to_embedding_bytes(embedding),
+                      ydb.PrimitiveType.String,
+                  ),
+              },
+          )
+
+          items = []
+
+          for result_set in result:
+              for row in result_set.rows:
+                  items.append(
+                      {
+                          "id": row["id"],
+                          "document": row["document"],
+                          "score": row["score"],
+                      }
+                  )
+
+          return items
+      ```
+
+    - Native SDK (Asyncio)
+
+      ```python
+      import ydb
+
+      async def search_items_vector_as_bytes(
+          pool: ydb.aio.QuerySessionPool,
+          table_name: str,
+          embedding: list[float],
+          strategy: str = "CosineSimilarity",
+          limit: int = 1,
+          index_name: str | None = None,
+      ) -> list[dict]:
+          view_index = f"VIEW {index_name}" if index_name else ""
+
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+          query = f"""
+          DECLARE $embedding as String;
+
+          SELECT
+              id,
+              document,
+              Knn::{strategy}(embedding, $embedding) as score
+          FROM {table_name} {view_index}
+          ORDER BY score {sort_order}
+          LIMIT {limit};
+          """
+
+          result = await pool.execute_with_retries(
+              query,
+              {
+                  "$embedding": (
+                      ydb.convert_floats_to_embedding_bytes(embedding),
+                      ydb.PrimitiveType.String,
+                  ),
+              },
+          )
+
+          items = []
+
+          for result_set in result:
+              for row in result_set.rows:
+                  items.append(
+                      {
+                          "id": row["id"],
+                          "document": row["document"],
+                          "score": row["score"],
+                      }
+                  )
+
+          return items
+      ```
+
+    {% endlist %}
+
+  - Alternative approach
+
+    {% note warning %}
+
+    Passing the vector as `List<Float>` with conversion on the YQL side via `Knn::ToBinaryStringFloat` yields worse performance than encoding a byte array on the client.
+
+    {% endnote %}
+
+    {% list tabs %}
+
+    - Native SDK
+
+      ```python
+      import ydb
+
+      def search_items_vector_as_float_list(
+          pool: ydb.QuerySessionPool,
+          table_name: str,
+          embedding: list[float],
+          strategy: str = "CosineSimilarity",
+          limit: int = 1,
+          index_name: str | None = None,
+          top_clusters: int = 10,
+      ) -> list[dict]:
+          view_index = f"VIEW {index_name}" if index_name else ""
+
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+          query = f"""
+          PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
+          DECLARE $embedding as List<Float>;
+
+          $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+          SELECT
+              id,
+              document,
+              Knn::{strategy}(embedding, $target_embedding) as score
+          FROM {table_name} {view_index}
+          ORDER BY score
+          {sort_order}
+          LIMIT {limit};
+          """
+
+          result = pool.execute_with_retries(
+              query,
+              {
+                  "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+              },
+          )
+
+          items = []
+
+          for result_set in result:
+              for row in result_set.rows:
+                  items.append(
+                      {
+                          "id": row["id"],
+                          "document": row["document"],
+                          "score": row["score"],
+                      }
+                  )
+
+          return items
+      ```
+
+    - Native SDK (Asyncio)
+
+      ```python
+      import ydb
+
+      async def search_items_vector_as_float_list(
+          pool: ydb.aio.QuerySessionPool,
+          table_name: str,
+          embedding: list[float],
+          strategy: str = "CosineSimilarity",
+          limit: int = 1,
+          index_name: str | None = None,
+      ) -> list[dict]:
+          view_index = f"VIEW {index_name}" if index_name else ""
+
+          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+          query = f"""
+          DECLARE $embedding as List<Float>;
+
+          $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+          SELECT
+              id,
+              document,
+              Knn::{strategy}(embedding, $target_embedding) as score
+          FROM {table_name} {view_index}
+          ORDER BY score
+          {sort_order}
+          LIMIT {limit};
+          """
+
+          result = await pool.execute_with_retries(
+              query,
+              {
+                  "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+              },
+          )
+
+          items = []
+
+          for result_set in result:
+              for row in result_set.rows:
+                  items.append(
+                      {
+                          "id": row["id"],
+                          "document": row["document"],
+                          "score": row["score"],
+                      }
+                  )
+
+          return items
+      ```
+
+    {% endlist %}
+
+  {% endlist %}
+>>>>>>> b5bd81e8ae1 (docs: use Python embedding helper in vector search recipes (#54671))
 - C#
 
     Vector search examples for the .NET SDK are not available yet.

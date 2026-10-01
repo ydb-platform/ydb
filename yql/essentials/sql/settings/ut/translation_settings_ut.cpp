@@ -46,6 +46,27 @@ Y_UNIT_TEST(InvalidKnownFlagValuesAreRejected) {
     UNIT_ASSERT_EXCEPTION_CONTAINS(ParseTranslationSettings(invalidYqlSelect, settings), yexception, "Bad YqlSelect args");
     UNIT_ASSERT_EXCEPTION_CONTAINS(ParseTranslationSettings(invalidMaxParseTreeDepth, settings), yexception, "Bad MaxParseTreeDepth args");
 }
+
+Y_UNIT_TEST(UnknownValuableFlagIsIgnoredByDefault) {
+    TTranslationSettings settings;
+    ParseTranslationSettings(TExtendedSqlFlags{{"UnknownFlag", {"some", "args"}}}, settings);
+    UNIT_ASSERT(settings.Flags.empty());
+}
+
+Y_UNIT_TEST(UnknownValuableFlagIsRejectedInStrictMode) {
+    TTranslationSettings settings;
+    settings.StrictConfigValidation = true;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        ParseTranslationSettings(TExtendedSqlFlags{{"UnknownFlag", {"some", "args"}}}, settings),
+        yexception, "Unknown SQL flag: UnknownFlag");
+}
+
+Y_UNIT_TEST(UnknownSimpleFlagIsIgnoredEvenInStrictMode) {
+    TTranslationSettings settings;
+    settings.StrictConfigValidation = true;
+    ParseTranslationSettings(TExtendedSqlFlags{{"UnknownSimpleFlag", {}}}, settings);
+    UNIT_ASSERT(settings.Flags.contains("UnknownSimpleFlag"));
+}
 } // Y_UNIT_TEST_SUITE(TTranslationSettingsFlagsTest)
 
 } // namespace NSQLTranslation

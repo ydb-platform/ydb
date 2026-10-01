@@ -13,7 +13,7 @@ def make_base_config():
         pdisk = config.PDisk.add(
             NodeId=node_id, PDiskId=1, BoxId=1,
             DriveStatus=common.kikimr_bs3.EDriveStatus.ACTIVE,
-            DecommitStatus=common.kikimr_bs3.EDecommitStatus.NONE,
+            DecommitStatus=common.kikimr_bs3.EDecommitStatus.DECOMMIT_NONE,
             Path='/dev/disk/by-id/test')
         pdisk.PDiskMetrics.ExpectedSlotCount = 1
         pdisk.PDiskMetrics.SlotSizeInUnits = 1
@@ -77,7 +77,7 @@ def test_vdisk_list_with_donors():
     assert donor_row['VSlotStatus'] is None
     assert donor_row['UsedSize'] == 100
     assert donor_row['AvailableSize'] == 200
-    assert donor_row['PDiskDecommitStatus'] == 'NONE'
+    assert donor_row['PDiskDecommitStatus'] == 'DECOMMIT_NONE'
 
 
 def test_build_donors_per_pdisk_map():

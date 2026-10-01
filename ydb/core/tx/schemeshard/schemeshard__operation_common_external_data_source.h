@@ -44,6 +44,10 @@ bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
               const NExternalSource::IExternalSourceFactory::TPtr& factory,
               TString& errStr);
 
+// An IAM delegation secret is an IAM token: it may only stand where a token is expected, never for a key
+// signature, a password or an AWS key. Secrets that do not exist (yet) are not checked here.
+bool ValidateSecretsUsage(const NKikimrSchemeOp::TAuth& auth, TSchemeShard* ss, TString& errStr);
+
 TExternalDataSourceInfo::TPtr CreateExternalDataSource(
     const NKikimrSchemeOp::TExternalDataSourceDescription& desc, ui64 alterVersion);
 

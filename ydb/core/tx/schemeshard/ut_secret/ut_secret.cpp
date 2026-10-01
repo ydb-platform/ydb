@@ -1,8 +1,157 @@
+#include <ydb/core/tx/schemeshard/schemeshard_iam_delegation.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <util/string/join.h>
+#include <util/string/split.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 namespace {
     using namespace NSchemeShardUT_Private;
     using NKikimrScheme::EStatus;
+
+    // IAM delegation secrets
+
+    TString DelegationSecret(const TString& name, const TString& sa, const TString& cloud, const TString& referrer, const TString& alter = "NONE") {
+        return TStringBuilder() << "Name: \"" << name << "\"\n"
+            << "IamDelegation { ServiceAccountId: \"" << sa << "\" CloudId: \"" << cloud << "\" ReferrerId: \"" << referrer << "\" }\n"
+            << "IamDelegationAlter: IAM_DELEGATION_ALTER_" << alter << "\n";
+    }
+
+    TString StageSecret(const TString& name, const TString& sa, const TString& cloud, const TString& referrer) {
+        return DelegationSecret(name, sa, cloud, referrer, "STAGE");
+    }
+
+    TString PromoteSecret(const TString& name, const TString& referrer) {
+        return DelegationSecret(name, "", "", referrer, "PROMOTE");
+    }
+
+    TString CancelSecret(const TString& name, const TString& referrer) {
+        return DelegationSecret(name, "", "", referrer, "CANCEL");
+    }
+
+    TString ConfirmSecret(const TString& name, const TString& referrer) {
+        return DelegationSecret(name, "", "", referrer, "CONFIRM");
+    }
+
+    // When the outbox hands a revocation out: at once when the statement reported that the setup of the
+    // delegation is over (CONFIRM, PROMOTE, CANCEL), after the lease otherwise
+    enum class EDue {
+        Now,
+        AfterLease,
+    };
+
+    TString DataSource(const TString& name, const TString& auth, const TString& type = "ObjectStorage") {
+        const THashMap<TString, TString> locations = {
+            {"ObjectStorage", "Location: \"https://s3.cloud.net/my_bucket\""},
+            {"PostgreSQL", "Location: \"localhost:5432\" Properties { Properties { key: \"database_name\" value: \"postgres\" } }"},
+            {"Ydb", "Location: \"localhost:2135\" Properties { Properties { key: \"database_name\" value: \"/Root\" } }"},
+        };
+        return TStringBuilder() << "Name: \"" << name << "\" SourceType: \"" << type << "\" " << locations.at(type) << " Auth { " << auth << " }";
+    }
+
+    using TRevocation = NKikimrScheme::TEvClaimIamDelegationRevocationsResult::TRevocation;
+
+    // A schemeshard with the feature on; the test stands in for the node that revokes the delegations of the outbox
+    struct TDelegationTest {
+        TTestBasicRuntime Runtime;
+        TTestEnv Env;
+        ui64 TxId = 100;
+
+        explicit TDelegationTest(const TTestEnvOptions& opts = {})
+            : Env(Runtime, opts)
+        {
+            Runtime.GetAppData().FeatureFlags.SetEnableIamDelegationSecrets(true);
+        }
+
+        void Wait() {
+            Env.TestWaitNotification(Runtime, TxId);
+        }
+
+        void Create(const TString& dir, const TString& scheme, const TVector<TExpectedResult>& expected = {EStatus::StatusAccepted}) {
+            TestCreateSecret(Runtime, ++TxId, dir, scheme, expected);
+            Wait();
+        }
+
+        void Alter(const TString& dir, const TString& scheme, const TVector<TExpectedResult>& expected = {EStatus::StatusAccepted}) {
+            TestAlterSecret(Runtime, ++TxId, dir, scheme, expected);
+            Wait();
+        }
+
+        void Replace(const TString& dir, const TString& scheme, const TVector<TExpectedResult>& expected = {EStatus::StatusAccepted}) {
+            TestCreateSecretOrReplace(Runtime, ++TxId, dir, scheme, expected);
+            Wait();
+        }
+
+        // A delegation secret whose setup the statement has reported, as CREATE SECRET leaves it
+        void CreateConfirmed(const TString& dir, const TString& name, const TString& sa, const TString& cloud, const TString& referrer) {
+            Create(dir, DelegationSecret(name, sa, cloud, referrer));
+            Alter(dir, ConfirmSecret(name, referrer));
+        }
+
+        void Drop(const TString& dir, const TString& name) {
+            TestDropSecret(Runtime, ++TxId, dir, name);
+            Wait();
+            TestLs(Runtime, dir + "/" + name, false, NLs::PathNotExist);
+        }
+
+        NKikimrSchemeOp::TSecretDescription Describe(const TString& path, bool withValue = false) {
+            NKikimrSchemeOp::TDescribeOptions opts;
+            opts.SetReturnSecretValue(withValue);
+            return DescribePath(Runtime, path, opts).GetPathDescription().GetSecretDescription();
+        }
+
+        void Reboot() {
+            RebootTablet(Runtime, TTestTxConfig::SchemeShard, Runtime.AllocateEdgeActor());
+        }
+
+        // Jumps the clock: the timers due by then fire once. Stepping through the 50 ms polls of the storage
+        // emulation would cost seconds of real time per virtual minute.
+        void Sleep(TDuration duration) {
+            Runtime.AdvanceCurrentTime(duration);
+            Env.SimulateSleep(Runtime, TDuration::MilliSeconds(1));
+        }
+
+        // The revocations the outbox hands out now: due (the setup of the delegation can no longer be in flight)
+        // and not claimed by anybody else
+        TVector<TRevocation> Claim(TDuration lease = TDuration::Minutes(5)) {
+            const TActorId sender = Runtime.AllocateEdgeActor();
+            ForwardToTablet(Runtime, TTestTxConfig::SchemeShard, sender, new TEvSchemeShard::TEvClaimIamDelegationRevocations(lease));
+            const auto result = Runtime.GrabEdgeEvent<TEvSchemeShard::TEvClaimIamDelegationRevocationsResult>(sender);
+            UNIT_ASSERT(result);
+            LastClaimId = result->Get()->Record.GetClaimId();
+            TVector<TRevocation> revocations(result->Get()->Record.GetRevocations().begin(), result->Get()->Record.GetRevocations().end());
+            SortBy(revocations, [](const TRevocation& r) { return r.GetReferrerId(); });
+            return revocations;
+        }
+
+        TString ClaimedReferrers(TDuration lease = TDuration::Minutes(5)) {
+            TVector<TString> referrers;
+            for (const auto& revocation : Claim(lease)) {
+                referrers.push_back(revocation.GetReferrerId());
+            }
+            return JoinSeq(",", referrers);
+        }
+
+        // Acknowledges revocations with the given claim (the last one by default)
+        void Revoked(const TVector<TString>& referrers, TMaybe<ui64> claimId = Nothing()) {
+            const TActorId sender = Runtime.AllocateEdgeActor();
+            ForwardToTablet(Runtime, TTestTxConfig::SchemeShard, sender, new TEvSchemeShard::TEvIamDelegationsRevoked(claimId.GetOrElse(LastClaimId), referrers));
+            UNIT_ASSERT(Runtime.GrabEdgeEvent<TEvSchemeShard::TEvIamDelegationsRevokedResult>(sender));
+        }
+
+        ui64 LastClaimId = 0;
+
+        // The revocations the outbox hands out, claimed and acknowledged: gone for good, not just hidden by the claim
+        void ExpectRevocations(const TString& referrers, EDue due) {
+            if (due == EDue::AfterLease) {
+                UNIT_ASSERT_VALUES_EQUAL(ClaimedReferrers(), "");
+                Sleep(StagedIamDelegationLease + TDuration::Seconds(1));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ClaimedReferrers(TDuration::Seconds(10)), referrers);
+            Revoked(StringSplitter(referrers).Split(',').SkipEmpty().ToList<TString>());
+            Sleep(TDuration::Seconds(11));
+            UNIT_ASSERT_VALUES_EQUAL(ClaimedReferrers(), "");
+        }
+    };
 
     void ExpectEqualSecretDescription(
         const NKikimrScheme::TEvDescribeSchemeResult& describeResult,
@@ -1036,5 +1185,381 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
             UNIT_ASSERT_C(foundUser1, "ACL should contain user1's DescribeSchema grant");
             UNIT_ASSERT_C(foundUser2, "ACL should contain user2's DescribeSchema grant (picked up from parent)");
         }
+    }
+
+    Y_UNIT_TEST(CreateIamDelegationSecret) {
+        TDelegationTest t;
+        t.Create("/MyRoot", DelegationSecret("sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1"));
+        const auto check = [&]() {
+            const auto secret = t.Describe("/MyRoot/sa-secret", /* withValue */ true);
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetName(), "sa-secret");
+            UNIT_ASSERT(secret.GetValue().empty()); // the delegation is described, the value never
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetIamDelegation().GetServiceAccountId(), "aje-sa-1");
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetIamDelegation().GetCloudId(), "b1g-cloud-1");
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetIamDelegation().GetReferrerId(), "referrer-1");
+        };
+        check();
+        UNIT_ASSERT_VALUES_EQUAL(t.Describe("/MyRoot/sa-secret").GetVersion(), 0u);
+        // the statement reports that IAM set the delegation up
+        t.Alter("/MyRoot", ConfirmSecret("sa-secret", "referrer-9"), {{EStatus::StatusPreconditionFailed, "is not the delegation of the secret"}});
+        t.Alter("/MyRoot", ConfirmSecret("sa-secret", "referrer-1"));
+        UNIT_ASSERT_VALUES_EQUAL(t.Describe("/MyRoot/sa-secret").GetVersion(), 1u);
+        t.Reboot();
+        check();
+        t.Create("/MyRoot", R"(Name: "plain-secret" Value: "v")");
+        UNIT_ASSERT(!t.Describe("/MyRoot/plain-secret").HasIamDelegation());
+
+        // the delegation must be complete and the only source
+        const TVector<TExpectedResult> invalid = {{EStatus::StatusInvalidParameter}};
+        t.Create("/MyRoot", DelegationSecret("bad", "", "b1g-cloud-1", "referrer-2"), invalid);
+        t.Create("/MyRoot", DelegationSecret("bad", "aje-sa-2", "", "referrer-2"), invalid);
+        t.Create("/MyRoot", DelegationSecret("bad", "aje-sa-2", "b1g-cloud-1", ""), invalid);
+        t.Create("/MyRoot", "Value: \"v\"\n" + DelegationSecret("bad", "aje-sa-2", "b1g-cloud-1", "referrer-2"), invalid);
+        // an alter mode has no meaning for a new secret
+        t.Create("/MyRoot", StageSecret("bad", "aje-sa-2", "b1g-cloud-1", "referrer-2"), invalid);
+        t.Create("/MyRoot", R"(Name: "bad" Value: "v" IamDelegationAlter: IAM_DELEGATION_ALTER_CONFIRM)", invalid);
+        TestLs(t.Runtime, "/MyRoot/bad", false, NLs::PathNotExist);
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), ""); // nothing to revoke
+    }
+
+    Y_UNIT_TEST(IamDelegationSecretFeatureFlag) {
+        TDelegationTest t;
+        t.CreateConfirmed("/MyRoot", "sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1");
+        t.Runtime.GetAppData().FeatureFlags.SetEnableIamDelegationSecrets(false);
+
+        // switched off: no new delegation secrets and no changes to the existing ones, which can still be dropped
+        const TVector<TExpectedResult> disabled = {{EStatus::StatusPreconditionFailed}};
+        t.Create("/MyRoot", DelegationSecret("sa-secret-2", "aje-sa-2", "b1g-cloud-1", "referrer-2"), disabled);
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-2", "b1g-cloud-1", "referrer-2"), disabled);
+        UNIT_ASSERT_VALUES_EQUAL(t.Describe("/MyRoot/sa-secret").GetVersion(), 1u);
+        t.Drop("/MyRoot", "sa-secret");
+        t.ExpectRevocations("referrer-1", EDue::Now);
+    }
+
+    Y_UNIT_TEST(AlterIamDelegationSecret) {
+        TDelegationTest t;
+        const auto describe = [&]() { return t.Describe("/MyRoot/sa-secret"); };
+        t.CreateConfirmed("/MyRoot", "sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1");
+
+        // a replacement is staged next to the delegation the readers keep using, then promoted over it
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-2", "b1g-cloud-1", "referrer-2"));
+        {
+            const auto secret = describe();
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetVersion(), 2u);
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetIamDelegation().GetReferrerId(), "referrer-1");
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetPendingIamDelegation().GetServiceAccountId(), "aje-sa-2");
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetPendingIamDelegation().GetReferrerId(), "referrer-2");
+            UNIT_ASSERT(!secret.HasPendingIamDelegationStagedAt());
+            UNIT_ASSERT(!secret.HasIamDelegationSetUp());
+        }
+        t.Alter("/MyRoot", PromoteSecret("sa-secret", "referrer-2"));
+        {
+            const auto secret = describe();
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetVersion(), 3u);
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetIamDelegation().GetServiceAccountId(), "aje-sa-2");
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetIamDelegation().GetReferrerId(), "referrer-2");
+            UNIT_ASSERT(!secret.HasPendingIamDelegation());
+        }
+        t.ExpectRevocations("referrer-1", EDue::Now); // its setup was reported
+
+        // the ALTER that staged a replacement may still be setting it up: for the lease, restarts included,
+        // nothing can be staged over it; afterwards it is replaced and revoked
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-3", "b1g-cloud-1", "referrer-3"));
+        t.Sleep(StagedIamDelegationLease / 2);
+        t.Reboot();
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-4", "b1g-cloud-1", "referrer-4"),
+            {{EStatus::StatusMultipleModifications, "is being set up for the secret by another ALTER"}});
+        t.Sleep(StagedIamDelegationLease / 2 + TDuration::Seconds(1));
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-4", "b1g-cloud-1", "referrer-4"));
+        UNIT_ASSERT_VALUES_EQUAL(describe().GetPendingIamDelegation().GetReferrerId(), "referrer-4");
+        t.ExpectRevocations("referrer-3", EDue::Now); // its lease has passed
+
+        // cancelled: the statement reports that the setup is over, so the revocation is due at once, and the
+        // next replacement can be staged at once
+        t.Alter("/MyRoot", CancelSecret("sa-secret", "referrer-4"));
+        UNIT_ASSERT_VALUES_EQUAL(describe().GetVersion(), 6u);
+        UNIT_ASSERT(!describe().HasPendingIamDelegation());
+        t.ExpectRevocations("referrer-4", EDue::Now);
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-5", "b1g-cloud-1", "referrer-5"));
+
+        // dropped: everything the secret names is revoked, the staged replacement once its setup can no longer be in flight
+        t.Drop("/MyRoot", "sa-secret");
+        t.ExpectRevocations("referrer-2", EDue::Now);
+        t.ExpectRevocations("referrer-5", EDue::AfterLease);
+    }
+
+    Y_UNIT_TEST(AlterIamDelegationSecretValidation) {
+        TDelegationTest t;
+        t.CreateConfirmed("/MyRoot", "sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1");
+        t.Create("/MyRoot", R"(Name: "plain-secret" Value: "v")");
+        const TVector<TExpectedResult> invalid = {{EStatus::StatusInvalidParameter}};
+
+        // the delegation is never changed in place
+        t.Alter("/MyRoot", DelegationSecret("sa-secret", "aje-sa-2", "b1g-cloud-1", "referrer-2"), {{EStatus::StatusInvalidParameter, "must equal the current delegation"}});
+        t.Alter("/MyRoot", R"(Name: "sa-secret")", invalid);
+        t.Alter("/MyRoot", DelegationSecret("sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1"));
+        // the source never changes
+        t.Alter("/MyRoot", R"(Name: "sa-secret" Value: "v")", invalid);
+        t.Replace("/MyRoot", R"(Name: "sa-secret" Value: "v")", invalid);
+        t.Alter("/MyRoot", DelegationSecret("plain-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1"), invalid);
+        t.Replace("/MyRoot", DelegationSecret("plain-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1"), invalid);
+        for (const TString alter : {"STAGE", "PROMOTE", "CANCEL", "CONFIRM"}) {
+            t.Alter("/MyRoot", TStringBuilder() << "Name: \"plain-secret\" Value: \"v2\" IamDelegationAlter: IAM_DELEGATION_ALTER_" << alter,
+                {{EStatus::StatusInvalidParameter, "allowed only for IAM delegation secrets"}});
+        }
+        // a staged replacement must be complete and new to the secret
+        t.Alter("/MyRoot", StageSecret("sa-secret", "", "b1g-cloud-1", "referrer-2"), invalid);
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-2", "", "referrer-2"), invalid);
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-2", "b1g-cloud-1", ""), invalid);
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1"), {{EStatus::StatusInvalidParameter, "is already named by secret"}});
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-2", "b1g-cloud-1", "referrer-2"));
+        t.Alter("/MyRoot", StageSecret("sa-secret", "aje-sa-2", "b1g-cloud-1", "referrer-2"), {{EStatus::StatusInvalidParameter, "is already named by secret"}});
+        // only the staged replacement can be promoted or cancelled, only the current delegation confirmed
+        t.Alter("/MyRoot", PromoteSecret("sa-secret", "referrer-9"), {{EStatus::StatusPreconditionFailed, "is not staged for the secret"}});
+        t.Alter("/MyRoot", CancelSecret("sa-secret", "referrer-1"), {{EStatus::StatusPreconditionFailed, "is not staged for the secret"}});
+        t.Alter("/MyRoot", ConfirmSecret("sa-secret", "referrer-2"), {{EStatus::StatusPreconditionFailed, "is not the delegation of the secret"}});
+        // CREATE OR REPLACE over a delegation secret is the same ALTER
+        t.Replace("/MyRoot", DelegationSecret("sa-secret", "aje-sa-3", "b1g-cloud-1", "referrer-3"), {{EStatus::StatusInvalidParameter, "must equal the current delegation"}});
+        t.Replace("/MyRoot", StageSecret("sa-secret", "aje-sa-3", "b1g-cloud-1", "referrer-3"), {{EStatus::StatusMultipleModifications, "is being set up for the secret by another ALTER"}});
+        t.Replace("/MyRoot", PromoteSecret("sa-secret", "referrer-2"));
+        {
+            const auto secret = t.Describe("/MyRoot/sa-secret");
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetVersion(), 4u);
+            UNIT_ASSERT_VALUES_EQUAL(secret.GetIamDelegation().GetReferrerId(), "referrer-2");
+            UNIT_ASSERT(!secret.HasPendingIamDelegation());
+        }
+        t.ExpectRevocations("referrer-1", EDue::Now);
+        UNIT_ASSERT_VALUES_EQUAL(t.Describe("/MyRoot/plain-secret", true).GetValue(), "v");
+    }
+
+    // The outbox: written with the change, handed out at once when the statement reported the setup and after
+    // the lease otherwise, hidden while a node holds it, forgotten when the node reports the revocation, kept
+    // across restarts.
+    Y_UNIT_TEST(IamDelegationRevocationOutbox) {
+        TDelegationTest t;
+        for (const TString i : {"1", "2", "3"}) {
+            t.Create("/MyRoot", DelegationSecret("sa-secret-" + i, "aje-sa-" + i, "b1g-cloud-" + i, "referrer-" + i));
+        }
+        t.Alter("/MyRoot", ConfirmSecret("sa-secret-1", "referrer-1"));
+        t.Alter("/MyRoot", ConfirmSecret("sa-secret-3", "referrer-3"));
+        t.Drop("/MyRoot", "sa-secret-1");
+        t.Drop("/MyRoot", "sa-secret-2");
+        {
+            const auto revocations = t.Claim(TDuration::Minutes(5));
+            UNIT_ASSERT_VALUES_EQUAL(revocations.size(), 1u); // the setup of the second one may still be in flight
+            UNIT_ASSERT_VALUES_EQUAL(revocations[0].GetReferrerId(), "referrer-1");
+            UNIT_ASSERT_VALUES_EQUAL(revocations[0].GetServiceAccountId(), "aje-sa-1");
+            UNIT_ASSERT_VALUES_EQUAL(revocations[0].GetCloudId(), "b1g-cloud-1");
+        }
+        // claimed: hidden from other claimers for the lease, then handed out again
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "");
+        t.Sleep(TDuration::Minutes(5) + TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "referrer-1");
+        // a restart keeps the records and forgets the claims
+        t.Reboot();
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "referrer-1");
+        // acknowledged: forgotten, restarts included; an unknown referrer is ignored
+        t.Revoked({"referrer-1", "referrer-9"});
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "");
+        t.Sleep(StagedIamDelegationLease);
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "referrer-2"); // its lease has passed
+        t.Revoked({"referrer-2"});
+        t.Reboot();
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "");
+        t.Drop("/MyRoot", "sa-secret-3");
+        t.ExpectRevocations("referrer-3", EDue::Now);
+    }
+
+    Y_UNIT_TEST(IamDelegationSecretInExternalDataSources) {
+        TDelegationTest t(TTestEnvOptions().RunFakeConfigDispatcher(true));
+        TestMkDir(t.Runtime, ++t.TxId, "/MyRoot", "dir");
+        t.Wait();
+        t.Create("/MyRoot/dir", DelegationSecret("sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1"));
+        t.Create("/MyRoot/dir", R"(Name: "plain-secret" Value: "v")");
+        const TString sa = "/MyRoot/dir/sa-secret";
+        const TString plain = "/MyRoot/dir/plain-secret";
+        const TVector<TExpectedResult> refused = {{EStatus::StatusSchemeError, "is an IAM delegation secret"}};
+        const TVector<TExpectedResult> accepted = {{EStatus::StatusAccepted}};
+        const auto serviceAccount = [](const TString& secret) { return Sprintf(R"(ServiceAccount { Id: "aje-sa-1" SecretName: "%s" })", secret.c_str()); };
+        const auto mdbBasic = [](const TString& saSecret, const TString& password) {
+            return Sprintf(R"(MdbBasic { ServiceAccountId: "aje-sa-1" ServiceAccountSecretName: "%s" Login: "user" PasswordSecretName: "%s" })", saSecret.c_str(), password.c_str());
+        };
+        const auto aws = [](const TString& keyId, const TString& key) {
+            return Sprintf(R"(Aws { AwsAccessKeyIdSecretName: "%s" AwsSecretAccessKeySecretName: "%s" AwsRegion: "ru-central1" })", keyId.c_str(), key.c_str());
+        };
+        const auto token = [](const TString& secret) { return Sprintf(R"(Token { TokenSecretName: "%s" })", secret.c_str()); };
+        ui32 n = 0;
+        const auto create = [&](const TString& auth, const TString& type, const TVector<TExpectedResult>& expected) {
+            const TString name = TStringBuilder() << "Source" << ++n;
+            TestCreateExternalDataSource(t.Runtime, ++t.TxId, "/MyRoot", DataSource(name, auth, type), expected);
+            t.Wait();
+            return name;
+        };
+
+        // its value is an IAM token: refused wherever the secret would stand for a key signature, a password or an AWS key
+        create(serviceAccount(sa), "ObjectStorage", refused);
+        create(Sprintf(R"(Basic { Login: "user" PasswordSecretName: "%s" })", sa.c_str()), "PostgreSQL", refused);
+        create(mdbBasic(sa, plain), "PostgreSQL", refused);
+        create(mdbBasic(plain, sa), "PostgreSQL", refused);
+        create(aws(sa, plain), "ObjectStorage", refused);
+        create(aws(plain, sa), "ObjectStorage", refused);
+        // accepted where a token is expected, and anywhere for a value secret
+        const TString tokenSource = create(token(sa), "Ydb", accepted);
+        create(serviceAccount(plain), "ObjectStorage", accepted);
+        // a secret this schemeshard cannot resolve to a delegation secret is left to whoever reads it
+        for (const TString& name : {"sa-secret", "/MyRoot/dir/no-such-secret", "/MyRoot/dir"}) {
+            create(serviceAccount(name), "ObjectStorage", accepted);
+        }
+        // nor can a data source be altered to misuse it
+        TestCreateExternalDataSourceOrReplace(t.Runtime, ++t.TxId, "/MyRoot", DataSource(tokenSource, serviceAccount(sa), "Ydb"), refused);
+        TestCreateExternalDataSourceOrReplace(t.Runtime, ++t.TxId, "/MyRoot", DataSource(tokenSource, token(plain), "Ydb"), accepted);
+        t.Wait();
+        const auto auth = DescribePath(t.Runtime, "/MyRoot/" + tokenSource).GetPathDescription().GetExternalDataSourceDescription().GetAuth();
+        UNIT_ASSERT_VALUES_EQUAL(auth.GetToken().GetTokenSecretName(), plain);
+    }
+
+    Y_UNIT_TEST(ForceDropRevokesTheDelegations) {
+        TDelegationTest t;
+        TestMkDir(t.Runtime, ++t.TxId, "/MyRoot", "dir");
+        t.Wait();
+        TestCreateSubDomain(t.Runtime, ++t.TxId, "/MyRoot", R"(Name: "SubDomain")");
+        t.Wait();
+        t.CreateConfirmed("/MyRoot/dir", "sa-secret", "aje-sa-1", "b1g-cloud-1", "referrer-1");
+        t.Alter("/MyRoot/dir", StageSecret("sa-secret", "aje-sa-2", "b1g-cloud-1", "referrer-2"));
+        t.CreateConfirmed("/MyRoot/SubDomain", "sa-secret", "aje-sa-3", "b1g-cloud-1", "referrer-3");
+
+        // the secrets go with their directory and subdomain; the revocations are written with the drops
+        TestForceDropUnsafe(t.Runtime, ++t.TxId, DescribePath(t.Runtime, "/MyRoot/dir").GetPathDescription().GetSelf().GetPathId());
+        t.Wait();
+        TestForceDropSubDomain(t.Runtime, ++t.TxId, "/MyRoot", "SubDomain");
+        t.Wait();
+        TestLs(t.Runtime, "/MyRoot/dir/sa-secret", false, NLs::PathNotExist);
+        TestLs(t.Runtime, "/MyRoot/SubDomain/sa-secret", false, NLs::PathNotExist);
+        t.Reboot();
+        t.ExpectRevocations("referrer-1,referrer-3", EDue::Now);
+        t.ExpectRevocations("referrer-2", EDue::AfterLease);
+    }
+
+    // A referrer names one delegation: a secret cannot take one that a secret (its current or staged delegation)
+    // or the outbox still holds. Only the node holding the claim may report a revocation.
+    Y_UNIT_TEST(IamDelegationReferrerIsUnique) {
+        TDelegationTest t;
+        const TVector<TExpectedResult> named = {{EStatus::StatusInvalidParameter, "is already named by secret"}};
+        t.CreateConfirmed("/MyRoot", "s1", "aje-sa-1", "b1g-cloud-1", "referrer-1");
+        t.CreateConfirmed("/MyRoot", "s2", "aje-sa-2", "b1g-cloud-1", "referrer-2");
+        t.Create("/MyRoot", DelegationSecret("s3", "aje-sa-3", "b1g-cloud-1", "referrer-1"), named);
+        t.Alter("/MyRoot", StageSecret("s2", "aje-sa-3", "b1g-cloud-1", "referrer-1"), named);
+        t.Alter("/MyRoot", StageSecret("s1", "aje-sa-3", "b1g-cloud-1", "referrer-3"));
+        t.Create("/MyRoot", DelegationSecret("s3", "aje-sa-3", "b1g-cloud-1", "referrer-3"), named); // staged counts
+        TestLs(t.Runtime, "/MyRoot/s3", false, NLs::PathNotExist);
+
+        // in the outbox the referrer is still taken; acknowledged, it is free again
+        t.Drop("/MyRoot", "s1");
+        t.Create("/MyRoot", DelegationSecret("s3", "aje-sa-3", "b1g-cloud-1", "referrer-1"), {{EStatus::StatusInvalidParameter, "is already named by the outbox"}});
+        t.ExpectRevocations("referrer-1", EDue::Now);
+        t.Create("/MyRoot", DelegationSecret("s3", "aje-sa-3", "b1g-cloud-1", "referrer-1"));
+
+        // a report without a claim, after the claim has run out, or with another claim does not delete the record
+        t.Drop("/MyRoot", "s2");
+        t.Revoked({"referrer-2"});
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(TDuration::Seconds(10)), "referrer-2");
+        const ui64 runOut = t.LastClaimId;
+        t.Sleep(TDuration::Seconds(11));
+        t.Revoked({"referrer-2"}, runOut);
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "referrer-2");
+        t.Revoked({"referrer-2"}, runOut);
+        t.Revoked({"referrer-2"}); // the live claim
+        t.Sleep(TDuration::Minutes(6));
+        UNIT_ASSERT_VALUES_EQUAL(t.ClaimedReferrers(), "");
+    }
+
+    // A force drop removes a secret under a CREATE or an ALTER that has not reached its plan step yet: what the
+    // next version of the secret names goes to the outbox with the rest, whichever of the two operations wins.
+    Y_UNIT_TEST(ForceDropUnderOperationRevokesWhatIsNamed) {
+        TDelegationTest t;
+        TestMkDir(t.Runtime, ++t.TxId, "/MyRoot", "dir");
+        t.Wait();
+        TestMkDir(t.Runtime, ++t.TxId, "/MyRoot", "dir2");
+        t.Wait();
+        t.CreateConfirmed("/MyRoot/dir2", "s2", "aje-sa-2", "b1g-cloud-1", "referrer-2");
+        const ui64 dir = DescribePath(t.Runtime, "/MyRoot/dir").GetPathDescription().GetSelf().GetPathId();
+        const ui64 dir2 = DescribePath(t.Runtime, "/MyRoot/dir2").GetPathDescription().GetSelf().GetPathId();
+
+        const auto blocksTx = [](ui64 txId) {
+            return [txId](const auto& ev) {
+                for (const auto& tx : ev->Get()->Record.GetTransactions()) {
+                    if (tx.GetTxId() == txId) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+        };
+
+        const ui64 create = ++t.TxId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> createPlan(t.Runtime, blocksTx(create));
+        AsyncCreateSecret(t.Runtime, create, "/MyRoot/dir", DelegationSecret("s1", "aje-sa-1", "b1g-cloud-1", "referrer-1"));
+        t.Runtime.WaitFor("blocked CREATE plan", [&] { return !createPlan.empty(); });
+        const ui64 drop = ++t.TxId;
+        TestForceDropUnsafe(t.Runtime, drop, dir);
+        createPlan.Unblock().Stop();
+        t.Env.TestWaitNotification(t.Runtime, {create, drop});
+        TestLs(t.Runtime, "/MyRoot/dir", false, NLs::PathNotExist);
+
+        const ui64 stage = ++t.TxId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> stagePlan(t.Runtime, blocksTx(stage));
+        AsyncAlterSecret(t.Runtime, stage, "/MyRoot/dir2", StageSecret("s2", "aje-sa-3", "b1g-cloud-1", "referrer-3"));
+        t.Runtime.WaitFor("blocked STAGE plan", [&] { return !stagePlan.empty(); });
+        const ui64 drop2 = ++t.TxId;
+        TestForceDropUnsafe(t.Runtime, drop2, dir2);
+        stagePlan.Unblock().Stop();
+        t.Env.TestWaitNotification(t.Runtime, {stage, drop2});
+        TestLs(t.Runtime, "/MyRoot/dir2", false, NLs::PathNotExist);
+
+        t.ExpectRevocations("referrer-2", EDue::Now);
+        t.ExpectRevocations("referrer-1,referrer-3", EDue::AfterLease);
+    }
+
+    Y_UNIT_TEST(OldAcknowledgementCannotDeleteAReusedReferrerAfterReboot) {
+        TDelegationTest t;
+        t.CreateConfirmed("/MyRoot", "first", "old-sa", "cloud", "referrer");
+        t.Drop("/MyRoot", "first");
+        t.Claim();
+        const ui64 oldClaim = t.LastClaimId;
+        t.Revoked({"referrer"});
+        t.CreateConfirmed("/MyRoot", "second", "new-sa", "cloud", "referrer");
+        t.Drop("/MyRoot", "second");
+        t.Reboot();
+        t.Claim();
+        UNIT_ASSERT_UNEQUAL(t.LastClaimId, oldClaim);
+        t.Revoked({"referrer"}, oldClaim);
+        t.Reboot();
+        const auto remaining = t.Claim();
+        UNIT_ASSERT_VALUES_EQUAL(remaining.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(remaining.front().GetServiceAccountId(), "new-sa");
+    }
+
+    Y_UNIT_TEST(NamedIamDelegationsDueTimes) {
+        NKikimrSchemeOp::TSecretDescription secret;
+        secret.SetValue("v");
+        UNIT_ASSERT(NamedIamDelegations(secret).empty());
+
+        // the delegations a secret names, with the time their revocation may be handed out
+        secret.MutableIamDelegation()->SetReferrerId("referrer-1");
+        secret.SetIamDelegationNamedAt(TInstant::Hours(1).MicroSeconds());
+        secret.MutablePendingIamDelegation()->SetReferrerId("referrer-2");
+        secret.SetPendingIamDelegationStagedAt(TInstant::Hours(2).MicroSeconds());
+        auto named = NamedIamDelegations(secret);
+        UNIT_ASSERT_VALUES_EQUAL(named.size(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(named[0].ReferrerId, "referrer-1");
+        UNIT_ASSERT_VALUES_EQUAL(named[0].NotBefore, TInstant::Hours(1) + StagedIamDelegationLease);
+        UNIT_ASSERT_VALUES_EQUAL(named[1].ReferrerId, "referrer-2");
+        UNIT_ASSERT_VALUES_EQUAL(named[1].NotBefore, TInstant::Hours(2) + StagedIamDelegationLease);
+        secret.SetIamDelegationSetUp(true);
+        named = NamedIamDelegations(secret);
+        UNIT_ASSERT_VALUES_EQUAL(named[0].NotBefore, TInstant::Zero());
+        secret.SetValue("v");
+        UNIT_ASSERT(!secret.HasIamDelegation());
+        UNIT_ASSERT_VALUES_EQUAL(NamedIamDelegations(secret).size(), 1u);
     }
 }

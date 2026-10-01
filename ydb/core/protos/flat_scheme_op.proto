@@ -2631,10 +2631,40 @@ message TIncrementalRestoreLockTargets {
     optional uint64 RestoreOpId = 3;
 }
 
+// The source of an IAM delegation secret: its value is the IAM token of the delegated service account.
+// Not sensitive: the fields identify the delegation, they grant nothing by themselves.
+message TIamDelegation {
+    optional string ServiceAccountId = 1;   // the service account YDB impersonates
+    optional string CloudId = 2;            // the cloud the delegation is set up in
+    optional string ReferrerId = 3;         // the id of the delegation on the YDB side (IAM referrer)
+}
+
 message TSecretDescription {
     optional string Name = 1;
-    optional string Value = 2 [(Ydb.sensitive) = true]; // original, unencrypted value
+    oneof Source {
+        string Value = 2 [(Ydb.sensitive) = true]; // original, unencrypted value
+        TIamDelegation IamDelegation = 5;
+    }
     optional uint64 Version = 3;
+    reserved 4;
+    // Staged by ALTER SECRET and not promoted yet (see EIamDelegationAlter): IAM may know it, readers never use it
+    optional TIamDelegation PendingIamDelegation = 6;
+    optional uint64 PendingIamDelegationStagedAt = 7; // microseconds; another replacement may be staged only after StagedIamDelegationLease
+    optional uint64 IamDelegationNamedAt = 8; // microseconds: CREATE, or the staging of the promoted replacement
+    // The statement that named IamDelegation reported that IAM set it up (CONFIRM, PROMOTE). Until then the
+    // setup may still be in flight and a revocation of the delegation waits for StagedIamDelegationLease.
+    optional bool IamDelegationSetUp = 9;
+}
+
+// What ALTER SECRET does with the delegation. IAM sets a delegation up between CREATE and CONFIRM, or STAGE and
+// PROMOTE / CANCEL, so the secret always names every delegation IAM may know; whatever it stops naming goes to
+// the outbox of revocations the schemeshard keeps (TEvClaimIamDelegationRevocations) for a node to revoke.
+enum EIamDelegationAlter {
+    IAM_DELEGATION_ALTER_NONE = 0;     // unchanged: IamDelegation must equal the current one
+    IAM_DELEGATION_ALTER_STAGE = 1;    // IamDelegation becomes PendingIamDelegation
+    IAM_DELEGATION_ALTER_PROMOTE = 2;  // PendingIamDelegation (named by IamDelegation.ReferrerId) becomes current, set up
+    IAM_DELEGATION_ALTER_CANCEL = 3;   // PendingIamDelegation (named by IamDelegation.ReferrerId) is dropped: its setup is over
+    IAM_DELEGATION_ALTER_CONFIRM = 4;  // the current delegation (named by IamDelegation.ReferrerId) is set up
 }
 
 message TSecretSchemaOp {
@@ -2645,6 +2675,9 @@ message TSecretSchemaOp {
     // However, this field is supposed to be resolved at KQP to the actual value and be cleared.
     // Schemeshard always uses secret's value from the Value field and asserts that the ValueParamName field is empty.
     optional string ValueParamName = 4;
+    reserved 5;
+    optional TIamDelegation IamDelegation = 6; // set for an IAM delegation secret (Value is not allowed then), the ReferrerId included
+    optional EIamDelegationAlter IamDelegationAlter = 7 [default = IAM_DELEGATION_ALTER_NONE];
 }
 
 message TStreamingQueryProperties {

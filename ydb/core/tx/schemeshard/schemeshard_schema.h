@@ -2708,6 +2708,18 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    // The outbox of IAM delegation revocations, see schemeshard_iam_delegation.h
+    struct IamDelegationRevocations : Table<141> {
+        struct ReferrerId : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct ServiceAccountId : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct CloudId : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct PathId : Column<4, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; }; // the secret, for logs
+        struct NotBefore : Column<5, NScheme::NTypeIds::Uint64> {}; // microseconds
+
+        using TKey = TableKey<ReferrerId>;
+        using TColumns = TableColumns<ReferrerId, ServiceAccountId, CloudId, PathId, NotBefore>;
+    };
+
     struct TestShardSet : Table<140> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
@@ -2856,7 +2868,8 @@ struct Schema : NIceDb::Schema {
         FullBackupItems,
         SetColumnConstraint,
         SetColumnConstraintShardStatus,
-        TestShardSet
+        TestShardSet,
+        IamDelegationRevocations
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

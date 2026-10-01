@@ -1243,6 +1243,13 @@ void TPathDescriber::DescribeSecret(const TActorContext&, TPathId pathId, TPathE
         entry->SetValue(secretInfo->Description.GetValue());
     }
     entry->SetVersion(secretInfo->Description.GetVersion());
+    // the delegation is not sensitive and is always described: the readers of the secret need it
+    if (secretInfo->Description.HasIamDelegation()) {
+        entry->MutableIamDelegation()->CopyFrom(secretInfo->Description.GetIamDelegation());
+    }
+    if (secretInfo->Description.HasPendingIamDelegation()) {
+        entry->MutablePendingIamDelegation()->CopyFrom(secretInfo->Description.GetPendingIamDelegation());
+    }
 }
 
 void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr pathEl) {

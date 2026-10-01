@@ -12,6 +12,7 @@
 #include "schemeshard_export.h"
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
+#include "schemeshard_iam_delegation.h"
 #include "schemeshard_info_types.h"
 #include "schemeshard_db_ref_map.h"
 #include "schemeshard_path.h"
@@ -331,6 +332,14 @@ public:
     TDbRefMap<TBackupCollectionInfo::TPtr> BackupCollections{"BackupCollections", this, DbRefMaps};
     TDbRefMap<TSysViewInfo::TPtr> SysViews{"SysViews", this, DbRefMaps};
     TDbRefMap<TSecretInfo::TPtr> Secrets{"Secrets", this, DbRefMaps};
+    // The outbox of IAM delegation revocations (schemeshard_iam_delegation.h) by referrer id, and the claims of the nodes revoking them
+    THashMap<TString, TIamDelegationRevocation> IamDelegationRevocations;
+    struct TIamDelegationClaim {
+        ui64 ClaimId = 0;
+        TInstant Until;
+    };
+    THashMap<TString, TIamDelegationClaim> ClaimedIamDelegationRevocations; // by referrer id; only the claim may acknowledge
+    ui64 NextIamDelegationClaimId = 0;
     TDbRefMap<TStreamingQueryInfo::TPtr> StreamingQueries{"StreamingQueries", this, DbRefMaps};
     THashSet<TPathId> TableInBackupCollections;
     TDbRefMap<TTestShardSetInfo::TPtr> TestShardSets{"TestShardSets", this, DbRefMaps};
@@ -1063,6 +1072,23 @@ public:
     void PersistSecret(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistSecretRemove(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId, const TSecretInfo& secretInfo);
+
+    // IAM delegation revocations
+    void PersistIamDelegationRevocation(NIceDb::TNiceDb& db, const TIamDelegationRevocation& revocation);
+    void PersistIamDelegationRevocationRemove(NIceDb::TNiceDb& db, const TString& referrerId);
+    // Whether the statement making the change reports that the setup of the staged replacement is over (CANCEL)
+    enum class EPendingIamDelegationSetup {
+        MayBeInFlight,
+        Over,
+    };
+    // Writes the revocation of every delegation named before the change and not after it (after == nullptr: removed)
+    void PersistIamDelegationRevocations(NIceDb::TNiceDb& db, TPathId pathId,
+        const NKikimrSchemeOp::TSecretDescription& before, const NKikimrSchemeOp::TSecretDescription* after,
+        EPendingIamDelegationSetup pendingSetup = EPendingIamDelegationSetup::MayBeInFlight);
+    // What names the referrer now: a secret (its current or staged delegation) or the outbox; nothing if it is free
+    std::optional<TString> FindIamDelegationReferrer(const TString& referrerId) const;
+    void Handle(TEvSchemeShard::TEvClaimIamDelegationRevocations::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSchemeShard::TEvIamDelegationsRevoked::TPtr& ev, const TActorContext& ctx);
     void PersistSecretAlter(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistSecretAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 

@@ -2434,23 +2434,25 @@ class TestViewer(object):
         }, headers=database_headers)
         assert missing_database.get('status_code') == 400, missing_database
 
-        response = cls.get_viewer("/viewer/nodes", {
+        group_only = cls.get_viewer("/viewer/nodes", {
             'database': cls.dedicated_db,
             'group': 'DC',
-            'fields_required': 'NodeId,SystemState',
+            'fields_required': 'NodeId',
         }, headers=database_headers)
-        assert 'status_code' not in response, response
+        assert 'status_code' not in group_only, group_only
+        assert group_only.get('NodeGroups'), group_only
 
         # group= disables sort=; cluster-level sort must not affect fields or response.
-        response = cls.get_viewer("/viewer/nodes", {
+        group_and_sort = cls.get_viewer("/viewer/nodes", {
             'database': cls.dedicated_db,
             'group': 'DC',
             'sort': 'Missing',
             'fields_required': 'NodeId',
         }, headers=database_headers)
-        assert 'status_code' not in response, response
-        for node in response.get('Nodes', []):
-            assert 'Missing' not in node, response
+        assert 'status_code' not in group_and_sort, group_and_sort
+        assert group_and_sort.get('NodeGroups'), group_and_sort
+        assert group_and_sort['NodeGroups'] == group_only['NodeGroups'], (group_only, group_and_sort)
+        assert group_and_sort['FieldsRequired'] == group_only['FieldsRequired'], (group_only, group_and_sort)
 
         # Check that users with viewer+ access level can get nodes with all fields_required and filter_peer_role
         viewer_headers = cls.make_cookie_headers(cls.viewer_session_id)

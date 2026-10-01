@@ -2262,7 +2262,7 @@ public:
             PathNavigateProcessed = true;
         }
 
-        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsDone() && TotalNodes > 0 && !DatabaseBoardInfoProcessed) {
+        if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsDone() && !DatabaseBoardInfoProcessed) {
             if (DatabaseBoardInfoResponse->IsOk() && DatabaseBoardInfoResponse->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 TString database = GetDatabaseFromEndpointsBoardPath(DatabaseBoardInfoResponse->Get()->Path);
                 for (const auto& entry : DatabaseBoardInfoResponse->Get()->InfoEntries) {
@@ -2282,7 +2282,7 @@ public:
             DatabaseBoardInfoProcessed = true;
         }
 
-        if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsDone() && TotalNodes > 0 && !ResourceBoardInfoProcessed) {
+        if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsDone() && !ResourceBoardInfoProcessed) {
             if (ResourceBoardInfoResponse->IsOk() && ResourceBoardInfoResponse->Get()->Status == TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
                 TString database = GetDatabaseFromEndpointsBoardPath(ResourceBoardInfoResponse->Get()->Path);
                 for (const auto& entry : ResourceBoardInfoResponse->Get()->InfoEntries) {

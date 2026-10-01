@@ -13,7 +13,6 @@
 
 namespace NKikimr::NColumnShard {
 
-
 struct TLimits {
 private:
     static constexpr ui64 MAX_BLOB_SIZE_LIMIT = 8 * 1024 * 1024;

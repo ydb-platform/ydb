@@ -27,7 +27,6 @@ private:
     const ui32 TabletTxNo;
     const NOlap::TSnapshot CurrentSnapshot;
     bool CompleteReady = false;
-
 };
 
 }   // namespace NKikimr::NColumnShard

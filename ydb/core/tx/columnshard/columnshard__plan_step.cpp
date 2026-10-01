@@ -33,7 +33,6 @@ private:
     const ui32 TabletTxNo;
     THashMap<TActorId, std::vector<ui64>> TxAcks;
     std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> Result;
-
 };
 
 bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {

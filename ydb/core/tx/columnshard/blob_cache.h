@@ -23,7 +23,6 @@ namespace NKikimr::NBlobCache {
 using NOlap::TBlobRange;
 using NOlap::TUnifiedBlobId;
 
-
 struct TReadBlobRangeOptions {
     bool CacheAfterRead;
     bool IsBackgroud;

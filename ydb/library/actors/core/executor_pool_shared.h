@@ -161,6 +161,7 @@ namespace NActors {
         void GetSharedStatsForHarmonizer(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
         void GetSharedStats(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
 
+        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;

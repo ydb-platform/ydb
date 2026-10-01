@@ -142,6 +142,81 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         return chunks;
     }
 
+    Y_UNIT_TEST(ChunkReserveMockSuccessCookiesRemainOptIn) {
+        TActorTestContext testCtx({.UsePDiskMock = true});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        constexpr ui64 cookie = 0x1234'5678'9abc'def0ULL;
+
+        for (const bool isDDisk : {false, true}) {
+            auto* request = new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner,
+                vdisk.PDiskParams->OwnerRound, 1);
+            UNIT_ASSERT(!request->IsDDisk);
+            request->IsDDisk = isDDisk;
+            testCtx.Send(request, cookie);
+            auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReserveResult>(
+                testCtx.Sender, TDuration::Seconds(10));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->ChunkIds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? cookie : 0);
+        }
+    }
+
+    Y_UNIT_TEST(ChunkReserveMockFailureCookiesRemainOptIn) {
+        TActorTestContext testCtx({.UsePDiskMock = true});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        constexpr ui64 cookie = 0x1234'5678'9abc'def0ULL;
+        const auto space = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+        UNIT_ASSERT(space->FreeChunks < Max<ui32>());
+
+        for (const bool isDDisk : {false, true}) {
+            for (const bool invalidRound : {false, true}) {
+                auto* request = new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner,
+                    vdisk.PDiskParams->OwnerRound + (invalidRound ? 1 : 0),
+                    invalidRound ? 1 : space->FreeChunks + 1);
+                request->IsDDisk = isDDisk;
+                testCtx.Send(request, cookie);
+                auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReserveResult>(
+                    testCtx.Sender, TDuration::Seconds(10));
+                UNIT_ASSERT(reply);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status,
+                    invalidRound ? NKikimrProto::INVALID_ROUND : NKikimrProto::OUT_OF_SPACE);
+                UNIT_ASSERT_VALUES_EQUAL(reply->Get()->ErrorReason,
+                    invalidRound ? "invalid OwnerRound" : "no free chunks");
+                UNIT_ASSERT(reply->Get()->ChunkIds.empty());
+                UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? cookie : 0);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ChunkReserveMockErrorCookiesRemainOptIn) {
+        TActorTestContext testCtx({.UsePDiskMock = true});
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        constexpr ui64 cookie = 0x1234'5678'9abc'def0ULL;
+        // The mock does not acknowledge PDiskStop; same-sender ordering puts it
+        // into the error state before either reservation is handled.
+        testCtx.Send(new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr));
+
+        for (const bool isDDisk : {false, true}) {
+            auto* request = new NPDisk::TEvChunkReserve(vdisk.PDiskParams->Owner,
+                vdisk.PDiskParams->OwnerRound, 1);
+            request->IsDDisk = isDDisk;
+            testCtx.Send(request, cookie);
+            auto reply = testCtx.GetRuntime()->GrabEdgeEventRethrow<NPDisk::TEvChunkReserveResult>(
+                testCtx.Sender, TDuration::Seconds(10));
+            UNIT_ASSERT(reply);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Status, NKikimrProto::CORRUPTED);
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->ErrorReason, "Stopped by control message");
+            UNIT_ASSERT(reply->Get()->ChunkIds.empty());
+            UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, isDDisk ? cookie : 0);
+        }
+    }
+
     Y_UNIT_TEST(ChunkForgetReleasesReservedChunk) {
         TActorTestContext testCtx(FewChunksSettings());
         TVDiskMock vdisk(&testCtx);
@@ -886,23 +961,125 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         UNIT_ASSERT(!normal->UringRouter);
     }
 
+    Y_UNIT_TEST(TestErrorStopRetiresRouterWithRetainedInitResult) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        TManualEvent retired;
+        ctx.SafeRunOnPDisk([&](NPDisk::TPDisk* pdisk) {
+            NPDisk::TPDiskTestPeer::ConfigureRouter(*pdisk, [&](NPDisk::TUringRouter& instance) {
+                NPDisk::NUringPrivate::TRouterHooks hooks;
+                hooks.Retired = [&] { retired.Signal(); };
+                NPDisk::TUringRouterTestPeer::SetHooks(instance, std::move(hooks));
+            });
+        });
+        auto init = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0, true), NKikimrProto::OK);
+        auto router = std::dynamic_pointer_cast<NPDisk::TUringRouter>(init->UringRouter);
+        UNIT_ASSERT(router);
+
+        auto* pdisk = ctx.GetPDisk();
+        pdisk->InputRequest(pdisk->ReqCreator.CreateFromArgs<NPDisk::TStopDevice>());
+        UNIT_ASSERT_C(retired.WaitT(TDuration::Seconds(10)), "shared router was not retired by error stop");
+        UNIT_ASSERT(!ctx.SafeRunOnPDisk([](NPDisk::TPDisk* p) { return p->BlockDevice->IsGood(); }));
+
+        UNIT_ASSERT(router->IsBroken());
+        UNIT_ASSERT(NPDisk::TUringRouterTestPeer::Retired(*router));
+        UNIT_ASSERT(!pdisk->BlockDevice->DuplicateFd().IsOpen());
+        TFile independent(ctx.TestCtx.Path, OpenExisting | RdWr);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_EX | LOCK_NB), 0);
+        UNIT_ASSERT_VALUES_EQUAL(flock(independent.GetHandle(), LOCK_UN), 0);
+    }
+
+    Y_UNIT_TEST(TestSharedUringCompletionResetsIdleProbeWindow) {
+        if (!NPDisk::RequireUring()) {
+            return;
+        }
+        TActorTestContext::TSettings settings;
+        settings.UseSectorMap = false;
+        settings.SmallDisk = true;
+        settings.ChunkSize = 16 << 20;
+        settings.DiskSize = ui64{16} << 30;
+        TActorTestContext ctx(settings);
+        auto init = ctx.TestResponse<NPDisk::TEvYardInitResult>(new NPDisk::TEvYardInit(
+            2, TVDiskID(0, 1, 0, 0, 0), ctx.TestCtx.PDiskGuid, {}, {}, 1, 0, true), NKikimrProto::OK);
+        auto router = std::dynamic_pointer_cast<NPDisk::TUringRouter>(init->UringRouter);
+        UNIT_ASSERT(router);
+
+        auto* pdisk = ctx.GetPDisk();
+        auto generation = pdisk->Mon.DeviceIoCompletionGeneration;
+        const ui64 generationBefore = generation->load(std::memory_order_relaxed);
+        struct TRead final : NPDisk::TUringOperationBase {
+            std::shared_ptr<std::atomic<ui64>> Generation;
+            TManualEvent Done;
+            std::atomic<ui64> GenerationAtCallback = 0;
+            std::atomic<bool> Dropped = false;
+
+            void OnComplete(TActorSystem*) noexcept override {
+                GenerationAtCallback.store(Generation->load(std::memory_order_relaxed), std::memory_order_relaxed);
+                Done.Signal();
+            }
+
+            void OnDrop(TActorSystem*) noexcept override {
+                Dropped.store(true, std::memory_order_relaxed);
+                Done.Signal();
+            }
+        } op;
+        op.Generation = generation;
+        alignas(4096) char buffer[4096];
+        op.SetOperationType(NPDisk::TUringOperationBase::EREAD);
+        op.PrepareIov(buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(router->Read(&op));
+        UNIT_ASSERT_C(op.Done.WaitT(TDuration::Seconds(10)), "shared-router read did not complete");
+        UNIT_ASSERT(!op.Dropped.load(std::memory_order_relaxed));
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), sizeof(buffer));
+        UNIT_ASSERT_C(op.GenerationAtCallback.load(std::memory_order_relaxed) > generationBefore,
+            "shared-router completion did not update PDisk activity generation before its callback");
+
+        auto control = ctx.GetRuntime()->GetAppData().Icb->
+            PDiskControls.IdleDeviceProbeIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT(control);
+        control->SetFromHtmlRequest(1);
+        const bool scheduled = ctx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            p->ObservedDeviceIoCompletionGeneration = generationBefore;
+            p->LastDeviceIoCompletionGenerationChange = 0;
+            return p->MaybeScheduleIdleDeviceProbe();
+        });
+        UNIT_ASSERT(!scheduled);
+        UNIT_ASSERT(!pdisk->IdleDeviceProbeInFlight.load(std::memory_order_acquire));
+    }
+
     Y_UNIT_TEST(TestUringSampleSinkOutlivesPDiskAndMonitor) {
         auto cfg = MakeIntrusive<TPDiskConfig>("", ui64{12345}, ui32{12345},
             TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         auto pdisk = MakeHolder<NPDisk::TPDisk>(std::make_shared<NPDisk::TPDiskCtx>(), cfg,
             MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto sink = pdisk->MakeUringSampleSink();
+        auto completionSink = pdisk->MakeUringCompletionSink();
         std::weak_ptr<NPDisk::TDeviceOverestimationAggregator> aggregator = pdisk->Mon.DeviceOverestimationMerged;
+        std::weak_ptr<std::atomic<ui64>> generation = pdisk->Mon.DeviceIoCompletionGeneration;
         pdisk.Reset();
         UNIT_ASSERT(!aggregator.expired());
+        UNIT_ASSERT(!generation.expired());
         NPDisk::TDeviceIoSample sample;
         sample.Size = 4096;
         sample.SubmitCycles = 1;
         sample.CompleteCycles = 2;
         sink(sample);
         UNIT_ASSERT_VALUES_EQUAL(aggregator.lock()->ComputeAndReset(0).SampleCount, 1);
+        completionSink();
+        UNIT_ASSERT_VALUES_EQUAL(generation.lock()->load(std::memory_order_relaxed), 1u);
         sink = {};
         UNIT_ASSERT(aggregator.expired());
+        UNIT_ASSERT(!generation.expired());
+        completionSink = {};
+        UNIT_ASSERT(generation.expired());
     }
 
     Y_UNIT_TEST(TestSharedUringRouterFailureNotification) {
@@ -2597,6 +2774,84 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
 
         control->RestoreDefault();
         UNIT_ASSERT_VALUES_EQUAL(control->Get(), 1);
+    }
+
+    Y_UNIT_TEST(IdleDeviceProbeControlDefaultsToDisabledAndUsesSeconds) {
+        TActorTestContext testCtx{{}};
+        testCtx.GetPDisk();
+
+        auto& icb = testCtx.GetRuntime()->GetAppData().Icb;
+        auto control = icb->PDiskControls.IdleDeviceProbeIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT_C(control, "IdleDeviceProbeIntervalSeconds must be registered by PDisk::Initialize");
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(control->GetDefault(), 0);
+
+        control->SetFromHtmlRequest(5);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 5);
+        control->SetFromHtmlRequest(100000);
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 86400);
+        control->RestoreDefault();
+        UNIT_ASSERT_VALUES_EQUAL(control->Get(), 0);
+    }
+
+    Y_UNIT_TEST(IdleDeviceProbeReadsAfterCompletionGenerationStalls) {
+        TActorTestContext testCtx{{}};
+        auto* pdisk = testCtx.GetPDisk();
+        auto control = testCtx.GetRuntime()->GetAppData().Icb->
+            PDiskControls.IdleDeviceProbeIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT(control);
+        control->SetFromHtmlRequest(1);
+
+        ui64 generationBefore = 0;
+        const bool scheduled = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            generationBefore = p->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
+            p->ObservedDeviceIoCompletionGeneration = generationBefore;
+            p->LastDeviceIoCompletionGenerationChange = 0;
+            return p->MaybeScheduleIdleDeviceProbe();
+        });
+        UNIT_ASSERT(scheduled);
+
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (pdisk->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed) == generationBefore ||
+                pdisk->IdleDeviceProbeInFlight.load(std::memory_order_acquire)) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "idle device probe did not complete");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(pdisk->Mon.PDiskState->Val(), NKikimrBlobStorage::TPDiskState::Normal);
+    }
+
+    Y_UNIT_TEST(IdleDeviceProbeFailureMovesPDiskToDeviceErrorAndStopsIo) {
+        TActorTestContext testCtx{{}};
+        auto* pdisk = testCtx.GetPDisk();
+        auto control = testCtx.GetRuntime()->GetAppData().Icb->
+            PDiskControls.IdleDeviceProbeIntervalSeconds.AtomicLoad();
+        UNIT_ASSERT(control);
+        control->SetFromHtmlRequest(1);
+        testCtx.TestCtx.SectorMap->ReadIoErrorEveryNthRequests = 1;
+
+        const bool scheduled = testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            p->ObservedDeviceIoCompletionGeneration =
+                p->Mon.DeviceIoCompletionGeneration->load(std::memory_order_relaxed);
+            p->LastDeviceIoCompletionGenerationChange = 0;
+            return p->MaybeScheduleIdleDeviceProbe();
+        });
+        UNIT_ASSERT(scheduled);
+
+        const auto deadline = TMonotonic::Now() + TDuration::Seconds(10);
+        while (pdisk->Mon.PDiskState->Val() != NKikimrBlobStorage::TPDiskState::DeviceIoError) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "probe failure did not stop PDisk device I/O");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        while (testCtx.SafeRunOnPDisk([](NPDisk::TPDisk* p) { return p->BlockDevice->IsGood(); })) {
+            UNIT_ASSERT_C(TMonotonic::Now() < deadline, "probe failure did not stop PDisk device I/O");
+            Sleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT(!pdisk->IdleDeviceProbeInFlight.load(std::memory_order_acquire));
+        testCtx.SafeRunOnPDisk([&](NPDisk::TPDisk* p) {
+            p->LastDeviceIoCompletionGenerationChange = 0;
+            UNIT_ASSERT(!p->MaybeScheduleIdleDeviceProbe());
+            UNIT_ASSERT(!p->IdleDeviceProbeInFlight.load(std::memory_order_acquire));
+        });
     }
 
     Y_UNIT_TEST(DeviceHaltTooLong) {

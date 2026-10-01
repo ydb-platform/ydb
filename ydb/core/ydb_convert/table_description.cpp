@@ -3138,7 +3138,9 @@ bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKi
 
     const auto sysViewType = in.GetSysViewDescription().GetType();
     out.set_sys_view_id(sysViewType);
-    TString sysViewTypeName = NKikimrSysView::ESysViewType_Name(sysViewType).substr(1);
+    TString sysViewTypeName = NKikimrSysView::ESysViewType_IsValid(sysViewType)
+        ? NKikimrSysView::ESysViewType_Name(static_cast<NKikimrSysView::ESysViewType>(sysViewType)).substr(1)
+        : "UnknownType";
     NProtobufJson::ToSnakeCase(&sysViewTypeName);
     out.set_sys_view_name(std::move(sysViewTypeName));
 

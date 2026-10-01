@@ -29,7 +29,7 @@ namespace {
         return x->GetTypeAnn() && x->GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyList;
     };
 
-    TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx, bool& isUniversal) {
+    TExprNode::TPtr RewriteMultiAggregate(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& types, bool& isUniversal) {
         isUniversal = false;
         auto exprLambda = node.Child(1);
         const TStructExprType* structType = nullptr;
@@ -158,7 +158,7 @@ namespace {
 
             auto traits = ctx.ReplaceNodes(TExprNode::TPtr(traitsFactoryBody), factoryReplaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
-            auto status = ExpandApplyNoRepeat(traits, traits, ctx);
+            auto status = ExpandApplyNoRepeat(traits, traits, ctx, types);
             if (status == IGraphTransformer::TStatus::Error) {
                 return nullptr;
             }
@@ -6068,7 +6068,7 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus MultiAggregateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus MultiAggregateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -6133,7 +6133,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        output = RewriteMultiAggregate(*input, ctx.Expr, isUniversal);
+        output = RewriteMultiAggregate(*input, ctx.Expr, ctx.Types, isUniversal);
         if (isUniversal) {
             output = input;
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());

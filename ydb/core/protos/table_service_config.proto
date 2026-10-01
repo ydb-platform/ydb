@@ -63,8 +63,8 @@ message TTableServiceConfig {
 
         optional bool VerboseMemoryLimitException = 29 [default = false];
 
-        optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 0];
-        optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 33554432];
+        optional uint64 KqpLevelCacheMaxSizeBytes = 32 [default = 104857600];
+        optional uint64 KqpLevelCacheIncreaseBatchSizeBytes = 33 [default = 10485760];
 
         // Bind the compute actor memory quota to the memory hungry operators (RFC dq_memory_quota_20), so that
         // DqHashCombine / DqHashAggregate / DqBlockHashJoin can request memory before growing, read a numeric
@@ -569,7 +569,8 @@ message TTableServiceConfig {
         optional uint64 IdleDestroyPeriodMs = 7 [default = 120000];
         optional uint64 LocalChannelColdInflightBytes = 9 [default = 524288];
         // Channels tell their consumers and producers what changed, rather than being polled: a union of inputs
-        // visits the channels which have something for it. Kill switch: off, the channels are polled as before
+        // visits the channels which have something for it, and a compute actor checks its output channels for
+        // finish only once one of them has. Kill switch: off, the channels are polled as before
         optional bool EnableChannelNotifications = 10 [default = true];
     }
 

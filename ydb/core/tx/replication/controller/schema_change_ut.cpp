@@ -20,6 +20,8 @@ namespace NKikimr::NReplication::NController {
 
 namespace {
 
+using TFamily = NKikimrReplication::TSchemaChange::TFamily;
+
 NKikimrReplication::TSchemaChange MakeSchemaChange(
         ui64 step = 100, ui64 txId = 10, ui64 sourceSchemaVersion = 2,
         bool withExtraColumn = true)
@@ -47,6 +49,24 @@ NKikimrReplication::TSchemaChange MakeSchemaChange(
     return schema;
 }
 
+NKikimrReplication::TSchemaChange MakeFamilySchemaChange(const TString& media) {
+    auto schema = MakeSchemaChange(100, 10, 2, false);
+    schema.MutableColumns(0)->SetFamily("default");
+    schema.MutableColumns(1)->SetFamily("archive");
+
+    auto* defaultFamily = schema.AddFamilies();
+    defaultFamily->SetName("default");
+    defaultFamily->SetCompression(TFamily::COMPRESSION_OFF);
+    defaultFamily->SetCacheMode(TFamily::CACHE_MODE_REGULAR);
+
+    auto* archive = schema.AddFamilies();
+    archive->SetName("archive");
+    archive->SetMedia(media);
+    archive->SetCompression(TFamily::COMPRESSION_LZ4);
+    archive->SetCacheMode(TFamily::CACHE_MODE_REGULAR);
+    return schema;
+}
+
 TEvService::TEvSchemaChangeReport* MakeSchemaChangeReport(
         const TWorkerId& id, const NKikimrReplication::TSchemaChange& schema,
         bool applied = false, bool completed = false)
@@ -60,6 +80,15 @@ TEvService::TEvSchemaChangeReport* MakeSchemaChangeReport(
 }
 
 using TTestEnv = NTestHelpers::TEnv<>;
+
+void CompleteSchemaChange(TTestEnv& env, ui64 controllerId, const TWorkerId& worker,
+        const NKikimrReplication::TSchemaChange& schema)
+{
+    env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, true));
+    env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+    env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema, false, true));
+    env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+}
 
 // TTestEnv uses real actor threads, so runtime observers cannot reliably
 // intercept actor-to-actor events. TBlockEvents is observer-based as well;
@@ -436,6 +465,130 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
 
         env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvPoison());
         env.ExpectUnlink();
+    }
+
+    Y_UNIT_TEST(CombinedFamilyCreationAndColumnReassignmentUsesOneAlter) {
+        const auto schema = MakeFamilySchemaChange("ssd");
+        TSchemaAltererTestEnv env(schema, 100);
+        env.ReplyMatchingDescription();
+
+        const auto proposal = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(),
+            NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+        const auto& transaction = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(
+            proposal->Get()->Ev.Get())->Record.GetTransaction(0);
+        const auto& alter = transaction.GetAlterTable();
+        UNIT_ASSERT_VALUES_EQUAL(alter.ColumnsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(alter.GetColumns(0).GetName(), "value");
+        UNIT_ASSERT_VALUES_EQUAL(alter.GetColumns(0).GetFamilyName(), "archive");
+        UNIT_ASSERT_VALUES_EQUAL(alter.GetPartitionConfig().ColumnFamiliesSize(), 2);
+        env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvPoison());
+        env.ExpectUnlink();
+    }
+
+    Y_UNIT_TEST(CombinedFamilyCreationAndReassignmentCompletes) {
+        TEnv env;
+        const auto info = StartReplication(env);
+        const auto controllerId = info.ControllerId;
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, controllerId, {worker});
+
+        const auto schema = MakeFamilySchemaChange("test");
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema));
+        const auto released = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(released->Get()->Record.GetSchema().SerializeAsString(), schema.SerializeAsString());
+
+        const auto description = env.GetDescription("/Root/replica1");
+        const auto& table = description.GetPathDescription().GetTable();
+        ui32 archiveId = 0;
+        for (const auto& family : table.GetPartitionConfig().GetColumnFamilies()) {
+            if (family.GetName() == "archive") {
+                archiveId = family.GetId();
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(family.GetColumnCodec()),
+                    static_cast<ui32>(NKikimrSchemeOp::ColumnCodecLZ4));
+            }
+        }
+        UNIT_ASSERT(archiveId);
+        bool reassigned = false;
+        for (const auto& column : table.GetColumns()) {
+            if (column.GetName() == "value") {
+                reassigned = column.GetFamily() == archiveId;
+            }
+        }
+        UNIT_ASSERT(reassigned);
+
+        CompleteSchemaChange(env, controllerId, worker, schema);
+
+        auto next = schema;
+        next.MutableVersion()->SetStep(200);
+        next.MutableVersion()->SetTxId(20);
+        next.SetSourceSchemaVersion(3);
+        next.MutableFamilies(1)->SetCompression(TFamily::COMPRESSION_OFF);
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, next));
+        const auto nextRelease = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(nextRelease->Get()->Record.GetSchema().SerializeAsString(), next.SerializeAsString());
+        const auto updated = env.GetDescription("/Root/replica1");
+        const auto& updatedTable = updated.GetPathDescription().GetTable();
+        for (const auto& item : updatedTable.GetPartitionConfig().GetColumnFamilies()) {
+            if (item.GetName() == "archive") {
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(item.GetColumnCodec()),
+                    static_cast<ui32>(NKikimrSchemeOp::ColumnCodecPlain));
+            }
+        }
+
+        CompleteSchemaChange(env, controllerId, worker, next);
+
+        auto withColumn = next;
+        withColumn.MutableVersion()->SetStep(300);
+        withColumn.MutableVersion()->SetTxId(30);
+        withColumn.SetSourceSchemaVersion(4);
+        auto* extra = withColumn.AddColumns();
+        extra->SetName("extra");
+        extra->SetType("Uint64");
+        extra->SetFamily("archive");
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, withColumn));
+        const auto columnRelease = env.GetRuntime().GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(columnRelease->Get()->Record.GetSchema().SerializeAsString(), withColumn.SerializeAsString());
+        const auto withColumnDescription = env.GetDescription("/Root/replica1");
+        bool added = false;
+        for (const auto& column : withColumnDescription.GetPathDescription().GetTable().GetColumns()) {
+            if (column.GetName() == "extra") {
+                added = column.GetFamily() == archiveId;
+            }
+        }
+        UNIT_ASSERT(added);
+    }
+
+    Y_UNIT_TEST(UnavailableFamilyPoolStopsReplication) {
+        TEnv env;
+        const auto info = StartReplication(env);
+        const auto controllerId = info.ControllerId;
+        const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, controllerId, {worker});
+
+        const auto schema = MakeFamilySchemaChange("unavailable_pool_kind");
+
+        env.SendAsync(controllerId, MakeSchemaChangeReport(worker, schema));
+        bool failed = false;
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            const auto state = DescribeReplication(env, info);
+            if (state->Get()->Record.GetState().HasError()) {
+                const TString issue = state->Get()->Record.GetState().GetError().DebugString();
+                UNIT_ASSERT_C(issue.find("unavailable_pool_kind") != TString::npos, issue);
+                failed = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(10));
+        }
+        UNIT_ASSERT(failed);
+        const auto description = env.GetDescription("/Root/replica1");
+        for (const auto& family : description.GetPathDescription().GetTable().GetPartitionConfig().GetColumnFamilies()) {
+            UNIT_ASSERT_VALUES_UNEQUAL(family.GetName(), "archive");
+        }
     }
 
     Y_UNIT_TEST(PauseCancelsStrandedCollectingBarrierAfterWorkerError) {

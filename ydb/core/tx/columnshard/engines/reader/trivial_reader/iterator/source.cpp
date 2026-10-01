@@ -13,6 +13,8 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/checker.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
@@ -220,36 +222,81 @@ TConclusion<NCommon::TExecutionResult> TPortionDataSource::DoStartFetchImpl(
         std::move(readActions), fetchers, GetExecutionContext().GetCursorStep(), "fetcher"));
 }
 
+THashMap<IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> TPortionDataSource::SelectIndexesForFetch(
+    const TFetchIndexContext& indexContext) const {
+    THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> result;
+    for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
+        NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
+        for (auto&& op : i.second) {
+            TCheckIndexContext checkAddr(indexContext.GetColumnId(), i.first, op);
+            std::shared_ptr<NIndexes::IIndexMeta> indexMeta = GetStageData().GetIndexes()->FindIndexFor(addr, op);
+            if (!indexMeta) {
+                indexMeta = SelectOptimalIndex(GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, op), op);
+            }
+            AFL_VERIFY(result.emplace(checkAddr, indexMeta).second);
+        }
+    }
+    return result;
+}
+
+// Re-runs the same resolution as DoStartFetchIndex. They agree only while the stage-data index
+// collection is still empty: reserve runs before the index fetch, FindIndexFor misses, and the schema
+// FindSkipIndexes path decides. A reserve after fetched index data has landed can pick a different meta.
+//
+// Addresses match TIndexFetcherLogic: one per distinct category. An in-place chunk is copied once per
+// address, and an ordinary bloom header names the whole chunk for every category. A blob chunk is read
+// by unique ranges, so its stored size stays the upper bound.
+ui64 TPortionDataSource::GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchIndexContext>& indexes) const {
+    struct TSelected {
+        std::shared_ptr<NIndexes::IIndexMeta> Meta;
+        THashSet<NIndexes::TIndexDataAddress> Addresses;
+    };
+
+    THashMap<ui32, TSelected> selected;
+    for (auto&& [_, indexContext] : indexes) {
+        for (auto&& [check, indexMeta] : SelectIndexesForFetch(indexContext)) {
+            if (!indexMeta) {
+                continue;
+            }
+            auto& item = selected[indexMeta->GetIndexId()];
+            item.Meta = indexMeta;
+            item.Addresses.emplace(NIndexes::TIndexDataAddress(indexMeta->GetIndexId(), indexMeta->CalcCategory(check.GetSubColumnName())));
+        }
+    }
+    ui64 result = 0;
+    for (auto&& [indexId, item] : selected) {
+        AFL_VERIFY(item.Meta);
+        AFL_VERIFY(!item.Addresses.empty());
+        for (const auto* chunk : GetPortionAccessor().GetIndexChunksPointers(indexId)) {
+            if (!chunk->HasBlobData()) {
+                result += chunk->GetDataSize();
+                continue;
+            }
+            const auto header = item.Meta->BuildHeader(NIndexes::TChunkOriginalData(chunk->GetBlobDataVerified()));
+            if (header.IsFail() || !(*header)) {
+                result += chunk->GetDataSize() * item.Addresses.size();
+                continue;
+            }
+            for (auto&& address : item.Addresses) {
+                if (const auto range = (*header)->GetAddressForCategory(address.GetCategory())) {
+                    result += range->GetSize();
+                }
+            }
+        }
+    }
+    return result;
+}
+
 TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDataSource::DoStartFetchIndex(
     const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& indexContext) {
     YDB_LOG_DEBUG("",
         {"sourceIdx", GetSourceIdx()});
-    THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> indexInfo;
-    for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
-        NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
-        for (auto&& op : i.second) {
-            auto indexMeta = MutableStageData().GetIndexes()->FindIndexFor(addr, op);
-            TCheckIndexContext checkAddr(indexContext.GetColumnId(), i.first, op);
-            if (!indexMeta) {
-                const auto indexesMeta = GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, op);
-                if (indexesMeta.empty()) {
-                    MutableStageData().AddRemapDataToIndex(checkAddr, nullptr);
-                    continue;
-                }
-                indexMeta = SelectOptimalIndex(indexesMeta, op);
-                if (!indexMeta) {
-                    MutableStageData().AddRemapDataToIndex(checkAddr, nullptr);
-                    continue;
-                }
-            }
-            AFL_VERIFY(indexInfo.emplace(checkAddr, indexMeta).second);
-            MutableStageData().AddRemapDataToIndex(checkAddr, indexMeta);
-        }
-    }
     THashMap<ui32, THashSet<NIndexes::NRequest::TOriginalDataAddress>> addresses;
-    for (auto&& [check, index] : indexInfo) {
-        const NIndexes::NRequest::TOriginalDataAddress addr(check.GetColumnId(), check.GetSubColumnName());
-        addresses[index->GetIndexId()].emplace(addr);
+    for (auto&& [check, index] : SelectIndexesForFetch(indexContext)) {
+        MutableStageData().AddRemapDataToIndex(check, index);
+        if (index) {
+            addresses[index->GetIndexId()].emplace(NIndexes::NRequest::TOriginalDataAddress(check.GetColumnId(), check.GetSubColumnName()));
+        }
     }
     std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>> result;
     for (auto&& i : addresses) {
@@ -475,7 +522,7 @@ TPortionDataSource::TPortionDataSource(const ui32 sourceIdx, const std::shared_p
 }
 
 TConclusion<NCommon::TExecutionResult> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::TProcessorContext& context,
-    const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& /*indexes*/,
+    const THashMap<ui32, IDataSource::TDataAddress>& columns, const THashMap<ui32, IDataSource::TFetchIndexContext>& indexes,
     const THashMap<ui32, IDataSource::TFetchHeaderContext>& /*headers*/, const std::shared_ptr<NArrow::NSSA::IMemoryCalculationPolicy>& policy) {
     class TEntitySize {
     private:
@@ -508,8 +555,12 @@ TConclusion<NCommon::TExecutionResult> TPortionDataSource::DoStartReserveMemory(
 
     auto& source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
 
-    const ui64 sizeToReserve = policy->GetReserveMemorySize(
-        result.GetBlobsSize(), result.GetRawSize(), GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount());
+    // Upper bound, not the category slice a header may name: the fetcher can still read the rest of the chunk.
+    // Not scaled by LIMIT. indexes is empty unless the scan graph was built with EnableCsIndexReadMemoryTracking,
+    // which is what attaches an index reserve node.
+    const ui64 sizeToReserve = policy->GetReserveMemorySize(result.GetBlobsSize(), result.GetRawSize(),
+                                   GetContext()->GetReadMetadata()->GetLimitRobustOptional(), GetRecordsCount()) +
+                               GetIndexesDataSizeForFetch(indexes);
 
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("mr"));
     return NCommon::StartProgramStepReserveMemory(source, sizeToReserve, policy->GetStage());

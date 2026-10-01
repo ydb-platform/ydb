@@ -42,9 +42,9 @@ class TPhysicalAggregationBuilder: public TPhysicalUnaryOpBuilderWithMemLimit {
     };
 
 public:
-    TPhysicalAggregationBuilder(TIntrusivePtr<TOpAggregate> aggregate, TExprContext& ctx, TPositionHandle pos, bool pruneUnusedOutputs = false,
+    TPhysicalAggregationBuilder(TOpAggregate& aggregate, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names, bool pruneUnusedOutputs = false,
                                 bool useBlocks = false)
-        : TPhysicalUnaryOpBuilderWithMemLimit(ctx, pos)
+        : TPhysicalUnaryOpBuilderWithMemLimit(ctx, pos, names)
         , Aggregate(aggregate)
         , PruneUnusedOutputs(pruneUnusedOutputs)
         , UseBlocks(useBlocks) {
@@ -110,13 +110,10 @@ private:
     TExprNode::TPtr GetDataTypeForSumAggregation(const TTypeAnnotationNode* itemType) const;
     TVector<TString> GetInputColumns() const;
     void BuildPhysicalAggregationTraits(const TVector<TString>& inputColumns, const TVector<TString>& keyFields, TVector<TString>& inputFields,
-                                        TVector<TPhysicalAggregationTraits>& phyAggTraitsList, THashMap<TString, TString>& projectionMap,
-                                        const TTypeAnnotationNode* inputType, const TTypeAnnotationNode* outputType);
+                                        TVector<TPhysicalAggregationTraits>& phyAggTraitsList, THashMap<TString, TString>& projectionMap);
     bool NeedToWrapWithCoalesce(const TPhysicalAggregationTraits& traits, EOpPhase aggregationPhase) const;
     TVector<TString> GetKeyFields() const;
     const TTypeAnnotationNode* GetAggregateInputType() const;
-    void PopulateAggregateColTypeMap(const TIntrusivePtr<TOpAggregate>& aggregate, const TStructExprType* structType,
-                                     THashMap<TString, const TTypeAnnotationNode*>& colTypeMap) const;
     THashMap<TString, const TTypeAnnotationNode*> GetIntermediateAggregationInputType() const;
 
     // Helpers for scalar aggregation.
@@ -131,7 +128,7 @@ private:
     bool IsScalarAggregation() const;
 
     // Holds an aggregate operator.
-    TIntrusivePtr<TOpAggregate> Aggregate;
+    TOpAggregate& Aggregate;
     const bool PruneUnusedOutputs;
     const bool UseBlocks;
     // This Map represents a simple physical aggregation functions.

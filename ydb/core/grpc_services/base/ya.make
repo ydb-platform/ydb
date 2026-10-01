@@ -1,8 +1,17 @@
 LIBRARY()
 
 SRCS(
+<<<<<<< HEAD
     base_service.h
     base.h
+=======
+    base.cpp
+    path_aliasing.cpp
+    base_service.h
+    base.h
+    request_paths.h
+    http_database_access_verdict.h
+>>>>>>> ed1f2be23f6 ([Relative paths 1/5] Add usage metrics and feature flag (#54693))
 )
 
 PEERDIR(

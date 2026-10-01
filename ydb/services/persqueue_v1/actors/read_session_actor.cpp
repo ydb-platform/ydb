@@ -782,8 +782,19 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReadSessionS
     ctx.Send(ev->Sender, result.Release());
 }
 
+<<<<<<< HEAD
 template <bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr& ev, const TActorContext& ctx) {
+=======
+template <EProtocol Protocol>
+void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const TActorContext& ctx) {
+    if constexpr (Protocol == EProtocol::Topic) {
+        for (const auto& settings : ev->Get()->Request.init_request().topics_read_settings()) {
+            Request->CountResourcePath(settings.path());
+        }
+    }
+
+>>>>>>> ed1f2be23f6 ([Relative paths 1/5] Add usage metrics and feature flag (#54693))
     if (!Topics.empty()) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, "got second init request", ctx);
     }

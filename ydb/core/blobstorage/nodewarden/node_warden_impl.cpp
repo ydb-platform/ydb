@@ -13,6 +13,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompactbroker.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_operation_broker.h>
@@ -181,6 +182,9 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvBlobStorage::TEvUpdateGroupInfo, Handle);
         hFunc(TEvBlobStorage::TEvControllerUpdateDiskStatus, Handle);
         hFunc(TEvBlobStorage::TEvControllerGroupMetricsExchange, Handle);
+        hFunc(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace, Handle);
+        hFunc(TEvBlobStorage::TEvControllerDatabaseSpaceState, Handle);
+        hFunc(TEvents::TEvUndelivered, Handle);
         hFunc(TEvPrivate::TEvSendDiskMetrics, Handle);
         hFunc(TEvPrivate::TEvUpdateStats, Handle);
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
@@ -1042,6 +1046,10 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
         InstanceId.emplace(record.GetInstanceId());
     }
 
+    if (record.GetComprehensive() && !RegisteredAtController) { // this is the response to RegisterNode
+        OnRegisteredAtController();
+    }
+
     if (record.HasServiceSet()) {
         const bool comprehensive = record.GetComprehensive();
         IgnoreCache |= comprehensive;
@@ -1314,17 +1322,38 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
     auto& record = ev->Get()->Record;
 
     std::unique_ptr<TEvBlobStorage::TEvControllerUpdateDiskStatus> updateDiskStatus;
+    bool spaceColorWorsened = false;
 
     for (const NKikimrBlobStorage::TVDiskMetrics& m : record.GetVDisksMetrics()) {
         Y_ABORT_UNLESS(m.HasVSlotId());
         const TVSlotId vslotId(m.GetVSlotId());
         if (const auto it = LocalVDisks.find(vslotId); it != LocalVDisks.end()) {
             TVDiskRecord& vdisk = it->second;
+
+            // VDisk reports changes of its space color with increasing sequence numbers, and once it has done so, its
+            // color in periodic PDisk metrics is ignored: such a snapshot may have been taken before a change VDisk
+            // has already reported, and still be delivered after it
+            const NKikimrBlobStorage::TVDiskMetrics *source = &m;
+            NKikimrBlobStorage::TVDiskMetrics withoutColor;
+            if (const ui64 sequence = record.GetVDiskSpaceSequence()) {
+                if (sequence <= vdisk.LastSpaceSequence) {
+                    continue; // an outdated report delivered after a newer one
+                }
+                vdisk.LastSpaceSequence = sequence;
+            } else if (vdisk.LastSpaceSequence && m.HasStatusFlags()) {
+                withoutColor.CopyFrom(m);
+                withoutColor.ClearStatusFlags();
+                source = &withoutColor;
+            }
+
             if (vdisk.VDiskMetrics) {
                 auto& current = *vdisk.VDiskMetrics;
                 NKikimrBlobStorage::TVDiskMetrics updated(current);
-                updated.MergeFrom(m);
+                updated.MergeFrom(*source);
                 if (differs(updated, current)) {
+                    // space color getting worse is reported to BSC immediately, not waiting for the timer
+                    spaceColorWorsened |= StatusFlagToSpaceColor(updated.GetStatusFlags()) >
+                        StatusFlagToSpaceColor(current.GetStatusFlags());
                     current.Swap(&updated);
                     VDisksWithUnreportedMetrics.PushBack(&vdisk);
                 }
@@ -1332,8 +1361,10 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
                 if (!updateDiskStatus) {
                     updateDiskStatus.reset(new TEvBlobStorage::TEvControllerUpdateDiskStatus);
                 }
-                updateDiskStatus->Record.AddVDisksMetrics()->CopyFrom(m);
-                vdisk.VDiskMetrics.emplace(m);
+                auto *item = updateDiskStatus->Record.AddVDisksMetrics();
+                item->CopyFrom(*source);
+                SetCurrentVDiskId(vdisk, item);
+                vdisk.VDiskMetrics.emplace(*source);
             }
         }
     }
@@ -1359,7 +1390,11 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatus::TPtr ev)
     }
 
     if (updateDiskStatus) {
+        updateDiskStatus->Record.SetMetricsSequence(++MetricsSequence);
         SendToController(std::move(updateDiskStatus));
+    }
+    if (spaceColorWorsened) {
+        SendDiskMetrics(true);
     }
 }
 
@@ -1407,6 +1442,13 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateStats::TPtr&) {
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats());
 }
 
+void TNodeWarden::SetCurrentVDiskId(const TVDiskRecord& vdisk, NKikimrBlobStorage::TVDiskMetrics *metrics) {
+    // BS_CONTROLLER matches metrics to VSlots by VDiskId including the generation; the one that came with the metrics
+    // may be outdated right after the group gets reconfigured, which would make BS_CONTROLLER drop the metrics until
+    // VDisk reports again, so the current one is used -- the same as in VDisk status reports
+    VDiskIDFromVDiskID(vdisk.GetVDiskId(), metrics->MutableVDiskId());
+}
+
 void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     YDB_LOG_TRACE_COMP(BS_NODE, "SendDiskMetrics",
         {"marker", "NW45"},
@@ -1418,7 +1460,9 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     if (reportMetrics) {
         for (auto& vdisk : std::exchange(VDisksWithUnreportedMetrics, {})) {
             Y_ABORT_UNLESS(vdisk.VDiskMetrics);
-            record.AddVDisksMetrics()->CopyFrom(*vdisk.VDiskMetrics);
+            auto *item = record.AddVDisksMetrics();
+            item->CopyFrom(*vdisk.VDiskMetrics);
+            SetCurrentVDiskId(vdisk, item);
         }
         for (auto& pdisk : std::exchange(PDisksWithUnreportedMetrics, {})) {
             Y_ABORT_UNLESS(pdisk.PDiskMetrics);
@@ -1429,6 +1473,7 @@ void TNodeWarden::SendDiskMetrics(bool reportMetrics) {
     FillInVDiskStatus(record.MutableVDiskStatus(), false);
 
     if (record.VDisksMetricsSize() || record.PDisksMetricsSize() || record.VDiskStatusSize()) { // anything to report?
+        record.SetMetricsSequence(++MetricsSequence);
         SendToController(std::move(ev));
     }
 }

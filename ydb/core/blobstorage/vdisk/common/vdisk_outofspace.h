@@ -9,6 +9,8 @@
 #include <util/generic/utility.h>
 #include <util/system/spinlock.h>
 
+#include <atomic>
+#include <functional>
 #include <optional>
 
 namespace NKikimr {
@@ -24,6 +26,17 @@ namespace NKikimr {
 
         TOutOfSpaceState(ui32 totalVDisks, ui32 selfOrderNum);
         static NKikimrWhiteboard::EFlag ToWhiteboardFlag(const ESpaceColor color);
+
+        // Called (from any thread, outside of internal locks) with new local chunk flags whenever the known local chunk
+        // space color changes (including the first valid observation). Only chunk flags are reported, as they have
+        // the same meaning as the VDisk space flags PDisk reports in its metrics (log flags are not there). The
+        // sequence number is taken under the lock and increases with every report of any VDisk in the process, so the
+        // receiver can put reports delivered out of order back in order. Must be set before the state is shared with
+        // other actors.
+        using TLocalChunkColorChangedCallback = std::function<void(NPDisk::TStatusFlags flags, ui64 sequence)>;
+        void SetLocalChunkColorChangedCallback(TLocalChunkColorChangedCallback callback) {
+            LocalChunkColorChangedCallback = std::move(callback);
+        }
         // update flags for vdisk with vdiskOrderNum
         void Update(ui32 vdiskOrderNum, NPDisk::TStatusFlags flags);
 
@@ -211,23 +224,28 @@ namespace NKikimr {
                 return;
             }
 
-            TGuard<TSpinLock> guard(LocalFlagsLock);
-            const auto current = static_cast<NPDisk::TStatusFlags>(AtomicGet(observed));
-            if (expectedObservationGeneration
-                    && *expectedObservationGeneration
-                        != static_cast<ui64>(AtomicGet(LocalSpaceObservationGeneration))
-                    && (current & NKikimrBlobStorage::StatusIsValid)
-                    && StatusFlagToSpaceColor(flags) <= StatusFlagToSpaceColor(current)) {
-                // A regular PDisk reply was observed after this poll was sent.
-                // A stale poll may still worsen the state, but must not improve
-                // or rewrite an equally severe newer observation.
-                return;
-            }
+            std::optional<TChunkColorChange> change;
+            {
+                TGuard<TSpinLock> guard(LocalFlagsLock);
+                const auto current = static_cast<NPDisk::TStatusFlags>(AtomicGet(observed));
+                if (expectedObservationGeneration
+                        && *expectedObservationGeneration
+                            != static_cast<ui64>(AtomicGet(LocalSpaceObservationGeneration))
+                        && (current & NKikimrBlobStorage::StatusIsValid)
+                        && StatusFlagToSpaceColor(flags) <= StatusFlagToSpaceColor(current)) {
+                    // A regular PDisk reply was observed after this poll was sent.
+                    // A stale poll may still worsen the state, but must not improve
+                    // or rewrite an equally severe newer observation.
+                    return;
+                }
 
-            if (flags != current) {
-                AtomicSet(observed, flags);
-                Update(SelfOrderNum, flags | AtomicGet(other));
+                if (flags != current) {
+                    AtomicSet(observed, flags);
+                    Update(SelfOrderNum, flags | AtomicGet(other));
+                    change = ChunkColorChanged(flags, current, observed);
+                }
             }
+            NotifyLocalChunkColorChanged(change);
         }
 
         void ObserveLocal(NPDisk::TStatusFlags flags, TAtomic& observed, const TAtomic& other) {
@@ -235,29 +253,60 @@ namespace NKikimr {
                 return;
             }
 
-            TGuard<TSpinLock> guard(LocalFlagsLock);
-            const auto current = static_cast<NPDisk::TStatusFlags>(AtomicGet(observed));
-            const auto newColor = StatusFlagToSpaceColor(flags);
-            const auto oldColor = StatusFlagToSpaceColor(current);
-            if ((current & NKikimrBlobStorage::StatusIsValid) && newColor < oldColor) {
-                // Improving observations are ignored. They must not invalidate an
-                // in-flight CheckSpace poll, which is the sole source allowed to
-                // improve the known state.
-                return;
-            }
-
-            if (flags != current) {
-                // Only an accepted worsening (or the first valid observation)
-                // invalidates polls already in flight. No-op replies under load
-                // must not pin the color at its worst value.
-                if (!(current & NKikimrBlobStorage::StatusIsValid) || newColor > oldColor) {
-                    AtomicIncrement(LocalSpaceObservationGeneration);
+            std::optional<TChunkColorChange> change;
+            {
+                TGuard<TSpinLock> guard(LocalFlagsLock);
+                const auto current = static_cast<NPDisk::TStatusFlags>(AtomicGet(observed));
+                const auto newColor = StatusFlagToSpaceColor(flags);
+                const auto oldColor = StatusFlagToSpaceColor(current);
+                if ((current & NKikimrBlobStorage::StatusIsValid) && newColor < oldColor) {
+                    // Improving observations are ignored. They must not invalidate an
+                    // in-flight CheckSpace poll, which is the sole source allowed to
+                    // improve the known state.
+                    return;
                 }
-                AtomicSet(observed, flags);
-                Update(SelfOrderNum, flags | AtomicGet(other));
+
+                if (flags != current) {
+                    // Only an accepted worsening (or the first valid observation)
+                    // invalidates polls already in flight. No-op replies under load
+                    // must not pin the color at its worst value.
+                    if (!(current & NKikimrBlobStorage::StatusIsValid) || newColor > oldColor) {
+                        AtomicIncrement(LocalSpaceObservationGeneration);
+                    }
+                    AtomicSet(observed, flags);
+                    Update(SelfOrderNum, flags | AtomicGet(other));
+                    change = ChunkColorChanged(flags, current, observed);
+                }
+            }
+            NotifyLocalChunkColorChanged(change);
+        }
+
+        struct TChunkColorChange {
+            NPDisk::TStatusFlags Flags;
+            ui64 Sequence;
+        };
+
+        // Returns the change to report if these are chunk flags whose space color has changed (or the first valid ones).
+        // Must be called under LocalFlagsLock, so the sequence follows the order of changes.
+        std::optional<TChunkColorChange> ChunkColorChanged(NPDisk::TStatusFlags flags, NPDisk::TStatusFlags prev,
+                const TAtomic& observed) const {
+            if (&observed == &ChunkFlags && (!(prev & NKikimrBlobStorage::StatusIsValid) ||
+                    StatusFlagToSpaceColor(flags) != StatusFlagToSpaceColor(prev))) {
+                return TChunkColorChange{flags, ++NextChunkColorChangeSequence};
+            }
+            return std::nullopt;
+        }
+
+        void NotifyLocalChunkColorChanged(const std::optional<TChunkColorChange>& change) const {
+            if (change && LocalChunkColorChangedCallback) {
+                LocalChunkColorChangedCallback(change->Flags, change->Sequence);
             }
         }
 
+        // shared by all VDisks of the process, so it keeps increasing across VDisk restarts
+        static inline std::atomic<ui64> NextChunkColorChangeSequence = 0;
+
+        TLocalChunkColorChangedCallback LocalChunkColorChangedCallback;
         mutable TSpinLock LocalFlagsLock;
         TAtomic LocalSpaceObservationGeneration = 0;
         mutable TSpinLock HeadroomLock;

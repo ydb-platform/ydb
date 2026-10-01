@@ -1636,6 +1636,15 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 rootDomainInfo->SetSchemeLimits(rootLimits, Self);
                 rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
 
+                if (row.IsValid()) {
+                    // storage space state is reported by BS_CONTROLLER and must survive restarts, the root domain too
+                    rootDomainInfo->SetDomainStateVersion(row.GetValueOrDefault<Schema::SubDomains::StateVersion>(0));
+                    rootDomainInfo->SetStorageSpaceExhausted(row.GetValueOrDefault<Schema::SubDomains::StorageSpaceExhausted>(false));
+                    if (rootDomainInfo->GetStorageSpaceExhausted()) {
+                        Self->ChangeSimpleCounter(COUNTER_STORAGE_SPACE_EXHAUSTED, +1);
+                    }
+                }
+
                 rootDomainInfo->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
 
                 Self->SubDomains.Set(Self->RootPathId(), rootDomainInfo);
@@ -1695,6 +1704,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     domainInfo->SetSmallBlobsQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::SmallBlobsQuotaExceeded>(false));
                     if (domainInfo->GetSmallBlobsQuotaExceeded()) {
                         Self->ChangeSimpleCounter(COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, +1);
+                    }
+                    domainInfo->SetStorageSpaceExhausted(rowset.GetValueOrDefault<Schema::SubDomains::StorageSpaceExhausted>(false));
+                    if (domainInfo->GetStorageSpaceExhausted()) {
+                        Self->ChangeSimpleCounter(COUNTER_STORAGE_SPACE_EXHAUSTED, +1);
                     }
 
                     if (rowset.HaveValue<Schema::SubDomains::AuditSettings>()) {

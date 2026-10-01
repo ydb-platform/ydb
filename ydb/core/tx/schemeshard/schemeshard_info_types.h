@@ -2346,6 +2346,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         AlterData->DomainStateVersion = DomainStateVersion;
         AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
         AlterData->SmallBlobsQuotaExceeded = SmallBlobsQuotaExceeded;
+        AlterData->StorageSpaceExhausted = StorageSpaceExhausted;
 
         // Update usage and recheck quotas (which may have changed by an alter)
         AlterData->DiskSpaceUsage = DiskSpaceUsage;
@@ -2733,6 +2734,18 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         SmallBlobsQuotaExceeded = value;
     }
 
+    // storage pools of the database are running out of space, as reported by BS_CONTROLLER
+    bool GetStorageSpaceExhausted() const {
+        return StorageSpaceExhausted;
+    }
+
+    void SetStorageSpaceExhausted(bool value) {
+        StorageSpaceExhausted = value;
+    }
+
+    // Returns true when the value has changed and needs to be persisted and pushed to scheme board.
+    bool ApplyStorageSpaceExhausted(bool value, IQuotaCounters* counters);
+
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2791,6 +2804,7 @@ private:
     ui64 DomainStateVersion = 0;
     bool DiskQuotaExceeded = false;
     bool SmallBlobsQuotaExceeded = false;
+    bool StorageSpaceExhausted = false;
     // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
     double SmallBlobsStorageUnits = 0;
 

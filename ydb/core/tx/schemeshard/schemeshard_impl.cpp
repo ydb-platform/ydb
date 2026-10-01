@@ -377,6 +377,9 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     Execute(CreateTxInitPopulator(std::move(opts.DelayPublications)), ctx);
 
+    DatabaseSpaceSubscriptionsActive = true;
+    UpdateDatabaseSpaceSubscriptions();
+
     if (opts.TablesToClean) {
         Execute(CreateTxCleanTables(std::move(opts.TablesToClean)), ctx);
     }
@@ -2783,7 +2786,8 @@ void TSchemeShard::PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pat
     db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::SubDomains::StateVersion>(subDomain.GetDomainStateVersion()),
             NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()),
-            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsQuotaExceeded>(subDomain.GetSmallBlobsQuotaExceeded()));
+            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsQuotaExceeded>(subDomain.GetSmallBlobsQuotaExceeded()),
+            NIceDb::TUpdate<Schema::SubDomains::StorageSpaceExhausted>(subDomain.GetStorageSpaceExhausted()));
 }
 
 void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
@@ -2840,8 +2844,11 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
             db.Table<Schema::WaitingShredTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
+        subDomain->ApplyStorageSpaceExhausted(false, this); // keep the counter right, as nothing will clear it now
+
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
         SubDomains.erase(pathId);
+        UpdateDatabaseSpaceSubscriptions();
     }
 }
 
@@ -5799,6 +5806,8 @@ void TSchemeShard::Die(const TActorContext &ctx) {
         NTabletPipe::CloseClient(SelfId(), SAPipeClientId);
     }
 
+    UnsubscribeFromDatabaseSpace();
+
     PipeClientCache->Detach(ctx);
 
     if (BackgroundCompactionQueue)
@@ -6250,6 +6259,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvShredManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
+
+        // storage space state
+        HFuncTraced(TEvBlobStorage::TEvControllerDatabaseSpaceState, Handle);
 
         HFuncTraced(NKikimr::NTestShard::TEvControlResponse, Handle);
 

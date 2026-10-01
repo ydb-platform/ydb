@@ -320,4 +320,18 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         builder.AddValue(2, true);
         CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
     }
+
+    Y_UNIT_TEST(NullDefaultUsesNullPositions) {
+        TChunkConstructionData info(3, nullptr, arrow::utf8(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().ConstructDefault(info).DetachResult());
+
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetPositions()->null_count(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetNullsCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->length(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(dict->GetDictionary()->null_count(), 1);
+        for (ui32 i = 0; i < 3; ++i) {
+            UNIT_ASSERT(dict->IsNull(i));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(PrepareToCompare(dict->GetChunkedArray()->ToString()), R"([[null,null,null]])");
+    }
 };

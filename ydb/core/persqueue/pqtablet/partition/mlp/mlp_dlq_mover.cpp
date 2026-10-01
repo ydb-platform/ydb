@@ -211,7 +211,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     const bool gotRequested = hasResult
         && response.GetPartitionResponse().GetCmdReadResult().GetResult(0).GetOffset() == requestedOffset;
     if (!gotRequested) {
-        LOG_D(
+        LOG_N(
             "Source message is missing, treat as moved",
             {"offset", requestedOffset},
             {"seqNo", Queue.front().SeqNo},

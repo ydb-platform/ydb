@@ -28,7 +28,7 @@ struct TClusterMainSettings {
 struct TYdbConfiguration : public TYdbSettings, public NCommon::TSettingDispatcher {
     using TPtr = TIntrusivePtr<TYdbConfiguration>;
 
-    TYdbConfiguration();
+    explicit TYdbConfiguration(bool strictConfigValidation = false);
     TYdbConfiguration(const TYdbConfiguration&) = delete;
 
     void Init(

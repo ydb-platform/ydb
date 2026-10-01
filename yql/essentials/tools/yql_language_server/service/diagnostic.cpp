@@ -18,9 +18,9 @@ using ::NYql::NFastCheck::TChecksResponse;
 class TDiagnosticService final: public IDiagnosticService {
 public:
     TDocumentDiagnosticReport Analyze(
-        TTextDocumentItemPtr textDocument,
+        TTextDocument::TPtr textDocument,
         TMaybe<TString> previousResultId) override {
-        auto currentVersion = textDocument->Version;
+        auto currentVersion = textDocument->Version();
         auto previousVersion = previousResultId.Transform(FromResultId);
         if (previousVersion && currentVersion == *previousVersion) {
             TRelatedUnchangedDocumentDiagnosticReport report;
@@ -39,13 +39,14 @@ public:
     }
 
 private:
-    TChecksRequest ToRequest(TTextDocumentItemPtr textDocument) {
+    TChecksRequest ToRequest(TTextDocument::TPtr textDocument) {
         return {
-            .Program = textDocument->Text,
-            .File = textDocument->Uri,
+            .Program = TString(textDocument->Text()),
+            .File = textDocument->Uri(),
             .ClusterMode = ::NYql::NFastCheck::Unknown,
             .LangVer = ::NYql::GetMaxReleasedLangVersion(),
             .SuppressPrerequisiteIssues = true,
+            .LimitStrictnessFactor = 10,
         };
     }
 

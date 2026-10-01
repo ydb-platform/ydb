@@ -3,6 +3,7 @@
 #include <array>
 
 #include "kqp_tasks_graph.h"
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
 
 #include <ydb/core/protos/query_stats.pb.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -217,6 +218,11 @@ struct TOperatorStats {
     }
 };
 
+struct TStageNodeStats {
+    ui32 Tasks = 0;
+    ui32 Finished = 0;
+};
+
 struct TStageExecutionStats {
 
     NYql::NDq::TStageId StageId;
@@ -271,6 +277,8 @@ struct TStageExecutionStats {
     ui32 TaskCount = 0; // up rounded to multiple of 4, actual is Task2Index.size()
     std::vector<bool> Finished;
     ui32 FinishedCount = 0;
+    std::vector<ui32> TaskNodeId; // per task index, 0 until the node is known
+    std::map<ui32, TStageNodeStats> Nodes;
     std::vector<TStageExecutionStats*> InputStages;
     std::vector<TStageExecutionStats*> OutputStages;
     std::unordered_map<ui32, NYql::NDqProto::TDqComputeActorStats> ComputeActors;
@@ -280,15 +288,17 @@ struct TStageExecutionStats {
     }
     void Resize(ui32 taskCount);
     ui32 EstimateMem() {
-        TMetricInfo info(15, 8);
+        TMetricInfo info(16, 8);
         info += TAsyncBufferStats::EstimateMem() * (Ingress.size() + Egress.size() + Input.size() + Output.size());
         info += TTableStats::EstimateMem() * Tables.size();
         info += TOperatorStats::EstimateMem() * (Joins.size() + Filters.size() + Aggregations.size());
         return (info.ScalarCount * TaskCount + info.TimeSeriesCount * HistorySampleCount * 2) * sizeof(ui64);
     }
     void SetHistorySampleCount(ui32 historySampleCount);
+    // First non-zero node wins, later calls for the same task are no-ops.
+    void SetTaskNode(ui32 index, ui32 nodeId);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
-    ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs);
+    ui64 UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs);
     bool IsDeadlocked(ui64 deadline) const;
     bool IsFinished() const;
 };
@@ -303,6 +313,7 @@ struct TGlobalMemoryUsage {
     ui64 InputInflightBytes = 0;
     ui64 OutputInflightBytes = 0;
     ui64 LocalInflightBytes = 0;
+    ui64 MemQueryAllocated = 0;
 };
 
 struct TNodeExecutionStats {
@@ -404,6 +415,15 @@ struct TAggExecStat {
 
 struct TQueryExecutionStats {
 private:
+    struct TCurrentTaskStats {
+        ui64 MemoryBytes = 0;
+        ui64 ReadIngressBytes = 0;
+    };
+    std::vector<TCurrentTaskStats> CurrentTaskStats;
+    ui64 CurrentMemoryBytes = 0;
+    ui64 CurrentReadIngressBytes = 0;
+    ui64 CurrentStatsSequenceNo = 0;
+    bool CollectCurrentQueryStats = false;
     std::unordered_map<ui32, std::map<ui32, ui32>> ShardsCountByNode;
     std::unordered_map<ui32, bool> UseLlvmByStageId;
     THashMap<ui32, TNodeExecutionStats> NodeStats;
@@ -452,13 +472,18 @@ public:
     bool CollectStatsByLongTasks = false;
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
-        NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs)
+        NYql::NDqProto::TDqExecutionStats* const result, ui64 deadlockTimeoutMs, bool collectCurrentQueryStats = false)
         : StatsMode(statsMode)
         , TasksGraph(tasksGraph)
         , Result(result)
         , DeadlockTimeoutUs(deadlockTimeoutMs * 1000)
     {
+        CollectCurrentQueryStats = collectCurrentQueryStats;
         HistorySampleCount = 32;
+    }
+
+    ui64 GetCpuTimeUs() const {
+        return StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
     }
 
     void Prepare();
@@ -501,6 +526,8 @@ public:
     ui64 EstimateCollectMem();
     ui64 EstimateFinishMem();
     void ExportAggExecStats(TAggExecStat* metrics);
+    TCurrentQueryResources GetCurrentQueryResources() const;
+    TCurrentExecStatsReport TakeCurrentStats(bool finished = false);
 };
 
 struct TTableStat {

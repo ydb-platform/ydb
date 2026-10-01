@@ -1901,6 +1901,8 @@ message TEvReshuffleKMeansResponse {
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
 
     optional bytes LastKeyAck = 13;
+
+    repeated uint32 EmptyClusters = 14;
 }
 
 message TEvRecomputeKMeansRequest {
@@ -2642,6 +2644,7 @@ message TEvApplyReplicationChangesResult {
         REASON_SCHEME_ERROR = 2;
         REASON_BAD_REQUEST = 3;
         REASON_UNEXPECTED_ROW_OPERATION = 4;
+        REASON_OVERLOADED = 5;
         REASON_OUTDATED_SCHEME = 6;
     }
 

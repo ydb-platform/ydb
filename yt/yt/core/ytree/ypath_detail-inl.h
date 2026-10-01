@@ -12,7 +12,8 @@ template <class TContextPtr>
 void TSupportsExistsBase::Reply(const TContextPtr& context, bool exists)
 {
     context->Response().set_value(exists);
-    context->SetResponseInfo("Result: %v", exists);
+    context->AnnotateResponse()
+        .With("Result", exists);
     context->Reply();
 }
 

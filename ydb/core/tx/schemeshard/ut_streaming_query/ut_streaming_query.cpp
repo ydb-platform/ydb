@@ -1,4 +1,5 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NSchemeShardUT_Private;
@@ -605,5 +606,33 @@ Y_UNIT_TEST_SUITE(TStreamingQueryTest) {
 
         TestDropStreamingQuery(runtime, ++txId, "/MyRoot", "MyStreamingQuery", {{NKikimrScheme::StatusPathDoesNotExist, "error: path hasn't been resolved"}});
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CreateStreamingQueryOrReplaceOverDroppedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Keep the dropped path among the parent's children
+        auto observer = runtime.AddObserver<NKikimr::NSchemeShard::TEvPrivate::TEvCleanDroppedPaths>([](auto& ev) {
+            ev.Reset();
+        });
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "UniqueName");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateStreamingQueryOrReplace(runtime, ++txId, "/MyRoot", R"(
+                Name: "UniqueName"
+            )", {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/UniqueName", false, NLs::PathExist);
     }
 }

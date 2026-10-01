@@ -44,6 +44,9 @@ struct TSpanContext
 
 void FormatValue(TStringBuilderBase* builder, const TSpanContext& context, TStringBuf spec);
 
+//! Formats a span context as a W3C traceparent value.
+std::string FormatTraceParent(const TSpanContext& spanContext);
+
 //! Parses a W3C traceparent value into a span context.
 bool TryParseTraceParent(TStringBuf traceParent, TSpanContext& spanContext);
 

@@ -328,6 +328,12 @@ message TQueryResponse {
 }
 
 message TEvQueryResponse {
+    enum ERejectionStage {
+        REJECTION_STAGE_UNSPECIFIED = 0;
+        REJECTION_STAGE_PROXY = 1;
+        REJECTION_STAGE_SESSION = 2;
+    }
+
     reserved 1; // (deprecated) KqpStatus
     reserved 2; // (deprecated) KqpError
     optional TQueryResponse Response = 3;
@@ -335,6 +341,7 @@ message TEvQueryResponse {
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
+    optional ERejectionStage RejectionStage = 9;
 }
 
 message TCloseSessionRequest {
@@ -389,6 +396,7 @@ message TCompileCacheQueryInfo {
     optional string Syntax = 14;
 }
 
+// Proxy-side session snapshot exported by .sys/query_sessions.
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -413,6 +421,12 @@ message TSessionInfo {
     optional string TraceId = 21;
     // Description of how the query was classified into WmPoolId
     optional string WmClassifiedBy = 22;
+    // Elapsed query execution time from QueryStartAt.
+    optional uint64 DurationUs = 23;
+    // Latest query-wide resource values; absent until the first report.
+    optional uint64 CpuTimeUs = 24;
+    optional uint64 ComputeMemoryBytes = 25;
+    optional uint64 ReadIngressBytesRate = 26;
 }
 
 message TEvListSessionsRequest {
@@ -944,6 +958,8 @@ message TKqpTableSinkSettings {
     // Do not take pessimistic locks (EvLock) for this query (ReadCommittedRW with
     // PRAGMA kikimr.KqpDisablePessimisticLocks="true").
     optional bool DisablePessimisticLocks = 31;
+    // Non-zero only for an execution that requested buffer lookup diagnostics.
+    optional uint64 BufferLookupDiagnosticsExecutionId = 32;
 }
 
 message TReadVectorTopK {

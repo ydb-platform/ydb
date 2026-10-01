@@ -80,9 +80,8 @@ class Unit:
 
     def on_peerdir_ts_resource(self, *resources: str):
         """
-        Ensure dependency installed on the project
-
-        Also check its version (is it supported by erm)
+        Add build resources using Node.js from engines.node and ERM defaults for npm tools.
+        Tools installed with project dependencies do not need a build resource.
         """
         ...
 

@@ -18,8 +18,9 @@ TEST_SRCS(
 SIZE(MEDIUM)
 TIMEOUT(600)
 REQUIREMENTS(cpu:4)
-
 REQUIREMENTS(ram:16)
+FORK_SUBTESTS()
+SPLIT_FACTOR(3)
 
 DEPENDS(
     ydb/apps/dstool
@@ -42,4 +43,5 @@ RECURSE_FOR_TESTS(
     F3_node_down_and_data_copy
     F4_throttling_and_limits
     F5_observability
+    F6_classic_nbs_grpc
 )

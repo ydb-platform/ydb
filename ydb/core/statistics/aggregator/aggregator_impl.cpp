@@ -88,8 +88,11 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 
         bool enableColumnStatisticsOld = EnableColumnStatistics;
         EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
+        EnableBackgroundAnalyzeChangeRatio = featureFlags.GetEnableBackgroundAnalyzeChangeRatio();
+        EnableAnalyzeSampling = featureFlags.GetEnableAnalyzeSampling();
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
+            StartTraversalScheduler();
         }
     }
 
@@ -776,14 +779,6 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 TraversalDatabase = operation.DatabaseName;
                 TraversalPathId = operationTable.PathId;
 
-                if (!*isKnown) {
-                    YDB_LOG_DEBUG("ScheduleNextAnalyze. table was deleted, deleting its statistics",
-                        {"tabletId", TabletID()},
-                        {"pathId", operationTable.PathId});
-                    DeleteStatisticsFromTable();
-                    return;
-                }
-
                 TraversalStartTime = TInstant::Now();
                 LastTraversalWasForce = true;
 
@@ -1455,6 +1450,9 @@ const NKikimrStat::TPathEntry* TStatisticsAggregator::FindBaseStatisticsEntry(
 bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
     const TChangeCounters& lastAnalyze, const TChangeCounters& current) const
 {
+    if (!EnableBackgroundAnalyzeChangeRatio) {
+        return false;
+    }
     if (lastAnalyze.RowUpdates == Max<ui64>() || lastAnalyze.RowDeletes == Max<ui64>()) {
         // Never analyzed — but only treat as stale once SchemeShard has sent
         // real counters. Otherwise FinishTraversal would keep baselining at

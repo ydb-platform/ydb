@@ -406,6 +406,7 @@ struct TPortoSettings {
     TMaybe<ui64> MemoryLimit;
     TString Layer;
     TString ContainerNamePrefix;
+    bool EnableAnonLimitRaiseBeforeDestroy;
 
     bool operator == (const TPortoSettings& o) const {
         return Enable == o.Enable && MemoryLimit == o.MemoryLimit && Layer == o.Layer;
@@ -428,6 +429,7 @@ public:
         , PortoCtl(portoCtl)
         , PortoLayer(portoSettings.Layer)
         , MemoryLimit(portoSettings.MemoryLimit)
+        , EnablePortoAnonLimitRaiseBeforeDestroy(portoSettings.EnableAnonLimitRaiseBeforeDestroy)
         , Counters(std::move(counters))
         , ContainerName(WorkDir.substr(WorkDir.rfind("/") + 1))
         , InternalWorkDir_("mnt/work")
@@ -485,7 +487,8 @@ private:
     }
 
     void Kill() override {
-        if (MemoryLimit) {
+        const auto startedAt = TInstant::Now();
+        if (EnablePortoAnonLimitRaiseBeforeDestroy && MemoryLimit) {
             try {
                 // see YQL-13760
                 i64 anonLimit = -1;
@@ -508,6 +511,7 @@ private:
             }
         }
 
+        const auto destroyStartedAt = TInstant::Now();
         bool destroyed = false;
         try {
             TShellCommand cmd(PortoCtl, {"destroy", ContainerName});
@@ -522,6 +526,7 @@ private:
         } catch (...) {
             YQL_CLOG(DEBUG, ProviderDq) << "Cannot destroy: " << CurrentExceptionMessage();
         }
+        const auto destroyFinishedAt = TInstant::Now();
         if (destroyed && !DestroyReported) {
             ++*Counters->PortoContainersDestroyed;
             DestroyReported = true;
@@ -529,6 +534,12 @@ private:
             ++*Counters->PortoContainerDestroyErrors;
         }
         TChildProcess::Kill();
+        YQL_CLOG(DEBUG, ProviderDq) << "Porto cleanup finished (Container: " << ContainerName
+            << ", AnonLimitDurationUs: " << (destroyStartedAt - startedAt).MicroSeconds()
+            << ", DestroyDurationUs: " << (destroyFinishedAt - destroyStartedAt).MicroSeconds()
+            << ", RaiseEnabled: " << EnablePortoAnonLimitRaiseBeforeDestroy
+            << ", MemoryLimitSet: " << MemoryLimit.Defined()
+            << ", Destroyed: " << destroyed << ")";
     }
 
     void PrepareForExec() override {
@@ -591,6 +602,7 @@ private:
     const TString PortoCtl;
     const TString PortoLayer;
     const TMaybe<ui64> MemoryLimit;
+    const bool EnablePortoAnonLimitRaiseBeforeDestroy;
     const TPipeFactoryCountersPtr Counters;
     bool Started = false;
     bool DestroyReported = false;
@@ -2087,7 +2099,8 @@ public:
                 EnablePorto,
                 Nothing(),
                 options.PortoLayer,
-                options.ContainerName
+                options.ContainerName,
+                options.EnablePortoAnonLimitRaiseBeforeDestroy,
             })
         , FileCache(options.FileCache)
         , Args {"yql@child", "tasks_runner_proxy"}

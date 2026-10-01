@@ -114,6 +114,7 @@ struct TTranslationSettings {
     TString File;
     bool EnableGenericUdfs;
     ui16 SyntaxVersion;
+    TMaybe<TString> Syntax;
     bool AnsiLexer;
     bool Antlr4Parser; // TODO(YQL-19017): remove.
     bool PgParser;
@@ -157,6 +158,7 @@ struct TParsedSettings {
     bool HasSyntaxV1 = false;
     bool HasAnsiLexer = false;
     bool HasPgParser = false;
+    TMaybe<TString> Syntax;
 
     bool ApplyTo(TTranslationSettings& settings, NYql::TIssues& issues) const;
 };

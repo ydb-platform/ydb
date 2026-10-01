@@ -15,6 +15,7 @@ PEERDIR(
 )
 
 SRCS(
+    embedding_ut.cpp
     value_ut.cpp
 )
 

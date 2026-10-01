@@ -1,3 +1,4 @@
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 
@@ -8,10 +9,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             TestCreateSysView(runtime, ++t.TxId, "/MyRoot/.sys",
-                              R"(
+                              Sprintf(R"(
                                  Name: "new_sys_view"
-                                 Type: EPartitionStats
-                                )");
+                                 Type: %d
+                                )", static_cast<i32>(NKikimrSysView::ESysViewType::EPartitionStats)));
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {
@@ -27,10 +28,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTestReboots) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TestCreateSysView(runtime, ++t.TxId, "/MyRoot/.sys",
-                                  R"(
+                                  Sprintf(R"(
                                      Name: "new_sys_view"
-                                     Type: EPartitionStats
-                                    )");
+                                     Type: %d
+                                    )", static_cast<i32>(NKikimrSysView::ESysViewType::EPartitionStats)));
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestLs(runtime, "/MyRoot/.sys/new_sys_view", false, NLs::PathExist);
             }

@@ -589,7 +589,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->GetDatabaseName(), req->path());
+            pathPair = SplitPath(Request_->GetDatabaseName(), Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -641,7 +641,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitPath(Request_->NormalizePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);
@@ -671,6 +671,22 @@ public:
 template <typename TDerived>
 class TBaseKeyValueRequest {
 protected:
+    static auto& GetRequestCtx(TDerived* self) {
+        if constexpr (requires { self->Request(); }) {
+            return self->Request();
+        } else {
+            return *self->Request;
+        }
+    }
+
+    const TString& GetNormalizedPath() {
+        if (!NormalizedPath) {
+            auto* self = static_cast<TDerived*>(this);
+            NormalizedPath = GetRequestCtx(self).NormalizePath(self->GetProtoRequest()->path());
+        }
+        return *NormalizedPath;
+    }
+
     void OnBootstrap() {
         auto self = static_cast<TDerived*>(this);
         Ydb::StatusIds::StatusCode status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
@@ -684,10 +700,9 @@ protected:
 
     void SendNavigateRequest() {
         auto self = static_cast<TDerived*>(this);
-        auto &rec = *self->GetProtoRequest();
         auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         auto& entry = req->ResultSet.emplace_back();
-        entry.Path = ::NKikimr::SplitPath(rec.path());
+        entry.Path = ::NKikimr::SplitPath(GetNormalizedPath());
         entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByPath;
         entry.ShowPrivatePath = true;
         entry.SyncVersion = false;
@@ -758,6 +773,7 @@ protected:
 
 private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TMaybe<TString> NormalizedPath;
 };
 
 class TDescribeVolumeRequest
@@ -857,7 +873,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(req->path());
+            pathPair = SplitPath(GetNormalizedPath());
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(StatusIds::BAD_REQUEST, ctx);

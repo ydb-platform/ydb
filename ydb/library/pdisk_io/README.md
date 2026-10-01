@@ -35,16 +35,35 @@ In the DDisk integration, PDisk lazily creates and starts one shared router for
 its device when the first `TEvYardInit` requests an `IUringRouterClient`. That
 request carries the DDisk `IdleSpinUs` setting; because the router is shared,
 the first requesting DDisk selects this value for that PDisk incarnation.
+The optional `DevNullMode` setting is also carried by `TEvYardInit`, but is a
+semantic mode rather than a tuning hint: every DDisk slot attaching to the
+shared router must request the same value. A conflicting slot is rejected,
+and changing the mode requires a PDisk restart. `DevNullMode` requires a usable
+io_uring router and cannot be combined with `ForcePDiskFallback`.
 Later DDisk slots and their PersistentBuffer children share submit-only client
 references to the same router. They cannot register resources, start it, or
 stop it.
+
+With `DevNullMode`, accepted data writes complete successfully without changing
+the device and data reads zero-fill their buffers. The router still completes
+operations on its I/O thread and retains its ordinary admission, callback,
+and shutdown contracts; it issues no data read/write SQEs. This mode does not
+make PDisk formatting, chunk allocation, or log I/O synthetic. Data and
+integrity metadata are not durable under this mode. In particular, a
+checksummed read after metadata eviction/restart cannot recover a valid
+integrity image from zero-filled storage. Use it only for disposable benchmark
+state: first write zero-valued used data and keep its checksum metadata
+resident, with `IntegrityChecksumCacheBytes` large enough for all used integrity
+pairs in the working set (zero disables caching). Run cold-cache and
+persistence checks with normal device I/O. Synthetic completions preserve
+router CPU accounting but do not produce device timing samples.
 
 Setup runs on one thread before concurrent submission:
 
 1. Probe availability when choosing the backend. Ring creation first tries
    the modern single-issuer/deferred-task-run flags and then a plain ring.
-2. Construct the router and record any `RegisterFile`, `RegisterBuffers` and
-   `SetSampleSink` requests.
+2. Construct the router and record any `RegisterFile`, `RegisterBuffers`,
+   `SetSampleSink` and `SetIoCompletionSink` requests.
 3. Call `Start()` once. The dedicated I/O thread enables the ring and performs
    registrations; `Start()` waits for that work before opening admission.
 4. Check registration success and error accessors before using fixed I/O.
@@ -73,8 +92,8 @@ The lifetime boundary is the return value of submission:
   and its buffers.
 
 An accepted submission gets exactly one terminal callback before `StopSync()`
-returns: `OnComplete()` if it reached the kernel (including error completion),
-or `OnDrop()` if shutdown discards it first. The router does not
+returns: `OnComplete()` after a kernel data result (including an error) or a
+synthetic DevNull result, or `OnDrop()` if shutdown discards it first. The router does not
 access the operation after that callback returns, so the callback may free it
 or return it to a pool. `GetInflight()` counts accepted queued/submitted work
 and callbacks still executing.
@@ -92,6 +111,12 @@ continues positive short I/O internally. A zero-byte result with data remaining
 becomes `-EIO`; if shutdown prevents an internal continuation, the operation
 completes with `-ECANCELED`. Keep all backing buffers alive until the terminal
 callback.
+
+The optional I/O-completion sink runs once for every positive data CQE, before
+the operation's terminal callback. Each positive short-I/O leg therefore calls
+the sink, while zero-progress and failed CQEs do not. PDisk uses this hook to
+observe successful DDisk/PersistentBuffer physical I/O without capturing actor
+or PDisk lifetime.
 
 `PrepareScatterGather`/`AddIov` support up to 64 segments on Linux, with 16
 stored inline. Fixed-buffer operations use one registered segment. A recycled
@@ -149,6 +174,9 @@ ownership. Failure to create the shared router returns no client, so DDisk uses
 PDisk raw-event I/O instead.
 `ForcePDiskFallback` opts out in the DDisk yard-init request and always selects
 that fallback path.
+
+For a `DevNullMode` request, failed router creation is an initialization error,
+never a silent fallback to real data I/O.
 
 [direct_io_op.cpp](../../core/blobstorage/ddisk/direct_io_op.cpp) owns DDisk's
 operation payload, short-I/O counters, critical retries and delivery back to the

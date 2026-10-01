@@ -178,16 +178,6 @@ namespace {
         return result;
     }
 
-    std::optional<ui64> ExtractCurrentQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern) {
-        for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
-                continue;
-            }
-            return ExtractNumericField(record, "currentQuerySpanId");
-        }
-        return std::nullopt;
-    }
-
     std::optional<ui64> ExtractBreakerQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern,
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
@@ -337,8 +327,6 @@ namespace {
         std::optional<ui64> BreakerShardBreakerQuerySpanId;
         std::optional<std::vector<ui64>> BreakerShardVictimQuerySpanIds;
 
-        std::optional<ui64> VictimSessionCurrentQuerySpanId;
-        std::optional<ui64> VictimShardCurrentQuerySpanId;
         std::optional<ui64> VictimSessionVictimQuerySpanId;
         std::optional<ui64> VictimShardVictimQuerySpanId;
         std::optional<std::vector<ui64>> VictimSessionVictimQuerySpanIdOccurrences;
@@ -415,8 +403,6 @@ namespace {
         data.VictimQueryText = ExtractQueryText(logs, patterns.VictimSessionActorMessagePattern, expectedVictimQueryText);
         data.BreakerShardBreakerQuerySpanId = ExtractBreakerQuerySpanId(logs, "DataShard", patterns.BreakerDatashardMessage);
         data.BreakerShardVictimQuerySpanIds = ExtractVictimQuerySpanIds(logs, "DataShard", patterns.BreakerDatashardMessage);
-        data.VictimSessionCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "SessionActor", patterns.VictimSessionActorMessagePattern);
-        data.VictimShardCurrentQuerySpanId = ExtractCurrentQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimShardVictimQuerySpanId = ExtractVictimQuerySpanId(logs, "DataShard", patterns.VictimDatashardMessage);
         data.VictimSessionVictimQuerySpanIdOccurrences = ExtractQuerySpanIdOccurrences(
             logs, "SessionActor", data.VictimSessionVictimQuerySpanId, patterns.VictimSessionActorMessagePattern);

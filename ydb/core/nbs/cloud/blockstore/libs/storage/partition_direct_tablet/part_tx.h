@@ -28,8 +28,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(LoadState, __VA_ARGS__)                                                \
     xxx(StoreVolumeConfig, __VA_ARGS__)                                        \
     xxx(StorePartitionIds, __VA_ARGS__)                                        \
-    xxx(UpdateVChunkConfig, __VA_ARGS__)                                       \
-    xxx(UpdateDirtyMapState, __VA_ARGS__)                                      \
+    xxx(UpdateVChunkState, __VA_ARGS__)                                        \
     xxx(SetVChunkTouched, __VA_ARGS__)                                         \
     xxx(StartAddHost, __VA_ARGS__)                                             \
     xxx(AddHostToDBG, __VA_ARGS__)                                             \
@@ -125,39 +124,15 @@ struct TTxPartition
     };
 
     //
-    // TUpdateVChunkConfig
+    // TUpdateVChunkState
     //
-    struct TUpdateVChunkConfig
-    {
-        struct TUpdateConfigRequest
-        {
-            TVChunkConfig VChunkConfig;
-            TPersistResultPromise UpdateCompleted;
-        };
-
-        using TUpdateConfigRequests = TVector<TUpdateConfigRequest>;
-
-        TUpdateConfigRequests UpdateConfigRequests;
-
-        explicit TUpdateVChunkConfig(TUpdateConfigRequests updateConfigRequests)
-            : UpdateConfigRequests(std::move(updateConfigRequests))
-        {}
-
-        void Clear()
-        {
-            // nothing to do
-        }
-    };
-
-    //
-    // TUpdateDirtyMapState
-    //
-    struct TUpdateDirtyMapState
+    struct TUpdateVChunkState
     {
         struct TUpdateStateRequest
         {
             ui32 VChunkIndex;
-            TDirtyMapStateProto State;
+            TVChunkConfig VChunkConfig;
+            TDirtyMapStateProto DirtyMapState;
             TPersistResultPromise UpdateCompleted;
         };
 
@@ -165,7 +140,7 @@ struct TTxPartition
 
         TUpdateStateRequests UpdateStateRequests;
 
-        explicit TUpdateDirtyMapState(TUpdateStateRequests updateStateRequests)
+        explicit TUpdateVChunkState(TUpdateStateRequests updateStateRequests)
             : UpdateStateRequests(std::move(updateStateRequests))
         {}
 

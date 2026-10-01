@@ -294,6 +294,21 @@ std::expected<void, TString> CheckSchemaNesting(arrow::io::RandomAccessFile& sou
     return {};
 }
 
+// Parquet reports some of its errors as exceptions, a column chunk index past
+// the chunks of a row group among them. The parser is called from an actor,
+// which an exception must not reach, so every entry point turns them into an
+// error.
+template <class TResult, class TFn>
+TResult Guarded(TFn&& fn) {
+    try {
+        return fn();
+    } catch (const parquet::ParquetException& ex) {
+        return std::unexpected(TStringBuilder() << "parquet: " << ex.what());
+    } catch (const std::exception& ex) {
+        return std::unexpected(TStringBuilder() << "parquet: " << ex.what());
+    }
+}
+
 // The memory the arrays of a decoded batch hold.
 ui64 DecodedBytes(const arrow::RecordBatch& batch) {
     ui64 bytes = 0;
@@ -539,18 +554,30 @@ public:
             return {};
         }
 
-        std::vector<int> rowGroupIndices(Session->FileReader->num_row_groups());
-        std::iota(rowGroupIndices.begin(), rowGroupIndices.end(), 0);
-        if (auto result = OpenRowGroups(std::move(rowGroupIndices)); !result) {
-            ResetFile();
-            return result;
-        }
-        return {};
+        return Guarded<std::expected<void, TString>>([this] {
+            std::vector<int> rowGroupIndices(Session->FileReader->num_row_groups());
+            std::iota(rowGroupIndices.begin(), rowGroupIndices.end(), 0);
+            if (auto result = OpenRowGroups(std::move(rowGroupIndices)); !result) {
+                ResetFile();
+                return result;
+            }
+            return std::expected<void, TString>{};
+        });
     }
 
     std::expected<void, TString> OpenMetadata(
         std::shared_ptr<arrow::io::RandomAccessFile> source) override
     {
+        return Guarded<std::expected<void, TString>>([this, &source] {
+            auto result = OpenMetadataUnguarded(std::move(source));
+            if (!result) {
+                ResetFile();
+            }
+            return result;
+        });
+    }
+
+    std::expected<void, TString> OpenMetadataUnguarded(std::shared_ptr<arrow::io::RandomAccessFile> source) {
         ResetFile();
 
         if (!source) {
@@ -621,6 +648,13 @@ public:
         const auto metadata = session->FileReader->parquet_reader()->metadata();
         for (int rowGroup = 0; rowGroup < metadata->num_row_groups(); ++rowGroup) {
             const auto rowGroupMeta = metadata->RowGroup(rowGroup);
+            // a chunk for every column of the schema, or the lookup of a
+            // chunk throws
+            if (rowGroupMeta->num_columns() != metadata->num_columns()) {
+                return std::unexpected(TStringBuilder() << "Parquet row group " << rowGroup << " has "
+                    << rowGroupMeta->num_columns() << " column chunks, the schema has "
+                    << metadata->num_columns() << " columns");
+            }
             for (size_t i = 0; i < ColumnMeta.size(); ++i) {
                 const int64_t values = rowGroupMeta->ColumnChunk(session->ColumnIndices[i])->num_values();
                 if (values != rowGroupMeta->num_rows()) {
@@ -645,6 +679,15 @@ public:
         if (!Session || !Session->FileReader) {
             return rowGroups;
         }
+        try {
+            return CollectRowGroups();
+        } catch (const std::exception&) {
+            return rowGroups; // the engine sees fewer row groups than it has planned
+        }
+    }
+
+    TVector<TRowGroupInfo> CollectRowGroups() const {
+        TVector<TRowGroupInfo> rowGroups;
 
         const auto metadata = Session->FileReader->parquet_reader()->metadata();
         rowGroups.reserve(metadata->num_row_groups());
@@ -679,7 +722,9 @@ public:
                 << " row groups");
         }
 
-        return OpenRowGroups({static_cast<int>(rowGroupIndex)});
+        return Guarded<std::expected<void, TString>>([this, rowGroupIndex] {
+            return OpenRowGroups({static_cast<int>(rowGroupIndex)});
+        });
     }
 
     void ResetRowGroup() override {
@@ -705,6 +750,16 @@ public:
         TMemoryPool& pool,
         const IDataParser::TAddRowFn& addRow,
         ui64 maxDataBytes) override
+    {
+        return Guarded<std::expected<TParsedBatch, TString>>([&] {
+            return ProcessNextBatchUnguarded(pool, addRow, maxDataBytes);
+        });
+    }
+
+    std::expected<TParsedBatch, TString> ProcessNextBatchUnguarded(
+        TMemoryPool& pool,
+        const IDataParser::TAddRowFn& addRow,
+        ui64 maxDataBytes)
     {
         Y_UNUSED(pool); // Arrow owns the decoded data; cells point into the record batch
 

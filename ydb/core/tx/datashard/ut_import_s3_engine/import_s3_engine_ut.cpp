@@ -2676,6 +2676,26 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ParquetChecksTheRowCountsOfTheColumns) {
+        { // a row group short of column chunks
+            // Parquet throws when the chunk of a column is looked up in a row
+            // group that has fewer. The parser turns that into an error, and
+            // refuses such a footer before any lookup.
+            const TString source = PatchFooter(
+                BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
+                [](parquet::format::FileMetaData& metadata) {
+                    metadata.row_groups[0].columns.resize(1);
+                });
+
+            const TEngineFixture fixture;
+            const auto outcome = ImportKeyValueParquet(fixture, source);
+
+            UNIT_ASSERT_C(outcome.Error, "a row group short of column chunks was taken");
+            UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
+                "Parquet row group 0 has 1 column chunks, the schema has 2 columns");
+            UNIT_ASSERT(outcome.Rows.empty());
+            UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
+        }
+
         { // ParquetRejectsAFooterWhoseColumnsDisagreeOnRows
             // Every column chunk of a row group holds a value for each of its
             // rows. A footer that says otherwise is wrong, and the file is

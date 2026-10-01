@@ -567,6 +567,32 @@ ui64 CountLocalDbTableRows(
     return NClient::TValue::Create(result)[0]["List"].Size();
 }
 
+void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (return (AsList
+                (EraseRow '%s key)
+            ))
+        )
+    )", keySpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
+void UpdateLocalDbTableRow(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec) {
+    const TString query = Sprintf(R"(
+        (
+            (let key %s)
+            (let values %s)
+            (return (AsList
+                (UpdateRow '%s key values)
+            ))
+        )
+    )", keySpec.c_str(), valuesSpec.c_str(), tableName.c_str());
+    Y_UNUSED(LocalMiniKQL(runtime, tabletId, query));
+}
+
 ui64 CountTxInfoRows(TTestBasicRuntime& runtime, ui64 tabletId) {
     const auto result = LocalMiniKQL(runtime, tabletId, R"(
         (

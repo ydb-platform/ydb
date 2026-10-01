@@ -511,6 +511,9 @@ void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shard
 
 ui64 CountLocalDbTableRows(
     TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& rangeSpec, const TString& fieldsSpec);
+void EraseLocalDbTableRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec);
+void UpdateLocalDbTableRow(
+    TTestBasicRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keySpec, const TString& valuesSpec);
 
 void VerifyNoBackupOrRestoreArtifacts(
     TTestBasicRuntime& runtime, const NYDBTest::NColumnShard::TController* csController, ui64 tabletId = TTestTxConfig::TxTablet0);

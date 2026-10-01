@@ -37,6 +37,7 @@ SRCS(
     ut_not_proposed_transactions.cpp
     ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
+    ut_leaked_operations_normalizer.cpp
     ut_backup.cpp
     ut_flow_control_manager.cpp
 )

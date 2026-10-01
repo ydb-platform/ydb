@@ -211,7 +211,7 @@ private:
     void MaybeAdvanceToFlushed();
     void MaybeAdvanceToErased();
     void MaybeQueryErase();
-    [[nodiscard]] bool CanForget() const;
+    [[nodiscard]] bool AllPBuffersErased() const;
 
     [[nodiscard]] TPBufferKey GetPBufferKey() const;
 

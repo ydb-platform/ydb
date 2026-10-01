@@ -289,7 +289,7 @@ bool TInflightInfo::CanBeCoveredByRestoreBarrier() const
     if (IsDataOnlyInPBuffers() || PBuffersLockCount != 0) {
         return false;
     }
-    // Only disabled hosts have not confirmed the erase.
+    // Every host that has not confirmed the erase is disabled.
     const THostMask unerased = WriteRequested.Exclude(EraseConfirmed);
     return !unerased.Empty() && unerased.Exclude(Disabled).Empty();
 }
@@ -561,7 +561,7 @@ void TInflightInfo::MaybeAdvanceToErased()
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
 
-    if (CanForget()) {
+    if (AllPBuffersErased()) {
         SetState(EState::PBufferErased);
     }
 }
@@ -584,7 +584,7 @@ void TInflightInfo::MaybeQueryErase()
     }
 }
 
-bool TInflightInfo::CanForget() const
+bool TInflightInfo::AllPBuffersErased() const
 {
     return WriteRequested.Exclude(EraseConfirmed).Empty();
 }

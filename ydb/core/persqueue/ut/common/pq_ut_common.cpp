@@ -51,6 +51,10 @@ void SendPQTabletConfig(
     UNIT_ASSERT_EQUAL(prepared->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
     UNIT_ASSERT(prepared->Record.HasTxId() && prepared->Record.GetTxId() == txId);
     UNIT_ASSERT(prepared->Record.HasOrigin() && prepared->Record.GetOrigin() == tabletId);
+    // Счётчик теста не знает пол, который таблетка выставила в PREPARED.
+    // Шаг ниже MinStep она принимает, но координатор так планировать не должен.
+    UNIT_ASSERT(prepared->Record.HasMinStep());
+    planStep = Max(planStep, prepared->Record.GetMinStep());
 
     auto plan = MakeHolder<TEvTxProcessing::TEvPlanStep>();
     plan->Record.SetStep(planStep);
@@ -169,6 +173,31 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
     return tabletConfig;
 }
 
+// Ответы оборванного SendPQTabletConfig уже лежат в ящике edge. Новый GrabEdgeEvent
+// заберёт их раньше, чем таблетка увидит повторный propose.
+void DropPendingPqConfigReplies(TTestActorRuntime& runtime, const TActorId& edge) {
+    auto events = runtime.CaptureMailboxEvents(edge.Hint(), edge.NodeId());
+    NActors::TEventsList keep;
+    while (!events.empty()) {
+        TAutoPtr<IEventHandle> ev = events.front();
+        events.pop_front();
+        if (!ev) {
+            continue;
+        }
+        const ui32 type = ev->GetTypeRewrite();
+        const bool drop =
+            type == TEvPersQueue::TEvProposeTransactionResult::EventType
+            || type == TEvTxProcessing::TEvPlanStepAck::EventType
+            || type == TEvTxProcessing::TEvPlanStepAccepted::EventType;
+        if (!drop) {
+            keep.push_back(ev);
+        }
+    }
+    if (!keep.empty()) {
+        runtime.PushMailboxEventsFront(edge.Hint(), edge.NodeId(), keep);
+    }
+}
+
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                     const TConstArrayRef<TConsumerPreparationParameters> users,
                      TTestActorRuntime& runtime,
@@ -184,11 +213,13 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
         ++version;
     }
 
-    // Повторять пару (planStep, txId) нельзя. Тот же TxId для новой конфигурации подхватит тело
-    // предыдущей транзакции, если она ещё не удалена: таблетка считает повторный пропоуз
-    // переотправкой. А тот же шаг таблетка уже запретила своим MinStep в ответе PREPARED
+    // Повторять TxId нельзя: тот же номер для новой конфигурации подхватит тело предыдущей
+    // транзакции, если она ещё не удалена. Шаг здесь только нижняя граница: SendPQTabletConfig
+    // поднимет его до MinStep из PREPARED. Повтор после TSchedulingLimitReachedException берёт
+    // TxId из отдельного диапазона: счётчик вызывающего кода уже сдвинут и пересечётся с txId + 1.
     static ui64 nextTxId = 12345;
     static ui64 nextPlanStep = 1;
+    static ui64 nextRetryTxId = 10'000'000;
     if (txId == 0) {
         txId = nextTxId++;
     }
@@ -205,6 +236,8 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             retriesLeft = 0;
         } catch (NActors::TSchedulingLimitReachedException) {
             UNIT_ASSERT(retriesLeft >= 1);
+            DropPendingPqConfigReplies(runtime, edge);
+            txId = nextRetryTxId++;
         }
     }
     TEvKeyValue::TEvResponse *result;

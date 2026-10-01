@@ -85,7 +85,7 @@ namespace NKikimr::NConveyorComposite {
                 auto* pool = result.AddWorkerPools();
                 pool->SetName("pool-" + ::ToString(poolIdx));
                 pool->SetWorkersCount(workersCounts[poolIdx]);
-                pool->SetSchedulingMode(NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::All);
+                pool->SetSchedulingMode(NConfig::TProtoWorkerPool::All);
                 for (const auto& [category, weight] : links[poolIdx]) {
                     auto* link = pool->AddLinks();
                     link->SetCategory(::ToString(category));
@@ -591,9 +591,8 @@ namespace NKikimr::NConveyorComposite {
             Subsequent service and managed batches use only eligible pools.
          */
         Y_UNIT_TEST(ModeTransitionsWithLiveBatch) {
-            using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
-            for (const auto from : {TPool::NonSchedulable, TPool::Schedulable, TPool::All}) {
-                for (const auto to : {TPool::NonSchedulable, TPool::Schedulable, TPool::All}) {
+            for (const auto from : {NConfig::TProtoWorkerPool::NonSchedulable, NConfig::TProtoWorkerPool::Schedulable, NConfig::TProtoWorkerPool::All}) {
+                for (const auto to : {NConfig::TProtoWorkerPool::NonSchedulable, NConfig::TProtoWorkerPool::Schedulable, NConfig::TProtoWorkerPool::All}) {
                     if (from == to) {
                         continue;
                     }
@@ -613,7 +612,7 @@ namespace NKikimr::NConveyorComposite {
                     fixture.RegisterProcess(1, kServiceQueryIdentity, ESpecialTaskCategory::Scan, "service");
                     fixture.RegisterProcess(2, MakeIdentity(0), ESpecialTaskCategory::Scan, "managed");
                     fixture.SendQueryResponse(query.Query);
-                    const bool managedFirst = from != TPool::NonSchedulable;
+                    const bool managedFirst = from != NConfig::TProtoWorkerPool::NonSchedulable;
                     TWorkerEventBlocker<TEvInternal::TEvNewTask> batches(fixture.Runtime);
                     fixture.Submit(managedFirst ? managed : service, managedFirst ? 2 : 1);
                     fixture.WaitFor([&] { return batches.size() == 1; });
@@ -628,13 +627,13 @@ namespace NKikimr::NConveyorComposite {
                     UNIT_ASSERT_VALUES_EQUAL(query.Query->GetParent()->CpuUsage.load(), 0);
                     const auto oldScope = results.front()->Get()->GetResults().front().GetScope();
                     results.Unblock();
-                    const ui32 expectedBatches = to == TPool::All ? 2 : 1;
+                    const ui32 expectedBatches = to == NConfig::TProtoWorkerPool::All ? 2 : 1;
                     for (ui32 i = 0; i < expectedBatches; ++i) {
                         fixture.WaitFor([&] { return !results.empty(); });
                         UNIT_ASSERT_C(results.size() == 1, transition);
                         const auto& result = results.front()->Get();
                         UNIT_ASSERT_C(result->GetWorkersPoolId() == 2, transition);
-                        UNIT_ASSERT_C(to == TPool::All || result->GetQueryIdentity().IsServiceQuery == (to == TPool::NonSchedulable), transition);
+                        UNIT_ASSERT_C(to == NConfig::TProtoWorkerPool::All || result->GetQueryIdentity().IsServiceQuery == (to == NConfig::TProtoWorkerPool::NonSchedulable), transition);
                         const auto scope = result->GetResults().front().GetScope();
                         results.Unblock(1);
                         fixture.WaitFor([&] { return scope->GetCountInFlight() == 0; });
@@ -642,11 +641,11 @@ namespace NKikimr::NConveyorComposite {
                     fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
                     UNIT_ASSERT_C(results.empty(), transition);
                     UNIT_ASSERT_VALUES_EQUAL(oldScope->GetCountInFlight(), 0);
-                    UNIT_ASSERT_C(service.Val() == (!managedFirst ? 1 : 0) + (to != TPool::Schedulable ? 1 : 0), transition);
-                    UNIT_ASSERT_C(managed.Val() == (managedFirst ? 1 : 0) + (to != TPool::NonSchedulable ? 1 : 0), transition);
-                    if (to != TPool::All) {
+                    UNIT_ASSERT_C(service.Val() == (!managedFirst ? 1 : 0) + (to != NConfig::TProtoWorkerPool::Schedulable ? 1 : 0), transition);
+                    UNIT_ASSERT_C(managed.Val() == (managedFirst ? 1 : 0) + (to != NConfig::TProtoWorkerPool::NonSchedulable ? 1 : 0), transition);
+                    if (to != NConfig::TProtoWorkerPool::All) {
                         // A second applied update must release the excluded queue in this same pool.
-                        proto.MutableWorkerPools(0)->SetSchedulingMode(TPool::All);
+                        proto.MutableWorkerPools(0)->SetSchedulingMode(NConfig::TProtoWorkerPool::All);
                         fixture.UpdateConfig(proto);
                         fixture.WaitFor([&] { return results.size() == 1; });
                         UNIT_ASSERT_VALUES_EQUAL(results.front()->Get()->GetWorkersPoolId(), 2);
@@ -670,7 +669,6 @@ namespace NKikimr::NConveyorComposite {
             Another query can run; releasing old leases restores admission without a throttle.
          */
         Y_UNIT_TEST_TWIN(ModeChangeHonorsTargetCapacity, AboveTarget) {
-            using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
             const ui64 started = AboveTarget ? 2 : 1;
             auto proto = BuildConfig({3, 1}, {{{ESpecialTaskCategory::Scan, 1}},
                                               {{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}});
@@ -693,7 +691,7 @@ namespace NKikimr::NConveyorComposite {
             }
             fixture.SendQueryResponse(query.Query);
             fixture.WaitFor([&] { return batches.size() == started; });
-            proto.MutableWorkerPools(0)->SetSchedulingMode(TPool::NonSchedulable);
+            proto.MutableWorkerPools(0)->SetSchedulingMode(NConfig::TProtoWorkerPool::NonSchedulable);
             fixture.UpdateConfig(proto);
             UNIT_ASSERT_VALUES_EQUAL(query.Query->CpuMaxDemand.load(), AboveTarget ? 4 : 1);
             fixture.Submit(executed, 1);
@@ -818,9 +816,8 @@ namespace NKikimr::NConveyorComposite {
             Registrations and factory delivery during the wait use the installed topology.
          */
         Y_UNIT_TEST_TWIN(PendingFallbackModeUpdateCanBeReplaced, RestoreInitial) {
-            using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
             auto initial = BuildConfig({1, 1}, {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}});
-            initial.MutableWorkerPools(0)->SetSchedulingMode(TPool::NonSchedulable);
+            initial.MutableWorkerPools(0)->SetSchedulingMode(NConfig::TProtoWorkerPool::NonSchedulable);
             auto first = MakeSchedulerQuery(MakeIdentity(0));
             auto second = MakeSchedulerQuery(MakeIdentity(1));
             TSchedulerRuntimeFixture fixture(initial);
@@ -833,7 +830,7 @@ namespace NKikimr::NConveyorComposite {
             UNIT_ASSERT_VALUES_EQUAL(results.front()->Get()->GetWorkersPoolId(), 1);
             const ui64 originalCapacity = first.Query->CpuMaxDemand.load();
             auto target = initial;
-            target.MutableWorkerPools(0)->SetSchedulingMode(TPool::All);
+            target.MutableWorkerPools(0)->SetSchedulingMode(NConfig::TProtoWorkerPool::All);
             fixture.UpdateConfig(target);
             fixture.RegisterProcess(2, MakeIdentity(1), ESpecialTaskCategory::Scan, "new-query");
             fixture.RegisterProcess(3, MakeIdentity(1), ESpecialTaskCategory::Scan, "cancelled");
@@ -850,7 +847,7 @@ namespace NKikimr::NConveyorComposite {
                 UNIT_ASSERT_VALUES_EQUAL(results.back()->Get()->GetWorkersPoolId(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 2);
             } else {
-                target.MutableWorkerPools(0)->SetSchedulingMode(TPool::Schedulable);
+                target.MutableWorkerPools(0)->SetSchedulingMode(NConfig::TProtoWorkerPool::Schedulable);
                 fixture.UpdateConfig(target);
                 fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
                 UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 1);
@@ -880,7 +877,6 @@ namespace NKikimr::NConveyorComposite {
             The queued managed task runs in the replacement, while service falls back to pool zero.
          */
         Y_UNIT_TEST(UnnamedModeChangeRecreatesPool) {
-            using TPool = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
             auto proto = BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}}});
             proto.MutableWorkerPools(0)->ClearName();
             auto query = MakeSchedulerQuery(MakeIdentity(0));
@@ -892,7 +888,7 @@ namespace NKikimr::NConveyorComposite {
             fixture.Submit(executed, 1);
             fixture.WaitFor([&] { return results.size() == 1; });
             const auto oldWorker = results.front()->Sender;
-            proto.MutableWorkerPools(0)->SetSchedulingMode(TPool::Schedulable);
+            proto.MutableWorkerPools(0)->SetSchedulingMode(NConfig::TProtoWorkerPool::Schedulable);
             fixture.UpdateConfig(proto);
             fixture.Submit(executed, 1);
             fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
@@ -919,7 +915,7 @@ namespace NKikimr::NConveyorComposite {
         Y_UNIT_TEST(DisabledSchedulingKeepsSharedServiceIdentity) {
             for (const auto flag : {std::optional<bool>{}, {false}, {true}}) {
                 auto proto = BuildConfig({1}, {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 1}}});
-                proto.MutableWorkerPools(0)->SetSchedulingMode(NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable);
+                proto.MutableWorkerPools(0)->SetSchedulingMode(NConfig::TProtoWorkerPool::NonSchedulable);
                 TSchedulerRuntimeFixture fixture(proto, flag);
                 fixture.SetLocalSchedulerEnabled(!flag.value_or(false));
                 const auto noTasks = fixture.FindNoTasks("WP::DEFAULT_SCHEDULABLE", ESpecialTaskCategory::Scan);

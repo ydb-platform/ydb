@@ -74,7 +74,7 @@ private:
     TAverageCalcer<TDuration> DeliveringDuration;
     ui64 MaxBatchSize = 30;
     std::vector<NConfig::THeavyLimit> HeavyLimits;
-    NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode SchedulingMode;
+    NConfig::TProtoWorkerPool::ESchedulingMode SchedulingMode;
     const TString PoolName;
     const NActors::TActorId DistributorId;
     const ui64 WorkersPoolId;

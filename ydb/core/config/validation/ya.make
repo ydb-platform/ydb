@@ -15,6 +15,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow/serializer
     ydb/core/tx/conveyor_composite/common
+    ydb/core/tx/conveyor_composite/common/config
     library/cpp/protobuf/json
     library/cpp/logger
 )

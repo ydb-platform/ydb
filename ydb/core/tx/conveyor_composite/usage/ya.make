@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     events.cpp
-    config.cpp
     service.cpp
     common.cpp
 )
@@ -10,6 +9,7 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/tx/conveyor_composite/common
+    ydb/core/tx/conveyor_composite/common/config
     ydb/library/actors/core
     ydb/services/metadata/request
     ydb/core/protos

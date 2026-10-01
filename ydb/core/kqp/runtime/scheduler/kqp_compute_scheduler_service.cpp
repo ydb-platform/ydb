@@ -417,21 +417,20 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
     auto pool = database->GetPool(poolId);
     Y_ENSURE(pool, "Pool not found: " << poolId);
 
-    TQueryPtr query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId));
-    ValidateAttributes(query ? query->MergedWith(attrs) : attrs, query.get(), pool.get());
-
     if (auto it = Queries.find(queryId); it != Queries.end()) {
         auto& state = it->second;
         const auto fullPoolId = state.Query->GetFullPoolId();
         Y_ENSURE(fullPoolId.DatabaseId == databaseId && fullPoolId.PoolId == poolId,
             "Query is already registered in a different pool: " << queryId);
+        ValidateAttributes(state.Query->MergedWith(attrs), state.Query.get(), pool.get());
         state.Query->Update(attrs);
         ++state.AddQueryCount;
         return state.Query;
     }
 
+    ValidateAttributes(attrs, nullptr, pool.get());
     bool allowMinFairShare = !pool->CpuLimit || *pool->CpuLimit > 0;
-    query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
+    auto query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
     pool->AddQuery(query);
     Y_ENSURE(Queries.emplace(queryId, TQueryState{1, query}).second);
     return query;

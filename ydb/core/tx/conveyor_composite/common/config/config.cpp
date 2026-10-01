@@ -2,14 +2,23 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#include <util/generic/hash_set.h>
 #include <util/generic/serialized_enum.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace NKikimr::NConveyorComposite::NConfig {
+
+const std::array<TWorkersPool, 2>& GetDefaultWorkersPoolTemplates() {
+    static const std::array<TWorkersPool, 2> templates{
+        TWorkersPool(0, "WP::DEFAULT", TProtoWorkerPool::NonSchedulable, TThreadsCountInfo(), {}),
+        TWorkersPool(1, "WP::DEFAULT_SCHEDULABLE", TProtoWorkerPool::Schedulable, TThreadsCountInfo(std::nullopt, 1), {})};
+    return templates;
+}
 
 TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config) {
     if (!config.HasEnabled()) {
@@ -20,14 +29,11 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
         Categories.emplace_back(TCategory(i));
     }
-    WorkerPools.reserve(2 + config.GetWorkerPools().size());
-    WorkerPools.emplace_back(WorkerPools.size());
+    const auto& templates = GetDefaultWorkersPoolTemplates();
+    WorkerPools.reserve(templates.size() + config.GetWorkerPools().size());
+    WorkerPools.assign(templates.begin(), templates.end());
     TWorkersPool* defWorkersPool = &WorkerPools.front();
-    auto& schedulablePool = WorkerPools.emplace_back(WorkerPools.size());
-    schedulablePool.PoolName = "WP::DEFAULT_SCHEDULABLE";
-    schedulablePool.SchedulingMode = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable;
-    schedulablePool.WorkersCountInfo = TThreadsCountInfo(std::nullopt, 1);
-    schedulablePool.HeavyLimits = defWorkersPool->GetHeavyLimits();
+    auto& schedulablePool = WorkerPools.back();
     std::set<ESpecialTaskCategory> usedCategories;
     for (auto&& i : config.GetCategories()) {
         if (i.HasQueueSizeLimit()) {
@@ -44,7 +50,10 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
         }
         Categories[(ui64)cat.GetCategory()] = std::move(cat);
     }
-    THashSet<TString> poolNames{defWorkersPool->GetName(), schedulablePool.GetName()};
+    THashSet<TString> poolNames;
+    for (const auto& pool : templates) {
+        poolNames.emplace(pool.GetName());
+    }
     for (auto&& i : config.GetWorkerPools()) {
         TWorkersPool wp(WorkerPools.size());
         auto conclusion = wp.DeserializeFromProto(i);
@@ -69,8 +78,8 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
         bool hasManagedPool = false;
         for (const auto poolId : i.GetWorkerPools()) {
             const auto mode = WorkerPools[poolId].GetSchedulingMode();
-            hasServicePool |= mode != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::Schedulable;
-            hasManagedPool |= mode != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable;
+            hasServicePool |= mode != TProtoWorkerPool::Schedulable;
+            hasManagedPool |= mode != TProtoWorkerPool::NonSchedulable;
         }
         if (!hasServicePool) {
             AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
@@ -81,7 +90,7 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
             AFL_VERIFY(i.AddWorkerPool(schedulablePool.GetWorkersPoolId()));
         }
     }
-    schedulablePool.MaxBatchSize = defWorkersPool->GetMaxBatchSize() * std::max<size_t>(1, schedulablePool.GetLinks().size());
+    schedulablePool.SetMaxBatchSize(defWorkersPool->GetMaxBatchSize() * std::max<size_t>(1, schedulablePool.GetLinks().size()));
     return TConclusionStatus::Success();
 }
 
@@ -157,8 +166,7 @@ TString THeavyLimit::DebugString() const {
 namespace {
 // WorkersCount and DefaultFractionOfThreadsCount are any_of. DeserializeFromProto keeps
 // WorkersCount when both are set, so a yaml value must drop the other field inherited from defaults.
-void ApplyPoolSizeAnyOf(NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& target,
-    const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& yamlPool) {
+void ApplyPoolSizeAnyOf(TProtoWorkerPool& target, const TProtoWorkerPool& yamlPool) {
     if (yamlPool.HasWorkersCount()) {
         target.SetWorkersCount(yamlPool.GetWorkersCount());
         target.ClearDefaultFractionOfThreadsCount();
@@ -213,7 +221,7 @@ TConclusion<NKikimrConfig::TCompositeConveyorConfig> TConfig::OverlayYamlOnDefau
         if (!yamlPool.HasName() || yamlPool.GetName().empty()) {
             return TConclusionStatus::Fail("worker pool overlay requires a name");
         }
-        NKikimrConfig::TCompositeConveyorConfig::TWorkersPool* existing = nullptr;
+        TProtoWorkerPool* existing = nullptr;
         for (auto& pool : *result.MutableWorkerPools()) {
             if (pool.GetName() == yamlPool.GetName()) {
                 existing = &pool;
@@ -277,7 +285,17 @@ TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersC
     PoolName = "WP::UNDEFINED:" + ::ToString(wpId);
 }
 
-TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto) {
+TWorkersPool::TWorkersPool(const ui32 wpId, TString poolName,
+    TProtoWorkerPool::ESchedulingMode schedulingMode,
+    TThreadsCountInfo workersCountInfo, std::vector<THeavyLimit> heavyLimits)
+    : PoolName(std::move(poolName))
+    , SchedulingMode(schedulingMode)
+    , WorkersPoolId(wpId)
+    , WorkersCountInfo(std::move(workersCountInfo))
+    , HeavyLimits(std::move(heavyLimits)) {
+}
+
+TConclusionStatus TWorkersPool::DeserializeFromProto(const TProtoWorkerPool& proto) {
     SchedulingMode = proto.GetSchedulingMode();
     if (!proto.GetLinks().size()) {
         return TConclusionStatus::Fail("no categories for workers pool");
@@ -295,10 +313,10 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
         categories.emplace(::ToString(link.GetCategory()));
         Links.emplace_back(std::move(link));
     }
-    if (!PoolName || PoolName == "WP::DEFAULT") {
+    if (!PoolName) {
         PoolName = "WP::" + JoinSeq("-", categories);
-        if (SchedulingMode != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable) {
-            PoolName += "-" + NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(SchedulingMode);
+        if (SchedulingMode != TProtoWorkerPool::NonSchedulable) {
+            PoolName += "-" + TProtoWorkerPool::ESchedulingMode_Name(SchedulingMode);
         }
     }
     if (Links.empty()) {
@@ -344,7 +362,7 @@ TString TWorkersPool::DebugString() const {
     TStringBuilder sb;
     sb << "{";
     sb << "id=" << WorkersPoolId << ";";
-    sb << "scheduling_mode=" << NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(SchedulingMode) << ";";
+    sb << "scheduling_mode=" << TProtoWorkerPool::ESchedulingMode_Name(SchedulingMode) << ";";
     sb << "threads=" << WorkersCountInfo.DebugString() << ";";
     TStringBuilder sbLinks;
     sbLinks << "[";
@@ -412,7 +430,7 @@ double TThreadsCountInfo::GetCPUUsageDouble(const ui64 totalThreadsCount) const 
     return result;
 }
 
-NKikimr::TConclusionStatus TThreadsCountInfo::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo) {
+NKikimr::TConclusionStatus TThreadsCountInfo::DeserializeFromProto(const TProtoWorkerPool& poolInfo) {
     if (poolInfo.HasWorkersCount()) {
         Count = poolInfo.GetWorkersCount();
         if (!std::isfinite(*Count) || *Count <= 0) {

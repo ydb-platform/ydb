@@ -1,6 +1,6 @@
 #pragma once
 #include "common.h"
-#include "config.h"
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 

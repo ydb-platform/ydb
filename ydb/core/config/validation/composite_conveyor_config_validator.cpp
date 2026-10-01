@@ -1,6 +1,7 @@
 #include "validators.h"
 
 #include <ydb/core/tx/conveyor_composite/common/category.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/library/actors/core/defs.h>
 
 #include <util/generic/hash_set.h>
@@ -38,7 +39,11 @@ EValidationResult ValidateCompositeConveyorConfig(
         }
     }
 
-    THashSet<TString> poolNames{"WP::DEFAULT", "WP::DEFAULT_SCHEDULABLE"};
+    const auto& defaultPools = NConveyorComposite::NConfig::GetDefaultWorkersPoolTemplates();
+    THashSet<TString> poolNames;
+    for (const auto& pool : defaultPools) {
+        poolNames.emplace(pool.GetName());
+    }
     for (const auto& pool : config.GetWorkerPools()) {
         if (pool.GetLinks().empty()) {
             return Fail(errors, "composite conveyor worker pool has no category links");
@@ -72,10 +77,10 @@ EValidationResult ValidateCompositeConveyorConfig(
         }
 
         TString poolName = pool.GetName();
-        if (!poolName || poolName == "WP::DEFAULT") {
+        if (!poolName) {
             poolName = "WP::" + JoinSeq("-", linkedCategories);
-            if (pool.GetSchedulingMode() != NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::NonSchedulable) {
-                poolName += "-" + NKikimrConfig::TCompositeConveyorConfig::TWorkersPool::ESchedulingMode_Name(pool.GetSchedulingMode());
+            if (pool.GetSchedulingMode() != NConveyorComposite::NConfig::TProtoWorkerPool::NonSchedulable) {
+                poolName += "-" + NConveyorComposite::NConfig::TProtoWorkerPool::ESchedulingMode_Name(pool.GetSchedulingMode());
             }
         }
         if (!poolNames.emplace(poolName).second) {

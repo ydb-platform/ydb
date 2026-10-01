@@ -1,7 +1,7 @@
 #include <library/cpp/retry/retry.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 

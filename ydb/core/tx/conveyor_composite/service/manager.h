@@ -3,7 +3,7 @@
 #include "query.h"
 #include "workers_pool.h"
 
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 
 #include <ranges>
 

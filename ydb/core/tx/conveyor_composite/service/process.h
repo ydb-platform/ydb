@@ -3,7 +3,7 @@
 #include "scope.h"
 #include "worker.h"
 
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/events.h>
 
 #include <ydb/library/accessor/positive_integer.h>

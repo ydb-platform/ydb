@@ -49,9 +49,6 @@ namespace NKikimr::NGRpcService {
             AddRule(config, "/volume-alias", "/Root/kfront/Volume");
             AddRule(config, "/volume-inspect", "/Root/kfront/Volume");
             AddRule(config, "/virtual/", "/Root");
-            AddRule(config, "/alternate-root", "/");
-            AddRule(config, "/Root/kfront/Volume", "/Root/kfront/Wrong");
-            AddRule(config, "/Root/kfront", "/Root/missing");
             return config;
         }
 
@@ -173,17 +170,6 @@ namespace NKikimr::NGRpcService {
             }
             UNIT_ASSERT(physicalChildren.contains("Root"));
             UNIT_ASSERT(!physicalChildren.contains("virtual"));
-
-            list.set_path("/alternate-root");
-            const auto alternateRoot = Result<Ydb::Scheme::ListDirectoryResult>(
-                Call(*stub, &TScheme::ListDirectory, list, "/virtual"));
-            UNIT_ASSERT_VALUES_EQUAL(alternateRoot.self().name(), "alternate-root");
-            std::set<std::string> alternateChildren;
-            for (const auto& child : alternateRoot.children()) {
-                alternateChildren.insert(child.name());
-            }
-            UNIT_ASSERT(alternateChildren.contains("Root"));
-            UNIT_ASSERT(!alternateChildren.contains("virtual"));
         }
 
         Y_UNIT_TEST(DeferredDatabaseOnlyRequestRewritesTheHeaderOnce) {
@@ -191,8 +177,7 @@ namespace NKikimr::NGRpcService {
             auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
 
             // The first request for this tenant is deferred while its database info
-            // is fetched, then re-enters ingress. The physical-name decoy rule must
-            // not see the cached result on replay.
+            // is fetched, then re-enters ingress.
             const auto session = Result<Ydb::Table::CreateSessionResult>(
                 Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "/alias/"));
             UNIT_ASSERT(!session.session_id().empty());

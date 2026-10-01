@@ -325,7 +325,7 @@ actor_system_config:
 
 - Начните с `2` потоков и наблюдайте за нагрузкой.
 - Учитывайте, что IO-пул обслуживает не только NFS-операции, но и другие блокирующие задачи (например, запись логов).
-- Мониторьте загрузку пула через [Embedded UI](../../reference/embedded-ui/ydb-monitoring.md#node_list_page).
+- Мониторьте загрузку пула через [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md#node_list_page).
 
 {% endnote %}
 

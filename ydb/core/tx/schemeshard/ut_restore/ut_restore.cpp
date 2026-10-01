@@ -25,6 +25,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/library/aws_init/aws.h>
 #include <ydb/library/testlib/backup_test_enums/backup_test_enums.h>
+#include <ydb/library/testlib/parquet_helpers/parquet_helpers.h>
 
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
@@ -165,20 +166,24 @@ namespace {
         {
         }
 
-        TString Ext() const {
-            TStringBuilder result;
-
+        // The extension of the raw data, which the checksum is of.
+        TString RawExt() const {
             switch (DataFormat) {
             case EDataFormat::YdbDump:
-                result << ".csv";
-                break;
+                return ".csv";
             case EDataFormat::Parquet:
-                result << ".parquet";
-                break;
+                return ".parquet";
             case EDataFormat::Invalid:
                 UNIT_ASSERT_C(false, "Invalid data format");
                 break;
             }
+
+            return {};
+        }
+
+        TString Ext() const {
+            TStringBuilder result;
+            result << RawExt();
 
             switch (CompressionCodec) {
             case ECompressionCodec::None:
@@ -315,6 +320,33 @@ namespace {
             UNIT_ASSERT_C(false, "Invalid compression codec");
             Y_ABORT("unreachable");
         }
+    }
+
+    // A data file of a backup in Parquet: a Utf8 key and a Utf8 value, which
+    // may be NULL. The YSON is what ReadTable gives for the rows.
+    TTestData GenerateParquetTestData(
+        const TVector<std::pair<TString, TMaybe<TString>>>& rows,
+        i64 rowGroupSize = 16)
+    {
+        TStringBuilder yson;
+        yson << "[[[[";
+        for (size_t i = 0; i < rows.size(); ++i) {
+            if (i) {
+                yson << ";";
+            }
+            yson << "[[\"" << rows[i].first << "\"];";
+            if (rows[i].second) {
+                yson << "[\"" << *rows[i].second << "\"]";
+            } else {
+                yson << "#";
+            }
+            yson << "]";
+        }
+        yson << "];%false]]]";
+
+        TTestData data(NTestUtils::BuildUtf8KeyValueParquet(rows, rowGroupSize), std::move(yson));
+        data.DataFormat = EDataFormat::Parquet;
+        return data;
     }
 
     TTestDataWithScheme GenerateTestData(
@@ -478,7 +510,7 @@ namespace {
                 const auto& data = item.Data.at(i);
                 result.emplace(Sprintf("%s/data_%02d%s", prefix.data(), i, data.Ext().c_str()), data.Data);
                 if (withChecksum) {
-                    auto rawDataKey = Sprintf("%s/data_%02d.csv", prefix.data(), i);
+                    auto rawDataKey = Sprintf("%s/data_%02d%s", prefix.data(), i, data.RawExt().c_str());
                     result.emplace(NBackup::ChecksumKey(rawDataKey), data.RawData.Checksum);
                 }
             }
@@ -714,6 +746,75 @@ value {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )", {data}, EnableDataShardDirectPartImport);
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTableParquet, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+
+        const auto data = GenerateParquetTestData({{"a1", "value1"}, {"a2", "value2"}, {"a3", "value3"}});
+
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data});
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnMultiShardTableParquet) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+
+        const auto a = GenerateParquetTestData({{"a1", "v_a_1"}, {"a2", "v_a_2"}});
+        const auto b = GenerateParquetTestData({{"b1", "v_b_1"}, {"b2", "v_b_2"}});
+
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            SplitBoundary {
+              KeyPrefix {
+                Tuple { Optional { Text: "b" } }
+              }
+            }
+        )", {a, b});
+
+        {
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 0, "Table", {"key"}, {"key", "value"});
+            NKqp::CompareYson(a.YsonStr, content);
+        }
+        {
+            auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1, "Table", {"key"}, {"key", "value"});
+            NKqp::CompareYson(b.YsonStr, content);
+        }
+    }
+
+    // A CSV line cannot hold a NULL (the empty token is rejected), a Parquet
+    // file can.
+    Y_UNIT_TEST(ShouldRestoreNullValuesParquet) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+
+        const auto data = GenerateParquetTestData({{"k1", Nothing()}, {"k2", "v2"}});
+
+        Restore(runtime, env, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data}, /*readBatchSize=*/32);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.YsonStr, content);
@@ -3660,7 +3761,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
 }
 
 Y_UNIT_TEST_SUITE(TImportTests) {
-    void Run(TTestBasicRuntime& runtime, TTestEnv& env,
+    ui64 Run(TTestBasicRuntime& runtime, TTestEnv& env,
             THashMap<TString, TString>&& data, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "")
@@ -3760,19 +3861,20 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, id, schemeshardId);
 
         if (initialStatus != Ydb::StatusIds::SUCCESS) {
-            return;
+            return id;
         }
 
         TestGetImport(runtime, schemeshardId, id, dbName, expectedStatus);
+        return id;
     }
 
-    void Run(TTestBasicRuntime& runtime, THashMap<TString, TString>&& data, const TString& request, bool enableDirectPartImport,
+    ui64 Run(TTestBasicRuntime& runtime, THashMap<TString, TString>&& data, const TString& request, bool enableDirectPartImport,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "") {
 
         TTestEnv env(runtime, TTestEnvOptions());
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDirectPartImport);
-        Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless, userSID);
+        return Run(runtime, env, std::move(data), request, expectedStatus, dbName, serverless, userSID);
     }
 
     void TestImportTable(bool enableDataShardDirectPartImport, const TString& extraSchemeFields = "",
@@ -3807,6 +3909,207 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
             NKqp::CompareYson(data.Data[0].YsonStr, content);
         }
+    }
+
+    TString ImportTableRequest() {
+        return R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )";
+    }
+
+    TString ImportIssues(TTestBasicRuntime& runtime, ui64 id, Ydb::StatusIds::StatusCode status) {
+        return NYql::IssuesFromMessageAsString(
+            TestGetImport(runtime, id, "/MyRoot", status).GetResponse().GetEntry().GetIssues());
+    }
+
+    TString Utf8KeyValueScheme() {
+        return R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )";
+    }
+
+    Y_UNIT_TEST_FLAG(ShouldSucceedOnParquetTable, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+
+        const auto data = GenerateParquetTestData({{"a1", "value1"}, {"a2", "value2"}});
+        Run(runtime, env, ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequest());
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    // The checksum of a Parquet file is checked when the whole file has been
+    // read, after its rows have been written: the import fails, the rows stay.
+    Y_UNIT_TEST(ShouldFailOnParquetChecksumAfterWritingRows) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+
+        const TVector<std::pair<TString, TMaybe<TString>>> rows = {
+            {"a1", TString(24_KB, 'a')},
+            {"a2", TString(24_KB, 'b')},
+            {"a3", TString(24_KB, 'c')},
+            {"a4", TString(24_KB, 'd')},
+        };
+        const auto data = GenerateParquetTestData(rows, /*rowGroupSize=*/1);
+        UNIT_ASSERT_GT(data.Data.size(), 64_KB);
+
+        TTestDataWithScheme backup(Utf8KeyValueScheme(), {data});
+        backup.Metadata = R"({"version": 1})";
+        auto s3Data = ConvertTestData(backup);
+        s3Data[NBackup::ChecksumKey("/data_00.parquet")] = TString(64, '0');
+
+        const ui64 id = Run(runtime, env, std::move(s3Data), ImportTableRequest(), Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED), "checksum mismatch");
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    // A row group that does not fit into the read buffer is rejected by the
+    // footer. The limit is a setting of the DataShard.
+    Y_UNIT_TEST(ShouldFailOnParquetRowGroupAboveTheLimit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        // above the 64 KB of the file the footer is looked for in
+        runtime.GetAppData().DataShardConfig.SetRestoreReadBufferSizeLimit(80_KB);
+
+        // one row group of 96 KB
+        const auto data = GenerateParquetTestData({
+            {"a1", TString(24_KB, 'a')},
+            {"a2", TString(24_KB, 'b')},
+            {"a3", TString(24_KB, 'c')},
+            {"a4", TString(24_KB, 'd')},
+        });
+
+        const ui64 id = Run(runtime, env,
+            ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequest(),
+            Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+            "bytes (RestoreReadBufferSizeLimit less what the footer takes)");
+    }
+
+    // A backup of the table has no NULL in a column that is NOT NULL, so such
+    // a file is of another origin. It is rejected, for any format, with the
+    // place of the row in the file.
+    Y_UNIT_TEST(ShouldFailOnNullInNotNullColumn, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
+        const TString scheme = R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { type_id: UTF8 }
+              not_null: true
+            }
+            primary_key: "key"
+        )";
+
+        // k1 has NULL, k2 has a value
+        const TTestData data = format == EDataFormat::Parquet
+            ? GenerateParquetTestData({{"k1", Nothing()}, {"k2", "v2"}})
+            : TTestData("\"k1\",null\n\"k2\",\"v2\"\n", "");
+        const TString place = format == EDataFormat::Parquet
+            ? " in row 0 of row group 0"
+            : " on line: \"k1\",null";
+
+        for (const bool directPartImport : {false, true}) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions());
+            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+            runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directPartImport);
+
+            const ui64 id = Run(runtime, env,
+                ConvertTestData(TTestDataWithScheme(TString(scheme), {data})), ImportTableRequest(),
+                Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+                "column 'value' has a NULL value but is NOT NULL" + place);
+        }
+    }
+
+    // The cells of a row come to the check by their place: the keys in the
+    // order of the key, the values in the order of the scheme. Here the order
+    // of the columns is neither.
+    Y_UNIT_TEST(ShouldFailOnNullInNotNullKey, EBackupTestDataFormat) {
+        const auto format = ToDataFormat(Arg<0>());
+        const TString scheme = R"(
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "k2"
+              type { type_id: UTF8 }
+              not_null: true
+            }
+            columns {
+              name: "k1"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "k1"
+            primary_key: "k2"
+        )";
+
+        TTestData data("", "");
+        TString place;
+        if (format == EDataFormat::Parquet) {
+            data = TTestData(NTestUtils::BuildUtf8ColumnsParquet({
+                {"value", {"v1", "v2"}},
+                {"k2", {"x", Nothing()}},
+                {"k1", {"a", "b"}},
+            }), "");
+            data.DataFormat = EDataFormat::Parquet;
+            place = " in row 1 of row group 0";
+        } else {
+            data = TTestData("\"v1\",\"x\",\"a\"\n\"v2\",null,\"b\"\n", "");
+            place = " on line: \"v2\",null,\"b\"";
+        }
+
+        for (const bool directPartImport : {false, true}) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions());
+            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+            runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(directPartImport);
+
+            const ui64 id = Run(runtime, env,
+                ConvertTestData(TTestDataWithScheme(TString(scheme), {data})), ImportTableRequest(),
+                Ydb::StatusIds::CANCELLED);
+            UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+                "column 'k2' has a NULL value but is NOT NULL" + place);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldFailWhenParquetImportIsDisabled) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+
+        const auto data = GenerateParquetTestData({{"k", "v"}});
+        const ui64 id = Run(runtime, env,
+            ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequest(),
+            Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
+            "Parquet import is disabled by feature flag EnableImportInParquet");
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {

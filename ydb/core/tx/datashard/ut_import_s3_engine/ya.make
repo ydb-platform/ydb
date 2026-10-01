@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/core/tx/datashard)
 PEERDIR(
     contrib/libs/apache/arrow
     contrib/libs/zstd
+    library/cpp/testing/common
     ydb/core/testlib
     ydb/core/tx
     yql/essentials/parser/pg_wrapper

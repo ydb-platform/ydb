@@ -25,6 +25,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aws_init
     ydb/library/testlib/backup_test_enums
+    ydb/library/testlib/parquet_helpers
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
     ydb/core/testlib/audit_helpers
@@ -35,12 +36,6 @@ SRCS(
     ut_restore_fs.cpp
 )
 
-IF (NOT OS_WINDOWS)
-    # calls the Parquet parser of the datashard, which is not built for Windows
-    SRCS(
-        ut_restore_data_format.cpp
-    )
-ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

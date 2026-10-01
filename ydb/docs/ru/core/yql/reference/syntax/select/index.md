@@ -261,6 +261,7 @@ SELECT * FROM FILTER(
 
 * [VIEW vector_index](vector_index.md)
 * [VIEW fulltext_index](fulltext_index.md)
+* [Гибридный поиск](hybrid_search.md)
 * [VIEW json_index](json_index.md)
 
 {% endif %}

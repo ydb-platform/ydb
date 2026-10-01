@@ -1523,7 +1523,8 @@ void ApplyChanges(
         const TTableId& tableId,
         const TString& sourceId,
         const TVector<TChange>& changes,
-        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected)
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected,
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason expectedReason)
 {
     auto &runtime = *server->GetRuntime();
 
@@ -1535,10 +1536,15 @@ void ApplyChanges(
         p->SetWriteTxId(change.WriteTxId);
         TCell keyCell = TCell::Make(change.Key);
         p->SetKey(TSerializedCellVec::Serialize({ &keyCell, 1 }));
-        auto* u = p->MutableUpsert();
-        u->AddTags(2);
-        TCell valueCell = TCell::Make(change.Value);
-        u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 }));
+        if (change.Operation == TChange::EOperation::Erase) {
+            p->MutableErase();
+        } else {
+            auto* u = change.Operation == TChange::EOperation::Reset
+                ? p->MutableReset() : p->MutableUpsert();
+            u->AddTags(2);
+            TCell valueCell = TCell::Make(change.Value);
+            u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 }));
+        }
     }
 
     auto sender = runtime.AllocateEdgeActor();
@@ -1549,6 +1555,9 @@ void ApplyChanges(
     UNIT_ASSERT_C(status == expected,
         "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
         << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected));
+    if (expectedReason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) {
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetReason()), static_cast<ui32>(expectedReason));
+    }
 }
 
 TRowVersion CommitWrites(

@@ -52,7 +52,9 @@ namespace NKikimr {
                 }>(
                 this->SimpleCountersOpts(),
                 targetCounterGroup,
-                TargetSimpleCounters);
+                TargetSimpleCounters,
+                EYdbMetricNameScope::Aggregate,
+                /*skipLeaderOnly=*/false);
 
             // Create all target cumulative counters
             this->template CreateTargetCountersForCounterType<
@@ -67,7 +69,9 @@ namespace NKikimr {
                 }>(
                 this->CumulativeCountersOpts(),
                 targetCounterGroup,
-                TargetCumulativeCounters);
+                TargetCumulativeCounters,
+                EYdbMetricNameScope::Aggregate,
+                /*skipLeaderOnly=*/false);
 
             // Create all target percentile counters
             this->template CreateTargetCountersForCounterType<
@@ -76,13 +80,16 @@ namespace NKikimr {
                 TYdbMetricsAggregatorImpl::CreateExplicitHistogram>(
                 this->PercentileCountersOpts(),
                 targetCounterGroup,
-                TargetPercentileCounters);
+                TargetPercentileCounters,
+                EYdbMetricNameScope::Aggregate,
+                /*skipLeaderOnly=*/false);
         }
 
         virtual void AddSourceCountersGroup(
             const TString& sourceGroupId,
             NMonitoring::TDynamicCounterPtr sourceCounterGroup,
-            bool isFollowerSource) override {
+            bool isFollowerSource,
+            EYdbMetricNameScope sourceNameScope) override {
             const auto result = SourceCounterGroups.try_emplace(sourceGroupId);
 
             Y_ABORT_UNLESS(
@@ -96,6 +103,7 @@ namespace NKikimr {
                 this->SimpleCountersOpts(),
                 sourceCounterGroup,
                 isFollowerSource,
+                sourceNameScope,
                 result.first->second.SimpleCounters);
 
             // Look up all cumulative counters for the given source group
@@ -104,6 +112,7 @@ namespace NKikimr {
                 this->CumulativeCountersOpts(),
                 sourceCounterGroup,
                 isFollowerSource,
+                sourceNameScope,
                 result.first->second.CumulativeCounters);
 
             // Look up all percentile counters for the given source group
@@ -112,6 +121,7 @@ namespace NKikimr {
                 this->PercentileCountersOpts(),
                 sourceCounterGroup,
                 isFollowerSource,
+                sourceNameScope,
                 result.first->second.PercentileCounters);
         }
 
@@ -234,6 +244,7 @@ namespace NKikimr {
          * @param[in] counterOptions The parsed enum options for the source counters
          * @param[in] sourceCounterGroup The counter group where the source counters are looked up
          * @param[in] isFollowerSource Leave LeaderOnly counters empty for follower sources
+         * @param[in] sourceNameScope The scope for the source metric names (Aggregate or Partition)
          * @param[in,out] sourceCounters The container where the source counters will be saved
          */
         template <
@@ -245,6 +256,7 @@ namespace NKikimr {
             const NAux::TAppParsedOpts<CounterDesc, false /* ParseSourceCounters */>* counterOptions,
             NMonitoring::TDynamicCounterPtr sourceCounterGroup,
             bool isFollowerSource,
+            EYdbMetricNameScope sourceNameScope,
             std::vector<TSourceCounterPtr>& sourceCounters) {
             sourceCounters.clear();
             sourceCounters.reserve(counterOptions->Size);
@@ -255,16 +267,16 @@ namespace NKikimr {
                     continue;
                 }
 
-                const char* counterName = counterOptions->GetNames()[i];
+                const TString counterName = MakeYdbMetricName(counterOptions->GetNames()[i], sourceNameScope);
 
                 auto sourceCounter = (sourceCounterGroup.Get()->*FindSourceCounter)(
                     "name",
-                    counterName);
+                    counterName.c_str());
 
                 Y_ABORT_UNLESS(
                     sourceCounter,
                     "The source counter %s does not exist (source group ID %s)",
-                    counterName,
+                    counterName.c_str(),
                     sourceGroupId.c_str());
 
                 sourceCounters.push_back(sourceCounter);

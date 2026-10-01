@@ -25,8 +25,7 @@ namespace configuration
 class PeriodicMetricReaderConfiguration : public MetricReaderConfiguration
 {
 public:
-  // TODO: spec default is 60000ms for interval, using 5000ms to preserve original behavior
-  static constexpr std::size_t kDefaultIntervalMs = 5000;
+  static constexpr std::size_t kDefaultIntervalMs = 60000;
   static constexpr std::size_t kDefaultTimeoutMs  = 30000;
 
   void Accept(MetricReaderConfigurationVisitor *visitor) const override

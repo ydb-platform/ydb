@@ -403,6 +403,8 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         }
         if (tablet->IsBooting()) {
             delayedTablets.push_back(record);
+        } else if (!(tablet->IsLeader() && tablet->AsLeader().IsBootingSuppressed())) {
+            tablet->InitiateStop(sideEffects);
         }
     }
     if (waitingTablets.size() == processedItems || BootQueue.WaitQueue.empty()) {

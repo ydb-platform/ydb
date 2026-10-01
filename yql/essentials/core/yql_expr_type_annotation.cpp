@@ -5682,6 +5682,18 @@ IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input, c
     return ConvertChildrenToTypeInternal(input, targetType, ctx, typeCtx.UseTypeDiffForConvertToError, &typeCtx);
 }
 
+bool IsSqlInCollectionItemsNullable(
+    const TTypeAnnotationNode* lookupType,
+    const TTypeAnnotationNode* collectionItemType)
+{
+    if (collectionItemType->HasOptionalOrNull()) {
+        return true;
+    }
+
+    const auto compareOptions = CanCompare<true>(lookupType, collectionItemType);
+    return compareOptions == ECompareOptions::Optional || compareOptions == ECompareOptions::Null;
+}
+
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
     auto collectionType = node.Collection().Ref().GetTypeAnn();
     if (collectionType->GetKind() == ETypeAnnotationKind::Optional) {
@@ -5696,13 +5708,7 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
         case ETypeAnnotationKind::Tuple: {
             const auto tupleType = collectionType->Cast<TTupleExprType>();
             for (const auto& item : tupleType->GetItems()) {
-                if (item->HasOptionalOrNull()) {
-                    result = true;
-                    break;
-                }
-
-                auto cmp = CanCompare<true>(lookupType, item);
-                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
+                if (IsSqlInCollectionItemsNullable(lookupType, item)) {
                     result = true;
                     break;
                 }
@@ -5711,27 +5717,13 @@ bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node) {
             break;
         }
         case ETypeAnnotationKind::Dict: {
-            if (collectionType->Cast<TDictExprType>()->GetKeyType()->HasOptionalOrNull()) {
-                result = true;
-            } else {
-                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TDictExprType>()->GetKeyType());
-                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
-                    result = true;
-                }
-            }
-
+            result = IsSqlInCollectionItemsNullable(
+                lookupType, collectionType->Cast<TDictExprType>()->GetKeyType());
             break;
         }
         case ETypeAnnotationKind::List: {
-            if (collectionType->Cast<TListExprType>()->GetItemType()->HasOptionalOrNull()) {
-                result = true;
-            } else {
-                auto cmp = CanCompare<true>(lookupType, collectionType->Cast<TListExprType>()->GetItemType());
-                if (cmp == ECompareOptions::Optional || cmp == ECompareOptions::Null) {
-                    result = true;
-                }
-            }
-
+            result = IsSqlInCollectionItemsNullable(
+                lookupType, collectionType->Cast<TListExprType>()->GetItemType());
             break;
         }
         case ETypeAnnotationKind::EmptyDict:

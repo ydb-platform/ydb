@@ -523,6 +523,19 @@ public:
         return nullptr;
     }
 
+    void* GetFunctionInSameModule(void* exportedFunction, const std::string& name) override
+    {
+        auto* reference = Runtime::asObject(static_cast<Runtime::Function*>(exportedFunction));
+        for (const auto& instance : Instances_) {
+            for (auto* object : Runtime::getInstanceExports(instance)) {
+                if (object == reference) {
+                    return static_cast<void*>(Runtime::asFunctionNullable(Runtime::getInstanceExport(instance, name)));
+                }
+            }
+        }
+        return nullptr;
+    }
+
     void* GetFunction(size_t index) override
     {
         auto* tableElement = Runtime::getTableElement(GetGlobalOffsetTable(), std::bit_cast<Uptr>(index));

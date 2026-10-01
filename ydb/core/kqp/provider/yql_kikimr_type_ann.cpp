@@ -3508,10 +3508,17 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
-        if (auto sampleRate = node.SampleRate(); sampleRate && !sampleRate.Maybe<TCoDouble>()) {
-            ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
-                "ANALYZE SAMPLE rate must evaluate to Double"));
-            return TStatus::Error;
+        if (auto sampleRate = node.SampleRate(); sampleRate) {
+            if (!sampleRate.Maybe<TCoDouble>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE SAMPLE rate must evaluate to Double"));
+                return TStatus::Error;
+            }
+            if (!SessionCtx->Config().FeatureFlags.GetEnableAnalyzeSampling()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE sampling is disabled"));
+                return TStatus::Error;
+            }
         }
 
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);

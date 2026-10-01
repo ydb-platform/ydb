@@ -14,7 +14,8 @@ namespace {
 
 auto ObserveScannedShards(TTestActorRuntime& runtime, THashSet<ui64>& shards) {
     return runtime.AddObserver<NKqp::TEvKqp::TEvQueryRequest>([&](auto& ev) {
-        if (ev->Get()->GetRequestType() == NRequestTypes::Analyze) {
+        if (ev->Get()->GetRequestType() == NRequestTypes::Analyze
+                && ev->Get()->GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
             const auto& query = ev->Get()->GetQuery();
             TStringBuf prefix, tablet;
             UNIT_ASSERT_C(TStringBuf(query).TrySplit(" WITH TabletId = '", prefix, tablet), query);

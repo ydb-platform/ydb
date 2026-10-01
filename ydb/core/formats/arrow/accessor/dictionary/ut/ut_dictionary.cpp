@@ -290,4 +290,34 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
             "actual", PrepareToCompare(visited[0]->ToString()));
     }
+
+    void CheckVisitValuesWithoutNullsPreservesDataSize(const std::shared_ptr<IChunkedArray>& source) {
+        TChunkConstructionData info(
+            source->GetRecordsCount(), nullptr, source->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(source, info).DetachResult());
+
+        std::shared_ptr<arrow::Array> decoded;
+        dict->VisitValues([&](std::shared_ptr<arrow::Array> array) {
+            decoded = std::move(array);
+        });
+
+        AFL_VERIFY(!HasNulls(decoded));
+        AFL_VERIFY(GetArrayDataSize(decoded) == GetArrayDataSize(source->GetChunkedArray()->chunk(0)));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesStringDataSize) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abc");
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesBooleanDataSize) {
+        TTrivialArray::TPlainBuilder<arrow::BooleanType> builder;
+        builder.AddValue(0, true);
+        builder.AddValue(1, false);
+        builder.AddValue(2, true);
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
 };

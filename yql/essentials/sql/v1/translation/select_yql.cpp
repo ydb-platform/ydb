@@ -273,6 +273,7 @@ public:
         auto projection = InitProjection(ctx, src);
 
         if (!projection ||
+            !InitWithout(ctx) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
             (GroupBy && !Init(ctx, src, *GroupBy)) ||
@@ -293,6 +294,14 @@ public:
             }
 
             item->Add(Q(Y(Q("result"), Q(std::move(items)))));
+        }
+
+        if (Without) {
+            TNodePtr setting = Y(Q("without"), Q(BuildWithoutColumns(Without->Columns)));
+            if (Without->IsIfExists) {
+                setting->Add(Q("if_exists"));
+            }
+            item->Add(Q(std::move(setting)));
         }
 
         if (Distinct) {
@@ -415,6 +424,30 @@ public:
     }
 
 private:
+    bool InitWithout(TContext& ctx) const {
+        if (!Without || !IsJoin()) {
+            return true;
+        }
+        bool valid = true;
+        for (const auto& column : Without->Columns) {
+            if (column.Source.empty()) {
+                ctx.Error(column.Position) << "Expected correlation name for WITHOUT in JOIN";
+                valid = false;
+            }
+        }
+        return valid;
+    }
+
+    TNodePtr BuildWithoutColumns(const TVector<TYqlWithout::TColumn>& withoutColumns) const {
+        TNodePtr columns = Y();
+        for (const auto& column : withoutColumns) {
+            columns->Add(Q(Y(
+                BuildQuotedAtom(column.Position, column.Source),
+                BuildQuotedAtom(column.Position, column.Name))));
+        }
+        return columns;
+    }
+
     TMaybe<TVector<TProjectionItem>> InitProjection(TContext& ctx, ISource* src) const {
         return std::visit(
             TOverloaded{
@@ -599,8 +632,7 @@ private:
         TString name = *term->GetColumnName();
 
         if (const auto* source = term->GetSourceName();
-            source && !source->empty() &&
-            Source && 1 < Source->Sources.size()) {
+            source && !source->empty() && IsJoin()) {
             name.prepend(".").prepend(*source);
         }
 
@@ -882,6 +914,10 @@ private:
         }
     }
 
+    bool IsJoin() const {
+        return Source && 1 < Source->Sources.size();
+    }
+
     TNodePtr Node_;
 };
 
@@ -1144,7 +1180,7 @@ public:
             return false;
         }
 
-        Node_ = ToSubLink(Source_, Variant_);
+        Node_ = BuildSubLink(Source_, Variant_, ctx);
         return true;
     }
 
@@ -1177,13 +1213,13 @@ private:
         return in.Expression->Init(ctx, src);
     }
 
-    TNodePtr ToSubLink(TNodePtr source, const TVariant& variant) {
+    TNodePtr BuildSubLink(TNodePtr source, const TVariant& variant, TContext& ctx) {
         source = Y("lambda", Q(Y()), std::move(source));
         return std::visit(
             TOverloaded{
                 [&](const TScalar& x) { return ToSubLink(std::move(source), x); },
                 [&](const TExists& x) { return ToSubLink(std::move(source), x); },
-                [&](const TIn& x) { return ToSubLink(std::move(source), x); },
+                [&](const TIn& x) { return ToSubLink(std::move(source), x, ctx); },
             }, variant);
     }
 
@@ -1195,9 +1231,15 @@ private:
         return Y("YqlSubLink", Q("exists"), Y("Void"), Y("Void"), Y("Void"), std::move(lambda));
     }
 
-    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in) {
+    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in, const TContext& ctx) {
         TNodePtr compare = Y("lambda", Q(Y("value")), Y("==", in.Expression, "value"));
-        return Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+        TNodePtr link = Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+        if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined()) {
+            link = L(std::move(link), Q(Y(Q(Y(Q("warnNoAnsiIn"))))));
+        } else if (*ctx.AnsiInForEmptyOrNullableItemsCollections) {
+            link = L(std::move(link), Q(Y(Q(Y(Q("ansiIn"))))));
+        }
+        return link;
     }
 
     static TNodePtr Unbox(TNodePtr node) {

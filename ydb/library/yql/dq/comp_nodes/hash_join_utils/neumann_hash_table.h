@@ -68,7 +68,7 @@ template <class T> class TBloomFilterMasks {
 
 template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
 class TNeumannHashTable {
-    /// hash = [...] [directory_bits] [...] [bloom_filter_bits]
+    /// hash = [bloom_filter_bits] [directory_bits] [bucket_bits]
     using Hash = ui32;
     using TBloom = ui16;
 
@@ -107,13 +107,13 @@ class TNeumannHashTable {
             return reinterpret_cast<const T &>(*this);
         }
 
-        T BloomTagSlot : kBloomHashBits;
         T DirSlotHash : sizeof(T) * 8 - kBloomHashBits;
+        T BloomTagSlot : kBloomHashBits;
     };
     static_assert(sizeof(THash) == sizeof(typename THash::T));
 
     Hash getDirectorySlot(THash thash) const {
-        return (*thash >> DirectoryHashShift_) & DirectoryHashMask_;
+        return (*thash >> Log2Buckets) & DirectoryHashMask_;
     }
 
     static constexpr ui32 kEmbeddedSize = 16;
@@ -212,11 +212,8 @@ class TNeumannHashTable {
         Overflow_ = overflow;
 
         DirectoryHashBits_ = *  estimatedLogSize;
-        DirectoryHashShift_ = sizeof(Hash) * 8 - kBloomHashBits >= DirectoryHashBits_
-                                ? kBloomHashBits
-                                : sizeof(Hash) * 8 - DirectoryHashBits_;
         DirectoryHashMask_ = (1ul << DirectoryHashBits_) - 1;
-        
+
         const ui32 dirsSize = (1ul << DirectoryHashBits_) + 1;
         Directories_.resize(dirsSize, TDirectory{});
         for (auto& directory : Directories_) {
@@ -578,7 +575,6 @@ class TNeumannHashTable {
     ui32 RowIndexSize_;
 
     unsigned DirectoryHashBits_;
-    unsigned DirectoryHashShift_;
     Hash DirectoryHashMask_;
 
     TMKQLVector<TDirectory> Directories_;

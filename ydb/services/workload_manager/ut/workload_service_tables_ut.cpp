@@ -74,7 +74,6 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceTables) {
     Y_UNIT_TEST(TestTablesIsNotCreatingForUnlimitedPool) {
         auto ydb = TYdbSetupSettings()
             .ConcurrentQueryLimit(-1)
-            .TotalMemoryLimitPercentPerNode(50)
             .Create();
 
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(TSampleQueries::TSelect42::Query));

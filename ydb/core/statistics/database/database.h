@@ -16,7 +16,8 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
     const NActors::TActorId& replyActorId, ui64 queryId,
-    const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags);
+    const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags,
+    bool acceptSampledStatistics = false);
 
 NActors::IActor* CreateDeleteStatisticsQuery(const NActors::TActorId& replyActorId, const TString& database,
     const TPathId& pathId);

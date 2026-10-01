@@ -122,6 +122,9 @@ namespace NActors {
 
     void TCpuManager::PrepareStart(TVector<NSchedulerQueue::TReader*>& scheduleReaders, TActorSystem* actorSystem) {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TCpuManager::PrepareStart");
+        if (Harmonizer) {
+            Harmonizer->SetActorSystem(actorSystem);
+        }
         NSchedulerQueue::TReader* readers;
         ui32 readersCount = 0;
         for (ui32 excIdx = 0; excIdx != ExecutorPoolCount; ++excIdx) {
@@ -260,6 +263,19 @@ namespace NActors {
         if (Shared) {
             Shared->GetSharedStats(poolId, sharedStatsCopy);
         }
+    }
+
+    TAsyncFrameCache::TProcessStats TCpuManager::GetAsyncFrameCacheStats() const {
+        // Shared is owned separately from Executors, and its worker threads are
+        // distinct TExecutorThread objects from the basic pools' own threads.
+        TAsyncFrameCache::TProcessStats stats;
+        for (ui32 poolId = 0; poolId < ExecutorPoolCount; ++poolId) {
+            Executors[poolId]->CollectAsyncFrameCacheStats(stats);
+        }
+        if (Shared) {
+            Shared->CollectAsyncFrameCacheStats(stats);
+        }
+        return stats;
     }
 
     void TCpuManager::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {

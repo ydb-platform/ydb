@@ -2,7 +2,7 @@
 
 #include "volume_config.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range/block_range.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/guarded_sglist.h>

@@ -17,6 +17,7 @@ TEST_SRCS(
     F1_17_noisy_neighbour.py
     F1_24_delete_partition_wipe.py
     F1_25_max_disk_size.py
+    F1_26_resize_grow.py
 )
 
 END()

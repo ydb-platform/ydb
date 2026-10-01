@@ -1,6 +1,7 @@
 #include "yql_solomon_provider_impl.h"
 
 #include <yql/essentials/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
@@ -114,7 +115,11 @@ private:
         }
 
         auto clusterType = shard.SolomonCluster().StringValue();
-        if (State_->Configuration->ClusterConfigs.at(clusterType).GetClusterType() == TSolomonClusterConfig::SCT_MONITORING) {
+        const auto& clusterConfig = State_->Configuration->ClusterConfigs.at(clusterType);
+
+        // The 'custom' service restriction is specific to cloud monitoring: a Monium
+        // project accepts writes into any of its services.
+        if (clusterConfig.GetClusterType() == TSolomonClusterConfig::SCT_MONITORING && !NSo::IsMoniumProject(clusterConfig)) {
             if (shard.Service().StringValue() != "custom") {
                 ctx.AddError(TIssue(ctx.GetPosition(shard.SolomonCluster().Pos()), TStringBuilder() << "It is not allowed to write into Monitoring service '" << shard.Service().StringValue() << "'. Use service 'custom' instead"));
                 return TStatus::Error;

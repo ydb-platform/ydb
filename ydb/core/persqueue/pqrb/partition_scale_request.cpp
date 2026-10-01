@@ -21,7 +21,8 @@ TPartitionScaleRequest::TPartitionScaleRequest(
     std::vector<NKikimrSchemeOp::TPersQueueGroupDescription_TPartitionBoundary> setBoundaries,
     const NActors::TActorId& parentActorId
 )
-    : Topic(topicName)
+    : TLogPrefix(NKikimrServices::PERSQUEUE_READ_BALANCER)
+    , Topic(topicName)
     , TopicPath(topicPath)
     , DatabasePath(databasePath)
     , PathId(pathId)
@@ -32,6 +33,13 @@ TPartitionScaleRequest::TPartitionScaleRequest(
     , ParentActorId(parentActorId) {
 
     }
+
+TStructuredMessage TPartitionScaleRequest::LogPrefix() const {
+    return YDB_LOG_CREATE_MESSAGE(
+        {"topic", Topic},
+        {"topicPath", TopicPath},
+        {"pathId", PathId});
+}
 
 void TPartitionScaleRequest::Bootstrap(const NActors::TActorContext &ctx) {
     SendProposeRequest(ctx);
@@ -80,8 +88,7 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
         }
         logMessage << ".";
     }
-    YDB_LOG_DEBUG(logMessage,
-        {"logPrefix", LogPrefix()});
+    LOG_D(logMessage);
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -158,9 +165,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         }
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete:
         case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAlready:
-            YDB_LOG_DEBUG("TPartitionScaleRequest completed",
-                {"logPrefix", LogPrefix()},
-                {"status", TEvTxUserProxy::TResultStatus::Str(status)});
+            LOG_D("TPartitionScaleRequest completed", {"status", TEvTxUserProxy::TResultStatus::Str(status)});
             ReplyAndDie(status, ctx);
             return;
         default: {
@@ -168,9 +173,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
             for (auto& issue : msg->Record.GetIssues()) {
                 issues << issue.ShortDebugString() + ", ";
             }
-            YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a scale request",
-                {"logPrefix", LogPrefix()},
-                {"status", TEvTxUserProxy::TResultStatus::Str(status)},
+            LOG_E("TPartitionScaleRequest SchemaShard error when trying to execute a scale request", {"status", TEvTxUserProxy::TResultStatus::Str(status)},
                 {"request", issues});
             ReplyAndDie(status, ctx);
             return;

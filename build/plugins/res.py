@@ -12,6 +12,10 @@ def remove_prefix(text, prefix):
     return text
 
 
+def _normalize_resource_path(path):
+    return path.replace("\\", "/")
+
+
 @ymake.macro
 def RESOURCE_FILES(unit: ymake.Unit, *args: str):
     """
@@ -118,7 +122,10 @@ def _YA_TOOLS_CONF(unit: ymake.Unit, conf_dir: str):
     )
 
     def add_resource_file(abs_path):
-        relative_path = remove_prefix(abs_path, conf_abs_path + "/")
+        relative_path = remove_prefix(
+            _normalize_resource_path(abs_path),
+            _normalize_resource_path(conf_abs_path) + "/",
+        )
         resource_files.append("/".join([conf_dir, relative_path]))
 
     def add_formula(formula, referenced_from):
@@ -166,7 +173,10 @@ def _YA_TOOLS_CONF(unit: ymake.Unit, conf_dir: str):
         if "formula" in definition:
             formula = definition["formula"]
         else:
-            tool_name = remove_prefix(tool_file, tools_dir + "/")[: -len(".tool.json")]
+            tool_name = remove_prefix(
+                _normalize_resource_path(tool_file),
+                _normalize_resource_path(tools_dir) + "/",
+            )[: -len(".tool.json")]
             formula = DEFAULT_FORMULA_PATH_TMPL.format(tool_name)
         add_formula(formula, 'tool config "{}"'.format(tool_file))
 

@@ -58,14 +58,15 @@ namespace {
     }
 
     struct TTouchEnv : public NTest::TTestEnv {
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
+            auto pageId = ResolvePageId(part, location, groupId);
             if (PrechargePhase) {
                 Precharged[groupId].insert(pageId);
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             } else {
                 Y_ENSURE(Precharged[groupId].count(pageId), "Requested page " << pageId << " should be precharged");
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             }
         }
 
@@ -190,7 +191,7 @@ Y_UNIT_TEST_SUITE(TPart) {
             UNIT_ASSERT_VALUES_EQUAL(cmp.Compare(*IndexTools::GetFlatLastRecord(*part), TRowTool(*lay).KeyCells(bar)), 0);
         }
         if (part->IndexPages.HasBTree()) {
-            UNIT_ASSERT_VALUES_EQUAL(part->IndexPages.GetBTree({}).LevelCount, 0); // no index keys
+            UNIT_ASSERT_VALUES_EQUAL(part->IndexPages.GetBTree({}).LevelCount(), 0); // no index keys
         }
 
         DumpPart(*(*wrap).Eggs.Lone(), 10);
@@ -450,7 +451,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         { /*_  Ensure that B-Tree index has enough layers */
             if (part.IndexPages.BTreeGroups.size()) {
-                UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, 3);
+                UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), 3);
             }
         }
 

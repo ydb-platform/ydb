@@ -1,5 +1,12 @@
 #include "ut/ut_utils.h"
 
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+
+#include <limits>
+#include <memory>
+#include <string>
+#include <string_view>
+
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -17,6 +24,50 @@ using namespace NYdb::NPersQueue;
 using namespace NHttp;
 using namespace NJson;
 
+
+namespace {
+
+class TWrappingTimestampKafkaCodec final : public NYdb::NTopic::ICodec {
+public:
+    explicit TWrappingTimestampKafkaCodec(NKafka::ECompressionType compression)
+        : Compression(compression)
+    {}
+
+    std::string Decompress(const std::string& data) const override {
+        return Codec.Decompress(data);
+    }
+
+    NYdb::NTopic::TDecompressionResult DecompressData(const std::string& data) const override {
+        return Codec.DecompressData(data);
+    }
+
+    std::unique_ptr<IOutputStream> CreateCoder(TBuffer& result, int quality) const override {
+        return Codec.CreateCoder(result, quality);
+    }
+
+    void CompressWriteBlock(NYdb::NTopic::TWriteBlockCompression& ctx) const override {
+        if (ctx.Payloads.size() == 1) {
+            return;
+        }
+        Codec.CompressWriteBlock(ctx);
+        auto batch = NKafka::ReadKafkaRecordBatch(TStringBuf(ctx.Data.data(), ctx.Data.size()));
+        batch.Attributes = static_cast<i16>(Compression);
+        batch.BaseTimestamp = ctx.BaseSequence == 1 ? std::numeric_limits<i64>::min() : std::numeric_limits<i64>::max();
+        batch.MaxTimestamp = std::numeric_limits<i64>::max();
+        for (size_t i = 0; i < batch.Records.size(); ++i) {
+            batch.Records[i].TimestampDelta = i == 0 ? 0 : (ctx.BaseSequence == 1 ? -1 : 1);
+        }
+        const TString bytes = NKafka::WriteKafkaRecordBatch(batch);
+        ctx.Data = TBuffer(bytes.data(), bytes.size());
+        ctx.Payloads.assign(1, std::string_view(ctx.Data.data(), ctx.Data.size()));
+    }
+
+private:
+    const NYdb::NTopic::TKafkaBatchCodec Codec;
+    const NKafka::ECompressionType Compression;
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
     template <typename T>
@@ -254,7 +305,8 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         }
     }
 
-    void CheckReadKafkaBatchMessages(ui64 readFromOffset, ui32 limit = 6, ui64 lastOffset = 0, ui32 batchSize = 3) {
+    void CheckReadKafkaBatchMessages(ui64 readFromOffset, ui32 limit = 6, ui64 lastOffset = 0, ui32 batchSize = 3,
+                                    bool wrappingTimestamps = false, NKafka::ECompressionType compression = NKafka::ECompressionType::NONE) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -296,7 +348,15 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             {1, batchSize, 'a'},
             {static_cast<ui64>(batchSize) + 1, batchSize, 'b'},
         };
+        if (wrappingTimestamps) {
+            NYdb::NTopic::TCodecMap::GetTheCodecMap().Set(
+                static_cast<ui32>(NYdb::NTopic::ECodec::KAFKA_BATCH), std::make_unique<TWrappingTimestampKafkaCodec>(compression));
+        }
         NKikimr::NPQ::NTest::WriteKafkaBatchMessages(topicClient, topicPath, producerId, dataSize, batchSize, writes, false);
+        if (wrappingTimestamps) {
+            NYdb::NTopic::TCodecMap::GetTheCodecMap().Set(
+                static_cast<ui32>(NYdb::NTopic::ECodec::KAFKA_BATCH), std::make_unique<NYdb::NTopic::TKafkaBatchCodec>());
+        }
 
         TKeepAliveHttpClient httpClient("localhost", monPort);
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
@@ -329,9 +389,22 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             UNIT_ASSERT_VALUES_EQUAL(
                 Base64Decode(jsonMap.find("Message")->second.GetString()),
                 TString(dataSize, messageOffset < batchSize ? 'a' : 'b'));
-            CheckMapValue(jsonMap, "CreateTimestamp", 1000 + messageOffset);
+            if (wrappingTimestamps) {
+                const i64 baseTimestamp = messageOffset < batchSize ? std::numeric_limits<i64>::min() : std::numeric_limits<i64>::max();
+                const i64 timestamp = messageOffset % batchSize == 0 ? baseTimestamp :
+                    (baseTimestamp == std::numeric_limits<i64>::min() ? std::numeric_limits<i64>::max() : std::numeric_limits<i64>::min());
+                CheckMapValue(jsonMap, "CreateTimestamp", static_cast<ui64>(timestamp));
+            } else {
+                CheckMapValue(jsonMap, "CreateTimestamp", 1000 + messageOffset);
+            }
             UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
             UNIT_ASSERT(jsonMap.find("Ip") != jsonMap.end());
+        }
+    }
+
+    Y_UNIT_TEST(TopicDataShowsKafkaBatchesWithWrappingTimestamps) {
+        for (const auto compression : {NKafka::ECompressionType::NONE, NKafka::ECompressionType::GZIP, NKafka::ECompressionType::ZSTD}) {
+            CheckReadKafkaBatchMessages(0, 6, 0, 3, true, compression);
         }
     }
 

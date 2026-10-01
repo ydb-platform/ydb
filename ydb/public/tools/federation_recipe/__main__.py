@@ -33,6 +33,7 @@ def _setenv(varname, value):
     except Exception:
         pass
 
+
 _PQ_CONFIG_TABLES = [
     """
 --!syntax_v1
@@ -96,23 +97,28 @@ class FederationRecipe(object):
             use_legacy_pq=True,
             additional_log_configs={
                 'PQ_MIRRORER': LogLevels.TRACE,
+                'KAFKA_PROXY': LogLevels.TRACE,
             },
-            extra_feature_flags=["enable_topic_retention_delete_last_blob", "enable_insecure_mirror_factory"]
+            extra_feature_flags=["enable_topic_retention_delete_last_blob", "enable_insecure_mirror_factory", "enable_kafka_transactions"],
+            kafka_api_port='auto',
         )
         configurator.yaml_config.setdefault('pqconfig', {})
         configurator.yaml_config['pqconfig']['pqdiscovery_config'] = {
             'lb_user_database_root': '/Root/logbroker-federation'
         }
-        configurator.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = True;
+        configurator.yaml_config['pqconfig']['quoting_config']['enable_quoting'] = True
 
         cluster = kikimr_cluster_factory(configurator)
         cluster.start()
 
         self.__clusters[name] = cluster
-        grpc_port = list(cluster.nodes.values())[0].grpc_port
+        node = list(cluster.nodes.values())[0]
+        grpc_port = node.grpc_port
         self.__cluster_ports[name] = grpc_port
         _setenv("{}_port".format(name), str(grpc_port))
-        logger.info("YDB cluster {} started on port {}".format(name, grpc_port))
+        if node.kafka_api_port is not None:
+            _setenv("{}_kafka_static_port".format(name), str(node.kafka_api_port))
+        logger.info("YDB cluster {} started on grpc port {}".format(name, grpc_port))
         return cluster, grpc_port
 
     def _setup_ydb_cluster(self, name, cluster, grpc_port):
@@ -123,10 +129,15 @@ class FederationRecipe(object):
                 "/Root/logbroker-federation/{}".format(account),
                 storage_pool_units_count={'hdd': 1},
             )
-            cluster.register_and_start_slots(
+            slots = cluster.register_and_start_slots(
                 "/Root/logbroker-federation/{}".format(account),
                 count=1,
             )
+
+            if account in PRE_INSTALLED_ACCOUNTS:
+                kafka_port = slots[0].kafka_api_port
+                _setenv("{}_{}_kafka_dynamic_port".format(name, account), str(kafka_port))
+                logger.info("YDB cluster {} {} slot started on kafka port {}".format(name, account, kafka_port))
 
         driver_config = ydb.DriverConfig(
             endpoint="localhost:{}".format(grpc_port),
@@ -582,13 +593,14 @@ class FederationRecipe(object):
 
 _recipe_instance = None
 
+
 def start(args):
     global _recipe_instance
     _recipe_instance = FederationRecipe()
     _recipe_instance.start(args)
 
+
 def stop(args):
-    global _recipe_instance
     if _recipe_instance is not None:
         _recipe_instance.stop(args)
 

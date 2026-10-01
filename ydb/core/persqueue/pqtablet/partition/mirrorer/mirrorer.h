@@ -18,14 +18,8 @@ private:
     const TDuration WRITE_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
     const TDuration WRITE_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
 
-    const TDuration CONSUMER_INIT_TIMEOUT_MAX = TDuration::Seconds(60);
-    const TDuration CONSUMER_INIT_TIMEOUT_START = TDuration::Seconds(5);
-
     const TDuration CONSUMER_INIT_INTERVAL_MAX = TDuration::Seconds(60);
     const TDuration CONSUMER_INIT_INTERVAL_START = TDuration::Seconds(1);
-
-    const TDuration READ_RETRY_TIMEOUT_MAX = TDuration::Seconds(1);
-    const TDuration READ_RETRY_TIMEOUT_START = TDuration::MilliSeconds(1);
 
     const TDuration UPDATE_COUNTERS_INTERVAL = TDuration::Seconds(5);
 
@@ -90,12 +84,6 @@ private:
         timeout = Min(timeout * 2, maxTimeout);
     }
 
-    bool AddToWriteRequest(
-        NKikimrClient::TPersQueuePartitionRequest& request,
-        NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage& message,
-        bool& incorrectRequest,
-        ui64& nextOffset
-    );
     void ProcessError(const TActorContext& ctx, const TString& msg);
     void ProcessError(const TActorContext& ctx, const TString& msg, const NKikimrClient::TResponse& response);
     void AfterSuccesWrite(const TActorContext& ctx);
@@ -112,7 +100,7 @@ private:
 
     bool TryRewindCommittedOffset(const TActorContext& ctx);
 
-    TLogPrefix BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
     TString GetCurrentState() const;
 
@@ -176,9 +164,7 @@ private:
     THolder<NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent> StreamStatus;
     TInstant LastInitStageTimestamp;
 
-    TDuration ConsumerInitTimeout = CONSUMER_INIT_TIMEOUT_START;
     TDuration ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
-    TDuration ReadRetryTimeout = READ_RETRY_TIMEOUT_START;
 
     TTabletCountersBase Counters;
 

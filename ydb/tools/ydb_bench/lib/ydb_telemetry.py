@@ -1,10 +1,13 @@
 """Bounded, best-effort executor-pool telemetry from local YDB monitoring ports."""
 
 import json
+import gzip
 import logging
 import math
+import socket
 import threading
 import time
+import uuid
 from pathlib import Path
 from collections import deque
 from urllib.request import HTTPRedirectHandler, ProxyHandler, build_opener
@@ -21,6 +24,113 @@ COUNTERS = (
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_FILE_BYTES = 32 * 1024 * 1024
 MAX_VIEW_BYTES = 2 * 1024 * 1024
+MAX_ARCHIVE_RESPONSE_BYTES = 16 * 1024 * 1024
+ARCHIVE_PART_BYTES = 16 * 1024 * 1024
+ARCHIVE_STATE_BYTES = 32 * 1024 * 1024
+ARCHIVE_FORMAT = "ydb-counters-delta-v1"
+
+
+def _archive_json(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
+
+
+class CountersArchiveEncoder:
+    """Dictionary and last successful snapshot, scoped to one archive part."""
+
+    def __init__(self):
+        self.definitions = {}
+        self.nodes = {}
+        self.state_bytes = 0
+        self.sequence = 0
+
+    def encode(self, record):
+        result = {key: value for key, value in record.items() if key != "counters"}
+        result["format"] = ARCHIVE_FORMAT
+        result["sequence"] = self.sequence
+        self.sequence += 1
+        if "counters" not in record:
+            return result
+        node = tuple(record[key] for key in ("host", "role", "index", "port"))
+        old_order, old_values = self.nodes.get(node, (None, {}))
+        order, values, definitions, changes = [], {}, [], []
+        occurrences = {}
+        for sensor in record["counters"]["sensors"]:
+            definition = {key: value for key, value in sensor.items() if key not in ("value", "hist")}
+            key = _archive_json(definition)
+            occurrence = occurrences.get(key, 0)
+            occurrences[key] = occurrence + 1
+            identity = (key, occurrence)
+            if identity not in self.definitions:
+                self.definitions[identity] = len(self.definitions)
+                self.state_bytes += len(key)
+                definitions.append([self.definitions[identity], definition])
+            metric = self.definitions[identity]
+            value = {key: value for key, value in sensor.items() if key in ("value", "hist")}
+            encoded = _archive_json(value)
+            order.append(metric)
+            values[metric] = encoded
+            # A newly present scalar defaults to integer zero, never a missing sample.
+            if encoded != old_values.get(metric, '{"value":0}'):
+                changes.append([metric, value])
+        self.state_bytes += sum(map(len, values.values())) - sum(map(len, old_values.values()))
+        self.nodes[node] = (order, values)
+        result.update(definitions=definitions, changes=changes)
+        if order != old_order:
+            result["present"] = order
+        result["counter_metadata"] = {key: value for key, value in record["counters"].items() if key != "sensors"}
+        return result
+
+
+def read_counters_archive(path):
+    """Yield reconstructed snapshots from one part, including legacy full snapshots."""
+    definitions, nodes = {}, {}
+    sequence = 0
+    with gzip.open(path, "rt", encoding="utf-8") as stream:
+        for line in stream:
+            record = json.loads(line)
+            if "format" not in record:
+                yield record
+                continue
+            if record["format"] != ARCHIVE_FORMAT:
+                raise ValueError("unsupported YDB counters archive format")
+            if record.get("sequence") != sequence:
+                raise ValueError("missing or reordered counter record")
+            sequence += 1
+            result = {
+                key: value
+                for key, value in record.items()
+                if key not in ("format", "sequence", "definitions", "changes", "present", "counter_metadata")
+            }
+            if "error" in record:
+                yield result
+                continue
+            for metric, definition in record["definitions"]:
+                if metric in definitions:
+                    raise ValueError("duplicate counter definition")
+                definitions[metric] = definition
+            node = tuple(record[key] for key in ("host", "role", "index", "port"))
+            old_order, old_values = nodes.get(node, (None, {}))
+            order = record.get("present", old_order)
+            if order is None or len(set(order)) != len(order):
+                raise ValueError("missing or invalid counter checkpoint")
+            values = {metric: old_values.get(metric, {"value": 0}) for metric in order}
+            for metric, value in record["changes"]:
+                if metric not in values:
+                    raise ValueError("change for absent counter")
+                values[metric] = value
+            if any(metric not in definitions for metric in order):
+                raise ValueError("undefined counter")
+            # Copy through JSON so callers cannot mutate subsequent decoded snapshots.
+            result["counters"] = json.loads(
+                _archive_json(
+                    dict(
+                        record["counter_metadata"],
+                        sensors=[dict(definitions[metric], **values[metric]) for metric in order],
+                    )
+                )
+            )
+            nodes[node] = (order, values)
+            yield result
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -58,7 +168,7 @@ def parse_counters(payload):
 
 
 class YdbCountersMonitor:
-    def __init__(self, path, nodes, context, interval=2.0):
+    def __init__(self, path, nodes, context, interval=2.0, *, collect_archive=True):
         self.path = Path(path) if path is not None else None
         self.nodes = nodes
         self.context = dict(context)
@@ -69,8 +179,13 @@ class YdbCountersMonitor:
         self._write_lock = threading.Lock()
         self.error = None
         self._opener = build_opener(ProxyHandler({}), _NoRedirect())
+        self.archive = None
+        if collect_archive and self.path is not None:
+            self.archive = YdbCountersArchive(self.path.parent / "ydb-counters", nodes, context, interval=5.0)
 
     def start(self):
+        if self.archive is not None:
+            self.archive.start()
         if self.path is not None:
             self._thread = threading.Thread(target=self._run, name="ydb-bench-ydb-counters", daemon=True)
             try:
@@ -82,28 +197,37 @@ class YdbCountersMonitor:
         return self
 
     def stop(self):
+        if self.archive is not None:
+            self.archive.stop()
+            if self.archive.error:
+                self.error = self.archive.error
         with self._write_lock:
             self._stop.set()
         if self._thread is not None:
             self._thread.join(timeout=2.0)
 
     def _fetch(self, port):
+        return parse_counters(
+            json.loads(self._fetch_payload(port, "/counters/counters=utils/json", MAX_RESPONSE_BYTES))
+        )
+
+    def _fetch_payload(self, port, endpoint, limit):
         if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
             raise ValueError("invalid local monitoring port")
-        url = "http://127.0.0.1:{}/counters/counters=utils/json".format(port)
+        url = "http://127.0.0.1:{}{}".format(port, endpoint)
         deadline = time.monotonic() + 2.0
         with self._opener.open(url, timeout=1.0) as response:
             payload = bytearray()
-            while len(payload) <= MAX_RESPONSE_BYTES:
+            while len(payload) <= limit:
                 if self._stop.is_set() or time.monotonic() >= deadline:
                     raise ValueError("monitoring request cancelled or timed out")
-                chunk = response.read1(min(65536, MAX_RESPONSE_BYTES + 1 - len(payload)))
+                chunk = response.read1(min(65536, limit + 1 - len(payload)))
                 if not chunk:
                     break
                 payload.extend(chunk)
-        if len(payload) > MAX_RESPONSE_BYTES:
+        if len(payload) > limit:
             raise ValueError("monitoring response is too large")
-        return parse_counters(json.loads(payload))
+        return payload
 
     def _sample(self):
         record = {"timestamp_unix": time.time(), "context": self.context, "nodes": []}
@@ -171,6 +295,73 @@ class YdbCountersMonitor:
         except Exception as error:
             self.error = str(error)[:300]
             logging.warning("YDB counters collection stopped: %s", self.error)
+
+
+class YdbCountersArchive(YdbCountersMonitor):
+    """Complete monitoring snapshots, stored only as concatenated gzip members."""
+
+    def __init__(self, path, nodes, context, interval=5.0):
+        super().__init__(path, nodes, context, interval, collect_archive=False)
+
+    def stop(self):
+        super().stop()
+        # Artifact hashing must not race with the last archive write.
+        if self._thread is not None:
+            self._thread.join()
+
+    def _run(self):
+        try:
+            self.path.mkdir(parents=True, exist_ok=True)
+            session = uuid.uuid4().hex
+            part, size = 0, 0
+            encoder = CountersArchiveEncoder()
+            while not self._stop.is_set():
+                started = time.monotonic()
+                nodes = self.nodes()
+                if not isinstance(nodes, (tuple, list)):
+                    raise ValueError("monitoring node list is unavailable")
+                for role, index, port in nodes:
+                    if self._stop.is_set():
+                        break
+                    record = {
+                        "timestamp_unix": time.time(),
+                        "context": self.context,
+                        "host": socket.gethostname(),
+                        "role": role,
+                        "index": index,
+                        "port": port,
+                    }
+                    try:
+                        payload = self._fetch_payload(port, "/counters/json?@private=1", MAX_ARCHIVE_RESPONSE_BYTES)
+                        value = json.loads(payload)
+                        if not isinstance(value, dict) or not isinstance(value.get("sensors"), list):
+                            raise ValueError("monitoring response has no sensors list")
+                        if any(not isinstance(sensor, dict) for sensor in value["sensors"]):
+                            raise ValueError("monitoring response has invalid sensors")
+                        record["counters"] = value
+                    except (OSError, ValueError, TypeError) as error:
+                        record["error"] = str(error)[:300]
+                    if size and encoder.state_bytes >= ARCHIVE_STATE_BYTES:
+                        part, size = part + 1, 0
+                        encoder = CountersArchiveEncoder()
+                    compressed = gzip.compress((_archive_json(encoder.encode(record)) + "\n").encode(), compresslevel=1)
+                    if size and size + len(compressed) > ARCHIVE_PART_BYTES:
+                        part, size = part + 1, 0
+                        encoder = CountersArchiveEncoder()
+                        compressed = gzip.compress(
+                            (_archive_json(encoder.encode(record)) + "\n").encode(), compresslevel=1
+                        )
+                    with self._write_lock:
+                        if self._stop.is_set():
+                            break
+                        with (self.path / (session + "-{:06d}.jsonl.gz".format(part))).open("ab") as stream:
+                            stream.write(compressed)
+                    size += len(compressed)
+                if self._stop.wait(max(0, self.interval - (time.monotonic() - started))):
+                    break
+        except Exception as error:
+            self.error = str(error)[:300]
+            logging.warning("Full YDB counters collection stopped: %s", self.error)
 
 
 def read_metrics(path, attempt):

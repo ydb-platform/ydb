@@ -328,6 +328,12 @@ message TQueryResponse {
 }
 
 message TEvQueryResponse {
+    enum ERejectionStage {
+        REJECTION_STAGE_UNSPECIFIED = 0;
+        REJECTION_STAGE_PROXY = 1;
+        REJECTION_STAGE_SESSION = 2;
+    }
+
     reserved 1; // (deprecated) KqpStatus
     reserved 2; // (deprecated) KqpError
     optional TQueryResponse Response = 3;
@@ -335,6 +341,7 @@ message TEvQueryResponse {
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
+    optional ERejectionStage RejectionStage = 9;
 }
 
 message TCloseSessionRequest {
@@ -389,6 +396,7 @@ message TCompileCacheQueryInfo {
     optional string Syntax = 14;
 }
 
+// Proxy-side session snapshot exported by .sys/query_sessions.
 message TSessionInfo {
     optional string SessionId = 1;
     /// optional ui32 NodeId = 2;
@@ -413,6 +421,12 @@ message TSessionInfo {
     optional string TraceId = 21;
     // Description of how the query was classified into WmPoolId
     optional string WmClassifiedBy = 22;
+    // Elapsed query execution time from QueryStartAt.
+    optional uint64 DurationUs = 23;
+    // Latest query-wide resource values; absent until the first report.
+    optional uint64 CpuTimeUs = 24;
+    optional uint64 ComputeMemoryBytes = 25;
+    optional uint64 ReadIngressBytesRate = 26;
 }
 
 message TEvListSessionsRequest {
@@ -777,6 +791,16 @@ message TEvScanPing {
 message TEvKqpScanCursor {
     optional uint64 TabletId = 1;
 
+    // How the scan that produced this cursor ordered its sources. A source index means nothing without
+    // it: the same portion takes a different index under a different order.
+    enum ESourcesSorting {
+        SOURCE_ID_ASC = 0;
+        FIRST_PK_ASC = 1;
+        LAST_PK_ASC = 2;
+        LAST_PK_DESC = 3;
+    }
+    optional ESourcesSorting SourcesSorting = 2;
+
     message TColumnShardScanPlain {
     }
     message TDeprecatedColumnShardScanSimple {
@@ -931,6 +955,11 @@ message TKqpTableSinkSettings {
     optional bool SkipMissingRows = 28;
     optional EInputRowFormat InputRowFormat = 29 [default = INPUT_ROW_FORMAT_FLAT];
     optional bool CollectAffectedRows = 30;
+    // Do not take pessimistic locks (EvLock) for this query (ReadCommittedRW with
+    // PRAGMA kikimr.KqpDisablePessimisticLocks="true").
+    optional bool DisablePessimisticLocks = 31;
+    // Non-zero only for an execution that requested buffer lookup diagnostics.
+    optional uint64 BufferLookupDiagnosticsExecutionId = 32;
 }
 
 message TReadVectorTopK {
@@ -1174,16 +1203,14 @@ message TStreamingQueryState {
     optional string CheckpointId = 11;
 
     // Inflight streaming query operation info
-    optional string OperationName = 4;
     optional string OperationActorId = 5;
-    optional google.protobuf.Timestamp OperationStartedAt = 6;
+    optional uint64 OperationOwnerGeneration = 13;
 
     // Streaming query properties stored in schemeshard
     optional TSchemeInfo SchemeInfo = 7;
-    optional string QueryText = 8;
-    optional bool Run = 9;
-    optional string ResourcePool = 10;
     optional uint64 QueryTextRevision = 12;
+
+    reserved 4, 6, 8, 9, 10;
 }
 
 // Cross-node lookup of QuerySpanId -> QueryText for TLI logging.

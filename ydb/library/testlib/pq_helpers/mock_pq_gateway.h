@@ -98,7 +98,27 @@ public:
 
 class IMockPqDeferredPublishClient {
 public:
+    enum class EMethod {
+        Begin,
+        Publish,
+        Cancel,
+        List,
+    };
+
+    struct TRequest {
+        EMethod Method;
+        ui64 PublicationId = 0;
+        TString ExternalId;
+        std::optional<std::string> WriterIdentity;
+        std::function<void(NYdb::EStatus, std::vector<NYdb::NTopic::TPublicationSummary>)> Reply;
+    };
+
+    using TRequestHandler = std::function<void(TRequest)>;
+
     virtual ~IMockPqDeferredPublishClient() = default;
+
+    // When set, the handler replies to SDK requests instead of automatic publication bookkeeping.
+    virtual void SetRequestHandler(TRequestHandler handler) = 0;
 
     virtual void EnsureOpenedPublications(ui64 count, const TString& nameSubstring) = 0;
 

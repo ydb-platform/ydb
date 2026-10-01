@@ -4,6 +4,7 @@
 //! returns a human-readable dump for SELECT, e.g. "rows_seen=3;positives=2".
 
 #include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
+#include <ydb/services/udf_store/wasm/abi/bridge.h>
 #include <ydb/services/udf_store/wasm/object_framework/object_framework.h>
 
 #include <string.h>
@@ -36,22 +37,8 @@ const TObjectType CtxType = {
     &CtxDestroy,
 };
 
-uint64_t AsHandle(const TUnversionedValue* value) {
-    if (!value || value->Type == EValueType::Null) {
-        return 0;
-    }
-    if (value->Type == EValueType::Uint64) {
-        return value->Data.Uint64;
-    }
-    if (value->Type == EValueType::Int64) {
-        return static_cast<uint64_t>(value->Data.Int64);
-    }
-    ThrowException("expected int64/uint64 handle");
-    return 0;
-}
-
-TCtx* GetCtx(const TUnversionedValue* handleArg) {
-    auto* ctx = static_cast<TCtx*>(ObjectFrameworkGet(AsHandle(handleArg), &CtxType));
+TCtx* GetCtx(uint64_t handleArg) {
+    auto* ctx = static_cast<TCtx*>(ObjectFrameworkGet(BridgeGetUint64(handleArg), &CtxType));
     if (!ctx) {
         ThrowException("unknown ctx handle");
     }
@@ -121,68 +108,60 @@ int FormatCtx(const TCtx* ctx, char* buf, int bufLen) {
     return n;
 }
 
-void PassThrough(TUnversionedValue* result, TUnversionedValue* inputArg) {
-    if (!inputArg || inputArg->Type == EValueType::Null) {
-        result->Type = EValueType::Null;
-        return;
-    }
-    *result = *inputArg;
-}
-
 } // namespace
 
 extern "C" {
 
 __attribute__((visibility("default"))) void ctx_create(
     TExpressionContext* /*context*/,
-    TUnversionedValue* result)
+    uint64_t* result,
+    uint64_t /*config*/)
 {
     const TObjectHandle handle = ObjectFrameworkCreate(&CtxType, nullptr, 0);
     if (handle == 0) {
         ThrowException("ctx_create failed");
     }
-    result->Type = EValueType::Uint64;
-    result->Data.Uint64 = handle;
+    *result = MakeUint64(handle).Release();
 }
 
 __attribute__((visibility("default"))) void ctx_destroy(
     TExpressionContext* /*context*/,
-    TUnversionedValue* result,
-    TUnversionedValue* handleArg)
+    uint64_t* result,
+    uint64_t handleArg)
 {
-    ObjectFrameworkDestroy(AsHandle(handleArg));
-    result->Type = EValueType::Null;
+    ObjectFrameworkDestroy(BridgeGetUint64(handleArg));
+    *result = MakeNull().Release();
 }
 
 //! Always increments rows_seen; returns |input| unchanged.
 __attribute__((visibility("default"))) void count_row(
     TExpressionContext* /*context*/,
-    TUnversionedValue* result,
-    TUnversionedValue* handleArg,
-    TUnversionedValue* inputArg)
+    uint64_t* result,
+    uint64_t handleArg,
+    uint64_t inputArg)
 {
     ++GetCtx(handleArg)->RowsSeen;
-    PassThrough(result, inputArg);
+    *result = inputArg;
 }
 
 //! Increments positives when |input| is a positive Int64; returns |input| unchanged.
 __attribute__((visibility("default"))) void count_positive(
     TExpressionContext* /*context*/,
-    TUnversionedValue* result,
-    TUnversionedValue* handleArg,
-    TUnversionedValue* inputArg)
+    uint64_t* result,
+    uint64_t handleArg,
+    uint64_t inputArg)
 {
     TCtx* ctx = GetCtx(handleArg);
-    if (inputArg && inputArg->Type == EValueType::Int64 && inputArg->Data.Int64 > 0) {
+    if (!BridgeIsNull(inputArg) && BridgeGetInt64(inputArg) > 0) {
         ++ctx->Positives;
     }
-    PassThrough(result, inputArg);
+    *result = inputArg;
 }
 
 __attribute__((visibility("default"))) void ctx_snapshot(
-    TExpressionContext* context,
-    TUnversionedValue* result,
-    TUnversionedValue* handleArg)
+    TExpressionContext* /*context*/,
+    uint64_t* result,
+    uint64_t handleArg)
 {
     const TCtx* ctx = GetCtx(handleArg);
     char tmp[96];
@@ -190,10 +169,7 @@ __attribute__((visibility("default"))) void ctx_snapshot(
     if (n <= 0) {
         ThrowException("ctx_snapshot: format failed");
     }
-    result->Type = EValueType::String;
-    result->Length = static_cast<uint32_t>(n);
-    result->Data.String = AllocateBytes(context, result->Length);
-    memcpy(result->Data.String, tmp, static_cast<size_t>(n));
+    *result = MakeString(tmp, n).Release();
 }
 
 } // extern "C"

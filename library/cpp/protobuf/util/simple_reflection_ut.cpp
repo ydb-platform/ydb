@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
     Y_UNIT_TEST(GetStringReference) {
         TSample src(GenSampleForMergeFrom());
         const Descriptor* descr = src.GetDescriptor();
-        TString scratch;
+        TProtoStringType scratch;
 
         TConstField srcOneStr(src, descr->FindFieldByName("OneStr"));
         UNIT_ASSERT_VALUES_EQUAL("one str"_sb, srcOneStr.GetStringReference(&scratch));
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
                 TMaybe<TConstField> field = TConstField::ByPath(msg, "OneStr");
                 UNIT_ASSERT(field);
                 UNIT_ASSERT(field->HasValue());
-                UNIT_ASSERT_VALUES_EQUAL("1", (field->Get<TString>()));
+                UNIT_ASSERT_VALUES_EQUAL("1", (field->Get<TProtoStringType>()));
             }
 
             {
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
                 TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr");
                 UNIT_ASSERT(field);
                 UNIT_ASSERT(!field->HasValue());
-                field->Set(TString("zz"));
+                field->Set(TProtoStringType("zz"));
                 UNIT_ASSERT(field->HasValue());
                 UNIT_ASSERT_VALUES_EQUAL("zz", msg.GetOneStr());
             }
@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
                 TMaybe<TMutableField> field = TMutableField::ByPath(msg, "OneStr");
                 UNIT_ASSERT(field);
                 UNIT_ASSERT(field->HasValue());
-                field->Set(TString("dd"));
+                field->Set(TProtoStringType("dd"));
                 UNIT_ASSERT(field->HasValue());
                 UNIT_ASSERT_VALUES_EQUAL("dd", msg.GetOneStr());
             }
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(ProtobufSimpleReflection) {
         TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.TTestExt.ExtField");
         UNIT_ASSERT(field);
         UNIT_ASSERT(field->HasValue());
-        UNIT_ASSERT_VALUES_EQUAL("ext", field->Get<TString>());
+        UNIT_ASSERT_VALUES_EQUAL("ext", field->Get<TProtoStringType>());
     }
     {
         TMaybe<TConstField> field = TConstField::ByPath(msg, "NExt.ExtField");

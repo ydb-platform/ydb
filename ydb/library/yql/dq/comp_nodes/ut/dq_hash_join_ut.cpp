@@ -1,3 +1,4 @@
+#include "utils/controlled_spiller.h"
 #include "utils/dq_factories.h"
 #include "utils/dq_setup.h"
 #include "utils/preallocated_spiller.h"
@@ -5,12 +6,17 @@
 #include <type_utils.h>
 #include <ydb/library/yql/dq/comp_nodes/ut/join_perf/construct_join_graph.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_join_common.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mock_spiller_factory_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+
+#include <arrow/util/bit_util.h>
+
+#include <numeric>
 
 namespace NKikimr::NMiniKQL {
 
@@ -893,6 +899,176 @@ TJoinTestData InnerJoinIntAndOptionalIntKeyTestData() {
     return td;
 }
 
+// INNER with EqualNulls: NULL keys match each other (IS NOT DISTINCT FROM).
+TJoinTestData InnerJoinEqualNullsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<std::optional<ui64>> leftKeys = {10, std::nullopt, 30};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt, 40};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<std::optional<ui64>> expLeftKeys = {10, std::nullopt};
+    TVector<ui64> expRightIds = {1, 2};
+    TVector<std::optional<ui64>> expRightKeys = {10, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {0};
+    return td;
+}
+
+// EqualNulls still distinguishes NULL from a present value (including 0).
+TJoinTestData InnerJoinEqualNullsNullVsZeroTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2};
+    TVector<std::optional<ui64>> leftKeys = {std::nullopt, 0};
+
+    TVector<ui64> rightIds = {1, 2};
+    TVector<std::optional<ui64>> rightKeys = {0, std::nullopt};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<std::optional<ui64>> expLeftKeys = {std::nullopt, 0};
+    TVector<ui64> expRightIds = {2, 1};
+    TVector<std::optional<ui64>> expRightKeys = {std::nullopt, 0};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {0};
+    return td;
+}
+
+// Composite key: (1, NULL) matches (1, NULL) and does not match (1, 0).
+TJoinTestData InnerJoinEqualNullsCompositeKeyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2, 3};
+    TVector<ui64> leftKey0 = {1, 1, 2};
+    TVector<std::optional<ui64>> leftKey1 = {std::nullopt, 0, std::nullopt};
+
+    TVector<ui64> rightIds = {1, 2, 3};
+    TVector<ui64> rightKey0 = {1, 1, 2};
+    TVector<std::optional<ui64>> rightKey1 = {std::nullopt, 0, 0};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<ui64> expLeftKey0 = {1, 1};
+    TVector<std::optional<ui64>> expLeftKey1 = {std::nullopt, 0};
+    TVector<ui64> expRightIds = {1, 2};
+    TVector<ui64> expRightKey0 = {1, 1};
+    TVector<std::optional<ui64>> expRightKey1 = {std::nullopt, 0};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKey0, leftKey1);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKey0, rightKey1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKey0, expLeftKey1,
+                                       expRightIds, expRightKey0, expRightKey1);
+
+    td.LeftKeyColmns = {1, 2};
+    td.RightKeyColmns = {1, 2};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft},
+                  {0, EJoinSide::kRight}, {1, EJoinSide::kRight}, {2, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {0, 1};
+    return td;
+}
+
+TJoinTestData LeftJoinEqualNullsTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2};
+    TVector<std::optional<ui64>> leftKeys = {10, std::nullopt};
+
+    TVector<ui64> rightIds = {1, 2};
+    TVector<std::optional<ui64>> rightKeys = {std::nullopt, 20};
+
+    TVector<ui64> expLeftIds = {1, 2};
+    TVector<std::optional<ui64>> expLeftKeys = {10, std::nullopt};
+    TVector<std::optional<ui64>> expRightIds = {std::nullopt, 1};
+    TVector<std::optional<ui64>> expRightKeys = {std::nullopt, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Left;
+    td.JoinSettings.EqualNullsKeys = {0};
+    return td;
+}
+
+// Only the second join key allows NULL == NULL. (NULL, 1) must not match (NULL, 1).
+TJoinTestData InnerJoinEqualNullsSecondKeyOnlyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<std::optional<ui64>> leftKey0 = {1, std::nullopt, 2};
+    TVector<std::optional<ui64>> leftKey1 = {std::nullopt, 1, 2};
+    TVector<std::optional<ui64>> rightKey0 = {1, std::nullopt, 3};
+    TVector<std::optional<ui64>> rightKey1 = {std::nullopt, 1, 3};
+
+    TVector<std::optional<ui64>> expLeftKey0 = {1};
+    TVector<std::optional<ui64>> expLeftKey1 = {std::nullopt};
+    TVector<std::optional<ui64>> expRightKey0 = {1};
+    TVector<std::optional<ui64>> expRightKey1 = {std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKey0, leftKey1);
+    td.Right = ConvertVectorsToTuples(setup, rightKey0, rightKey1);
+    td.Result = ConvertVectorsToTuples(setup, expLeftKey0, expLeftKey1, expRightKey0, expRightKey1);
+
+    td.LeftKeyColmns = {0, 1};
+    td.RightKeyColmns = {0, 1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.EqualNullsKeys = {1};
+    return td;
+}
+
+// Without EqualNullsKeys, NULL keys are allowed in the input but never match.
+TJoinTestData InnerJoinNullKeysDoNotMatchByDefaultTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftIds = {1, 2};
+    TVector<std::optional<ui64>> leftKeys = {10, std::nullopt};
+    TVector<ui64> rightIds = {1, 2};
+    TVector<std::optional<ui64>> rightKeys = {10, std::nullopt};
+
+    TVector<ui64> expLeftIds = {1};
+    TVector<std::optional<ui64>> expLeftKeys = {10};
+    TVector<ui64> expRightIds = {1};
+    TVector<std::optional<ui64>> expRightKeys = {10};
+
+    td.Left = ConvertVectorsToTuples(setup, leftIds, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightIds, rightKeys);
+    td.Result = ConvertVectorsToTuples(setup, expLeftIds, expLeftKeys, expRightIds, expRightKeys);
+
+    td.LeftKeyColmns = {1};
+    td.RightKeyColmns = {1};
+    td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
 TJoinTestData SwappedKeyColumnsInnerTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -985,6 +1161,27 @@ TJoinTestData SpillingTestData() {
     [[maybe_unused]] constexpr ui64 rightSizeBytes = rightSize * packedTupleSize;
     td.JoinMemoryConstraint = joinMemory;
     td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+TJoinTestData FinalDumpSpillingTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int rows = 50000;
+    TVector<ui64> leftKeys(rows, 1);
+    TVector<ui64> leftValues(rows);
+    TVector<ui64> rightKeys(rows, 1);
+    TVector<ui64> rightValues(rows);
+    std::iota(leftValues.begin(), leftValues.end(), 0);
+    std::iota(rightValues.begin(), rightValues.end(), 0);
+
+    TVector<ui64> empty;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, empty, empty);
+    td.Kind = EJoinKind::LeftOnly;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
     return td;
 }
 
@@ -1477,10 +1674,75 @@ TJoinTestData LeftOnlyCommonFilterTestDataLeftIsBuild() {
     return td;
 }
 
-void AsCrossJoin(TJoinTestData& td) {
-    td.Kind = EJoinKind::Cross;
+void AsKeylessJoin(TJoinTestData& td, EJoinKind kind) {
+    td.Kind = kind;
     td.LeftKeyColmns = {};
     td.RightKeyColmns = {};
+}
+
+void AsCrossJoin(TJoinTestData& td) {
+    AsKeylessJoin(td, EJoinKind::Cross);
+}
+
+TJoinTestData KeylessJoinCommonFilterTestData(EJoinKind kind) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 100};
+    TVector<ui64> rightKeys = {10, 20};
+    TVector<ui64> rightVals = {10, 50};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    td.JoinSettings.BuildSide = EBuildSide::Right;
+    AsKeylessJoin(td, kind);
+
+    if (kind == EJoinKind::Inner) {
+        TVector<ui64> expLeftKeys = {1, 1, 2};
+        TVector<ui64> expLeftVals = {5, 5, 20};
+        TVector<ui64> expRightKeys = {10, 20, 20};
+        TVector<ui64> expRightVals = {10, 50, 50};
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    } else if (kind == EJoinKind::Left) {
+        TVector<ui64> expLeftKeys = {1, 1, 2, 3};
+        TVector<ui64> expLeftVals = {5, 5, 20, 100};
+        TVector<std::optional<ui64>> expRightKeys = {10, 20, 20, std::nullopt};
+        TVector<std::optional<ui64>> expRightVals = {10, 50, 50, std::nullopt};
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    } else {
+        td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+        if (kind == EJoinKind::LeftSemi) {
+            TVector<ui64> expLeftKeys = {1, 2};
+            TVector<ui64> expLeftVals = {5, 20};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals);
+        } else {
+            UNIT_ASSERT(kind == EJoinKind::LeftOnly);
+            TVector<ui64> expLeftKeys = {3};
+            TVector<ui64> expLeftVals = {100};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals);
+        }
+    }
+    return td;
+}
+
+TJoinTestData KeylessLeftJoinCommonFilterTestDataLeftIsBuild() {
+    auto td = KeylessJoinCommonFilterTestData(EJoinKind::Left);
+    td.JoinSettings.BuildSide = EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData KeylessLeftJoinEmptyRightTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2};
+    TVector<ui64> leftVals = {5, 20};
+    TVector<ui64> empty;
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, empty, empty);
+    TVector<std::optional<ui64>> nulls(2, std::nullopt);
+    td.Result = ConvertVectorsToTuples(setup, leftKeys, leftVals, nulls, nulls);
+    AsKeylessJoin(td, EJoinKind::Left);
+    return td;
 }
 
 TJoinTestData TrueCrossJoinTestData() {
@@ -1501,6 +1763,12 @@ TJoinTestData TrueCrossJoinTestData() {
     td.Result =
         ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
     AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData TrueKeylessInnerJoinTestData() {
+    auto td = TrueCrossJoinTestData();
+    td.Kind = EJoinKind::Inner;
     return td;
 }
 
@@ -1735,6 +2003,72 @@ TJoinTestData MakeCrossJoinSpillingTestData(const TCrossSpillSpec& spec) {
     td.ExpectsSpilling = buildSize > 1;
     td.JoinSettings.BuildSide = spec.BuildSide;
     AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData KeylessPreservedProbeSpillingTestData(EJoinKind kind) {
+    constexpr int rightSize = 20000;
+    auto td = MakeCrossJoinSpillingTestData({
+        .LeftSize = 3,
+        .RightSize = rightSize,
+        .LeftValue = [](int index) {
+            // The first row has exactly one match, while the other two have none.
+            return index == 0 ? rightSize - 2 : rightSize + index;
+        },
+        .AddFilters = [](TJoinTestData& td) {
+            td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+        },
+        .WithExpectedResult = false,
+    });
+
+    auto& setup = *td.Setup;
+    if (kind == EJoinKind::Left) {
+        TVector<ui64> expLeftKeys = {0, 1, 2};
+        TVector<ui64> expLeftValues = {rightSize - 2, rightSize + 1, rightSize + 2};
+        TVector<std::optional<ui64>> expRightKeys = {2 * (rightSize - 1) + 3, std::nullopt, std::nullopt};
+        TVector<std::optional<ui64>> expRightValues = {rightSize - 1, std::nullopt, std::nullopt};
+        td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues, expRightKeys, expRightValues);
+    } else {
+        td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+        if (kind == EJoinKind::LeftSemi) {
+            TVector<ui64> expLeftKeys = {0};
+            TVector<ui64> expLeftValues = {rightSize - 2};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues);
+        } else {
+            UNIT_ASSERT(kind == EJoinKind::LeftOnly);
+            TVector<ui64> expLeftKeys = {1, 2};
+            TVector<ui64> expLeftValues = {rightSize + 1, rightSize + 2};
+            td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftValues);
+        }
+    }
+    AsKeylessJoin(td, kind);
+    return td;
+}
+
+TJoinTestData KeylessLeftJoinSpillingLeftIsBuildTestData() {
+    constexpr int leftSize = 5000;
+    auto td = MakeCrossJoinSpillingTestData({
+        .LeftSize = leftSize,
+        .RightSize = 1,
+        .BuildSide = EBuildSide::Left,
+        .LeftValue = [](int index) { return index; },
+        .RightValue = [](int) { return 1; },
+        .AddFilters = [](TJoinTestData& td) {
+            td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+        },
+        .WithExpectedResult = false,
+    });
+
+    TVector<ui64> expLeftKeys(leftSize);
+    TVector<ui64> expLeftValues(leftSize);
+    TVector<std::optional<ui64>> expRightKeys(leftSize, std::nullopt);
+    TVector<std::optional<ui64>> expRightValues(leftSize, std::nullopt);
+    std::iota(expLeftKeys.begin(), expLeftKeys.end(), 0);
+    std::iota(expLeftValues.begin(), expLeftValues.end(), 0);
+    expRightKeys[0] = 3;
+    expRightValues[0] = 1;
+    td.Result = ConvertVectorsToTuples(*td.Setup, expLeftKeys, expLeftValues, expRightKeys, expRightValues);
+    AsKeylessJoin(td, EJoinKind::Left);
     return td;
 }
 
@@ -2057,6 +2391,30 @@ void AssertOutputBufferBounded(const TOutputBlockStats& stats, i64 expectedTotal
                          << stats.MaxBlockRows << " rows) should be at most " << maxBlockBytes);
 }
 
+void PoisonNullUi64Slots(const NUdf::TUnboxedValue& blockList, ui32 column, ui64 leftover) {
+    NUdf::TUnboxedValue row;
+    auto iter = blockList.GetListIterator();
+    ui32 poisoned = 0;
+    while (iter.Next(row)) {
+        const auto col = row.GetElement(column);
+        const auto arr = TArrowBlock::From(col).GetDatum().array();
+        UNIT_ASSERT(arr);
+        UNIT_ASSERT(arr->buffers.size() >= 2 && arr->buffers[1]);
+        ui8* raw = arr->buffers[1]->mutable_data();
+        UNIT_ASSERT_C(raw, "null-slot leftover test needs a mutable values buffer");
+        auto* values = reinterpret_cast<ui64*>(raw) + arr->offset;
+        const ui8* bits = arr->buffers[0] ? arr->buffers[0]->data() : nullptr;
+        for (int64_t i = 0; i < arr->length; ++i) {
+            const bool isNull = bits && !arrow::BitUtil::GetBit(bits, arr->offset + i);
+            if (isNull) {
+                values[i] = leftover;
+                ++poisoned;
+            }
+        }
+    }
+    UNIT_ASSERT_GT(poisoned, 0);
+}
+
 void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     auto descr = MakeJoinDescription(testData);
     if (testData.JoinMemoryConstraint){
@@ -2080,6 +2438,55 @@ void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     if (testData.ExpectsSpilling && withSpiller) {
         AssertSpilled(*got);
     }
+}
+
+void RunFinalDumpSpillingIsBatchedTest() {
+    auto testData = FinalDumpSpillingTestData();
+    auto descr = MakeJoinDescription(testData);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+    THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+        testData.Kind, ETestedJoinAlgo::kBlockHash, descr, true, testData.JoinSettings);
+    auto spillerFactory = std::make_shared<TControlledWriteSpillerFactory>(
+        std::make_shared<TPreallocatedSpillerFactory>(32_MB));
+    graph->GetContext().SpillerFactory = spillerFactory;
+
+    const size_t tupleWidth = testData.Renames.size() + 1;
+    std::vector<NUdf::TUnboxedValue> output(tupleWidth);
+    auto stream = graph->GetValue();
+    i64 outputRows = 0;
+    bool stoppedRegularSpilling = false;
+    constexpr size_t MaxWritesPerPage = 2; // tuple page and optional probe match bitmap
+    constexpr size_t MaxPendingPuts = TestStorageSettings.SpillingPagesAtTime * MaxWritesPerPage;
+
+    while (true) {
+        const auto status = stream.WideFetch(output.data(), tupleWidth);
+        if (status == NYql::NUdf::EFetchStatus::Finish) {
+            break;
+        }
+        if (status == NYql::NUdf::EFetchStatus::Ok) {
+            outputRows += ArrowScalarAsInt(TArrowBlock::From(output.back()));
+            continue;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(status, NYql::NUdf::EFetchStatus::Yield);
+        const size_t pendingPuts = spillerFactory->PendingPuts();
+        if (pendingPuts == 0) {
+            continue;
+        }
+        UNIT_ASSERT_LE(pendingPuts, MaxPendingPuts);
+        if (!stoppedRegularSpilling) {
+            // Leave enough pages in memory for the end-of-input dump. Before the batching fix that dump
+            // submitted all of them at once instead of limiting the batch to SpillingPagesAtTime pages.
+            descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+            stoppedRegularSpilling = true;
+        }
+        spillerFactory->CompletePendingPuts();
+    }
+
+    UNIT_ASSERT(stoppedRegularSpilling);
+    UNIT_ASSERT_VALUES_EQUAL(outputRows, 0);
+    UNIT_ASSERT_GT(spillerFactory->TotalPuts(), static_cast<size_t>(TestStorageSettings.SpillingPagesAtTime * 2));
+    UNIT_ASSERT_LE(spillerFactory->MaxPendingPuts(), MaxPendingPuts);
 }
 
 // The mock spiller resolves every future at once, so the states that wait for spilling are only
@@ -2121,6 +2528,51 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestInnerJoinIntAndOptionalIntKey, BlockJoin) {
         Test(InnerJoinIntAndOptionalIntKeyTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNulls) {
+        Test(InnerJoinEqualNullsTestData(), /*blockJoin=*/true);
+    }
+
+    // arrow builders zero null slotsPoison
+    // poison leftover so hash/equality cannot
+    // rely on that and must canonicalize EqualNulls NULLs
+    Y_UNIT_TEST(TestInnerJoinEqualNullsDistinctNullSlotData) {
+        TJoinTestData td = InnerJoinEqualNullsTestData();
+        auto descr = MakeJoinDescription(td);
+        auto dummy = td.Setup->BuildGraph(td.Setup->PgmBuilder->NewDataLiteral<ui64>(0));
+        auto& ctx = dummy->GetContext();
+        NUdf::TUnboxedValue leftBlocks = ToBlocks(ctx, td.BlockSize, descr.LeftSource.ColumnTypes, td.Left.Value);
+        NUdf::TUnboxedValue rightBlocks = ToBlocks(ctx, td.BlockSize, descr.RightSource.ColumnTypes, td.Right.Value);
+        PoisonNullUi64Slots(leftBlocks, td.LeftKeyColmns[0], 0x1111111111111111ull);
+        PoisonNullUi64Slots(rightBlocks, td.RightKeyColmns[0], 0x2222222222222222ull);
+        descr.InputsAreBlocks = true;
+        descr.LeftSource.ValuesList = leftBlocks;
+        descr.RightSource.ValuesList = rightBlocks;
+
+        THolder<IComputationGraph> got = ConstructJoinGraphStream(
+            td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+        CompareListAndBlockStreamIgnoringOrder(td.Result, *got);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNullsNullVsZero) {
+        Test(InnerJoinEqualNullsNullVsZeroTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNullsCompositeKey) {
+        Test(InnerJoinEqualNullsCompositeKeyTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinEqualNulls) {
+        Test(LeftJoinEqualNullsTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinEqualNullsSecondKeyOnly) {
+        Test(InnerJoinEqualNullsSecondKeyOnlyTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestInnerJoinNullKeysDoNotMatchByDefault, BlockJoin) {
+        Test(InnerJoinNullKeysDoNotMatchByDefaultTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST_TWIN(TestEmptyFlows, BlockJoin) {
@@ -2354,6 +2806,54 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), true);
     }
 
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::Left), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashKeylessLeftJoinCommonFilterLeftIsBuild) {
+        Test(KeylessLeftJoinCommonFilterTestDataLeftIsBuild(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftSemi), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::LeftOnly), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinEmptyRight, BlockJoin) {
+        Test(KeylessLeftJoinEmptyRightTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingRightIsBuild, BlockJoin) {
+        Test(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftJoinSpillingSlowSpiller, BlockJoin) {
+        TestWithSlowSpiller(KeylessPreservedProbeSpillingTestData(EJoinKind::Left), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftSemiJoinSpillingRightIsBuild, BlockJoin) {
+        Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftSemi), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessLeftOnlyJoinSpillingRightIsBuild, BlockJoin) {
+        Test(KeylessPreservedProbeSpillingTestData(EJoinKind::LeftOnly), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashKeylessLeftJoinSpillingLeftIsBuild) {
+        Test(KeylessLeftJoinSpillingLeftIsBuildTestData(), /*blockJoin=*/true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoin, BlockJoin) {
+        Test(TrueKeylessInnerJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashKeylessInnerJoinCommonFilter, BlockJoin) {
+        Test(KeylessJoinCommonFilterTestData(EJoinKind::Inner), BlockJoin);
+    }
+
     Y_UNIT_TEST_TWIN(TestHashCrossJoin, BlockJoin) {
         Test(TrueCrossJoinTestData(), BlockJoin);
     }
@@ -2469,6 +2969,9 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestBlockSpilling) { 
         Test(SpillingTestData(), true);
     }
+    Y_UNIT_TEST(TestFinalDumpSpillingIsBatched) {
+        RunFinalDumpSpillingIsBatchedTest();
+    }
 
     Y_UNIT_TEST(TestBlockJoinWithoutSpilling) {
         Test(BasicInnerJoinTestData(), true, false);
@@ -2533,6 +3036,37 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     Y_UNIT_TEST(TestOutputBufferBoundedCrossJoinSpilling) {
         auto td = CrossJoinOutputBufferBoundedSpillingTestData();
         AssertOutputBufferBounded(MeasureOutputBlocks(td), 8 * 20000);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TDqHashJoinSettingsCompatibilityTest) {
+    Y_UNIT_TEST(NewRuntimeReadsOldSettingsTuple) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        const auto oldSettings = pb.NewTuple({pb.NewDataLiteral(static_cast<ui32>(EBuildSide::Left))});
+
+        const auto parsed = ParseHashJoinSettingsTuple(oldSettings);
+        UNIT_ASSERT_EQUAL(parsed.BuildSide, EBuildSide::Left);
+        UNIT_ASSERT(parsed.EqualNullsKeys.empty());
+    }
+
+    Y_UNIT_TEST(OldRuntimeIgnoresNewSettingsField) {
+        TDqSetup<false> setup;
+        auto& pb = setup.GetDqProgramBuilder();
+        const TVector<ui32> keys = {0, 2};
+        const auto newSettings = pb.NewTuple({
+            pb.NewDataLiteral(static_cast<ui32>(EBuildSide::Left)),
+            pb.AsTuple(keys),
+        });
+        const auto* tuple = AS_VALUE(TTupleLiteral, newSettings);
+
+        // This is exactly how the pre-EqualNulls runtime parsed settings.
+        const auto oldBuildSide =
+            static_cast<EBuildSide>(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().Get<ui32>());
+        UNIT_ASSERT_EQUAL(oldBuildSide, EBuildSide::Left);
+
+        const auto parsed = ParseHashJoinSettingsTuple(newSettings);
+        UNIT_ASSERT_VALUES_EQUAL(parsed.EqualNullsKeys, keys);
     }
 }
 } // namespace NKikimr::NMiniKQL

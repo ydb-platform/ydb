@@ -517,7 +517,7 @@ namespace NKikimr::NBsController {
             for (const TPDiskId& pdiskId : state.PDisksToRemove) {
                 TPDiskInfo *pdiskInfo = state.PDisks.FindForUpdate(pdiskId);
                 Y_ABORT_UNLESS(pdiskInfo);
-                if (pdiskInfo->NumActiveSlots) {
+                if (pdiskInfo->NumActiveDynamicSlots) {
                     *errorDescription = TStringBuilder() << "failed to remove PDisk# " << pdiskId << " as it has active VSlots";
                     return false;
                 }
@@ -644,6 +644,7 @@ namespace NKikimr::NBsController {
             CommitSelfHealUpdates(state);
             CommitScrubUpdates(state, txc);
             CommitStoragePoolStatUpdates(state);
+            CommitDatabaseSpaceUpdates(state, db); // uses group status flags computed by CommitStoragePoolStatUpdates
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
             CommitShredUpdates(state);
@@ -663,14 +664,14 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT_UNLESS(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
                 }
 
-                // Keep node->group subscription in commit path: dynamic groups may appear
-                // after initial RegisterNode, and cleanup for the same index is done below.
+                // Keep subscriptions for placements added after RegisterNode on the current connection.
+                // Disconnected nodes will subscribe to their live placements when they register again.
                 if (overlay->second && !overlay->second->IsBeingDeleted()) {
                     const TGroupId groupId = overlay->second->GroupId;
                     if (NKikimr::IsDynamicGroup(groupId)) {
                         const TNodeId nodeId = overlay->second->VSlotId.NodeId;
                         auto& node = GetNode(nodeId);
-                        if (node.GroupsRequested.insert(groupId).second) {
+                        if (node.ConnectedServerId && node.GroupsRequested.insert(groupId).second) {
                             GroupToNode.emplace(groupId, nodeId);
                         }
                     }
@@ -830,6 +831,36 @@ namespace NKikimr::NBsController {
             }
         }
 
+        void TBlobStorageController::CommitDatabaseSpaceUpdates(TConfigState& state, NIceDb::TNiceDb& db) {
+            {
+                TDatabaseSpaceTracker::TBatch batch(DatabaseSpace);
+
+                // created/changed/deleted groups (group may change its storage pool or stop being a physical one);
+                // done first, so that deleted pools have no groups left
+                for (const auto& [base, overlay] : state.Groups.Diff()) {
+                    if (overlay->second) {
+                        UpdateDatabaseSpaceGroup(*overlay->second);
+                    } else {
+                        DatabaseSpace.RemoveGroup(overlay->first);
+                    }
+                }
+
+                // created/changed/deleted storage pools (name and scope may change)
+                for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
+                    if (cur) {
+                        UpdateDatabaseSpacePool(cur->first, cur->second);
+                    } else {
+                        DatabaseSpace.RemovePool(prev->first);
+                        // the persisted hysteresis latch goes away along with the pool
+                        const auto& [boxId, storagePoolId] = prev->first;
+                        db.Table<Schema::DatabaseSpaceExhaustedPool>().Key(boxId, storagePoolId).Delete();
+                    }
+                }
+            }
+
+            CommitDatabaseSpaceChanges(db);
+        }
+
         void TBlobStorageController::CommitSysViewUpdates(TConfigState& state) {
             for (const auto& [base, overlay] : state.PDisks.Diff()) {
                 SysViewChangedPDisks.insert(overlay->first);
@@ -924,7 +955,7 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(pdisk);
             const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
             Y_ABORT_UNLESS(group);
-            pdisk->NumActiveSlots -= pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+            pdisk->NumActiveDynamicSlots -= pdisk->GetOwnerWeight(group->GroupSizeInUnits);
 
             if (UncommittedVSlots.erase(vslotId)) {
                 const ui32 erased = pdisk->VSlotsOnPDisk.erase(vslotId.VSlotId);
@@ -950,7 +981,7 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::TConfigState::CheckConsistency() const {
 #ifndef NDEBUG
             PDisks.ForEach([&](const auto& pdiskId, const auto& pdisk) {
-                ui32 numActiveSlots = 0;
+                ui32 numActiveDynamicSlots = 0;
                 for (const auto& [vslotId, vslot] : pdisk.VSlotsOnPDisk) {
                     const TVSlotInfo *vslotInTable = VSlots.Find(TVSlotId(pdiskId, vslotId));
                     Y_ABORT_UNLESS(vslot == vslotInTable);
@@ -958,10 +989,10 @@ namespace NKikimr::NBsController {
                     if (!vslot->IsBeingDeleted()) {
                         const TGroupInfo *group = Groups.Find(vslot->GroupId);
                         Y_ABORT_UNLESS(group);
-                        numActiveSlots += pdisk.GetOwnerWeight(group->GroupSizeInUnits);
+                        numActiveDynamicSlots += pdisk.GetOwnerWeight(group->GroupSizeInUnits);
                     }
                 }
-                Y_ABORT_UNLESS(pdisk.NumActiveSlots == numActiveSlots);
+                Y_ABORT_UNLESS(pdisk.NumActiveDynamicSlots == numActiveDynamicSlots);
             });
             VSlots.ForEach([&](const auto& vslotId, const auto& vslot) {
                 Y_ABORT_UNLESS(vslot.VSlotId == vslotId);
@@ -1176,7 +1207,7 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(pdisk.BoxId);
             pb->SetNumStaticSlots(pdisk.StaticSlotUsage);
             pb->SetDriveStatus(pdisk.Status);
-            pb->SetExpectedSlotCount(pdisk.GetEffectiveExpectedSlotCount());
+            pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
             pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
             pb->SetDriveStatusChangeTimestamp(pdisk.StatusTimestamp.GetValue());
             pb->SetDecommitStatus(pdisk.DecommitStatus);
@@ -1409,6 +1440,8 @@ namespace NKikimr::NBsController {
             settings->AddGroupReservePartPPM(GroupReservePart);
             settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
             settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->AddDatabaseSpaceBlockColor(DatabaseSpace.GetBlockColor());
+            settings->AddDatabaseSpaceUnblockColor(DatabaseSpace.GetUnblockColor());
             settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
             // TODO: settings->AddSerialManagementStage(SerialManagementStage);
             settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);

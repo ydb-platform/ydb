@@ -77,6 +77,13 @@ eventually handled, and every enabled model transition is eventually selected.
 An unbounded sequence of crashes, permanently hung process without a timeout,
 or permanently unavailable storage intentionally invalidates this claim.
 
+The explicit `mode: deploy` cluster hold is outside this finite-work model:
+it can remain active indefinitely until the user requests release. Its queue
+contract is tested separately: release is durable and idempotent, and completion
+requires confirmed cleanup before the next queued run is admitted. The model's
+`eventually_terminal` claim must not be interpreted as automatic release of a
+held cluster, nor as proof of distributed lease or recovery behavior.
+
 ## Counterexamples found while developing the model
 
 SPIN exposed four distinct protocol/model defects before the final run:

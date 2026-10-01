@@ -15,6 +15,7 @@ SRCS(
     ut_db_iface.cpp
     ut_db_scheme.cpp
     flat_executor_ut.cpp
+    flat_executor_alter_ut.cpp
     flat_executor_database_ut.cpp
     flat_executor_gclogic_ut.cpp
     flat_executor_leases_ut.cpp
@@ -24,6 +25,7 @@ SRCS(
     flat_test_db.h
     flat_test_db.cpp
     flat_test_db_helpers.h
+    shared_cache_btree_walk_ut.cpp
     shared_cache_s3fifo_ut.cpp
     shared_cache_tiered_ut.cpp
     shared_handle_ut.cpp
@@ -31,6 +33,7 @@ SRCS(
     ut_btree_index_iter_charge.cpp
     ut_self.cpp
     ut_iterator.cpp
+    ut_key_blocks.cpp
     ut_memtable.cpp
     ut_sausage.cpp
     ut_stat.cpp

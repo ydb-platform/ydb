@@ -88,8 +88,11 @@ void TStatisticsAggregator::HandleConfig(NConsole::TEvConsole::TEvConfigNotifica
 
         bool enableColumnStatisticsOld = EnableColumnStatistics;
         EnableColumnStatistics = featureFlags.GetEnableColumnStatistics();
+        EnableBackgroundAnalyzeChangeRatio = featureFlags.GetEnableBackgroundAnalyzeChangeRatio();
+        EnableAnalyzeSampling = featureFlags.GetEnableAnalyzeSampling();
         if (!enableColumnStatisticsOld && EnableColumnStatistics) {
             InitializeStatisticsTable();
+            StartTraversalScheduler();
         }
     }
 
@@ -569,6 +572,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvSaveStatisticsQueryResponse
         {"tabletId", TabletID()},
         {"success", ev->Get()->Success});
 
+    if (!SaveQueryActorId || ev->Sender != SaveQueryActorId) {
+        return;
+    }
+
     SaveQueryActorId = {};
 
     if (ev->Get()->Success) {
@@ -710,8 +717,9 @@ void TStatisticsAggregator::SaveStatisticsToTable() {
     };
 
     if (items.empty()) {
-        Send(SelfId(), new TEvStatistics::TEvSaveStatisticsQueryResponse(
-            Ydb::StatusIds::SUCCESS, {}, TraversalPathId));
+        if (!AnalyzeActorId) {
+            DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS);
+        }
         return;
     }
     size_t itemsSize = items.size();
@@ -770,14 +778,6 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ForceTraversalOperationId);
                 TraversalDatabase = operation.DatabaseName;
                 TraversalPathId = operationTable.PathId;
-
-                if (!*isKnown) {
-                    YDB_LOG_DEBUG("ScheduleNextAnalyze. table was deleted, deleting its statistics",
-                        {"tabletId", TabletID()},
-                        {"pathId", operationTable.PathId});
-                    DeleteStatisticsFromTable();
-                    return;
-                }
 
                 TraversalStartTime = TInstant::Now();
                 LastTraversalWasForce = true;
@@ -925,7 +925,7 @@ void TStatisticsAggregator::FinishTraversal(
     ReportAnalyzeCounters();
 
     // When a background traversal completes successfully, check whether there
-    // are pending force (user-initiated) ANALYZE requests for the same table
+    // are pending force (user-initiated) full ANALYZE requests for the same table
     // that have not started yet. If so, mark them as finished — the background
     // traversal just collected the same statistics, so re-traversing would be
     // redundant. This deduplication only applies to background traversals;
@@ -937,7 +937,8 @@ void TStatisticsAggregator::FinishTraversal(
             }
             for (auto& table : operation.Tables) {
                 if (table.PathId == pathId
-                        && table.Status == TForceTraversalTable::EStatus::None) {
+                        && table.Status == TForceTraversalTable::EStatus::None
+                        && table.SampleRate == 1.0) {
                     UpdateForceTraversalTableStatus(
                         TForceTraversalTable::EStatus::TraversalFinished,
                         operation.OperationId, table, db);
@@ -1204,6 +1205,7 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
     const ui64 maxStateBytes = std::max<ui64>(1, std::min<ui64>(
         StatisticsConfig.GetAnalyzeHistogramMaxStateBytes(),
         TAnalyzeActor::MaxStatisticSize));
+    const auto* table = ForceTraversalTable(operationId, pathId);
     auto analyzeActorConfig = TAnalyzeActor::TConfig{
         .MaxTotalScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
         .MaxPerNodeScanActorsInFlight = StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
@@ -1213,9 +1215,10 @@ void TStatisticsAggregator::StartAnalyzeActor(const TActorContext& ctx, const TS
         .CollectPrimaryKeyHistogram = StatisticsConfig.GetAnalyzeCollectPrimaryKeyHistogram(),
         .HistogramOversampleFactor = oversampleFactor,
         .HistogramMaxStateBytes = maxStateBytes,
+        .SampleRate = table ? table->SampleRate : 1.0,
     };
     AnalyzeActorId = ctx.Register(new TAnalyzeActor(
-        SelfId(), operationId, database, pathId, columnTags, analyzeActorConfig),
+        SelfId(), operationId, database, pathId, table ? table->ColumnTags : columnTags, analyzeActorConfig),
         TMailboxType::HTSwap, AppData()->BatchPoolId);
 }
 
@@ -1229,6 +1232,8 @@ void TStatisticsAggregator::ResetTraversalState(NIceDb::TNiceDb& db) {
         AnalyzeActorId = {};
     }
     SaveQueryActorId = {};
+    PendingSaveStatistics = false;
+    FinishingTraversal = false;
     PersistTraversal(db);
 
     StatisticsToSave.clear();
@@ -1445,6 +1450,9 @@ const NKikimrStat::TPathEntry* TStatisticsAggregator::FindBaseStatisticsEntry(
 bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
     const TChangeCounters& lastAnalyze, const TChangeCounters& current) const
 {
+    if (!EnableBackgroundAnalyzeChangeRatio) {
+        return false;
+    }
     if (lastAnalyze.RowUpdates == Max<ui64>() || lastAnalyze.RowDeletes == Max<ui64>()) {
         // Never analyzed — but only treat as stale once SchemeShard has sent
         // real counters. Otherwise FinishTraversal would keep baselining at

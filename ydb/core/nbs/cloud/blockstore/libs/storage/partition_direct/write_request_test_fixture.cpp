@@ -39,7 +39,7 @@ void TWriteRequestTestFixture::Init()
         (ui32 vChunkIndex,
          ui8 hostIndex,
          TPBufferKey pBufferKey,
-         TBlockRange64 range,
+         TBlockRange16 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
@@ -61,7 +61,7 @@ void TWriteRequestTestFixture::Init()
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
             TPBufferKey pBufferKey,
-            TBlockRange64 range,
+            TBlockRange16 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId,
@@ -143,7 +143,7 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
             TPBufferKey pBufferKey,
-            TBlockRange64 range,
+            TBlockRange16 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId,

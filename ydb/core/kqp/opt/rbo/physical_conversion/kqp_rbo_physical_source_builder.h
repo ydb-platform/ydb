@@ -8,14 +8,19 @@ using namespace NKikimr::NKqp;
 
 class TPhysicalSourceBuilder: public TPhysicalNullaryOpBuilder {
 public:
-    TPhysicalSourceBuilder(TIntrusivePtr<TOpRead> read, TExprContext& ctx, TPositionHandle pos, const TString& stageGUID)
-        : TPhysicalNullaryOpBuilder(ctx, pos)
+    TPhysicalSourceBuilder(TOpRead& read, TExprContext& ctx, TPositionHandle pos, const TPhysicalNames& names,
+        const TInfoUnitRegistry& registry, const TString& stageGUID, TString carrierColumn = {})
+        : TPhysicalNullaryOpBuilder(ctx, pos, names)
         , Read(read)
-        , StageGUID(stageGUID) {}
+        , Registry(registry)
+        , StageGUID(stageGUID)
+        , CarrierColumn(std::move(carrierColumn)) {}
 
     TExprNode::TPtr BuildPhysicalOp() override;
 
 private:
-    TIntrusivePtr<TOpRead> Read;
+    TOpRead& Read;
+    const TInfoUnitRegistry& Registry;
     TString StageGUID;
+    TString CarrierColumn;
 };

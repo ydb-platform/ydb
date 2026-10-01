@@ -226,9 +226,8 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountReadQuoter::MakeCountersUpdat
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, true, User);
 }
 
-TLogPrefix TAccountReadQuoter::BuildLogPrefix() const {
+TStructuredMessage TAccountReadQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "AccountReadQuoter"},
         {"topic", TopicConverter->GetClientsideName()},
         {"partition", Partition.ToString()},
         {"consumer", User});
@@ -263,7 +262,6 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 ) {
     TQuoterParams params;
     const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    AFL_ENSURE(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
     auto topicPath = topicConverter->GetFederationPath();
 
     auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
@@ -287,9 +285,8 @@ THolder<NAccountQuoterEvents::TEvCounters> TAccountWriteQuoter::MakeCountersUpda
     return MakeHolder<NAccountQuoterEvents::TEvCounters>(Counters, false, TString{});
 }
 
-TLogPrefix TAccountWriteQuoter::BuildLogPrefix() const {
+TStructuredMessage TAccountWriteQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "AccountWriteQuoter"},
         {"topic", TopicConverter->GetClientsideName()},
         {"partition", Partition.ToString()});
 }

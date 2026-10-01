@@ -47,6 +47,35 @@ namespace NKikimr::NDDisk {
         }
 
         creds.SerializeResolvedForRequest(record.MutableCredentials());
+        const auto ownershipStatus = IsBroken() ? NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR
+            : !PersistentBufferReady ? NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY
+            : CheckPersistentBufferOwnership(creds);
+        if (ownershipStatus != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
+            using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+            const TStringBuf errorReason = [&] {
+                switch (ownershipStatus) {
+                    case TStatus::ERROR:
+                        return TStringBuf("persistent buffer is broken");
+                    case TStatus::BUSY:
+                        return TStringBuf("persistent buffer is not ready yet");
+                    case TStatus::OUTDATED:
+                        return TStringBuf("persistent buffer registration is being retired");
+                    case TStatus::INCORRECT_REQUEST:
+                        return TStringBuf("persistent buffer is not registered");
+                    default:
+                        return TStringBuf("persistent buffer registration is not ready, registered, or active");
+                }
+            }();
+            auto result = std::make_unique<TEvWritePersistentBuffersResult>();
+            for (const auto& id : record.GetPersistentBufferIds()) {
+                auto* item = result->Record.AddResult();
+                item->MutablePersistentBufferId()->CopyFrom(id);
+                item->MutableResult()->SetStatus(ownershipStatus);
+                item->MutableResult()->SetErrorReason(errorReason.data(), errorReason.size());
+            }
+            SendReply(*ev, std::move(result));
+            return;
+        }
         if constexpr (requires { record.ChecksumsSize(); record.GetSelector(); }) {
             if (!Config.EnableChecksums) {
                 // Do not forward sender-supplied checksums into the checksum-less PB v0 format.
@@ -426,6 +455,9 @@ namespace {
 
         for (auto& [key, allocation] : DataChunkAllocationsInFlight) {
             Y_UNUSED(key);
+            if (!allocation.LogIssued) {
+                PendingChunkRelease.insert(allocation.ChunkIdx);
+            }
             for (auto& parked : allocation.ParkedWriteResults) {
                 parked.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
                 parked.ErrorMessage = GetBrokenReason();
@@ -480,6 +512,16 @@ namespace {
                 && ev->Cookie == PBShutdownCookie && ev->Sender == PersistentBufferActorId) {
             PersistentBufferGone = true;
             TryCompleteStop();
+            return;
+        }
+        if (sourceType == NPDisk::TEvChunkReserve::EventType && ReserveInFlight) {
+            ReserveInFlight = false;
+            BeginStopping("PDisk reserve request was not delivered");
+            TryCompleteStop();
+            return;
+        }
+        if (sourceType == NPDisk::TEvChunkForget::EventType && ev->Cookie == StartupForgetCookie) {
+            BeginStopping("PDisk startup forget request was not delivered");
             return;
         }
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
@@ -548,6 +590,7 @@ namespace {
 
             hFunc(NPDisk::TEvYardInitResult, Handle)
             hFunc(NPDisk::TEvReadLogResult, Handle)
+            hFunc(NPDisk::TEvChunkForgetResult, Handle)
             cFunc(TEvPrivate::EvHandleSingleQuery, HandleSingleQuery)
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
             hFunc(NPDisk::TEvLogResult, Handle)
@@ -594,6 +637,11 @@ namespace {
             }
         }
         STRICT_STFUNC_BODY(
+            hFunc(TEvGetPersistentBufferRegistrationToken, Handle)
+            hFunc(TEvPrivate::TEvExpirePersistentBufferRegistrationToken, Handle)
+            hFunc(TEvRegisterPersistentBuffer, Handle)
+            hFunc(TEvUnregisterPersistentBuffer, Handle)
+            hFunc(TEvPrivate::TEvProcessPersistentBufferRemoval, Handle)
             hFunc(TEvConnect, Handle)
             hFunc(TEvDisconnect, Handle)
             hFunc(TEvWritePersistentBuffer, Handle)
@@ -676,6 +724,9 @@ namespace {
             REJECT_QUERY(Write, &Counters.Interface.Write)
             REJECT_QUERY(Read, &Counters.Interface.Read)
             REJECT_QUERY(Sync, &Counters.Interface.Sync)
+            REJECT_QUERY(GetPersistentBufferRegistrationToken, &Counters.Interface.GetPersistentBufferRegistrationToken)
+            REJECT_QUERY(RegisterPersistentBuffer, nullptr)
+            REJECT_QUERY(UnregisterPersistentBuffer, nullptr)
             REJECT_QUERY(DeleteTabletChunks, nullptr)
             REJECT_QUERY(WritePersistentBuffer, &Counters.Interface.WritePersistentBuffer)
             REJECT_QUERY(ReadPersistentBuffer, &Counters.Interface.ReadPersistentBuffer)
@@ -803,6 +854,9 @@ namespace {
             hFunc(TEvWrite, reject)
             hFunc(TEvRead, reject)
             hFunc(TEvSync, reject)
+            hFunc(TEvGetPersistentBufferRegistrationToken, reject)
+            hFunc(TEvRegisterPersistentBuffer, reject)
+            hFunc(TEvUnregisterPersistentBuffer, reject)
             hFunc(TEvDeleteTabletChunks, reject)
             hFunc(TEvWritePersistentBuffer, reject)
             hFunc(TEvReadPersistentBuffer, reject)
@@ -827,6 +881,7 @@ namespace {
             cFunc(TEvPrivate::EvFinishStopping, FinishStopping)
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
+            hFunc(NPDisk::TEvChunkReserveResult, HandleStopping)
             hFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
             default:
@@ -851,6 +906,7 @@ namespace {
             return;
         }
         Stopping = true;
+        PersistentBufferRegistrationTokens.clear();
         Become(&TThis::StateFuncStopping);
         YDB_LOG_NOTICE("DDisk stopping", {"DDiskId", DDiskId}, {"reason", reason});
         if (IsPersistentBufferActor) {
@@ -876,7 +932,7 @@ namespace {
             // Includes fallback: cancellation results must precede destruction.
             Send(SelfId(), new TEvPrivate::TEvFinishStopping);
         }
-        if (previous || !PersistentBufferGone) {
+        if (previous || !PersistentBufferGone || ReserveInFlight) {
             Schedule(StopIoTimeout, new TEvPrivate::TEvStopIoTimeout);
         }
     }
@@ -889,7 +945,7 @@ namespace {
     }
 
     void TDDiskActor::TryCompleteStop() {
-        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone) {
+        if (!PoisonReceived || !OwnDrainComplete || !PersistentBufferGone || ReserveInFlight) {
             return;
         }
 #if defined(__linux__)
@@ -897,6 +953,8 @@ namespace {
 #endif
         CountersBase->RemoveSubgroupChain(CountersChain);
         if (IsPersistentBufferActor) {
+            Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()),
+                new NNodeWhiteboard::TEvWhiteboard::TEvDDiskStateDelete(BaseInfo.PDiskId, BaseInfo.VDiskSlotId, BaseInfo.InitOwnerRound));
             if (ParentDDiskId) {
                 Send(ParentDDiskId, new TEvents::TEvGone());
             }
@@ -932,6 +990,9 @@ namespace {
             IoStalledCounter->Inc();
             YDB_LOG_ERROR("TDDiskActor I/O stalled during shutdown",
                 {"DDiskId", DDiskId}, {"persistentBuffer", IsPersistentBufferActor});
+        }
+        if (ReserveInFlight) {
+            YDB_LOG_ERROR("DDisk waiting for outstanding reservation", {"DDiskId", DDiskId});
         }
         if (!PersistentBufferGone) {
             YDB_LOG_ERROR("DDisk waiting for PersistentBuffer shutdown", {"DDiskId", DDiskId},
@@ -971,6 +1032,7 @@ namespace {
             FlushParkedAllocationReplies(allocation);
         }
         ClearIoStalled();
+        ReleaseUncommittedChunks();
         // A queued retry can have posted a cancellation result ahead of this
         // barrier. Do not let child Gone bypass that final result turn.
         Send(SelfId(), new TEvPrivate::TEvCompleteStop);

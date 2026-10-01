@@ -14,6 +14,8 @@ using TDirectBlockGroupsConnections =
     ::NYdb::NBS::PartitionDirect::NProto::TDirectBlockGroupsConnections;
 using TAddHostInProgress =
     ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+using TRemoveHostInProgress =
+    ::NYdb::NBS::PartitionDirect::NProto::TRemoveHostInProgress;
 
 using NYdb::NBS::NBlockStore::NStorage::TTestExecutor;
 
@@ -53,20 +55,17 @@ TDirectBlockGroupsConnections MakeSampleDirectBlockGroupsConnections()
     return msg;
 }
 
-TDirtyMapStateProto MakeSampleDirtyMapState(ui32 stateGeneration)
+TDirtyMapStateProto MakeSampleDirtyMapState()
 {
     TDirtyMapStateProto state;
-    state.SetStateGeneration(stateGeneration);
 
     auto* ddiskState = state.AddDDiskStates();
-    auto* ahead = ddiskState->MutableAhead();
-    ahead->SetRunLengthEncoding("ahead-rle");
     auto* behind = ddiskState->MutableBehind();
     behind->SetBitMask("behind-bit-mask");
 
     auto* secondDDiskState = state.AddDDiskStates();
-    auto* secondAhead = secondDDiskState->MutableAhead();
-    secondAhead->SetRunLengthEncoding("second-ahead-rle");
+    auto* secondBehind = secondDDiskState->MutableBehind();
+    secondBehind->SetRunLengthEncoding("second-behind-rle");
 
     return state;
 }
@@ -194,7 +193,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 TPartitionDatabase partitionDb(db);
                 TAddHostInProgress intent;
                 intent.SetDirectBlockGroupId(3);
-                intent.SetNewHostIndex(5);
+                intent.SetLiveHostCount(5);
                 intent.SetDBGConnectionsConfigGeneration(7);
                 partitionDb.StoreAddHostInProgress(intent);
             });
@@ -208,7 +207,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT(partitionDb.ReadAddHostInProgress(loaded));
                 UNIT_ASSERT(loaded.Defined());
                 UNIT_ASSERT_VALUES_EQUAL(3u, loaded->GetDirectBlockGroupId());
-                UNIT_ASSERT_VALUES_EQUAL(5u, loaded->GetNewHostIndex());
+                UNIT_ASSERT_VALUES_EQUAL(5u, loaded->GetLiveHostCount());
                 UNIT_ASSERT_VALUES_EQUAL(
                     7u,
                     loaded->GetDBGConnectionsConfigGeneration());
@@ -228,6 +227,77 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 TPartitionDatabase partitionDb(db);
                 TMaybe<TAddHostInProgress> loaded;
                 UNIT_ASSERT(partitionDb.ReadAddHostInProgress(loaded));
+                UNIT_ASSERT(!loaded.Defined());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreReadAndClearRemoveHostInProgress)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+            });
+
+        // Absent right after init.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TRemoveHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadRemoveHostInProgress(loaded));
+                UNIT_ASSERT(!loaded.Defined());
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TRemoveHostInProgress intent;
+                intent.SetDirectBlockGroupId(3);
+                intent.MutableDDiskId()->SetNodeId(102);
+                intent.MutableDDiskId()->SetPDiskId(1);
+                intent.MutableDDiskId()->SetDDiskSlotId(2);
+                intent.MutablePersistentBufferDDiskId()->SetNodeId(107);
+                intent.MutablePersistentBufferDDiskId()->SetPDiskId(1);
+                intent.MutablePersistentBufferDDiskId()->SetDDiskSlotId(7);
+                partitionDb.StoreRemoveHostInProgress(intent);
+            });
+
+        // Read back what was stored.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TRemoveHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadRemoveHostInProgress(loaded));
+                UNIT_ASSERT(loaded.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(3u, loaded->GetDirectBlockGroupId());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    102u,
+                    loaded->GetDDiskId().GetNodeId());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    107u,
+                    loaded->GetPersistentBufferDDiskId().GetNodeId());
+            });
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.ClearRemoveHostInProgress();
+            });
+
+        // Absent again after clear.
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMaybe<TRemoveHostInProgress> loaded;
+                UNIT_ASSERT(partitionDb.ReadRemoveHostInProgress(loaded));
                 UNIT_ASSERT(!loaded.Defined());
             });
     }
@@ -281,8 +351,6 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                         expected.GetTemporaryOfflinePBuffers() ==
                         cfg.GetTemporaryOfflinePBuffers());
                     UNIT_ASSERT(expected.GetDDisks() == cfg.GetDDisks());
-                    UNIT_ASSERT(
-                        expected.GetHealthyDDisks() == cfg.GetHealthyDDisks());
                     UNIT_ASSERT(
                         expected.GetDisabledHosts() == cfg.GetDisabledHosts());
                     UNIT_ASSERT_VALUES_EQUAL(
@@ -340,8 +408,6 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                     updated.GetTemporaryOfflinePBuffers() ==
                     stored.GetTemporaryOfflinePBuffers());
                 UNIT_ASSERT(updated.GetDDisks() == stored.GetDDisks());
-                UNIT_ASSERT(
-                    updated.GetHealthyDDisks() == stored.GetHealthyDDisks());
                 UNIT_ASSERT(
                     updated.GetDisabledHosts() == stored.GetDisabledHosts());
                 UNIT_ASSERT_VALUES_EQUAL(
@@ -410,7 +476,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
     Y_UNIT_TEST(ShouldStoreAndReadDirtyMapState)
     {
         TTestExecutor executor;
-        const auto written = MakeSampleDirtyMapState(7);
+        const auto written = MakeSampleDirtyMapState();
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)
@@ -433,7 +499,6 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(
                     written.SerializeAsString(),
                     state.SerializeAsString());
-                UNIT_ASSERT_VALUES_EQUAL(7u, state.GetStateGeneration());
                 UNIT_ASSERT_VALUES_EQUAL(2, state.DDiskStatesSize());
             });
     }
@@ -441,8 +506,8 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
     Y_UNIT_TEST(ShouldStoreDirtyMapStatePerVChunkIndependently)
     {
         TTestExecutor executor;
-        const auto first = MakeSampleDirtyMapState(1);
-        const auto second = MakeSampleDirtyMapState(2);
+        const auto first = MakeSampleDirtyMapState();
+        const auto second = MakeSampleDirtyMapState();
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)
@@ -462,10 +527,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(2u, loaded.size());
 
                 UNIT_ASSERT(loaded.contains(0));
-                UNIT_ASSERT_VALUES_EQUAL(1u, loaded.at(0).GetStateGeneration());
-
                 UNIT_ASSERT(loaded.contains(1));
-                UNIT_ASSERT_VALUES_EQUAL(2u, loaded.at(1).GetStateGeneration());
 
                 // A vchunk that was never written must be absent from the map.
                 UNIT_ASSERT(!loaded.contains(2));
@@ -481,10 +543,10 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TPartitionDatabase partitionDb(db);
                 partitionDb.InitSchema();
-                partitionDb.StoreDirtyMapState(5, MakeSampleDirtyMapState(1));
+                partitionDb.StoreDirtyMapState(5, MakeSampleDirtyMapState());
             });
 
-        const auto updated = MakeSampleDirtyMapState(99);
+        const auto updated = MakeSampleDirtyMapState();
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)
@@ -503,7 +565,6 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT(loaded.contains(5));
 
                 const auto& state = loaded.at(5);
-                UNIT_ASSERT_VALUES_EQUAL(99u, state.GetStateGeneration());
                 UNIT_ASSERT_VALUES_EQUAL(
                     updated.SerializeAsString(),
                     state.SerializeAsString());

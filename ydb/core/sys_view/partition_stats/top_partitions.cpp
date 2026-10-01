@@ -136,7 +136,7 @@ THolder<NActors::IActor> CreateTopPartitionsByCpuScan(const NActors::TActorId& o
         {ESysViewType::ETopPartitionsByCpuOneHour, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR},
     };
 
-    auto statusIter = nameToStatus.find(sysViewInfo.GetType());
+    auto statusIter = nameToStatus.find(static_cast<ESysViewType>(sysViewInfo.GetType()));
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
     return MakeHolder<TTopPartitionsByCpuScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);
@@ -162,7 +162,7 @@ THolder<NActors::IActor> CreateTopPartitionsByTliScan(const NActors::TActorId& o
         {ESysViewType::ETopPartitionsByTliOneHour, NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR},
     };
 
-    auto statusIter = nameToStatus.find(sysViewInfo.GetType());
+    auto statusIter = nameToStatus.find(static_cast<ESysViewType>(sysViewInfo.GetType()));
     Y_ABORT_UNLESS(statusIter != nameToStatus.end());
 
     return MakeHolder<TTopPartitionsByTliScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, statusIter->second);

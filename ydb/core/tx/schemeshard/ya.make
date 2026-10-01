@@ -120,6 +120,7 @@ SRCS(
     schemeshard__notify.cpp
     schemeshard__op_traits.h
     schemeshard__operation.cpp
+    schemeshard_operation_registry.cpp
     schemeshard__operation.h
     schemeshard__op_traits.cpp
     schemeshard__operation_alter_bsv.cpp
@@ -235,6 +236,7 @@ SRCS(
     schemeshard__root_shred_manager.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
+    schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp
@@ -303,6 +305,7 @@ SRCS(
     schemeshard_path.h
     schemeshard_path_describer.cpp
     schemeshard_path_element.cpp
+    schemeshard_path_db_ref.cpp
     schemeshard_path_element.h
     schemeshard_pq_helpers.cpp
     schemeshard_pq_helpers.h
@@ -404,6 +407,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/aclib/protos/identity
+    ydb/library/backup/proto
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer

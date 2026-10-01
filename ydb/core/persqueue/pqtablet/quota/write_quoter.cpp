@@ -24,9 +24,8 @@ TWriteQuoter::TWriteQuoter(
 {
 }
 
-TLogPrefix TWriteQuoter::BuildLogPrefix() const {
+TStructuredMessage TWriteQuoter::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "WriteQuoter"},
         {"partition", Partition.ToString()});
 }
 

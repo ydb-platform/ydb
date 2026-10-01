@@ -80,7 +80,7 @@ void EnsureSpecDoesntUseNativeYtTypes(const NYT::TNode& spec, TStringBuf tableNa
 
 TIssue MakeIssueFromYtError(const NYT::TYtError& e, TStringBuf what, TPosition pos = {}, bool shortErrors = false);
 
-TMaybe<TString> GenerateInputQuery(const TExprNode::TPtr& qlFilterNode);
+TMaybe<TString> GenerateInputQuery(const TExprNode::TPtr& qlFilterNode, ui32 depthLimit);
 
 TString UploadBinarySnapshotToYt(const TString& remotePath, NYT::IClientPtr client, NYT::ITransactionPtr snapshotTx,
     const TString& localPath, TDuration expirationInterval, const TMaybe<NYT::TNode>& transactionSpec = Nothing());

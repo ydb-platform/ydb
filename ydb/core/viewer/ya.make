@@ -125,26 +125,26 @@ IF (NOT EXPORT_CMAKE)
         monitoring/CHANGELOG.md monitoring/CHANGELOG.md
         monitoring/editor.worker.js monitoring/editor.worker.js
         monitoring/index.html monitoring/index.html
-        monitoring/static/css/36246.278c95da.css monitoring/static/css/36246.278c95da.css
+        monitoring/static/css/84925.f1072fcf.css monitoring/static/css/84925.f1072fcf.css
+        monitoring/static/css/async/14028.f09582d0.css monitoring/static/css/async/14028.f09582d0.css
         monitoring/static/css/async/15859.6d4b02c1.css monitoring/static/css/async/15859.6d4b02c1.css
         monitoring/static/css/async/17418.37c6b914.css monitoring/static/css/async/17418.37c6b914.css
+        monitoring/static/css/async/18988.e4fb1441.css monitoring/static/css/async/18988.e4fb1441.css
         monitoring/static/css/async/2026.2c4e6ced.css monitoring/static/css/async/2026.2c4e6ced.css
-        monitoring/static/css/async/22188.6c3229b4.css monitoring/static/css/async/22188.6c3229b4.css
         monitoring/static/css/async/23803.1fcd1b75.css monitoring/static/css/async/23803.1fcd1b75.css
-        monitoring/static/css/async/35361.dc101e4c.css monitoring/static/css/async/35361.dc101e4c.css
-        monitoring/static/css/async/40795.f09582d0.css monitoring/static/css/async/40795.f09582d0.css
-        monitoring/static/css/async/47070.117bea55.css monitoring/static/css/async/47070.117bea55.css
-        monitoring/static/css/async/51669.bae7fcb5.css monitoring/static/css/async/51669.bae7fcb5.css
-        monitoring/static/css/async/52280.688ffb32.css monitoring/static/css/async/52280.688ffb32.css
-        monitoring/static/css/async/63265.965184b9.css monitoring/static/css/async/63265.965184b9.css
+        monitoring/static/css/async/28398.26b35bef.css monitoring/static/css/async/28398.26b35bef.css
+        monitoring/static/css/async/33086.d7afacc4.css monitoring/static/css/async/33086.d7afacc4.css
+        monitoring/static/css/async/36730.26df63a9.css monitoring/static/css/async/36730.26df63a9.css
+        monitoring/static/css/async/43500.29fd2cec.css monitoring/static/css/async/43500.29fd2cec.css
+        monitoring/static/css/async/45541.bae7fcb5.css monitoring/static/css/async/45541.bae7fcb5.css
+        monitoring/static/css/async/45820.117bea55.css monitoring/static/css/async/45820.117bea55.css
         monitoring/static/css/async/72440.6342ce96.css monitoring/static/css/async/72440.6342ce96.css
-        monitoring/static/css/async/76904.26b35bef.css monitoring/static/css/async/76904.26b35bef.css
+        monitoring/static/css/async/76217.104322e9.css monitoring/static/css/async/76217.104322e9.css
         monitoring/static/css/async/77099.21b9dd4c.css monitoring/static/css/async/77099.21b9dd4c.css
-        monitoring/static/css/async/9951.3cab3189.css monitoring/static/css/async/9951.3cab3189.css
-        monitoring/static/css/index.001c7968.css monitoring/static/css/index.001c7968.css
+        monitoring/static/css/index.0736b98e.css monitoring/static/css/index.0736b98e.css
         monitoring/static/favicon.png monitoring/static/favicon.png
-        monitoring/static/js/36246.9991d34d.js monitoring/static/js/36246.9991d34d.js
-        monitoring/static/js/36246.9991d34d.js.LICENSE.txt monitoring/static/js/36246.9991d34d.js.LICENSE.txt
+        monitoring/static/js/84925.c3839623.js monitoring/static/js/84925.c3839623.js
+        monitoring/static/js/84925.c3839623.js.LICENSE.txt monitoring/static/js/84925.c3839623.js.LICENSE.txt
         monitoring/static/js/async/10103.2b987b59.js monitoring/static/js/async/10103.2b987b59.js
         monitoring/static/js/async/10183.8c539f92.js monitoring/static/js/async/10183.8c539f92.js
         monitoring/static/js/async/10273.40deb6ab.js monitoring/static/js/async/10273.40deb6ab.js
@@ -162,12 +162,13 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/12190.7acb500e.js monitoring/static/js/async/12190.7acb500e.js
         monitoring/static/js/async/12753.2b75a04f.js monitoring/static/js/async/12753.2b75a04f.js
         monitoring/static/js/async/12765.7f44f7d7.js monitoring/static/js/async/12765.7f44f7d7.js
-        monitoring/static/js/async/12984.f433fed3.js monitoring/static/js/async/12984.f433fed3.js
+        monitoring/static/js/async/12984.cfb4b165.js monitoring/static/js/async/12984.cfb4b165.js
         monitoring/static/js/async/13677.7595b2ae.js monitoring/static/js/async/13677.7595b2ae.js
         monitoring/static/js/async/13903.503e04f9.js monitoring/static/js/async/13903.503e04f9.js
         monitoring/static/js/async/13907.5419f8ae.js monitoring/static/js/async/13907.5419f8ae.js
         monitoring/static/js/async/13979.350001bb.js monitoring/static/js/async/13979.350001bb.js
         monitoring/static/js/async/13979.350001bb.js.LICENSE.txt monitoring/static/js/async/13979.350001bb.js.LICENSE.txt
+        monitoring/static/js/async/14028.2e8d6a65.js monitoring/static/js/async/14028.2e8d6a65.js
         monitoring/static/js/async/14095.e0c884f1.js monitoring/static/js/async/14095.e0c884f1.js
         monitoring/static/js/async/14095.e0c884f1.js.LICENSE.txt monitoring/static/js/async/14095.e0c884f1.js.LICENSE.txt
         monitoring/static/js/async/14323.2c384ec1.js monitoring/static/js/async/14323.2c384ec1.js
@@ -182,13 +183,14 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/1514.f953c72e.js monitoring/static/js/async/1514.f953c72e.js
         monitoring/static/js/async/15367.d8f40316.js monitoring/static/js/async/15367.d8f40316.js
         monitoring/static/js/async/15408.7e573b4b.js monitoring/static/js/async/15408.7e573b4b.js
-        monitoring/static/js/async/1557.4b2df0a1.js monitoring/static/js/async/1557.4b2df0a1.js
+        monitoring/static/js/async/1557.f8822701.js monitoring/static/js/async/1557.f8822701.js
         monitoring/static/js/async/15640.7d6f2319.js monitoring/static/js/async/15640.7d6f2319.js
         monitoring/static/js/async/15736.36200b96.js monitoring/static/js/async/15736.36200b96.js
         monitoring/static/js/async/15809.69c1aa15.js monitoring/static/js/async/15809.69c1aa15.js
         monitoring/static/js/async/15819.064fb058.js monitoring/static/js/async/15819.064fb058.js
-        monitoring/static/js/async/15859.643e5f78.js monitoring/static/js/async/15859.643e5f78.js
+        monitoring/static/js/async/15859.62aca23f.js monitoring/static/js/async/15859.62aca23f.js
         monitoring/static/js/async/16069.11e227e6.js monitoring/static/js/async/16069.11e227e6.js
+        monitoring/static/js/async/16416.8dcbc0fa.js monitoring/static/js/async/16416.8dcbc0fa.js
         monitoring/static/js/async/16919.e262ebda.js monitoring/static/js/async/16919.e262ebda.js
         monitoring/static/js/async/17161.abdb152f.js monitoring/static/js/async/17161.abdb152f.js
         monitoring/static/js/async/17386.3665b6fe.js monitoring/static/js/async/17386.3665b6fe.js
@@ -201,6 +203,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/18842.35d398ab.js monitoring/static/js/async/18842.35d398ab.js
         monitoring/static/js/async/18977.613fadf6.js monitoring/static/js/async/18977.613fadf6.js
         monitoring/static/js/async/18977.613fadf6.js.LICENSE.txt monitoring/static/js/async/18977.613fadf6.js.LICENSE.txt
+        monitoring/static/js/async/18988.cf1045ce.js monitoring/static/js/async/18988.cf1045ce.js
         monitoring/static/js/async/19133.7e5bb031.js monitoring/static/js/async/19133.7e5bb031.js
         monitoring/static/js/async/19133.7e5bb031.js.LICENSE.txt monitoring/static/js/async/19133.7e5bb031.js.LICENSE.txt
         monitoring/static/js/async/19312.650eeacf.js monitoring/static/js/async/19312.650eeacf.js
@@ -229,7 +232,6 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/21864.036be292.js monitoring/static/js/async/21864.036be292.js
         monitoring/static/js/async/21864.036be292.js.LICENSE.txt monitoring/static/js/async/21864.036be292.js.LICENSE.txt
         monitoring/static/js/async/2199.90b1c925.js monitoring/static/js/async/2199.90b1c925.js
-        monitoring/static/js/async/22188.cdc38188.js monitoring/static/js/async/22188.cdc38188.js
         monitoring/static/js/async/22322.ff416d52.js monitoring/static/js/async/22322.ff416d52.js
         monitoring/static/js/async/22385.1af7fcef.js monitoring/static/js/async/22385.1af7fcef.js
         monitoring/static/js/async/22622.0176d828.js monitoring/static/js/async/22622.0176d828.js
@@ -241,7 +243,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/2339.f0b01444.js monitoring/static/js/async/2339.f0b01444.js
         monitoring/static/js/async/2339.f0b01444.js.LICENSE.txt monitoring/static/js/async/2339.f0b01444.js.LICENSE.txt
         monitoring/static/js/async/23458.f964a304.js monitoring/static/js/async/23458.f964a304.js
-        monitoring/static/js/async/23803.48f59163.js monitoring/static/js/async/23803.48f59163.js
+        monitoring/static/js/async/23803.e3535ebf.js monitoring/static/js/async/23803.e3535ebf.js
         monitoring/static/js/async/24158.36a7595d.js monitoring/static/js/async/24158.36a7595d.js
         monitoring/static/js/async/24358.9dbaf936.js monitoring/static/js/async/24358.9dbaf936.js
         monitoring/static/js/async/24359.6dc92317.js monitoring/static/js/async/24359.6dc92317.js
@@ -277,6 +279,8 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/2817.9edae78a.js.LICENSE.txt monitoring/static/js/async/2817.9edae78a.js.LICENSE.txt
         monitoring/static/js/async/28242.9d6f9d6e.js monitoring/static/js/async/28242.9d6f9d6e.js
         monitoring/static/js/async/28331.297da9fb.js monitoring/static/js/async/28331.297da9fb.js
+        monitoring/static/js/async/28398.052cd37f.js monitoring/static/js/async/28398.052cd37f.js
+        monitoring/static/js/async/28398.052cd37f.js.LICENSE.txt monitoring/static/js/async/28398.052cd37f.js.LICENSE.txt
         monitoring/static/js/async/28442.16288050.js monitoring/static/js/async/28442.16288050.js
         monitoring/static/js/async/28498.d69b2c05.js monitoring/static/js/async/28498.d69b2c05.js
         monitoring/static/js/async/28531.c5c4cec7.js monitoring/static/js/async/28531.c5c4cec7.js
@@ -309,6 +313,8 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/32606.432e0aa7.js monitoring/static/js/async/32606.432e0aa7.js
         monitoring/static/js/async/33071.4560a0ae.js monitoring/static/js/async/33071.4560a0ae.js
         monitoring/static/js/async/33071.4560a0ae.js.LICENSE.txt monitoring/static/js/async/33071.4560a0ae.js.LICENSE.txt
+        monitoring/static/js/async/33086.e7898933.js monitoring/static/js/async/33086.e7898933.js
+        monitoring/static/js/async/33086.e7898933.js.LICENSE.txt monitoring/static/js/async/33086.e7898933.js.LICENSE.txt
         monitoring/static/js/async/33103.f4f1bc6e.js monitoring/static/js/async/33103.f4f1bc6e.js
         monitoring/static/js/async/33382.b60741b2.js monitoring/static/js/async/33382.b60741b2.js
         monitoring/static/js/async/34135.747ad134.js monitoring/static/js/async/34135.747ad134.js
@@ -316,8 +322,6 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/34195.c6de7051.js monitoring/static/js/async/34195.c6de7051.js
         monitoring/static/js/async/34801.bd23a818.js monitoring/static/js/async/34801.bd23a818.js
         monitoring/static/js/async/34930.34eac0f6.js monitoring/static/js/async/34930.34eac0f6.js
-        monitoring/static/js/async/35361.2967678a.js monitoring/static/js/async/35361.2967678a.js
-        monitoring/static/js/async/35361.2967678a.js.LICENSE.txt monitoring/static/js/async/35361.2967678a.js.LICENSE.txt
         monitoring/static/js/async/35540.b7a99ad9.js monitoring/static/js/async/35540.b7a99ad9.js
         monitoring/static/js/async/35548.84577723.js monitoring/static/js/async/35548.84577723.js
         monitoring/static/js/async/35659.b0672f99.js monitoring/static/js/async/35659.b0672f99.js
@@ -327,6 +331,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/35959.e0a5f202.js monitoring/static/js/async/35959.e0a5f202.js
         monitoring/static/js/async/3600.90798a79.js monitoring/static/js/async/3600.90798a79.js
         monitoring/static/js/async/36345.3c2b095b.js monitoring/static/js/async/36345.3c2b095b.js
+        monitoring/static/js/async/36730.36105139.js monitoring/static/js/async/36730.36105139.js
         monitoring/static/js/async/36765.ac1619d4.js monitoring/static/js/async/36765.ac1619d4.js
         monitoring/static/js/async/36870.7857b32a.js monitoring/static/js/async/36870.7857b32a.js
         monitoring/static/js/async/37164.bed8782b.js monitoring/static/js/async/37164.bed8782b.js
@@ -349,7 +354,6 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/40248.fbef77ca.js monitoring/static/js/async/40248.fbef77ca.js
         monitoring/static/js/async/40492.fb065c08.js monitoring/static/js/async/40492.fb065c08.js
         monitoring/static/js/async/40637.fad211d6.js monitoring/static/js/async/40637.fad211d6.js
-        monitoring/static/js/async/40795.b251674b.js monitoring/static/js/async/40795.b251674b.js
         monitoring/static/js/async/40842.5a2fd3b1.js monitoring/static/js/async/40842.5a2fd3b1.js
         monitoring/static/js/async/41169.4f955ae5.js monitoring/static/js/async/41169.4f955ae5.js
         monitoring/static/js/async/41212.41bde9b1.js monitoring/static/js/async/41212.41bde9b1.js
@@ -365,12 +369,13 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/42446.0087fe16.js monitoring/static/js/async/42446.0087fe16.js
         monitoring/static/js/async/42489.e5ca84d7.js monitoring/static/js/async/42489.e5ca84d7.js
         monitoring/static/js/async/42564.d4fb1f84.js monitoring/static/js/async/42564.d4fb1f84.js
-        monitoring/static/js/async/42613.a6551665.js monitoring/static/js/async/42613.a6551665.js
+        monitoring/static/js/async/42613.4ef32fed.js monitoring/static/js/async/42613.4ef32fed.js
         monitoring/static/js/async/42694.2283704e.js monitoring/static/js/async/42694.2283704e.js
         monitoring/static/js/async/42914.86418ece.js monitoring/static/js/async/42914.86418ece.js
         monitoring/static/js/async/43031.410e5f31.js monitoring/static/js/async/43031.410e5f31.js
         monitoring/static/js/async/43335.34771c33.js monitoring/static/js/async/43335.34771c33.js
         monitoring/static/js/async/43479.3881af6f.js monitoring/static/js/async/43479.3881af6f.js
+        monitoring/static/js/async/43500.18829538.js monitoring/static/js/async/43500.18829538.js
         monitoring/static/js/async/43646.9b890c13.js monitoring/static/js/async/43646.9b890c13.js
         monitoring/static/js/async/43749.3865f3cc.js monitoring/static/js/async/43749.3865f3cc.js
         monitoring/static/js/async/43815.21902b4b.js monitoring/static/js/async/43815.21902b4b.js
@@ -382,10 +387,12 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/44594.5145ad9e.js monitoring/static/js/async/44594.5145ad9e.js
         monitoring/static/js/async/45306.6d981d1d.js monitoring/static/js/async/45306.6d981d1d.js
         monitoring/static/js/async/45488.7382d15e.js monitoring/static/js/async/45488.7382d15e.js
+        monitoring/static/js/async/45541.af924fbc.js monitoring/static/js/async/45541.af924fbc.js
         monitoring/static/js/async/45565.f11494bf.js monitoring/static/js/async/45565.f11494bf.js
         monitoring/static/js/async/45565.f11494bf.js.LICENSE.txt monitoring/static/js/async/45565.f11494bf.js.LICENSE.txt
         monitoring/static/js/async/45723.3986a49e.js monitoring/static/js/async/45723.3986a49e.js
         monitoring/static/js/async/45723.3986a49e.js.LICENSE.txt monitoring/static/js/async/45723.3986a49e.js.LICENSE.txt
+        monitoring/static/js/async/45820.316979c8.js monitoring/static/js/async/45820.316979c8.js
         monitoring/static/js/async/45850.7c1e2dd1.js monitoring/static/js/async/45850.7c1e2dd1.js
         monitoring/static/js/async/46023.594375ac.js monitoring/static/js/async/46023.594375ac.js
         monitoring/static/js/async/46023.594375ac.js.LICENSE.txt monitoring/static/js/async/46023.594375ac.js.LICENSE.txt
@@ -397,14 +404,13 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/46635.f4fb6d47.js monitoring/static/js/async/46635.f4fb6d47.js
         monitoring/static/js/async/46704.4a97a70a.js monitoring/static/js/async/46704.4a97a70a.js
         monitoring/static/js/async/46815.9dfac84e.js monitoring/static/js/async/46815.9dfac84e.js
-        monitoring/static/js/async/47070.03cd72cd.js monitoring/static/js/async/47070.03cd72cd.js
         monitoring/static/js/async/47171.fc127ed1.js monitoring/static/js/async/47171.fc127ed1.js
         monitoring/static/js/async/47173.b189e37f.js monitoring/static/js/async/47173.b189e37f.js
         monitoring/static/js/async/47379.e846e3bd.js monitoring/static/js/async/47379.e846e3bd.js
         monitoring/static/js/async/47379.e846e3bd.js.LICENSE.txt monitoring/static/js/async/47379.e846e3bd.js.LICENSE.txt
         monitoring/static/js/async/47744.ef299837.js monitoring/static/js/async/47744.ef299837.js
         monitoring/static/js/async/48053.67f5901e.js monitoring/static/js/async/48053.67f5901e.js
-        monitoring/static/js/async/48269.545773c0.js monitoring/static/js/async/48269.545773c0.js
+        monitoring/static/js/async/48269.e8bb1a1d.js monitoring/static/js/async/48269.e8bb1a1d.js
         monitoring/static/js/async/48349.bf8ea4f9.js monitoring/static/js/async/48349.bf8ea4f9.js
         monitoring/static/js/async/48399.626a5af0.js monitoring/static/js/async/48399.626a5af0.js
         monitoring/static/js/async/48635.b797ede9.js monitoring/static/js/async/48635.b797ede9.js
@@ -419,7 +425,6 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/50499.91fd09bd.js.LICENSE.txt monitoring/static/js/async/50499.91fd09bd.js.LICENSE.txt
         monitoring/static/js/async/5087.b316f527.js monitoring/static/js/async/5087.b316f527.js
         monitoring/static/js/async/5122.e2ac3506.js monitoring/static/js/async/5122.e2ac3506.js
-        monitoring/static/js/async/51669.dd654bfb.js monitoring/static/js/async/51669.dd654bfb.js
         monitoring/static/js/async/51898.235b8f9f.js monitoring/static/js/async/51898.235b8f9f.js
         monitoring/static/js/async/51906.05bffa52.js monitoring/static/js/async/51906.05bffa52.js
         monitoring/static/js/async/51915.19c88301.js monitoring/static/js/async/51915.19c88301.js
@@ -430,7 +435,6 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/52257.aa53f23d.js monitoring/static/js/async/52257.aa53f23d.js
         monitoring/static/js/async/52257.aa53f23d.js.LICENSE.txt monitoring/static/js/async/52257.aa53f23d.js.LICENSE.txt
         monitoring/static/js/async/52270.9fe60058.js monitoring/static/js/async/52270.9fe60058.js
-        monitoring/static/js/async/52280.e6f2ee6a.js monitoring/static/js/async/52280.e6f2ee6a.js
         monitoring/static/js/async/52295.dc5370f7.js monitoring/static/js/async/52295.dc5370f7.js
         monitoring/static/js/async/52388.76402988.js monitoring/static/js/async/52388.76402988.js
         monitoring/static/js/async/52389.a5e6348f.js monitoring/static/js/async/52389.a5e6348f.js
@@ -474,6 +478,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/57566.5920620d.js monitoring/static/js/async/57566.5920620d.js
         monitoring/static/js/async/57615.142f709c.js monitoring/static/js/async/57615.142f709c.js
         monitoring/static/js/async/57865.36e5d43c.js monitoring/static/js/async/57865.36e5d43c.js
+        monitoring/static/js/async/58103.a5c45fef.js monitoring/static/js/async/58103.a5c45fef.js
         monitoring/static/js/async/58232.ab2b75d8.js monitoring/static/js/async/58232.ab2b75d8.js
         monitoring/static/js/async/58294.afdef38d.js monitoring/static/js/async/58294.afdef38d.js
         monitoring/static/js/async/58516.8d1da251.js monitoring/static/js/async/58516.8d1da251.js
@@ -505,7 +510,6 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/61887.073b4f5d.js monitoring/static/js/async/61887.073b4f5d.js
         monitoring/static/js/async/62258.16f55c87.js monitoring/static/js/async/62258.16f55c87.js
         monitoring/static/js/async/62565.d30d75e9.js monitoring/static/js/async/62565.d30d75e9.js
-        monitoring/static/js/async/63265.ed5f59d9.js monitoring/static/js/async/63265.ed5f59d9.js
         monitoring/static/js/async/63309.dd08a775.js monitoring/static/js/async/63309.dd08a775.js
         monitoring/static/js/async/63359.f6fef534.js monitoring/static/js/async/63359.f6fef534.js
         monitoring/static/js/async/6361.e055a317.js monitoring/static/js/async/6361.e055a317.js
@@ -595,18 +599,17 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/74784.c2248024.js monitoring/static/js/async/74784.c2248024.js
         monitoring/static/js/async/75308.3f92647d.js monitoring/static/js/async/75308.3f92647d.js
         monitoring/static/js/async/75768.91febbfa.js monitoring/static/js/async/75768.91febbfa.js
+        monitoring/static/js/async/76217.2481d49f.js monitoring/static/js/async/76217.2481d49f.js
         monitoring/static/js/async/76241.3297360c.js monitoring/static/js/async/76241.3297360c.js
         monitoring/static/js/async/76306.e28a1353.js monitoring/static/js/async/76306.e28a1353.js
         monitoring/static/js/async/76436.c4a5ca76.js monitoring/static/js/async/76436.c4a5ca76.js
-        monitoring/static/js/async/76904.6cb7109b.js monitoring/static/js/async/76904.6cb7109b.js
-        monitoring/static/js/async/76904.6cb7109b.js.LICENSE.txt monitoring/static/js/async/76904.6cb7109b.js.LICENSE.txt
         monitoring/static/js/async/76935.7721ea01.js monitoring/static/js/async/76935.7721ea01.js
         monitoring/static/js/async/77031.e7afa867.js monitoring/static/js/async/77031.e7afa867.js
         monitoring/static/js/async/77095.515bbab2.js monitoring/static/js/async/77095.515bbab2.js
         monitoring/static/js/async/77099.1539a692.js monitoring/static/js/async/77099.1539a692.js
         monitoring/static/js/async/77219.7650ddb8.js monitoring/static/js/async/77219.7650ddb8.js
         monitoring/static/js/async/77219.7650ddb8.js.LICENSE.txt monitoring/static/js/async/77219.7650ddb8.js.LICENSE.txt
-        monitoring/static/js/async/77265.cbd12a02.js monitoring/static/js/async/77265.cbd12a02.js
+        monitoring/static/js/async/77265.a3272299.js monitoring/static/js/async/77265.a3272299.js
         monitoring/static/js/async/77344.c0d0140a.js monitoring/static/js/async/77344.c0d0140a.js
         monitoring/static/js/async/77669.146129f1.js monitoring/static/js/async/77669.146129f1.js
         monitoring/static/js/async/77906.82b7ccc0.js monitoring/static/js/async/77906.82b7ccc0.js
@@ -617,7 +620,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/78138.7e0c74ee.js monitoring/static/js/async/78138.7e0c74ee.js
         monitoring/static/js/async/78250.43b6f66f.js monitoring/static/js/async/78250.43b6f66f.js
         monitoring/static/js/async/78252.44b63dec.js monitoring/static/js/async/78252.44b63dec.js
-        monitoring/static/js/async/7841.23e157ec.js monitoring/static/js/async/7841.23e157ec.js
+        monitoring/static/js/async/7841.cc71cc47.js monitoring/static/js/async/7841.cc71cc47.js
         monitoring/static/js/async/78499.928be91f.js monitoring/static/js/async/78499.928be91f.js
         monitoring/static/js/async/78499.928be91f.js.LICENSE.txt monitoring/static/js/async/78499.928be91f.js.LICENSE.txt
         monitoring/static/js/async/78631.a6db412b.js monitoring/static/js/async/78631.a6db412b.js
@@ -628,7 +631,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/79482.be608073.js monitoring/static/js/async/79482.be608073.js
         monitoring/static/js/async/79517.69d19eb4.js monitoring/static/js/async/79517.69d19eb4.js
         monitoring/static/js/async/79953.2dfe0612.js monitoring/static/js/async/79953.2dfe0612.js
-        monitoring/static/js/async/7997.01485015.js monitoring/static/js/async/7997.01485015.js
+        monitoring/static/js/async/7997.35068d06.js monitoring/static/js/async/7997.35068d06.js
         monitoring/static/js/async/80125.9d5b97ba.js monitoring/static/js/async/80125.9d5b97ba.js
         monitoring/static/js/async/80332.4c1d6b66.js monitoring/static/js/async/80332.4c1d6b66.js
         monitoring/static/js/async/80360.67b32b8a.js monitoring/static/js/async/80360.67b32b8a.js
@@ -643,8 +646,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/81481.da5e152a.js monitoring/static/js/async/81481.da5e152a.js
         monitoring/static/js/async/81586.e29cd057.js monitoring/static/js/async/81586.e29cd057.js
         monitoring/static/js/async/81708.92582b94.js monitoring/static/js/async/81708.92582b94.js
-        monitoring/static/js/async/81916.7aaa96b2.js monitoring/static/js/async/81916.7aaa96b2.js
-        monitoring/static/js/async/81999.c9de72a7.js monitoring/static/js/async/81999.c9de72a7.js
+        monitoring/static/js/async/81999.da6c1e26.js monitoring/static/js/async/81999.da6c1e26.js
         monitoring/static/js/async/82004.472b5b11.js monitoring/static/js/async/82004.472b5b11.js
         monitoring/static/js/async/82357.7ed19ece.js monitoring/static/js/async/82357.7ed19ece.js
         monitoring/static/js/async/82415.5dfd0267.js monitoring/static/js/async/82415.5dfd0267.js
@@ -718,7 +720,7 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/90958.d5e2826a.js monitoring/static/js/async/90958.d5e2826a.js
         monitoring/static/js/async/91087.f4f6d9ab.js monitoring/static/js/async/91087.f4f6d9ab.js
         monitoring/static/js/async/91255.07bd817d.js monitoring/static/js/async/91255.07bd817d.js
-        monitoring/static/js/async/91798.01954b98.js monitoring/static/js/async/91798.01954b98.js
+        monitoring/static/js/async/91798.9c611521.js monitoring/static/js/async/91798.9c611521.js
         monitoring/static/js/async/91848.263708b3.js monitoring/static/js/async/91848.263708b3.js
         monitoring/static/js/async/92011.60786522.js monitoring/static/js/async/92011.60786522.js
         monitoring/static/js/async/92013.0ba738d1.js monitoring/static/js/async/92013.0ba738d1.js
@@ -777,9 +779,8 @@ IF (NOT EXPORT_CMAKE)
         monitoring/static/js/async/98908.c4d5f683.js monitoring/static/js/async/98908.c4d5f683.js
         monitoring/static/js/async/99036.a9dffe91.js monitoring/static/js/async/99036.a9dffe91.js
         monitoring/static/js/async/99204.9f838adb.js monitoring/static/js/async/99204.9f838adb.js
-        monitoring/static/js/async/9951.01f7a6ee.js monitoring/static/js/async/9951.01f7a6ee.js
         monitoring/static/js/async/99584.30e1ba68.js monitoring/static/js/async/99584.30e1ba68.js
-        monitoring/static/js/index.6270637f.js monitoring/static/js/index.6270637f.js
+        monitoring/static/js/index.252496f8.js monitoring/static/js/index.252496f8.js
         monitoring/static/js/lib-axios.9ac32478.js monitoring/static/js/lib-axios.9ac32478.js
         monitoring/static/js/lib-react.4a71e642.js monitoring/static/js/lib-react.4a71e642.js
         monitoring/static/js/lib-react.4a71e642.js.LICENSE.txt monitoring/static/js/lib-react.4a71e642.js.LICENSE.txt
@@ -846,8 +847,7 @@ RESOURCE(
 )
 
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/actors/helpers
+    contrib/libs/yaml-cpp
     library/cpp/archive
     library/cpp/json
     library/cpp/mime/types
@@ -872,19 +872,21 @@ PEERDIR(
     ydb/core/viewer/json
     ydb/core/viewer/yaml
     ydb/core/viewer/protos
+    ydb/library/actors/core
+    ydb/library/actors/helpers
     ydb/library/computation_graph_renderer
     ydb/library/persqueue/topic_parser
     ydb/library/yaml_config
+    ydb/public/api/grpc
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/common
-    ydb/public/api/grpc
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/result
     ydb/public/sdk/cpp/src/client/types
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/auth
-    contrib/libs/yaml-cpp
 )
 
 YQL_LAST_ABI_VERSION()

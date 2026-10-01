@@ -66,14 +66,14 @@ public:
         Become(&TTopicLocationActor::StateWork);
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
             {"actorClassName", "TopicLocationActor"},
             {"path", Path});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
-        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        DoLogUnhandledException(Service, *this, exc);
         ReplyError(
             Ydb::StatusIds::INTERNAL_ERROR,
             TStringBuilder() << "Unhandled exception: " << exc.what());

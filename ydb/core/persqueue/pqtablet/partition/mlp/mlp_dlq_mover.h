@@ -21,7 +21,7 @@ public:
 
     void Bootstrap();
     void PassAway() override;
-    TLogPrefix BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
 private:
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr&);

@@ -179,6 +179,15 @@ size_t bitset_extract_setbits_avx2(const uint64_t *words, size_t length,
                                    uint32_t *out, size_t outcapacity,
                                    uint32_t base);
 
+/*
+ * Same as bitset_extract_setbits_avx2, using AVX-512 (VBMI2) decoding.
+ *
+ * It writes at most "outcapacity" values and requires no padding beyond them:
+ * "out" only needs room for the values that are actually produced.
+ *
+ * Requires AVX-512 VBMI2 (VPCOMPRESSB): only call it when
+ * croaring_hardware_support() reports ROARING_SUPPORTS_AVX512.
+ */
 size_t bitset_extract_setbits_avx512(const uint64_t *words, size_t length,
                                      uint32_t *out, size_t outcapacity,
                                      uint32_t base);
@@ -214,6 +223,12 @@ size_t bitset_extract_setbits_sse_uint16(const uint64_t *words, size_t length,
                                          uint16_t *out, size_t outcapacity,
                                          uint16_t base);
 
+/*
+ * Same as bitset_extract_setbits_avx512, writing 16-bit values.
+ *
+ * Requires AVX-512 VBMI2 (VPCOMPRESSB): only call it when
+ * croaring_hardware_support() reports ROARING_SUPPORTS_AVX512.
+ */
 size_t bitset_extract_setbits_avx512_uint16(const uint64_t *words,
                                             size_t length, uint16_t *out,
                                             size_t outcapacity, uint16_t base);

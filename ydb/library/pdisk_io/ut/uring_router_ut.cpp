@@ -27,9 +27,23 @@
 #include <vector>
 #include <thread>
 
-// Keep liburing after project/system headers that may define conflicting macros.
 #include <ydb/library/pdisk_io/uring_router_test_peer.h>
 #include <ydb/library/pdisk_io/uring_test_support.h>
+
+// Keep liburing after project/system headers that may define conflicting macros.
+#include <ydb/library/pdisk_io/liburing_compat.h>
+
+namespace NKikimr::NPDisk {
+
+unsigned TUringRouterTestPeer::Ready(const TUringRouter& router) {
+    return io_uring_sq_ready(router.Ring.get());
+}
+
+unsigned TUringRouterTestPeer::Staged(const TUringRouter& router) {
+    return router.Ring->sq.sqe_tail - router.Ring->sq.sqe_head;
+}
+
+} // namespace NKikimr::NPDisk
 
 using NActors::TActorSystem;
 using namespace NKikimr::NPDisk;
@@ -739,9 +753,13 @@ void DoDeviceSampleSink(TUringRouterConfig config) {
 
     TDeviceIoSample sample;
     std::atomic<bool> sampleSeen{false};
+    std::atomic<ui64> completionCount{0};
     router->SetSampleSink([&](const TDeviceIoSample& value) {
         sample = value;
         sampleSeen.store(true, std::memory_order_release);
+    });
+    router->SetIoCompletionSink([&] {
+        completionCount.fetch_add(1, std::memory_order_relaxed);
     });
     router->Start();
 
@@ -765,6 +783,7 @@ void DoDeviceSampleSink(TUringRouterConfig config) {
     UNIT_ASSERT_VALUES_EQUAL(sample.Offset, offset);
     UNIT_ASSERT_VALUES_EQUAL(sample.Size, size);
     UNIT_ASSERT(sample.IsWrite);
+    UNIT_ASSERT_VALUES_EQUAL(completionCount.load(std::memory_order_relaxed), 1u);
     router.reset();
 }
 
@@ -787,11 +806,15 @@ void DoFixedShortRetrySampling(TUringRouterConfig config) {
 
     TDeviceIoSample samples[2];
     std::atomic<int> sampleCount{0};
+    std::atomic<ui64> completionCount{0};
     router->SetSampleSink([&](const TDeviceIoSample& sample) {
         const int index = sampleCount.fetch_add(1, std::memory_order_relaxed);
         if (index < 2) {
             samples[index] = sample;
         }
+    });
+    router->SetIoCompletionSink([&] {
+        completionCount.fetch_add(1, std::memory_order_relaxed);
     });
     router->Start();
     UNIT_ASSERT_C(router->AreBuffersRegistered(),
@@ -809,6 +832,8 @@ void DoFixedShortRetrySampling(TUringRouterConfig config) {
     UNIT_ASSERT_VALUES_EQUAL(op.Result.load(std::memory_order_relaxed), -EIO);
     UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(sampleCount.load(std::memory_order_relaxed), 2);
+    // The first CQE made progress; the second was EOF and became -EIO.
+    UNIT_ASSERT_VALUES_EQUAL(completionCount.load(std::memory_order_relaxed), 1u);
 
     UNIT_ASSERT_VALUES_EQUAL(samples[0].Offset, 0u);
     UNIT_ASSERT_VALUES_EQUAL(samples[0].Size, bufferSize);
@@ -1386,6 +1411,91 @@ Y_UNIT_TEST_SUITE(TUringOperationBaseTest) {
 
 Y_UNIT_TEST_SUITE(TUringRouterTest) {
 
+    Y_UNIT_TEST(DevNullNativeReadsZerosAndLeavesDeviceUnchanged) {
+        auto config = DefaultConfig();
+        config.DevNullMode = true;
+        SKIP_IF_NO_URING(config);
+        TTempFile tmp(MakeTempName(nullptr, "uring_devnull"));
+        TFile file(tmp.Name(), CreateAlways | RdWr);
+        TAlignedBuf original(4096);
+        memset(original.Data(), 'D', original.Size);
+        file.Write(original.Data(), original.Size);
+
+        TUringRouter router(DupOwned(file), nullptr, config);
+        router.Start();
+        TAlignedBuf discarded(4096);
+        memset(discarded.Data(), 'W', discarded.Size);
+        TManualEvent writeDone;
+        TTestOp write;
+        write.Event = &writeDone;
+        PrepareWriteOp(write, discarded.Data(), discarded.Size, 0);
+        UNIT_ASSERT(router.Write(&write));
+        writeDone.WaitI();
+        UNIT_ASSERT_VALUES_EQUAL(write.GetResult(), discarded.Size);
+
+        TAlignedBuf synthetic(4096);
+        memset(synthetic.Data(), 'R', synthetic.Size);
+        TManualEvent readDone;
+        TTestOp read;
+        read.Event = &readDone;
+        PrepareReadOp(read, synthetic.Data(), synthetic.Size, 0);
+        UNIT_ASSERT(router.Read(&read));
+        readDone.WaitI();
+        router.StopSync();
+        UNIT_ASSERT_VALUES_EQUAL(read.GetResult(), synthetic.Size);
+        char actual[4096];
+        file.Pload(actual, sizeof(actual), 0);
+        UNIT_ASSERT(memcmp(actual, original.Data(), sizeof(actual)) == 0);
+        for (size_t i = 0; i < synthetic.Size; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<const char*>(synthetic.Data())[i], 0);
+        }
+        for (size_t i = 0; i < discarded.Size; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<const char*>(discarded.Data())[i], 'W');
+        }
+    }
+
+    Y_UNIT_TEST(DevNullStopWaitsForSyntheticTerminalCallback) {
+        auto config = DefaultConfig();
+        config.DevNullMode = true;
+        SKIP_IF_NO_URING(config);
+        TTempFile tmp(MakeTempName(nullptr, "uring_devnull_stop"));
+        TFile file(tmp.Name(), CreateAlways | RdWr);
+        file.Resize(4096);
+        auto router = std::make_unique<TUringRouter>(DupOwned(file), nullptr, config);
+        TManualEvent entered, release, joining;
+        NUringPrivate::TRouterHooks hooks;
+        hooks.BeforeTerminalCallback = [&] { entered.Signal(); release.WaitI(); };
+        hooks.BeforeJoin = [&] { joining.Signal(); };
+        TUringRouterTestPeer::SetHooks(*router, std::move(hooks));
+        router->Start();
+        std::atomic<int> completions = 0, drops = 0;
+        TTerminalOp op;
+        op.Completions = &completions;
+        op.Drops = &drops;
+        TAlignedBuf buffer(4096);
+        PrepareReadOp(op, buffer.Data(), buffer.Size, 0);
+        UNIT_ASSERT(router->Read(&op));
+        std::atomic<bool> stopped = false;
+        std::thread stopper;
+        Y_DEFER {
+            release.Signal();
+            if (stopper.joinable()) { stopper.join(); }
+        };
+        entered.WaitI();
+        stopper = std::thread([&] {
+            router->StopSync();
+            stopped.store(true);
+        });
+        joining.WaitI();
+        UNIT_ASSERT(!stopped.load());
+        release.Signal();
+        stopper.join();
+        UNIT_ASSERT_VALUES_EQUAL(completions.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(drops.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(router->GetInflight(), 0u);
+        UNIT_ASSERT(TUringRouterTestPeer::Retired(*router));
+    }
+
     Y_UNIT_TEST(DefaultIdleSpinIs10Microseconds) {
         UNIT_ASSERT_VALUES_EQUAL(10u, TUringRouterConfig{}.IdleSpinUs);
     }
@@ -1731,9 +1841,10 @@ struct TScriptedRouter {
     std::unique_ptr<TUringRouter> Router;
 
     explicit TScriptedRouter(ui32 depth = 16,
-            std::unique_ptr<TScriptedUringBackend> backend = std::make_unique<TScriptedUringBackend>())
+            std::unique_ptr<TScriptedUringBackend> backend = std::make_unique<TScriptedUringBackend>(),
+            bool devNullMode = false)
         : Backend(backend.get())
-        , Router(TUringRouterTestPeer::Create(std::move(backend), depth))
+        , Router(TUringRouterTestPeer::Create(std::move(backend), depth, devNullMode))
     {}
 
     ~TScriptedRouter() {
@@ -1776,6 +1887,165 @@ void AssertSqe(const TScriptedUringBackend::TSubmission& submission, int opcode,
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
+    Y_UNIT_TEST(DevNullRejectsUnstartedAndDropsStoppedAdmission) {
+        TScriptedRouter fixture(16, std::make_unique<TScriptedUringBackend>(), true);
+        char buffer[8];
+        memset(buffer, 'W', sizeof(buffer));
+        TScriptedOp rejected;
+        PrepareWriteOp(rejected, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(!fixture.Router->Write(&rejected));
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Completions + rejected.Drops, 0u);
+
+        fixture.Initialize();
+        TScriptedOp accepted;
+        PrepareWriteOp(accepted, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Write(&accepted));
+        fixture.Router->StopAsync();
+        fixture.Issue();
+        UNIT_ASSERT_VALUES_EQUAL(accepted.Completions, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(accepted.Drops, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        UNIT_ASSERT(fixture.Backend->Stats->Consumed.empty());
+        for (char value : buffer) { UNIT_ASSERT_VALUES_EQUAL(value, 'W'); }
+        UNIT_ASSERT(!fixture.Router->Write(&rejected));
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Completions + rejected.Drops, 0u);
+    }
+
+    Y_UNIT_TEST(DevNullCompletesEveryShapeWithoutDataSqeOrSample) {
+        TScriptedRouter fixture(16, std::make_unique<TScriptedUringBackend>(), true);
+        std::vector<TDeviceIoSample> samples;
+        fixture.Router->SetSampleSink([&](const TDeviceIoSample& sample) { samples.push_back(sample); });
+        char fixedBuffer[8];
+        memset(fixedBuffer, 'F', sizeof(fixedBuffer));
+        iovec registration{fixedBuffer, sizeof(fixedBuffer)};
+        fixture.Router->RegisterBuffers(&registration, 1);
+        fixture.Initialize();
+
+        char writeBuffer[16];
+        memset(writeBuffer, 'W', sizeof(writeBuffer));
+        TScriptedOp write;
+        PrepareWriteOp(write, writeBuffer, sizeof(writeBuffer), 32);
+        UNIT_ASSERT(fixture.Router->Write(&write));
+
+        char scalarBuffer[8];
+        memset(scalarBuffer, 'S', sizeof(scalarBuffer));
+        TScriptedOp scalar;
+        PrepareReadOp(scalar, scalarBuffer, sizeof(scalarBuffer), 64);
+        UNIT_ASSERT(fixture.Router->Read(&scalar));
+
+        char scatterFirst[4], scatterSecond[6];
+        memset(scatterFirst, 'A', sizeof(scatterFirst));
+        memset(scatterSecond, 'B', sizeof(scatterSecond));
+        TScriptedOp scatter;
+        scatter.SetOperationType(TUringOperationBase::EREAD);
+        scatter.PrepareScatterGather(2, 128);
+        scatter.AddIov(scatterFirst, sizeof(scatterFirst));
+        scatter.AddIov(scatterSecond, sizeof(scatterSecond));
+        UNIT_ASSERT(fixture.Router->Read(&scatter));
+
+        TScriptedOp fixed;
+        UNIT_ASSERT(fixture.Router->ReadFixed(fixedBuffer, sizeof(fixedBuffer), 8192, 0, &fixed));
+
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 4u);
+        fixture.Issue();
+        UNIT_ASSERT(fixture.Backend->Stats->Consumed.empty());
+        UNIT_ASSERT(samples.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        for (auto* op : {&write, &scalar, &scatter, &fixed}) {
+            UNIT_ASSERT_VALUES_EQUAL(op->Completions, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(op->Drops, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(op->GetOperationBytes(), 0u);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(write.GetResult(), sizeof(writeBuffer));
+        UNIT_ASSERT_VALUES_EQUAL(scalar.GetResult(), sizeof(scalarBuffer));
+        UNIT_ASSERT_VALUES_EQUAL(scatter.GetResult(), sizeof(scatterFirst) + sizeof(scatterSecond));
+        UNIT_ASSERT_VALUES_EQUAL(fixed.GetResult(), sizeof(fixedBuffer));
+        for (char value : writeBuffer) { UNIT_ASSERT_VALUES_EQUAL(value, 'W'); }
+        for (char value : scalarBuffer) { UNIT_ASSERT_VALUES_EQUAL(value, 0); }
+        for (char value : scatterFirst) { UNIT_ASSERT_VALUES_EQUAL(value, 0); }
+        for (char value : scatterSecond) { UNIT_ASSERT_VALUES_EQUAL(value, 0); }
+        for (char value : fixedBuffer) { UNIT_ASSERT_VALUES_EQUAL(value, 0); }
+
+        memset(fixedBuffer, 'F', sizeof(fixedBuffer));
+        TScriptedOp fixedWrite;
+        UNIT_ASSERT(fixture.Router->WriteFixed(fixedBuffer, sizeof(fixedBuffer), 8192, 0, &fixedWrite));
+        TScriptedOp scatterWrite;
+        scatterWrite.SetOperationType(TUringOperationBase::EWRITE);
+        scatterWrite.PrepareScatterGather(2, 128);
+        scatterWrite.AddIov(writeBuffer, 4);
+        scatterWrite.AddIov(writeBuffer + 4, sizeof(writeBuffer) - 4);
+        UNIT_ASSERT(fixture.Router->Write(&scatterWrite));
+        fixture.Issue();
+        UNIT_ASSERT(fixture.Backend->Stats->Consumed.empty());
+        UNIT_ASSERT(samples.empty());
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        for (auto* op : {&fixedWrite, &scatterWrite}) {
+            UNIT_ASSERT_VALUES_EQUAL(op->Completions, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(op->Drops, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(op->GetOperationBytes(), 0u);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixedWrite.GetResult(), sizeof(fixedBuffer));
+        UNIT_ASSERT_VALUES_EQUAL(scatterWrite.GetResult(), sizeof(writeBuffer));
+        for (char value : fixedBuffer) { UNIT_ASSERT_VALUES_EQUAL(value, 'F'); }
+        for (char value : writeBuffer) { UNIT_ASSERT_VALUES_EQUAL(value, 'W'); }
+    }
+
+    Y_UNIT_TEST(DevNullCallbackCanRecycleOperationBeforePriorInflightRetires) {
+        TScriptedRouter fixture(16, std::make_unique<TScriptedUringBackend>(), true);
+        fixture.Initialize();
+        char buffer[8];
+        memset(buffer, 'X', sizeof(buffer));
+        TScriptedOp op;
+        op.Callback = [&] {
+            if (op.Completions == 1) {
+                op.ResetSubmissionState();
+                PrepareWriteOp(op, buffer, sizeof(buffer), 64);
+                Y_ABORT_UNLESS(fixture.Router->Write(&op));
+            }
+        };
+        PrepareWriteOp(op, buffer, sizeof(buffer), 0);
+        UNIT_ASSERT(fixture.Router->Write(&op));
+        fixture.Issue();
+        UNIT_ASSERT_VALUES_EQUAL(op.Completions, 2u);
+        UNIT_ASSERT_VALUES_EQUAL(op.Drops, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetResult(), sizeof(buffer));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        UNIT_ASSERT(fixture.Backend->Stats->Consumed.empty());
+    }
+
+    Y_UNIT_TEST(DevNullDrainIsBoundedByQueueDepth) {
+        constexpr ui32 depth = 2;
+        TScriptedRouter fixture(depth, std::make_unique<TScriptedUringBackend>(), true);
+        fixture.Initialize();
+        char buffer[8];
+        memset(buffer, 'W', sizeof(buffer));
+        constexpr ui64 opCount = 5;
+        TScriptedOp ops[opCount];
+        for (auto& op : ops) {
+            PrepareWriteOp(op, buffer, sizeof(buffer), 0);
+            UNIT_ASSERT(fixture.Router->Write(&op));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), opCount);
+
+        auto completed = [&] {
+            ui64 count = 0;
+            for (const auto& op : ops) {
+                count += op.Completions;
+            }
+            return count;
+        };
+        for (const ui64 expected : {2u, 4u, 5u}) {
+            fixture.Issue();
+            UNIT_ASSERT_VALUES_EQUAL(completed(), expected);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
+        for (const auto& op : ops) {
+            UNIT_ASSERT_VALUES_EQUAL(op.Completions, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(op.Drops, 0u);
+        }
+        UNIT_ASSERT(fixture.Backend->Stats->Consumed.empty());
+    }
+
     Y_UNIT_TEST(StopSyncWaitsForEveryPublisherPhase) {
         for (ui32 phase = 0; phase != 3; ++phase) {
             auto backend = std::make_unique<TScriptedUringBackend>();
@@ -2216,12 +2486,15 @@ Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
                 }
                 fixture.Initialize();
                 std::vector<TDeviceIoSample> samples;
+                ui64 completionCount = 0;
                 fixture.Router->SetSampleSink([&](const TDeviceIoSample& sample) { samples.push_back(sample); });
+                fixture.Router->SetIoCompletionSink([&] { ++completionCount; });
                 TScriptedOp op;
                 op.Callback = [&] {
                     // The completing CQE is retired before clients can recycle.
                     Y_ABORT_UNLESS(fixture.Backend->CqHead == fixture.Backend->CqTail);
                     Y_ABORT_UNLESS(samples.size() == 3);
+                    Y_ABORT_UNLESS(completionCount == 3);
                 };
                 if (fixed) {
                     const bool accepted = write
@@ -2307,6 +2580,8 @@ Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
         for (const int result : {0, -EIO, -EAGAIN, -EBUSY, -EINTR}) {
             TScriptedRouter fixture;
             fixture.Initialize();
+            ui64 completionCount = 0;
+            fixture.Router->SetIoCompletionSink([&] { ++completionCount; });
             char buffer[8] = {};
             TScriptedOp op;
             PrepareReadOp(op, buffer, sizeof(buffer), 0);
@@ -2323,6 +2598,7 @@ Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
             UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 5u);
             UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(completionCount, 1u);
             UNIT_ASSERT(!fixture.Router->IsBroken());
             UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
         }

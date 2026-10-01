@@ -258,10 +258,22 @@ public:
 
             planNode.TypeName = typeName;
 
+            auto visitResultStage = [&](const TDqStageBase& resultStage) {
+                // Write with RETURNING produces the result straight from the sink stage.
+                // Keep the ResultSet node clean and attach the sink stage below it so the plan
+                // looks like a regular write with the ResultSet on top.
+                if (resultStage.Outputs()) {
+                    auto& sinkPlanNode = AddPlanNode(planNode);
+                    Visit(resultStage, sinkPlanNode);
+                } else {
+                    Visit(resultStage, planNode);
+                }
+            };
+
             if (res.Maybe<TDqCnResult>()) {
-                Visit(res.Cast<TDqCnResult>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnResult>().Output().Stage());
             } else if (res.Maybe<TDqCnValue>()) {
-                Visit(res.Cast<TDqCnValue>().Output().Stage(), planNode);
+                visitResultStage(res.Cast<TDqCnValue>().Output().Stage());
             } else {
                 Y_ENSURE(false, res.Ref().Content());
             }
@@ -270,6 +282,11 @@ public:
         for (const auto& stage: Tx.Stages()) {
             TDqStageBase stageBase = stage.Cast<TDqStageBase>();
             if (stageBase.Outputs()) { // Sink
+                if (VisitedStages.contains(stage.Raw())) {
+                    // Already rendered as a result output stage (e.g. write with RETURNING).
+                    continue;
+                }
+
                 auto& planNode = AddPlanNode(phaseNode);
                 Visit(TExprBase(stage), planNode);
             }
@@ -1091,7 +1108,7 @@ private:
     }
 
     template<typename TSinkLike>
-    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode, TString planNodeSuffix = "Sink") {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sinkLike.DataSink().template Cast<TCoDataSink>();
@@ -1267,7 +1284,11 @@ private:
             op.Properties["Name"] = "Write to external data source";
         }
 
-        AddOperator(planNode, "Sink", op);
+        auto inputContext = CurrentArgContext.AddArg(sinkLike.Ptr().Get());
+        LambdaInputs[inputContext] = &stagePlanNode;
+        op.Inputs.push_back(inputContext);
+
+        AddOperator(planNode, planNodeSuffix, op);
     }
 
     void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
@@ -1293,7 +1314,7 @@ private:
             dqIntegration = providerIt->second->GetDqIntegration();
         }
 
-        VisitTableSink(transform, stage, planNode, stagePlanNode);
+        VisitTableSink(transform, stage, planNode, stagePlanNode, TString(transform.Type().Value()));
 
         if (dqIntegration) {
             dqIntegration->FillSinkPlanProperties(transform, planNode.Operators.back().Properties);
@@ -1459,6 +1480,8 @@ private:
             operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
+        } else if (auto maybeSort = TMaybeNode<TCoWideSort>(node)) {
+            operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
             operatorId = Visit(maybeSort.Cast(), planNode);
         } else if (auto maybeTop = TMaybeNode<TCoTop>(node)) {
@@ -1722,6 +1745,34 @@ private:
         op.Properties["SortBy"] = NPlanUtils::PrettyExprStr(sort.KeySelectorLambda());
 
         return AddOperator(planNode, "Sort", std::move(op));
+    }
+
+    std::variant<ui32, TArgContext> Visit(const TCoWideSort& sort, TQueryPlanNode& planNode) {
+        const auto& input = sort.Input().Ref();
+        YQL_ENSURE(input.IsCallable("ExpandMap") && input.ChildrenSize() == 2);
+
+        const auto& expandLambda = input.Tail();
+        YQL_ENSURE(expandLambda.IsLambda());
+
+        TStringBuilder sortBy;
+        for (const auto& key : sort.Keys()) {
+            const auto index = FromString<ui32>(key.Index().Value());
+            YQL_ENSURE(index + 1 < expandLambda.ChildrenSize());
+
+            const auto member = TExprBase(expandLambda.ChildPtr(index + 1)).Cast<TCoMember>();
+            const auto ascending = FromString<bool>(key.Direction().Cast<TCoBool>().Literal().Value());
+
+            if (sortBy.size()) {
+                sortBy << ", ";
+            }
+            sortBy << member.Name().Value() << (ascending ? " asc" : " desc");
+        }
+
+        TOperator op;
+        op.Properties["Name"] = "WideSort";
+        op.Properties["SortBy"] = TString(sortBy);
+
+        return AddOperator(planNode, "WideSort", std::move(op));
     }
 
     std::variant<ui32, TArgContext> Visit(const TCoTop& top, TQueryPlanNode& planNode) {
@@ -3429,6 +3480,15 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
                 stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
+                if (!(*stat)->GetNodes().empty()) {
+                    auto& nodesStats = stats.InsertValue("Nodes", NJson::JSON_ARRAY);
+                    for (const auto& node : (*stat)->GetNodes()) {
+                        auto& nodeInfo = nodesStats.AppendValue(NJson::JSON_MAP);
+                        nodeInfo["NodeId"] = node.GetNodeId();
+                        nodeInfo["Tasks"] = node.GetTasks();
+                        nodeInfo["Finished"] = node.GetFinished();
+                    }
+                }
                 if (auto updateTimeUs = (*stat)->GetUpdateTimeMs(); updateTimeUs) {
                     stats["UpdateTimeMs"] = updateTimeUs;
                 }
@@ -3795,6 +3855,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         auto& inputBytes = history.InsertValue("InputInflightBytes", NJson::JSON_ARRAY);
                         for (auto& u : node.GetGlobalMemoryUsageMB()) {
                             inputBytes.AppendValue(u.GetInputInflightBytes());
+                        }
+
+                        auto& queryAllocated = history.InsertValue("MemQueryAllocated", NJson::JSON_ARRAY);
+                        for (auto& u : node.GetGlobalMemoryUsageMB()) {
+                            queryAllocated.AppendValue(u.GetMemQueryAllocated());
                         }
                     }
                 }

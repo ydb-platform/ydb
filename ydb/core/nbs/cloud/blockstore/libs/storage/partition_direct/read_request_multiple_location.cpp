@@ -50,8 +50,9 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
         const size_t offsetBytes = offsetBlocks * blockSize;
         const size_t sizeBytes = hint.RequestRelativeRange.Size() * blockSize;
 
-        auto subRequest = std::make_shared<TReadBlocksLocalRequest>(
-            Request->Headers.Clone(hint.VChunkRange));
+        auto subRequest =
+            std::make_shared<TReadBlocksLocalRequest>(Request->Headers.Clone(
+                ConvertRangeSafe<TBlockRange64>(hint.VChunkRange)));
 
         // Create subbuffer Sglist for current range
         subRequest->Sglist = SgList.CreateDepender(

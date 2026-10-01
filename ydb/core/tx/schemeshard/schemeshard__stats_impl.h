@@ -2,6 +2,10 @@
 
 #include "schemeshard_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -38,7 +42,7 @@ bool TStatsQueue<TEvent>::BatchingEnabled() const {
 
 template<typename TEvent>
 TDuration TStatsQueue<TEvent>::BatchTimeout() const {
-     return SS->StatsBatchTimeout; 
+     return SS->StatsBatchTimeout;
 }
 
 template<typename TEvent>
@@ -48,17 +52,17 @@ TDuration TStatsQueue<TEvent>::Delay() const {
 
 template<typename TEvent>
 bool TStatsQueue<TEvent>::Empty() const {
-     return Queue.empty(); 
+     return Queue.empty();
 }
 
 template<typename TEvent>
 ui32 TStatsQueue<TEvent>::MaxBatchSize() const {
-     return std::max<ui32>(SS->StatsMaxBatchSize, 1); 
+     return std::max<ui32>(SS->StatsMaxBatchSize, 1);
 }
 
 template<typename TEvent>
-TDuration TStatsQueue<TEvent>::MaxExecuteTime() const { 
-    return SS->StatsMaxExecuteTime; 
+TDuration TStatsQueue<TEvent>::MaxExecuteTime() const {
+    return SS->StatsMaxExecuteTime;
 }
 
 template<typename TEvent>
@@ -93,8 +97,8 @@ EStatsQueueStatus TStatsQueue<TEvent>::Status() const {
 }
 
 template<typename TEvent>
-size_t TStatsQueue<TEvent>::Size() const { 
-    return Queue.size(); 
+size_t TStatsQueue<TEvent>::Size() const {
+    return Queue.size();
 }
 
 template<typename TEvent>
@@ -114,7 +118,7 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
     PersistStatsPending = false;
 
     if (Queue.Empty()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxStoreStats::Execute empty");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxStoreStats::Execute empty");
         return true;
     }
 
@@ -145,3 +149,5 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
 
 } // NSchemeShard
 } // NKikimr
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

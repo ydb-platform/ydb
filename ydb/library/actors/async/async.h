@@ -2,6 +2,7 @@
 #include "abi.h"
 #include "result.h"
 #include "callback_coroutine.h"
+#include "frame_cache.h"
 #include <ydb/library/actors/core/actor.h>
 #include <coroutine>
 #include <functional>
@@ -1222,11 +1223,23 @@ namespace NActors {
             }
         };
 
+        class TAsyncFrameAllocator {
+        public:
+            static void* operator new(size_t size) {
+                return TAsyncFrameCache::AllocateCurrent(size);
+            }
+
+            static void operator delete(void* frame, size_t size) noexcept {
+                TAsyncFrameCache::Free(frame, size);
+            }
+        };
+
         template<class T>
         class TAsyncPromise
             : public TAsyncPromiseBase
             , public TAsyncPromiseResult<T>
             , public TAsyncAwaitTransform
+            , public TAsyncFrameAllocator
         {
         public:
             constexpr async<T> get_return_object() noexcept {
@@ -1247,6 +1260,7 @@ namespace NActors {
             , private TActorRunnableItem::TImpl<TActorAsyncHandlerPromise>
             , private TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>
             , public TAsyncAwaitTransform
+            , public TAsyncFrameAllocator
         {
             friend TActorRunnableItem::TImpl<TActorAsyncHandlerPromise>;
             friend TCustomCoroutineCallbacks<TActorAsyncHandlerPromise>;

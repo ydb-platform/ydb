@@ -410,7 +410,7 @@ public:
         Service_->IncrementActiveRequestCount();
         ActiveRequestCountIncremented_ = true;
 
-        BuildGlobalRequestInfo();
+        BuildGlobalRequestAnnotations();
 
         Cancelable_ = RuntimeInfo_->Descriptor.Cancelable && !RequestHeader_->uncancelable();
 
@@ -423,7 +423,7 @@ public:
     {
         if (!Replied_) {
             // Prevent alerting.
-            SuppressMissingRequestInfoCheck();
+            SuppressMissingRequestAnnotationCheck();
 
             TCurrentTraceContextGuard guard(TraceContext_);
             if (CanceledList_.IsFired()) {
@@ -550,7 +550,7 @@ public:
     TError GetCanceledError() const
     {
         auto error = TError(NYT::EErrorCode::Canceled, "RPC request is canceled");
-        if (ThrottledError_) {
+        if (ThrottledError_ && !ThrottledError_->IsOK()) {
             error.Add(*ThrottledError_);
         }
         return error;
@@ -687,6 +687,20 @@ public:
         return ResponseAttachmentsStream_;
     }
 
+    std::optional<TAttachmentsOutputStreamStatistics> GetResponseAttachmentsStreamStatistics() override
+    {
+        TAttachmentsOutputStreamPtr stream;
+        {
+            auto guard = Guard(StreamsLock_);
+            stream = ResponseAttachmentsStream_;
+        }
+
+        if (!stream) {
+            return std::nullopt;
+        }
+        return stream->GetStatistics();
+    }
+
     void HandleStreamingPayload(const TStreamingPayload& payload)
     {
         if (!RuntimeInfo_->Descriptor.StreamingEnabled) {
@@ -810,69 +824,66 @@ private:
         return false;
     }
 
-    void BuildGlobalRequestInfo()
+    void BuildGlobalRequestAnnotations()
     {
-        TStringBuilder builder;
-        TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
-
         if (RequestHeader_->has_request_id()) {
-            delimitedBuilder->AppendFormat("RequestId: %v", FromProto<TRequestId>(RequestHeader_->request_id()));
+            RequestLoggingTags_.Add("RequestId", FromProto<TRequestId>(RequestHeader_->request_id()));
         }
 
         if (RequestHeader_->has_realm_id()) {
-            delimitedBuilder->AppendFormat("RealmId: %v", FromProto<TRealmId>(RequestHeader_->realm_id()));
+            RequestLoggingTags_.Add("RealmId", FromProto<TRealmId>(RequestHeader_->realm_id()));
         }
 
         if (RequestHeader_->has_user()) {
-            delimitedBuilder->AppendFormat("User: %v", RequestHeader_->user());
+            RequestLoggingTags_.Add("User", RequestHeader_->user());
         }
 
         if (RequestHeader_->has_user_tag() && RequestHeader_->user_tag() != RequestHeader_->user()) {
-            delimitedBuilder->AppendFormat("UserTag: %v", RequestHeader_->user_tag());
+            RequestLoggingTags_.Add("UserTag", RequestHeader_->user_tag());
         }
 
         if (RequestHeader_->has_mutation_id()) {
-            delimitedBuilder->AppendFormat("MutationId: %v", FromProto<TMutationId>(RequestHeader_->mutation_id()));
+            RequestLoggingTags_.Add("MutationId", FromProto<TMutationId>(RequestHeader_->mutation_id()));
         }
 
         if (RequestHeader_->has_start_time()) {
-            delimitedBuilder->AppendFormat("StartTime: %v", FromProto<TInstant>(RequestHeader_->start_time()));
+            RequestLoggingTags_.Add("StartTime", FromProto<TInstant>(RequestHeader_->start_time()));
         }
 
-        delimitedBuilder->AppendFormat("Retry: %v", RequestHeader_->retry());
+        RequestLoggingTags_.Add("Retry", RequestHeader_->retry());
 
         if (RequestHeader_->has_user_agent()) {
-            delimitedBuilder->AppendFormat("UserAgent: %v", RequestHeader_->user_agent());
+            RequestLoggingTags_.Add("UserAgent", RequestHeader_->user_agent());
         }
 
         if (RequestHeader_->has_timeout()) {
-            delimitedBuilder->AppendFormat("Timeout: %v", FromProto<TDuration>(RequestHeader_->timeout()));
+            RequestLoggingTags_.Add("Timeout", FromProto<TDuration>(RequestHeader_->timeout()));
         }
 
         if (RequestHeader_->tos_level() != NBus::DefaultTosLevel) {
-            delimitedBuilder->AppendFormat("TosLevel: %x", RequestHeader_->tos_level());
+            RequestLoggingTags_.AddFormat("TosLevel", "%x", RequestHeader_->tos_level());
         }
 
         if (RequestHeader_->HasExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext)) {
             const auto& multiproxyTargetExt = RequestHeader_->GetExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext);
-            delimitedBuilder->AppendFormat("MultiproxyTargetCluster: %v", multiproxyTargetExt.cluster());
+            RequestLoggingTags_.Add("MultiproxyTargetCluster", multiproxyTargetExt.cluster());
         }
 
-        delimitedBuilder->AppendFormat("Endpoint: %v", ReplyBus_->GetEndpointDescription());
-
-        delimitedBuilder->AppendFormat("BodySize: %v, AttachmentsSize: %v/%v",
-            GetMessageBodySize(RequestMessage_),
-            GetTotalMessageAttachmentSize(RequestMessage_),
-            GetMessageAttachmentCount(RequestMessage_));
+        RequestLoggingTags_
+            .Add("Endpoint", ReplyBus_->GetEndpointDescription())
+            .Add("BodySize", GetMessageBodySize(RequestMessage_))
+            .AddFormat(
+                "AttachmentsSize",
+                "%v/%v",
+                GetTotalMessageAttachmentSize(RequestMessage_),
+                GetMessageAttachmentCount(RequestMessage_));
 
         // COMPAT(danilalexeev): legacy RPC codecs
         if (RequestHeader_->has_request_codec() && RequestHeader_->has_response_codec()) {
-            delimitedBuilder->AppendFormat("RequestCodec: %v, ResponseCodec: %v",
-                RequestCodec_,
-                ResponseCodec_);
+            RequestLoggingTags_
+                .Add("RequestCodec", RequestCodec_)
+                .Add("ResponseCodec", ResponseCodec_);
         }
-
-        RequestInfos_.push_back(builder.Flush());
     }
 
     void Finish()
@@ -1170,8 +1181,8 @@ private:
 
         TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
 
-        for (const auto& info : RequestInfos_) {
-            delimitedBuilder->AppendString(info);
+        if (!RequestLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", RequestLoggingTags_);
         }
 
         if (RuntimeInfo_->Descriptor.Cancelable && !Cancelable_) {
@@ -1180,7 +1191,7 @@ private:
 
         auto logMessage = builder.Flush();
         if (TraceContext_ && TraceContext_->IsRecorded()) {
-            TraceContext_->AddTag(RequestInfoAnnotation, logMessage);
+            TraceContext_->AddTag(RequestAnnotationsTraceTag, logMessage);
             const auto& authenticationIdentity = GetAuthenticationIdentity();
             if (!authenticationIdentity.User.empty()) {
                 TStringBuilder builder;
@@ -1194,7 +1205,7 @@ private:
         }
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
 
-        RequestInfoState_ = ERequestInfoState::Flushed;
+        RequestAnnotationState_ = ERequestAnnotationState::Flushed;
     }
 
     void LogResponse() override
@@ -1225,8 +1236,8 @@ private:
             GetTotalMessageAttachmentSize(responseMessage),
             GetMessageAttachmentCount(responseMessage));
 
-        for (const auto& info : ResponseInfos_) {
-            delimitedBuilder->AppendString(info);
+        if (!ResponseLoggingTags_.IsEmpty()) {
+            delimitedBuilder->AppendFormat("%v", ResponseLoggingTags_);
         }
 
         delimitedBuilder->AppendFormat("ExecutionTime: %v, TotalTime: %v",
@@ -1239,7 +1250,7 @@ private:
 
         auto logMessage = builder.Flush();
         if (TraceContext_ && TraceContext_->IsRecorded()) {
-            TraceContext_->AddTag(ResponseInfoAnnotation, logMessage);
+            TraceContext_->AddTag(ResponseAnnotationsTraceTag, logMessage);
         }
         auto logLevel = Error_.IsOK() ? LogLevel_ : ErrorLogLevel_;
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, logLevel, RuntimeInfo_->ResponseLoggingAnchor, logMessage);
@@ -1924,7 +1935,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
             .With("method_limit", incomingRequest.RuntimeInfo->QueueSizeLimit.load(std::memory_order::relaxed))
             .With("queue_limit", incomingRequest.RequestQueue->GetQueueSizeLimit())
             .With("queue", incomingRequest.RequestQueue->GetName());
-        if (incomingRequest.ThrottledError) {
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
             error.Add(*incomingRequest.ThrottledError);
         }
         ReplyError(std::move(error), std::move(incomingRequest));
@@ -1937,7 +1948,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
             .With("method_limit", incomingRequest.RuntimeInfo->QueueByteSizeLimit.load(std::memory_order::relaxed))
             .With("queue_limit", incomingRequest.RequestQueue->GetQueueByteSizeLimit())
             .With("queue", incomingRequest.RequestQueue->GetName());
-        if (incomingRequest.ThrottledError) {
+        if (incomingRequest.ThrottledError && !incomingRequest.ThrottledError->IsOK()) {
             error.Add(*incomingRequest.ThrottledError);
         }
         ReplyError(std::move(error), std::move(incomingRequest));
@@ -2740,9 +2751,9 @@ void TServiceBase::ReplyDiscoverRequest(const TCtxDiscoverPtr& context, bool isU
     response.set_up(isUp);
     ToProto(response.mutable_suggested_addresses(), SuggestAddresses());
 
-    context->SetResponseInfo("Up: %v, SuggestedAddresses: %v",
-        response.up(),
-        response.suggested_addresses());
+    context->AnnotateResponse()
+        .With("Up", response.up())
+        .With("SuggestedAddresses", response.suggested_addresses());
 
     context->Reply();
 }
@@ -2832,6 +2843,7 @@ TServiceBase::TRuntimeMethodInfoPtr TServiceBase::RegisterMethod(const TMethodDe
         {RootUserName, runtimeInfo->DefaultRequestQueue.Get()});
 
     runtimeInfo->Heavy.store(descriptor.Options.Heavy);
+    runtimeInfo->Pooled.store(descriptor.Pooled);
     runtimeInfo->QueueSizeLimit.store(descriptor.QueueSizeLimit);
     runtimeInfo->QueueByteSizeLimit.store(descriptor.QueueByteSizeLimit);
     runtimeInfo->ConcurrencyLimit.Reconfigure(descriptor.ConcurrencyLimit);
@@ -3048,8 +3060,8 @@ DEFINE_RPC_SERVICE_METHOD(TServiceBase, Discover)
 {
     auto replyDelay = FromProto<TDuration>(request->reply_delay());
 
-    context->SetRequestInfo("ReplyDelay: %v",
-        replyDelay);
+    context->AnnotateRequest()
+        .With("ReplyDelay", replyDelay);
 
     auto isUp = IsUp(context);
     EnrichDiscoverResponse(response);

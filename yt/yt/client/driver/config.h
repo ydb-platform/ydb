@@ -36,6 +36,9 @@ struct TDriverConfig
     i64 ReadBufferSize;
     i64 WriteBufferSize;
 
+    //! Driver tries not to send attachments larger than this size.
+    i64 MaxAttachmentSize;
+
     TSlruCacheConfigPtr ClientCache;
 
     std::optional<std::string> Token;

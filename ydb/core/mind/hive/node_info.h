@@ -160,7 +160,7 @@ public:
         auto it = TabletsOfObject.find(tablet.GetObjectId());
         if (it != TabletsOfObject.end()) {
             auto count = it->second.size();
-            if (tablet.IsAliveOnLocal(Local)) {
+            if (tablet.IsPresentOnLocal(Local)) {
                 --count;
             }
             return count;

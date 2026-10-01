@@ -19,15 +19,11 @@ class TReadContext;
 
 // Holds all metadata that is needed to perform read/scan
 class TReadMetadataBase {
-public:
-    using ESorting = ERequestSorting;
-
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
-    YDB_ACCESSOR_DEF(bool, FakeSort);
     std::optional<ui64> FilteredCountLimit;
     std::optional<ui64> RequestedLimit;
-    const ESorting Sorting = ESorting::ASC;   // Sorting inside returned batches
+    const ERequestSorting RequestSorting = ERequestSorting::ASC;   // order inside the returned batches
     std::shared_ptr<TPKRangesFilter> PKRangesFilter;
     TProgramContainer Program;
     const std::shared_ptr<const TVersionedIndex> IndexVersionsPointer;
@@ -56,6 +52,12 @@ public:
 
     ui64 GetTabletId() const {
         return TabletId;
+    }
+
+    // The transaction has written something and its lock is broken, so it can no longer commit,
+    // and it does not make sense to execute scans for it too.
+    virtual bool HasWritesAndBroken() const {
+        return false;
     }
 
     bool NeedToDetectConflicts() const {
@@ -185,10 +187,10 @@ public:
         RequestShardingInfo = metadataAccessor->GetShardingInfo(IndexVersionsPointer, RequestSnapshot);
     }
 
-    TReadMetadataBase(const std::shared_ptr<const TVersionedIndex> index, const ESorting sorting, const TProgramContainer& ssaProgram,
-        const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot, const std::shared_ptr<IScanCursor>& scanCursor,
-        const ui64 tabletId)
-        : Sorting(sorting)
+    TReadMetadataBase(const std::shared_ptr<const TVersionedIndex> index, const ERequestSorting requestSorting,
+        const TProgramContainer& ssaProgram, const std::shared_ptr<ISnapshotSchema>& schema, const TSnapshot& requestSnapshot,
+        const std::shared_ptr<IScanCursor>& scanCursor, const ui64 tabletId)
+        : RequestSorting(requestSorting)
         , Program(ssaProgram)
         , IndexVersionsPointer(index)
         , RequestSnapshot(requestSnapshot)
@@ -204,7 +206,7 @@ public:
 
     virtual TString DebugString() const {
         return TStringBuilder() << " predicate{" << (PKRangesFilter ? PKRangesFilter->DebugString() : "no_initialized") << "}"
-                                << " " << Sorting << " sorted";
+                                << " " << RequestSorting << " sorted";
     }
 
     std::set<ui32> GetProcessingColumnIds() const {
@@ -213,12 +215,16 @@ public:
         return result;
     }
 
+    ERequestSorting GetRequestSorting() const {
+        return RequestSorting;
+    }
+
     bool IsAscSorted() const {
-        return Sorting == ESorting::ASC;
+        return RequestSorting == ERequestSorting::ASC;
     }
 
     bool IsDescSorted() const {
-        return Sorting == ESorting::DESC;
+        return RequestSorting == ERequestSorting::DESC;
     }
 
     bool IsSorted() const {

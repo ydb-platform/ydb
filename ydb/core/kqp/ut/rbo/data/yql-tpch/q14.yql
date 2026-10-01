@@ -1,3 +1,5 @@
+$to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
+$to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
 

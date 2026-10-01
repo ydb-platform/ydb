@@ -17,13 +17,14 @@ namespace NKikimr::NOlap::NReader::NCommon {
 
 class TSpecialReadContext;
 class IDataSource;
+class TDataSourceLease;
 
 class ISourcesConstructor {
 private:
     virtual void DoClear() = 0;
     virtual void DoAbort() = 0;
     virtual bool DoIsFinished() const = 0;
-    virtual std::shared_ptr<IDataSource> DoTryExtractNext(
+    virtual std::unique_ptr<TDataSourceLease> DoTryExtractNext(
         const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) = 0;
     virtual void DoInitCursor(const std::shared_ptr<IScanCursor>& cursor) = 0;
     virtual TString DoDebugString() const = 0;
@@ -69,13 +70,7 @@ public:
         return DoIsFinished();
     }
 
-    std::shared_ptr<IDataSource> TryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit) {
-        AFL_VERIFY(!IsFinished());
-        AFL_VERIFY(InitCursorFlag);
-        auto result = DoTryExtractNext(context, inFlightCurrentLimit);
-        //        AFL_VERIFY(result);
-        return result;
-    }
+    std::unique_ptr<TDataSourceLease> TryExtractNext(const std::shared_ptr<TSpecialReadContext>& context, const ui32 inFlightCurrentLimit);
 
     void InitCursor(const std::shared_ptr<IScanCursor>& cursor) {
         AFL_VERIFY(!InitCursorFlag);
@@ -90,7 +85,6 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    mutable TAtomicCounter BreakLockOnReadFinished = TAtomicCounter();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
     std::shared_ptr<NOlap::NDataLocks::TManager::TGuard> DataLockGuard;
 
@@ -139,13 +133,11 @@ public:
         return std::move(SourcesConstructor);
     }
 
-    bool GetBreakLockOnReadFinished() const {
-        return BreakLockOnReadFinished.Val();
-    }
+    // Breaking it right away, not at read finish, so that this scan stops at its next step
+    // (HasWritesAndBroken) and its own reply already reports the lock as broken (DoOnReplyConstruction).
+    void BreakLock() const;
 
-    void SetBreakLockOnReadFinished() const {
-        BreakLockOnReadFinished.Inc();
-    }
+    virtual bool HasWritesAndBroken() const override;
 
     THashSet<ui64> GetConflictingLockIds() const {
         THashSet<ui64> result;
@@ -192,9 +184,14 @@ public:
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
+    const ESourcesSorting SourcesSorting;
 
     bool NeedDuplicateFiltering() const {
         return DuplicateFilteringNeeded;
+    }
+
+    ESourcesSorting GetSourcesSorting() const {
+        return SourcesSorting;
     }
 
     EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
@@ -206,7 +203,11 @@ public:
     TReadMetadata& operator=(const TReadMetadata&) = delete;
 
     bool OrderByLimitAllowed() const {
-        return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+        return TableMetadataAccessor->OrderByLimitAllowed();
+    }
+
+    bool IsSortedScanWithLimit() const {
+        return IsSorted() && HasLimit() && OrderByLimitAllowed();
     }
 
     EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {

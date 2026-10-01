@@ -138,6 +138,22 @@ def JAVA_MODULE(unit: ymake.Unit, *args: str):
 
     data = {k: v for k, v in data.items() if v}
 
+    _dump_java_module(unit, data)
+
+
+@ymake.macro
+def JAVA_RUNTIME_MODULE(unit: ymake.Unit, *args: str):
+    if unit.get('YA_IDE_IDEA') == 'yes':
+        _dump_java_module(
+            unit,
+            {
+                'PATH': unit.path(),
+                'RUNTIME_MANAGED_PEERS_CLOSURE': '${MANAGED_PEERS_CLOSURE}',
+            },
+        )
+
+
+def _dump_java_module(unit, data):
     dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8') + '\n' + DELIM + '\n'
     unit.set_property(['JAVA_DART_DATA', dart])
 

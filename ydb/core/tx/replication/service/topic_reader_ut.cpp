@@ -1,6 +1,7 @@
 #include "topic_reader.h"
 #include "worker.h"
 
+#include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/write_topic.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
@@ -137,6 +138,78 @@ Y_UNIT_TEST_SUITE(RemoteTopicReader) {
         do {
             env.GetRuntime().template GrabEdgeEvents<TEvents::TEvPoison>(ev);
         } while (ev->Sender != reader && ev->Recipient != topicReader);
+    }
+
+    void CheckCommitQueue(const TVector<ui64>& offsets, const TVector<ui64>& expectedOffsets) {
+        TTestActorRuntime runtime;
+        runtime.Initialize(TAppPrepare().Unwrap());
+
+        const auto worker = runtime.AllocateEdgeActor();
+        const auto ydbProxy = runtime.AllocateEdgeActor();
+        const auto readSession = runtime.AllocateEdgeActor();
+        const auto settings = TEvYdbProxy::TTopicReaderSettings()
+            .ConsumerName("consumer")
+            .AppendTopics(NYdb::NTopic::TTopicReadSettings()
+                .Path("/Root/topic")
+                .AppendPartitionIds(0)
+            );
+
+        const auto reader = runtime.Register(CreateRemoteTopicReader(ydbProxy, settings));
+        runtime.Send(reader, worker, new TEvWorker::TEvHandshake());
+        runtime.GrabEdgeEvent<TEvYdbProxy::TEvCreateTopicReaderRequest>(ydbProxy);
+        runtime.Send(reader, ydbProxy,
+            new TEvYdbProxy::TEvCreateTopicReaderResponse(readSession));
+        runtime.GrabEdgeEvent<TEvWorker::TEvHandshake>(worker);
+        runtime.Send(reader, readSession,
+            new TEvYdbProxy::TEvStartTopicReadingSession(TString("read-session"), 7));
+        auto started = runtime.GrabEdgeEvent<TEvWorker::TEvReaderStarted>(worker);
+        UNIT_ASSERT_VALUES_EQUAL(started->Sender, reader);
+        UNIT_ASSERT_VALUES_EQUAL(started->Get()->CommittedOffset, 7);
+
+        // In this runtime Send dispatches the reader's handler synchronously.
+        // All commits have been handled before we inspect the outgoing requests.
+        for (const auto offset : offsets) {
+            runtime.Send(reader, worker, new TEvWorker::TEvCommit(offset));
+        }
+
+        for (const auto offset : expectedOffsets) {
+            auto requests = runtime.CaptureMailboxEvents(ydbProxy.Hint(), ydbProxy.NodeId());
+            UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+            const auto& request = requests.front();
+            UNIT_ASSERT_VALUES_EQUAL(request->GetTypeRewrite(), static_cast<ui32>(TEvYdbProxy::EvCommitOffsetRequest));
+            UNIT_ASSERT_VALUES_EQUAL(request->Sender, reader);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<3>(request->Get<TEvYdbProxy::TEvCommitOffsetRequest>()->GetArgs()), offset);
+            UNIT_ASSERT(runtime.CaptureMailboxEvents(worker.Hint(), worker.NodeId()).empty());
+
+            runtime.Send(reader, ydbProxy,
+                new TEvYdbProxy::TEvCommitOffsetResponse(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})));
+            auto result = runtime.GrabEdgeEvent<TEvWorker::TEvCommitResult>(worker);
+            UNIT_ASSERT_VALUES_EQUAL(result->Sender, reader);
+            UNIT_ASSERT_VALUES_EQUAL(result->Get()->Offset, offset);
+
+            auto notification = runtime.GrabEdgeEvent<TEvYdbProxy::TEvCommitOffsetRequest>(readSession);
+            UNIT_ASSERT_VALUES_EQUAL(std::get<3>(notification->Get()->GetArgs()), offset);
+        }
+
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(ydbProxy.Hint(), ydbProxy.NodeId()).empty());
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(worker.Hint(), worker.NodeId()).empty());
+        UNIT_ASSERT(runtime.CaptureMailboxEvents(readSession.Hint(), readSession.NodeId()).empty());
+    }
+
+    Y_UNIT_TEST(QueuesCommitWhileAnotherCommitIsInFlight) {
+        CheckCommitQueue({10, 20}, {10, 20});
+    }
+
+    Y_UNIT_TEST(CoalescesCommitsWhileAnotherCommitIsInFlight) {
+        CheckCommitQueue({10, 20, 30, 25, 30, 10, 5}, {10, 30});
+    }
+
+    Y_UNIT_TEST(KeepsLargerPendingCommitWhenSmallerCommitArrives) {
+        CheckCommitQueue({10, 30, 20}, {10, 30});
+    }
+
+    Y_UNIT_TEST(DropsSmallerAndDuplicateCommitsWhileAnotherCommitIsInFlight) {
+        CheckCommitQueue({10, 10, 5}, {10});
     }
 }
 

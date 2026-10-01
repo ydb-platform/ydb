@@ -33,6 +33,7 @@ def do(args):
         'Guid',
         'NumStaticSlots',
         'NumActiveSlots',
+        'NumDonorSlots',
         'ExpectedSlotCount',
         'SlotSizeInUnits',
         'PDiskConfig',
@@ -74,6 +75,10 @@ def do(args):
     if args.all_columns or args.check_leaked_slots or (args.columns and 'NumActiveSlots' in args.columns):
         num_active_slots_map = common.build_pdisk_usage_map(base_config, count_donors=True)
 
+    donors_per_pdisk_map = None
+    if args.all_columns or (args.columns and 'NumDonorSlots' in args.columns):
+        donors_per_pdisk_map = common.build_donors_per_pdisk_map(base_config)
+
     pdisk_whiteboard_info = {}
     if args.check_leaked_slots:
         pdisk_node_ids = sorted({pdisk.NodeId for pdisk in base_config.PDisk})
@@ -106,6 +111,7 @@ def do(args):
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
         row['NumActiveSlots'] = num_active_slots_map.get((pdisk.NodeId, pdisk.PDiskId), 0) if num_active_slots_map else None
+        row['NumDonorSlots'] = donors_per_pdisk_map.get((pdisk.NodeId, pdisk.PDiskId), 0) if donors_per_pdisk_map else None
         if args.check_leaked_slots:
             wb_info = pdisk_whiteboard_info.get((pdisk.NodeId, pdisk.PDiskId), {})
             pdisk_reported = wb_info.get('NumActiveSlots')

@@ -59,7 +59,7 @@ public:
         if (const auto* cacheSystem = ctx.ActorSystem()->GetSubSystem<TAllocationCacheSubSystem>()) {
             cacheSystem->GetFamilyStats(&AllocationCacheStats);
         }
-        ActorSystemCounters.Set(harmonizerStats, {});
+        ActorSystemCounters.Set(harmonizerStats);
         ActorSystemCounters.SetAllocationCacheStats(AllocationCacheStats);
         actor->OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));

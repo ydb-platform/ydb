@@ -300,9 +300,7 @@ void TActorSystemCounters::Init(NMonitoring::TDynamicCounters* group) {
     AsyncFrameCacheCachedBytes = frameCacheGroup->GetCounter("CachedBytes", false);
 }
 
-void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats, const TAllocationCacheProcessStats& frameCacheStats) {
-    *AsyncFrameCacheCachedFrames = frameCacheStats.CachedFrames;
-    *AsyncFrameCacheCachedBytes = frameCacheStats.CachedBytes;
+void TActorSystemCounters::Set(const THarmonizerStats& harmonizerStats) {
 #ifdef ACTORSLIB_COLLECT_EXEC_STATS
     *MaxUsedCpuPercent = harmonizerStats.MaxUsedCpu;
     *MinUsedCpuPercent = harmonizerStats.MinUsedCpu;

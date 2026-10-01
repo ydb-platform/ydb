@@ -127,7 +127,7 @@ struct TActorSystemCounters {
 
     void Init(NMonitoring::TDynamicCounters* group);
     void SetAllocationCacheStats(const std::vector<TAllocationCacheFamilyStats>& stats);
-    void Set(const THarmonizerStats& harmonizerStats, const TAllocationCacheProcessStats& frameCacheStats);
+    void Set(const THarmonizerStats& harmonizerStats);
 };
 
 } // NActors

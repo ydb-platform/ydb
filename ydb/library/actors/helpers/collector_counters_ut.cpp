@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TActorSystemCountersTest) {
         auto bytes = group->FindCounter("CachedBytes");
         UNIT_ASSERT(frames && bytes);
 
-        counters.Set(THarmonizerStats{}, TAllocationCacheProcessStats{});
+        counters.SetAllocationCacheStats({});
         UNIT_ASSERT_VALUES_EQUAL(frames->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), 0);
 
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TActorSystemCountersTest) {
         TAllocationCacheProcessStats stats;
         stats.Add(first.GetCachedStats());
         stats.Add(second.GetCachedStats());
-        counters.Set(THarmonizerStats{}, stats);
+        counters.SetAllocationCacheStats({{TAsyncFrameCacheTag::Name, stats}});
         UNIT_ASSERT_VALUES_EQUAL(frames->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), 3072);
 
@@ -57,7 +57,7 @@ Y_UNIT_TEST_SUITE(TActorSystemCountersTest) {
         stats = TAllocationCacheProcessStats{};
         stats.Add(first.GetCachedStats());
         stats.Add(second.GetCachedStats());
-        counters.Set(THarmonizerStats{}, stats);
+        counters.SetAllocationCacheStats({{TAsyncFrameCacheTag::Name, stats}});
         UNIT_ASSERT_VALUES_EQUAL(frames->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), 2048);
         first.Release(live, 1024);

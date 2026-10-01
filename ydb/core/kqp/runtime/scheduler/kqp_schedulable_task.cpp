@@ -43,7 +43,7 @@ bool TSchedulableTask::TryIncreaseUsage() {
                 fairShare = Query->AllowMinFairShare;
             }
         }
-    } else { // TODO: check directly for the pool snapshot - even if there is no query snapshot yet.
+    } else { // The pool of the query is not in the snapshot yet - see TQuery::InitSnapshot().
         fairShare = Query->AllowMinFairShare;
         poolOrQuery = Query.get();
     }

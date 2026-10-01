@@ -49,6 +49,16 @@ NSnapshot::TQuery* TQuery::TakeSnapshot() {
     return newQuery;
 }
 
+void TQuery::InitSnapshot(const NSnapshot::TPool& pool) {
+    auto snapshot = std::make_shared<NSnapshot::TQuery>(std::get<TQueryId>(GetId()), shared_from_this());
+
+    // Like the leaf pool gives its fair-share to the queries. But the zero fair-share would make the tasks wait for
+    // the maximum delay (see TSchedulableBase::CalculateDelay) - then it's what the query has without a snapshot.
+    snapshot->FairShare = pool.FairShare > 0 ? pool.FairShare : AllowMinFairShare;
+
+    SetSnapshot(snapshot);
+}
+
 TFullPoolId TQuery::GetFullPoolId() const {
     auto* pool = GetParent();
     Y_ENSURE(pool, "Query " << std::get<TQueryId>(GetId()) << " is not attached to a pool");

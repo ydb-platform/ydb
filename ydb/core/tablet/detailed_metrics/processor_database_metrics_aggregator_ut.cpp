@@ -1279,10 +1279,11 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
                                    ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
                                    : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
             auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+            auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
             auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
             UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 0, DumpBuckets(rawSnapshot.Get()));
             UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 1, DumpBuckets(rawSnapshot.Get()));
-            AssertCpuHistogram(rawExecutor, publicBucket, 1);
+            AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
         }
     }
 
@@ -1307,10 +1308,11 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
                                    ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
                                    : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
             auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+            auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
             auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
             UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 1, DumpBuckets(rawSnapshot.Get()));
             UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 1, DumpBuckets(rawSnapshot.Get()));
-            AssertCpuHistogram(rawExecutor, publicBucket, 2);
+            AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
 
             // Node1 restarts: a fresh aggregator, the tablet has its first report (rate 0 -> bucket 0).
             // The processor has not dropped node1 in between.
@@ -1325,7 +1327,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
             UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 2, DumpBuckets(rawSnapshot.Get()));
             UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(1), 0, DumpBuckets(rawSnapshot.Get()));
-            AssertCpuHistogram(rawExecutor, publicBucket, 2);
+            AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
         }
     }
 
@@ -1404,7 +1406,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             } else {
                 for (ui64 tabletId : {1000, 2000}) {
                     auto rawExecutor = FindRawLeafExecutorCounters(newFixture.RawRoot, tabletId, 0);
-                    AssertCpuHistogram(rawExecutor, FindPublicLeafGroup(newFixture.PublicRoot, tabletId, 0), 1);
+                    AssertCpuHistogram(rawExecutor, FindPublicLeafGroup(newFixture.PublicRoot, tabletId, 0), 1,
+                                       "table.datashard.partition.used_core_percents");
                     auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
                     UNIT_ASSERT_VALUES_EQUAL_C(rawSnapshot->Value(0), 1, DumpBuckets(rawSnapshot.Get()));
                 }

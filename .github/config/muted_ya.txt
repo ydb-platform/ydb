@@ -23,6 +23,7 @@ ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
 ydb/core/persqueue/ut TPQTest.TestCompactifiedWithRetention
 ydb/core/persqueue/ut TPQTest.TestMaxTimeLagRewind
 ydb/core/persqueue/ut TPQTest.TestPQPartialRead
+ydb/core/persqueue/ut TPQTest.TestPQRead
 ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
 ydb/core/persqueue/ut TPQTest.TestReadSessions
 ydb/core/persqueue/ut TPQTest.TestSetClientOffset

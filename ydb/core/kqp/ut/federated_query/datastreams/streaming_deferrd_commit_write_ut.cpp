@@ -443,8 +443,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopic = TStringBuilder() << Name_ << "Input";
         const auto outputTopic = TStringBuilder() << Name_ << "Output";
-        CreateTopic(inputTopic, std::nullopt, /* local */ true);
-        CreateTopic(outputTopic);
+        CreateScopedTopicExt(inputTopic, std::nullopt, /* local */ true);
+        CreateScopedTopic(outputTopic);
         CreatePqSourceBasicAuth("pqSource", /* useSchemaSecrets */ true);
         auto client = GetDeferredPublishClient(false, "", NYdb::CreateLoginCredentialsProviderFactory({.User = "root", .Password = "1234"}));
         const auto queryName = TStringBuilder() << Name_ << "Query";
@@ -506,8 +506,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         ValidatePublicationsCount(1, queryName, *client);
         const auto canceled = client->CancelPublication(TDeferredPublication(publications.front().IntPublicationId)).ExtractValueSync();
         UNIT_ASSERT_C(canceled.IsSuccess(), canceled.GetIssues().ToString());
-        DropTopic(inputTopic, /* local */ true);
-        DropTopic(outputTopic);
         if constexpr (Gc) {
             DropTopic(outputTopic, /* local */ true);
         }

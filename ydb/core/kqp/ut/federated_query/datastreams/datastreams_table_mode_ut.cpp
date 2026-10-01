@@ -97,10 +97,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreamsTableMode) {
             const std::string sourceName = std::string("tableModeWriteTimeSource") + suffix;
 
             ui32 partitionCount = 1;
-            CreateTopic(topicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), local);
-            Y_DEFER {
-                DropTopic(topicName, local);
-            };
+            CreateScopedTopicExt(topicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount), local);
 
             std::string topicRef;
             if (local) {

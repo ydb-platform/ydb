@@ -34,6 +34,7 @@
 # Txs/Sec are perturbed when on.
 
 import contextlib
+import math
 import os
 import signal
 import statistics
@@ -174,6 +175,8 @@ def calc_significance(main_mean, current_mean, main_stddev, current_stddev, main
     # Returns (verdict_str, n_sigmas_or_None, is_significant_or_None).
     if main_mean in ("N/A", None) or current_mean in ("N/A", None):
         return "N/A", None, None
+    if main_mean == 0:
+        return "N/A (zero base)", None, None
     if main_n < 2 or current_n < 2:
         return "N/A (need >= 2 iterations)", None, None
 
@@ -220,19 +223,60 @@ def collect_value(values, val):
 
 
 def extract_total_txs_sec(log_file):
-    # Mirror the original `grep -A1 "^Total" | tail -1 | awk '{print $3}'`:
-    # take the line after the LAST "Total" header, 3rd whitespace field.
-    if not os.path.isfile(log_file):
-        return None
+    # Warmup and measurement both print a Total row. Validate the final row;
+    # CLI workloads can exit successfully even when every query has failed.
     with open(log_file, errors="replace") as f:
         lines = f.read().splitlines()
-    val = None
+    total = None
     for i, line in enumerate(lines):
-        if line.startswith("Total") and i + 1 < len(lines):
-            fields = lines[i + 1].split()
-            if len(fields) >= 3:
-                val = fields[2]
-    return val
+        if line.startswith("Total"):
+            total = dict(zip(line.split(), lines[i + 1].split())) if i + 1 < len(lines) else {}
+    try:
+        transactions = int(total["Txs"])
+        errors = int(total["Errors"])
+        rate_text = total["Txs/Sec"]
+        rate = float(rate_text)
+    except (TypeError, KeyError, ValueError) as exc:
+        raise ValueError(f"Missing or invalid measured Total row in {log_file}") from exc
+    if transactions <= 0 or errors != 0 or not math.isfinite(rate) or rate <= 0:
+        raise ValueError(
+            f"Invalid performance measurement: {transactions} successful transactions, "
+            f"{errors} errors, {rate_text} Txs/Sec. See {log_file} and {log_file}.err")
+    return rate_text
+
+
+def test_extract_total_txs_sec_uses_measurement(tmp_path):
+    log = tmp_path / "workload.log"
+    log.write_text("Total Txs Txs/Sec Retries Errors\n10 0 0 0 50\n"
+                   "Total Txs Txs/Sec Retries Errors\n20 200 10.0 0 0\n")
+    assert extract_total_txs_sec(log) == "10.0"
+
+
+@pytest.mark.parametrize("summary", [
+    "100 0 0 0 4400",  # All queries timed out, as in the failed baseline.
+    "100 100 1 0 2",  # Partial failures must not bias the comparison either.
+    "100 0 0 0 0",
+    "100 100 nan 0 0",
+    "100 100 inf 0 0",
+    "100 100 -1 0 0",
+    "",
+])
+def test_extract_total_txs_sec_rejects_invalid_measurement(tmp_path, summary):
+    log = tmp_path / "workload.log"
+    log.write_text("Total Txs Txs/Sec Retries Errors\n" + summary + "\n")
+    with pytest.raises(ValueError):
+        extract_total_txs_sec(log)
+
+
+def test_extract_total_txs_sec_rejects_missing_measurement(tmp_path):
+    log = tmp_path / "workload.log"
+    log.write_text("workload terminated before printing results\n")
+    with pytest.raises(ValueError, match="Total row"):
+        extract_total_txs_sec(log)
+
+
+def test_zero_baseline_is_not_significant():
+    assert calc_significance(0, 2304.9, 0, 7, 3, 3) == ("N/A (zero base)", None, None)
 
 
 class TestCompareIndexPerformance:
@@ -251,6 +295,7 @@ class TestCompareIndexPerformance:
         self.iterations = int(yatest.common.get_param('compare_iterations', default='3'))
         self.duration = yatest.common.get_param('compare_duration', default='60')
         self.warmup = yatest.common.get_param('compare_warmup', default='30')
+        self.vector_client_timeout = yatest.common.get_param('compare_vector_client_timeout', default='30s')
         self.rows = yatest.common.get_param('compare_rows', default='10000')
         self.threads = yatest.common.get_param('compare_threads', default='10')
         self.targets = yatest.common.get_param('compare_targets', default='1000')
@@ -714,7 +759,7 @@ class TestCompareIndexPerformance:
         main_values = []
         current_values = []
 
-        vector_index_args = []
+        vector_index_args = ["--client-timeout", self.vector_client_timeout]
         if self.vector_clusters is not None:
             vector_index_args += ["--clusters", self.vector_clusters]
         if self.vector_levels is not None:

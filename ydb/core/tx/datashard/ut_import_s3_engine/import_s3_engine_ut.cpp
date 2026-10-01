@@ -581,6 +581,24 @@ TString WithFooter(TStringBuf body, const parquet::format::FileMetaData& metadat
         << TStringBuf(reinterpret_cast<const char*>(&length), sizeof(length)) << "PAR1";
 }
 
+// A Parquet file of the given body and footer bytes.
+TString WithFooterBytes(TStringBuf body, TStringBuf footer) {
+    const ui32 length = footer.size();
+    return TStringBuilder() << body << footer
+        << TStringBuf(reinterpret_cast<const char*>(&length), sizeof(length)) << "PAR1";
+}
+
+// A number the way thrift's compact protocol writes it.
+TString Varint(ui32 value) {
+    TString out;
+    while (value >= 0x80) {
+        out.push_back(static_cast<char>(value | 0x80));
+        value >>= 7;
+    }
+    out.push_back(static_cast<char>(value));
+    return out;
+}
+
 // The file with its footer changed by patch.
 TString PatchFooter(const TString& file, const std::function<void(parquet::format::FileMetaData&)>& patch) {
     size_t footerStart = 0;
@@ -2780,6 +2798,54 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
             UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
                 "Parquet column 'value' has 3 rows where column 'key' has 4, from row 3 of row group 0");
             UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), 3);
+        }
+    }
+
+    Y_UNIT_TEST(ParquetRejectsAMalformedFooter) {
+        // The tail of the file is checked before the footer is fetched, and
+        // the footer is parsed under limits before Arrow sees it: a crafted
+        // file ends in an error, with nothing but the tail downloaded.
+        const TString source = BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4);
+        size_t footerStart = 0;
+        ReadFooter(source, &footerStart);
+        const TStringBuf body = TStringBuf(source).SubStr(0, footerStart);
+        const TString footer = source.substr(footerStart, source.size() - 8 - footerStart);
+
+        const auto import = [](const TString& file, TStringBuf expected, TStringBuf what) {
+            const TEngineFixture fixture;
+            const auto outcome = ImportKeyValueParquet(fixture, file);
+            UNIT_ASSERT_C(outcome.Error, what << " was taken");
+            UNIT_ASSERT_STRING_CONTAINS_C(*outcome.Error, expected, what);
+            UNIT_ASSERT_C(outcome.Rows.empty(), what);
+            UNIT_ASSERT_LE_C(outcome.RequestedBytes, 64_KB, what);
+        };
+
+        { // the magic
+            TString file = source;
+            file.replace(file.size() - 4, 4, "XXXX");
+            import(file, "parquet magic bytes not found in footer", "a file without the magic");
+        }
+
+        { // a footer length past the file
+            TString file = source;
+            const ui32 length = file.size();
+            file.replace(file.size() - 8, 4, TStringBuf(reinterpret_cast<const char*>(&length), sizeof(length)));
+            import(file, "exceeds file size", "a footer longer than the file");
+        }
+
+        { // a list the footer declares but does not hold: above the limit of
+          // thrift, and below it
+            // In the compact protocol the list of the row groups, one struct,
+            // is 0x19 (field 4, a list) 0x1C (one element, a struct). A longer
+            // list is 0xFC and its length as a varint.
+            const size_t header = footer.find("\x19\x1C");
+            UNIT_ASSERT(header != TString::npos);
+            for (const ui32 declared : {1000001u, 100000u}) {
+                TString patched = footer;
+                patched.replace(header + 1, 1, TStringBuilder() << '\xFC' << Varint(declared));
+                import(WithFooterBytes(body, patched), "failed to parse the parquet footer",
+                    TStringBuilder() << "a footer declaring " << declared << " row groups it does not hold");
+            }
         }
     }
 

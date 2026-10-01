@@ -3438,6 +3438,38 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
+    Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTableParquet, EnableDataShardDirectPartImport) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+            runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+
+            // several row groups, so that a reboot lands between them
+            TVector<std::pair<TString, TMaybe<TString>>> rows;
+            for (ui32 i = 0; i < 6; ++i) {
+                rows.emplace_back(TStringBuilder() << "k" << i, TString(24_KB, static_cast<char>('a' + i)));
+            }
+            const auto data = GenerateParquetTestData(rows, /*rowGroupSize=*/2);
+
+            Restore(t, runtime, activeZone, port, R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )", {data});
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+                NKqp::CompareYson(data.YsonStr, content);
+            }
+        });
+    }
+
     Y_UNIT_TEST_WITH_COMPRESSION_FLAG(ShouldSucceedOnMultiShardTable, EnableDataShardDirectPartImport) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -4110,6 +4142,113 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             Ydb::StatusIds::CANCELLED);
         UNIT_ASSERT_STRING_CONTAINS(ImportIssues(runtime, id, Ydb::StatusIds::CANCELLED),
             "Parquet import is disabled by feature flag EnableImportInParquet");
+    }
+
+    TString ImportTableRequestWithRetries() {
+        return R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              number_of_retries: 3
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Table"
+              }
+            }
+        )";
+    }
+
+    // A Parquet backup of three row groups, each fetched by a GetObject of its
+    // own: the file is bigger than the tail the footer is looked for in.
+    TTestData MultiRowGroupParquetTestData() {
+        TVector<std::pair<TString, TMaybe<TString>>> rows;
+        for (ui32 i = 0; i < 6; ++i) {
+            rows.emplace_back(TStringBuilder() << "k" << i, TString(24_KB, static_cast<char>('a' + i)));
+        }
+        return GenerateParquetTestData(rows, /*rowGroupSize=*/2);
+    }
+
+    // A GetObject of a row group fails with a retriable error after the row
+    // groups before it were written. The downloader restarts with the engine
+    // it has, which keeps its place in the file, and the direct import keeps
+    // its part; the import completes with every row.
+    Y_UNIT_TEST_FLAG(ShouldRetryParquetReadWithLiveEngine, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+
+        const auto data = MultiRowGroupParquetTestData();
+        const ui64 contentLength = data.Data.size();
+        UNIT_ASSERT_GT(contentLength, 64_KB);
+
+        ui32 rowGroupReads = 0;
+        bool failed = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NWrappers::NExternalStorage::EvGetObjectResponse) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            const auto* response = ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>();
+            if (!response->Key || !response->Key->EndsWith(".parquet") || !response->Result.IsSuccess()) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            const auto interval = response->GetReadInterval();
+            if (interval.second + 1 == contentLength) {
+                return TTestActorRuntime::EEventAction::PROCESS; // the tail of the file, with the footer
+            }
+            if (++rowGroupReads != 2 || failed) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            // the second row group fails once; the retry is a wakeup the
+            // downloader schedules for itself
+            failed = true;
+            runtime.EnableScheduleForActor(ev->Recipient);
+            Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(
+                Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                    Aws::S3::S3Errors::INTERNAL_FAILURE, "InternalError", "injected failure", /*isRetryable=*/true)));
+            ev.Reset(new IEventHandle(ev->Recipient, ev->Sender,
+                new NWrappers::NExternalStorage::TEvGetObjectResponse(response->Key, interval, outcome),
+                ev->Flags, ev->Cookie));
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(runtime, env, ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequestWithRetries());
+        UNIT_ASSERT_C(failed, "no row group was read on its own");
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    // The first upload of rows is answered with a retriable error. The
+    // downloader drops its engine, restarts from the last checkpoint and
+    // uploads again; the import completes with every row, once.
+    Y_UNIT_TEST(ShouldRetryParquetUploadAfterRetriableError) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions());
+        runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+
+        const auto data = MultiRowGroupParquetTestData();
+
+        bool failed = false;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != TEvDataShard::EvS3UploadRowsResponse || failed) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+            failed = true;
+            runtime.EnableScheduleForActor(ev->Recipient);
+            const ui64 tabletId = ev->Get<TEvDataShard::TEvS3UploadRowsResponse>()->Record.GetTabletID();
+            ev.Reset(new IEventHandle(ev->Recipient, ev->Sender,
+                new TEvDataShard::TEvS3UploadRowsResponse(tabletId, NKikimrTxDataShard::TError::WRONG_SHARD_STATE),
+                ev->Flags, ev->Cookie));
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        Run(runtime, env, ConvertTestData(TTestDataWithScheme(Utf8KeyValueScheme(), {data})), ImportTableRequestWithRetries());
+        UNIT_ASSERT_C(failed, "no rows were uploaded");
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnSingleShardTable, EnableDataShardDirectPartImport) {
@@ -9494,6 +9633,52 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
             primary_key: "key"
         )", EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_TWIN(ShouldSucceedOnParquetTable, 2, 1, false, EnableDataShardDirectPartImport) {
+        // several row groups, so that a reboot lands between them
+        TVector<std::pair<TString, TMaybe<TString>>> rows;
+        for (ui32 i = 0; i < 6; ++i) {
+            rows.emplace_back(TStringBuilder() << "k" << i, TString(24_KB, static_cast<char>('a' + i)));
+        }
+        THashMap<TString, TTestDataWithScheme> bucket;
+        bucket.emplace("", TTestDataWithScheme(R"(
+            columns {
+              name: "key"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            columns {
+              name: "value"
+              type { optional_type { item { type_id: UTF8 } } }
+            }
+            primary_key: "key"
+        )", {GenerateParquetTestData(rows, /*rowGroupSize=*/2)}));
+
+        TImportEnv<false> env(ConvertTestData(bucket), DefaultImportItems());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                env.SetupRuntime(runtime);
+                runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+                runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+                runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
+                runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+            }
+
+            const ui64 importId = ++t.TxId;
+            AsyncImport(runtime, importId, "/MyRoot", env.Request);
+            t.TestEnv->TestWaitNotification(runtime, importId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestGetImport(runtime, importId, "/MyRoot", {
+                    Ydb::StatusIds::SUCCESS,
+                    Ydb::StatusIds::NOT_FOUND
+                });
+            }
+        });
     }
 
     Y_UNIT_TEST_WITH_REBOOTS_BUCKETS_QUAD(ShouldSucceedOnTableWithChecksum, 2, 1, false, IsFs, EnableDataShardDirectPartImport) {

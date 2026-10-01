@@ -937,8 +937,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             Counters.PageCollections->Inc();
             Y_ENSURE(pageCollectionId);
             collection.Id = pageCollectionId;
-            collection.PageSet.reserve(collection.TotalPages = pageCollection.Total());
-            collection.TotalSize = sizeof(TPage) * pageCollection.Total() + pageCollection.BackingSize();
+            // Do not call reserve(): TotalPages counts all disk pages; PageSet grows with tracked pages.
+            collection.TotalPages = pageCollection.Total();
+            collection.TotalSize = sizeof(TPage) * collection.TotalPages + pageCollection.BackingSize();
         } else {
             Y_DEBUG_ABORT_UNLESS(collection.Id == pageCollectionId);
             Y_ENSURE(collection.TotalPages == pageCollection.Total(),

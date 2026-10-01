@@ -22,7 +22,7 @@ TPrivatePageCache::TPageCollection::TPageCollection(TIntrusiveConstPtr<NPageColl
     : Id(pageCollection->Label())
     , PageCollection(std::move(pageCollection))
 {
-    PageMap.reserve(PageCollection->Total());
+    // Do not call reserve(): Total() counts all disk pages; PageMap grows with cached pages.
 }
 
 TPrivatePageCache::TPageCollection::TPageCollection(const TPageCollection &pageCollection)

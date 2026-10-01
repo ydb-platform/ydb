@@ -3449,6 +3449,8 @@ void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
 
 void TExecutor::Handle(TEvPrivate::TEvRetryGcRequest::TPtr &ev, const TActorContext &ctx) {
     GcLogic->RetryGcRequests(ev->Get()->Channel, ctx);
+    // Empty retries produce no GC result to resume vacuum.
+    ScheduleVacuumProgress();
 }
 
 void TExecutor::Handle(TEvResourceBroker::TEvResourceAllocated::TPtr &ev) {

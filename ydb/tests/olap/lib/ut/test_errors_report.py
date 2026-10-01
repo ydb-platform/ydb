@@ -52,7 +52,7 @@ def test_no_tmp_file_left(tmp_path):
     fn = str(tmp_path / 'errors.yaml')
     write_errors_yaml(fn, 'Suite1', 'Query01', [_error('e1')], 0, 10)
     assert not os.path.exists(fn + '_')
-    assert os.listdir(str(tmp_path)) == ['errors.yaml', 'errors.yaml.lock']
+    assert sorted(os.listdir(str(tmp_path))) == ['errors.yaml', 'errors.yaml.lock']
 
 
 def test_corrupted_existing_file_starts_fresh(tmp_path):

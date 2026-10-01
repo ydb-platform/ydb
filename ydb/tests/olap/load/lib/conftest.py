@@ -16,7 +16,7 @@ from pytz import timezone
 from time import time
 from typing import Optional, Union, Any
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
-from ydb.tests.olap.lib.workload_result import ErrorArea, ErrorPriority, QueryPlan, WorkloadError, WorkloadRunResult
+from ydb.tests.olap.lib.workload_result import ErrorArea, ErrorPriority, QueryPlan, WorkloadError, WorkloadRunResult, Iteration
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
 from ydb.tests.olap.lib.errors_report import write_errors_yaml

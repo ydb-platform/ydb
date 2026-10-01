@@ -516,6 +516,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         gotFamilyNames.emplace(0, DefaultFamilyName);
         for (const auto& family : got.GetPartitionConfig().GetColumnFamilies()) {
             const auto name = GetFamilyName(family);
+            if (name.empty()) {
+                error = TStringBuilder() << "Unnamed non-default destination column family"
+                    << ": id: " << family.GetId();
+                return false;
+            }
             gotFamilyNames[family.GetId()] = name;
             families.emplace(name, &family);
         }

@@ -236,6 +236,7 @@ SRCS(
     schemeshard__root_shred_manager.cpp
     schemeshard__serverless_storage_billing.cpp
     schemeshard__state_changed_reply.cpp
+    schemeshard__storage_space.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__table_partitions_format.cpp
     schemeshard__table_stats.cpp

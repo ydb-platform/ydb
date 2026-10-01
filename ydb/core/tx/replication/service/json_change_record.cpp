@@ -37,8 +37,12 @@ public:
     }
 
     bool OnMapKey(const TStringBuf& key) override {
-        if (!FamilyMaps.empty() && FamilyMaps.back() == ValuesStack.back() && FamilyMaps.back()->Has(key)) {
-            DuplicateFamily = key;
+        if (!FamilyMaps.empty() && ValuesStack.back()->Has(key)) {
+            if (FamilyMaps.back() == ValuesStack.back()) {
+                DuplicateFamily = key;
+            } else {
+                DuplicateSetting = key;
+            }
             return false;
         }
 
@@ -54,6 +58,7 @@ public:
     }
 
     TString DuplicateFamily;
+    TString DuplicateSetting;
 
 private:
     TVector<const NJson::TJsonValue*> FamilyMaps;
@@ -68,9 +73,13 @@ bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& jso
         return true;
     }
 
-    error = parser.DuplicateFamily
-        ? TStringBuilder() << "duplicate column family: " << parser.DuplicateFamily
-        : TString("cannot parse JSON");
+    if (parser.DuplicateFamily) {
+        error = TStringBuilder() << "duplicate column family: " << parser.DuplicateFamily;
+    } else if (parser.DuplicateSetting) {
+        error = TStringBuilder() << "duplicate column family setting: " << parser.DuplicateSetting;
+    } else {
+        error = "cannot parse JSON";
+    }
     return false;
 }
 

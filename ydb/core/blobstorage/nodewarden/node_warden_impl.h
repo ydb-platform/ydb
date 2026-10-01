@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/dsproxy/group_sessions.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
@@ -434,6 +435,26 @@ namespace NKikimr::NStorage {
         void SendRegisterNode();
         void SendInitialGroupRequests();
 
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Database space state relay: local actors subscribe here, the node warden keeps one subscription per database
+        // at BS_CONTROLLER and fans its notifications out
+
+        struct TDatabaseSpaceSubscription {
+            THashSet<TActorId> Subscribers;
+            std::optional<NKikimrBlobStorage::TEvControllerDatabaseSpaceState> Last; // last state got from BSC
+        };
+
+        std::map<TPathId, TDatabaseSpaceSubscription> DatabaseSpaceSubscriptions; // database's domain key -> subscription
+        bool RegisteredAtController = false; // BSC has confirmed registration over the current pipe
+
+        void OnRegisteredAtController();
+        void Handle(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr ev);
+        void Handle(TEvents::TEvUndelivered::TPtr ev);
+        void RemoveDatabaseSpaceSubscriber(const TActorId& subscriber, TPathId scope,
+            NKikimrBlobStorage::TEvControllerSubscribeDatabaseSpace *request);
+        void SendDatabaseSpaceRequest(std::unique_ptr<TEvBlobStorage::TEvControllerSubscribeDatabaseSpace> request);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Actor methods
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -546,6 +567,7 @@ namespace NKikimr::NStorage {
             ui64 ScrubCookieForController = 0; // cookie used to communicate with BS_CONTROLLER
 
             std::optional<NKikimrBlobStorage::TVDiskMetrics> VDiskMetrics;
+            ui64 LastSpaceSequence = 0; // VDiskSpaceSequence of the last applied space color report of the VDisk
 
             // this flag is only used to cooperate between PDisk and VDisk code while processing service set update;
             // it should never escape the ApplyServiceSet() function
@@ -766,6 +788,7 @@ namespace NKikimr::NStorage {
         void RenderDSProxies(IOutputStream& out);
 
         void SendDiskMetrics(bool reportMetrics);
+        static void SetCurrentVDiskId(const TVDiskRecord& vdisk, NKikimrBlobStorage::TVDiskMetrics *metrics);
         void Handle(TEvStatusUpdate::TPtr ev);
 
         void Handle(TEvBlobStorage::TEvDropDonor::TPtr ev);
@@ -893,6 +916,7 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenQueryGroupInfo::TPtr ev);
 
         bool VDiskStatusChanged = false;
+        ui64 MetricsSequence = 0; // sequence number of the last TEvControllerUpdateDiskStatus sent to BS_CONTROLLER
 
         STATEFN(StateOnline);
 

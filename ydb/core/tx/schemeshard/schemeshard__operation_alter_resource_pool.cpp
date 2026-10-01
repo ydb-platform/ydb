@@ -152,6 +152,7 @@ public:
         const TResourcePoolInfo::TPtr resourcePoolInfo = NResourcePool::ModifyResourcePool(resourcePoolDescription, oldResourcePoolInfo);
         Y_ABORT_UNLESS(resourcePoolInfo);
         RETURN_RESULT_UNLESS(NResourcePool::IsResourcePoolInfoValid(result, resourcePoolInfo));
+        RETURN_RESULT_UNLESS(NResourcePool::IsCpuGuaranteeValid(result, parentPath, dstPath->PathId, resourcePoolInfo, context));
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
         const TPathElement::TPtr resourcePool = ReplaceResourcePoolPathElement(dstPath);

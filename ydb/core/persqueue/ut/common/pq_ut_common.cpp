@@ -59,7 +59,7 @@ void SendPQTabletConfig(
     UNIT_ASSERT_EQUAL(prepared->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
     UNIT_ASSERT(prepared->Record.HasTxId() && prepared->Record.GetTxId() == txId);
     UNIT_ASSERT(prepared->Record.HasOrigin() && prepared->Record.GetOrigin() == tabletId);
-    // Счётчик теста не знает пол, который таблетка выставила в PREPARED.
+    // Счётчик теста не знает нижнюю границу, которую таблетка выставила в PREPARED.
     // Шаг ниже MinStep она принимает, но координатор так планировать не должен.
     UNIT_ASSERT(prepared->Record.HasMinStep());
     planStep = Max(planStep, prepared->Record.GetMinStep());

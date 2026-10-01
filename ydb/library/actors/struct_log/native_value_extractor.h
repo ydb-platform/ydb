@@ -88,4 +88,7 @@ protected:
 template <>
 class TNativeValueExtractor<TStringBuf> {};
 
+template <>
+class TNativeValueExtractor<std::string_view> {};
+
 }

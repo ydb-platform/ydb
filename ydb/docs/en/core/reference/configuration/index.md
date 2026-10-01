@@ -27,7 +27,6 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](kafka.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
 || [{#T}](log_config.md) | No | Logging configuration and parameters ||
 || [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||
-|| [{#T}](monitoring_config.md) | No | Parameters of [YDB Monitoring](../ydb-ui/ydb-monitoring.md) ||
 || [{#T}](node_broker_config.md) | No | Stable node names configuration ||
 || [{#T}](query_service_config.md) | No | Federated query connector configuration ||
 || [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption ||

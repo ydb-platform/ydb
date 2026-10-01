@@ -157,14 +157,14 @@ TIntrusiveConstPtr<TSlices> SlicesOf(const TPartView& view) {
 struct TPageRef {
     TLogoBlobID Label;
     ui32 Group = 0;
-    ui32 PageId = 0;
+    TPageOffset Offset;
 
     bool operator==(const TPageRef&) const = default;
 
     template <typename H>
     friend H AbslHashValue(H h, const TPageRef& ref) {
         const ui64* raw = ref.Label.GetRaw();
-        return H::combine(std::move(h), raw[0], raw[1], raw[2], ref.Group, ref.PageId);
+        return H::combine(std::move(h), raw[0], raw[1], raw[2], ref.Group, static_cast<size_t>(ref.Offset));
     }
 };
 
@@ -183,13 +183,13 @@ public:
         return Inner->Locate(part, ref, lob);
     }
 
-    const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
-        const auto type = part->GetPageType(pageId, groupId);
-        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex,
+    const TSharedData* TryGetPage(const TPart* part, const TPageLocation& location, TGroupId groupId) override {
+        const auto type = location.Type;
+        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex || type == EPage::BTreeIndexV2,
             "key-block iterator requested a non-index page");
-        const TSharedData* page = Inner->TryGetPage(part, pageId, groupId);
+        const TSharedData* page = Inner->TryGetPage(part, location, groupId);
         if (page) {
-            Seen.insert({part->Label, groupId.Raw(), pageId});
+            Seen.insert({ part->Label, groupId.Raw(), location.Offset });
         }
         return page;
     }
@@ -216,7 +216,7 @@ TMark PageBegin(IPartGroupIndexIter& iter, const TKeyCellDefaults& keys) {
 struct TPageSpan {
     TMark Begin;
     TMark End;
-    TPageId PageId = Max<TPageId>();
+    TPageOffset Offset;
     TRowId Rows = 0;
     ui64 Bytes = 0;
 };
@@ -252,9 +252,10 @@ struct TPageCursor {
             }
         }
         Page = {};
-        Page.PageId = Iter->GetPageId();
+        const auto location = Iter->GetLocation();
+        Page.Offset = location.Offset;
         Page.Rows = Iter->GetNextRowId() - Iter->GetRowId();
-        Page.Bytes = part->GetPageSize(Page.PageId, NPage::TGroupId(0));
+        Page.Bytes = location.Size;
         Page.Begin = PageBegin(*Iter, keys);
         const EReady ready = Iter->Next();
         if (ready == EReady::Page) {
@@ -394,7 +395,7 @@ struct TKeyBlockIterator::TState {
             start = Later(start, page.Begin);
             end = Earlier(end, page.End);
             Block.OwnerRows = page.Rows;
-            if (SeenData.insert({owner->Label, 0, page.PageId}).second) {
+            if (SeenData.insert({ owner->Label, 0, page.Offset }).second) {
                 Telemetry.OwnerMainGroupBytes += page.Bytes;
             }
         } else {

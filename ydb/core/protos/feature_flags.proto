@@ -431,4 +431,5 @@ message TFeatureFlags {
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
     optional bool EnableAsyncIndexReplication = 351 [default = false];
     optional bool EnableDatabaseAccessCheckForHttpMonitoring = 352 [default = false];
+    optional bool EnableLocalDBBtreeIndexV2 = 353 [default = false];
 }

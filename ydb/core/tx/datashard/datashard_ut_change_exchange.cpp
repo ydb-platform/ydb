@@ -4824,13 +4824,59 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitTxNotification(server, edgeActor, AsyncAlterAddIndex(server, "/Root", "/Root/Table",
             TShardedTableOptions::TIndex{"by_value", {"value"}, {}, NKikimrSchemeOp::EIndexTypeGlobalAsync}));
 
-        const auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+        auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
             R"({"tableChanges":"***","ts":"***"})",
         });
         const auto& index = records[0]["tableChanges"][0]["table"]["indexes"]["by_value"];
         UNIT_ASSERT_VALUES_EQUAL(index["type"].GetString(), "GlobalAsync");
         UNIT_ASSERT_VALUES_EQUAL(index["indexColumns"][0].GetString(), "value");
         UNIT_ASSERT_VALUES_EQUAL(index["dataColumns"].GetArray().size(), 0);
+
+        WaitTxNotification(server, edgeActor, AsyncAlterDropIndex(server, "/Root", "Table", "by_value"));
+
+        records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"tableChanges":"***","ts":"***"})",
+        });
+        const auto& dropped = records[1]["tableChanges"][0]["table"];
+        UNIT_ASSERT(dropped.Has("indexes"));
+        UNIT_ASSERT_VALUES_EQUAL(dropped["indexes"].GetMap().size(), 0);
+        UNIT_ASSERT(dropped["schemaVersion"].GetUInteger()
+            > records[0]["tableChanges"][0]["table"]["schemaVersion"].GetUInteger());
+    }
+
+    Y_UNIT_TEST(SchemaChangesCanceledIndexBuild) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> blockBuild(runtime);
+        const auto buildIndexId = AsyncAlterAddIndex(server, "/Root", "/Root/Table",
+            TShardedTableOptions::TIndex{"by_value", {"value"}});
+        runtime.WaitFor("Build index request", [&]{ return blockBuild.size(); });
+        CancelAddIndex(server, "/Root", buildIndexId);
+        WaitTxNotification(server, edgeActor, buildIndexId);
+        blockBuild.Stop();
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+        const auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"tableChanges":"***","ts":"***"})",
+        });
+        const auto& table = records[0]["tableChanges"][0]["table"];
+        UNIT_ASSERT(table["columns"].Has("extra"));
+        UNIT_ASSERT(table.Has("indexes"));
+        UNIT_ASSERT_VALUES_EQUAL(table["indexes"].GetMap().size(), 0);
     }
 
     Y_UNIT_TEST(UnnamedColumnFamilyAlter) {

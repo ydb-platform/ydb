@@ -105,12 +105,7 @@ namespace NActors {
     };
 
     struct TActorSystemSetup {
-        TActorSystemSetup();
-
         ui32 NodeId = 0;
-
-        // Idle coroutine allocation bytes per worker; zero disables retention.
-        size_t AsyncFrameCacheSizeBytes;
 
         // Either Executors or CpuManager must be initialized
         ui32 ExecutorsCount = 0;
@@ -171,12 +166,7 @@ namespace NActors {
     public:
         const ui32 NodeId;
 
-        size_t GetAsyncFrameCacheSizeBytes() const noexcept {
-            return AsyncFrameCacheSizeBytes;
-        }
-
     private:
-        const size_t AsyncFrameCacheSizeBytes;
         THolder<TCpuManager> CpuManager;
         const ui32 ExecutorPoolCount;
 

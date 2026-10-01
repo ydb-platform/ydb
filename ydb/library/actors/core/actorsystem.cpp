@@ -1,6 +1,5 @@
 #include "defs.h"
 #include "subsystems/allocation_cache.h"
-#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
@@ -29,9 +28,6 @@
 
 namespace NActors {
 
-    TActorSystemSetup::TActorSystemSetup()
-        : AsyncFrameCacheSizeBytes(TAsyncFrameCache::DefaultSizeBytes)
-    {}
 
     namespace {
         template<class TCallback>
@@ -168,7 +164,6 @@ namespace NActors {
     TActorSystem::TActorSystem(THolder<TActorSystemSetup>& setup, void* appData,
                                TIntrusivePtr<NLog::TSettings> loggerSettings)
         : NodeId(setup->NodeId)
-        , AsyncFrameCacheSizeBytes(setup->AsyncFrameCacheSizeBytes)
         , CpuManager(new TCpuManager(setup))
         , ExecutorPoolCount(CpuManager->GetExecutorsCount())
         , Scheduler(setup->Scheduler)
@@ -186,9 +181,6 @@ namespace NActors {
         SubSystems = std::move(SystemSetup->SubSystems);
         if (!GetSubSystem<TAllocationCacheSubSystem>()) {
             RegisterSubSystem(std::unique_ptr<TAllocationCacheSubSystem>(new TAllocationCacheSubSystem));
-        }
-        if (!GetSubSystem<TAsyncFrameCache>()) {
-            RegisterSubSystem(std::make_unique<TAsyncFrameCache>(AsyncFrameCacheSizeBytes));
         }
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));

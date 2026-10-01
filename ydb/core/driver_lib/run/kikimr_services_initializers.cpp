@@ -239,6 +239,7 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
@@ -628,7 +629,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
-    setup->AsyncFrameCacheSizeBytes = systemConfig.GetAsyncFrameCacheSizeBytes();
+    setup->RegisterSubSystem(std::make_unique<NActors::TAsyncFrameCache>(systemConfig.GetAsyncFrameCacheSizeBytes()));
 
     auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");

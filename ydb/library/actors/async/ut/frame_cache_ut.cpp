@@ -167,7 +167,7 @@ namespace {
 
     void CheckRealWorker(size_t budget, bool io, bool shared) {
         THolder<TActorSystemSetup> setup(new TActorSystemSetup);
-        setup->AsyncFrameCacheSizeBytes = budget;
+        setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>(budget));
         setup->Scheduler = new TBasicSchedulerThread;
         if (io) {
             setup->CpuManager.IO.push_back(TIOExecutorPoolConfig{});
@@ -181,7 +181,6 @@ namespace {
         }
         TWorkerState a, b;
         TActorSystem system(setup);
-        UNIT_ASSERT_VALUES_EQUAL(system.GetAsyncFrameCacheSizeBytes(), budget);
         system.Start();
         Y_DEFER { system.Stop(); system.Cleanup(); };
         system.Register(new TWorkerCacheActor(a));
@@ -223,7 +222,7 @@ Y_UNIT_TEST_SUITE(AsyncFrameCache) {
 
     Y_UNIT_TEST(DefaultCustomAndZeroBudgets) {
         UNIT_ASSERT_VALUES_EQUAL(TAllocationCache<TAsyncFrameCacheTag>(TAsyncFrameCache::DefaultSizeBytes).GetSizeBytes(), 4194304);
-        UNIT_ASSERT_VALUES_EQUAL(TActorSystemSetup().AsyncFrameCacheSizeBytes, 4194304);
+        UNIT_ASSERT_VALUES_EQUAL(TAsyncFrameCache::DefaultSizeBytes, 4194304);
         for (size_t budget : {size_t(0), size_t(1023), size_t(1024), size_t(2047), size_t(2048)}) {
             TAllocationCache<TAsyncFrameCacheTag> cache(budget);
             TScopedAllocationCache<TAsyncFrameCacheTag> binding(&cache);

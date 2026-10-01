@@ -40,6 +40,7 @@ THolder<TActorSystemSetup> MakeSetup(size_t smallBudget = 128, size_t otherBudge
     setup->Executors[0] = new TBasicExecutorPool(0, 1, 10, "cache-test");
     setup->Scheduler = new TBasicSchedulerThread;
     // Deliberately register families first. Resolution supplies their core.
+    setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
     setup->RegisterSubSystem(std::make_unique<TSmallFamily>(smallBudget));
     setup->RegisterSubSystem(std::make_unique<TOtherFamily>(otherBudget));
     return setup;

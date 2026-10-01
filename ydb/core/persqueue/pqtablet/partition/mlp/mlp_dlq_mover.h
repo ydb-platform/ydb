@@ -33,7 +33,17 @@ private:
     void Handle(TEvPartitionWriter::TEvDisconnected::TPtr&);
     STFUNC(StateInit);
 
+    struct TPendingMove {
+        TDLQMessage Message;
+        ui64 Size = 0;
+        // False when the source body is already gone. Such an entry stays behind
+        // any write that was started earlier, so Processed keeps seqno order.
+        bool WriteInFlight = false;
+    };
+
     void ProcessQueue();
+    void AppendProcessed(const TDLQMessage& message);
+    void ReleaseResolvedPrefix();
     void Handle(TEvPersQueue::TEvResponse::TPtr&);
     void Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&);
     void Handle(TEvPartitionWriter::TEvWriteResponse::TPtr&);
@@ -55,7 +65,7 @@ private:
 
     TString ProducerId;
     std::deque<TDLQMessage> Queue;
-    std::deque<std::pair<TDLQMessage, ui64>> Pending;
+    std::deque<TPendingMove> Pending;
     ui64 PendingMessagesSize = 0;
 
     Ydb::StatusIds::StatusCode ResponseStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;

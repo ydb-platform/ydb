@@ -171,6 +171,17 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "The writer disconnected");
 }
 
+void TDLQMoverActor::AppendProcessed(const TDLQMessage& message) {
+    Processed.emplace_back(message.Offset, message.SeqNo);
+}
+
+void TDLQMoverActor::ReleaseResolvedPrefix() {
+    while (!Pending.empty() && !Pending.front().WriteInFlight) {
+        AppendProcessed(Pending.front().Message);
+        Pending.pop_front();
+    }
+}
+
 void TDLQMoverActor::ProcessQueue() {
     if (PendingMessagesSize >= MaxPendingMessagesSize || Queue.empty()) {
         return;
@@ -206,8 +217,13 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
             {"seqNo", Queue.front().SeqNo},
             {"hasResult", hasResult}
         );
-        Processed.emplace_back(requestedOffset, Queue.front().SeqNo);
+        const TDLQMessage message = Queue.front();
         Queue.pop_front();
+        if (Pending.empty()) {
+            AppendProcessed(message);
+        } else {
+            Pending.push_back({.Message = message, .Size = 0, .WriteInFlight = false});
+        }
         if (Queue.empty() && Pending.empty()) {
             return ReplySuccess();
         }
@@ -240,7 +256,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
     Send(PartitionWriterActorId, std::move(writeRequest));
 
-    Pending.emplace_back(Queue.front(), messageSize);
+    Pending.push_back({.Message = Queue.front(), .Size = messageSize, .WriteInFlight = true});
     Queue.pop_front();
 
     PendingMessagesSize += messageSize;
@@ -268,13 +284,14 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: " << result->GetError().Reason);
     }
 
-    if (Pending.empty()) {
+    if (Pending.empty() || !Pending.front().WriteInFlight) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Write error: unexpected result");
     }
 
-    auto [message, messageSize] = Pending.front();
-    Processed.emplace_back(message.Offset, message.SeqNo);
+    const ui64 messageSize = Pending.front().Size;
+    AppendProcessed(Pending.front().Message);
     Pending.pop_front();
+    ReleaseResolvedPrefix();
 
     LOG_D(
         "Dump NPQLOGPREFIX, queue, pending, processed",
@@ -282,15 +299,15 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
         {"pending", Pending.size()},
         {"processed", Processed.size()}
     );
-    if (Queue.empty() && Pending.empty()) {
-        return ReplySuccess();
-    }
 
     bool processingPaused = PendingMessagesSize >= MaxPendingMessagesSize;
     AFL_ENSURE(PendingMessagesSize >= messageSize)
         ("PendingMessagesSize", PendingMessagesSize)
         ("messageSize", messageSize);
     PendingMessagesSize -= messageSize;
+    if (Queue.empty() && Pending.empty()) {
+        return ReplySuccess();
+    }
     if (processingPaused) {
         ProcessQueue();
     }

@@ -179,7 +179,6 @@ namespace NActors {
 
             using TLogSinkVector = std::vector<NStructuredLog::ILogSinkSPtr>;
             TLogSinkVector Sinks;
-            ui64 FlushSinksTimeout {0};
 
         private:
             int SetLevelImpl(

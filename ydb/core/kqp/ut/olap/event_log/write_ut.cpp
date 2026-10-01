@@ -121,26 +121,40 @@ namespace {
             Cerr << Endl;
         }
     }
+
+    template <typename C>
+    bool WaitCondition(const C& cond) {
+        for(unsigned i=0; i < 100; i++) {
+            if (cond()) {
+                return true;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        return false;
+    }
 }
 
 class TBaseTestExampleLogWriter : public TColumnShardLogWriter {
 public:
     TKikimrRunner& Runner;
+    NLog::EComponent Component;
     unsigned WrittenCount{0};
 
     TBaseTestExampleLogWriter(TKikimrRunner& runner, NLog::EComponent component, TVector<std::shared_ptr<TSchematizedLogColumn>> columns,
             std::optional<ui32> maxBatchSize = {})
-        : TColumnShardLogWriter([component](const NActors::NStructuredLog::TLogMessage& message) {
-            return message.Component == component;
-        }, TColumnShardLogWriter::TDatabaseSettings {
+        : TColumnShardLogWriter(TColumnShardLogWriter::TDatabaseSettings {
             .Path = "/Root",
             .StoreName = "olapStore",
             .TableName = "olapTable",
             .MaxBatchSize = maxBatchSize
         }, columns),
-        Runner(runner)
+        Runner(runner),
+        Component(component)
     {
-        Y_UNUSED(component);
+    }
+
+    bool Filter(const NActors::NStructuredLog::TLogMessage& message) override {
+        return Component == message.Component;
     }
 
     bool Write(const NActors::NStructuredLog::TLogMessage& message) override {
@@ -179,10 +193,9 @@ public:
     }
 
     void CheckWrittenLogContent(const TQueryResult& requiredResult, unsigned existedRecordCount = 0) {
-        // Wait log completely written
-        for(unsigned i=0; WrittenCount + existedRecordCount < requiredResult.size() && i < 100; i++) {
-            Sleep(TDuration::MilliSeconds(100));
-        }
+        WaitCondition([&](){
+            return WrittenCount + existedRecordCount >= requiredResult.size();
+        });
 
         // Build query
         auto query = GetFetchQuery();
@@ -230,19 +243,18 @@ struct TEnvironment {
     std::shared_ptr<TBaseTestExampleLogWriter> Writer;
     std::vector<NStructuredLog::ILogSinkSPtr> AddSinks;
 
-    TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = {})
+    TEnvironment(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0)
         : Kikimr(TKikimrSettings().SetWithSampleTables(false)) {
         Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
     }
 
-    void RecreateWriter(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = {}) {
+    void RecreateWriter(const TVector<std::shared_ptr<TSchematizedLogColumn>>& columns, std::optional<ui32> maxBatchSize = 0) {
         Writer = std::make_shared<TBaseTestExampleLogWriter>(Kikimr, TEnvironment::Component, columns, maxBatchSize);
     }
 
     void UpdateSinks() {
         auto* runtime = Kikimr.GetTestServer().GetRuntime();
         for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
-            runtime->GetLogSettings(i)->FlushSinksTimeout = (Writer->GetDatabaseSettings().MaxBatchSize.has_value())?1000000:0;
             runtime->GetLogSettings(i)->Sinks = {Writer};
             std::copy(begin(AddSinks), end(AddSinks), std::back_inserter(runtime->GetLogSettings(i)->Sinks));
         }
@@ -276,7 +288,7 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             std::make_shared<TDBLogMessageStringValueColumn>("string_value", std::vector<TKeyName>{"value"}),
             std::make_shared<TDBLogColumnUint64>("ui64_value", std::vector<TKeyName>{"value"})
         });
-        env.WriteLog([](){
+        env.WriteLog([&](){
             YDB_LOG_INFO_COMP(TEnvironment::Component, "Test info message",
                 {"value", 3});
             YDB_LOG_NOTICE_COMP(TEnvironment::Component, "Test notice message",
@@ -288,10 +300,10 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
 
         // Fetch and check data
         env.Writer->CheckWrittenLogContent({
-            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:281")", R"(["3"])",  "[3u]"},
-            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:283")", R"(["7"])",   "[7u]"},
-            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:285")", R"(["ace"])", "#"},
-            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:286")", R"(#)",       "#"}});
+            {"1u", "6u", R"("Test info message")",   R"("write_ut.cpp:293")", R"(["3"])",  "[3u]"},
+            {"2u", "5u", R"("Test notice message")", R"("write_ut.cpp:295")", R"(["7"])",   "[7u]"},
+            {"3u", "4u", R"("Test warn message")",   R"("write_ut.cpp:297")", R"(["ace"])", "#"},
+            {"4u", "3u", R"("Test error message")",  R"("write_ut.cpp:298")", R"(#)",       "#"}});
     }
 
     Y_UNIT_TEST(WriteVaryValues) {
@@ -339,7 +351,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             env.Writer->Write(message);
             message.Time = TInstant::MicroSeconds(1789233327128338);
             env.Writer->Write(message);
-            env.Writer->Flush();
         });
 
         // Fetch and check data
@@ -366,8 +377,6 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             env.Writer->Write(message);
             message.NodeId = 3;
             env.Writer->Write(message);
-
-            env.Writer->Flush();
         });
 
         // Fetch and check data
@@ -420,12 +429,12 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             {"6u", "0u", "#", R"(["Dummy \"value1\" instead of null; Null \"value2\" instead of not casted value string-value"])"}});
     }
 
-    /* Y_UNIT_TEST(ManualFlush) {
+    Y_UNIT_TEST(ManualFlush) {
 
         TEnvironment env({
             std::make_shared<TDBLogMessageIdColumn>(1),
             std::make_shared<TDBLogMessageNodeIdColumn>()
-        });
+        }, 100 /* Disable autoflush by size */);
 
         // Write data
         env.WriteLog([&](){
@@ -437,28 +446,83 @@ Y_UNIT_TEST_SUITE(KqpOlapWriteLog) {
             env.Writer->Write(message);
             message.NodeId = 2;
             env.Writer->Write(message);
+        });
+
+        // Check
+        UNIT_ASSERT(
+            WaitCondition([&](){
+                return env.Writer->GetCurrentBatchSize() == 2;
+            }));
+        env.Writer->CheckWrittenLogContent({});
+
+
+        // Flush
+        env.WriteLog([&](){
             env.Writer->Flush();
+        });
 
-            // Check
-            env.Writer->CheckWrittenLogContent({
-                {"1u", "1u"},
-                {"2u", "2u"}});
+        // Check
+        UNIT_ASSERT(
+            WaitCondition([&](){
+                return env.Writer->GetCurrentBatchSize() == 0;
+            }));
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"}});
+    }
 
-            // Second chunk
+    Y_UNIT_TEST(AutoFlushBySize) {
+
+        TEnvironment env({
+            std::make_shared<TDBLogMessageIdColumn>(1),
+            std::make_shared<TDBLogMessageNodeIdColumn>()
+        }, 2 /* Disable autoflush by size */);
+
+        // Write data
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
+
+            // First chunk
+            message.NodeId = 1;
+            env.Writer->Write(message);
+            message.NodeId = 2;
+            env.Writer->Write(message);
             message.NodeId = 3;
             env.Writer->Write(message);
+        });
+
+        // Check
+        UNIT_ASSERT(
+            WaitCondition([&](){
+                return env.Writer->GetCurrentBatchSize() == 1;
+            }));
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"}});
+
+        // Write data
+        env.WriteLog([&](){
+            NActors::NStructuredLog::TLogMessage message;
+            message.Component = TEnvironment::Component;
+
+            // First chunk
             message.NodeId = 4;
             env.Writer->Write(message);
-            env.Writer->Flush();
-
-            // Check
-            env.Writer->CheckWrittenLogContent({
-                {"1u", "1u"},
-                {"2u", "2u"},
-                {"3u", "3u"},
-                {"4u", "4u"}});
+            message.NodeId = 5;
         });
-    } */
+
+        // Check
+        UNIT_ASSERT(
+            WaitCondition([&](){
+                return env.Writer->GetCurrentBatchSize() == 0;
+            }));
+        env.Writer->CheckWrittenLogContent({
+            {"1u", "1u"},
+            {"2u", "2u"},
+            {"3u", "3u"},
+            {"4u", "4u"}});
+    }
 
     /* Y_UNIT_TEST(AutoFlush) {
 

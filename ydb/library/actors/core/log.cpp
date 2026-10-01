@@ -261,16 +261,6 @@ namespace NActors {
         }
     }
 
-    void TLoggerActor::HandleLogFlushSinks(NLog::TEvLogFlushSinks::TPtr& ev, const NActors::TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-
-        FlushScheduled = false;
-        for(auto& sink: Settings->Sinks) {
-            sink->Flush();
-        }
-    }
-
     void TLoggerActor::BecomeDefunct() {
         Become(&TThis::StateDefunct);
         Schedule(WakeupInterval, new TEvents::TEvWakeup);
@@ -564,17 +554,6 @@ namespace NActors {
             // @todo Может ли Settings удалиться в этот момент
             for(auto& sink: Settings->Sinks) {
                 sink->Write(message);
-
-                if (Settings->FlushSinksTimeout == 0) {
-                    sink->Flush();
-                }
-            }
-
-            if (Settings->FlushSinksTimeout != 0) {
-                if (!FlushScheduled) {
-                    Schedule(TDuration::MilliSeconds(Settings->FlushSinksTimeout), new NLog::TEvLogFlushSinks());
-                    FlushScheduled = true;
-                }
             }
         }
         return OutputRecord(

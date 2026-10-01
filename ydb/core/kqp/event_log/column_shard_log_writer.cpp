@@ -67,10 +67,9 @@ std::optional<Ydb::Table::DescribeTableResult> DescribeTable(
 } // namespace
 
 TColumnShardLogWriter::TColumnShardLogWriter(
-    TLogMessageFilter filter,
     TDatabaseSettings settings,
     TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
-    : TBaseEventLogWriter(std::move(filter), std::move(columns))
+    : TBaseEventLogWriter(std::move(columns))
     , Settings(std::move(settings))
 {
 }
@@ -80,16 +79,10 @@ bool TColumnShardLogWriter::Write(const NActors::NStructuredLog::TLogMessage& me
         return false;
     }
 
-    CurrentBatchSize++;
-    if (Settings.MaxBatchSize.has_value() && CurrentBatchSize == Settings.MaxBatchSize.value()) {
+    if (Settings.MaxBatchSize.has_value() && CurrentBatchSize >= Settings.MaxBatchSize.value()) {
         Flush();
     }
     return true;
-}
-
-void TColumnShardLogWriter::Flush() {
-    TBaseEventLogWriter::Flush();
-    CurrentBatchSize = 0;
 }
 
 TString TColumnShardLogWriter::GetCreateStoreQuery() {

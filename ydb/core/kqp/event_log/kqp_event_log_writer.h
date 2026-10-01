@@ -46,13 +46,14 @@ public:
 
     TKqpEventLogWriter(const TDatabaseSettings& settings):
         TColumnShardLogWriter(
-            [](const NActors::NStructuredLog::TLogMessage& message){
-                // @todo текст сообщения в константу
-                return (message.Component == NKikimrServices::KQP_REQUEST) &&
-                       (message.TextMessage == "KQP request processed");
-            },
             UpdateSettings(settings),
             GetColumns()) {}
+
+    bool Filter(const NActors::NStructuredLog::TLogMessage& message) override {
+        // @todo текст сообщения в константу
+        return (message.Component == NKikimrServices::KQP_REQUEST) &&
+            (message.TextMessage == "KQP request processed");
+    }
 };
 
 }

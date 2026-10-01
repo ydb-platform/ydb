@@ -23,7 +23,6 @@ struct TLogMessage {
 class ILogSink {
 public:
     virtual bool Write(const TLogMessage&) = 0;
-    virtual void Flush() = 0;
     virtual ~ILogSink() = default;
 };
 using ILogSinkSPtr = std::shared_ptr<ILogSink>;

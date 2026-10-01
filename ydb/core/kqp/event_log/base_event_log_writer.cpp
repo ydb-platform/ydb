@@ -8,10 +8,8 @@
 namespace NKikimr::NKqp::NEventLog {
 
 TBaseEventLogWriter::TBaseEventLogWriter(
-    TLogMessageFilter filter,
     TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
-    : Filter(std::move(filter))
-    , Columns(std::move(columns))
+    : Columns(std::move(columns))
 {
     for (std::size_t i = 0; i < Columns.size(); ++i) {
         ErrorColumn = std::dynamic_pointer_cast<TDBLogMessageErrorColumn>(Columns[i]);
@@ -23,7 +21,7 @@ TBaseEventLogWriter::TBaseEventLogWriter(
 }
 
 bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& message) {
-    if (Filter && !Filter(message)) {
+    if (!Filter(message)) {
         return false;
     }
 
@@ -75,23 +73,24 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
     if (ErrorColumn != nullptr) {
         ErrorColumn->Write(columnWriteErrors);
     }
-    WrittenRecordCount++;
+    CurrentBatchSize++;
     return true;
 }
 
 void TBaseEventLogWriter::Flush() {
-    if (WrittenRecordCount == 0) {
+    Cerr << "DEBUG: TBaseEventLogWriter::Flush" <<  Endl;
+    if (CurrentBatchSize == 0) {
         return;
     }
     if (CreationState.load() != TCreationState::Exists) {
-        Cerr << "DEBUG: Flush delay" <<  Endl;
+        Cerr << "DEBUG: TBaseEventLogWriter::Flush delay" <<  Endl;
         return;
     }
 
     Cerr << "DEBUG: Flush!! " <<  Endl;
     auto batch = CreateCurrentBatch();
     WriteBatch(batch);
-    WrittenRecordCount = 0;
+    CurrentBatchSize = 0;
 }
 
 std::shared_ptr<arrow::Schema> TBaseEventLogWriter::GetArrowSchema() const {
@@ -108,8 +107,8 @@ std::shared_ptr<arrow::RecordBatch> TBaseEventLogWriter::CreateCurrentBatch() {
     for (auto& column : Columns) {
         arrays.push_back(column->MakeArray());
     }
-    auto batch = arrow::RecordBatch::Make(GetArrowSchema(), WrittenRecordCount, arrays);
-    WrittenRecordCount = 0;
+    auto batch = arrow::RecordBatch::Make(GetArrowSchema(), CurrentBatchSize, arrays);
+    CurrentBatchSize = 0;
     return batch;
 }
 

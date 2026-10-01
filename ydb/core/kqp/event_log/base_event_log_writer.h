@@ -13,17 +13,21 @@ namespace NKikimr::NKqp::NEventLog {
 
 class TBaseEventLogWriter : public NActors::NStructuredLog::ILogSink {
 public:
-    using TLogMessageFilter = std::function<bool(const NActors::NStructuredLog::TLogMessage&)>;
-
-    TBaseEventLogWriter(TLogMessageFilter filter, TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
+    TBaseEventLogWriter(TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
 
     const TVector<std::shared_ptr<TSchematizedLogColumn>>& GetColumns() const {
         return Columns;
     }
 
-    bool Write(const NActors::NStructuredLog::TLogMessage&) override;
-    void Flush() override;
+    virtual bool Filter(const NActors::NStructuredLog::TLogMessage&) = 0;
 
+    bool Write(const NActors::NStructuredLog::TLogMessage&) override;
+
+    virtual void Flush();
+
+    unsigned GetCurrentBatchSize() const {
+        return CurrentBatchSize;
+    }
 protected:
     virtual void CreateOrUpdateStorage() = 0;
     virtual void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) = 0;
@@ -31,7 +35,6 @@ protected:
     std::shared_ptr<arrow::Schema> GetArrowSchema() const;
     std::shared_ptr<arrow::RecordBatch> CreateCurrentBatch();
 
-    const TLogMessageFilter Filter;
     const TVector<std::shared_ptr<TSchematizedLogColumn>> Columns;
     std::shared_ptr<TDBLogMessageErrorColumn> ErrorColumn;
     std::optional<std::size_t> ErrorColumnIndex;
@@ -42,7 +45,7 @@ protected:
         Exists = 3
     };
     std::atomic<TCreationState> CreationState {TCreationState::Unknown};
-    unsigned WrittenRecordCount {0};
+    unsigned CurrentBatchSize {0};
 };
 
 } // namespace NKikimr::NKqp::NEventLog

@@ -30,7 +30,6 @@ public:
     };
 
     TColumnShardLogWriter(
-        TLogMessageFilter filter,
         TDatabaseSettings settings,
         TVector<std::shared_ptr<TSchematizedLogColumn>> columns);
 
@@ -39,7 +38,6 @@ public:
     }
 
     bool Write(const NActors::NStructuredLog::TLogMessage&) override;
-    void Flush() override;
 
 protected:
     TString GetCreateStoreQuery();
@@ -55,7 +53,6 @@ protected:
     void WriteBatch(std::shared_ptr<arrow::RecordBatch> batch) override;
 
     const TDatabaseSettings Settings;
-    ui32 CurrentBatchSize {0};
 };
 
 } // namespace NEventLog

@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
 #include "external_source_factory.h"
 
 #include <library/cpp/testing/unittest/registar.h>

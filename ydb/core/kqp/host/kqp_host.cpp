@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
 #include "kqp_host_impl.h"
 #include "kqp_statement_rewrite.h"
 

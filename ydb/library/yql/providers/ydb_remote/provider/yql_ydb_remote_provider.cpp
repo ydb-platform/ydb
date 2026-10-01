@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
 #include "yql_ydb_remote_provider_impl.h"
 
 #include <ydb/library/yql/providers/ydb_remote/expr_nodes/yql_ydb_remote_expr_nodes.h>

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/ydb_remote/expr_nodes/yql_ydb_remote_expr_nodes.gen.h>

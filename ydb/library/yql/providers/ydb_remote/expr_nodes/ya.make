@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/ydb_remote/common
     yql/essentials/core/expr_nodes
     yql/essentials/providers/common/provider
 )

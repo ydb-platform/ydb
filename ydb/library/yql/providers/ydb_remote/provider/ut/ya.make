@@ -6,6 +6,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/ydb_remote/common
     contrib/libs/grpc
     library/cpp/testing/common
     ydb/public/api/grpc

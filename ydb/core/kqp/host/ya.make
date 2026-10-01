@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/ydb_remote/common
     ydb/core/base
     ydb/core/kqp/common
     ydb/core/kqp/query_data

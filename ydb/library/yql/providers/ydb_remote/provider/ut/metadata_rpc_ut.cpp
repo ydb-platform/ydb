@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
 #include <ydb/library/yql/providers/ydb_remote/provider/yql_ydb_remote_provider_impl.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <yql/essentials/core/yql_type_annotation.h>

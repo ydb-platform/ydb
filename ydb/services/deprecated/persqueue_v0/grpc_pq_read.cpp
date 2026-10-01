@@ -4,6 +4,7 @@
 #include "ydb/core/client/server/grpc_proxy_status.h"
 
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
 using namespace NActors;
@@ -19,6 +20,9 @@ namespace NGRpcProxy {
 using namespace NPersQueue;
 
 void TPQReadService::TSession::OnCreated() {
+    if (const auto database = GetDatabase(); !database.empty() && !database.StartsWith('/')) {
+        NGRpcService::CreateCounterCb(Counters, nullptr)("persqueue_v0", "ReadSession", true)->CountRelativeDatabase();
+    }
     // Start waiting for new session.
     Proxy->WaitReadSession();
     if (Proxy->TooMuchSessions()) {

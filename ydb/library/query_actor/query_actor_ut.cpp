@@ -22,7 +22,7 @@ struct TTestQueryActorBase : public TQueryBase {
     };
 
     TTestQueryActorBase()
-        : TQueryBase(NKikimrServices::KQP_PROXY, "", Tests::TestDomainName)
+        : TQueryBase(NKikimrServices::KQP_PROXY, "", TString("/") + Tests::TestDomainName)
     {}
 
     NThreading::TFuture<TResult> GetResult() const {

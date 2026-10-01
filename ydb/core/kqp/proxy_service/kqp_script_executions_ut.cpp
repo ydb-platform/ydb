@@ -124,7 +124,7 @@ struct TScriptExecutionsYdbSetup {
         NYdb::TDriverConfig driverCfg;
         driverCfg
             .SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort)
-            .SetDatabase(Tests::TestDomainName)
+            .SetDatabase(TString("/") + Tests::TestDomainName)
             .SetAuthToken(BUILTIN_ACL_ROOT);
         YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);

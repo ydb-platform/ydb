@@ -719,7 +719,9 @@ void TReadSessionActor::Handle(TEvPQProxy::TEvReadInit::TPtr& ev, const TActorCo
     }
 
     PeerName = event->PeerName;
-    Database = CanonizePath(event->Database);
+    Database = CanonizePath(AppData(ctx)->FeatureFlags.GetEnableRelativePaths() && AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+        ? PrependDomainIfNeeded("/" + AppData(ctx)->DomainsInfo->GetDomain()->Name, event->Database)
+        : event->Database);
     RequestId = event->RequestId;
 
     ReadOnlyLocal = init.GetReadOnlyLocal();

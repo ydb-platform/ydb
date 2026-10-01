@@ -4,6 +4,7 @@
 #include "ydb/core/client/server/grpc_proxy_status.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_services/counters/counters.h>
 #include <util/generic/queue.h>
 
 using namespace NActors;
@@ -20,6 +21,9 @@ using namespace NPersQueue;
 
 
 void TPQWriteServiceImpl::TSession::OnCreated() {            // Start waiting for new session.
+    if (const auto database = GetDatabase(); !database.empty() && !database.StartsWith('/')) {
+        NGRpcService::CreateCounterCb(Counters, nullptr)("persqueue_v0", "WriteSession", true)->CountRelativeDatabase();
+    }
     Proxy->WaitWriteSession();
     if (Proxy->TooMuchSessions()) {
         ReplyWithError("proxy overloaded", NPersQueue::NErrorCode::OVERLOAD);

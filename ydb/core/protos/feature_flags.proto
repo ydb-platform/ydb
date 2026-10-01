@@ -431,4 +431,8 @@ message TFeatureFlags {
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
     optional bool EnableAsyncIndexReplication = 351 [default = false];
     optional bool EnableDatabaseAccessCheckForHttpMonitoring = 352 [default = false];
+    // Only a leading '/' makes a client path absolute. Otherwise prepend the
+    // cluster root for database names, or the database for schema-object paths.
+    // Main: enabled. Backports to 26-4 must use default = false.
+    optional bool EnableRelativePaths = 353 [default = true];
 }

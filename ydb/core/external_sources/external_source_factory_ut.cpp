@@ -2,6 +2,7 @@
 #include "external_source_factory.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NKikimr::NExternalSource {
@@ -37,6 +38,32 @@ Y_UNIT_TEST_SUITE(NativeYdbExternalSourceFactory) {
             false, false, false, {"PostgreSQL"}, true);
         UNIT_ASSERT(!factory->IsAvailableProvider(TString(NYql::YdbRemoteProviderName)));
         UNIT_ASSERT_EXCEPTION_CONTAINS(factory->GetOrCreate("Ydb"), TExternalSourceException, "is disabled");
+    }
+
+    Y_UNIT_TEST(ReadTimeoutPropertyIsValidatedIndependentlyOfRouting) {
+        // SchemeShard also validates EDS properties through the default factory.
+        for (const bool native : {false, true}) {
+            const auto factory = CreateExternalSourceFactory({}, nullptr, 50000, nullptr,
+                false, false, true, {}, native);
+            const auto source = factory->GetOrCreate("Ydb");
+            NKikimrSchemeOp::TExternalDataSourceDescription description;
+            description.SetSourceType("Ydb");
+            description.SetLocation("localhost:2135");
+            auto& properties = *description.MutableProperties()->MutableProperties();
+            properties["database_name"] = "/Remote";
+            UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(description.SerializeAsString()));
+            for (const auto* value : {"1", "60000", "120000", "3600000"}) {
+                properties["read_timeout_ms"] = value;
+                UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(description.SerializeAsString()));
+            }
+            for (const auto* value : {"", "0", "-1", "3600001", "4294967296", "60s", "1.5", "invalid"}) {
+                properties["read_timeout_ms"] = value;
+                UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(description.SerializeAsString()),
+                    TExternalSourceException, "READ_TIMEOUT_MS must be an integer between 1 and 3600000");
+            }
+            UNIT_ASSERT_EXCEPTION_CONTAINS(factory->GetOrCreate("PostgreSQL")->ValidateExternalDataSource(description.SerializeAsString()),
+                TExternalSourceException, "Unsupported property: read_timeout_ms");
+        }
     }
 }
 

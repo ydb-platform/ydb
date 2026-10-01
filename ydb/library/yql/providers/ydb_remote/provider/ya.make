@@ -4,6 +4,7 @@ SRCS(
     yql_ydb_remote_config.cpp
     yql_ydb_remote_dq_integration.cpp
     yql_ydb_remote_load_meta.cpp
+    yql_ydb_remote_logical_opt.cpp
     yql_ydb_remote_provider.cpp
     yql_ydb_remote_type_ann.cpp
 )

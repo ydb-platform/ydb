@@ -158,6 +158,7 @@ public:
     explicit TDataSink(TState::TPtr state)
         : State_(std::move(state))
         , PhysicalOptimizer_(NYdbRemote::CreatePhysicalOptimizer())
+        , LogicalOptimizer_(NYdbRemote::CreateLogicalOptimizer(State_))
     {
     }
 
@@ -185,6 +186,10 @@ public:
         return Execution_;
     }
 
+    IGraphTransformer& GetLogicalOptProposalTransformer() override {
+        return *LogicalOptimizer_;
+    }
+
     IGraphTransformer& GetPhysicalOptProposalTransformer() override {
         return *PhysicalOptimizer_;
     }
@@ -199,6 +204,7 @@ private:
     TSinkTypeAnnotation TypeAnnotation_;
     TSinkExecution Execution_;
     const THolder<IGraphTransformer> PhysicalOptimizer_;
+    const THolder<IGraphTransformer> LogicalOptimizer_;
 };
 
 } // namespace

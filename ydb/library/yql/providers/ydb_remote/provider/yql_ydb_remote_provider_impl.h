@@ -13,6 +13,7 @@ struct TCluster {
     TString Endpoint;
     TString Database;
     bool UseTls = false;
+    ui64 ReadTimeoutMs = 60000;
 };
 
 struct TTable {
@@ -68,6 +69,7 @@ const TTypeAnnotationNode* ParseColumnType(const Ydb::Type& type, TExprContext& 
 THolder<IGraphTransformer> CreateLoadMetadataTransformer(TState::TPtr state);
 THolder<TVisitorTransformerBase> CreateTypeAnnotationTransformer(TState::TPtr state);
 THolder<IGraphTransformer> CreatePhysicalOptimizer();
+THolder<IGraphTransformer> CreateLogicalOptimizer(TState::TPtr state);
 THolder<IDqIntegration> CreateDqIntegration(TState::TPtr state);
 
 } // namespace NYql::NYdbRemote

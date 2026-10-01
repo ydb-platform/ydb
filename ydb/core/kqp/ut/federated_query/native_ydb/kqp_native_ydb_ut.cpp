@@ -7,6 +7,7 @@
 #include <grpc/support/string_util.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/json/json_reader.h>
 
 namespace NKikimr::NKqp {
 namespace {
@@ -15,34 +16,41 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NFederatedQueryTest;
 
-// Each test runs in its own process. Install a generated test CA before the
-// first TLS channel; no test certificate or private key is embedded in production.
+// gRPC caches default roots once per process. All fixtures use one generated CA,
+// including when FORK_SUBTESTS puts several TLS scenarios in the same process.
 class TTestTlsRoots {
 public:
-    explicit TTestTlsRoots(std::string certificate) {
-        Certificate_ = std::move(certificate);
+    static const NCertTestUtils::TCertAndKey& GetCa() {
+        static const TTestTlsRoots roots;
+        return roots.Ca_;
+    }
+
+private:
+    TTestTlsRoots()
+        : Ca_(NCertTestUtils::GenerateCA(NCertTestUtils::TProps::AsCA().WithValid(TDuration::Days(1))))
+    {
         grpc_set_ssl_roots_override_callback([](char** roots) {
-            *roots = gpr_strdup(Certificate_.c_str());
+            *roots = gpr_strdup(GetCa().Certificate.c_str());
             return GRPC_SSL_ROOTS_OVERRIDE_OK;
         });
     }
 
-    ~TTestTlsRoots() {
-        grpc_set_ssl_roots_override_callback(nullptr);
-    }
-
-private:
-    inline static std::string Certificate_;
+    const NCertTestUtils::TCertAndKey Ca_;
 };
 
 struct TNativeYdbFixture {
+    // Initialize before constructing any drivers, even for plaintext fixtures
+    // that later try TLS against a warmed endpoint.
+    const NCertTestUtils::TCertAndKey& TrustedCa = TTestTlsRoots::GetCa();
     TKikimrRunner Remote{TKikimrSettings().SetDomainRoot("Remote").SetWithSampleTables(false).SetAuthToken("root@builtin")};
     std::shared_ptr<TKikimrRunner> Consumer;
 
     explicit TNativeYdbFixture(bool enabled = true, const TString& token = "root@builtin",
-                               const TString& hostnamePattern = {}, bool createSource = true) {
+                               const TString& hostnamePattern = {}, bool createSource = true,
+                               bool enableLookup = false) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableNativeYdbProvider(enabled);
+        config.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(enableLookup);
         config.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
         if (hostnamePattern) {
@@ -71,11 +79,14 @@ struct TNativeYdbFixture {
         }
     }
 
-    TExecuteQueryResult CreateSource(const TString& endpoint, bool tls, const TString& name = "remote_db") {
+    TExecuteQueryResult CreateSource(const TString& endpoint, bool tls, const TString& name = "remote_db",
+                                     const TString& readTimeoutMs = {}) {
         const TString source = TStringBuilder()
             << "CREATE EXTERNAL DATA SOURCE " << name << " WITH (SOURCE_TYPE='Ydb', LOCATION='"
             << endpoint << "', DATABASE_NAME='/Remote', USE_TLS='" << (tls ? "true" : "false") << "', "
-            << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token');";
+            << "AUTH_METHOD='TOKEN', TOKEN_SECRET_PATH='remote_token'"
+            << (readTimeoutMs.empty() ? TString() : TStringBuilder() << ", READ_TIMEOUT_MS='" << readTimeoutMs << "'")
+            << ");";
         return Consumer->GetQueryClient().ExecuteQuery(source, TTxControl::NoTx()).ExtractValueSync();
     }
 
@@ -97,7 +108,57 @@ struct TNativeYdbFixture {
         return Consumer->GetQueryClient().ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(),
             TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(30))).ExtractValueSync();
     }
+
+    NJson::TJsonValue ExplainSource(const TString& sql) {
+        const auto result = Consumer->GetQueryClient().ExecuteQuery(sql, TTxControl::BeginTx().CommitTx(),
+            TExecuteQuerySettings().ExecMode(EExecMode::Explain).ClientTimeout(TDuration::Seconds(30))).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT(result.GetStats());
+        UNIT_ASSERT(result.GetStats()->GetPlan());
+        NJson::TJsonValue plan;
+        UNIT_ASSERT(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan));
+        auto source = FindPlanNodeByKv(plan, "SourceType", "Ydb");
+        UNIT_ASSERT_C(source.IsDefined(), *result.GetStats()->GetPlan());
+        return source;
+    }
 };
+
+void AssertMetadataConnectionFailure(const TExecuteQueryResult& result) {
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+    const TString issues = result.GetIssues().ToString();
+    UNIT_ASSERT_STRING_CONTAINS(issues, "Native YDB metadata session failed: TRANSPORT_UNAVAILABLE");
+    UNIT_ASSERT(!issues.Contains("root@builtin"));
+}
+
+void CheckTlsCertificateRejected(bool wrongHostname) {
+    TNativeYdbFixture fixture(true, "root@builtin", {}, false);
+    // A hostname mismatch must use the trusted issuer so it cannot accidentally
+    // pass by rejecting an unrelated issuer left in gRPC's process-wide cache.
+    const auto ca = wrongHostname ? fixture.TrustedCa
+        : NCertTestUtils::GenerateCA(NCertTestUtils::TProps::AsCA().WithValid(TDuration::Days(1)));
+    auto properties = NCertTestUtils::TProps::AsServer().WithValid(TDuration::Days(1));
+    if (wrongHostname) {
+        properties.CommonName = "wrong-host.invalid";
+        properties.AltNames = {"DNS:wrong-host.invalid"};
+    }
+    const auto certificate = NCertTestUtils::GenerateSignedCert(ca, properties);
+    fixture.Populate();
+    const auto port = NTesting::GetFreePort();
+    fixture.Remote.GetTestServer().EnableGRpc(NYdbGrpc::TServerOptions()
+        .SetHost("localhost").SetPort(port)
+        .SetSslData(NYdbGrpc::TSslData{
+            .Cert = TString(certificate.Certificate),
+            .Key = TString(certificate.PrivateKey),
+            .Root = TString(ca.Certificate),
+        }));
+    const auto created = fixture.CreateSource(TStringBuilder() << "localhost:" << port, true);
+    UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+    const auto result = fixture.Consumer->GetQueryClient().ExecuteQuery(
+        "SELECT COUNT(*) AS Total FROM remote_db.`items`;", TTxControl::BeginTx().CommitTx(),
+        // Allow the provider's 60 s metadata budget to finish before the client.
+        TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(75))).ExtractValueSync();
+    AssertMetadataConnectionFailure(result);
+}
 
 } // namespace
 
@@ -184,6 +245,70 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
         UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 1);
         UNIT_ASSERT(rows.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(*rows.ColumnParser("Value").GetOptionalUtf8(), "two");
+        const auto source = fixture.ExplainSource("SELECT Value FROM remote_db.`items` WHERE Key = 2u;");
+        const auto& columns = source["ReadColumns"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(columns[0].GetStringSafe(), "Key");
+        UNIT_ASSERT_VALUES_EQUAL(columns[1].GetStringSafe(), "Value");
+    }
+
+    Y_UNIT_TEST(ProjectionAndCountPruneTheRemoteSource) {
+        TNativeYdbFixture fixture;
+        fixture.Populate();
+        const auto projected = fixture.ExplainSource("SELECT Key FROM remote_db.`items` LIMIT 2;");
+        const auto& projectedColumns = projected["ReadColumns"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(projectedColumns.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(projectedColumns.front().GetStringSafe(), "Key");
+        UNIT_ASSERT_VALUES_EQUAL(projected["ReadTimeoutMs"].GetUIntegerSafe(), 60000);
+
+        const auto count = fixture.ExplainSource("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
+        const auto& countColumns = count["ReadColumns"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(countColumns.size(), 1);
+        // The first field in the canonical row type is the physical carrier.
+        UNIT_ASSERT_VALUES_EQUAL(countColumns.front().GetStringSafe(), "Flag");
+        const auto result = fixture.Read("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Total").GetUint64(), 3);
+    }
+
+    Y_UNIT_TEST(ExternalSourceReadTimeoutReachesThePhysicalPlan) {
+        TNativeYdbFixture fixture;
+        fixture.Populate();
+        const auto created = fixture.CreateSource(fixture.Remote.GetEndpoint(), false, "remote_slow", "120000");
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        const auto source = fixture.ExplainSource("SELECT Key FROM remote_slow.`items`;");
+        UNIT_ASSERT_VALUES_EQUAL(source["ReadTimeoutMs"].GetUIntegerSafe(), 120000);
+        const auto result = fixture.Read("SELECT Key FROM remote_slow.`items`;");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+        const auto invalid = fixture.CreateSource(fixture.Remote.GetEndpoint(), false, "remote_invalid", "0");
+        UNIT_ASSERT(!invalid.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(invalid.GetIssues().ToString(), "READ_TIMEOUT_MS must be an integer between 1 and 3600000");
+    }
+
+    Y_UNIT_TEST(StreamLookupFailsWithControlledQueryIssue) {
+        TNativeYdbFixture fixture(true, "root@builtin", {}, true, true);
+        fixture.Populate();
+        fixture.Scheme("CREATE TABLE local_items (Key Uint64 NOT NULL, PRIMARY KEY (Key));");
+        const auto inserted = fixture.Read("UPSERT INTO local_items (Key) VALUES (1u);");
+        UNIT_ASSERT_C(inserted.IsSuccess(), inserted.GetIssues().ToString());
+        const auto ordinary = fixture.Read(R"(
+            SELECT r.Value AS Value FROM local_items AS l
+            LEFT JOIN ANY remote_db.`items` AS r ON l.Key = r.Key;
+        )");
+        UNIT_ASSERT_C(ordinary.IsSuccess(), ordinary.GetIssues().ToString());
+        auto rows = ordinary.GetResultSetParser(0);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Value").GetOptionalUtf8().value(), "one");
+        const auto result = fixture.Read(R"(
+            SELECT r.Value AS Value FROM local_items AS l
+            LEFT JOIN /*+ streamlookup() */ ANY remote_db.`items` AS r ON l.Key = r.Key;
+        )");
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Native YDB streamlookup joins are not supported");
+        UNIT_ASSERT(result.GetIssues().ToString().find("yql_dq_integration_impl.cpp") == std::string::npos);
     }
 
     Y_UNIT_TEST(BoolAndNullMatchQueryServiceFormat) {
@@ -234,11 +359,10 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
     }
 
     Y_UNIT_TEST(TokenAndTlsReadWithoutConnector) {
-        const auto ca = NCertTestUtils::GenerateCA(NCertTestUtils::TProps::AsCA().WithValid(TDuration::Days(1)));
+        TNativeYdbFixture fixture(true, "root@builtin", {}, false);
+        const auto& ca = fixture.TrustedCa;
         const auto certificate = NCertTestUtils::GenerateSignedCert(ca,
             NCertTestUtils::TProps::AsServer().WithValid(TDuration::Days(1)));
-        TTestTlsRoots roots(ca.Certificate);
-        TNativeYdbFixture fixture(true, "root@builtin", {}, false);
         fixture.Populate();
         const auto port = NTesting::GetFreePort();
         fixture.Remote.GetTestServer().EnableGRpc(NYdbGrpc::TServerOptions()
@@ -257,6 +381,14 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
         UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Total").GetUint64(), 3);
     }
 
+    Y_UNIT_TEST(TlsRejectsAnUntrustedCertificate) {
+        CheckTlsCertificateRejected(false);
+    }
+
+    Y_UNIT_TEST(TlsRejectsCertificateHostnameMismatch) {
+        CheckTlsCertificateRejected(true);
+    }
+
     Y_UNIT_TEST(TlsSourceCannotReuseWarmedPlaintextProviderChannel) {
         TNativeYdbFixture fixture;
         fixture.Populate();
@@ -268,8 +400,8 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
         // metadata driver must keep TLS separate from the warmed plaintext cache.
         const auto tls = fixture.Consumer->GetQueryClient().ExecuteQuery(
             "SELECT COUNT(*) AS Total FROM remote_tls.`items`;", TTxControl::BeginTx().CommitTx(),
-            TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(3))).ExtractValueSync();
-        UNIT_ASSERT(!tls.IsSuccess());
+            TExecuteQuerySettings().ClientTimeout(TDuration::Seconds(75))).ExtractValueSync();
+        AssertMetadataConnectionFailure(tls);
         const auto again = fixture.Read("SELECT COUNT(*) AS Total FROM remote_db.`items`;");
         UNIT_ASSERT_C(again.IsSuccess(), again.GetIssues().ToString());
         auto rows = again.GetResultSetParser(0);
@@ -308,7 +440,7 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
         // Remote KQP wraps the resolver's AccessDenied in ABORTED. The source
         // preserves the status while withholding remote issues and credentials.
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
-            TStringBuilder() << "YdbRemote query failed with status " << static_cast<size_t>(EStatus::ABORTED));
+            "YdbRemote query failed with status ABORTED");
         UNIT_ASSERT(result.GetIssues().ToString().find("restricted@builtin") == std::string::npos);
 
         fixture.Scheme("GRANT 'ydb.granular.select_row' ON `/Remote/items` TO `restricted@builtin`;", true);

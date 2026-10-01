@@ -208,9 +208,11 @@ NYql::NDq::IDqAsyncIoFactory::TPtr CreateKqpAsyncIoFactory(
 
         // Actor registration is independent of the compile-time provider flag:
         // existing plans must retain their implementation after a flag change.
-        Y_VALIDATE(federatedQuerySetup->NativeYdbDriver && federatedQuerySetup->NativeYdbTlsDriver, "Missing native YDB drivers");
+        Y_VALIDATE(federatedQuerySetup->NativeYdbResources, "Missing native YDB resources");
         NYql::NDq::RegisterYdbRemoteReadActorFactory(
-            *factory, *federatedQuerySetup->NativeYdbDriver, *federatedQuerySetup->NativeYdbTlsDriver,
+            *factory, [resources = federatedQuerySetup->NativeYdbResources](bool useTls) {
+                return *resources->GetDriver(useTls);
+            },
             federatedQuerySetup->CredentialsFactory);
 
         static_assert(

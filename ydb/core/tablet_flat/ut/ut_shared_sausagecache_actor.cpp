@@ -1998,7 +1998,10 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
     }
 
     Y_UNIT_TEST(InMemory_FailedPreloadFetch) {
-        TSharedPageCacheMock sharedCache;
+        auto config = TSharedPageCacheMock::DefaultConfig();
+        config.SetMemoryLimit(PAGE_TOTAL_SIZE);
+        config.SetInMemoryInFlyLimit(PAGE_TOTAL_SIZE);
+        TSharedPageCacheMock sharedCache(config);
         auto collection = MakeIntrusive<TPageCollectionMock>(1ul, 1u);
         collection->PageTypes = { EPage::Skip };
         sharedCache.Collection1 = collection;
@@ -2022,6 +2025,25 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
             NKikimrProto::ERROR);
         sharedCache.CheckFetches({});
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+
+        sharedCache.Unregister(sharedCache.Sender1);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableSharedCacheConfig()->CopyFrom(config);
+        appConfig.MutableSharedCacheConfig()->SetInMemoryInFlyLimit(0);
+        sharedCache.UpdateConfig(appConfig);
+
+        // A new in-memory collection with no resident pages must not inherit the failed page's reservation.
+        auto emptyCollection = MakeIntrusive<TPageCollectionMock>(3ul, 1u);
+        emptyCollection->PageTypes = { EPage::Skip };
+        sharedCache.Attach(sharedCache.Sender1, emptyCollection, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({});
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection2, { _P(0) });
+        sharedCache.CheckFetches({ TFetch{ 10, sharedCache.Collection2, { _P(0) } } });
+        sharedCache.Provide(sharedCache.Collection2, { _P(0) });
+        sharedCache.CheckResults({ TFetch{ 1, sharedCache.Collection2, { _P(0) } } });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 1);
     }
 
     Y_UNIT_TEST(InMemory_ResidentSinglePageV2ChangesTier) {

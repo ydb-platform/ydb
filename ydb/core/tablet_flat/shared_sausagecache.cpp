@@ -1238,6 +1238,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
                 continue;
             }
 
+            RemoveAlivePage(page);
             page->Collection = nullptr;
             ++droppedPagesCount;
         }
@@ -1256,6 +1257,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
         } else {
             collection.PageSet.clear();
         }
+
+        ActualizeCacheSizeLimit();
 
         if (fetchType == EBlockIOFetchTypeCookie::TryKeepInMemoryPreload) {
             for (const auto& owner : collection.InMemoryOwners) {

@@ -1,39 +1,33 @@
-PROGRAM(mrjob)
+SET(MRJOB_RESOURCE None)
 
-ALLOCATOR(J)
-
-INCLUDE(
-    ${ARCADIA_ROOT}/yql/essentials/udfs/common/python/sanitizer_suppressions.inc
-)
-
-SRCS(
-    mrjob.cpp
-)
-
-IF (OS_LINUX)
-    # prevent external python extensions to lookup protobuf symbols (and maybe
-    # other common stuff) in main binary
-    EXPORTS_SCRIPT(${ARCADIA_ROOT}/yql/essentials/tools/exports.symlist)
+IF (NOT OPENSOURCE AND NOT BUILD_YQL_FROM_SOURCES)
+    INCLUDE(${ARCADIA_ROOT}/yql/resources.inc)
+    IF (SANITIZER_TYPE == "address")
+        SET(MRJOB_RESOURCE ${MRJOB_RESOURCE_ASAN})
+    ELSEIF (SANITIZER_TYPE == "memory")
+        SET(MRJOB_RESOURCE ${MRJOB_RESOURCE_MSAN})
+    ELSEIF (SANITIZER_TYPE == "thread")
+        SET(MRJOB_RESOURCE ${MRJOB_RESOURCE_TSAN})
+    ELSEIF (SANITIZER_TYPE == "undefined")
+        SET(MRJOB_RESOURCE ${MRJOB_RESOURCE_UBSAN})
+    ELSE()
+        SET(MRJOB_RESOURCE ${MRJOB_RESOURCE_DEFAULT})
+    ENDIF()
 ENDIF()
 
-PEERDIR(
-    yt/cpp/mapreduce/client
-    yql/essentials/public/udf/service/terminate_policy
-    yql/essentials/providers/common/gateway
-    yql/essentials/utils/backtrace
-    yql/essentials/parser/pg_wrapper
-    yql/essentials/sql/pg
-    yt/yql/providers/yt/job
-    yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm16
-    yql/essentials/minikql/computation/llvm16
-    yql/essentials/minikql/invoke_builtins/llvm16
-    yql/essentials/minikql/comp_nodes/llvm16
-)
+IF (MRJOB_RESOURCE != "None")
+    PACKAGE()
 
-YQL_LAST_ABI_VERSION()
+    FROM_SANDBOX(FILE ${MRJOB_RESOURCE} RENAME RESOURCE OUT_NOAUTO mrjob)
 
-END()
+    END()
+ELSE()
+    PROGRAM(mrjob)
+
+    INCLUDE(ya.make.inc)
+
+    END()
+ENDIF()
 
 RECURSE_FOR_TESTS(
     test

@@ -194,8 +194,8 @@ actor-system startup. The budget excludes active frames, fixed cache metadata,
 and allocator bookkeeping, so it is not a limit on total coroutine memory.
 Each worker has an independent budget.
 
-The cache has seven LIFO lists for capacities of 1, 2, 4, 8, 16, 32, and
-64 KiB. Requests up to 1 KiB use the 1 KiB bin; larger requests up to 64 KiB
+The cache has seven last-in, first-out (LIFO) lists for capacities of 1, 2, 4,
+8, 16, 32, and 64 KiB. Requests up to 1 KiB use the 1 KiB bin; larger requests up to 64 KiB
 use the smallest bin that fits. A cache miss allocates a block of that bin's
 capacity. Requests over 64 KiB use the heap directly and are never retained.
 Returns that exceed the remaining byte budget are freed to the heap. The

@@ -1093,6 +1093,31 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT_C(result.error().Contains("was not reserved"), result.error());
     }
 
+    Y_UNIT_TEST(ZstdContinuesThroughEmptyLinesWithinAFrame) {
+        // The zstd reader gives out the lines it has decoded when its buffer
+        // is full, before the end of the frame, where there is no checkpoint
+        // yet. Empty lines give no rows either. That is not a reader that
+        // makes no progress: the import goes on to the rows that follow. Here:
+        // one frame of 256 KiB of empty lines and a row, through a buffer of
+        // 128 KiB.
+        const TString csv = TString(256_KB, '\n') + "\"k1\",\"v1\"\n";
+        const TString source = ZstdCompress(csv);
+
+        const TEngineFixture fixture;
+        auto engine = fixture.MakeEngine(
+            EDataFormat::YdbDump,
+            source,
+            /*readBatchSize=*/source.size(),
+            /*validateChecksum=*/false,
+            ECompressionCodec::Zstd);
+
+        TVector<TString> taken;
+        const auto error = RunImport(*engine, source, RejectRow("no such key", taken));
+
+        UNIT_ASSERT_C(!error, error.GetOrElse(""));
+        UNIT_ASSERT_VALUES_EQUAL(JoinSeq(",", taken), "k1");
+    }
+
     Y_UNIT_TEST(ZstdDefersCountersUntilRestartableFrameBoundary) {
         const TString largeValue = MakePseudoRandomAscii(256_KB);
         const TString csv = TStringBuilder()

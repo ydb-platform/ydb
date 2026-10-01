@@ -532,7 +532,7 @@ public:
         }
 
         const ui64 readyBytes = Reader->ReadyBytes();
-        if (!readyBytes && !parsedData.Rows && !parsedData.DataBytes) {
+        if (!readyBytes && data.empty()) {
             return SetDataError("CSV reader produced an empty batch without making progress");
         }
         if (readyBytes > ContentLength - ProcessedBytes) {

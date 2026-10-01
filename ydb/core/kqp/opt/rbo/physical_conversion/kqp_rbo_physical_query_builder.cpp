@@ -716,7 +716,7 @@ TKqpPhyTxSettings TPhysicalQueryBuilder::GetPhysicalTxSettings() const {
 
     switch (kqpCtx.QueryCtx->Type) {
         case EKikimrQueryType::Dml: {
-            txSettings.Type = EPhysicalTxType::Compute;
+            txSettings.Type = withEffects ? EPhysicalTxType::Data : EPhysicalTxType::Compute;
             break;
         }
         case EKikimrQueryType::Query: {

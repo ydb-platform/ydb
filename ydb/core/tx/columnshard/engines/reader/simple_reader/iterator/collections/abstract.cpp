@@ -30,12 +30,11 @@ TString ISourcesCollection::DebugString() const {
 }
 
 std::shared_ptr<IScanCursor> ISourcesCollection::BuildCursor(
-    const std::shared_ptr<NCommon::IDataSource>& source, const ui32 readyRecords, const ui64 tabletId) const {
-    AFL_VERIFY(source);
+    const NCommon::IDataSource& source, const ui32 readyRecords, const ui64 tabletId) const {
     AFL_VERIFY(tabletId);
-    AFL_VERIFY(readyRecords <= source->GetRecordsCount())("count", source->GetRecordsCount())("ready", readyRecords);
+    AFL_VERIFY(readyRecords <= source.GetRecordsCount())("count", source.GetRecordsCount())("ready", readyRecords);
     auto result = std::make_shared<TSourceIndexScanCursor>(SourcesSortingToProto(Context->GetReadMetadata()->GetSourcesSorting()),
-        DoGetSourceStartPK(source), source->GetSourceIdx(), readyRecords, source->GetPortionIdOptional());
+        DoGetSourceStartPK(source), source.GetSourceIdx(), readyRecords, source.GetPortionIdOptional());
     result->SetTabletId(tabletId);
     return result;
 }

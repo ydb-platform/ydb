@@ -504,7 +504,7 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context);
+    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
@@ -512,8 +512,8 @@ public:
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
         THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
-        TOperationContext& context);
-    void AbortOperationPropose(const TTxId txId, TOperationContext& context);
+        TProposeContext& context);
+    void AbortOperationPropose(const TTxId txId, TProposeContext& context);
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
@@ -744,7 +744,7 @@ public:
     bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType = {});
     bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
     bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
-    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const;
+    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr, ui64 count = 1) const;
     bool CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const;
     bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
 
@@ -1051,6 +1051,7 @@ public:
     // StreamingQuery
     void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+    void ResumeStreamingQueriesOperations(const TVector<TPathId>& ids);
 
     // TestShardSet
     void PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
@@ -1109,6 +1110,7 @@ public:
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
         TVector<ui64> FullBackupIds;
+        TVector<TPathId> StreamingQueriesOperations;
     };
 
     void SubscribeToTempTableOwners();
@@ -1902,6 +1904,7 @@ public:
     bool PersistBuildIndexSampleForgetAll(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClusterSize(NIceDb::TNiceDb& db, const TIndexBuildInfo& info, ui32 i);
     void PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     bool PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);

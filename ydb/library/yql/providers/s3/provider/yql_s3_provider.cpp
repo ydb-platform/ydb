@@ -7,8 +7,8 @@
 
 namespace NYql {
 
-TS3State::TS3State()
-    : Configuration(MakeIntrusive<TS3Configuration>())
+TS3State::TS3State(bool strictConfigValidation)
+    : Configuration(MakeIntrusive<TS3Configuration>(strictConfigValidation))
     , GatewayRetryPolicy(GetHTTPDefaultRetryPolicy())
 {}
 
@@ -32,7 +32,7 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
         Y_UNUSED(hiddenAborter);
         Y_UNUSED(qContext);
 
-        auto state = MakeIntrusive<TS3State>();
+        auto state = MakeIntrusive<TS3State>(typeCtx->StrictConfigValidation);
 
         state->Types = typeCtx.Get();
         state->FunctionRegistry = functionRegistry;

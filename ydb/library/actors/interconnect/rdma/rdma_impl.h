@@ -8,6 +8,7 @@
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/util/intrusive_funnel_queue.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/monlib/metrics/metric_sub_registry.h>
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
@@ -49,7 +50,9 @@ NMonitoring::TDynamicCounterPtr MakeCounters(NMonitoring::TDynamicCounters* coun
 
 class TWr;
 
-class TIbVerbsBuilderImpl final : public IIbVerbsBuilder {
+class TIbVerbsBuilderImpl final
+    : public IIbVerbsBuilder
+    , public TIntrusiveFunnelQueueItem<TIbVerbsBuilderImpl> {
 public:
     TIbVerbsBuilderImpl(size_t hint) noexcept {
         WorkBuf.reserve(hint);
@@ -62,7 +65,15 @@ public:
     void AddSendVerb(std::span<const TSendSge> sgList,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept;
     size_t GetVerbsNum() const noexcept;
-    ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr, size_t deviceIndex) noexcept;
+    ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept;
+
+    void AttachQp(std::shared_ptr<TQueuePair> qp) noexcept {
+        HoldedQp = std::move(qp);
+    }
+
+    int PostSend(struct ::ibv_send_wr *wr, struct ::ibv_send_wr **bad_wr) noexcept {
+        return HoldedQp->PostSend(wr, bad_wr);
+    }
 
 private:
     struct TWrVerbData {
@@ -72,6 +83,8 @@ private:
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> IoCb;
     };
     std::vector<TWrVerbData> WorkBuf;
+
+    std::shared_ptr<TQueuePair> HoldedQp;
 };
 
 void SetSigHandler() noexcept;
@@ -555,24 +568,6 @@ static ICq::TPtr CreateCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaR
 }
 
 class TSimpleCqBase : public TCqCommon {
-protected:
-    struct TWaiterCtx {
-        TWaiterCtx(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> verbsBuilder) noexcept
-            : Qp(std::move(qp))
-            , VerbsBuilder(std::move(verbsBuilder))
-        {}
-        size_t GetVerbsNum() const noexcept {
-            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->GetVerbsNum();
-        }
-
-        ibv_send_wr* BuildListOfVerbs(std::vector<TWr*>& preparedWr) noexcept {
-            return static_cast<TIbVerbsBuilderImpl*>(VerbsBuilder.get())->BuildListOfVerbs(preparedWr, Qp->GetDeviceIndex());
-        }
-
-        std::shared_ptr<TQueuePair> Qp;
-        std::unique_ptr<IIbVerbsBuilder> VerbsBuilder;
-    };
-
 public:
     TSimpleCqBase(NActors::TActorSystem* as, size_t sz, NMonitoring::TDynamicCounters* c, bool nonBlockingPolling) noexcept
         : TCqCommon(as)
@@ -630,7 +625,9 @@ public:
         if (TerminalError.load(std::memory_order_relaxed)) {
             return TErr();
         }
-        Waiters.Enqueue(new TWaiterCtx(std::move(qp), std::move(builder)));
+        TIbVerbsBuilderImpl* b = static_cast<TIbVerbsBuilderImpl*>(builder.release());
+        b->AttachQp(std::move(qp));
+        Waiters.Push(b);
         // If the thread may sleep we need to start Wr processing from caller thread. It is not a problem due to thread safe ibverbs api.
         // If we can't finish wr prosessing (no more wr to allocate without waiting) it means there are some verbs infligh so we can process it
         // from cq thread.
@@ -666,7 +663,7 @@ public:
 
     // Builds and posts pending RDMA send WRs.
     // Returns false when there is no pending send work and the CQ thread may idle.
-    bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
+    bool ProcessWr(std::unique_ptr<TIbVerbsBuilderImpl>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
         while (true) {
             if (ctx) {
                 TWr* wr = nullptr;
@@ -690,7 +687,7 @@ public:
                     } else {
                         Allocated.fetch_add(preparedWr.size());
                         ibv_send_wr* wrErr = nullptr;
-                        int err = ctx->Qp->PostSend(wrList, &wrErr);
+                        int err = ctx->PostSend(wrList, &wrErr);
                         if (err) {
                             while (wrErr) {
                                 TWr* x = &WrBuf[wrErr->wr_id];
@@ -707,8 +704,7 @@ public:
                     return false;
                 }
             } else {
-                TWaiterCtx* p = nullptr;
-                Waiters.Dequeue(&p);
+                TIbVerbsBuilderImpl* p = Waiters.Pop();
                 if (p == nullptr) {
                     // No wr to build
                     return false;
@@ -795,8 +791,6 @@ public:
         }
     }
 
-
-
     void HandleWc(ibv_wc* wc, size_t sz) noexcept {
         for (size_t i = 0; i < sz; i++, wc++) {
             if (wc->wr_id & TSrq::SRQ_WR_MASK) {
@@ -852,6 +846,18 @@ protected:
             ThreadYield();
         }
     }
+
+    // The intrusive queue does not own its items. This must be called only
+    // after the poller has stopped and submissions have been externally
+    // serialized with CQ destruction.
+    void DrainWaiters() noexcept {
+        VerbsBuildingState.CurCtx.reset();
+        VerbsBuildingState.PreparedWr.clear();
+        while (TIbVerbsBuilderImpl* waiter = Waiters.Pop()) {
+            delete waiter;
+        }
+    }
+
     TThread Thread;
     std::atomic<bool> Finished;
     std::atomic<bool> Cont;
@@ -863,10 +869,10 @@ protected:
     // imlementation of Release() methos on IWr* will be musch more difficult
     TLockFreeQueue<TWr*> Queue;
 
-    TLockFreeQueue<TWaiterCtx*> Waiters;
+    TIntrusiveFunnelQueue<TIbVerbsBuilderImpl> Waiters;
 
     struct {
-        std::unique_ptr<TWaiterCtx> CurCtx;
+        std::unique_ptr<TIbVerbsBuilderImpl> CurCtx;
         std::vector<TWr*> PreparedWr;
         TSpinLock Lock; // Is used to protect VerbsBulding due to cuncurrent access from one poller thred and multiple actor system threads
     } VerbsBuildingState;

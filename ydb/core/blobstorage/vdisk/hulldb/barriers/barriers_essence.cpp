@@ -45,6 +45,11 @@ namespace NKikimr {
         }
 
         NGc::TKeepStatus TBarriersEssence::KeepBarrier(const TKeyBarrier &key) const {
+            if (MemViewSnap.IsTabletDeleted(key.TabletId)) {
+                // Max generation block is the tombstone; all barrier records can go.
+                return false;
+            }
+
             TMaybe<NBarriers::TCurrentBarrier> soft;
             TMaybe<NBarriers::TCurrentBarrier> hard;
             MemViewSnap.GetBarrier(key.TabletId, key.Channel, soft, hard);
@@ -66,6 +71,12 @@ namespace NKikimr {
         {
             if (!allowGarbageCollection) {
                 return {true};
+            }
+
+            if (MemViewSnap.IsTabletDeleted(id.TabletID())) {
+                // Max generation block is the tombstone; none of the tablet's data is needed any
+                // more, on any channel, and no barrier has to be issued to say so.
+                return false;
             }
 
             // extract gen and step

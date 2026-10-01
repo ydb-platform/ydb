@@ -5,6 +5,7 @@
 # - mutes tests
 # - adds user properties from test_dir
 # - merges VERIFY/SANITIZER/TIMEOUT/POSSIBLE_OOM tags into error_type for upload
+# - skips coredump artifacts (core/binary) so they are not published to S3
 
 import argparse
 import json
@@ -88,6 +89,24 @@ def filter_empty_logs(logs):
     return result
 
 
+# ya attaches these as links on crash: "core", "binary", plus child-process
+# variants like "ydbd core" / "core2". Backtrace text/html is still published.
+_COREDUMP_LINK_KINDS = ("core", "binary")
+_COREDUMP_FILE_SUFFIXES = (".core", ".dmp")
+
+
+def is_coredump_artifact_link(link_type: str) -> bool:
+    kind = link_type.lower().rstrip("0123456789").strip()
+    if kind in _COREDUMP_LINK_KINDS:
+        return True
+    return any(kind.endswith(" " + suffix) for suffix in _COREDUMP_LINK_KINDS)
+
+
+def is_coredump_artifact_file(filename: str) -> bool:
+    name = filename.lower()
+    return name.endswith(_COREDUMP_FILE_SUFFIXES)
+
+
 def save_log(build_root, fn, out_dir, log_url_prefix, trunc_size):
     fpath = os.path.relpath(fn, build_root)
 
@@ -128,6 +147,9 @@ def save_zip(suite_name, out_dir, url_prefix, logs_dir: Set[str]):
         test_type = os.path.basename(os.path.dirname(path))
         for root, dirs, files in os.walk(path):
             for f in files:
+                if is_coredump_artifact_file(f):
+                    log_print(f"skip coredump artifact in zip: {f}")
+                    continue
                 filename = os.path.join(root, f)
                 zf.write(filename, os.path.join(test_type, os.path.relpath(filename, path)))
     zf.close()
@@ -336,8 +358,14 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
                         continue
                     if link_type == "logsdir":
                         continue
-                    
+                    if is_coredump_artifact_link(link_type):
+                        result["links"].pop(link_type, None)
+                        continue
+
                     for i, file_path in enumerate(paths):
+                        if is_coredump_artifact_file(file_path):
+                            result["links"].pop(link_type, None)
+                            continue
                         if os.path.isfile(file_path) and os.stat(file_path).st_size > 0:
                             results_file_links.append((result, link_type, file_path))
                         else:
@@ -363,6 +391,10 @@ def transform(report_file, mute_check: YaMuteCheck, ya_out_dir, log_url_prefix, 
         # Save log files
         save_log_start = time.time()
         for result, link_type, file_path in results_file_links:
+            if is_coredump_artifact_link(link_type) or is_coredump_artifact_file(file_path):
+                if "links" in result:
+                    result["links"].pop(link_type, None)
+                continue
             if file_path not in processed_files_cache:
                 url = save_log(ya_out_dir, file_path, log_out_dir, log_url_prefix, log_truncate_size)
                 processed_files_cache[file_path] = url

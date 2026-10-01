@@ -244,7 +244,7 @@ private:
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -361,14 +361,23 @@ public:
                     }
                 }
             }
-            result->SetStatus(NKikimrScheme::StatusSuccess);
+            const auto& alter = Transaction.GetAlterColumnTable();
+            const bool statisticsChange = Transaction.HasAlterColumnTable()
+                && (alter.UpsertMultiColumnStatisticsSize() || alter.DropMultiColumnStatisticsSize());
+            if (statisticsChange) {
+                // Statistics-only updates must be published before notifying completion.
+                context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
+                context.OnComplete.DoneOperation(OperationId);
+            } else {
+                result->SetStatus(NKikimrScheme::StatusSuccess);
+            }
             SetState(TTxState::Done);
         }
 
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
+    void AbortPropose(TProposeContext&) override {
         Y_ABORT("no AbortPropose for TAlterColumnTable");
     }
 

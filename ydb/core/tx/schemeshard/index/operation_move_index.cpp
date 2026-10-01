@@ -311,7 +311,7 @@ public:
     virtual const char* Name() const override final { return "TUpdateMainTableOnIndexMove"; }
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         const TTabletId ssId = context.SS->SelfTabletId();
 
         auto opDescr = Transaction.GetAlterTable();
@@ -391,7 +391,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
@@ -416,7 +416,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
 
     TVector<ISubOperation::TPtr> result;
 
-    if (!context.SS->EnableMoveIndex) {
+    if (!context.SS->EnableMoveIndex && !tx.GetInternal()) {
         TString errStr = "Move index is not supported yet";
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
     }
@@ -496,6 +496,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
 
     {
         auto mainTableAlter = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        *mainTableAlter.MutableLockGuard() = tx.GetLockGuard();
         auto operation = mainTableAlter.MutableAlterTable();
         operation->SetName(mainTablePath.LeafName());
         result.push_back(new TUpdateMainTableOnIndexMove(NextPartId(nextId, result), mainTableAlter));

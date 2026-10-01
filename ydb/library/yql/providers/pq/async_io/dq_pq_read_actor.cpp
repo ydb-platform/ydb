@@ -12,11 +12,12 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
-#include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
+#include <ydb/library/yql/providers/pq/common/events.h>
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
@@ -306,9 +307,10 @@ public:
         ui32 topicPartitionsCount,
         bool enableStreamingQueriesCounters,
         TActorId infoAggregator,
-        TDuration checkPartitionCountPeriod)
+        TDuration checkPartitionCountPeriod,
+        TActorId controlPlaneActorId)
         : TActor<TDqPqReadActor>(&TDqPqReadActor::StateFunc)
-        , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId)
+        , TDqPqReadActorBase(inputIndex, taskId, this->SelfId(), txId, std::move(sourceParams), std::move(readParams), computeActorId, controlPlaneActorId)
         , Metrics(txId, taskId, counters, SourceParams, enableStreamingQueriesCounters)
         , BufferSize(bufferSize)
         , HolderFactory(holderFactory)
@@ -526,6 +528,7 @@ private:
         hFunc(TEvPrivate::TEvReadSessionRetry, Handle);
         hFunc(TEvPrivate::TEvCheckClusterAvailability, Handle);
         hFunc(TEvents::TEvWakeup, Handle);
+        hFunc(TEvents::TEvInvokeResult, HandleConsumerOffsets);
     )
 
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
@@ -576,6 +579,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        StopConsumerOffsetInitialization();
         ClearMkqlData();
 
         for (auto& clusterState : Clusters) {
@@ -619,10 +623,14 @@ private:
                 TopicPartitionsCount
             );
         }
-        for (const auto& cluster : Clusters) {
+        for (auto& cluster : Clusters) {
             const auto& partitionsToRead = GetPartitionsToRead(cluster);
             for (const auto partitionId : partitionsToRead) {
                 Partitions[MakePartitionKey(TString(cluster.Info.Name), partitionId)];
+            }
+            if (!WithoutConsumer) {
+                GetTopicClient(cluster);
+                InitConsumerOffsets(SelfId(), cluster.Info, cluster.TopicClient, cluster.PartitionsCount);
             }
         }
 
@@ -638,6 +646,10 @@ private:
             session->RequestStatus();
         }
         ScheduleStatusRequest();
+    }
+
+    void OnConsumerOffsetsInitialized() override {
+        NotifyCA();
     }
 
     void ScheduleStatusRequest() {
@@ -704,8 +716,9 @@ private:
             if (Clusters.empty()) {
                 StartClusterDiscovery();
             }
+            const bool consumerOffsetsInitialized = ConsumerOffsetsInitialized();
             for (auto& clusterState : Clusters) {
-                if (clusterState.PartitionsCount == 0) {
+                if (clusterState.PartitionsCount == 0 || !consumerOffsetsInitialized) {
                     continue;
                 }
                 auto events = GetReadSession(clusterState).GetEvents(false, std::nullopt, static_cast<size_t>(freeSpace));
@@ -866,7 +879,7 @@ private:
     }
 
     void SubscribeOnNextEvent() {
-        if (FinishedByOffsets) {
+        if (FinishedByOffsets || !ConsumerOffsetsInitialized()) {
             return;
         }
         for (auto& clusterState : Clusters) {
@@ -875,6 +888,9 @@ private:
     }
 
     void SubscribeOnNextEvent(TClusterState& clusterState) {
+        if (!clusterState.PartitionsCount) {
+            return;
+        }
         if (!clusterState.SubscribedOnEvent) {
             clusterState.SubscribedOnEvent = true;
             Metrics.InFlySubscribe->Inc();
@@ -1420,7 +1436,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
     bool enableStreamingQueriesCounters,
     i64 bufferSize,
     TActorId infoAggregator,
-    TDuration checkPartitionCountPeriod
+    TDuration checkPartitionCountPeriod,
+    TActorId controlPlaneActorId
 ) {
     const TString& tokenName = settings.GetToken().GetName();
     const TString token = secureParams.Value(tokenName, TString());
@@ -1449,7 +1466,8 @@ std::pair<IDqComputeActorAsyncInput*, IActor*> CreateDqPqReadActor(
         topicPartitionsCount,
         enableStreamingQueriesCounters,
         infoAggregator,
-        checkPartitionCountPeriod
+        checkPartitionCountPeriod,
+        controlPlaneActorId
     );
 
     return {actor, actor};
@@ -1491,6 +1509,13 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             infoAggregator = ActorIdFromProto(actorIdProto);
         }
 
+        TActorId controlPlaneActorId;
+        if (const auto it = args.TaskParams.find(PqControlPlaneActorIdParam); it != args.TaskParams.end()) {
+            NActorsProto::TActorId actorIdProto;
+            YQL_ENSURE(actorIdProto.ParseFromString(it->second), "Failed to parse " << it->first);
+            controlPlaneActorId = ActorIdFromProto(actorIdProto);
+        }
+
         if (!settings.GetSharedReading()) {
             return CreateDqPqReadActor(
                 std::move(settings),
@@ -1512,7 +1537,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
                 enableStreamingQueriesCounters,
                 PQReadDefaultFreeSpace,
                 infoAggregator,
-                checkPartitionCountPeriod);
+                checkPartitionCountPeriod,
+                controlPlaneActorId);
         }
 
         const TStringBuf format(settings.GetFormat());
@@ -1538,7 +1564,8 @@ void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driv
             PQReadDefaultFreeSpace,
             pqGateway,
             enableStreamingQueriesCounters,
-            checkPartitionCountPeriod);
+            checkPartitionCountPeriod,
+            controlPlaneActorId);
     });
 }
 

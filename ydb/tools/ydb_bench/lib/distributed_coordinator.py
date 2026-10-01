@@ -11,6 +11,7 @@ from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted,
 from ydb.tools.ydb_bench.lib.distributed_sessions import PROTOCOL_VERSION, session_reference
 from ydb.tools.ydb_bench.lib.distributed_artifacts import copy_results
 from ydb.tools.ydb_bench.lib.hosts import NoRedirect, validate_endpoint
+from ydb.tools.ydb_bench.lib.cluster_templates import parse_port_selection
 
 
 class DistributedCleanupError(BenchmarkError):
@@ -77,13 +78,15 @@ class DistributedCluster:
         cancelled,
         progress,
         reset_disks=False,
+        deploy=False,
     ):
         self.reference = {"session_id": str(uuid.uuid4()), "coordinator_id": coordinator_id, "run_id": run_id}
         self.template, self.tenant, self.actor_system = template, tenant, actor_system
         self.reset_disks = reset_disks
+        self.deploy = deploy
         self.directory, self.call, self.cancelled, self.progress = directory, call, cancelled, progress
         self.host_ids = list(dict.fromkeys(node["host_id"] for node in template["nodes"]))
-        self.cli_host = next(node["host_id"] for node in template["nodes"] if node["role"] == "cli")
+        self.cli_host = next((node["host_id"] for node in template["nodes"] if node["role"] == "cli"), None)
         self.cli_hosts = list(dict.fromkeys(node["host_id"] for node in template["nodes"] if node["role"] == "cli"))
         self.static_host = next(node["host_id"] for node in template["nodes"] if node["role"] == "static")
         self.dynamic_nodes = [
@@ -128,6 +131,9 @@ class DistributedCluster:
 
     def _reserve(self):
         capabilities = {}
+        needs_auto = any(
+            parse_port_selection(ports, 'ports')[1] for ports in self.template.get('port_ranges', {}).values()
+        )
         for host in self.host_ids:
             self._check()
             try:
@@ -143,6 +149,14 @@ class DistributedCluster:
                 or not value["platform"].startswith("linux")
             ):
                 raise BenchmarkError("Host {} does not support this distributed-ydb protocol on Linux".format(host))
+            if self.template.get('port_ranges') and value.get('port_ranges') is not True:
+                raise BenchmarkError(
+                    'Host {} does not support configured port ranges; update its benchmark binary'.format(host)
+                )
+            if needs_auto and value.get('port_auto') is not True:
+                raise BenchmarkError(
+                    'Host {} does not support auto port fallback; update its benchmark binary'.format(host)
+                )
             capabilities[host] = value
         self.metadata["capabilities"] = capabilities
         for host in self.host_ids:
@@ -227,11 +241,35 @@ class DistributedCluster:
                 "tenant": self.tenant,
                 "actor_system": self.actor_system,
                 "reset_disks": self.reset_disks,
+                "deploy": self.deploy,
             },
         )
         self.hosts.extend(prepared[host] for host in self.host_ids)
         atomic_write_json(self.directory / "execution-plan.json", self.metadata)
-        self.operation(self.host_ids, "configure", {"hosts": self.hosts})
+        configured = self.operation(self.host_ids, "configure", {"hosts": self.hosts})
+        configuration = None
+        for host in self.host_ids:
+            artifacts = configured[host].get("artifacts")
+            if (
+                not isinstance(artifacts, list)
+                or len(artifacts) != 1
+                or not isinstance(artifacts[0], dict)
+                or artifacts[0].get("path") != "configuration/cluster.yaml"
+            ):
+                raise BenchmarkError("Missing saved YDB configuration for host " + host)
+            if configuration is not None and artifacts[0] != configuration:
+                raise BenchmarkError("YDB cluster configuration differs between hosts")
+            configuration = artifacts[0]
+        host = self.host_ids[0]
+        copy_results(
+            lambda operation, value: self.call(host, operation, value),
+            self.reference,
+            "configure",
+            [configuration],
+            "configuration",
+            self.directory / "configuration",
+        )
+        atomic_write_json(self.directory / "execution-plan.json", self.metadata)
         self.progress("starting-static-nodes")
         self.operation(self.host_ids, "start-static")
         self.progress("bootstrapping-cluster")
@@ -241,7 +279,7 @@ class DistributedCluster:
         self.progress("starting-dynamic-nodes")
         self.operation(self.host_ids, "start-dynamic")
         self.progress("waiting-for-client-endpoints")
-        self.operation(self.cli_hosts, "ready")
+        self.operation([self.static_host] if self.deploy else self.cli_hosts, "ready")
         self.ready = True
         self.progress("cluster-ready", dynamic_nodes=len(self.dynamic_nodes))
 

@@ -301,52 +301,41 @@ struct TTypeBuilderEnv {
 Y_UNIT_TEST_SUITE(TWasmBridgeAbiTest) {
 
 Y_UNIT_TEST(ParseBridgeManifest) {
-    const TString manifest = R"({
+    const TString manifest = R"json({
         "module_type": "module", "module_kind": "wasm",
         "module_name": "Echo",
-        "calling_convention": "bridge",
+
         "required_libraries": ["sdk"],
         "functions": [
             {
                 "name": "EchoInt",
                 "export": "echo_int",
                 "argument_types": [
-                    {"value": "int64", "tag": "concrete_type"}
+                    "Int64"
                 ],
-                "result_type": {"value": "int64", "tag": "concrete_type"}
+                "result_type": "Int64"
             }
         ]
-    })";
+    })json";
     const auto parsed = ParseManifest(manifest);
-    UNIT_ASSERT(parsed.CallingConventionEnum == EWasmCallingConvention::Bridge);
-    UNIT_ASSERT(parsed.Functions[0].CallingConvention == EWasmCallingConvention::Bridge);
 }
 
 Y_UNIT_TEST(ParseDictType) {
-    const TString manifest = R"({
+    const TString manifest = R"json({
         "module_type": "module", "module_kind": "wasm",
         "module_name": "D",
-        "calling_convention": "bridge",
+
         "functions": [
             {
                 "name": "Lookup",
                 "argument_types": [
-                    {
-                        "value": "dict",
-                        "tag": "concrete_type",
-                        "key": {"value": "string", "tag": "concrete_type"},
-                        "payload": {"value": "int64", "tag": "concrete_type"}
-                    },
-                    {"value": "string", "tag": "concrete_type"}
+                    "Dict<String, Int64>",
+                    "String"
                 ],
-                "result_type": {
-                    "value": "optional",
-                    "tag": "concrete_type",
-                    "item": {"value": "int64", "tag": "concrete_type"}
-                }
+                "result_type": "Optional<Int64>"
             }
         ]
-    })";
+    })json";
     const auto parsed = ParseManifest(manifest);
     UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].ArgTypes.size(), 2u);
     UNIT_ASSERT(parsed.Functions[0].ArgTypes[0]->Kind == TWasmTypeNode::EKind::Dict);
@@ -354,28 +343,21 @@ Y_UNIT_TEST(ParseDictType) {
 }
 
 Y_UNIT_TEST(ParseCallableType) {
-    const TString manifest = R"({
+    const TString manifest = R"json({
         "module_type": "module", "module_kind": "wasm",
         "module_name": "C",
-        "calling_convention": "bridge",
+
         "functions": [
             {
                 "name": "Run",
                 "argument_types": [
-                    {
-                        "value": "callable",
-                        "tag": "concrete_type",
-                        "arguments": [
-                            {"value": "int64", "tag": "concrete_type"}
-                        ],
-                        "returns": {"value": "int64", "tag": "concrete_type"}
-                    },
-                    {"value": "int64", "tag": "concrete_type"}
+                    "(Int64)->Int64",
+                    "Int64"
                 ],
-                "result_type": {"value": "int64", "tag": "concrete_type"}
+                "result_type": "Int64"
             }
         ]
-    })";
+    })json";
     const auto parsed = ParseManifest(manifest);
     UNIT_ASSERT(parsed.Functions[0].ArgTypes[0]->Kind == TWasmTypeNode::EKind::Callable);
     UNIT_ASSERT(parsed.Functions[0].ArgTypes[0]->CallableReturns->Leaf == EUdfValueType::Int64);
@@ -383,44 +365,22 @@ Y_UNIT_TEST(ParseCallableType) {
 }
 
 Y_UNIT_TEST(ParseStructuredAndWideLeafTypes) {
-    const TString manifest = R"({
+    const TString manifest = R"json({
         "module_type": "module", "module_kind": "wasm",
         "module_name": "Wide",
-        "calling_convention": "bridge",
+
         "functions": [
             {
                 "name": "Wide",
                 "argument_types": [
-                    {
-                        "value": "struct",
-                        "tag": "concrete_type",
-                        "members": [
-                            {"name": "id", "type": {"value": "int32", "tag": "concrete_type"}},
-                            {"name": "score", "type": {"value": "float", "tag": "concrete_type"}},
-                            {"name": "name", "type": {"value": "utf8", "tag": "concrete_type"}}
-                        ]
-                    },
-                    {
-                        "value": "tuple",
-                        "tag": "concrete_type",
-                        "elements": [
-                            {"value": "date", "tag": "concrete_type"},
-                            {"value": "decimal", "tag": "concrete_type"}
-                        ]
-                    },
-                    {"value": "resource", "tag": "concrete_type", "resource_tag": "Trie"}
+                    "Struct<'id': Int32, 'score': Float, 'name': Utf8>",
+                    "Tuple<Date, Decimal(35,0)>",
+                    "Resource<'Trie'>"
                 ],
-                "result_type": {
-                    "value": "variant",
-                    "tag": "concrete_type",
-                    "elements": [
-                        {"value": "uint32", "tag": "concrete_type"},
-                        {"value": "timestamp", "tag": "concrete_type"}
-                    ]
-                }
+                "result_type": "Variant<Uint32, Timestamp>"
             }
         ]
-    })";
+    })json";
     const auto parsed = ParseManifest(manifest);
     const auto& function = parsed.Functions[0];
     UNIT_ASSERT_VALUES_EQUAL(function.ArgTypes.size(), 3u);
@@ -428,9 +388,9 @@ Y_UNIT_TEST(ParseStructuredAndWideLeafTypes) {
     const auto& structNode = *function.ArgTypes[0];
     UNIT_ASSERT(structNode.Kind == TWasmTypeNode::EKind::Struct);
     UNIT_ASSERT_VALUES_EQUAL(structNode.Members.size(), 3u);
-    UNIT_ASSERT_VALUES_EQUAL(structNode.Members[1].Name, "score");
-    UNIT_ASSERT(structNode.Members[1].Type->Leaf == EUdfValueType::Float);
-    UNIT_ASSERT(structNode.Members[2].Type->Leaf == EUdfValueType::Utf8);
+    UNIT_ASSERT_VALUES_EQUAL(structNode.Members[2].Name, "score");
+    UNIT_ASSERT(structNode.Members[2].Type->Leaf == EUdfValueType::Float);
+    UNIT_ASSERT(structNode.Members[1].Type->Leaf == EUdfValueType::Utf8);
 
     const auto& tupleNode = *function.ArgTypes[1];
     UNIT_ASSERT(tupleNode.Kind == TWasmTypeNode::EKind::Tuple);
@@ -446,47 +406,23 @@ Y_UNIT_TEST(ParseStructuredAndWideLeafTypes) {
 }
 
 Y_UNIT_TEST(NestedLeavesKeepTheirDeclaredType) {
-    const TString manifest = R"({
+    const TString manifest = R"json({
         "module_type": "module", "module_kind": "wasm",
         "module_name": "Nested",
-        "calling_convention": "bridge",
+
         "functions": [
             {
                 "name": "Nested",
                 "argument_types": [
-                    {
-                        "value": "dict",
-                        "tag": "concrete_type",
-                        "key": {"value": "string", "tag": "concrete_type"},
-                        "payload": {"value": "int64", "tag": "concrete_type"}
-                    },
-                    {
-                        "value": "list",
-                        "tag": "concrete_type",
-                        "item": {
-                            "value": "optional",
-                            "tag": "concrete_type",
-                            "item": {"value": "utf8", "tag": "concrete_type"}
-                        }
-                    },
-                    {
-                        "value": "struct",
-                        "tag": "concrete_type",
-                        "members": [
-                            {"name": "id", "type": {"value": "int32", "tag": "concrete_type"}},
-                            {"name": "name", "type": {"value": "utf8", "tag": "concrete_type"}}
-                        ]
-                    },
-                    {"value": "string", "tag": "concrete_type"}
+                    "Dict<String, Int64>",
+                    "List<Optional<Utf8>>",
+                    "Struct<'id': Int32, 'name': Utf8>",
+                    "String"
                 ],
-                "result_type": {
-                    "value": "optional",
-                    "tag": "concrete_type",
-                    "item": {"value": "int64", "tag": "concrete_type"}
-                }
+                "result_type": "Optional<Int64>"
             }
         ]
-    })";
+    })json";
     const auto parsed = ParseManifest(manifest);
     const auto& function = parsed.Functions[0];
     TTypeBuilderEnv types;
@@ -499,16 +435,16 @@ Y_UNIT_TEST(NestedLeavesKeepTheirDeclaredType) {
     UNIT_ASSERT_VALUES_EQUAL(
         types.Format(*function.ArgTypes[2]),
         "Struct<'id':Int32,'name':Utf8>");
-    // A bare leaf argument / result keeps the historical Optional<data> shape.
-    UNIT_ASSERT_VALUES_EQUAL(types.Format(*function.ArgTypes[3]), "String?");
+    // Top-level scalars are exact too.
+    UNIT_ASSERT_VALUES_EQUAL(types.Format(*function.ArgTypes[3]), "String");
     UNIT_ASSERT_VALUES_EQUAL(types.Format(*function.ResultType), "Int64?");
 }
 
-Y_UNIT_TEST(RejectBridgeWithTypeConfigCallable) {
-    const TString manifest = R"({
+Y_UNIT_TEST(AcceptTypeConfigCallable) {
+    const TString manifest = R"json({
         "module_type": "module", "module_kind": "wasm",
         "module_name": "Bad",
-        "calling_convention": "bridge",
+
         "objects": [
             {
                 "name": "X",
@@ -519,13 +455,13 @@ Y_UNIT_TEST(RejectBridgeWithTypeConfigCallable) {
                         "export": "x_apply",
                         "yql_binding": "type_config_callable",
                         "argument_types": [],
-                        "result_type": {"value": "int64", "tag": "concrete_type"}
+                        "result_type": "Int64"
                     }
                 ]
             }
         ]
-    })";
-    UNIT_ASSERT_EXCEPTION(ParseManifest(manifest), yexception);
+    })json";
+    UNIT_ASSERT_VALUES_EQUAL(ParseManifest(manifest).Functions.size(), 2);
 }
 
 Y_UNIT_TEST(EchoIntViaBridgeIntrinsics) {
@@ -1030,6 +966,29 @@ Y_UNIT_TEST(AliasingNodeKeepsIdentityOwner) {
 
     table.Unref(owner);
     UNIT_ASSERT_VALUES_EQUAL(table.TryReuse(keepAlive), NullBridgeHandle);
+    UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
+}
+
+Y_UNIT_TEST(OptionalStringPayloadDoesNotReuseWrapper) {
+    TMiniKqlEnv mkql;
+    TWasmBridgeNodeTable table(22);
+    auto value = mkql.ValueBuilder.NewString(
+        TStringRef("a string long enough to use a reference counted buffer", 53));
+    const ui64 optional = table.Register(
+        EBridgeNodeKind::Optional, EBridgeValueKind::Optional, nullptr,
+        TUnboxedValue(value.MakeOptional()));
+    const ui64 payload = table.RegisterOrReuse(
+        EBridgeNodeKind::String, EBridgeValueKind::String, nullptr,
+        value.GetOptionalValue());
+    UNIT_ASSERT(payload != optional);
+    UNIT_ASSERT(table.Resolve(payload).ValueKind == EBridgeValueKind::String);
+    const auto actual = table.Resolve(payload).Value.AsStringRef();
+    const auto expected = value.AsStringRef();
+    UNIT_ASSERT_VALUES_EQUAL(TStringBuf(actual.Data(), actual.Size()),
+        TStringBuf(expected.Data(), expected.Size()));
+    table.Unref(payload);
+    UNIT_ASSERT_VALUES_EQUAL(table.TryReuse(value), optional);
+    table.Unref(optional);
     UNIT_ASSERT_VALUES_EQUAL(table.DebugSize(), 0u);
 }
 

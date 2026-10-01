@@ -1466,7 +1466,8 @@ public:
     bool IsUsingSequence(const TString& name) {
         for (const auto& pr : Columns) {
             if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
-                pr.second.DefaultValue == name)
+                pr.second.DefaultValue == name &&
+                !pr.second.IsDropped())
             {
                 // A column scheduled to be dropped by the pending alter no longer keeps the
                 // sequence alive. This lets a single ALTER drop a serial column and cascade
@@ -4535,6 +4536,7 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
+    TActorId OperationOwnerActorId;
 };
 
 struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {

@@ -764,6 +764,7 @@ public:
             Config->DefaultTxMode.Get().GetOrElse(NKqpProto::ISOLATION_LEVEL_UNDEFINED));
 
         queryProto.SetDisableCheckpoints(Config->DisableCheckpoints.Get().GetOrElse(false));
+        queryProto.SetMaxTasksPerStage(Config->MaxTasksPerStage.Get().GetOrElse(0));
         queryProto.SetEnableWatermarks(Config->GetEnableWatermarks());
 
         bool enableDiscardSelect = Config->GetEnableDiscardSelect();
@@ -1316,8 +1317,10 @@ private:
             if (tableMeta->Kind == NYql::EKikimrTableKind::External) {
                 FillExternalSource(*tableMeta, *txProto.AddTables());
 
-                if (const auto sourceMeta = tableMeta->ExternalSource.UnderlyingExternalSourceMetadata) {
-                    FillExternalSource(*sourceMeta, *txProto.AddTables());
+                if (tableMeta->IsExternalTable()) {
+                    FillExternalSource(
+                        *tableMeta->ExternalTable().GetUnderlyingDataSourceMetadata(),
+                        *txProto.AddTables());
                 }
             }
         }

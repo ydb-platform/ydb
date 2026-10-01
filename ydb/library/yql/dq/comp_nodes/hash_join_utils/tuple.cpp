@@ -112,7 +112,7 @@ bool TupleKeysEqual(const TTupleLayout *layout,
         const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + layout->BitmaskOffset + byteN);
         const ui8 mask = masks[i >= 8];
         if constexpr (EqualNulls) {
-            const ui8 eqMask = static_cast<ui8>(layout->EqualNullsKeyMask >> (byteN * 8)) & mask;
+            const ui8 eqMask = layout->GetEqualNullsMaskByte(byteN) & mask;
             const ui8 reqMask = mask & ~eqMask;
             if ((lhsBits & rhsBits & reqMask) != reqMask || (lhsBits & eqMask) != (rhsBits & eqMask)) {
                 return false;
@@ -125,7 +125,7 @@ bool TupleKeysEqual(const TTupleLayout *layout,
     for (auto colInd = layout->KeyColumnsFixedNum; colInd != layout->KeyColumnsNum; ++colInd) {
         const auto &col = layout->Columns[colInd];
         if constexpr (EqualNulls) {
-            if ((layout->EqualNullsKeyMask >> colInd) & 1ull) {
+            if (layout->EqualNullsKeyMask.Get(colInd)) {
                 const ui8 bit =
                     (ReadUnaligned<ui8>(lhsRow + layout->BitmaskOffset + colInd / 8) >> (colInd % 8)) & 1u;
                 if (bit == 0) {
@@ -242,41 +242,42 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
 }
 
 void TTupleLayout::NormalizeEqualNullsFixedKeys(ui8* res) const {
-    if (Y_LIKELY(!EqualNullsKeyMask)) {
+    if (Y_LIKELY(!HasEqualNullsKeys)) {
         return;
     }
-    ui64 keyBits = 0;
-    std::memcpy(&keyBits, res + BitmaskOffset, std::min<ui32>(BitmaskSize, sizeof(keyBits)));
-    const ui64 nullEqualNulls = EqualNullsKeyMask & ~keyBits;
-    if (Y_LIKELY(!nullEqualNulls)) {
-        return;
-    }
-    for (ui32 j = 0; j < KeyColumnsFixedNum; ++j) {
-        if ((nullEqualNulls >> j) & 1ull) {
+
+    const ui32 fixedMaskBytes = (KeyColumnsFixedNum + 7) / 8;
+    for (ui32 byteN = 0; byteN < fixedMaskBytes; ++byteN) {
+        ui8 nullEqualNulls = GetEqualNullsMaskByte(byteN) & ~res[BitmaskOffset + byteN];
+        while (nullEqualNulls) {
+            const ui32 j = byteN * 8 + CountTrailingZeroBits(static_cast<ui32>(nullEqualNulls));
+            if (j >= KeyColumnsFixedNum) {
+                break;
+            }
             const auto& col = KeyColumns[j];
             std::memset(res + col.Offset, 0, col.DataSize);
+            nullEqualNulls &= nullEqualNulls - 1;
         }
     }
 }
 
 bool TTupleLayout::HashVariableKey(const ui8* res, ui32 keyColIdx) const {
-    if (Y_LIKELY(!EqualNullsKeyMask) || ((EqualNullsKeyMask >> keyColIdx) & 1ull) == 0) {
+    if (Y_LIKELY(!HasEqualNullsKeys) || !EqualNullsKeyMask.Get(keyColIdx)) {
         return true;
     }
     return (res[BitmaskOffset + keyColIdx / 8] >> (keyColIdx % 8)) & 1u;
 }
 
 void TTupleLayout::ApplyEqualNulls(const std::vector<ui32>& equalNullsInputColumns) {
-    Y_ENSURE(KeyColumnsNum <= 64, "EqualNulls supports at most 64 key columns");
-
-    ui64 packed = 0;
+    EqualNullsKeyMask.Clear();
+    HasEqualNullsKeys = false;
     for (ui32 j = 0; j < KeyColumnsNum; ++j) {
         if (std::find(equalNullsInputColumns.begin(), equalNullsInputColumns.end(),
                       KeyColumns[j].OriginalColumnIndex) != equalNullsInputColumns.end()) {
-            packed |= (1ull << j);
+            EqualNullsKeyMask.Set(j);
+            HasEqualNullsKeys = true;
         }
     }
-    EqualNullsKeyMask = packed;
 }
 
 THolder<TTupleLayout>

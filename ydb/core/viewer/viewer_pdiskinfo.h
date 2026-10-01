@@ -25,6 +25,13 @@ struct TWhiteboardInfo<NKikimrWhiteboard::TEvPDiskStateResponse> {
     }
 
     static void MergeResponses(TResponseType& result, TMap<ui32, TResponseType>& responses, const TString& fields = GetDefaultMergeField()) {
+        for (const auto& [nodeId, response] : responses) {
+            for (const auto& sample : response.GetDDiskStateInfo()) {
+                auto* ddisk = result.AddDDiskStateInfo();
+                ddisk->CopyFrom(sample);
+                ddisk->SetNodeId(nodeId);
+            }
+        }
         if (fields == GetDefaultMergeField()) {
             TWhiteboardMerger<TResponseType>::MergeResponsesElementKey(result, responses);
         } else {

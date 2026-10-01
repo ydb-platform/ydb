@@ -1,5 +1,6 @@
 #include "database.h"
 
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/events.h>
 
 #include <ydb/library/table_creator/table_creator.h>
@@ -107,7 +108,9 @@ public:
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
         , Items(std::move(items))
-    {}
+    {
+        RequestType = TString(NRequestTypes::Analyze);
+    }
 
     void OnRunQuery() override {
         TStringBuilder sql;

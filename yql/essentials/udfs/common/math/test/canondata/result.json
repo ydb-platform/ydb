@@ -23,5 +23,15 @@
         {
             "uri": "file://test.test_SwapBytes_2025_02-Results_/extracted"
         }
+    ],
+    "test.test[expm1-Results]": [
+        {
+            "uri": "file://test.test_expm1-Results_/results.txt"
+        }
+    ],
+    "test.test[log1p-Results]": [
+        {
+            "uri": "file://test.test_log1p-Results_/results.txt"
+        }
     ]
 }

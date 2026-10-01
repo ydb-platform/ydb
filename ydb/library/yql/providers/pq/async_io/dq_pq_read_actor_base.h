@@ -1,10 +1,13 @@
 #pragma once
 
+#include <ydb/library/actors/core/invoke.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_topic_client.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 namespace NYql::NDq::NInternal {
 
@@ -53,7 +56,8 @@ public:
         const TTxId& txId,
         NPq::NProto::TDqPqTopicSource&& sourceParams,
         TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
-        const NActors::TActorId& computeActorId);
+        const NActors::TActorId& computeActorId,
+        const NActors::TActorId& controlPlaneActorId);
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, TSourceState& state) override;
 
@@ -74,7 +78,25 @@ protected:
 
     void MaybeSchedulePartitionIdlenessCheck(TInstant systemTime);
 
+    void HandleConsumerOffsets(NActors::TEvents::TEvInvokeResult::TPtr& ev);
+
+    void StopConsumerOffsetInitialization();
+
+    void InitConsumerOffsets(
+        const NActors::TActorId& selfId,
+        const NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo& cluster,
+        ITopicClient::TPtr topicClient,
+        ui32 partitionsCount);
+
+    bool ConsumerOffsetsInitialized() const;
+
+    virtual void OnConsumerOffsetsInitialized() = 0;
+
 private:
+    const NActors::TActorId ControlPlaneActorId;
+    THashSet<NActors::TActorId> ControlPlaneInteractors;
+    bool ConsumerOffsetsRewindFailed = false;
+
     TString LogPartitionToOffset() const;
 };
 

@@ -23,6 +23,7 @@
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_terminator.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/sql/v1/translation/context.h>
@@ -138,6 +139,32 @@ struct TStreamingAggregationTypeAnnTest {
     const TStructExprType* CheckType(TExprNode::TPtr& node) {
         UNIT_ASSERT_VALUES_EQUAL_C(Annotate(node), IGraphTransformer::TStatus::Ok, Ctx.IssueManager.GetIssues().ToString());
         return GetSeqItemType(*node->GetTypeAnn()).Cast<TStructExprType>();
+    }
+
+    template <typename TCheck>
+    void Run(const TExprNode& node, TCheck&& check) {
+        using namespace NKikimr::NMiniKQL;
+        TScopedAlloc alloc(__LOCATION__);
+        TTypeEnvironment env(alloc);
+        TKqpComputeContextBase computeCtx;
+        const auto registry = CreateFunctionRegistry(CreateBuiltinRegistry());
+        const auto randomProvider = CreateDeterministicRandomProvider(1);
+        const auto timeProvider = CreateDeterministicTimeProvider(10000000);
+        const NKikimr::NKqp::TKqlCompileContext compileCtx("", MakeIntrusive<TKikimrTablesData>(), env, *registry);
+        const auto compiler = NKikimr::NKqp::CreateKqlCompiler(compileCtx, Types);
+        NCommon::TMkqlBuildContext buildCtx(*compiler, compileCtx.PgmBuilder(), Ctx);
+        const auto compiled = NCommon::MkqlBuildExpr(node, buildCtx);
+        const auto* expectedType = NCommon::BuildType(node, *node.GetTypeAnn(), compileCtx.PgmBuilder());
+        UNIT_ASSERT(compiled.GetStaticType()->IsSameType(*expectedType));
+        const auto programNode = compileCtx.PgmBuilder().Collect(compiled);
+        TExploringNodeVisitor explorer;
+        explorer.Walk(programNode.GetNode(), env.GetNodeStack());
+        const TComputationPatternOpts options(alloc.Ref(), env, GetKqpBaseComputeFactory(&computeCtx),
+            registry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
+        const auto pattern = MakeComputationPattern(explorer, programNode, {}, options);
+        const auto graph = pattern->Clone(options.ToComputationOptions(*randomProvider, *timeProvider));
+        const TBindTerminator bindTerminator(graph->GetTerminator());
+        check(graph->GetValue());
     }
 };
 
@@ -346,6 +373,84 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(StreamingAggregationProjectsHandlerInputs, InitReturnsItem) {
+        for (const auto kind : {ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}) {
+            TStreamingAggregationTypeAnnTest test;
+            const TString program = TStringBuilder() << R"((
+                (return (AggregationTraits
+                    (StructType '('value (DataType 'Int64)))
+                    (lambda '(item) )" << (InitReturnsItem ? "item" : "(AsStruct '('value (Member item 'value)))") << R"()
+                    (lambda '(item state) )" << (InitReturnsItem
+                        ? "(AsStruct '('value (Add (Member state 'value) (Member item 'value))))" : "item") << R"()
+                    (lambda '(state) state)
+                    (lambda '(state) state)
+                    (lambda '(left right) left)
+                    (lambda '(state) state)
+                    (Null)))
+            ))";
+            const auto traits = ParseAndAnnotate(program, test.Ctx, false, false, test.Types);
+            UNIT_ASSERT_C(traits, test.Ctx.IssueManager.GetIssues().ToString());
+            const auto keyTraits = ParseAndAnnotate(R"((
+                (return (AggregationTraits
+                    (StructType '('key (DataType 'String)))
+                    (lambda '(item) item)
+                    (lambda '(item state) item)
+                    (lambda '(state) state)
+                    (lambda '(state) state)
+                    (lambda '(left right) left)
+                    (lambda '(state) (Member state 'key))
+                    (Null)))
+            ))", test.Ctx, false, false, test.Types);
+            UNIT_ASSERT_C(keyTraits, test.Ctx.IssueManager.GetIssues().ToString());
+            auto input = ParseAndAnnotate(R"((
+                (return (AsList
+                    (AsStruct '('key (String 'a)) '('value (Int64 '1)))
+                    (AsStruct '('key (String 'a)) '('value (Int64 '2)))
+                    (AsStruct '('key (String 'b)) '('value (Int64 '10)))
+                    (AsStruct '('key (String 'a)) '('value (Int64 '4)))
+                    (AsStruct '('key (String 'b)) '('value (Int64 '20)))))
+            ))", test.Ctx, false, false, test.Types);
+            UNIT_ASSERT_C(input, test.Ctx.IssueManager.GetIssues().ToString());
+            if (kind != ETypeAnnotationKind::List) {
+                const auto inputPos = input->Pos();
+                input = test.Ctx.NewCallable(inputPos, kind == ETypeAnnotationKind::Stream ? "Iterator" : "ToFlow",
+                    {std::move(input)});
+            }
+            auto node = test.Aggregation(kind, {test.Atom("key")}, {
+                test.List({test.Atom("value_state"), traits}), test.List({test.Atom("key_state"), keyTraits})});
+            const auto originalInput = input;
+            node = test.Ctx.ChangeChild(*node, NNodes::TKqpStreamingAggregation::idx_Input, std::move(input));
+            const auto* resultType = test.CheckType(node);
+            UNIT_ASSERT_VALUES_EQUAL(node->GetTypeAnn()->GetKind(), kind);
+            const auto aggregation = kind == ETypeAnnotationKind::Flow ? node : node->HeadPtr();
+            UNIT_ASSERT(NNodes::TKqpStreamingAggregation::Match(aggregation.Get()));
+            UNIT_ASSERT_VALUES_EQUAL(aggregation->GetTypeAnn()->GetKind(), ETypeAnnotationKind::Flow);
+            if (kind != ETypeAnnotationKind::Flow) {
+                UNIT_ASSERT(node->IsCallable(kind == ETypeAnnotationKind::List ? "ForwardList" : "FromFlow"));
+                UNIT_ASSERT(aggregation->Head().IsCallable("ToFlow"));
+                UNIT_ASSERT(aggregation->Head().HeadPtr() == originalInput);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(resultType->FindItemType("value_state")->Cast<TStructExprType>()->GetSize(), 1);
+            test.Run(*node, [&](const auto& value) {
+                const auto rows = value.GetListIterator();
+                const TVector<TStringBuf> expectedKeys = {"a", "a", "b", "a", "b"};
+                const TVector<i64> expectedValues = InitReturnsItem
+                    ? TVector<i64>{1, 3, 10, 7, 30} : TVector<i64>{1, 2, 10, 4, 20};
+                NUdf::TUnboxedValue row;
+                for (ui32 i = 0; i < expectedKeys.size(); ++i) {
+                    UNIT_ASSERT(rows.Next(row));
+                    const auto key = row.GetElement(*resultType->FindItem("key"));
+                    const auto keyState = row.GetElement(*resultType->FindItem("key_state"));
+                    const auto valueState = row.GetElement(*resultType->FindItem("value_state"));
+                    UNIT_ASSERT_VALUES_EQUAL(TString(key.AsStringRef()), expectedKeys[i]);
+                    UNIT_ASSERT_VALUES_EQUAL(TString(keyState.AsStringRef()), expectedKeys[i]);
+                    UNIT_ASSERT_VALUES_EQUAL(valueState.GetElement(0).Get<i64>(), expectedValues[i]);
+                }
+                UNIT_ASSERT(!rows.Next(row));
+            });
+        }
+    }
+
     Y_UNIT_TEST(StreamingAggregationInvalidSettings) {
         for (const ui32 settingCase : {0, 1, 2, 3, 4, 5, 6, 7}) {
             TStreamingAggregationTypeAnnTest test;
@@ -369,6 +474,33 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
                 UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(), "Unknown output column missing");
             }
         }
+    }
+
+    Y_UNIT_TEST_TWIN(StreamingAggregationStateTablePathCharacters, AbsolutePath) {
+        constexpr TStringBuf allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789/-_.";
+        for (ui32 byte = 0; byte < 256; ++byte) {
+            TStreamingAggregationTypeAnnTest test;
+            TString path = AbsolutePath ? "/Root/state" : "state";
+            path.push_back(static_cast<char>(byte));
+            path += "table";
+            auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")}, {},
+                {test.List({test.Atom("state_table_path"), test.Atom(path)})});
+            const bool valid = allowed.Contains(static_cast<char>(byte));
+            UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node),
+                valid ? IGraphTransformer::TStatus::Ok : IGraphTransformer::TStatus::Error,
+                "Path byte " << byte << ": " << test.Ctx.IssueManager.GetIssues().ToString());
+            if (!valid) {
+                UNIT_ASSERT_STRING_CONTAINS(test.Ctx.IssueManager.GetIssues().ToString(),
+                    "Invalid streaming aggregation state table path");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StreamingAggregationEmptyStateTablePath) {
+        TStreamingAggregationTypeAnnTest test;
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")}, {},
+            {test.List({test.Atom("state_table_path"), test.Atom("")})});
+        test.CheckType(node);
     }
 
     Y_UNIT_TEST_TWIN(StreamingAggregationOutputColumns, EmptyOutput) {
@@ -399,6 +531,61 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
             {test.List({test.Atom("key"), test.Traits("(Int64 '1)")})});
         UNIT_ASSERT_VALUES_EQUAL_C(test.Annotate(node), IGraphTransformer::TStatus::Error,
             test.Ctx.IssueManager.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_QUAD(StreamingAggregationParentIndicesAndHandlerArgumentCounts, InitWithParent, UpdateWithParent) {
+        using namespace NKikimr::NMiniKQL;
+        TStreamingAggregationTypeAnnTest test;
+        const TString program = TStringBuilder() << R"((
+            (return (AggregationTraits
+                (StructType '('key (DataType 'String)))
+                (lambda '(item)" << (InitWithParent ? " parent" : "") << ") '("
+                << (InitWithParent ? "parent" : "(Uint32 '99)") << R"( (Uint32 '99) (Uint32 '0)))
+                (lambda '(item state)" << (UpdateWithParent ? " parent" : "") << ") '((Nth state '0) "
+                << (UpdateWithParent ? "parent" : "(Uint32 '99)") << R"( (Add (Nth state '2) (Uint32 '1))))
+                (lambda '(state) state)
+                (lambda '(state) state)
+                (lambda '(left right) left)
+                (lambda '(state) state)
+                (Null)))
+        ))";
+        const auto traits = ParseAndAnnotate(program, test.Ctx, false, false, test.Types);
+        UNIT_ASSERT_C(traits, test.Ctx.IssueManager.GetIssues().ToString());
+        // Reverse alphabetical order so handler indices cannot be confused with result member indices.
+        auto node = test.Aggregation(ETypeAnnotationKind::Flow, {test.Atom("key")}, {
+            test.List({test.Atom("z_first"), traits}), test.List({test.Atom("a_second"), traits})});
+        auto input = ParseAndAnnotate(R"((
+            (return (ToFlow (AsList
+                (AsStruct '('key (String 'a)))
+                (AsStruct '('key (String 'a)))
+                (AsStruct '('key (String 'b)))
+                (AsStruct '('key (String 'a)))
+                (AsStruct '('key (String 'b))))))
+        ))", test.Ctx, false, false, test.Types);
+        UNIT_ASSERT_C(input, test.Ctx.IssueManager.GetIssues().ToString());
+        node = test.Ctx.ChangeChild(*node, NNodes::TKqpStreamingAggregation::idx_Input, std::move(input));
+        const auto* resultType = test.CheckType(node);
+
+        test.Run(*node, [&](const auto& value) {
+            const auto rows = value.GetListIterator();
+            const TVector<TStringBuf> expectedKeys = {"a", "a", "b", "a", "b"};
+            const TVector<ui32> expectedUpdates = {0, 1, 0, 2, 1};
+            NUdf::TUnboxedValue row;
+            for (ui32 i = 0; i < expectedKeys.size(); ++i) {
+                UNIT_ASSERT(rows.Next(row));
+                const auto key = row.GetElement(*resultType->FindItem("key"));
+                UNIT_ASSERT_VALUES_EQUAL(TString(key.AsStringRef()), expectedKeys[i]);
+                ui32 parent = 0;
+                for (const TStringBuf name : {"z_first", "a_second"}) {
+                    const auto state = row.GetElement(*resultType->FindItem(name));
+                    UNIT_ASSERT_VALUES_EQUAL(state.GetElement(0).Get<ui32>(), InitWithParent ? parent : 99);
+                    UNIT_ASSERT_VALUES_EQUAL(state.GetElement(1).Get<ui32>(), UpdateWithParent && expectedUpdates[i] ? parent : 99);
+                    UNIT_ASSERT_VALUES_EQUAL(state.GetElement(2).Get<ui32>(), expectedUpdates[i]);
+                    ++parent;
+                }
+            }
+            UNIT_ASSERT(!rows.Next(row));
+        });
     }
 
     Y_UNIT_TEST_TWIN(StreamingAggregationProjectedStateMustBePersistable, UseStateTable) {
@@ -477,11 +664,21 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
             static_cast<ui32>(NKikimr::TKeyDesc::EColumnIdDataShard));
     }
 
+    Y_UNIT_TEST(TestLocalTopicDataSourceWithoutLocation) {
+        const auto source = TExternalDataSource::CreateForLocalTopic("cluster", "database", "token");
+        UNIT_ASSERT(source.IsYdbTopics());
+        UNIT_ASSERT_VALUES_EQUAL(source.GetDataSourcePath(), "cluster");
+        const auto properties = source.BuildConnectorProperties();
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("database_name"), "database");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("transient_token"), "token");
+    }
+
     Y_UNIT_TEST(TestFillAuthPropertiesNone) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        source.DataSourceAuth.MutableNone();
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auth.MutableNone();
+        TExternalSourceAuth source(auth);
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 1);
         auto it = properties.find("authMethod");
         UNIT_ASSERT(it != properties.end());
@@ -490,12 +687,13 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesServiceAccount) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableServiceAccount();
-        sa.SetId("saId");
-        sa.SetSecretName("secretName");
-        source.ServiceAccountIdSignature = "saSignature";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* sa = auth.MutableServiceAccount();
+        sa->SetId("saId");
+        sa->SetSecretName("secretName");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"saSignature"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
         {
             auto it = properties.find("authMethod");
@@ -521,12 +719,13 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesBasic) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableBasic();
-        sa.SetLogin("login");
-        sa.SetPasswordSecretName("passwordSecretName");
-        source.Password = "password";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* basic = auth.MutableBasic();
+        basic->SetLogin("login");
+        basic->SetPasswordSecretName("passwordSecretName");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"password"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 4);
         {
             auto it = properties.find("authMethod");
@@ -552,15 +751,15 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesMdbBasic) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableMdbBasic();
-        sa.SetServiceAccountId("saId");
-        sa.SetServiceAccountSecretName("secretName");
-        source.ServiceAccountIdSignature = "saSignature";
-        sa.SetLogin("login");
-        sa.SetPasswordSecretName("passwordSecretName");
-        source.Password = "password";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* mdb = auth.MutableMdbBasic();
+        mdb->SetServiceAccountId("saId");
+        mdb->SetServiceAccountSecretName("secretName");
+        mdb->SetLogin("login");
+        mdb->SetPasswordSecretName("passwordSecretName");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"saSignature", "password"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 7);
         {
             auto it = properties.find("authMethod");
@@ -601,14 +800,14 @@ Y_UNIT_TEST_SUITE(KikimrProvider) {
 
     Y_UNIT_TEST(TestFillAuthPropertiesAws) {
         THashMap<TString, TString> properties;
-        TExternalSource source;
-        auto& sa = *source.DataSourceAuth.MutableAws();
-        sa.SetAwsAccessKeyIdSecretName("accessIdName");
-        sa.SetAwsSecretAccessKeySecretName("accessSecretName");
-        sa.SetAwsRegion("region");
-        source.AwsAccessKeyId = "accessId";
-        source.AwsSecretAccessKey = "accessSecret";
-        FillAuthProperties(properties, source);
+        NKikimrSchemeOp::TAuth auth;
+        auto* aws = auth.MutableAws();
+        aws->SetAwsAccessKeyIdSecretName("accessIdName");
+        aws->SetAwsSecretAccessKeySecretName("accessSecretName");
+        aws->SetAwsRegion("region");
+        TExternalSourceAuth source(auth);
+        source.InitSecretValues({"accessId", "accessSecret"});
+        properties = source.BuildAuthProperties();
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 6);
         {
             auto it = properties.find("authMethod");

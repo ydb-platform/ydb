@@ -5,7 +5,7 @@ from multiprocessing.pool import ThreadPool
 import time
 import base64
 import binascii
-from yql_utils import get_param
+from yql_utils import get_param, yql_binary_path
 
 
 def run_one(item):
@@ -15,14 +15,14 @@ def run_one(item):
         support_udfs = False
         if "LIKE" in input:
             support_udfs = True
-        yqlrun_res = YQLRun(prov='yt',
-                            use_sql2yql=False,
-                            cfg_dir='yql/essentials/cfg/udf_test',
-                            support_udfs=support_udfs).yql_exec(
-            program="--!syntax_pg\n" + input,
-            run_sql=True,
-            check_error=True
-        )
+        yqlrun_res = YQLRun(
+            prov='pure',
+            binary=yql_binary_path('yql/essentials/tools/minirun/minirun'),
+            extra_args=['--pg'],
+            use_sql2yql=False,
+            cfg_dir='yql/essentials/cfg/udf_test',
+            support_udfs=support_udfs,
+        ).yql_exec(program=input, check_error=True)
 
         dom = cyson.loads(yqlrun_res.results)
         elapsed_time = time.time() - start_time
@@ -97,7 +97,7 @@ def test_doc():
             continue
         if multiline is not None:
             if line.endswith('"""'):
-                multiline.append(line[0:line.index('"""')])
+                multiline.append(line[0 : line.index('"""')])
                 queue.append((original_line, original_input, "".join(multiline), should_fail))
                 multiline = None
                 original_line = None
@@ -126,9 +126,9 @@ def test_doc():
         if not input.startswith("SELECT"):
             input = "SELECT " + input
         if "/*" in output:
-            output = output[:output.index("/*")].strip()
+            output = output[: output.index("/*")].strip()
         if output.startswith('"""'):
-            multiline = [output[output.index('"""') + 3:] + "\n"]
+            multiline = [output[output.index('"""') + 3 :] + "\n"]
             original_line = line
             original_input = input
             continue

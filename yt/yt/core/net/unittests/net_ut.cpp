@@ -4,13 +4,17 @@
 #include <yt/yt/core/net/listener.h>
 #include <yt/yt/core/net/dialer.h>
 #include <yt/yt/core/net/config.h>
+#include <yt/yt/core/net/packet_connection.h>
 #include <yt/yt/core/net/private.h>
+#include <yt/yt/core/net/socket.h>
 
 #include <yt/yt/core/concurrency/poller.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <util/network/pollerimpl.h>
+
+#include <util/system/tempfile.h>
 
 namespace NYT::NNet {
 namespace {
@@ -58,6 +62,64 @@ TEST_F(TNetTest, CreateConnectionPair)
 {
     IConnectionPtr a, b;
     std::tie(a, b) = CreateConnectionPair(Poller_);
+}
+
+#if defined(HAVE_EPOLL_POLLER)
+
+TEST_F(TNetTest, ConnectionArmFailure)
+{
+    TTempFileHandle file;
+    SafeMakeNonblocking(file.GetHandle());
+    EXPECT_THROW(
+        CreateConnectionFromFD(SafeDup(file.GetHandle()), /*localAddress*/ {}, /*remoteAddress*/ {}, Poller_),
+        TSystemError);
+}
+
+#endif
+
+#ifdef _linux_
+
+TEST_F(TNetTest, PipeConnectionRejectsRegularFile)
+{
+    TTempFileHandle file;
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateInputConnectionFromFD(SafeDup(file.GetHandle()), std::string(file.Name()), Poller_, /*pipeHolder*/ {}),
+        "is not a FIFO");
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateInputConnectionFromPath(std::string(file.Name()), Poller_, /*pipeHolder*/ {}),
+        "is not a FIFO");
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateOutputConnectionFromPath(std::string(file.Name()), Poller_, /*pipeHolder*/ {}),
+        "is not a FIFO");
+
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateOutputConnectionFromPath(
+            std::string(file.Name()),
+            Poller_,
+            /*pipeHolder*/ {},
+            /*capacity*/ {},
+            EDeliveryFencedMode::Old),
+        "is not a FIFO");
+    EXPECT_THROW_WITH_SUBSTRING(
+        CreateOutputConnectionFromPath(
+            std::string(file.Name()),
+            Poller_,
+            /*pipeHolder*/ {},
+            /*capacity*/ {},
+            EDeliveryFencedMode::New),
+        "is not a FIFO");
+}
+
+#endif
+
+TEST_F(TNetTest, PacketConnectionBindFailure)
+{
+    TFileDescriptorGuard socket(CreateUdpSocket(AF_INET6));
+    BindSocket(socket.Get(), TNetworkAddress::CreateIPv6Loopback(0));
+
+    EXPECT_THROW(
+        CreatePacketConnection(GetSocketName(socket.Get()), Poller_),
+        TErrorException);
 }
 
 TEST_F(TNetTest, TransferFourBytes)

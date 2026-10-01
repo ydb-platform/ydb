@@ -23,13 +23,14 @@ using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
 TAnalyzeActor::TAnalyzeActor(const TString& database, const TString& tablePath,
     const TVector<TString>& columns, NThreading::TPromise<NYql::IKikimrGateway::TGenericResult> promise,
-    double sampleRate)
+    double sampleRate, NWilson::TTraceId traceId)
     : Database(database)
     , TablePath(tablePath)
     , Columns(columns)
     , SampleRate(sampleRate)
     , Promise(promise)
     , OperationId(UlidGen.Next(TActivationContext::Now()).ToBinary())
+    , TraceId(std::move(traceId))
 {}
 
 void TAnalyzeActor::Bootstrap() {
@@ -41,7 +42,7 @@ void TAnalyzeActor::Bootstrap() {
     entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
     navigate->Cookie = FirstRoundCookie;
 
-    Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+    Send(NKikimr::MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()), 0, 0, NWilson::TTraceId(TraceId));
 
     Become(&TAnalyzeActor::StateWork);
 }
@@ -156,7 +157,7 @@ void TAnalyzeActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&
         entry.RedirectRequired = false;
         navigate->Cookie = SecondRoundCookie;
 
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()), 0, 0, NWilson::TTraceId(TraceId));
     };
 
     if (!domainInfo->IsServerless()) {
@@ -211,7 +212,7 @@ void TAnalyzeActor::SendAnalyzeRequest() {
     Send(
         MakePipePerNodeCacheID(EPipePerNodeCache::Leader),
         new TEvPipeCache::TEvForward(analyzeRequest.release(), StatisticsAggregatorId.value(), true),
-        IEventHandle::FlagTrackDelivery
+        IEventHandle::FlagTrackDelivery, 0, NWilson::TTraceId(TraceId)
     );
 }
 

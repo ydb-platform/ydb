@@ -73,12 +73,14 @@ enum class EAggregationKind {
 struct TAggregation {
     EAggregationKind Kind;
     size_t Column = 0;
-    EDataSlot ResultSlot = EDataSlot::Uint64;
 };
 
-struct TAggregationAst {
+struct TInputTransformAst {
     NYql::TExprContext ExprContext;
     NYql::TExprNode::TPtr InputTransform;
+};
+
+struct TAggregationAst : TInputTransformAst {
     std::array<NYql::TExprNode::TPtr, 4> Lambdas;
     std::vector<EDataSlot> OutputSlots;
     size_t KeyWidth = 0;
@@ -141,6 +143,33 @@ std::vector<NYql::TAstNode*> ExtractAstTuple(NYql::TAstNode& root)
     return result;
 }
 
+NYql::TAstNode* ExtractInputTransformAst(NYql::TAstNode& root)
+{
+    if (IsAstLambda(root) || IsAstEmptyList(root)) {
+        return &root;
+    }
+
+    NYql::TAstNode* list = nullptr;
+    size_t firstItem = 0;
+    if (root.IsList() && root.GetChildrenCount() > 0 &&
+        root.GetChild(0)->IsAtom() && root.GetChild(0)->GetContent() == "AsTuple") {
+        list = &root;
+        firstItem = 1;
+    } else if (root.IsList() && root.GetChildrenCount() == 2 &&
+        root.GetChild(0)->IsAtom() && root.GetChild(0)->GetContent() == "quote" &&
+        root.GetChild(1)->IsList()) {
+        auto* quoted = root.GetChild(1);
+        if (IsAstLambda(*quoted) || IsAstEmptyList(*quoted)) {
+            return quoted;
+        }
+        list = quoted;
+    }
+    Y_ENSURE(list, "Input transform AST must be a lambda, an AsTuple, or a quoted list");
+    Y_ENSURE(list->GetChildrenCount() > firstItem,
+        "Input transform AST tuple must contain an input transform");
+    return list->GetChild(firstItem);
+}
+
 NYql::TExprNode::TPtr CompileAstLambda(
     NYql::TAstNode& lambda,
     NYql::TAstParseResult& ast,
@@ -193,6 +222,35 @@ THolder<TAggregationAst> LoadAggregationAst(const std::string& path)
             TStringBuilder() << "aggregation item " << i, path);
     }
     result->KeyWidth = ParseAstKeyWidth(*items[5]);
+    return result;
+}
+
+THolder<TInputTransformAst> LoadInputTransformAst(const std::string& path)
+{
+    TString source = TFileInput(path).ReadAll();
+    const size_t first = source.find_first_not_of(" \t\r\n");
+    const bool quotedRoot = first != TString::npos && source[first] == '\'';
+    if (quotedRoot) {
+        source = TStringBuilder() << "(return " << source << ')';
+    }
+    auto ast = NYql::ParseAst(source, nullptr, TString(path));
+    Y_ENSURE(ast.IsOk(), "Cannot parse input transform AST " << path << ": " << ast.Issues.ToString());
+    auto* root = ast.Root;
+    if (quotedRoot) {
+        Y_ENSURE(root->IsList() && root->GetChildrenCount() == 2 &&
+            root->GetChild(0)->IsAtom() && root->GetChild(0)->GetContent() == "return",
+            "Cannot unwrap quoted input transform AST root");
+        root = root->GetChild(1);
+    }
+
+    auto result = MakeHolder<TInputTransformAst>();
+    auto* inputTransform = ExtractInputTransformAst(*root);
+    if (!IsAstEmptyList(*inputTransform)) {
+        Y_ENSURE(IsAstLambda(*inputTransform),
+            "Input transform AST item is neither a lambda nor an empty list");
+        result->InputTransform = CompileAstLambda(
+            *inputTransform, ast, result->ExprContext, "input transform", path);
+    }
     return result;
 }
 
@@ -269,14 +327,14 @@ TRuntimeNode BuildAstStreamLambda(
     return result;
 }
 
-EDataSlot GetOutputDataSlot(TType* type)
+EDataSlot GetDataSlot(TType* type)
 {
     while (type->IsOptional()) {
         type = static_cast<TOptionalType*>(type)->GetItemType();
     }
-    Y_ENSURE(type->IsData(), "Custom aggregation outputs must be DataSlots, got " << *type);
+    Y_ENSURE(type->IsData(), "Expected a DataSlot, got " << *type);
     const auto slot = static_cast<TDataType*>(type)->GetDataSlot();
-    Y_ENSURE(slot, "Custom aggregation output has an unknown data type: " << *type);
+    Y_ENSURE(slot, "Unknown data type: " << *type);
     return *slot;
 }
 
@@ -285,7 +343,7 @@ void SaveOutputSlots(TAggregationAst& aggregationAst, const TRuntimeNode::TList&
     std::vector<EDataSlot> slots;
     slots.reserve(output.size());
     for (const auto& node : output) {
-        slots.push_back(GetOutputDataSlot(node.GetStaticType()));
+        slots.push_back(GetDataSlot(node.GetStaticType()));
     }
     Y_ENSURE(aggregationAst.KeyWidth <= slots.size(),
         "Aggregation AST key width " << aggregationAst.KeyWidth
@@ -505,29 +563,67 @@ bool IsSummable(EDataSlot slot)
     }
 }
 
-std::vector<size_t> ResolveKeys(const TRunParams& params, const TDqBlockData& data)
+EDataSlot GetBlockSumResultSlot(EDataSlot slot)
+{
+    switch (slot) {
+        case EDataSlot::Int8:
+        case EDataSlot::Int16:
+        case EDataSlot::Int32:
+            return EDataSlot::Int64;
+        case EDataSlot::Uint8:
+        case EDataSlot::Uint16:
+        case EDataSlot::Uint32:
+            return EDataSlot::Uint64;
+        default:
+            return slot;
+    }
+}
+
+std::vector<std::string> MakeAggregationColumnNames(
+    const TDqBlockData& data,
+    size_t width,
+    bool postTransform)
+{
+    std::vector<std::string> result;
+    result.reserve(width);
+    if (postTransform) {
+        for (size_t i = 0; i < width; ++i) {
+            result.push_back(ToString(i + 1));
+        }
+    } else {
+        Y_ENSURE(width == data.Columns.size(), "Unexpected aggregation input width");
+        for (const auto& column : data.Columns) {
+            result.push_back(column.Name);
+        }
+    }
+    return result;
+}
+
+std::vector<size_t> ResolveKeys(
+    const TRunParams& params,
+    const std::vector<std::string>& columnNames)
 {
     Y_ENSURE(!params.DqBlockKeyColumns.empty(), "At least one --dq-block-keys column is required");
     std::vector<size_t> result;
     std::unordered_set<std::string> seen;
     for (const auto& name : params.DqBlockKeyColumns) {
         Y_ENSURE(seen.emplace(name).second, "Duplicate key column: " << name);
-        auto it = std::find_if(data.Columns.begin(), data.Columns.end(), [&](const auto& column) {
-            return column.Name == name;
-        });
-        Y_ENSURE(it != data.Columns.end(), "Key column was not selected by --dq-block-columns: " << name);
-        result.push_back(std::distance(data.Columns.begin(), it));
+        auto it = std::find(columnNames.begin(), columnNames.end(), name);
+        Y_ENSURE(it != columnNames.end(), "Aggregation input has no key column named " << name);
+        result.push_back(std::distance(columnNames.begin(), it));
     }
     return result;
 }
 
-std::vector<TAggregation> ResolveAggregations(const TRunParams& params, const TDqBlockData& data)
+std::vector<TAggregation> ResolveAggregations(
+    const TRunParams& params,
+    const std::vector<std::string>& columnNames)
 {
     Y_ENSURE(!params.DqBlockAggregations.empty(), "At least one aggregation is required");
     std::vector<TAggregation> result;
     for (const auto& text : params.DqBlockAggregations) {
         if (text == "count") {
-            result.push_back({EAggregationKind::Count, 0, EDataSlot::Uint64});
+            result.push_back({EAggregationKind::Count, 0});
             continue;
         }
 
@@ -535,17 +631,11 @@ std::vector<TAggregation> ResolveAggregations(const TRunParams& params, const TD
         Y_ENSURE(TStringBuf(text).StartsWith(sumPrefix),
             "Unsupported aggregation '" << text << "'; expected sum:column_name or count");
         const std::string name = text.substr(sumPrefix.size());
-        auto it = std::find_if(data.Columns.begin(), data.Columns.end(), [&](const auto& column) {
-            return column.Name == name;
-        });
-        Y_ENSURE(it != data.Columns.end(),
-            "Sum column was not selected by --dq-block-columns: " << name);
-        Y_ENSURE(IsSummable(it->Slot), "Cannot sum column " << name << " of type "
-            << NUdf::GetDataTypeInfo(it->Slot).Name);
+        auto it = std::find(columnNames.begin(), columnNames.end(), name);
+        Y_ENSURE(it != columnNames.end(), "Aggregation input has no sum column named " << name);
         result.push_back({
             EAggregationKind::Sum,
-            static_cast<size_t>(std::distance(data.Columns.begin(), it)),
-            it->Slot,
+            static_cast<size_t>(std::distance(columnNames.begin(), it)),
         });
     }
     return result;
@@ -765,15 +855,21 @@ std::vector<TType*> ExtractBlockItemTypes(const std::vector<TType*>& blockTypes)
     return result;
 }
 
+EDataSlot GetBlockItemDataSlot(TType* type)
+{
+    Y_ENSURE(type->IsBlock(), "Expected a BlockType, got " << *type);
+    return GetDataSlot(static_cast<TBlockType*>(type)->GetItemType());
+}
+
 template<bool LLVM, bool Spilling>
 std::vector<TType*> MakeAggregationInputBlockTypes(
     TKqpSetup<LLVM, Spilling>& setup,
     const TDqBlockData& data,
-    TAggregationAst* aggregationAst)
+    TInputTransformAst* inputTransformAst)
 {
     auto& pb = setup.GetKqpBuilder();
     auto result = MakeBlockTypes(pb, MakeRawInputItemTypes(pb, data));
-    if (!aggregationAst || !aggregationAst->InputTransform) {
+    if (!inputTransformAst || !inputTransformAst->InputTransform) {
         return result;
     }
 
@@ -781,14 +877,14 @@ std::vector<TType*> MakeAggregationInputBlockTypes(
         pb.NewDataType(EDataSlot::Uint64), TBlockType::EShape::Scalar));
     auto* streamType = pb.NewStreamType(pb.NewMultiType(result));
     return ExtractTransformBlockTypes(BuildAstStreamLambda(
-        aggregationAst->InputTransform, pb.Arg(streamType), "input transform", pb,
-        *setup.FunctionRegistry, aggregationAst->ExprContext));
+        inputTransformAst->InputTransform, pb.Arg(streamType), "input transform", pb,
+        *setup.FunctionRegistry, inputTransformAst->ExprContext));
 }
 
 THolder<IComputationGraph> BuildInputTransformGraph(
     TKqpSetup<false, false>& setup,
     const TDqBlockData& data,
-    TAggregationAst& aggregationAst,
+    TInputTransformAst& inputTransformAst,
     std::vector<TType*>& outputBlockTypes)
 {
     auto& pb = setup.GetKqpBuilder();
@@ -799,9 +895,66 @@ THolder<IComputationGraph> BuildInputTransformGraph(
     auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
     const auto input = TRuntimeNode(streamCallable, false);
     auto output = BuildAstStreamLambda(
-        aggregationAst.InputTransform, input, "input transform", pb,
-        *setup.FunctionRegistry, aggregationAst.ExprContext);
+        inputTransformAst.InputTransform, input, "input transform", pb,
+        *setup.FunctionRegistry, inputTransformAst.ExprContext);
     outputBlockTypes = ExtractTransformBlockTypes(output);
+    return setup.BuildGraph(output, {streamCallable});
+}
+
+template<bool LLVM, bool Spilling>
+THolder<IComputationGraph> BuildBlockCombineHashedGraph(
+    TKqpSetup<LLVM, Spilling>& setup,
+    const std::vector<TType*>& inputBlockTypes,
+    const std::vector<size_t>& keys,
+    const std::vector<TAggregation>& aggregations)
+{
+    auto& pb = setup.GetKqpBuilder();
+    auto inputTypes = inputBlockTypes;
+    inputTypes.push_back(pb.NewBlockType(
+        pb.NewDataType(EDataSlot::Uint64), TBlockType::EShape::Scalar));
+    auto* streamType = pb.NewStreamType(pb.NewMultiType(inputTypes));
+    auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
+
+    std::vector<ui32> blockKeys;
+    std::vector<TType*> outputTypes;
+    blockKeys.reserve(keys.size());
+    outputTypes.reserve(keys.size() + aggregations.size() + 1);
+    for (size_t key : keys) {
+        Y_ENSURE(key < inputBlockTypes.size(), "Key column index exceeds input transform output width");
+        Y_ENSURE(key <= std::numeric_limits<ui32>::max(), "Key column index exceeds Uint32");
+        blockKeys.push_back(static_cast<ui32>(key));
+        auto* itemType = static_cast<TBlockType*>(inputBlockTypes[key])->GetItemType();
+        outputTypes.push_back(pb.NewBlockType(itemType, TBlockType::EShape::Many));
+    }
+
+    std::vector<TAggInfo> blockAggregations;
+    blockAggregations.reserve(aggregations.size());
+    for (const auto& aggregation : aggregations) {
+        if (aggregation.Kind == EAggregationKind::Sum) {
+            Y_ENSURE(aggregation.Column < inputBlockTypes.size(),
+                "Sum column index exceeds input transform output width");
+            Y_ENSURE(aggregation.Column <= std::numeric_limits<ui32>::max(),
+                "Sum column index exceeds Uint32");
+            blockAggregations.push_back({
+                .Name = "sum",
+                .ArgsColumns = {static_cast<ui32>(aggregation.Column)},
+            });
+            const auto inputSlot = GetBlockItemDataSlot(inputBlockTypes[aggregation.Column]);
+            Y_ENSURE(IsSummable(inputSlot), "Cannot sum aggregation input column "
+                << aggregation.Column << " of type " << NUdf::GetDataTypeInfo(inputSlot).Name);
+            auto* itemType = pb.NewOptionalType(pb.NewDataType(
+                GetBlockSumResultSlot(inputSlot)));
+            outputTypes.push_back(pb.NewBlockType(itemType, TBlockType::EShape::Many));
+        } else {
+            blockAggregations.push_back({.Name = "count_all", .ArgsColumns = {}});
+            outputTypes.push_back(pb.NewBlockType(
+                pb.NewDataType(EDataSlot::Uint64), TBlockType::EShape::Many));
+        }
+    }
+    outputTypes.push_back(inputTypes.back());
+    auto* outputType = pb.NewStreamType(pb.NewMultiType(outputTypes));
+    auto output = pb.BlockCombineHashed(
+        TRuntimeNode(streamCallable, false), {}, blockKeys, blockAggregations, outputType);
     return setup.BuildGraph(output, {streamCallable});
 }
 
@@ -813,7 +966,8 @@ THolder<IComputationGraph> BuildGraph(
     const std::vector<TAggregation>& aggregations,
     bool blocks,
     bool dqAggregate,
-    TAggregationAst* aggregationAst = nullptr)
+    TAggregationAst* aggregationAst = nullptr,
+    bool promoteSums = false)
 {
     auto& pb = setup.GetKqpBuilder();
     auto inputTypes = blocks ? inputBlockTypes : ExtractBlockItemTypes(inputBlockTypes);
@@ -871,12 +1025,23 @@ THolder<IComputationGraph> BuildGraph(
         }
         return result;
     };
+    auto promoteSum = [&](TRuntimeNode item) {
+        if (!promoteSums) {
+            return item;
+        }
+        const auto inputSlot = GetDataSlot(item.GetStaticType());
+        TType* resultType = pb.NewDataType(GetBlockSumResultSlot(inputSlot));
+        if (item.GetStaticType()->IsOptional()) {
+            resultType = pb.NewOptionalType(resultType);
+        }
+        return pb.Convert(item, resultType);
+    };
     auto init = [&](TRuntimeNode::TList, TRuntimeNode::TList items) {
         TRuntimeNode::TList result;
         result.reserve(aggregations.size());
         for (const auto& aggregation : aggregations) {
             if (aggregation.Kind == EAggregationKind::Sum) {
-                result.push_back(items[aggregation.Column]);
+                result.push_back(promoteSum(items[aggregation.Column]));
             } else {
                 result.push_back(pb.template NewDataLiteral<ui64>(1));
             }
@@ -888,7 +1053,10 @@ THolder<IComputationGraph> BuildGraph(
         result.reserve(aggregations.size());
         for (size_t i = 0; i < aggregations.size(); ++i) {
             if (aggregations[i].Kind == EAggregationKind::Sum) {
-                result.push_back(pb.AggrAdd(items[aggregations[i].Column], state[i]));
+                auto item = promoteSums
+                    ? pb.Convert(items[aggregations[i].Column], state[i].GetStaticType())
+                    : items[aggregations[i].Column];
+                result.push_back(pb.AggrAdd(item, state[i]));
             } else {
                 result.push_back(pb.AggrAdd(pb.template NewDataLiteral<ui64>(1), state[i]));
             }
@@ -1104,17 +1272,29 @@ bool EncodedAggregatesEqual(
 }
 
 std::vector<EDataSlot> MakeOutputSlots(
-    const TDqBlockData& data,
+    const std::vector<TType*>& inputBlockTypes,
     const std::vector<size_t>& keys,
-    const std::vector<TAggregation>& aggregations)
+    const std::vector<TAggregation>& aggregations,
+    bool promoteSums)
 {
     std::vector<EDataSlot> result;
     result.reserve(keys.size() + aggregations.size());
     for (size_t key : keys) {
-        result.push_back(data.Columns[key].Slot);
+        Y_ENSURE(key < inputBlockTypes.size(),
+            "Key column index exceeds input transform output width");
+        result.push_back(GetBlockItemDataSlot(inputBlockTypes[key]));
     }
     for (const auto& aggregation : aggregations) {
-        result.push_back(aggregation.ResultSlot);
+        if (aggregation.Kind == EAggregationKind::Count) {
+            result.push_back(EDataSlot::Uint64);
+            continue;
+        }
+        Y_ENSURE(aggregation.Column < inputBlockTypes.size(),
+            "Sum column index exceeds input transform output width");
+        const auto inputSlot = GetBlockItemDataSlot(inputBlockTypes[aggregation.Column]);
+        Y_ENSURE(IsSummable(inputSlot), "Cannot sum aggregation input column "
+            << aggregation.Column << " of type " << NUdf::GetDataTypeInfo(inputSlot).Name);
+        result.push_back(promoteSums ? GetBlockSumResultSlot(inputSlot) : inputSlot);
     }
     return result;
 }
@@ -1145,7 +1325,8 @@ TResultMap CollectScalarResults(
 TResultMap CollectBlockResults(
     const TUnboxedValue& stream,
     const std::vector<EDataSlot>& outputSlots,
-    size_t keyWidth)
+    size_t keyWidth,
+    TStringBuf implementation)
 {
     TResultMap result;
     std::vector<TUnboxedValue> values(outputSlots.size() + 1);
@@ -1169,7 +1350,7 @@ TResultMap CollectBlockResults(
                 AppendUnboxed(i < keyWidth ? key : aggregates, value, outputSlots[i]);
             }
             Y_ENSURE(result.emplace(std::move(key), std::move(aggregates)).second,
-                "DqHashAggregate produced a duplicate key");
+                implementation << " produced a duplicate key");
         }
     }
     return result;
@@ -1209,23 +1390,26 @@ void Verify(
     const std::vector<std::vector<TUnboxedValue>>& blockValues,
     const std::vector<size_t>& keys,
     const std::vector<TAggregation>& aggregations,
+    const std::vector<EDataSlot>& outputSlots,
+    TInputTransformAst* inputTransformAst,
     TAggregationAst* aggregationAst,
-    size_t iterations)
+    size_t iterations,
+    TStringBuf implementation,
+    bool promoteSums)
 {
-    const auto outputSlots = aggregationAst
-        ? aggregationAst->OutputSlots
-        : MakeOutputSlots(data, keys, aggregations);
     const size_t keyWidth = aggregationAst ? aggregationAst->KeyWidth : keys.size();
     Y_ENSURE(keyWidth <= outputSlots.size(), "Key width exceeds aggregation output width");
     const std::vector<EDataSlot> aggregateSlots(
         outputSlots.begin() + keyWidth, outputSlots.end());
-    auto actual = CollectBlockResults(blockGraph.GetValue(), outputSlots, keyWidth);
+    auto actual = CollectBlockResults(
+        blockGraph.GetValue(), outputSlots, keyWidth, implementation);
 
     TKqpSetup<false, false> referenceSetup(GetPerfTestFactory());
     const auto referenceInputBlockTypes = MakeAggregationInputBlockTypes(
-        referenceSetup, data, aggregationAst);
+        referenceSetup, data, inputTransformAst);
     auto referenceGraph = BuildGraph(
-        referenceSetup, referenceInputBlockTypes, keys, aggregations, false, false, aggregationAst);
+        referenceSetup, referenceInputBlockTypes, keys, aggregations, false, false,
+        aggregationAst, promoteSums);
     const auto referenceInputItemTypes = ExtractBlockItemTypes(referenceInputBlockTypes);
     auto scalarStream = TUnboxedValuePod(new TScalarBlockStream(
         blockValues, referenceInputItemTypes, referenceGraph->GetContext(), iterations));
@@ -1233,8 +1417,8 @@ void Verify(
         referenceGraph->GetContext(), std::move(scalarStream));
     auto expected = CollectScalarResults(referenceGraph->GetValue(), outputSlots, keyWidth);
 
-    Y_ENSURE(actual.size() == expected.size(), "Verification failed: DqHashAggregate produced "
-        << actual.size() << " groups, reference produced " << expected.size());
+    Y_ENSURE(actual.size() == expected.size(), "Verification failed: " << implementation
+        << " produced " << actual.size() << " groups, reference produced " << expected.size());
     for (const auto& [key, value] : expected) {
         const auto it = actual.find(key);
         Y_ENSURE(it != actual.end(), "Verification failed: result is missing a key");
@@ -1257,8 +1441,24 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
     auto aggregationAst = params.DqBlockAstFile.empty()
         ? THolder<TAggregationAst>()
         : LoadAggregationAst(params.DqBlockAstFile);
-    const auto keys = aggregationAst ? std::vector<size_t>() : ResolveKeys(params, data);
-    const auto aggregations = aggregationAst ? std::vector<TAggregation>() : ResolveAggregations(params, data);
+    auto generatorAst = params.DqBlockGeneratorAstFile.empty()
+        ? THolder<TInputTransformAst>()
+        : LoadInputTransformAst(params.DqBlockGeneratorAstFile);
+    Y_ENSURE(!aggregationAst || !generatorAst,
+        "Aggregation AST and input transform AST cannot be used together");
+    TInputTransformAst* inputTransformAst = aggregationAst
+        ? static_cast<TInputTransformAst*>(aggregationAst.Get())
+        : generatorAst.Get();
+    std::vector<size_t> keys;
+    std::vector<TAggregation> aggregations;
+    std::vector<EDataSlot> outputSlots;
+    const bool blockCombineHashed = params.DqBlockImpl == "BlockCombineHashed";
+    Y_ENSURE(blockCombineHashed || params.DqBlockImpl == "DqHashAggregate",
+        "Unknown DQ block implementation: " << params.DqBlockImpl);
+    Y_ENSURE(!blockCombineHashed || (!LLVM && !Spilling),
+        "BlockCombineHashed does not support LLVM or spilling");
+    Y_ENSURE(!blockCombineHashed || !aggregationAst,
+        "BlockCombineHashed does not support custom aggregation lambdas");
     params.RowsPerRun = data.Rows;
 
     THolder<TKqpSetup<false, false>> transformSetup;
@@ -1267,10 +1467,10 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
     TBlockDatums transformedBlocks;
     THolder<TKqpSetup<LLVM, Spilling>> setup;
     std::vector<std::vector<TUnboxedValue>> blockValues;
-    if (aggregationAst && aggregationAst->InputTransform) {
+    if (inputTransformAst && inputTransformAst->InputTransform) {
         transformSetup = MakeHolder<TKqpSetup<false, false>>(GetPerfTestFactory());
         transformGraph = BuildInputTransformGraph(
-            *transformSetup, data, *aggregationAst, transformOutputBlockTypes);
+            *transformSetup, data, *inputTransformAst, transformOutputBlockTypes);
         auto inputStream = TUnboxedValuePod(new TPrebuiltBlockStream(
             WrapBlockValues(data, transformGraph->GetContext()), 1));
         transformGraph->GetEntryPoint(0, true)->SetValue(
@@ -1282,7 +1482,7 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
 
     setup = MakeHolder<TKqpSetup<LLVM, Spilling>>(GetPerfTestFactory());
     setup->Alloc.Ref().ForcefullySetMemoryYellowZone(Spilling);
-    const auto inputBlockTypes = MakeAggregationInputBlockTypes(*setup, data, aggregationAst.Get());
+    const auto inputBlockTypes = MakeAggregationInputBlockTypes(*setup, data, inputTransformAst);
     if (!transformOutputBlockTypes.empty()) {
         Y_ENSURE(inputBlockTypes.size() == transformOutputBlockTypes.size(),
             "Input transform output width changed between graph builds");
@@ -1294,11 +1494,29 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
                     << transformType << " vs " << inputType);
         }
     }
-    auto graph = BuildGraph(
-        *setup, inputBlockTypes, keys, aggregations, true, true, aggregationAst.Get());
-    const size_t outputWidth = aggregationAst
-        ? aggregationAst->OutputSlots.size()
-        : keys.size() + aggregations.size();
+    if (!aggregationAst) {
+        const auto columnNames = MakeAggregationColumnNames(
+            data, inputBlockTypes.size(), static_cast<bool>(generatorAst));
+        if (generatorAst) {
+            Cerr << "Post-transform columns:" << Endl;
+            for (size_t i = 0; i < columnNames.size(); ++i) {
+                Cerr << "  " << columnNames[i] << ": "
+                    << *static_cast<TBlockType*>(inputBlockTypes[i])->GetItemType() << Endl;
+            }
+        }
+        keys = ResolveKeys(params, columnNames);
+        aggregations = ResolveAggregations(params, columnNames);
+        outputSlots = MakeOutputSlots(
+            inputBlockTypes, keys, aggregations, blockCombineHashed);
+    }
+    auto graph = blockCombineHashed
+        ? BuildBlockCombineHashedGraph(*setup, inputBlockTypes, keys, aggregations)
+        : BuildGraph(
+            *setup, inputBlockTypes, keys, aggregations, true, true, aggregationAst.Get());
+    if (aggregationAst) {
+        outputSlots = aggregationAst->OutputSlots;
+    }
+    const size_t outputWidth = outputSlots.size();
     if constexpr (Spilling) {
         graph->GetContext().SpillerFactory = std::make_shared<TPreallocatedSpillerFactory>();
     }
@@ -1315,7 +1533,7 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
     for (int attempt = 1; attempt <= params.NumAttempts; ++attempt) {
         Cerr << "------ DQ block run " << attempt << " of " << params.NumAttempts << Endl;
         TRunResult result;
-        if (params.NumAttempts > 1 && !params.EnableVerification) {
+        if (params.NumAttempts > 1 || params.EnableVerification) {
             result = RunForked([&] {
                 return MeasureGraph<LLVM, Spilling>(*graph, outputWidth);
             });
@@ -1333,13 +1551,17 @@ void RunTestDqBlock(TRunParams params, TTestResultCollector& printout)
     if (params.EnableVerification) {
         RunForked([&] {
             Verify<LLVM, Spilling>(
-                *graph, data, blockValues, keys, aggregations,
-                aggregationAst.Get(), params.NumRuns);
+                *graph, data, blockValues, keys, aggregations, outputSlots,
+                inputTransformAst, aggregationAst.Get(), params.NumRuns,
+                params.DqBlockImpl, blockCombineHashed);
             return TRunResult{};
         });
     }
 
-    printout.SubmitMetrics(params, *finalResult, "DqHashAggregateBlock", LLVM, Spilling);
+    printout.SubmitMetrics(
+        params, *finalResult,
+        blockCombineHashed ? "BlockCombineHashedBlock" : "DqHashAggregateBlock",
+        LLVM, Spilling);
 }
 
 template void RunTestDqBlock<false, false>(TRunParams params, TTestResultCollector& printout);

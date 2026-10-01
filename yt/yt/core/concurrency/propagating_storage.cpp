@@ -31,7 +31,7 @@ std::optional<std::any> TPropagatingStorageImpl::RemoveRaw(const std::type_info&
     if (iter == Data_.end()) {
         return std::nullopt;
     }
-    auto result = std::make_optional<std::any>(iter->second);
+    auto result = std::make_optional<std::any>(std::move(iter->second));
     Data_.erase(iter);
     return result;
 }

@@ -4,7 +4,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats_simple.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/frontend_runtime.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/nbs_frontend/blockstore_facade.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/vhost.h>
@@ -68,8 +68,8 @@ TNbsService::TNbsService(const NKikimrConfig::TNbsConfig& config)
         VhostCallbacks);
 
     if (Config.GetNbsFrontendConfig().GetEnabled()) {
-        Frontend = std::make_unique<TNbsFrontendRuntime>(
-            Logging->CreateLog("NBS2_FRONTEND"));
+        BlockStoreFacade =
+            CreateNbsBlockStoreFacade(Logging->CreateLog("NBS2_FRONTEND"));
     }
 }
 
@@ -80,16 +80,16 @@ void TNbsService::Start()
     STORAGE_INFO("TNbsService start");
     Scheduler->Start();
     VhostServer->Start();
-    if (Frontend) {
-        Frontend->Start();
+    if (BlockStoreFacade) {
+        BlockStoreFacade->Start();
     }
 }
 
 void TNbsService::Stop()
 {
     STORAGE_INFO("TNbsService stop");
-    if (Frontend) {
-        Frontend->Stop();
+    if (BlockStoreFacade) {
+        BlockStoreFacade->Stop();
     }
     VhostServer->Stop();
     Scheduler->Stop();
@@ -124,13 +124,33 @@ void StopNbsService()
     }
 }
 
+void StopNbsExecutors()
+{
+    if (!NbsService) {
+        return;
+    }
+
+    // Same count the pool was built with, so the rotated vector holds each
+    // executor once. GetExecutors(0) indexes an empty pool.
+    const ui32 executorCount = NbsService->StorageConfig->GetThreadPoolSize();
+    if (executorCount == 0) {
+        return;
+    }
+
+    for (const auto& executor:
+         NbsService->ExecutorPool.GetExecutors(executorCount))
+    {
+        executor->Stop();
+    }
+}
+
 NYdb::NBS::NNbs1CompatApi::NBlockStore::IBlockStorePtr
 GetNbsFrontendBlockStore()
 {
-    if (!NbsService || !NbsService->Frontend) {
+    if (!NbsService || !NbsService->BlockStoreFacade) {
         return {};
     }
-    return NbsService->Frontend->GetBlockStore();
+    return NbsService->BlockStoreFacade;
 }
 
 TNbsServicePtr GetNbsService()

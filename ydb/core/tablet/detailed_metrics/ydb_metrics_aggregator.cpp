@@ -52,7 +52,9 @@ namespace NKikimr {
                 }>(
                 this->SimpleCountersOpts(),
                 targetCounterGroup,
-                TargetSimpleCounters);
+                TargetSimpleCounters,
+                EYdbMetricNameScope::Aggregate,
+                /*skipLeaderOnly=*/false);
 
             // Create all target cumulative counters
             this->template CreateTargetCountersForCounterType<
@@ -67,7 +69,9 @@ namespace NKikimr {
                 }>(
                 this->CumulativeCountersOpts(),
                 targetCounterGroup,
-                TargetCumulativeCounters);
+                TargetCumulativeCounters,
+                EYdbMetricNameScope::Aggregate,
+                /*skipLeaderOnly=*/false);
 
             // Create all target percentile counters
             this->template CreateTargetCountersForCounterType<
@@ -76,13 +80,16 @@ namespace NKikimr {
                 TYdbMetricsAggregatorImpl::CreateExplicitHistogram>(
                 this->PercentileCountersOpts(),
                 targetCounterGroup,
-                TargetPercentileCounters);
+                TargetPercentileCounters,
+                EYdbMetricNameScope::Aggregate,
+                /*skipLeaderOnly=*/false);
         }
 
         virtual void AddSourceCountersGroup(
             const TString& sourceGroupId,
             NMonitoring::TDynamicCounterPtr sourceCounterGroup,
-            bool isFollowerSource) override {
+            bool isFollowerSource,
+            EYdbMetricNameScope sourceNameScope) override {
             const auto result = SourceCounterGroups.try_emplace(sourceGroupId);
 
             Y_ABORT_UNLESS(
@@ -91,36 +98,30 @@ namespace NKikimr {
                 sourceGroupId.c_str());
 
             // Look up all simple counters for the given source group
-            FindSourceCountersForCounterType<
-                typename TYdbMetricsAggregatorImpl::TSimpleCountersOpts,
-                decltype(result.first->second.SimpleCounters),
-                &NMonitoring::TDynamicCounters::FindNamedCounter>(
+            FindSourceCountersForCounterType<&NMonitoring::TDynamicCounters::FindNamedCounter>(
                 sourceGroupId,
                 this->SimpleCountersOpts(),
                 sourceCounterGroup,
                 isFollowerSource,
+                sourceNameScope,
                 result.first->second.SimpleCounters);
 
             // Look up all cumulative counters for the given source group
-            FindSourceCountersForCounterType<
-                typename TYdbMetricsAggregatorImpl::TCumulativeCountersOpts,
-                decltype(result.first->second.CumulativeCounters),
-                &NMonitoring::TDynamicCounters::FindNamedCounter>(
+            FindSourceCountersForCounterType<&NMonitoring::TDynamicCounters::FindNamedCounter>(
                 sourceGroupId,
                 this->CumulativeCountersOpts(),
                 sourceCounterGroup,
                 isFollowerSource,
+                sourceNameScope,
                 result.first->second.CumulativeCounters);
 
             // Look up all percentile counters for the given source group
-            FindSourceCountersForCounterType<
-                typename TYdbMetricsAggregatorImpl::TPercentileCountersOpts,
-                decltype(result.first->second.PercentileCounters),
-                &NMonitoring::TDynamicCounters::FindNamedHistogram>(
+            FindSourceCountersForCounterType<&NMonitoring::TDynamicCounters::FindNamedHistogram>(
                 sourceGroupId,
                 this->PercentileCountersOpts(),
                 sourceCounterGroup,
                 isFollowerSource,
+                sourceNameScope,
                 result.first->second.PercentileCounters);
         }
 
@@ -235,28 +236,28 @@ namespace NKikimr {
         /**
          * Find all source counters of the given counter type (simple, cumulative, percentile).
          *
-         * @tparam TCounterOptions The type of the parsed enum options for source counters
-         * @tparam TSourceCounters The type of the container with the source counters
-         * @tparam FindSourceCounter The function, which looks up the given source counter
+         * @tparam FindSourceCounter The TDynamicCounters member function, which looks up the given source counter
+         * @tparam CounterDesc The function, which returns the enum description for the counter type
+         * @tparam TSourceCounterPtr The type of the source counter pointer
          *
          * @param[in] sourceGroupId The ID of the corresponding source group
          * @param[in] counterOptions The parsed enum options for the source counters
          * @param[in] sourceCounterGroup The counter group where the source counters are looked up
          * @param[in] isFollowerSource Leave LeaderOnly counters empty for follower sources
+         * @param[in] sourceNameScope The scope for the source metric names (Aggregate or Partition)
          * @param[in,out] sourceCounters The container where the source counters will be saved
          */
         template <
-            class TCounterOptions,
-            class TSourceCounters,
-            TSourceCounters::value_type (NMonitoring::TDynamicCounters::*FindSourceCounter)(
-                const TString& name,
-                const TString& value) const>
+            auto FindSourceCounter,
+            const NProtoBuf::EnumDescriptor* CounterDesc(),
+            class TSourceCounterPtr>
         void FindSourceCountersForCounterType(
             const TString& sourceGroupId,
-            const TCounterOptions* counterOptions,
+            const NAux::TAppParsedOpts<CounterDesc, false /* ParseSourceCounters */>* counterOptions,
             NMonitoring::TDynamicCounterPtr sourceCounterGroup,
             bool isFollowerSource,
-            TSourceCounters& sourceCounters) {
+            EYdbMetricNameScope sourceNameScope,
+            std::vector<TSourceCounterPtr>& sourceCounters) {
             sourceCounters.clear();
             sourceCounters.reserve(counterOptions->Size);
 
@@ -266,16 +267,16 @@ namespace NKikimr {
                     continue;
                 }
 
-                const char* counterName = counterOptions->GetNames()[i];
+                const TString counterName = MakeYdbMetricName(counterOptions->GetNames()[i], sourceNameScope);
 
                 auto sourceCounter = (sourceCounterGroup.Get()->*FindSourceCounter)(
                     "name",
-                    counterName);
+                    counterName.c_str());
 
                 Y_ABORT_UNLESS(
                     sourceCounter,
                     "The source counter %s does not exist (source group ID %s)",
-                    counterName,
+                    counterName.c_str(),
                     sourceGroupId.c_str());
 
                 sourceCounters.push_back(sourceCounter);

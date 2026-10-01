@@ -1274,7 +1274,7 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
     }
 }
 
-void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TOperationContext& context, bool isBackup) {
+void IncAliveChildrenSafeWithUndo(const TOperationId& opId, const TPath& parentPath, TProposeContext& context, bool isBackup) {
     parentPath.Base()->IncAliveChildrenPrivate(isBackup);
     if (parentPath.Base()->GetAliveChildren() == 1 && !parentPath.Base()->IsDomainRoot()) {
         auto grandParent = parentPath.Parent();

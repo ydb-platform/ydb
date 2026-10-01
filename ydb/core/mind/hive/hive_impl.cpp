@@ -403,6 +403,8 @@ void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb&, TSideEffects& sideEffects)
         }
         if (tablet->IsBooting()) {
             delayedTablets.push_back(record);
+        } else if (!(tablet->IsLeader() && tablet->AsLeader().IsBootingSuppressed())) {
+            tablet->InitiateStop(sideEffects);
         }
     }
     if (waitingTablets.size() == processedItems || BootQueue.WaitQueue.empty()) {
@@ -2147,6 +2149,57 @@ void THive::UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff) {
     }
 }
 
+void THive::UpdateCounterShrinkRemainingHistory() {
+    if (TabletCounters == nullptr) {
+        return;
+    }
+    i64 pools = 0;
+    i64 entries = 0;
+    std::unordered_set<TTabletId> tablets;
+    for (const auto& [name, pool] : StoragePools) {
+        if (pool.RemainingHistory.empty()) {
+            continue;
+        }
+        ++pools;
+        entries += pool.RemainingHistory.size();
+        for (const auto& entry : pool.RemainingHistory) {
+            tablets.insert(entry.Tablet);
+        }
+    }
+    TabletCounters->Simple()[NHive::COUNTER_SHRINK_POOLS].Set(pools);
+    TabletCounters->Simple()[NHive::COUNTER_SHRINK_HISTORY_ENTRIES].Set(entries);
+    TabletCounters->Simple()[NHive::COUNTER_SHRINK_HISTORY_TABLETS].Set(tablets.size());
+}
+
+void THive::OnShrinkMoveDataSent(i64 inFlight, i64 queued) {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Cumulative()[NHive::COUNTER_SHRINK_MOVE_DATA_SENT].Increment(1);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_INFLIGHT].Set(inFlight);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_QUEUED].Set(queued);
+    }
+}
+
+void THive::OnShrinkMoveDataAnswered(i64 inFlight, i64 queued) {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Cumulative()[NHive::COUNTER_SHRINK_MOVE_DATA_ANSWERED].Increment(1);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_INFLIGHT].Set(inFlight);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_QUEUED].Set(queued);
+    }
+}
+
+void THive::OnShrinkMoveDataRetried() {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Cumulative()[NHive::COUNTER_SHRINK_MOVE_DATA_RETRIED].Increment(1);
+    }
+}
+
+void THive::OnShrinkMoveDataFinished() {
+    if (TabletCounters != nullptr) {
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_INFLIGHT].Set(0);
+        TabletCounters->Simple()[NHive::COUNTER_SHRINK_MOVE_DATA_QUEUED].Set(0);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);
@@ -3496,7 +3549,7 @@ ui64 THive::GetObjectImbalance(TFullObjectId object) {
     if (it == ObjectDistributions.Distributions.end()) {
         return 0;
     }
-    return it->second->GetImbalance();
+    return it->second->second.GetImbalance();
 }
 
 void THive::BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects) {
@@ -4641,13 +4694,18 @@ bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
     } else {
         YDB_LOG_INFO("ShrinkPool: starting move data for tablets",
             {"logPrefix", GetLogPrefix()},
-            {"tabletsToMoveDataCount", tabletsToMoveData.size()});
+            {"pool", pool.Name},
+            {"tabletsToMoveDataCount", tabletsToMoveData.size()},
+            {"remainingHistoryCount", pool.RemainingHistory.size()});
+        UpdateCounterShrinkRemainingHistory();
         StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, pool.Name);
         return true;
     }
 }
 
 void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
+    // Every erase from RemainingHistory reaches here, so this is the one place the gauges need refreshing.
+    UpdateCounterShrinkRemainingHistory();
     if (!pool.RemainingHistory.empty() || pool.NeedShrinkFromTenant) {
         YDB_LOG_DEBUG("ShrinkPool: history entries remaining",
             {"logPrefix", GetLogPrefix()},

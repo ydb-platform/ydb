@@ -185,6 +185,10 @@ THostIndex TInflightInfo::RequestFlush(THostIndex destination)
 
 void TInflightInfo::ConfirmFlush(THostIndex host)
 {
+    if (!DesiredDDisks.Get(host)) {
+        return;
+    }
+
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
     Y_ABORT_UNLESS(FlushRequested.Get(host));
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
@@ -196,6 +200,10 @@ void TInflightInfo::ConfirmFlush(THostIndex host)
 
 void TInflightInfo::FlushFailed(THostIndex host)
 {
+    if (!DesiredDDisks.Get(host)) {
+        return;
+    }
+
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
     Y_ABORT_UNLESS(FlushRequested.Get(host));
     Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
@@ -263,9 +271,6 @@ void TInflightInfo::UpdateHosts(
     THostMask removed,
     THostMask disabled)
 {
-    // Removed hosts should be disabled too.
-    Y_ABORT_UNLESS(removed.Exclude(disabled).Empty());
-
     switch (State) {
         case EState::PBufferPendingWrite:
         case EState::PBufferIncompleteWrite:
@@ -277,12 +282,14 @@ void TInflightInfo::UpdateHosts(
         }
         case EState::PBufferFlushing: {
             // Just update DesiredDDisks and Disabled.
+            const auto unavailableDDisks = disabled.Include(removed);
             const auto droppedFlushes =
-                GetInflightFlushes().LogicalAnd(disabled);
+                GetInflightFlushes().LogicalAnd(unavailableDDisks);
 
             DesiredDDisks = DesiredDDisks.Include(added).Exclude(removed);
             Disabled = disabled;
-            FlushRequested = FlushRequested.Exclude(disabled);
+            FlushRequested = FlushRequested.Exclude(unavailableDDisks);
+            FlushConfirmed = FlushConfirmed.Exclude(removed);
 
             auto notRequestsFlushes =
                 DesiredDDisks.Exclude(Disabled).Exclude(FlushRequested);

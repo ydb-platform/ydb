@@ -146,6 +146,10 @@ If the client-side timeout is shorter than the query execution time on the {{ yd
 
 **Implicit transaction** is a query execution mode in which [transaction mode](transactions.md#modes) is not specified. In this case, {{ ydb-short-name }} independently determines whether to wrap them in a transaction. This mode is described in more detail in [{#T}](transactions.md#implicit).
 
+### Interactive transactions {#interactive-transaction}
+
+An **interactive transaction** is a transaction in which multiple queries are executed, with application logic potentially running between them. It allows the program to send multiple queries and make decisions about the further course of the transaction based on the data received. Such a transaction can explicitly begin with a separate step (or open together with the first query) and complete separately. Unlike a single query that is executed and committed atomically, an interactive transaction enables building complex workflows in which multiple related operations are treated as a single atomic unit. At the same time, it incurs overhead on the system, as it requires holding [optimistic locks](#optimistic-locking) and uncommitted changes for longer, and also increases the complexity of the application-side code.
+
 ### Multi-version concurrency control {#mvcc}
 
 [**Multi-version concurrency control**](https://en.wikipedia.org/wiki/Multiversion_concurrency_control) or **MVCC** is a method used by {{ ydb-short-name }} for concurrent access of multiple parallel transactions to the database without interfering with each other. It is described in more detail in a separate article [{#T}](query_execution/mvcc.md).
@@ -225,7 +229,7 @@ A **vector index** is a specialized type of [secondary index](#secondary-index) 
 
 #### Full-text index {#fulltext-index}
 
-A **full-text index** is an additional data structure used to speed up text search in a table column (by words and phrases, and, when using N-grams, also by substrings).
+A **full-text index** is an additional data structure used to speed up text search in a table column (by words and combinations of words, and, when using N-grams, also by substrings).
 
 The capabilities of full-text search and index parameters are described in the articles [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
@@ -695,7 +699,7 @@ In addition, there is a **root SchemeShard** that stores information about datab
 
 #### SelfHeal {#self-heal}
 
-**SelfHeal** is a mechanism for automatically maintaining and restoring cluster fault tolerance. SelfHeal of [storage](../maintenance/manual/selfheal.md) moves [VDisk](#vdisk) of storage groups after prolonged failures of nodes or disks. SelfHeal of [State Storage](../maintenance/manual/selfheal_statestorage.md) moves replicas of the metadata distribution subsystem after failures and adds replicas when new nodes appear.
+[**SelfHeal**](../devops/concepts/selfheal.md) is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../devops/concepts/selfheal-storage.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [Metadata Distribution SelfHeal](../devops/concepts/selfheal-metadata-distribution.md) relocates [State Storage](#state-storage), [Board](#board), and [SchemeBoard](#scheme-board) replicas after failures and can add replicas when new nodes appear.
 
 #### NodeBroker {#node-broker}
 

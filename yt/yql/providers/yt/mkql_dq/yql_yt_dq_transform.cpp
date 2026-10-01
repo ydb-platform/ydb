@@ -42,17 +42,16 @@ public:
 
                 TProgramBuilder pgmBuilder(env, FunctionRegistry);
 
-                YQL_ENSURE(callable.GetInputsCount() == 8 || callable.GetInputsCount() == 9, "Expected 8 or 9 arguments.");
+                YQL_ENSURE(callable.GetInputsCount() == 10, "Expected 10 arguments.");
+                const bool hasPartitionRanges = AS_VALUE(TDataLiteral, callable.GetInput(8))->AsValue().Get<bool>();
 
                 TCallableBuilder callableBuilder(env, callable.GetType()->GetName(), callable.GetType()->GetReturnType(), false);
-                callableBuilder.Add(callable.GetInput(0));
-                callableBuilder.Add(callable.GetInput(1));
-                callableBuilder.Add(callable.GetInput(2));
-                callableBuilder.Add(callable.GetInput(3));
+                for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
+                    if (i != 4 || !hasPartitionRanges) {
+                        callableBuilder.Add(callable.GetInput(i));
+                        continue;
+                    }
 
-                if (callable.GetInputsCount() == 8U)
-                    callableBuilder.Add(callable.GetInput(4));
-                else {
                     auto params = GetPartitionParams();
 
                     TVector<TRuntimeNode> newGrpList;
@@ -60,10 +59,10 @@ public:
                     for (ui32 grp = 0; grp < groupList->GetItemsCount(); ++grp) {
                         TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[grp]);
                         TVector<TRuntimeNode> newTableList;
-                        for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
-                            TString paramsKey = TStringBuilder() << grp << "/" << i;
+                        for (ui32 tbl = 0; tbl < tableList->GetItemsCount(); ++tbl) {
+                            TString paramsKey = TStringBuilder() << grp << "/" << tbl;
 
-                            TTupleLiteral* tableTuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
+                            TTupleLiteral* tableTuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[tbl]);
                             YQL_ENSURE(tableTuple->GetValuesCount() == 4);
 
                             NYT::TRichYPath richYPath;
@@ -86,9 +85,6 @@ public:
                     }
                     callableBuilder.Add(pgmBuilder.NewList(newGrpList.front().GetStaticType(), newGrpList));
                 }
-                callableBuilder.Add(callable.GetInput(5));
-                callableBuilder.Add(callable.GetInput(6));
-                callableBuilder.Add(callable.GetInput(7));
                 return TRuntimeNode(callableBuilder.Build(), false);
             };
         }
@@ -99,7 +95,7 @@ public:
 
                 TProgramBuilder pgmBuilder(env, FunctionRegistry);
 
-                YQL_ENSURE(callable.GetInputsCount() == 6, "Expected six arguments.");
+                YQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 arguments.");
 
                 TCallableBuilder callableBuilder(env, callable.GetType()->GetName(), callable.GetType()->GetReturnType(), false);
                 callableBuilder.Add(callable.GetInput(0));
@@ -111,8 +107,9 @@ public:
                 richYPath.TransactionId(GetGuid(TaskParams.Value("yt.write.tx", TString())));
                 callableBuilder.Add(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(NYT::PathToNode(richYPath))));
 
-                callableBuilder.Add(callable.GetInput(4));
-                callableBuilder.Add(callable.GetInput(5));
+                for (ui32 i = 4; i < callable.GetInputsCount(); ++i) {
+                    callableBuilder.Add(callable.GetInput(i));
+                }
 
                 return TRuntimeNode(callableBuilder.Build(), false);
             };

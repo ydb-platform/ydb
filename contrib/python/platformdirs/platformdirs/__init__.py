@@ -393,9 +393,13 @@ def user_preference_dir(  # ruff:ignore[too-many-arguments]
     ).user_preference_dir
 
 
-def user_bin_dir() -> str:
-    """:returns: bin directory tied to the user"""
-    return PlatformDirs().user_bin_dir
+def user_bin_dir(*, use_site_for_root: bool = False) -> str:
+    """:param use_site_for_root: See `use_site_for_root <platformdirs.api.PlatformDirsABC.use_site_for_root>`.
+
+    :returns: bin directory tied to the user
+
+    """
+    return PlatformDirs(use_site_for_root=use_site_for_root).user_bin_dir
 
 
 def site_bin_dir() -> str:
@@ -849,9 +853,13 @@ def user_preference_path(  # ruff:ignore[too-many-arguments]
     ).user_preference_path
 
 
-def user_bin_path() -> Path:
-    """:returns: bin path tied to the user"""
-    return PlatformDirs().user_bin_path
+def user_bin_path(*, use_site_for_root: bool = False) -> Path:
+    """:param use_site_for_root: See `use_site_for_root <platformdirs.api.PlatformDirsABC.use_site_for_root>`.
+
+    :returns: bin path tied to the user
+
+    """
+    return PlatformDirs(use_site_for_root=use_site_for_root).user_bin_path
 
 
 def site_bin_path() -> Path:

@@ -64,8 +64,8 @@ struct InstrumentDescriptor
   std::string name_;
   std::string description_;
   std::string unit_;
-  InstrumentType type_;
-  InstrumentValueType value_type_;
+  InstrumentType type_{InstrumentType::kCounter};
+  InstrumentValueType value_type_{InstrumentValueType::kInt};
 };
 
 struct InstrumentDescriptorUtil

@@ -6,7 +6,16 @@
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
+#include <atomic>
+#include <memory>
+
 namespace NYql::NDq {
+
+// Moves when an output channel of one owner (a compute actor) may have finished: a channel which opts in increments
+// it when it becomes finished, before it wakes the owner up, so that the owner calls IsFinished only once it has
+// moved. A change detector, not a count of finishes: a channel increments it on binding too (in Channels 2.0 on
+// BindFinishEpoch and again on Bind, as it may be finished already), and may do so more than once on a finish.
+using TDqOutputFinishEpoch = std::atomic<ui64>;
 
 struct TDqOutputChannelStats : public TDqOutputStats {
     ui64 ChannelId = 0;
@@ -54,6 +63,13 @@ public:
 
     virtual void Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) = 0;
     virtual bool IsLocal() const = 0;
+
+    // Opt in to TDqOutputFinishEpoch: an output which returns true increments `epoch` whenever it becomes finished,
+    // and once on binding, as it may be finished already. An output which returns false is checked as before.
+    virtual bool BindFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) {
+        Y_UNUSED(epoch);
+        return false;
+    }
 };
 
 struct TDqOutputChannelChunkSizeLimitExceeded : public yexception {

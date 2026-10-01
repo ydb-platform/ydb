@@ -12,6 +12,10 @@
 using namespace NActors;
 using namespace NThreading;
 
+namespace {
+
+using TAsyncFrameCache = TAllocationCache<TAsyncFrameCacheTag>;
+
 class TPingTargetActor : public TActor<TPingTargetActor> {
 public:
     TPingTargetActor()
@@ -90,12 +94,12 @@ public:
         for (size_t i = 0; i < 64; ++i) {
             co_await Step();
         }
-        const auto before = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
+        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             co_await Step();
         }
 
-        const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
+        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
         State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
         State.counters["retained_bytes"] = stats.CachedBytes;
         PassAway();
@@ -119,7 +123,7 @@ private:
 };
 
 template<class TDriver>
-void BM_PingActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
+void BM_PingActor(benchmark::State& state, size_t budget = NActors::TAsyncFrameCache::DefaultSizeBytes) {
 
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->AsyncFrameCacheSizeBytes = budget;
@@ -230,7 +234,7 @@ private:
 };
 
 template<class TDriver>
-void BM_YieldActor(benchmark::State& state, size_t budget = TAsyncFrameCache::DefaultSizeBytes) {
+void BM_YieldActor(benchmark::State& state, size_t budget = NActors::TAsyncFrameCache::DefaultSizeBytes) {
 
     THolder<TActorSystemSetup> setup(new TActorSystemSetup);
     setup->AsyncFrameCacheSizeBytes = budget;
@@ -281,12 +285,12 @@ public:
         for (size_t i = 0; i < 64; ++i) {
             benchmark::DoNotOptimize(co_await Step());
         }
-        const auto before = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
+        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             benchmark::DoNotOptimize(co_await Step());
         }
 
-        const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
+        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
         // Step is inline: allocation elision is allowed in this control.
         State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
         State.counters["retained_bytes"] = stats.CachedBytes;
@@ -352,11 +356,11 @@ public:
         for (size_t i = 0; i < 64; ++i) {
             Root();
         }
-        const auto before = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
+        const auto before = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
         for (auto _ : State) {
             Root();
         }
-        const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
+        const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
         State.counters["heap_allocations_per_op"] = double(stats.HeapAllocations - before) / State.iterations();
         State.counters["frame_allocations_per_op"] = 2;
         State.counters["retained_bytes"] = stats.CachedBytes;
@@ -409,12 +413,12 @@ public:
         if (context.WarmupLeft) {
             Root();
             if (!--context.WarmupLeft) {
-                context.HeapBefore = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats().HeapAllocations;
+                context.HeapBefore = TAsyncFrameCache::GetCurrent()->GetStats().HeapAllocations;
             }
         } else if (context.State.KeepRunning()) {
             Root();
         } else {
-            const auto stats = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent()->GetStats();
+            const auto stats = TAsyncFrameCache::GetCurrent()->GetStats();
             context.State.counters["heap_allocations_per_op"] =
                 double(stats.HeapAllocations - context.HeapBefore) / context.State.iterations();
             context.State.counters["frame_allocations_per_op"] = 2;
@@ -511,3 +515,5 @@ void BM_RescheduleRunnableAsync(benchmark::State& state) {
 }
 
 BENCHMARK(BM_RescheduleRunnableAsync)->MeasureProcessCPUTime();
+
+} // namespace

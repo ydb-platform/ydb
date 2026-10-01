@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             WriteEvent(base + TDuration::Seconds(26), "watermark");
             WaitMetric("shared-new", base.Seconds() + 19, 2);
         }
-        ExecQuery(fmt::format("CREATE STREAMING QUERY sharedExplicit WITH (OUTPUT_FROM = Timestamp(\"{}\"), FORCE = TRUE) AS {}",
+        ExecQuery(fmt::format("CREATE STREAMING QUERY sharedExplicit WITH (OUTPUT_FROM = Timestamp(\"{}\")) AS {}",
             (base + TDuration::Seconds(6)).ToString(), Body(2, "shared-explicit")),
             NYdb::EStatus::BAD_REQUEST, "requires a watermark generator before each hopping operator");
     }
@@ -228,7 +228,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage("historyInput", "retained");
         ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY historyQuery WITH (FORCE = TRUE, OUTPUT_FROM = Timestamp("{}"){}) AS DO BEGIN
+            CREATE STREAMING QUERY historyQuery WITH (OUTPUT_FROM = Timestamp("{}"){}) AS DO BEGIN
                 INSERT INTO historySource.historyOutput SELECT Data FROM historySource.historyInput
             END DO
         )", outputFrom.ToString(), ReadFrom ? ", READ_FROM = EARLIEST" : ""));
@@ -250,13 +250,13 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
             PRAGMA ydb.DisableCheckpoints = "TRUE";
             INSERT INTO historySource.historyOutput SELECT Data FROM historySource.historyInput
         END DO)";
-        const std::string outputFrom = "FORCE = TRUE, OUTPUT_FROM = Timestamp(\"2025-05-04T11:30:34Z\")"
+        const std::string outputFrom = "OUTPUT_FROM = Timestamp(\"2025-05-04T11:30:34Z\")"
             + std::string(ReadFrom ? ", READ_FROM = EARLIEST" : "");
         ExecQuery("CREATE STREAMING QUERY historyQuery WITH (RUN = FALSE)" + body);
         for (const auto prefix : {
             "CREATE STREAMING QUERY rejectedOutput WITH (",
-            "ALTER STREAMING QUERY historyQuery SET (",
-            "CREATE OR REPLACE STREAMING QUERY historyQuery WITH (",
+            "ALTER STREAMING QUERY historyQuery SET (FORCE = TRUE, ",
+            "CREATE OR REPLACE STREAMING QUERY historyQuery WITH (FORCE = TRUE, ",
         }) {
             ExecQuery(std::string(prefix) + "RUN = TRUE, " + outputFrom + ")" + body,
                 NYdb::EStatus::GENERIC_ERROR, "Cannot use setting OUTPUT_FROM without checkpoints");
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(StreamingHistoryReplay) {
         WriteTopicMessage("historyInput", "live");
         ReadTopicMessages("historyOutput", {"live"});
         // Validate OUTPUT_FROM even when ALTER supplies no query text.
-        ExecQuery("ALTER STREAMING QUERY withoutCheckpoints SET (" + outputFrom + ")",
+        ExecQuery("ALTER STREAMING QUERY withoutCheckpoints SET (FORCE = TRUE, " + outputFrom + ")",
             NYdb::EStatus::GENERIC_ERROR, "Cannot use setting OUTPUT_FROM without checkpoints");
     }
 

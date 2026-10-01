@@ -574,28 +574,32 @@ class LoadSuiteBase:
                 # read-modify-write целиком делается под блокировкой
                 with open(f'{fn}.lock', 'w') as lock_file:
                     fcntl.flock(lock_file, fcntl.LOCK_EX)
-                    data = {}
-                    if os.path.exists(fn):
-                        with open(fn, 'r') as f:
-                            data = yaml.safe_load(f)
-                            if not isinstance(data, dict):
-                                data = {}
-                    errors_by_tests = data.get('errors_by_tests')
-                    if not isinstance(errors_by_tests, dict):
-                        errors_by_tests = {}
-                    errors_by_tests[f'{cls.suite()}.{query_name}'] = {
-                        **get_test_info(cls.suite(), query_name, result.start_time, end_time),
-                        'errors': [e.serialize() for e in errors],
-                    }
-                    data['environment'] = get_environment_info()
-                    data['errors_by_tests'] = errors_by_tests
-                    with open(tmp_fn, 'w') as f:
-                        yaml.safe_dump(data, f, allow_unicode=True)
-                    os.replace(tmp_fn, fn)
+                    try:
+                        data = {}
+                        if os.path.exists(fn):
+                            with open(fn, 'r') as f:
+                                data = yaml.safe_load(f)
+                                if not isinstance(data, dict):
+                                    data = {}
+                        errors_by_tests = data.get('errors_by_tests')
+                        if not isinstance(errors_by_tests, dict):
+                            errors_by_tests = {}
+                        errors_by_tests[f'{cls.suite()}.{query_name}'] = {
+                            **get_test_info(cls.suite(), query_name, result.start_time, end_time),
+                            'errors': [e.serialize() for e in errors],
+                        }
+                        data['environment'] = get_environment_info()
+                        data['errors_by_tests'] = errors_by_tests
+                        with open(tmp_fn, 'w') as f:
+                            yaml.safe_dump(data, f, allow_unicode=True)
+                        os.replace(tmp_fn, fn)
+                    except BaseException as e:
+                        result.add_warning(f'Error while write {fn}: {e}', area=ErrorArea.TEST_INFRA)
+                    finally:
+                        if os.path.exists(tmp_fn):
+                            os.remove(tmp_fn)
             except BaseException as e:
-                result.add_warning(f'Error while write {fn}: {e}', area=ErrorArea.TEST_INFRA)
-                if os.path.exists(tmp_fn):
-                    os.remove(tmp_fn)
+                result.add_warning(f'Error while lock {fn}.lock: {e}', area=ErrorArea.TEST_INFRA)
         if not result.success:
             ie = result.get_integrated_error()
             exc = pytest.fail.Exception(str(ie))

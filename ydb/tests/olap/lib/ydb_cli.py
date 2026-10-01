@@ -187,8 +187,6 @@ class YdbCliHelper:
             for e in self.__errors:
                 if e.priority >= ErrorPriority.ERROR:
                     result[e.area.name.lower()] = True
-            if len(result) == 0 and not self.success:
-                result['other'] = True
             if any(e.priority == ErrorPriority.WARNING for e in self.__errors):
                 result['warning'] = True
             return result
@@ -199,10 +197,10 @@ class YdbCliHelper:
                 return True
             return False
 
-        def add_error(self, msg: Optional[str], area: ErrorArea = ErrorArea.REQUEST) -> bool:
+        def add_error(self, msg: Optional[str], area) -> bool:
             return self.__add_error(msg, area=area, priority=ErrorPriority.ERROR)
 
-        def add_warning(self, msg: Optional[str], area: ErrorArea = ErrorArea.REQUEST):
+        def add_warning(self, msg: Optional[str], area):
             return self.__add_error(msg, area=area, priority=ErrorPriority.WARNING)
 
         def add_custom_error(self, error: WorkloadError) -> None:

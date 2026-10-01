@@ -923,14 +923,14 @@ class WorkloadTestBase(LoadSuiteBase):
             # Проверяем явные ошибки (только если не timeout)
             if not success:
                 result.add_error(
-                    f"Workload execution failed. stderr: {stderr}")
+                    f"Workload execution failed. stderr: {stderr}", area=ErrorArea.OTHER)
                 error_found = True
             elif not self._ignore_stderr_content:
                 if "error" in str(stderr).lower():
-                    result.add_error(f"Error detected in stderr: {stderr}")
+                    result.add_error(f"Error detected in stderr: {stderr}", area=ErrorArea.OTHER)
                     error_found = True
                 elif self._has_real_error_in_stdout(str(stdout)):
-                    result.add_warning(f"Error detected in stdout: {stdout}")
+                    result.add_warning(f"Error detected in stdout: {stdout}", area=ErrorArea.OTHER)
                     error_found = True
 
         # Проверяем предупреждения
@@ -938,7 +938,7 @@ class WorkloadTestBase(LoadSuiteBase):
             "warning: permanently added" not in str(stderr).lower()
             and "warning" in str(stderr).lower()
         ):
-            result.add_warning(f"Warning in stderr: {stderr}")
+            result.add_warning(f"Warning in stderr: {stderr}", area=ErrorArea.OTHER)
 
         # Добавляем информацию о выполнении в iterations
         iteration = YdbCliHelper.Iteration()
@@ -2250,12 +2250,14 @@ class WorkloadTestBase(LoadSuiteBase):
                 threads_info = f" with {thread_count} parallel threads"
 
             overall_result.add_error(
-                f"All {real_iteration_count} iterations{threads_info} failed to execute successfully"
+                f"All {real_iteration_count} iterations{threads_info} failed to execute successfully",
+                area=ErrorArea.REQUEST
             )
         elif failed_iterations > 0:
             # Некоторые итерации завершились с ошибкой
             overall_result.add_warning(
-                f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully"
+                f"{failed_iterations} out of {real_iteration_count} iterations failed to execute successfully",
+                area=ErrorArea.REQUEST
             )
 
     def _add_execution_statistics(
@@ -2727,7 +2729,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Логируем ошибку выгрузки, но не прерываем выполнение
                 error_msg = f"Failed to upload results: {e}"
                 logging.error(error_msg)
-                result.add_warning(error_msg)
+                result.add_warning(error_msg, ErrorArea.TEST_INFRA)
                 # После добавления warning нужно пересчитать summary флаги
                 # summary флаги (with_errors/with_warnings) автоматически добавляются в ydb_cli.py
 

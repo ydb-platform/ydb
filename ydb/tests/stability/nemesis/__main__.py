@@ -12,7 +12,8 @@ from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster  # no
 from ydb.tests.stability.nemesis.internal.config import Settings, get_orchestrator_settings  # noqa: E402
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml, install_on_hosts, stop_agent_services  # noqa: E402
 from ydb.tests.tools.nemesis.library import monitor  # noqa: E402
-from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import run_orchestrator_liveness_cli_batch  # noqa: E402
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catalog import ORCHESTRATOR_LIVENESS_CHECKS  # noqa: E402
+from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_execution import liveness_check_result_dict  # noqa: E402
 
 
 _DESCRIPTION = """\
@@ -185,7 +186,7 @@ def run_liveness_checks(settings: Settings):
             "checks": [],
             "error_message": "No hosts found in config"
         }
-        print(json.dumps(result))
+        print(json.dumps(result), flush=True)
         return
 
     # Create cluster object
@@ -203,7 +204,20 @@ def run_liveness_checks(settings: Settings):
 
     checks: list = []
     try:
-        checks = run_orchestrator_liveness_cli_batch(cluster)
+        for spec in ORCHESTRATOR_LIVENESS_CHECKS:
+            # Flushed before the check: a timeout kill keeps this line in the pipe.
+            print("liveness start %s" % spec.name, file=sys.stderr, flush=True)
+            row = liveness_check_result_dict(spec, cluster)
+            checks.append(row)
+            print(
+                "liveness done %s status=%s violations=%d" % (
+                    spec.name,
+                    row.get("status"),
+                    len(row.get("violations") or []),
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
         result = {
             "status": "completed",
             "checks": checks,
@@ -215,8 +229,8 @@ def run_liveness_checks(settings: Settings):
             "error_message": str(e),
         }
 
-    # Output JSON to stdout
-    print(json.dumps(result))
+    # Output JSON to stdout. flush: the parent may SIGKILL this process on timeout.
+    print(json.dumps(result), flush=True)
 
 
 def main():

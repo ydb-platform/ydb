@@ -20,6 +20,23 @@ from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catal
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+def _as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
+def log_liveness_subprocess_output(stdout: Any, stderr: Any, *, returncode: Any) -> None:
+    """Write both subprocess streams to the orchestrator log, uncut."""
+    logger.info(
+        "Liveness subprocess output returncode=%s\n--- stdout ---\n%s\n--- stderr ---\n%s",
+        returncode,
+        _as_text(stdout),
+        _as_text(stderr),
+    )
+
 
 def liveness_check_result_dict(spec: OrchestratorLivenessCheck, cluster: ExternalKiKiMRCluster) -> Dict[str, Any]:
     try:
@@ -65,7 +82,7 @@ def run_orchestrator_liveness_subprocess_sync(
     yaml_config: str,
     *,
     database_yaml_config: str | None = None,
-    timeout_seconds: int = 60,
+    timeout_seconds: int = 120,
 ) -> List[WardenCheckResult]:
     logger.info("Running liveness checks via subprocess with %ds timeout", timeout_seconds)
 
@@ -86,9 +103,7 @@ def run_orchestrator_liveness_subprocess_sync(
 
         elapsed = time.time() - start_time
         logger.info("Subprocess completed in %.1fs with return code %s", elapsed, result.returncode)
-
-        if result.stderr:
-            logger.debug("Subprocess stderr: %s", result.stderr[:500])
+        log_liveness_subprocess_output(result.stdout, result.stderr, returncode=result.returncode)
 
         if result.stdout:
             try:
@@ -114,14 +129,13 @@ def run_orchestrator_liveness_subprocess_sync(
 
             except json.JSONDecodeError as e:
                 logger.error("Failed to parse liveness output: %s", e)
-                logger.error("Raw output: %s", result.stdout[:500])
                 return [
                     WardenCheckResult(
                         name="LivenessChecks",
                         category="liveness",
                         violations=[],
                         status="error",
-                        error_message=f"Failed to parse output: {e}",
+                        error_message="Failed to parse output: %s" % e,
                     )
                 ]
 
@@ -136,15 +150,16 @@ def run_orchestrator_liveness_subprocess_sync(
             )
         ]
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as exc:
         logger.warning("Liveness checks timed out after %ds", timeout_seconds)
+        log_liveness_subprocess_output(exc.stdout, exc.stderr, returncode="timeout")
         return [
             WardenCheckResult(
                 name="LivenessChecks",
                 category="liveness",
                 violations=[],
                 status="error",
-                error_message=f"Timeout after {timeout_seconds}s",
+                error_message="Timeout after %ds" % timeout_seconds,
             )
         ]
 

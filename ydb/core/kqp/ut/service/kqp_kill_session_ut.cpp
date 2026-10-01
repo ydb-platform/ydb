@@ -332,7 +332,139 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
         AssertSessionAlive(second);
     }
 
-    Y_UNIT_TEST(ReadWriteUsePermissionsDoNotAllowKillingForeignSession) {
+    Y_UNIT_TEST_TWIN(GenericUseCanKillForeignSession, tableService) {
+        auto settings = KillSessionSettings();
+        settings.FeatureFlags.SetEnableDatabaseAdmin(false);
+        TKikimrRunner kikimr(settings);
+        auto admin = kikimr.GetQueryClient();
+        auto querySession = CreateSession(admin);
+        auto tableClient = kikimr.GetTableClient();
+        auto created = tableClient.CreateSession().GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        auto tableSession = created.GetSession();
+        const auto sessionId = tableService ? tableSession.GetId() : querySession.GetId();
+        auto granted = kikimr.GetSchemeClient().ModifyPermissions("/Root",
+            NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                NYdb::NScheme::TPermissions("operator@builtin", {"ydb.generic.use"}))).GetValueSync();
+        UNIT_ASSERT_C(granted.IsSuccess(), granted.GetIssues().ToString());
+        WaitForProxy(kikimr, "operator@builtin");
+        auto client = kikimr.GetQueryClient(TClientSettings().AuthToken("operator@builtin"));
+
+        auto killed = client.ExecuteQuery(KillSessionQuery(sessionId), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(killed.IsSuccess(), killed.GetIssues().ToString());
+        auto repeated = client.ExecuteQuery(KillSessionQuery(sessionId), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(repeated.GetStatus(), EStatus::PRECONDITION_FAILED, repeated.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(repeated.GetIssues().ToString(), "Session not found");
+    }
+
+    Y_UNIT_TEST(GenericUseGrantedThroughGroupCanKillForeignSession) {
+        auto settings = KillSessionSettings();
+        settings.FeatureFlags.SetEnableDatabaseAdmin(false);
+        TKikimrRunner kikimr(settings);
+        auto admin = kikimr.GetQueryClient();
+        auto victim = CreateSession(admin);
+        kikimr.GetTestClient().TestCreateUser("/Root", "operator", "secret_password", "root@builtin");
+        auto created = admin.ExecuteQuery("CREATE GROUP operators WITH USER operator;",
+            TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        auto granted = kikimr.GetSchemeClient().ModifyPermissions("/Root",
+            NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                NYdb::NScheme::TPermissions("operators", {"ydb.generic.use"}))).GetValueSync();
+        UNIT_ASSERT_C(granted.IsSuccess(), granted.GetIssues().ToString());
+        Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), "/Root");
+        auto client = kikimr.GetQueryClient(TClientSettings().CredentialsProviderFactory(
+            CreateLoginCredentialsProviderFactory({.User = "operator", .Password = "secret_password"})));
+
+        auto killed = client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(killed.IsSuccess(), killed.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(GenericUseMaskGrantedInPartsCanKillForeignSession) {
+        auto settings = KillSessionSettings();
+        settings.FeatureFlags.SetEnableDatabaseAdmin(false);
+        TKikimrRunner kikimr(settings);
+        auto admin = kikimr.GetQueryClient();
+        auto victim = CreateSession(admin);
+        auto granted = kikimr.GetSchemeClient().ModifyPermissions("/Root",
+            NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                NYdb::NScheme::TPermissions("operator@builtin", {
+                    "ydb.generic.read", "ydb.generic.write", "ydb.database.connect", "ydb.access.grant"}))).GetValueSync();
+        UNIT_ASSERT_C(granted.IsSuccess(), granted.GetIssues().ToString());
+        WaitForProxy(kikimr, "operator@builtin");
+        auto client = kikimr.GetQueryClient(TClientSettings().AuthToken("operator@builtin"));
+
+        auto killed = client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_C(killed.IsSuccess(), killed.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(GenericUseIsCheckedForEachExecution) {
+        auto settings = KillSessionSettings();
+        settings.FeatureFlags.SetEnableDatabaseAdmin(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        TKikimrRunner kikimr(settings);
+        auto admin = kikimr.GetQueryClient();
+        auto first = CreateSession(admin);
+        auto second = CreateSession(admin);
+        GrantSessionConnect(kikimr, "operator@builtin");
+        WaitForProxy(kikimr, "operator@builtin");
+        auto client = kikimr.GetQueryClient(TClientSettings().AuthToken("operator@builtin"));
+        auto caller = CreateSession(client);
+        auto kill = [&](const std::string& sessionId) {
+            auto params = TParamsBuilder().AddParam("$session_id").Utf8(sessionId).Build().Build();
+            return caller.ExecuteQuery("DECLARE $session_id AS Utf8; KILL SESSION $session_id;",
+                TTxControl::NoTx(), params, NoRetryExecuteQuerySettings()).GetValueSync();
+        };
+        auto denied = kill(first.GetId());
+        UNIT_ASSERT_VALUES_EQUAL_C(denied.GetStatus(), EStatus::UNAUTHORIZED, denied.GetIssues().ToString());
+        AssertSessionAlive(first);
+
+        auto granted = kikimr.GetSchemeClient().ModifyPermissions("/Root",
+            NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                NYdb::NScheme::TPermissions("operator@builtin", {"ydb.generic.use"}))).GetValueSync();
+        UNIT_ASSERT_C(granted.IsSuccess(), granted.GetIssues().ToString());
+        Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), "/Root");
+        auto killed = kill(first.GetId());
+        UNIT_ASSERT_C(killed.IsSuccess(), killed.GetIssues().ToString());
+
+        auto revoked = kikimr.GetSchemeClient().ModifyPermissions("/Root",
+            NYdb::NScheme::TModifyPermissionsSettings()
+                .AddRevokePermissions(NYdb::NScheme::TPermissions("operator@builtin", {"ydb.generic.use"}))
+                .AddGrantPermissions(NYdb::NScheme::TPermissions("operator@builtin", {"ydb.database.connect"}))).GetValueSync();
+        UNIT_ASSERT_C(revoked.IsSuccess(), revoked.GetIssues().ToString());
+        Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), "/Root");
+        denied = kill(second.GetId());
+        UNIT_ASSERT_VALUES_EQUAL_C(denied.GetStatus(), EStatus::UNAUTHORIZED, denied.GetIssues().ToString());
+        AssertSessionAlive(caller);
+        AssertSessionAlive(second);
+    }
+
+    Y_UNIT_TEST(GenericUseOnSubdirectoryDoesNotAllowKillingForeignSession) {
+        auto settings = KillSessionSettings();
+        settings.FeatureFlags.SetEnableDatabaseAdmin(false);
+        TKikimrRunner kikimr(settings);
+        auto admin = kikimr.GetQueryClient();
+        auto victim = CreateSession(admin);
+        GrantSessionConnect(kikimr, "operator@builtin");
+        auto created = kikimr.GetSchemeClient().MakeDirectory("/Root/Scope").GetValueSync();
+        UNIT_ASSERT_C(created.IsSuccess(), created.GetIssues().ToString());
+        auto granted = kikimr.GetSchemeClient().ModifyPermissions("/Root/Scope",
+            NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
+                NYdb::NScheme::TPermissions("operator@builtin", {"ydb.generic.use"}))).GetValueSync();
+        UNIT_ASSERT_C(granted.IsSuccess(), granted.GetIssues().ToString());
+        WaitForProxy(kikimr, "operator@builtin");
+        auto client = kikimr.GetQueryClient(TClientSettings().AuthToken("operator@builtin"));
+
+        auto denied = client.ExecuteQuery(KillSessionQuery(victim.GetId()), TTxControl::NoTx(),
+            NoRetryExecuteQuerySettings()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(denied.GetStatus(), EStatus::UNAUTHORIZED, denied.GetIssues().ToString());
+        AssertSessionAlive(victim);
+    }
+
+    Y_UNIT_TEST(ReadWritePermissionsDoNotAllowKillingForeignSession) {
         auto settings = KillSessionSettings();
         settings.FeatureFlags.SetEnableDatabaseAdmin(true);
         TKikimrRunner kikimr(settings);
@@ -340,7 +472,7 @@ Y_UNIT_TEST_SUITE(KqpKillSession) {
         auto victim = CreateSession(admin);
         auto permissions = NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(
             NYdb::NScheme::TPermissions("regular@builtin", {
-                "ydb.generic.read", "ydb.generic.write", "ydb.generic.use"}));
+                "ydb.generic.read", "ydb.generic.write", "ydb.database.connect"}));
         auto granted = kikimr.GetSchemeClient().ModifyPermissions("/Root", permissions).GetValueSync();
         UNIT_ASSERT_C(granted.IsSuccess(), granted.GetIssues().ToString());
         Tests::TClient::RefreshPathCache(kikimr.GetTestServer().GetRuntime(), "/Root");

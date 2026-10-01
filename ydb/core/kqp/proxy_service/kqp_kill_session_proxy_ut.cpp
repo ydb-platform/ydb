@@ -40,13 +40,13 @@ public:
     }
 
     void Kill(const TString& sessionId, ui64 cookie, TDuration timeout = TDuration::Seconds(30),
-        const TString& sid = "owner@builtin", bool admin = false, const TString& database = "/Root")
+        const TString& sid = "owner@builtin", bool canKillAnySession = false, const TString& database = "/Root")
     {
         auto request = MakeHolder<TEvKqp::TEvKillSessionRequest>();
         auto& record = request->Record;
         record.SetSessionId(sessionId);
         record.SetDatabase(database);
-        record.SetIsDatabaseAdmin(admin);
+        record.SetCanKillAnySession(canKillAnySession);
         record.SetDeadlineUs((Runtime->GetCurrentTime() + timeout).MicroSeconds());
         NACLibProto::TUserToken token;
         token.SetUserSID(sid);
@@ -177,7 +177,7 @@ Y_UNIT_TEST_SUITE(KqpKillSessionProxy) {
         malformed->Record.SetSessionId(sessionId);
         malformed->Record.SetDatabase("/Root");
         malformed->Record.SetUserToken("not a serialized user token");
-        malformed->Record.SetIsDatabaseAdmin(true);
+        malformed->Record.SetCanKillAnySession(true);
         fixture.Runtime->Send(new IEventHandle(fixture.Proxy(), fixture.Sender, malformed.Release(), 0, 3));
         fixture.ExpectKill(3, Ydb::StatusIds::UNAUTHORIZED);
 
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpKillSessionProxy) {
         fixture.ExpectKill(8, Ydb::StatusIds::SUCCESS);
     }
 
-    Y_UNIT_TEST(RemoteOwnerWaitsForRemoval) {
+    Y_UNIT_TEST_TWIN(RemoteOwnerWaitsForRemoval, canKillAnySession) {
         TKillSessionFixture fixture(2);
         const auto sessionId = fixture.CreateSession("owner@builtin", 1);
         TVector<TAutoPtr<IEventHandle>> closes;
@@ -215,7 +215,8 @@ Y_UNIT_TEST_SUITE(KqpKillSessionProxy) {
                 }
             });
 
-        fixture.Kill(sessionId, 42);
+        fixture.Kill(sessionId, 42, TDuration::Seconds(30),
+            canKillAnySession ? "operator@builtin" : "owner@builtin", canKillAnySession);
         fixture.Runtime->WaitFor("remote administrative close", [&] { return !closes.empty(); }, TDuration::Seconds(5));
         fixture.Barrier(1);
         UNIT_ASSERT_VALUES_EQUAL(callerResponses, 0);

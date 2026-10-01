@@ -883,6 +883,8 @@ public:
         if (!isAdmin && (!UserToken || !security.CheckAccess(NACLib::ConnectDatabase, *UserToken))) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Access denied for KILL SESSION");
         }
+        const bool canKillAnySession = isAdmin
+            || (UserToken && security.CheckAccess(NACLib::GenericUse, *UserToken));
 
         auto request = std::make_unique<TEvKqp::TEvKillSessionRequest>();
         auto& record = request->Record;
@@ -891,7 +893,7 @@ public:
         if (UserToken) {
             record.SetUserToken(UserToken->SerializeAsString());
         }
-        record.SetIsDatabaseAdmin(isAdmin);
+        record.SetCanKillAnySession(canKillAnySession);
         record.SetSourceSessionId(RequestContext->SessionId);
         record.SetDeadlineUs(Deadline.MicroSeconds());
         record.SetTraceId(RequestContext->TraceId);

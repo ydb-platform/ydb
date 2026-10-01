@@ -378,13 +378,13 @@ message TEvCloseSessionResponse {
     optional TCloseSessionResponse Response = 3;
 }
 
-// Internal KILL SESSION request. The administrator decision is made by the
+// Internal KILL SESSION request. The authorization decision is made by the
 // scheme executer for Database before forwarding to the owning KQP proxy.
 message TEvKillSessionRequest {
     optional bytes SessionId = 1;
     optional string Database = 2;
     optional string UserToken = 3;
-    optional bool IsDatabaseAdmin = 4 [default = false];
+    optional bool CanKillAnySession = 4 [default = false];
     optional bytes SourceSessionId = 5;
     optional uint64 DeadlineUs = 6;
     optional string TraceId = 7;

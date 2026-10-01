@@ -1052,7 +1052,7 @@ public:
 
         // Empty identities never confer ownership, including sessions created
         // before the creator identity was recorded.
-        if (!request.GetIsDatabaseAdmin() && initiatorSid.empty()) {
+        if (!request.GetCanKillAnySession() && initiatorSid.empty()) {
             reply(Ydb::StatusIds::UNAUTHORIZED, "Session not found or access denied");
             return;
         }
@@ -1084,7 +1084,7 @@ public:
 
         const auto* sessionInfo = LocalSessions->FindPtr(sessionId);
         if (!sessionInfo) {
-            if (request.GetIsDatabaseAdmin()) {
+            if (request.GetCanKillAnySession()) {
                 reply(Ydb::StatusIds::PRECONDITION_FAILED, "Session not found");
             } else {
                 reply(Ydb::StatusIds::UNAUTHORIZED, "Session not found or access denied");
@@ -1092,7 +1092,7 @@ public:
             return;
         }
         if (CanonizePath(sessionInfo->Database) != CanonizePath(request.GetDatabase())
-            || (!request.GetIsDatabaseAdmin() && (sessionInfo->ClientSID.empty() || sessionInfo->ClientSID != initiatorSid)))
+            || (!request.GetCanKillAnySession() && (sessionInfo->ClientSID.empty() || sessionInfo->ClientSID != initiatorSid)))
         {
             reply(Ydb::StatusIds::UNAUTHORIZED, "Session not found or access denied");
             return;

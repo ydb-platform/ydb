@@ -34,6 +34,7 @@ class StreamingTestBase:
         extra_feature_flags = [
             "enable_external_data_sources",
             "enable_streaming_queries",
+            "enable_streaming_queries_counters",
             "enable_shared_reading_in_streaming_queries",
         ]
 

@@ -159,10 +159,11 @@ An exception stored by a nested child is rethrown in the parent at co_await.
 `async<T>` is deliberately not a general future or detachable task. Do not use
 UnsafeMove in ordinary application code; it exists for library combinators.
 
-### Worker-local frame cache
+### Worker-Local Frame Cache
 
-Coroutine frames allocated on actor-system executor workers automatically use
-a thread-local `TAsyncFrameCache`, shared by all actors running on that worker.
+To reduce repeated heap-allocation overhead, coroutine frames allocated on
+actor-system executor workers automatically use a worker-local
+`TAsyncFrameCache`, shared by all actors running on that worker.
 This applies to top-level actor coroutines and every `async<T>` allocation,
 including free functions, const members, and coroutine lambdas. Allocation
 outside an executor worker uses the heap. Requests up to 64 KiB are rounded to

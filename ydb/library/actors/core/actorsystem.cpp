@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "subsystems/allocation_cache.h"
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
@@ -181,6 +182,9 @@ namespace NActors {
         SubSystems = std::move(SystemSetup->SubSystems);
         if (!GetSubSystem<TAllocationCacheSubSystem>()) {
             RegisterSubSystem(std::unique_ptr<TAllocationCacheSubSystem>(new TAllocationCacheSubSystem));
+        }
+        if (!GetSubSystem<TAsyncFrameCache>()) {
+            RegisterSubSystem(std::make_unique<TAsyncFrameCache>());
         }
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));

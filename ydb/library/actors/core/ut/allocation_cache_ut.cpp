@@ -104,6 +104,24 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
+    Y_UNIT_TEST(DefaultAsyncFamilyPreservesExplicitBudget) {
+        for (bool configured : {false, true}) {
+            auto setup = MakeSetup();
+            setup->SubSystems.clear();
+            if (configured) {
+                setup->RegisterSubSystem(std::make_unique<TAsyncFrameCache>(8192));
+            }
+            TActorSystem system(setup);
+            UNIT_ASSERT(system.GetSubSystem<TAsyncFrameCache>());
+            system.Start();
+            auto worker = system.GetSubSystem<TAllocationCacheSubSystem>()->CreateWorker();
+            UNIT_ASSERT_VALUES_EQUAL(worker->Get<TAsyncFrameCacheTag>()->GetSizeBytes(),
+                configured ? 8192 : TAsyncFrameCache::DefaultSizeBytes);
+            system.Stop();
+            system.Cleanup();
+        }
+    }
+
     Y_UNIT_TEST(FamilySnapshotsIncludeAllWorkersAndEmptyFamilies) {
         auto setup = MakeSetup();
         TActorSystem system(setup);

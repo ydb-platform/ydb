@@ -301,6 +301,7 @@ ydb/core/kqp/ut/tli KqpTli.TwoVictimsOneBreaker
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTable
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable
 ydb/core/kqp/ut/tli unittest.[*/*] chunk
+ydb/core/kqp/ut/tracing TKqpQueryTrace.TransactionTracePropagation-TableService
 ydb/core/kqp/ut/tx KqpReadYourWrites.InsertThenUpdateThenDeleteAfterCommit_Serializable+IsOlap
 ydb/core/kqp/ut/tx KqpReadYourWrites.InsertThenUpdateThenDeleteAfterCommit_Snapshot+IsOlap
 ydb/core/kqp/ut/tx KqpSinkMvcc.OlapMultiSinks

@@ -3069,6 +3069,49 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit) {
     CmdRead({"key-1"}, NKikimrClient::TKeyValueRequest::REALTIME, {"value"}, {false}, {creationUnixTime}, tc);
 }
 
+Y_UNIT_TEST(TestRequestInFlightLimitRejectsReadWriteAndDelete) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &){}, activeZone);
+
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper requestsInFlightLimit(10'000, 1, 1'000'000);
+    TControlBoard::RegisterSharedControl(requestsInFlightLimit,
+        icb->KeyValueVolumeControls.RequestsInFlightLimit);
+    requestsInFlightLimit = 1;
+
+    ExecuteWrite(tc, {{"key", "value"}}, 0, 2,
+        NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+    TGetBlocker gets(*tc.Runtime);
+    gets.BlockChannel(NKeyValue::BLOB_CHANNEL);
+
+    SendRequestEvent(MakeReadRequest(1, {"key"}), tc);
+    tc.Runtime->WaitFor("blocked read fills the request in-flight limit", [&] {
+        return gets.BlockedCount(NKeyValue::BLOB_CHANNEL) == 1;
+    }, TDuration::Seconds(1));
+
+    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_BLOCKED>(tc,
+        "key", "", 0, 0, 0);
+    ExecuteWrite<NKikimrKeyValue::Statuses::RSTATUS_BLOCKED>(tc,
+        {{"another-key", "another-value"}}, 0, 2,
+        NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+    TDesiredPair<TEvKeyValue::TEvExecuteTransaction> deleteRequest;
+    deleteRequest.Request.set_tablet_id(tc.TabletId);
+    deleteRequest.Request.set_lock_generation(0);
+    auto *range = deleteRequest.Request.add_commands()->mutable_delete_range()->mutable_range();
+    range->set_from_key_inclusive("key");
+    range->set_to_key_inclusive("key");
+    ExecuteEvent(deleteRequest, tc);
+    UNIT_ASSERT_C(deleteRequest.Response.status() == NKikimrKeyValue::Statuses::RSTATUS_BLOCKED,
+        deleteRequest.Response.msg());
+
+    gets.UnblockOne();
+    CheckReadResponse(ReceiveKeyValueResponse(tc), 1, {"value"});
+}
+
 Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsError) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

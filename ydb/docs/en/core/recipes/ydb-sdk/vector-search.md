@@ -717,6 +717,8 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
 
   - Recommended approach
 
+    Use `ydb.convert_floats_to_embedding_bytes` from Python SDK 3.33.1 or later to serialize vectors.
+
     The method accepts an array of dictionaries `items`, where each dictionary contains the fields `id` — identifier, `document` — text, `embedding` — vector representation of the text, pre-serialized into a byte sequence.
 
     To use the structure in the example below, a `items_struct_type = ydb.StructType()` is created where the types of all fields are specified. To pass a list of such structures, it must be wrapped in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
@@ -726,13 +728,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     - Native SDK
 
       ```python
-      import struct
       import ydb
-
-
-      def convert_vector_to_bytes(vector: list[float]) -> bytes:
-          b = struct.pack("f" * len(vector), *vector)
-          return b + b"\x01"
 
       def insert_items_vector_as_bytes(
           pool: ydb.QuerySessionPool,
@@ -765,7 +761,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
           items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
           for item in items:
-              item["embedding"] = convert_vector_to_bytes(item["embedding"])
+              item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
           pool.execute_with_retries(
               query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -777,12 +773,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
     - Native SDK (Asyncio)
 
       ```python
-      import struct
       import ydb
-
-      def convert_vector_to_bytes(vector: list[float]) -> bytes:
-          b = struct.pack("f" * len(vector), *vector)
-          return b + b"\x01"
 
       async def insert_items_vector_as_bytes(
           pool: ydb.aio.QuerySessionPool,
@@ -815,7 +806,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
           items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
 
           for item in items:
-              item["embedding"] = convert_vector_to_bytes(item["embedding"])
+              item["embedding"] = ydb.convert_floats_to_embedding_bytes(item["embedding"])
 
           await pool.execute_with_retries(
               query, {"$items": (items, ydb.ListType(items_struct_type))}
@@ -1720,7 +1711,7 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
               query,
               {
                   "$embedding": (
-                      convert_vector_to_bytes(embedding),
+                      ydb.convert_floats_to_embedding_bytes(embedding),
                       ydb.PrimitiveType.String,
                   ),
               },
@@ -1774,7 +1765,7 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
               query,
               {
                   "$embedding": (
-                      convert_vector_to_bytes(embedding),
+                      ydb.convert_floats_to_embedding_bytes(embedding),
                       ydb.PrimitiveType.String,
                   ),
               },

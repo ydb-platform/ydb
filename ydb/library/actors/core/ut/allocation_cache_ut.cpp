@@ -28,8 +28,8 @@ struct TOtherTag : TSmallTag {
 };
 struct TAbsentTag : TSmallTag {};
 
-using TSmallFrontend = TAllocationCacheFrontend<TSmallTag>;
-using TOtherFrontend = TAllocationCacheFrontend<TOtherTag>;
+using TSmallFamily = TAllocationCacheFamily<TSmallTag>;
+using TOtherFamily = TAllocationCacheFamily<TOtherTag>;
 
 THolder<TActorSystemSetup> MakeSetup(size_t smallBudget = 128, size_t otherBudget = 512) {
     auto setup = MakeHolder<TActorSystemSetup>();
@@ -38,9 +38,9 @@ THolder<TActorSystemSetup> MakeSetup(size_t smallBudget = 128, size_t otherBudge
     setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
     setup->Executors[0] = new TBasicExecutorPool(0, 1, 10, "cache-test");
     setup->Scheduler = new TBasicSchedulerThread;
-    // Deliberately register frontends first. Resolution supplies their core.
-    setup->RegisterSubSystem(std::make_unique<TSmallFrontend>(smallBudget));
-    setup->RegisterSubSystem(std::make_unique<TOtherFrontend>(otherBudget));
+    // Deliberately register families first. Resolution supplies their core.
+    setup->RegisterSubSystem(std::make_unique<TSmallFamily>(smallBudget));
+    setup->RegisterSubSystem(std::make_unique<TOtherFamily>(otherBudget));
     return setup;
 }
 
@@ -74,8 +74,8 @@ public:
 
     void Bootstrap() {
         Result->HasCache = TAllocationCache<TSmallTag>::GetCurrent() != nullptr;
-        auto* block = TSmallFrontend::Allocate(1);
-        TSmallFrontend::Free(block, 1);
+        auto* block = TSmallFamily::Allocate(1);
+        TSmallFamily::Free(block, 1);
         Result->Ready.Signal();
         PassAway();
     }
@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         UNIT_ASSERT(second.Ready.WaitT(TDuration::Seconds(10)));
         UNIT_ASSERT(first.HasCache && second.HasCache);
         // Both pools have worker id 0, but own separate physical caches.
-        UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TSmallFrontend::FamilyId()).CachedBytes, 128);
+        UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 128);
     }
 
     Y_UNIT_TEST(SharedPhysicalWorkerIsCountedOnce) {
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         UNIT_ASSERT(first.Ready.WaitT(TDuration::Seconds(10)));
         UNIT_ASSERT(second.Ready.WaitT(TDuration::Seconds(10)));
         UNIT_ASSERT(first.HasCache && second.HasCache);
-        UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TSmallFrontend::FamilyId()).CachedBytes, 64);
+        UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 64);
     }
 
     Y_UNIT_TEST(AutomaticRegistrationAndIsolatedBudgets) {
@@ -184,18 +184,18 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         UNIT_ASSERT(!worker->Get<TAbsentTag>());
         UNIT_ASSERT_VALUES_EQUAL(worker->Get<TSmallTag>()->GetSizeBytes(), 128);
         UNIT_ASSERT_VALUES_EQUAL(worker->Get<TOtherTag>()->GetSizeBytes(), 512);
-        void* small = TSmallFrontend::Allocate(65);
-        void* overflow = TSmallFrontend::Allocate(1);
-        void* other = TOtherFrontend::Allocate(257);
+        void* small = TSmallFamily::Allocate(65);
+        void* overflow = TSmallFamily::Allocate(1);
+        void* other = TOtherFamily::Allocate(257);
         UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(small) % __STDCPP_DEFAULT_NEW_ALIGNMENT__, 0);
-        TSmallFrontend::Free(small, 65);
-        TSmallFrontend::Free(overflow, 1);
-        TOtherFrontend::Free(other, 257);
-        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFrontend::FamilyId()).CachedBytes, 128);
-        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TOtherFrontend::FamilyId()).CachedBytes, 512);
-        UNIT_ASSERT_VALUES_EQUAL(TSmallFrontend::Allocate(65), small);
-        TSmallFrontend::Free(small, 65);
-        UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TAsyncFrameCacheFrontend::FamilyId()).CachedBytes, 0);
+        TSmallFamily::Free(small, 65);
+        TSmallFamily::Free(overflow, 1);
+        TOtherFamily::Free(other, 257);
+        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 128);
+        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TOtherFamily::FamilyId()).CachedBytes, 512);
+        UNIT_ASSERT_VALUES_EQUAL(TSmallFamily::Allocate(65), small);
+        TSmallFamily::Free(small, 65);
+        UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TAsyncFrameCache::FamilyId()).CachedBytes, 0);
     }
 
     Y_UNIT_TEST(ScopedCoroutineBindingPreservesOtherFamilies) {
@@ -207,42 +207,42 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         auto worker = core->CreateWorker();
         TWorkerBinding binding(worker.get());
         auto* small = TAllocationCache<TSmallTag>::GetCurrent();
-        auto* coroutine = TAsyncFrameCache::GetCurrent();
-        TAsyncFrameCache scoped(1024);
+        auto* coroutine = TAllocationCache<TAsyncFrameCacheTag>::GetCurrent();
+        TAllocationCache<TAsyncFrameCacheTag> scoped(1024);
         {
             TScopedAllocationCache<TAsyncFrameCacheTag> guard(&scoped);
-            UNIT_ASSERT_VALUES_EQUAL(TAsyncFrameCache::GetCurrent(), &scoped);
+            UNIT_ASSERT_VALUES_EQUAL(TAllocationCache<TAsyncFrameCacheTag>::GetCurrent(), &scoped);
             UNIT_ASSERT_VALUES_EQUAL(TAllocationCache<TSmallTag>::GetCurrent(), small);
         }
-        UNIT_ASSERT_VALUES_EQUAL(TAsyncFrameCache::GetCurrent(), coroutine);
-        auto* block = TSmallFrontend::Allocate(65);
-        TSmallFrontend::Free(block, 65);
+        UNIT_ASSERT_VALUES_EQUAL(TAllocationCache<TAsyncFrameCacheTag>::GetCurrent(), coroutine);
+        auto* block = TSmallFamily::Allocate(65);
+        TSmallFamily::Free(block, 65);
         TAllocationCacheWorker::SetCurrent(nullptr);
         worker.reset();
-        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFrontend::FamilyId()).CachedBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 0);
     }
 
     Y_UNIT_TEST(AbsentAndDisabledUseCompatibleFallback) {
         TSubSystems subsystems;
-        RegisterSubSystem(subsystems, std::make_unique<TSmallFrontend>(1024));
+        RegisterSubSystem(subsystems, std::make_unique<TSmallFamily>(1024));
         const auto order = ResolveSubSystemDependencies(subsystems);
         UNIT_ASSERT(order);
-        UNIT_ASSERT(!GetSubSystem<TSmallFrontend>(subsystems));
+        UNIT_ASSERT(!GetSubSystem<TSmallFamily>(subsystems));
         UNIT_ASSERT(!TAllocationCache<TSmallTag>::GetCurrent());
-        void* outside = TSmallFrontend::Allocate(65);
+        void* outside = TSmallFamily::Allocate(65);
         auto setup = MakeSetup(0);
         TActorSystem system(setup);
         system.Start();
         Y_DEFER { system.Stop(); system.Cleanup(); };
         auto worker = system.GetSubSystem<TAllocationCacheSubSystem>()->CreateWorker();
         TWorkerBinding binding(worker.get());
-        TSmallFrontend::Free(outside, 65);
-        void* disabled = TSmallFrontend::Allocate(65);
-        TSmallFrontend::Free(disabled, 65);
+        TSmallFamily::Free(outside, 65);
+        void* disabled = TSmallFamily::Allocate(65);
+        TSmallFamily::Free(disabled, 65);
         UNIT_ASSERT_VALUES_EQUAL(worker->Get<TSmallTag>()->GetCachedStats().CachedBytes, 0);
         // An unregistered tag in a context with other families still falls back.
-        auto* absent = TAllocationCacheFrontend<TAbsentTag>::Allocate(70);
-        TAllocationCacheFrontend<TAbsentTag>::Free(absent, 70);
+        auto* absent = TAllocationCacheFamily<TAbsentTag>::Allocate(70);
+        TAllocationCacheFamily<TAbsentTag>::Free(absent, 70);
     }
 
     Y_UNIT_TEST(CrossThreadAndCrossSystemTransfer) {
@@ -257,19 +257,19 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         void* block;
         {
             TWorkerBinding binding(origin.get());
-            block = TSmallFrontend::Allocate(65);
+            block = TSmallFamily::Allocate(65);
         }
         origin.reset();
         first.Stop();
         first.Cleanup();
         std::thread freeing([&] {
             TWorkerBinding binding(destination.get());
-            TSmallFrontend::Free(block, 65);
-            UNIT_ASSERT_VALUES_EQUAL(TSmallFrontend::Allocate(65), block);
-            TSmallFrontend::Free(block, 65);
+            TSmallFamily::Free(block, 65);
+            UNIT_ASSERT_VALUES_EQUAL(TSmallFamily::Allocate(65), block);
+            TSmallFamily::Free(block, 65);
         });
         freeing.join();
-        UNIT_ASSERT_VALUES_EQUAL(second.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TSmallFrontend::FamilyId()).CachedBytes, 128);
+        UNIT_ASSERT_VALUES_EQUAL(second.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 128);
     }
 
     Y_UNIT_TEST(LateFreeAfterWorkerAndSubsystemDestruction) {
@@ -282,18 +282,18 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
             worker = system.GetSubSystem<TAllocationCacheSubSystem>()->CreateWorker();
             {
                 TWorkerBinding binding(worker.get());
-                block = TSmallFrontend::Allocate(65);
-                auto* idle = TOtherFrontend::Allocate(1);
-                TOtherFrontend::Free(idle, 1);
+                block = TSmallFamily::Allocate(65);
+                auto* idle = TOtherFamily::Allocate(1);
+                TOtherFamily::Free(idle, 1);
             }
             TAllocationCacheProcessStats stats;
-            worker->GetCachedStats(TOtherFrontend::FamilyId(), &stats);
+            worker->GetCachedStats(TOtherFamily::FamilyId(), &stats);
             UNIT_ASSERT_VALUES_EQUAL(stats.CachedBytes, 64);
             worker.reset();
             system.Stop();
             system.Cleanup();
         }
-        TSmallFrontend::Free(block, 65);
+        TSmallFamily::Free(block, 65);
     }
 
     Y_UNIT_TEST(StatisticsDuringWorkerMutationAndDestruction) {
@@ -308,18 +308,18 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
                 auto worker = core->CreateWorker();
                 TWorkerBinding binding(worker.get());
                 for (size_t j = 0; j < 100; ++j) {
-                    auto* block = TSmallFrontend::Allocate(65);
-                    TSmallFrontend::Free(block, 65);
+                    auto* block = TSmallFamily::Allocate(65);
+                    TSmallFamily::Free(block, 65);
                 }
             }
             finished.store(true);
         });
         while (!finished.load()) {
-            const auto stats = core->GetCachedStats(TSmallFrontend::FamilyId());
+            const auto stats = core->GetCachedStats(TSmallFamily::FamilyId());
             UNIT_ASSERT_VALUES_EQUAL(stats.CachedBytes, stats.CachedFrames * 128);
             UNIT_ASSERT(stats.CachedBytes <= 128);
         }
         owner.join();
-        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFrontend::FamilyId()).CachedBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 0);
     }
 }

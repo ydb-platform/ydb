@@ -1,5 +1,7 @@
 #include "allocation_cache.h"
 
+#include <ydb/library/actors/core/thread_context.h>
+
 #include <limits>
 
 namespace NActors {

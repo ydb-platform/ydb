@@ -2,7 +2,6 @@
 
 #include <ydb/library/actors/core/allocation_cache.h>
 #include <ydb/library/actors/core/subsystem.h>
-#include <ydb/library/actors/core/thread_context.h>
 
 #include <util/generic/string.h>
 
@@ -11,7 +10,7 @@
 
 namespace NActors {
 
-// Frontends register each tag's size classes, budget and cache factory during
+// Families register each tag's size classes, budget and cache factory during
 // dependency resolution. OnBeforeStart freezes this configuration. Executor
 // thread hooks create one cache per family and publish their pointers in the
 // thread context;
@@ -46,7 +45,7 @@ struct TAllocationCacheWorkerCounters {
     std::vector<TAllocationCacheCounters> Families;
 };
 
-template<class TTag> class TAllocationCacheFrontend;
+template<class TTag> class TAllocationCacheFamily;
 
 // One instance per physical executor, independent of pool and worker ids.
 // Owned by the cache subsystem for the executor thread lifetime.
@@ -67,7 +66,7 @@ public:
 
     template<class TTag>
     void Bind(TAllocationCache<TTag>* cache) {
-        const size_t family = TAllocationCacheFrontend<TTag>::FamilyId();
+        const size_t family = TAllocationCacheFamily<TTag>::FamilyId();
         if (CachePointers.size() <= family) {
             CachePointers.resize(family + 1);
         }
@@ -119,7 +118,7 @@ private:
     std::vector<std::unique_ptr<TAllocationCacheWorker>> ExecutorWorkers;
 };
 
-// Register this frontend as a subsystem. Its dependency callback registers the
+// Register this family as a subsystem. Its dependency callback registers the
 // family automatically; callers never need a second family-registration step.
 // The tag is the allocation ABI: size classes and default-new alignment are
 // stable for its entire lifetime, including frees in another actor system.
@@ -130,9 +129,9 @@ private:
 // Family budgets bound retained block capacity, excluding cache bookkeeping.
 // They are isolated; the worker's retained-capacity bound is their checked sum.
 template<class TTag>
-class TAllocationCacheFrontend : public ISubSystem {
+class TAllocationCacheFamily : public ISubSystem {
 public:
-    explicit TAllocationCacheFrontend(size_t budget)
+    explicit TAllocationCacheFamily(size_t budget)
         : Budget(budget)
     {
         (void)FamilyId();
@@ -173,22 +172,11 @@ private:
 
 template<class TTag>
 TAllocationCache<TTag>* TAllocationCacheWorker::Get() const noexcept {
-    const size_t family = TAllocationCacheFrontend<TTag>::FamilyId();
+    const size_t family = TAllocationCacheFamily<TTag>::FamilyId();
     return family < CachePointers.size()
         ? static_cast<TAllocationCache<TTag>*>(CachePointers[family])
         : nullptr;
 }
 
-template<class TTag>
-TAllocationCache<TTag>* TAllocationCache<TTag>::GetCurrent() noexcept {
-    auto* context = TlsThreadContext;
-    if (!context) {
-        return nullptr;
-    }
-    const size_t family = TAllocationCacheFrontend<TTag>::FamilyId();
-    return family < context->AllocationCachePointers.size()
-        ? static_cast<TAllocationCache<TTag>*>(context->AllocationCachePointers[family])
-        : nullptr;
-}
 
 } // namespace NActors

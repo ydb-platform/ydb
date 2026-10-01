@@ -2,7 +2,7 @@
 #include "abi.h"
 #include "result.h"
 #include "callback_coroutine.h"
-#include <ydb/library/actors/core/subsystems/allocation_cache.h>
+#include <ydb/library/actors/core/subsystems/allocation_cache_tls.h>
 #include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include <ydb/library/actors/core/actor.h>
 #include <coroutine>
@@ -1227,11 +1227,11 @@ namespace NActors {
         class TAsyncFrameAllocator {
         public:
             Y_FORCE_INLINE static void* operator new(size_t size) {
-                return TAsyncFrameCacheFrontend::Allocate(size);
+                return TAsyncFrameCache::Allocate(size);
             }
 
             Y_FORCE_INLINE static void operator delete(void* frame, size_t size) noexcept {
-                TAsyncFrameCacheFrontend::Free(frame, size);
+                TAsyncFrameCache::Free(frame, size);
             }
         };
 

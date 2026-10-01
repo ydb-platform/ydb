@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/core/subsystems/allocation_cache.h>
+#include <ydb/library/actors/core/subsystems/allocation_cache_tls.h>
 #include <ydb/library/actors/core/thread_context.h>
 
 namespace NActors {

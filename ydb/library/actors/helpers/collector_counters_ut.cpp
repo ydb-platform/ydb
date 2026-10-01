@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(TActorSystemCountersTest) {
         UNIT_ASSERT_VALUES_EQUAL(bytes->Val(), 0);
 
         // The collector sums the caches of the actor system's worker threads.
-        TAsyncFrameCache first(DefaultAsyncFrameCacheSizeBytes);
-        TAsyncFrameCache second(DefaultAsyncFrameCacheSizeBytes);
+        TAllocationCache<TAsyncFrameCacheTag> first(TAsyncFrameCache::DefaultSizeBytes);
+        TAllocationCache<TAsyncFrameCacheTag> second(TAsyncFrameCache::DefaultSizeBytes);
         first.Release(first.Allocate(1), 1);
         second.Release(second.Allocate(1025), 1025);
         TAllocationCacheProcessStats stats;

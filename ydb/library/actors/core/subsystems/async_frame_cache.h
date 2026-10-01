@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/actors/core/allocation_cache.h>
+#include <ydb/library/actors/core/subsystems/allocation_cache.h>
 
 namespace NActors {
 
@@ -11,10 +11,13 @@ struct TAsyncFrameCacheTag {
     static constexpr size_t MaxAllocationSize = 64_KB;
 };
 
-inline constexpr size_t DefaultAsyncFrameCacheSizeBytes = 4_MB;
+class TAsyncFrameCache : public TAllocationCacheFamily<TAsyncFrameCacheTag> {
+public:
+    static constexpr size_t DefaultSizeBytes = 4_MB;
 
-template<class TTag> class TAllocationCacheFrontend;
-using TAsyncFrameCacheFrontend = TAllocationCacheFrontend<TAsyncFrameCacheTag>;
-using TAsyncFrameCache = TAllocationCache<TAsyncFrameCacheTag>;
+    explicit TAsyncFrameCache(size_t budget = DefaultSizeBytes)
+        : TAllocationCacheFamily<TAsyncFrameCacheTag>(budget)
+    {}
+};
 
 } // namespace NActors

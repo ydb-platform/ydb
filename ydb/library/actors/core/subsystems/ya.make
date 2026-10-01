@@ -16,6 +16,7 @@ ENDIF()
 SRCS(
     allocation_cache.cpp
     allocation_cache.h
+    allocation_cache_tls.h
     async_frame_cache.h
     inmemory_metrics.cpp
     metric_system.cpp

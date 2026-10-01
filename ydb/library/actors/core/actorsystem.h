@@ -109,7 +109,7 @@ namespace NActors {
         ui32 NodeId = 0;
 
         // Idle coroutine allocation bytes per worker; zero disables retention.
-        size_t AsyncFrameCacheSizeBytes = DefaultAsyncFrameCacheSizeBytes;
+        size_t AsyncFrameCacheSizeBytes = TAsyncFrameCache::DefaultSizeBytes;
 
         // Either Executors or CpuManager must be initialized
         ui32 ExecutorsCount = 0;

@@ -182,8 +182,8 @@ namespace NActors {
         if (!GetSubSystem<TAllocationCacheSubSystem>()) {
             RegisterSubSystem(std::unique_ptr<TAllocationCacheSubSystem>(new TAllocationCacheSubSystem));
         }
-        if (!GetSubSystem<TAsyncFrameCacheFrontend>()) {
-            RegisterSubSystem(std::make_unique<TAsyncFrameCacheFrontend>(AsyncFrameCacheSizeBytes));
+        if (!GetSubSystem<TAsyncFrameCache>()) {
+            RegisterSubSystem(std::make_unique<TAsyncFrameCache>(AsyncFrameCacheSizeBytes));
         }
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));

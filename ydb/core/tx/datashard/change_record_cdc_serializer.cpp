@@ -413,7 +413,8 @@ protected:
             const auto type = index.GetType();
             const TString typeName = NKikimrSchemeOp::EIndexType_Name(type);
             TStringBuf typeSuffix(typeName);
-            Y_ENSURE(typeSuffix.SkipPrefix("EIndexType"), "Unknown index type: " << type);
+            Y_ENSURE(type != NKikimrSchemeOp::EIndexTypeInvalid && typeSuffix.SkipPrefix("EIndexType"),
+                "Unknown index type: " << type);
             value["type"] = type == NKikimrSchemeOp::EIndexTypeGlobal
                 ? "GlobalSync" : TString(typeSuffix);
             auto& indexColumns = value["indexColumns"];

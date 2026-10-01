@@ -8,6 +8,7 @@ SRCS(
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/yql/providers/native
+    ydb/library/yql/providers/ydb_remote/common
     ydb/library/yql/providers/ydb_remote/proto
     ydb/library/yql/providers/common/token_accessor/client
     ydb/public/sdk/cpp/src/client/arrow

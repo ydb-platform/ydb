@@ -41,12 +41,14 @@ TSource Source() {
     return source;
 }
 
-Ydb::Query::ExecuteQueryResponsePart Batch() {
+Ydb::Query::ExecuteQueryResponsePart Batch(ui64 rows = 1) {
     arrow::UInt64Builder builder;
-    UNIT_ASSERT(builder.Append(42).ok());
+    for (ui64 row = 0; row < rows; ++row) {
+        UNIT_ASSERT(builder.Append(42 + row).ok());
+    }
     auto array = builder.Finish().ValueOrDie();
     auto schema = arrow::schema({arrow::field("value", arrow::uint64())});
-    auto batch = arrow::RecordBatch::Make(schema, 1, {array});
+    auto batch = arrow::RecordBatch::Make(schema, rows, {array});
     Ydb::Query::ExecuteQueryResponsePart part;
     part.set_status(Ydb::StatusIds::SUCCESS);
     auto* result = part.mutable_result_set();
@@ -105,7 +107,7 @@ public:
         TTag Accepted, Metadata, Written, Finished, Done;
     };
 
-    TQueryServer() {
+    explicit TQueryServer(ui64 maxInboundBytes = MaxInboundMessageBytes) {
         NTesting::InitPortManagerFromEnv();
         const auto endpoint = TStringBuilder() << "127.0.0.1:" << NTesting::GetFreePort();
         grpc::ServerBuilder builder;
@@ -115,8 +117,8 @@ public:
         Server_ = builder.BuildAndStart();
         UNIT_ASSERT(Server_);
         auto config = NYdb::TDriverConfig().SetEndpoint(endpoint).SetDatabase("/Remote")
-            .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetNetworkThreadsNum(1)
-            .SetMaxInboundMessageSize(MaxInboundMessageBytes);
+            .SetDiscoveryMode(NYdb::EDiscoveryMode::Off).SetNetworkThreadsNum(2)
+            .SetMaxInboundMessageSize(maxInboundBytes);
         Driver_ = std::make_unique<NYdb::TDriver>(config);
         TlsDriver_ = std::make_unique<NYdb::TDriver>(config);
         Client = CreateClient(false);
@@ -165,8 +167,8 @@ public:
         UNIT_ASSERT(call.Context.IsCancelled());
     }
 
-    void Finish(TCall& call) {
-        call.Writer.Finish(grpc::Status::OK, &call.Finished);
+    void Finish(TCall& call, grpc::Status status = grpc::Status::OK) {
+        call.Writer.Finish(status, &call.Finished);
         WaitFor(call.Finished);
         WaitFor(call.Done);
     }
@@ -267,7 +269,7 @@ public:
                     UNIT_ASSERT_VALUES_EQUAL(context.Deadline, Deadline);
                 }
                 return std::make_shared<TCountingStream>(CreateReadStream(Server.Client, Source(), context), Reads);
-            }, {.Timeout = TDuration::Seconds(60), .MaxBatchBytes = 1024 * 1024,
+            }, {.Timeout = TDuration::Seconds(60), .MaxBatchBytes = 1024 * 1024, .MaxRowBytes = MaxOutputRowBytes,
                 .MaxRetries = 2, .Columns = {"value"}},
             IDqAsyncIoFactory::TSourceArguments{
                 .InputDesc = input, .InputIndex = 0, .StatsLevel = {}, .TxId = {}, .TaskId = 1,
@@ -486,15 +488,162 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
     }
 
     Y_UNIT_TEST(RejectsOversizedWirePart) {
-        TQueryServer server;
+        constexpr ui64 testInboundLimit = 1024 * 1024;
+        TQueryServer server(testInboundLimit);
         auto& call = server.ExpectCall();
         auto stream = CreateReadStream(server.Client, Source(), Context());
         auto result = stream->Next();
         server.Open(call);
         auto part = Batch();
-        part.mutable_result_set()->set_data(std::string(MaxInboundMessageBytes + 1, 'x'));
+        part.mutable_result_set()->set_data(std::string(testInboundLimit + 1, 'x'));
         server.Write(call, part, false); // The receiver can reject its advertised size before Write completes.
         AssertError(result);
+        stream->Cancel();
+        server.Cancelled(call);
+        server.Finish(call);
+    }
+
+    Y_UNIT_TEST(BufferedPartDrainsBeforeNextRead) {
+        TQueryServer server;
+        auto& call = server.ExpectCall();
+        auto stream = CreateReadStream(server.Client, Source(), Context());
+        auto next = stream->Next();
+        server.Open(call);
+        UNIT_ASSERT_VALUES_EQUAL(call.Request.response_part_limit_bytes(), 1024 * 1024);
+        // A valid server part may exceed that soft packing target.
+        server.Write(call, Batch(200000));
+        UNIT_ASSERT(next.Wait(WaitTimeout));
+        UNIT_ASSERT(!next.GetValue().Error);
+        ui64 received = 0;
+        ui64 blocks = 0;
+        while (received < 200000) {
+            const auto result = next.GetValue();
+            UNIT_ASSERT_C(!result.Error, result.Error);
+            UNIT_ASSERT(result.Batch);
+            UNIT_ASSERT(!result.Finished);
+            UNIT_ASSERT(result.Bytes <= 1024 * 1024);
+            const auto& values = static_cast<const arrow::UInt64Array&>(*result.Batch->column(0));
+            for (int64_t row = 0; row < values.length(); ++row) {
+                UNIT_ASSERT_VALUES_EQUAL(values.Value(row), 42 + received + row);
+            }
+            for (const auto& buffer : values.data()->buffers) {
+                UNIT_ASSERT(!buffer || !buffer->parent());
+            }
+            received += values.length();
+            ++blocks;
+            next = stream->Next();
+            if (received < 200000) {
+                UNIT_ASSERT(next.HasValue()); // Buffered output requires no RPC.
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(received, 200000);
+        UNIT_ASSERT(blocks > 1);
+        UNIT_ASSERT(!next.HasValue()); // Only now is another SDK read pending.
+        server.Finish(call);
+        UNIT_ASSERT(next.Wait(WaitTimeout));
+        UNIT_ASSERT(next.GetValue().Finished);
+    }
+
+    Y_UNIT_TEST(CancellationDropsBufferedPartWithoutAnotherRead) {
+        TQueryServer server;
+        auto& call = server.ExpectCall();
+        auto stream = CreateReadStream(server.Client, Source(), Context());
+        std::weak_ptr<IReadStream> lifetime = stream;
+        auto first = stream->Next();
+        server.Open(call);
+        server.Write(call, Batch(200000));
+        UNIT_ASSERT(first.Wait(WaitTimeout));
+        UNIT_ASSERT(first.GetValue().Batch);
+        UNIT_ASSERT(first.GetValue().Batch->num_rows() < 200000);
+        stream->Cancel();
+        auto next = stream->Next();
+        UNIT_ASSERT(next.HasValue());
+        AssertError(next);
+        stream.reset();
+        AssertStreamReleased(lifetime); // Retained compact output must not own stream/IPC state.
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::UInt64Array&>(
+            *first.GetValue().Batch->column(0)).Value(0), 42);
+        server.Cancelled(call);
+        server.Finish(call);
+    }
+
+    Y_UNIT_TEST(ResourceExhaustedHasSafeNamedErrorAndIsNotRetried) {
+        TActorFixture fixture;
+        auto& first = fixture.Server.ExpectCall();
+        auto& unexpected = fixture.Server.ExpectCall();
+        auto error = fixture.Setup.AsyncInputPromises->FatalError.GetFuture();
+        fixture.Pull(1);
+        fixture.Server.Open(first);
+        fixture.Server.Finish(first, grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED,
+            "private query or authentication details"));
+        UNIT_ASSERT(error.Wait(WaitTimeout));
+        const auto issues = error.GetValue().ToString();
+        UNIT_ASSERT_STRING_CONTAINS(issues, "CLIENT_RESOURCE_EXHAUSTED");
+        UNIT_ASSERT(!issues.Contains("private query"));
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Attempts.load(), 1);
+        UNIT_ASSERT(!fixture.Server.AcceptedWithin(unexpected, TDuration::MilliSeconds(700)));
+    }
+
+    Y_UNIT_TEST(SchemaAndFormatErrorsHaveSafeCategories) {
+        TQueryServer server;
+        for (bool valueFormat : {false, true}) {
+            auto& call = server.ExpectCall();
+            auto source = Source();
+            source.MutableColumns(0)->MutableType()->set_type_id(Ydb::Type::STRING);
+            auto stream = CreateReadStream(server.Client, source, Context());
+            auto result = stream->Next();
+            server.Open(call);
+            auto part = Batch();
+            if (valueFormat) {
+                part.mutable_result_set()->set_format(Ydb::ResultSet::FORMAT_VALUE);
+                part.mutable_result_set()->clear_data();
+                part.mutable_result_set()->clear_arrow_format_meta();
+            }
+            server.Write(call, part);
+            AssertError(result);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetValue().Error,
+                valueFormat ? "required Arrow format" : "schema changed; recompile");
+            UNIT_ASSERT(!result.GetValue().Retryable);
+            stream->Cancel();
+            server.Cancelled(call);
+            server.Finish(call);
+        }
+    }
+
+    Y_UNIT_TEST(BadRequestHintsAtRemoteCapabilitiesWithoutForwardingIssues) {
+        TQueryServer server;
+        auto& call = server.ExpectCall();
+        auto stream = CreateReadStream(server.Client, Source(), Context());
+        auto result = stream->Next();
+        server.Open(call);
+        Ydb::Query::ExecuteQueryResponsePart failure;
+        failure.set_status(Ydb::StatusIds::BAD_REQUEST);
+        failure.add_issues()->set_message("private query or authentication details");
+        server.Write(call, failure);
+        AssertError(result);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetValue().Error, "BAD_REQUEST");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetValue().Error, "remote Query Service support for Arrow");
+        UNIT_ASSERT(!result.GetValue().Error.Contains("private query"));
+        UNIT_ASSERT(!result.GetValue().Retryable);
+        stream->Cancel();
+        server.Cancelled(call);
+        server.Finish(call);
+    }
+
+    Y_UNIT_TEST(AbortedRemainsRetryableWithoutIssueTextClassification) {
+        TQueryServer server;
+        auto& call = server.ExpectCall();
+        auto stream = CreateReadStream(server.Client, Source(), Context());
+        auto result = stream->Next();
+        server.Open(call);
+        Ydb::Query::ExecuteQueryResponsePart failure;
+        failure.set_status(Ydb::StatusIds::ABORTED);
+        failure.add_issues()->set_message("private query or authentication details");
+        server.Write(call, failure);
+        AssertError(result);
+        UNIT_ASSERT(result.GetValue().Retryable);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetValue().Error, "ABORTED");
+        UNIT_ASSERT(!result.GetValue().Error.Contains("private query"));
         stream->Cancel();
         server.Cancelled(call);
         server.Finish(call);
@@ -520,7 +669,8 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
     }
 
     Y_UNIT_TEST(OversizedCompressedResponseFailsAfterSdkProcessing) {
-        TQueryServer server;
+        constexpr ui64 testInboundLimit = 1024 * 1024;
+        TQueryServer server(testInboundLimit);
         auto& call = server.ExpectCall();
         auto context = Context();
         auto stream = CreateReadStream(server.Client, Source(), context);
@@ -529,7 +679,7 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
         server.Accept(call);
         call.Context.set_compression_algorithm(GRPC_COMPRESS_GZIP);
         auto part = Batch();
-        part.mutable_result_set()->set_data(std::string(2 * MaxInboundMessageBytes, 'x'));
+        part.mutable_result_set()->set_data(std::string(2 * testInboundLimit, 'x'));
         {
             const auto protobuf = part.SerializeAsString();
             TString gzip;
@@ -537,8 +687,8 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadTransport) {
             TZLibCompress compress(&output, ZLib::GZip);
             compress.Write(protobuf.data(), protobuf.size());
             compress.Finish();
-            UNIT_ASSERT(protobuf.size() > MaxInboundMessageBytes);
-            UNIT_ASSERT(gzip.size() < MaxInboundMessageBytes);
+            UNIT_ASSERT(protobuf.size() > testInboundLimit);
+            UNIT_ASSERT(gzip.size() < testInboundLimit);
         }
         server.Write(call, part, false);
         AssertError(result);

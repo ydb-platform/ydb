@@ -247,7 +247,7 @@ class TAlterStreamingQuery : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const auto& streamingQueryDescription = Transaction.GetCreateStreamingQuery();
         const TString& name = streamingQueryDescription.GetName();

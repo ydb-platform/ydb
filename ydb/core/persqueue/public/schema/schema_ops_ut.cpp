@@ -287,7 +287,8 @@ Y_UNIT_TEST(SharedConsumerReadFromYqlBans) {
                 ALTER CONSUMER stream_c SET (read_from = Interval('PT30S'));
         )");
         UNIT_ASSERT(!res.Success);
-        UNIT_ASSERT_STRING_CONTAINS(res.Issues, "reading only messages from the last N seconds is not supported");
+        UNIT_ASSERT(!res.Issues.Contains("last N seconds"));
+        UNIT_ASSERT_STRING_CONTAINS(res.Issues, "Failed to parse read_from");
         auto config = DescribeTabletConfig(runtime, path);
         UNIT_ASSERT_VALUES_EQUAL(NPQ::GetConsumer(config, "stream_c")->GetReadFromTimestampsMs(), 70000u);
     }

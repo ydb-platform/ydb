@@ -528,6 +528,7 @@ namespace {
         std::optional<TString> dlq;
         std::optional<TDuration> receiveMessageWaitTime;
         std::optional<TDuration> receiveMessageDelay;
+        bool readFromIsInterval = false;
 
 
         protoConsumer->set_name(consumer.Name().StringValue());
@@ -543,14 +544,15 @@ namespace {
                 protoConsumer->mutable_availability_period()->set_nanos(period.NanoSecondsOfSecond());
             } else if (name == "setReadFromTs"sv) {
                 if (setting.Value().Maybe<TCoInterval>()) {
-                    return TStringBuilder() << "reading only messages from the last N seconds is not supported for consumer "
-                        << consumer.Name().StringValue();
+                    // Type may be set by a later setting. Reject only shared consumers after the loop.
+                    readFromIsInterval = true;
+                } else {
+                    auto tsValue = GetTimestampValue(setting);
+                    if (!tsValue) {
+                        return GetConsumerTimestampParseError(consumer, "read_from");
+                    }
+                    protoConsumer->mutable_read_from()->set_seconds(tsValue.value());
                 }
-                auto tsValue = GetTimestampValue(setting);
-                if (!tsValue) {
-                    return GetConsumerTimestampParseError(consumer, "read_from");
-                }
-                protoConsumer->mutable_read_from()->set_seconds(tsValue.value());
             } else if (name == "setSupportedCodecs"sv) {
                 auto codecs = GetTopicCodecsFromString(
                         TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())
@@ -609,6 +611,14 @@ namespace {
                 value->set_seconds(receiveMessageDelay->Seconds());
                 value->set_nanos(receiveMessageDelay->NanoSecondsOfSecond());
             }
+        }
+
+        if (readFromIsInterval) {
+            if (type && type.value() == "shared"sv) {
+                return TStringBuilder() << "reading only messages from the last N seconds is not supported for shared consumer '"
+                    << consumer.Name().StringValue() << "'";
+            }
+            return GetConsumerTimestampParseError(consumer, "read_from");
         }
 
         if (!type || type.value() == "streaming"sv) {
@@ -677,14 +687,16 @@ namespace {
                 protoConsumer->mutable_reset_availability_period();
             } else if (name == "setReadFromTs") {
                 if (setting.Value().Maybe<TCoInterval>()) {
-                    return TStringBuilder() << "reading only messages from the last N seconds is not supported for consumer "
-                        << consumer.Name().StringValue();
+                    // Existing consumer type is not known here. Schema rejects this for shared
+                    // consumers and reports a timestamp parse error for streaming ones.
+                    (*protoConsumer->mutable_alter_attributes())["_ydb_read_from_rolling_window"] = "1";
+                } else {
+                    auto tsValue = GetTimestampValue(setting);
+                    if (!tsValue) {
+                        return GetConsumerTimestampParseError(consumer, "read_from");
+                    }
+                    protoConsumer->mutable_set_read_from()->set_seconds(tsValue.value());
                 }
-                auto tsValue = GetTimestampValue(setting);
-                if (!tsValue) {
-                    return GetConsumerTimestampParseError(consumer, "read_from");
-                }
-                protoConsumer->mutable_set_read_from()->set_seconds(tsValue.value());
             } else if (name == "setSupportedCodecs") {
                 auto codecs = GetTopicCodecsFromString(
                         TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value())

@@ -3,10 +3,13 @@
 
 #include "rpc_scheme_base.h"
 #include "rpc_common/rpc_common.h"
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -31,6 +34,7 @@ public:
 
     void Bootstrap(const TActorContext &ctx) {
         TBase::Bootstrap(ctx);
+        Path = this->Request_->NormalizePath(this->GetProtoRequest()->path());
         ResolvePath(ctx);
     }
 
@@ -41,7 +45,7 @@ private:
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = TSchemeCacheNavigate::OpList; // we need ListNodeEntry
-        entry.Path = NKikimr::SplitPath(this->GetProtoRequest()->path());
+        entry.Path = NKikimr::SplitPath(Path);
 
         ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
         this->Become(&TDerived::StateResolvePath);
@@ -62,7 +66,7 @@ private:
 
         const auto& entry = request->ResultSet.front();
         if (entry.Status != TSchemeCacheNavigate::EStatus::Ok) {
-            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+            return SendProposeRequest(ctx, Path);
         }
 
         switch (entry.Kind) {
@@ -70,11 +74,11 @@ private:
             case TSchemeCacheNavigate::EKind::KindIndex:
                 break;
             default:
-                return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+                return SendProposeRequest(ctx, Path);
         }
 
         if (!entry.Self || !entry.ListNodeEntry) {
-            return SendProposeRequest(ctx, this->GetProtoRequest()->path());
+            return SendProposeRequest(ctx, Path);
         }
 
         if (entry.ListNodeEntry->Children.size() != 1) {
@@ -86,7 +90,7 @@ private:
         const auto& childName = entry.ListNodeEntry->Children.at(0).Name;
 
         return SendProposeRequest(ctx,
-            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(this->GetProtoRequest()->path()), childName)));
+            NKikimr::JoinPath(NKikimr::ChildPath(NKikimr::SplitPath(Path), childName)));
     }
 
     void SendProposeRequest(const TActorContext& ctx, const TString& path) {
@@ -125,9 +129,38 @@ private:
                 if (OverrideName) {
                     result.mutable_self()->set_name(*OverrideName);
                 }
+                const auto& requestedPath = this->GetProtoRequest()->path();
+                if (Path != requestedPath) {
+                    const auto parts = NKikimr::SplitPath(TString{requestedPath});
+                    result.mutable_self()->set_name(parts.empty() ? TString("/") : parts.back());
+                }
                 if constexpr (ListChildren) {
                     for (const auto& child : pathDescription.GetChildren()) {
                         ConvertDirectoryEntry(child, result.add_children(), false);
+                    }
+                    const auto header = this->Request_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER);
+                    const auto database = this->Request_->GetDatabaseName();
+                    if (header && database) {
+                        const TString rawDatabase = CGIUnescapeRet(*header);
+                        const TString logicalDatabase = NKikimr::CanonizePath(rawDatabase);
+                        const TString logicalName(NKikimr::ExtractBase(logicalDatabase));
+                        const TString physicalName(NKikimr::ExtractBase(*database));
+                        const TStringBuf logicalParent = NKikimr::ExtractParent(logicalDatabase);
+                        if (rawDatabase.StartsWith("/") && Path.StartsWith("/")
+                            && !logicalName.empty() && !physicalName.empty() && logicalName != physicalName
+                            && this->Request_->NormalizePath(logicalDatabase) == *database
+                            && logicalParent == NKikimr::ExtractParent(*database)
+                            && (TStringBuf(requestedPath) == logicalParent || (logicalParent.empty() && requestedPath == "/"))
+                            && NKikimr::CanonizePath(Path) == TString(NKikimr::ExtractParent(*database))
+                            && std::none_of(result.children().begin(), result.children().end(),
+                                [&](const auto& child) { return child.name() == logicalName; })) {
+                            for (auto& child : *result.mutable_children()) {
+                                if (child.name() == physicalName) {
+                                    child.set_name(logicalName);
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
                 return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
@@ -149,6 +182,7 @@ private:
     }
 
 private:
+    TString Path;
     TMaybe<TString> OverrideName;
 };
 

@@ -895,8 +895,7 @@ public:
                     GUCSettings
                 );
                 settingsBuilder.SetFromConfig(SessionCtx->Config());
-                return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData, cluster,
-                    SessionCtx->Config().NormalizePath);
+                return RewriteReadFromView(node, ctx, settingsBuilder, Types.Modules, viewData);
             }
         }
 

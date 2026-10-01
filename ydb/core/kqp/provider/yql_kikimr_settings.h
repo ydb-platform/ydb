@@ -10,7 +10,6 @@
 #include <yql/essentials/providers/common/config/yql_setting.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
-#include <functional>
 #include <memory>
 
 namespace NYql {
@@ -23,7 +22,6 @@ enum EOptionalFlag {
 
 struct TKikimrSettings {
     using TConstPtr = std::shared_ptr<const TKikimrSettings>;
-    std::function<TString(TStringBuf)> NormalizePath;
 private:
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
     static constexpr NCommon::EConfSettingType Dynamic = NCommon::EConfSettingType::Dynamic;

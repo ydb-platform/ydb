@@ -293,6 +293,7 @@ class Workload(unittest.TestCase):
                 )
             except AssertionError:
                 self.dump_topic_end_offsets(self.test_topic_path)
+                self.dump_consumer_offsets(self.test_topic_path, workloadConsumerName)
                 raise
         finally:
             print("Killing processes")
@@ -773,6 +774,21 @@ class Workload(unittest.TestCase):
             print(f"Topic {topic} end offsets total={total} partitions=[{', '.join(parts)}]")
         except Exception as error:
             print(f"Failed to describe {topic}: {error}")
+
+    def dump_consumer_offsets(self, topic, consumer):
+        try:
+            description = self.driver.topic_client.describe_consumer(topic, consumer, include_stats=True)
+            parts = []
+            total = 0
+            for partition in description.partitions:
+                stats = partition.partition_consumer_stats
+                offset = stats.committed_offset if stats else None
+                parts.append(f"{partition.partition_id}:{offset}")
+                if offset is not None:
+                    total += offset
+            print(f"Consumer {consumer} offsets for {topic} total={total} partitions=[{', '.join(parts)}]")
+        except Exception as error:
+            print(f"Failed to describe consumer {consumer} for {topic}: {error}")
 
     def count_messages(self, messages_info):
         return sum(len(messages) for messages in messages_info.values())

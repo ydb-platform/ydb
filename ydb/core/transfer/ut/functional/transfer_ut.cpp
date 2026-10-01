@@ -316,7 +316,12 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.CheckTransferStateError("No ReadTopic permissions");
 
         // Nothing must be written to the target table.
-        testCase.CheckResult({});
+        {
+            auto res = testCase.ExecuteQuery(TStringBuilder() << "SELECT COUNT(*) FROM `" << testCase.TableName << "`", false);
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToOneLineString());
+            const auto proto = NYdb::TProtoAccessor::GetProto(res.GetResultSet(0));
+            UNIT_ASSERT_VALUES_EQUAL(proto.rows(0).items(0).uint64_value(), 0);
+        }
 
         testCase.DropTransfer();
         testCase.DropTopic();

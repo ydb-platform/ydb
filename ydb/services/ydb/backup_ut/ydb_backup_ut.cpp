@@ -362,7 +362,8 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                 case EIndexType::LocalBloomNgramFilter:
                     UNIT_ASSERT(std::holds_alternative<TLocalBloomNgramFilterSettings>(indexDesc.GetIndexSettings()));
                     break;
-                case EIndexType::GlobalVectorKMeansTree: {
+                case EIndexType::GlobalVectorKMeansTree:
+                case EIndexType::GlobalHnsw: {
                     Ydb::Table::KMeansTreeSettings settings;
                     std::get<TKMeansTreeSettings>(indexDesc.GetIndexSettings()).SerializeTo(settings);
                     Ydb::Table::KMeansTreeSettings expected;
@@ -825,6 +826,8 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
             return NYdb::NTable::EIndexType::GlobalUnique;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            return NYdb::NTable::EIndexType::GlobalHnsw;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             return NYdb::NTable::EIndexType::GlobalFulltextPlain;
@@ -862,26 +865,29 @@ void TestRestoreTableWithIndex(
             )", "table"_a = table, "index"_a = index, "index_type"_a = ConvertIndexTypeToSQL(indexType));
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexTypeGlobalHnsw:
+            type = indexType == NKikimrSchemeOp::EIndexTypeGlobalHnsw
+                ? "hnsw" : "vector_kmeans_tree";
             if (prefix) {
                 query = fmt::format(R"(CREATE TABLE `{table}` (
                     Key Uint32,
                     Group Uint32,
                     Value String,
                     PRIMARY KEY (Key),
-                    INDEX {index} GLOBAL USING vector_kmeans_tree
+                    INDEX {index} GLOBAL USING {type}
                         ON (Group, Value)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
-                    ))", "table"_a = table, "index"_a = index);
+                    ))", "table"_a = table, "index"_a = index, "type"_a = type);
             } else {
                 query = fmt::format(R"(CREATE TABLE `{table}` (
                     Key Uint32,
                     Group Uint32,
                     Value String,
                     PRIMARY KEY (Key),
-                    INDEX {index} GLOBAL USING vector_kmeans_tree
+                    INDEX {index} GLOBAL USING {type}
                         ON (Value)
                         WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80, overlap_clusters=3, overlap_ratio="1.2")
-                    ))", "table"_a = table, "index"_a = index);
+                    ))", "table"_a = table, "index"_a = index, "type"_a = type);
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
@@ -3560,6 +3566,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
+            case EIndexTypeGlobalHnsw:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:
@@ -5051,6 +5058,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalAsync:
             case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
+            case EIndexTypeGlobalHnsw:
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:

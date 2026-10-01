@@ -917,3 +917,46 @@ TEST(TtlTierSettings, ObjectKeyPrefixRoundTrip) {
     TTtlEvictToExternalStorageAction("/Root/eds").SerializeTo(proto);
     EXPECT_FALSE(proto.has_object_key_prefix());
 }
+
+TEST(VectorIndexSettings, HnswDefaultsAndAbsoluteDeltaRows) {
+    Ydb::Table::VectorIndexSettings proto;
+    const auto defaults = NTable::TVectorIndexSettings::FromProto(proto);
+    EXPECT_EQ(defaults.MinRows, 10000u);
+    EXPECT_EQ(defaults.M, 16u);
+    EXPECT_EQ(defaults.EfConstruction, 200u);
+    EXPECT_EQ(defaults.DeltaRows, 10000u);
+    auto settings = defaults;
+    settings.MinRows = 0;
+    settings.M = 24;
+    settings.EfConstruction = 400;
+    settings.DeltaRows = 1ULL << 40;
+    settings.SerializeTo(proto);
+    EXPECT_TRUE(proto.has_min_rows());
+    EXPECT_EQ(proto.min_rows(), 0u);
+    EXPECT_EQ(proto.m(), 24u);
+    EXPECT_EQ(proto.ef_construction(), 400u);
+    EXPECT_EQ(proto.delta_rows(), 1ULL << 40);
+    const auto restored = NTable::TVectorIndexSettings::FromProto(proto);
+    EXPECT_EQ(restored.MinRows, settings.MinRows);
+    EXPECT_EQ(restored.M, settings.M);
+    EXPECT_EQ(restored.EfConstruction, settings.EfConstruction);
+    EXPECT_EQ(restored.DeltaRows, settings.DeltaRows);
+    settings.DeltaRows = 0;
+    proto.Clear();
+    settings.SerializeTo(proto);
+    EXPECT_TRUE(proto.has_delta_rows());
+    EXPECT_EQ(NTable::TVectorIndexSettings::FromProto(proto).DeltaRows, 0u);
+}
+
+TEST(VectorIndexSettings, HnswLegacyWireFieldsKeepTheirMeaning) {
+    Ydb::Table::VectorIndexSettings proto;
+    // Existing min_rows/M/ef_construction tags remain 4/5/6. Old search and
+    // percentage settings at tags 7/8 must not become a delta row count.
+    ASSERT_TRUE(proto.ParseFromString(std::string("\x20\x01\x28\x18\x30\xc8\x01\x38\x32\x40\x05", 11)));
+    const auto settings = NTable::TVectorIndexSettings::FromProto(proto);
+    EXPECT_EQ(settings.MinRows, 1u);
+    EXPECT_EQ(settings.M, 24u);
+    EXPECT_EQ(settings.EfConstruction, 200u);
+    EXPECT_EQ(settings.DeltaRows, 10000u);
+    EXPECT_FALSE(proto.has_delta_rows());
+}

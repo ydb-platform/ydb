@@ -247,7 +247,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, "Unique constraint feature is disabled")};
                 }
                 break;
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                 TString msg;
                 if (!NKikimr::NKMeans::ValidateSettingsPartial(indexDescription.GetVectorIndexKmeansTreeDescription().GetSettings(), msg)) {
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
@@ -455,7 +456,8 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                 result.push_back(createIndexImplTable(CalcImplTableDesc(baseTableDescription, implTableColumns, userIndexDesc, uniqueKeySize)));
                 break;
             }
-            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree: {
+            case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            case NKikimrSchemeOp::EIndexTypeGlobalHnsw: {
                 const bool prefixVectorIndex = indexDescription.GetKeyColumnNames().size() > 1;
                 NKikimrSchemeOp::TTableDescription userLevelDesc, userPostingDesc, userPrefixDesc;
                 if (indexDescription.IndexImplTableDescriptionsSize() == 2 + prefixVectorIndex) {
@@ -466,7 +468,12 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
                         userPrefixDesc = indexDescription.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition);
                     }
                 }
-                const THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                THashSet<TString> indexDataColumns{indexDescription.GetDataColumnNames().begin(), indexDescription.GetDataColumnNames().end()};
+                // Vector search ranks posting rows by the embedding even when
+                // the index is otherwise non-covering.
+                const auto indexColumns = NTableIndex::ExtractInfo(indexDescription);
+                Y_ENSURE(!indexColumns.KeyColumns.empty());
+                indexDataColumns.insert(indexColumns.KeyColumns.back());
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreeLevelImplTableDesc(baseTableDescription.GetPartitionConfig(), userLevelDesc)));
                 result.push_back(createIndexImplTable(CalcVectorKmeansTreePostingImplTableDesc(baseTableDescription, baseTableDescription.GetPartitionConfig(), indexDataColumns, userPostingDesc)));
                 if (prefixVectorIndex) {

@@ -60,13 +60,17 @@ std::string MakeSelect(const TVectorWorkloadParams& params, const TString& index
 
     TStringBuilder ret;
     ret << "--!syntax_v1" << "\n";
+    if (params.Hnsw) {
+        ret << "PRAGMA ydb.HNSWEfSearch=\"" << params.HnswEfSearch << "\";\n";
+    }
     ret << "DECLARE $Embedding as String;" << "\n";
     if (params.PrefixColumn)
         ret << "DECLARE $PrefixValue as " << params.PrefixType << ";" << "\n";
     ret << "pragma ydb.KMeansTreeSearchTopSize=\"" << params.KmeansTreeSearchClusters << "\";" << "\n";
     ret << "SELECT " << MakeKeyExpression(params, "") << " AS id FROM `" << params.TableOpts.Name << "`\n";
-    if (!indexName.empty())
+    if (!indexName.empty()) {
         ret << "VIEW " << indexName << "\n";
+    }
     if (params.PrefixColumn)
         ret << "WHERE " << params.PrefixColumn << " = $PrefixValue" << "\n";
     ret << "ORDER BY Knn::" << functionName << "(" << params.EmbeddingColumn << ", $Embedding) " << (isAscending ? "ASC" : "DESC") << "\n";

@@ -429,6 +429,10 @@ message TKqpVectorSearchSettings {
 
     // Inconsistent online RO: the reads carry neither a snapshot nor a lock.
     optional bool AllowInconsistentReads = 28;
+
+    // Search all posting partitions without k-means cluster-range pruning.
+    optional bool FullRangeHnsw = 29;
+    optional uint32 HnswEfSearch = 30 [default = 15];
 }
 
 message TKqpTaskInfo {

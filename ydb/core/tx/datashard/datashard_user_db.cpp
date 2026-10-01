@@ -425,11 +425,13 @@ void TDataShardUserDb::UpsertRowInt(
             throw TNotReadyTabletException();
 
         Db.Update(localTableId, rowOp, key, ops, MvccVersion);
+        Self.UpdateHnswIndex(localTableId, rowOp, keyCells, ops, Db, MvccVersion, writeTxId);
     } else {
         if (collector && !collector->OnUpdateTx(tableId, localTableId, rowOp, key, ops, writeTxId, userCtx))
             throw TNotReadyTabletException();
 
         Db.UpdateTx(localTableId, rowOp, key, ops, writeTxId);
+        Self.UpdateHnswIndex(localTableId, rowOp, keyCells, ops, Db, MvccVersion, writeTxId);
     }
 
     if (VolatileTxId) {
@@ -595,6 +597,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
         {"localTid", localTid},
         {"shard", Self.TabletID()});
     Db.CommitTx(localTid, lockId, MvccVersion);
+    Self.CommitHnswIndexChanges(localTid, lockId, MvccVersion, Db);
     Self.GetConflictsCache().GetTableCache(localTid).RemoveUncommittedWrites(lockId, Db);
     CommittedTxIds.insert(lockId);
 

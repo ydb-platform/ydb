@@ -9,7 +9,10 @@ struct TStatServiceSettings {
     TStatServiceSettings() = default;
 };
 
-NActors::TActorId MakeStatServiceID(ui32 node);
+inline NActors::TActorId MakeStatServiceID(ui32 node) {
+    const char x[12] = "StatService";
+    return NActors::TActorId(node, TStringBuf(x, 12));
+}
 
 THolder<NActors::IActor> CreateStatService(const TStatServiceSettings& settings = TStatServiceSettings());
 

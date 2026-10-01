@@ -7,7 +7,10 @@
 
 namespace NKikimr::NWorkloadManager {
 
-NActors::TActorId MakeServiceId(ui32 nodeId);
+inline NActors::TActorId MakeServiceId(ui32 nodeId) {
+    const char name[12] = "kqp_workld";
+    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+}
 
 NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(NMonitoring::TDynamicCounterPtr rootCounters);
 

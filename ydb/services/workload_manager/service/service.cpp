@@ -725,10 +725,7 @@ NMonitoring::TDynamicCounterPtr GetWorkloadManagerCounters(NMonitoring::TDynamic
     return GetServiceCounters(rootCounters, "kqp")->GetSubgroup("subsystem", "workload_manager");
 }
 
-NActors::TActorId MakeServiceId(ui32 nodeId) {
-    const char name[12] = "kqp_workld";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12));
-}
+
 
 
 } // namespace NKikimr::NWorkloadManager

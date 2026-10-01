@@ -2,7 +2,7 @@
 #include "blob_checker_actors.h"
 
 #include <ydb/core/base/counters.h>
-#include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NBsController {
@@ -44,9 +44,10 @@ public:
 
 void TBlobStorageController::Handle(const TEvBlobCheckerUpdateGroupStatus::TPtr& ev) {
     if (ev->Sender != BlobCheckerOrchestratorId) {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC54, "Ignoring status from stale BlobChecker orchestrator",
-                (Sender, ev->Sender),
-                (OrchestratorId, BlobCheckerOrchestratorId));
+        YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Ignoring status from stale BlobChecker orchestrator",
+            {"marker", "BSC54"},
+            {"sender", ev->Sender},
+            {"orchestratorId", BlobCheckerOrchestratorId});
         return;
     }
 
@@ -71,8 +72,9 @@ void TBlobStorageController::Handle(const TEvBlobCheckerUpdateGroupStatus::TPtr&
 void TBlobStorageController::Handle(const TEvBlobCheckerPlanCheck::TPtr& ev) {
     TGroupId groupId = ev->Get()->GroupId;
     const TActorId orchestratorId = ev->Sender;
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC53, "Handle TEvBlobCheckerPlanCheck",
-            (GroupId, groupId));
+    YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Handle TEvBlobCheckerPlanCheck",
+        {"marker", "BSC53"},
+        {"groupId", groupId});
     if (!IsBlobCheckerEnabled() || !BlobCheckerPlanner || orchestratorId != BlobCheckerOrchestratorId ||
             BlobCheckerCancellationsPending.contains(groupId) ||
             BlobCheckerGroupDeletionsPending.contains(groupId) || !IsBlobCheckerGroupEligible(groupId)) {
@@ -145,9 +147,10 @@ void TBlobStorageController::UpdateBlobCheckerState() {
 
 
 void TBlobStorageController::UpdateBlobCheckerSettings(TDuration periodicity) {
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC52, "Updating BlobChecker settings",
-            (OldPeriodicity, BlobCheckerPeriodicity),
-            (NewPeriodicity, periodicity));
+    YDB_LOG_DEBUG_COMP(BS_CONTROLLER, "Updating BlobChecker settings",
+        {"marker", "BSC55"},
+        {"oldPeriodicity", BlobCheckerPeriodicity},
+        {"newPeriodicity", periodicity});
     if (periodicity == BlobCheckerPeriodicity) {
         return;
     }
@@ -169,7 +172,8 @@ void TBlobStorageController::UpdateBlobCheckerSettings(TDuration periodicity) {
         return;
     }
 
-    STLOG(PRI_NOTICE, BS_CONTROLLER, BSC51, "Suspending BlobCheckerOrchestrator actor");
+    YDB_LOG_NOTICE_COMP(BS_CONTROLLER, "Suspending BlobCheckerOrchestrator actor",
+        {"marker", "BSC56"});
     // Retain group/node locks until active workers acknowledge cancellation,
     // but do not count the disabled interval as pacing debt on re-enable.
     BlobCheckerPlanner->ResetPacing();
@@ -217,9 +221,10 @@ bool TBlobStorageController::IsBlobCheckerEnabled() const {
 }
 
 void TBlobStorageController::InitializeBlobCheckerOrchestratorActor() {
-    STLOG(PRI_NOTICE, BS_CONTROLLER, BSC50, "Initializing BlobCheckerOrchestrator actor",
-            (BlobCheckerGroupRecordsSize, BlobCheckerGroupRecords.size()),
-            (BlobCheckerPeriodicity, BlobCheckerPeriodicity));
+    YDB_LOG_NOTICE_COMP(BS_CONTROLLER, "Initializing BlobCheckerOrchestrator actor",
+        {"marker", "BSC57"},
+        {"blobCheckerGroupRecordsSize", BlobCheckerGroupRecords.size()},
+        {"blobCheckerPeriodicity", BlobCheckerPeriodicity});
     BlobCheckerOrchestratorId = Register(CreateBlobCheckerOrchestratorActor(
             SelfId(), BlobCheckerGroupRecords, BlobCheckerPeriodicity,
             GetServiceCounters(AppData()->Counters, "storage_pool_stat")));

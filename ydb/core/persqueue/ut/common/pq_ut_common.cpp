@@ -46,13 +46,14 @@ void SendPQTabletConfig(
 
     TAutoPtr<IEventHandle> handle;
     // Ответ оборванной попытки может прийти уже после DropPendingPqConfigReplies.
-    const auto grabResult = [&](NKikimrPQ::TEvProposeTransactionResult::EStatus status) {
+    // Статус здесь не фильтруем: неожиданный статус текущего TxId должен дойти до ассерта.
+    const auto grabResult = [&]() {
         return runtime.GrabEdgeEventIf<TEvPersQueue::TEvProposeTransactionResult>(handle,
-            [txId, status](const TEvPersQueue::TEvProposeTransactionResult& ev) {
-                return ev.Record.GetTxId() == txId && ev.Record.GetStatus() == status;
+            [txId](const TEvPersQueue::TEvProposeTransactionResult& ev) {
+                return ev.Record.GetTxId() == txId;
             });
     };
-    auto* prepared = grabResult(NKikimrPQ::TEvProposeTransactionResult::PREPARED);
+    auto* prepared = grabResult();
     UNIT_ASSERT(prepared);
     UNIT_ASSERT(prepared->Record.HasStatus());
     UNIT_ASSERT_EQUAL(prepared->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
@@ -74,7 +75,7 @@ void SendPQTabletConfig(
     UNIT_ASSERT(ack);
     auto* accepted = runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(handle);
     UNIT_ASSERT(accepted);
-    auto* complete = grabResult(NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
+    auto* complete = grabResult();
     UNIT_ASSERT(complete);
     UNIT_ASSERT(complete->Record.HasStatus());
     UNIT_ASSERT_EQUAL(complete->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::COMPLETE);

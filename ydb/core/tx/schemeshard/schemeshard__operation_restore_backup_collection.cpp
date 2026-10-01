@@ -210,7 +210,7 @@ public:
     {
     }
 
-    THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString&, TProposeContext& context) override {
         if (AppData()->HasInjectedFailure(static_cast<ui64>(EInjectedFailureType::LateBackupCollectionNotFound))) {
             return MakeHolder<TProposeResponse>(NKikimrScheme::StatusPathDoesNotExist, ui64(OperationId.GetTxId()), ui64(context.SS->SelfTabletId()));
         }
@@ -306,9 +306,14 @@ public:
         return result;
     }
 
+<<<<<<< HEAD
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateRestoreOpControlPlane AbortPropose"
             << ", opId: " << OperationId);
+=======
+    void AbortPropose(TProposeContext& context) override {
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

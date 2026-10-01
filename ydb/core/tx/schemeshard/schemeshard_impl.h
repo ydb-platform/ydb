@@ -490,16 +490,26 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
+<<<<<<< HEAD
     THolder<TProposeResponse> IgniteOperation(TProposeRequest& request, TOperationContext& context);
+=======
+    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context);
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
         const NKikimrScheme::TEvModifySchemeTransaction& record,
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
+<<<<<<< HEAD
         THolder<TProposeResponse>& response,
         TOperationContext& context);
     void AbortOperationPropose(const TTxId txId, TOperationContext& context);
+=======
+        THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
+        TProposeContext& context);
+    void AbortOperationPropose(const TTxId txId, TProposeContext& context);
+>>>>>>> 9d4011fa03c (schemeshard: guard against TMemoryChanges misuse (#54625))
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;

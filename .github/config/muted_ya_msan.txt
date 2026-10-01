@@ -1,10 +1,10 @@
 ydb/core/driver_lib/run/ut XdsBootstrapConfigInitializer.CanSetGrpcXdsBootstrapConfigEnvWithSomeNumberOfXdsServers
+ydb/core/driver_lib/run/ut unittest.[*/*] chunk
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.RestartSessionIfQueryStopped
 ydb/core/fq/libs/row_dispatcher/ut TopicSessionTests.TwoSessionsWithDifferentSchemes
 ydb/core/fq/libs/row_dispatcher/ut unittest.sole chunk
-ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
-ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/ut/query CS_WriteAffinity.CtasGeneratedDataWithPartitionBy+EnableCsWriteAffinity
+ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
@@ -14,6 +14,12 @@ ydb/core/kqp/ut/topics unittest.[*/*] chunk
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/load_test/ut GroupWriteTest.WriteHardRateDispatcher
 ydb/core/load_test/ut unittest.[*/*] chunk
+ydb/core/persqueue/ut TPQTest.TestMaxTimeLagRewind
+ydb/core/persqueue/ut TPQTest.TestPQPartialRead
+ydb/core/persqueue/ut TPQTest.TestPQRead
+ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
+ydb/core/persqueue/ut TPQTest.TestReadSessions
+ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut Interconnect.KernelLivenessReconnectLocalFallbackNotAppliedRdma
@@ -37,12 +43,12 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.ValidatingLoadVariedPay
 ydb/library/actors/interconnect/ut InterconnectSessionV2.XdcPayloadRoundTrip
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
+ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestLoadFromSeveralStates
 ydb/tests/fq/pq_async_io/ut TDqPqReadActorTest.TestSaveLoadPqRead
 ydb/tests/fq/pq_async_io/ut unittest.sole chunk
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/federation_test TWriteDisabledTest.DisableWriteOnClusterA
 ydb/tests/functional/federation_test unittest.sole chunk
-ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
@@ -52,7 +58,6 @@ ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnComp
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/kafka_serverless/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/node_broker/tests test_workload.py.TestDeltaProtocol.test
-ydb/tests/stress/node_broker/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/oltp_workload/tests/soak py3test.sole chunk

@@ -6199,6 +6199,224 @@ FROM (
                 )
                 ORDER BY a;
             )"},
+            {"forward frame count and average", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Count(e) OVER w AS ahead_count,
+                    Avg(e) OVER w AS ahead_avg
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN 1 FOLLOWING AND 2 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"ranking with a centred frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    RowNumber() OVER w AS row_number_in_group,
+                    Rank() OVER w AS rank_in_group,
+                    Sum(e) OVER w AS centred_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"global sliding frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, e,
+                    Sum(e) OVER (ORDER BY a ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS sliding_sum
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"centred decimal average", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, f,
+                    Avg(f) OVER w AS centred_avg,
+                    Max(f) OVER w AS centred_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"running frame reaching ahead", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS ahead_sum,
+                    Count(e) OVER w AS ahead_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND 2 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"trailing frame count with ranking", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Rank() OVER w AS rank_in_group,
+                    Count(e) OVER w AS trailing_count,
+                    Avg(e) OVER w AS trailing_avg
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND 2 PRECEDING
+                )
+                ORDER BY a;
+            )"},
+            {"suffix aggregates with ranking", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e, f,
+                    RowNumber() OVER w AS row_number_in_group,
+                    Count(e) OVER w AS suffix_count,
+                    Min(e) OVER w AS suffix_min,
+                    Avg(f) OVER w AS suffix_avg
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c, a
+                    ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"global whole partition frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, e,
+                    Sum(e) OVER () AS total,
+                    Max(e) OVER () AS maximum
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"global suffix frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, e,
+                    Sum(e) OVER (ORDER BY a ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS suffix_sum
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"range frame around the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS around_sum,
+                    Count(e) OVER w AS around_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN 10 PRECEDING AND 10 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range frame ending at the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS recent_sum,
+                    Max(e) OVER w AS recent_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN 10 PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range frame ending before the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Count(e) OVER w AS earlier_count,
+                    Avg(e) OVER w AS earlier_avg
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING
+                )
+                ORDER BY a;
+            )"},
+            {"range frame reaching ahead", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS ahead_sum,
+                    Rank() OVER w AS rank_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range frame after the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Count(e) OVER w AS later_count,
+                    Min(e) OVER w AS later_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN 5 FOLLOWING AND 15 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range suffix frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS suffix_sum,
+                    DenseRank() OVER w AS dense_rank_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"descending range frame with offsets", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS recent_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c DESC
+                    RANGE BETWEEN 10 PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"global range frame with offsets", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, e,
+                    Sum(e) OVER (ORDER BY a RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS nearby_sum
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
             {"range frame over a string order key", R"(
                 PRAGMA YqlSelect = "force";
 
@@ -6481,14 +6699,6 @@ FROM (
     }
 
     const THashSet<TString> WindowQueriesNotLoweredYet{
-        // A frame that ends after the current row but does not span the whole partition still
-        // needs a row queue.
-        "suffix frame",
-        // Frames that do not run from the partition start to the current row need a row queue.
-        "sliding frame ending at the current row",
-        "centred frame",
-        "forward looking frame",
-        "trailing frame",
     };
 
     Y_UNIT_TEST_TWIN(WindowFunctions, ColumnStore) {

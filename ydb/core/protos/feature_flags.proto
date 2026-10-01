@@ -430,6 +430,7 @@ message TFeatureFlags {
     optional bool EnableCsIndexReadMemoryTracking = 350 [default = false];
     // Creates asynchronous indexes on newly created asynchronous replication destinations.
     optional bool EnableAsyncIndexReplication = 351 [default = false];
+    optional bool EnableDatabaseAccessCheckForHttpMonitoring = 353 [default = false];
     // Selects the native external YDB provider when compiling new query plans.
     optional bool EnableNativeYdbProvider = 352 [default = false];
 }

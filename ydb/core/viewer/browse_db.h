@@ -134,11 +134,16 @@ public:
                 }
                 if (pbPathDescription.HasTable()) {
                     const auto& pbTable(pbPathDescription.GetTable());
-                    if (pbTable.HasUniformPartitionsCount()) {
-                        pbCommon.SetPartitions(pbTable.GetUniformPartitionsCount());
-                    }
-                    if (pbTable.SplitBoundarySize() > 0) {
-                        pbCommon.SetPartitions(pbTable.SplitBoundarySize() + 1);
+                    if (pbTable.HasPartitionCount()) {
+                        pbCommon.SetPartitions(pbTable.GetPartitionCount());
+                    } else {
+                        // Fallback for an older schemeshard
+                        if (pbTable.HasUniformPartitionsCount()) {
+                            pbCommon.SetPartitions(pbTable.GetUniformPartitionsCount());
+                        }
+                        if (pbTable.SplitBoundarySize() > 0) {
+                            pbCommon.SetPartitions(pbTable.SplitBoundarySize() + 1);
+                        }
                     }
                     if (pbTable.ColumnsSize() > 0) {
                         NKikimrViewer::TMetaTableInfo& pbMetaTable = *metaInfo.MutableTable();

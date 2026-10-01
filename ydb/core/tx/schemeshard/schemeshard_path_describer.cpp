@@ -451,6 +451,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 
     Self->DescribeTable(tableInfo, typeRegistry, returnConfig, entry);
     entry->SetName(pathEl->Name);
+    entry->SetPartitionCount(tableInfo.GetPartitions().size());
 
     if (returnBoundaries) {
         // split boundaries (split keys without shard's tablet-ids)

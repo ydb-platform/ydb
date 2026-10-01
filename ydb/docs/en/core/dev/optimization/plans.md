@@ -1,12 +1,12 @@
-# Query plan optimization
+# Query execution plan
 
-It's very useful to to analyze execution plans for queries in order to detect and eliminate the causes of possible inefficiencies. {{ ydb-short-name }} provides two types of query plans: logical plan and execution plan. Logical plan is better suited for analyzing complex queries with a large number of [JOIN](../../yql/reference/syntax/select/join.md) operators. Execution plan is more detailed: it additionally shows the stages of the distributed plan and connectors between them, which makes it more convenient for analyzing simple OLTP queries.
+It's very useful to analyze execution plans for queries in order to detect and eliminate the causes of possible inefficiencies. {{ ydb-short-name }} provides two types of query plans: logical plan and execution plan. Logical plan is better suited for analyzing complex queries with a large number of [JOIN](../../yql/reference/syntax/select/join.md) operators. Execution plan is more detailed: it additionally shows the stages of the distributed plan and connectors between them, which makes it more convenient for analyzing simple OLTP queries.
 
 ## Logical Query Plan
 
 You can get the logical plan via {{ ydb-short-name }} [CLI](../../reference/ydb-cli/commands/explain-plan.md).
 
-This plan allows you to compare the query optimizer's predictions with the execution statistics. If the predictions differ significantly from the actual data at the execution stage, this may indicate that the optimizer has not built the most efficient plan for the current query. In this case, you can use [optimizer hints](query-hints.md) to create a more efficient plan.
+This plan allows you to compare the query optimizer's predictions with the execution statistics. If the predictions differ significantly from the actual data at the execution stage, this may indicate that the optimizer has not built the most efficient plan for the current query. In this case, you can use [optimizer hints](hints.md) to create a more efficient plan.
 
 ## Query Execution Plan
 

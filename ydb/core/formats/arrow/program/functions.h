@@ -10,6 +10,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/function.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_vector.h>
 
 namespace NKikimr::NArrow::NSSA {
 
@@ -467,12 +468,10 @@ public:
         auto argumentsReader = resources.GetArguments(
             TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation, !NeedConcatenation);
         TAccessorsCollection::TChunksMerger merger;
-        std::optional<NAccessor::TCompositeChunkedArray::TBuilder> compositeBuilder;
         std::shared_ptr<arrow::Scalar> nullResult;
         while (auto batch = argumentsReader.ReadNext()) {
             // Some kernels may produce non-null output for null input.
-            // In this case we cannot just make a dictionary from input indices and output values.
-            // We shall materialize a new trivial array in such a case.
+            // We shall restore that output at null positions after expanding the mapped dictionary values.
             if (batch->Dictionary && batch->Dictionary->GetPositions()->null_count() && !nullResult) {
                 auto result = GetKernelOutputForNullInput(*batch);
                 if (result.IsFail()) {
@@ -484,50 +483,29 @@ public:
             if (result.IsFail()) {
                 return result.GetError();
             }
-            std::shared_ptr<NAccessor::IChunkedArray> resultAccessor;
+            auto datum = result.DetachResult();
             if (const auto& dictionary = batch->Dictionary) {
-                if (!result->is_array()) {
+                if (!datum.is_array()) {
                     return TConclusionStatus::Fail("dictionary scalar kernel result is not an array");
                 }
-                resultAccessor = std::make_shared<NAccessor::TDictionaryArray>(
-                    result->make_array(), dictionary->GetPositions(), true);
+                auto materialized = arrow::compute::Take(datum, arrow::Datum(dictionary->GetPositions()));
+                if (!materialized.ok()) {
+                    return TConclusionStatus::Fail(materialized.status().message());
+                }
+                datum = std::move(*materialized);
                 if (nullResult && nullResult->is_valid && dictionary->GetPositions()->null_count()) {
                     auto nullPositions = arrow::compute::IsNull(arrow::Datum(dictionary->GetPositions()));
                     if (!nullPositions.ok()) {
                         return TConclusionStatus::Fail(nullPositions.status().message());
                     }
-                    auto replaced = arrow::compute::IfElse(
-                        *nullPositions, arrow::Datum(nullResult), arrow::Datum(resultAccessor->GetChunkedArray()));
+                    auto replaced = arrow::compute::IfElse(*nullPositions, arrow::Datum(nullResult), datum);
                     if (!replaced.ok()) {
                         return TConclusionStatus::Fail(replaced.status().message());
                     }
-                    auto functionResult = TFunctionResult::FromDatum(std::move(*replaced));
-                    if (functionResult.IsScalar()) {
-                        return TConclusionStatus::Fail("dictionary null replacement result is a scalar");
-                    }
-                    resultAccessor = functionResult.GetAccessorVerified();
+                    datum = std::move(*replaced);
                 }
             }
-            if (argumentsReader.HasUnwrappedComposite()) {
-                if (!resultAccessor) {
-                    auto functionResult = TFunctionResult::FromDatum(arrow::Datum(*result));
-                    if (functionResult.IsScalar()) {
-                        return TConclusionStatus::Fail("composite scalar kernel result is a scalar");
-                    }
-                    resultAccessor = functionResult.GetAccessorVerified();
-                }
-                if (!compositeBuilder) {
-                    compositeBuilder.emplace(resultAccessor->GetDataType());
-                }
-                compositeBuilder->AddChunk(resultAccessor);
-            } else if (resultAccessor) {
-                return TFunctionResult(resultAccessor);
-            } else {
-                merger.AddChunk(*result);
-            }
-        }
-        if (compositeBuilder) {
-            return TFunctionResult(compositeBuilder->Finish());
+            merger.AddChunk(datum);
         }
         auto result = merger.Execute();
         if (result.IsFail()) {

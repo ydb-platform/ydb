@@ -58,10 +58,11 @@ std::shared_ptr<arrow::compute::ScalarFunction> MakeSliceUnsafeFunction() {
 }
 
 Y_UNIT_TEST_SUITE(Functions) {
-    Y_UNIT_TEST(KeepsDictionaryForNullPreservingIndexIn) {
+    Y_UNIT_TEST(ExpandsDictionaryForNullPreservingIndexIn) {
         const auto result = IndexInDictionary(NumVecToArray(arrow::int32(), { 1, 2 }));
 
-        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TDictionaryArray>(result));
+        // Preserving dictionary encoding for null-preserving kernels is a future optimization.
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialArray>(result));
         UNIT_ASSERT_VALUES_EQUAL(result->GetNullsCount(), 2);
         UNIT_ASSERT(result->GetChunkedArray()->chunk(0)->Equals(*NumVecToArray(arrow::int32(), { 1, 0, 0, 1 }, 0)));
     }
@@ -69,7 +70,7 @@ Y_UNIT_TEST_SUITE(Functions) {
     Y_UNIT_TEST(ExpandsDictionaryForNonNullPreservingIndexIn) {
         const auto result = IndexInDictionary(NumVecToArray(arrow::int32(), { 1, 2, 0 }, 0));
 
-        UNIT_ASSERT(!std::dynamic_pointer_cast<NAccessor::TDictionaryArray>(result));
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialArray>(result));
         UNIT_ASSERT(result->GetChunkedArray()->chunk(0)->Equals(*NumVecToArray(arrow::int32(), { 1, 0, 2, 1 }, 0)));
     }
 
@@ -86,11 +87,10 @@ Y_UNIT_TEST_SUITE(Functions) {
         TKernelFunction kernel(function, std::make_shared<arrow::compute::MatchSubstringOptions>("a", true));
         auto result = kernel.Call(TExecFunctionContext(TColumnChainInfo::BuildVector({ 1 })), resources).DetachResult();
 
-        const auto dictionary = std::dynamic_pointer_cast<NAccessor::TDictionaryArray>(result.GetAccessorVerified());
-        UNIT_ASSERT(dictionary);
-        UNIT_ASSERT_VALUES_EQUAL(dictionary->GetPositions().get(), positions.get());
-        UNIT_ASSERT(dictionary->GetChunkedArray()->chunk(0)->Equals(
-            *BoolVecToArray({ true, std::nullopt, std::nullopt, false, true })));
+        // Preserving dictionary encoding for null-preserving kernels is a future optimization.
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialArray>(result.GetAccessorVerified()));
+        UNIT_ASSERT(result.GetAccessorVerified()->GetChunkedArray()->chunk(0)->Equals(
+            *BoolVecToArray({true, std::nullopt, std::nullopt, false, true})));
     }
 
     Y_UNIT_TEST(KernelCallExpandsDictionaryWithNullPositions) {
@@ -106,12 +106,12 @@ Y_UNIT_TEST_SUITE(Functions) {
         TKernelFunction kernel(function);
         auto result = kernel.Call(TExecFunctionContext(TColumnChainInfo::BuildVector({ 1, 2 })), resources).DetachResult();
 
-        UNIT_ASSERT(!std::dynamic_pointer_cast<NAccessor::TDictionaryArray>(result.GetAccessorVerified()));
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialArray>(result.GetAccessorVerified()));
         UNIT_ASSERT(result.GetAccessorVerified()->GetChunkedArray()->chunk(0)->Equals(
             *StringVecToArray({ "Ada", "fallback", "Bobby" })));
     }
 
-    Y_UNIT_TEST(KernelCallKeepsNullFreeCompositeDictionaryPart) {
+    Y_UNIT_TEST(KernelCallExpandsNullFreeCompositeDictionaryPart) {
         const auto firstPositions = UInt8VecToArray({ 0, std::nullopt, 1 });
         const auto secondPositions = UInt8VecToArray({ 0, 0 });
         NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(arrow::utf8());
@@ -129,14 +129,13 @@ Y_UNIT_TEST_SUITE(Functions) {
         TKernelFunction kernel(function);
         auto result = kernel.Call(TExecFunctionContext(TColumnChainInfo::BuildVector({ 1, 2 })), resources).DetachResult();
 
-        const auto composite = std::dynamic_pointer_cast<NAccessor::TCompositeChunkedArray>(result.GetAccessorVerified());
-        UNIT_ASSERT(composite);
-        UNIT_ASSERT_VALUES_EQUAL(composite->GetChunks().size(), 2);
-        UNIT_ASSERT(composite->GetChunks()[0]->GetChunkedArray()->chunk(0)->Equals(
-            *StringVecToArray({ "Ada", "fallback", "Bobby" })));
-        const auto dictionary = std::dynamic_pointer_cast<NAccessor::TDictionaryArray>(composite->GetChunks()[1]);
-        UNIT_ASSERT(dictionary);
-        UNIT_ASSERT_VALUES_EQUAL(dictionary->GetPositions().get(), secondPositions.get());
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialChunkedArray>(result.GetAccessorVerified()));
+        const auto chunks = result.GetAccessorVerified()->GetChunkedArray();
+        UNIT_ASSERT_VALUES_EQUAL(chunks->num_chunks(), 2);
+        UNIT_ASSERT(chunks->chunk(0)->Equals(
+            *StringVecToArray({"Ada", "fallback", "Bobby"})));
+        // Preserving dictionary encoding for the null-free part is a future optimization.
+        UNIT_ASSERT(chunks->chunk(1)->Equals(*StringVecToArray({"Carla", "Carla"})));
     }
 
     Y_UNIT_TEST(KernelCallMapsCompositeDictionaryValues) {
@@ -160,18 +159,13 @@ Y_UNIT_TEST_SUITE(Functions) {
         TKernelFunction kernel(function);
         auto result = kernel.Call(TExecFunctionContext(TColumnChainInfo::BuildVector({ 1, 2 })), resources).DetachResult();
 
-        const auto composite = std::dynamic_pointer_cast<NAccessor::TCompositeChunkedArray>(result.GetAccessorVerified());
-        UNIT_ASSERT(composite);
-        UNIT_ASSERT_VALUES_EQUAL(composite->GetChunks().size(), 3);
-        const auto firstDictionary = std::dynamic_pointer_cast<NAccessor::TDictionaryArray>(composite->GetChunks()[0]);
-        const auto secondDictionary = std::dynamic_pointer_cast<NAccessor::TDictionaryArray>(composite->GetChunks()[2]);
-        UNIT_ASSERT(firstDictionary);
-        UNIT_ASSERT(secondDictionary);
-        UNIT_ASSERT_VALUES_EQUAL(firstDictionary->GetPositions().get(), firstPositions.get());
-        UNIT_ASSERT_VALUES_EQUAL(secondDictionary->GetPositions().get(), secondPositions.get());
-        UNIT_ASSERT(firstDictionary->GetChunkedArray()->chunk(0)->Equals(*BoolVecToArray({ true, false, true })));
-        UNIT_ASSERT(composite->GetChunks()[1]->GetChunkedArray()->chunk(0)->Equals(*BoolVecToArray({ false, std::nullopt })));
-        UNIT_ASSERT(secondDictionary->GetChunkedArray()->chunk(0)->Equals(*BoolVecToArray({ false, false })));
+        // Preserving dictionary encoding within mixed results is a future optimization.
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialChunkedArray>(result.GetAccessorVerified()));
+        const auto chunks = result.GetAccessorVerified()->GetChunkedArray();
+        UNIT_ASSERT_VALUES_EQUAL(chunks->num_chunks(), 3);
+        UNIT_ASSERT(chunks->chunk(0)->Equals(*BoolVecToArray({true, false, true})));
+        UNIT_ASSERT(chunks->chunk(1)->Equals(*BoolVecToArray({false, std::nullopt})));
+        UNIT_ASSERT(chunks->chunk(2)->Equals(*BoolVecToArray({false, false})));
     }
 
     Y_UNIT_TEST(KernelCallHandlesMultipleDictionaries) {
@@ -233,11 +227,11 @@ Y_UNIT_TEST_SUITE(Functions) {
         TKernelFunction functionCall(function);
         auto result = functionCall.Call(TExecFunctionContext(TColumnChainInfo::BuildVector({ 1 })), resources).DetachResult();
 
-        const auto composite = std::dynamic_pointer_cast<NAccessor::TCompositeChunkedArray>(result.GetAccessorVerified());
-        UNIT_ASSERT(composite);
-        UNIT_ASSERT_VALUES_EQUAL(composite->GetChunks().size(), 2);
-        UNIT_ASSERT(composite->GetChunks()[0]->GetChunkedArray()->chunk(0)->Equals(*NumVecToArray(arrow::uint64(), { 1, 2 })));
-        UNIT_ASSERT(composite->GetChunks()[1]->GetChunkedArray()->chunk(0)->Equals(*NumVecToArray(arrow::uint64(), { 3 })));
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialChunkedArray>(result.GetAccessorVerified()));
+        const auto chunks = result.GetAccessorVerified()->GetChunkedArray();
+        UNIT_ASSERT_VALUES_EQUAL(chunks->num_chunks(), 2);
+        UNIT_ASSERT(chunks->chunk(0)->Equals(*NumVecToArray(arrow::uint64(), {1, 2})));
+        UNIT_ASSERT(chunks->chunk(1)->Equals(*NumVecToArray(arrow::uint64(), {3})));
         UNIT_ASSERT(input->GetDataType()->Equals(timestampType));
         UNIT_ASSERT(inputComposite->GetChunks()[0]->GetChunkedArray()->type()->Equals(timestampType));
         UNIT_ASSERT(inputComposite->GetChunks()[1]->GetChunkedArray()->type()->Equals(timestampType));
@@ -259,6 +253,7 @@ Y_UNIT_TEST_SUITE(Functions) {
                                 .DetachResult()
                                 .GetAccessorVerified();
 
+        UNIT_ASSERT(std::dynamic_pointer_cast<NAccessor::TTrivialChunkedArray>(result));
         const auto values = TStatusValidator::GetValid(arrow::Concatenate(result->GetChunkedArray()->chunks()));
         UNIT_ASSERT(values->Equals(*NumVecToArray(arrow::uint32(), { 1, 10, 11, 12, 13 })));
     }

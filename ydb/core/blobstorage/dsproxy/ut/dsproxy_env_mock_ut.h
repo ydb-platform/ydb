@@ -35,11 +35,14 @@ struct TDSProxyEnv {
     TBSProxyContextPtr BSProxyCtxPtr;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> DynCounters;
     TIntrusivePtr<NKikimr::TStoragePoolCounters> StoragePoolCounters;
+    TIntrusivePtr<NKikimr::TStoragePoolCounters> ProxyStoragePoolCounters;
     TDiskResponsivenessTracker::TPerDiskStatsPtr PerDiskStatsPtr;
     TNodeLayoutInfoPtr NodeLayoutInfo;
     TIntrusivePtr<TGroupQueues> GroupQueues;
     ui64 GroupId;
     ui64 NodeIdx;
+    TActorId ProxyActorId;
+    TActorId InFlightLatencyAggregator;
     TActorId RealProxyActorId;
     TActorId FakeProxyActorId;
 
@@ -49,10 +52,12 @@ struct TDSProxyEnv {
     }
 
     void Configure(TTestActorRuntime& runtime, TBlobStorageGroupType type, ui64 groupId, ui64 nodeIndex,
-            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1)
+            TBlobStorageGroupInfo::EEncryptionMode encryptionMode = TBlobStorageGroupInfo::EEM_ENC_V1,
+            bool enableInFlightLatencyAggregator = false)
     {
         GroupId = groupId;
         NodeIdx = nodeIndex;
+        InFlightLatencyAggregator = {};
 
         ui32 vDiskCount = type.BlobSubgroupSize();
         VDisks.clear();
@@ -78,11 +83,18 @@ struct TDSProxyEnv {
         BSProxyCtxPtr.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
         Mon = new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, nodeMon, false);
         TDsProxyPerPoolCounters perPoolCounters(runtime.GetAppData(nodeIndex).Counters);
+        if (enableInFlightLatencyAggregator) {
+            InFlightLatencyAggregator = runtime.Register(CreateDsProxyInFlightLatencyAggregator(), nodeIndex);
+            runtime.EnableScheduleForActor(InFlightLatencyAggregator, true);
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+        }
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
+        ProxyStoragePoolCounters = storagePoolCounters;
         TControlWrapper enablePutBatching(DefaultEnablePutBatching, false, true);
         TControlWrapper enableVPatch(DefaultEnableVPatch, false, true);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), nullptr, true, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
+                    .InFlightLatencyAggregator = InFlightLatencyAggregator,
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = enablePutBatching,
                         .EnableVPatch = enableVPatch,
@@ -90,6 +102,11 @@ struct TDSProxyEnv {
                 }
             );
         TActorId actorId = runtime.Register(dsproxy, nodeIndex);
+        ProxyActorId = actorId;
+        if (enableInFlightLatencyAggregator) {
+            runtime.EnableScheduleForActor(ProxyActorId, true);
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(1));
+        }
         runtime.RegisterService(RealProxyActorId, actorId, nodeIndex);
 
         FakeProxyActorId = runtime.AllocateEdgeActor(0);

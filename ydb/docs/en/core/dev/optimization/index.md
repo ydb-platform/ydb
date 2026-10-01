@@ -4,4 +4,4 @@ Materials on analyzing and tuning query execution:
 
 - [Using query plans for query optimization](plans.md) — logical and execution plans, finding bottlenecks.
 - [Optimizer hints](hints.md) — influencing the cost-based optimizer via the `PRAGMA ydb.OptimizerHints` pragma.
-- [Parameterized queries and recompilation](parameterized-queries.md)
+- [Parameterized queries and recompilation](parameterized-queries.md).

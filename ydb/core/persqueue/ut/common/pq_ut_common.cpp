@@ -45,7 +45,14 @@ void SendPQTabletConfig(
     runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
 
     TAutoPtr<IEventHandle> handle;
-    auto* prepared = runtime.GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(handle);
+    // Ответ оборванной попытки может прийти уже после DropPendingPqConfigReplies.
+    const auto grabResult = [&](NKikimrPQ::TEvProposeTransactionResult::EStatus status) {
+        return runtime.GrabEdgeEventIf<TEvPersQueue::TEvProposeTransactionResult>(handle,
+            [txId, status](const TEvPersQueue::TEvProposeTransactionResult& ev) {
+                return ev.Record.GetTxId() == txId && ev.Record.GetStatus() == status;
+            });
+    };
+    auto* prepared = grabResult(NKikimrPQ::TEvProposeTransactionResult::PREPARED);
     UNIT_ASSERT(prepared);
     UNIT_ASSERT(prepared->Record.HasStatus());
     UNIT_ASSERT_EQUAL(prepared->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::PREPARED);
@@ -67,7 +74,7 @@ void SendPQTabletConfig(
     UNIT_ASSERT(ack);
     auto* accepted = runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(handle);
     UNIT_ASSERT(accepted);
-    auto* complete = runtime.GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(handle);
+    auto* complete = grabResult(NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
     UNIT_ASSERT(complete);
     UNIT_ASSERT(complete->Record.HasStatus());
     UNIT_ASSERT_EQUAL(complete->Record.GetStatus(), NKikimrPQ::TEvProposeTransactionResult::COMPLETE);
@@ -173,8 +180,8 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
     return tabletConfig;
 }
 
-// Ответы оборванного SendPQTabletConfig уже лежат в ящике edge. Новый GrabEdgeEvent
-// заберёт их раньше, чем таблетка увидит повторный propose.
+// Ответы оборванного SendPQTabletConfig уже лежат в ящике edge. Снимаем их до
+// повтора. То, что таблетка пришлёт позже, отсекает фильтр по TxId в SendPQTabletConfig.
 void DropPendingPqConfigReplies(TTestActorRuntime& runtime, const TActorId& edge) {
     auto events = runtime.CaptureMailboxEvents(edge.Hint(), edge.NodeId());
     NActors::TEventsList keep;

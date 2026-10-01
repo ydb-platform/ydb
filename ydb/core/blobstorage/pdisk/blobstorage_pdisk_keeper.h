@@ -174,6 +174,26 @@ public:
         return 100.0 * (totalHardLimit ? (double)totalUsed / totalHardLimit : 1.0);
     }
 
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetSharedPoolColor() const {
+        return ChunkTracker.GetSharedPoolColor();
+    }
+
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetCompactionPressureColor() const {
+        return ChunkTracker.GetCompactionPressureColor();
+    }
+
+    void SetAllocationReserves(ui64 system, ui64 maintenance) {
+        ChunkTracker.SetAllocationReserves(system, maintenance);
+    }
+
+    ui64 GetAllocationHeadroom(TOwner owner, EAllocationPurpose purpose) const {
+        return ChunkTracker.GetAllocationHeadroom(owner, purpose);
+    }
+
+    ui64 GetWorstAllocationHeadroom(EAllocationPurpose purpose) const {
+        return ChunkTracker.GetWorstAllocationHeadroom(purpose);
+    }
+
     NKikimrBlobStorage::TPDiskSpaceColor::E GetPDiskCapacityAlert() const {
         return ChunkTracker.GetPDiskCapacityAlert();
     }

@@ -419,6 +419,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
         const auto isAlreadyExists =
             dstPath.Check()
                 .IsResolved()
+                .NotDeleted()
                 .NotUnderDeleting();
         if (isAlreadyExists) {
             return {CreateAlterExternalTable(id, tx)};

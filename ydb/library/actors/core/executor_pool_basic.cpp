@@ -956,6 +956,14 @@ namespace NActors {
         }
     }
 
+    void TBasicExecutorPool::CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
+        for (i16 i = 0; i < MaxFullThreadCount; ++i) {
+            if (Threads[i].Thread) {
+                Threads[i].Thread->CollectAsyncFrameCacheStats(stats);
+            }
+        }
+    }
+
     void TBasicExecutorPool::GetExecutorPoolState(TExecutorPoolState &poolState) const {
         poolState.CurrentLimit = GetThreadCount();
         poolState.MaxLimit = GetMaxThreadCount();

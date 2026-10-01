@@ -443,12 +443,34 @@ message TSchemaChange {
     message TColumn {
         optional string Name = 1;
         optional string Type = 2;
+        optional string Family = 3;
+    }
+
+    message TFamily {
+        enum ECompression {
+            COMPRESSION_UNSPECIFIED = 0;
+            COMPRESSION_OFF = 1;
+            COMPRESSION_LZ4 = 2;
+        }
+
+        enum ECacheMode {
+            CACHE_MODE_UNSPECIFIED = 0;
+            CACHE_MODE_REGULAR = 1;
+            CACHE_MODE_IN_MEMORY = 2;
+        }
+
+        optional string Name = 1;
+        optional string Media = 2;
+        optional ECompression Compression = 3;
+        optional ECacheMode CacheMode = 4;
     }
 
     optional NKikimrProto.TRowVersion Version = 1;
     optional uint64 SourceSchemaVersion = 2;
     repeated TColumn Columns = 3;
     repeated string PrimaryKeyColumnNames = 4;
+    // Empty for records written before family metadata was introduced.
+    repeated TFamily Families = 5;
 }
 
 message TEvSchemaChangeReport {

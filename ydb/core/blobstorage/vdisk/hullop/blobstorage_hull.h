@@ -158,9 +158,10 @@ namespace NKikimr {
         //    collectStep=Max<ui32>(). For this command perGenCounter must also be
         //    set to Max<ui32>()
         //
-        // Once the Max generation block is present, the tablet is treated as fully
-        // deleted: no blob data is needed, and compaction may drop every barrier
-        // record for that tablet. The Max generation block itself is kept.
+        // With EnableCollectByCompleteDeletionBlock, once the Max generation block is
+        // present, the tablet is treated as fully deleted: no blob data is needed, and
+        // compaction may drop every barrier record for that tablet. The Max generation
+        // block itself is kept. Without the flag, the data waits for the barrier.
 
         ////////////////////////////////////////////////////////////////////////
         // Blocks
@@ -249,6 +250,9 @@ namespace NKikimr {
         // Hands out `chunks`, one run per hull, sized as `split` says.
         void AddFreshReservedChunks(const TFreshShortfall& split, const TVector<TChunkIdx>& chunks);
         void AdmitToFresh(const TFreshAdmission& admission);
+        // Unsequenced admitted records (a huge blob about to be logged) have got their LSN, see
+        // TFreshAdmission::Unsequenced; `admission` is sequenced from here on.
+        void SequenceFresh(TFreshAdmission& admission);
         // Called once admitted records are in Fresh, or instead if they never will be. A rotation that was
         // waiting for them to land happens here.
         void LandInFresh(const TFreshAdmission& admission, const TActorContext& ctx);

@@ -18,6 +18,7 @@ def add_options(p):
     p.add_argument('--allow-working-disks', action='store_true', help='Allow settlement even if any of enlisted PDisks is still working')
     common.add_ignore_degraded_group_check_option(p)
     common.add_ignore_failure_model_group_check_option(p)
+    common.add_ignore_group_layout_check_option(p)
     common.add_ignore_vslot_quotas_option(p)
     p.add_argument('--unavail-as-offline', action='store_true', help='Treat PDisks not reported by Node Whiteboard as offline')
     common.add_basic_format_options(p)

@@ -1215,6 +1215,9 @@ std::tuple<TVector<ui64>, TTableId> CreateShardedTable(
     for (const auto& family : opts.Families_) {
         auto fam = desc->MutablePartitionConfig()->AddColumnFamilies();
         if (family.Name) fam->SetName(family.Name);
+        if (family.Id) fam->SetId(*family.Id);
+        if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+        if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
         if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
         if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
         if (family.DataPoolKind) fam->MutableStorageConfig()->MutableData()->SetPreferredPoolKind(family.DataPoolKind);
@@ -1520,7 +1523,8 @@ void ApplyChanges(
         const TTableId& tableId,
         const TString& sourceId,
         const TVector<TChange>& changes,
-        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected)
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected,
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EReason expectedReason)
 {
     auto &runtime = *server->GetRuntime();
 
@@ -1532,10 +1536,15 @@ void ApplyChanges(
         p->SetWriteTxId(change.WriteTxId);
         TCell keyCell = TCell::Make(change.Key);
         p->SetKey(TSerializedCellVec::Serialize({ &keyCell, 1 }));
-        auto* u = p->MutableUpsert();
-        u->AddTags(2);
-        TCell valueCell = TCell::Make(change.Value);
-        u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 }));
+        if (change.Operation == TChange::EOperation::Erase) {
+            p->MutableErase();
+        } else {
+            auto* u = change.Operation == TChange::EOperation::Reset
+                ? p->MutableReset() : p->MutableUpsert();
+            u->AddTags(2);
+            TCell valueCell = TCell::Make(change.Value);
+            u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 }));
+        }
     }
 
     auto sender = runtime.AllocateEdgeActor();
@@ -1546,6 +1555,9 @@ void ApplyChanges(
     UNIT_ASSERT_C(status == expected,
         "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
         << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected));
+    if (expectedReason != NKikimrTxDataShard::TEvApplyReplicationChangesResult::REASON_NONE) {
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(ev->Get()->Record.GetReason()), static_cast<ui32>(expectedReason));
+    }
 }
 
 TRowVersion CommitWrites(
@@ -1750,12 +1762,53 @@ ui64 AsyncSetColumnFamily(
 
     auto fam = desc.MutablePartitionConfig()->AddColumnFamilies();
     if (family.Name) fam->SetName(family.Name);
+    if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+    if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
     if (family.LogPoolKind) fam->MutableStorageConfig()->MutableLog()->SetPreferredPoolKind(family.LogPoolKind);
     if (family.SysLogPoolKind) fam->MutableStorageConfig()->MutableSysLog()->SetPreferredPoolKind(family.SysLogPoolKind);
     if (family.DataPoolKind) fam->MutableStorageConfig()->MutableData()->SetPreferredPoolKind(family.DataPoolKind);
     if (family.ExternalPoolKind) fam->MutableStorageConfig()->MutableExternal()->SetPreferredPoolKind(family.ExternalPoolKind);
     if (family.DataThreshold) fam->MutableStorageConfig()->SetDataThreshold(family.DataThreshold);
     if (family.ExternalThreshold) fam->MutableStorageConfig()->SetExternalThreshold(family.ExternalThreshold);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
+ui64 AsyncAlterColumnFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        TShardedTableOptions::TFamily family)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterTable, workingDir);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterTable();
+    desc.SetName(name);
+
+    auto fam = desc.MutablePartitionConfig()->AddColumnFamilies();
+    if (family.Name) fam->SetName(family.Name);
+    if (family.Id) fam->SetId(*family.Id);
+    if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
+    if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
+    if (family.DataPoolKind) fam->MutableStorageConfig()->MutableData()->SetPreferredPoolKind(family.DataPoolKind);
+    if (family.ResetDataPoolKind) fam->MutableStorageConfig()->MutableData();
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
+ui64 AsyncAlterAddColumnToFamily(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const TString& colName,
+        const TString& familyName)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterTable, workingDir);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterTable();
+    desc.SetName(name);
+    auto col = desc.AddColumns();
+    col->SetName(colName);
+    col->SetType("Uint32");
+    col->SetFamilyName(familyName);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));
 }

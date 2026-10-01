@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from alembic.ddl.impl import DefaultImpl
 from alembic.util import CommandError
@@ -10,11 +10,16 @@ from sqlalchemy.sql.dml import Delete, Update
 from sqlalchemy.sql.elements import quoted_name
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType, sqla_type_from_name
+from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import JSON as ChSqlaJSON  # noqa: N811
+from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import AggregateFunction as ChSqlaAggregateFunction
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Array as ChSqlaArray
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Enum as ChSqlaEnum
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Map as ChSqlaMap
+from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Nested as ChSqlaNested
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Nullable
+from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import SimpleAggregateFunction as ChSqlaSimpleAggregateFunction
 from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Tuple as ChSqlaTuple
+from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import _Variant as ChSqlaVariant
 from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import MergeTree
 from clickhouse_connect.cc_sqlalchemy.inspector import with_internal_query_formats
 from clickhouse_connect.cc_sqlalchemy.sql import full_table
@@ -22,6 +27,7 @@ from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import (
     ClickHouseDDLHelper,
     column_specification,
 )
+from clickhouse_connect.datatypes.dynamic import JSON as ChJSON  # noqa: N811
 from clickhouse_connect.driver.binding import quote_identifier
 
 __all__ = ["ClickHouseImpl"]
@@ -42,8 +48,24 @@ def _reject_standard_index() -> None:
     raise CommandError(_STANDARD_INDEX_MESSAGE)
 
 
+def _contains_named_container(type_obj: ChSqlaType) -> bool:
+    if isinstance(type_obj, ChSqlaNested) or (isinstance(type_obj, ChSqlaTuple) and type_obj.type_def.keys):
+        return True
+    if isinstance(type_obj, ChSqlaArray):
+        nested_types = type_obj.type_def.values[:1]
+    elif isinstance(type_obj, (ChSqlaMap, ChSqlaTuple)):
+        nested_types = type_obj.type_def.values
+    else:
+        return False
+    return any(_contains_named_container(sqla_type_from_name(str(name))) for name in nested_types)
+
+
 def _render_ch_type(type_obj):
     """Render a ChSqlaType as valid Python source for autogen migrations"""
+    if isinstance(type_obj, (ChSqlaAggregateFunction, ChSqlaSimpleAggregateFunction, ChSqlaVariant)):
+        return f"sqla_type_from_name({type_obj.name!r})"
+    if _contains_named_container(type_obj):
+        return f"sqla_type_from_name({type_obj.name!r})"
     wrappers = type_obj.type_def.wrappers
     if isinstance(type_obj, ChSqlaEnum):
         keys = list(type_obj.type_def.keys)
@@ -57,6 +79,26 @@ def _render_ch_type(type_obj):
     elif isinstance(type_obj, ChSqlaTuple):
         elements = ", ".join(_render_inner(v) for v in type_obj.type_def.values)
         rendered = f"Tuple({elements})"
+    elif isinstance(type_obj, ChSqlaJSON):
+        ch_type = cast(ChJSON, type_obj.ch_type)
+        args = []
+        typed_paths = ", ".join(f"{path!r}: {path_type.name!r}" for path, path_type in zip(ch_type.typed_paths, ch_type.typed_types))
+        if typed_paths:
+            args.append(f"typed_paths={{{typed_paths}}}")
+        configured_limits = {
+            key: int(value)
+            for key, value in zip(ch_type.type_def.keys, ch_type.type_def.values)
+            if key in ("max_dynamic_paths", "max_dynamic_types")
+        }
+        if "max_dynamic_paths" in configured_limits:
+            args.append(f"max_dynamic_paths={configured_limits['max_dynamic_paths']}")
+        if "max_dynamic_types" in configured_limits:
+            args.append(f"max_dynamic_types={configured_limits['max_dynamic_types']}")
+        if ch_type.skip_paths:
+            args.append(f"skip_paths={ch_type.skip_paths!r}")
+        if ch_type.skip_regexps:
+            args.append(f"skip_regexps={ch_type.skip_regexps!r}")
+        rendered = f"JSON({', '.join(args)})" if args else "JSON"
     else:
         return str(type_obj.name)
     for wrapper in reversed(wrappers):
@@ -408,9 +450,29 @@ class ClickHouseImpl(DefaultImpl):
 
     @staticmethod
     def _normalize_type_name(type_: Any) -> str:
-        if hasattr(type_, "name"):
-            return str(type_.name).replace(" ", "")
-        return str(type_).replace(" ", "")
+        type_name = str(type_.name) if hasattr(type_, "name") else str(type_)
+        normalized: list[str] = []
+        quote: str | None = None
+        pos = 0
+        while pos < len(type_name):
+            char = type_name[pos]
+            if quote:
+                normalized.append(char)
+                if char == "\\" and pos + 1 < len(type_name):
+                    pos += 1
+                    normalized.append(type_name[pos])
+                elif char == quote and pos + 1 < len(type_name) and type_name[pos + 1] == quote:
+                    pos += 1
+                    normalized.append(type_name[pos])
+                elif char == quote:
+                    quote = None
+            elif char in ("'", '"', "`"):
+                quote = char
+                normalized.append(char)
+            elif not char.isspace():
+                normalized.append(char)
+            pos += 1
+        return "".join(normalized)
 
     @staticmethod
     def _set_type_nullable(type_: Any, nullable: bool):

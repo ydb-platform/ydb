@@ -8,6 +8,8 @@
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf_meta/udf_meta.h>
 
+#include <cstddef>
+
 namespace NYql::NFastCheck {
 
 enum class ESyntax {
@@ -49,6 +51,7 @@ struct TChecksRequest {
     TMaybe<TVector<TCheckFilter>> Filters;
     TString IssueReportTarget;
     bool SuppressPrerequisiteIssues = false;
+    ui32 LimitStrictnessFactor = 1;
 };
 
 struct TCheckResponse {

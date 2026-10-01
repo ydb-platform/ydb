@@ -2,6 +2,7 @@
 
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <google/protobuf/text_format.h>
@@ -12,6 +13,17 @@
 namespace NKikimr {
 namespace NSysView {
 
+namespace {
+
+NMonitoring::TDynamicCounterPtr CreateDetailedCounterGroup(
+    NMonitoring::TCountableBase::EVisibility visibility = NMonitoring::TCountableBase::EVisibility::Public)
+{
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
+    return MakeIntrusive<NMonitoring::TDynamicCounters>(visibility);
+}
+
+} // namespace
+
 TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
@@ -19,8 +31,8 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
     , CollectInterval(TotalInterval / 2)
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)
-    , DetailedGroup(new ::NMonitoring::TDynamicCounters)
-    , DetailedRawGroup(new ::NMonitoring::TDynamicCounters(
+    , DetailedGroup(CreateDetailedCounterGroup())
+    , DetailedRawGroup(CreateDetailedCounterGroup(
         ::NMonitoring::TCountableBase::EVisibility::Private))
 {
     InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;

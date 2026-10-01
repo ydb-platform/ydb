@@ -147,6 +147,9 @@ message TActorSystemConfig {
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
+    // Maximum idle coroutine allocation bytes per actor-system worker. Zero disables caching.
+    optional uint64 AsyncFrameCacheSizeBytes = 26 [default = 4194304];
+
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
 
@@ -819,12 +822,18 @@ message TCompositeConveyorConfig {
         optional double Weight = 2;
     }
 
+    message THeavyLimit {
+        optional uint64 CpuLimitUs = 1;
+        optional uint32 ThreadLimit = 2;
+    }
+
     message TWorkersPool {
         optional double WorkersCount = 1;
         optional double DefaultFractionOfThreadsCount = 2;
         repeated TWorkerPoolCategoryLink Links = 3;
         optional string Name = 4;
         optional uint64 MaxBatchSize = 5;
+        repeated THeavyLimit HeavyLimits = 6;
     }
 
     optional bool Enabled = 1 [default = true];
@@ -1737,10 +1746,10 @@ message TImmediateControlsConfig {
             MaxValue: 137438953472,
             DefaultValue: 536870912 }];
         optional uint64 PageCacheReleaseRate = 5 [(ControlOptions) = {
-            Description: "Page Cache Release Rate.",
+            Description: "Page Cache Release Rate. A smaller request is served by the huge page cache alone.",
             MinValue: 0,
-            MaxValue: 134217728,
-            DefaultValue: 8388608 }];
+            MaxValue: 1073741824,
+            DefaultValue: 134217728 }];
         optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
             Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
             MinValue: 0,
@@ -2048,6 +2057,13 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
+        optional uint64 SpaceReportPeriodSeconds = 56 [(ControlOptions) = {
+            Description: "Period between cached VDisk space report refreshes; 0 disables periodic refreshes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -2256,6 +2272,32 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 1 }];
+        optional uint64 CompactionAdmissionColor = 10 [(ControlOptions) = {
+            Description: "Worst effective space color (TPDiskSpaceColor value) of the shared pool and dynamic owners at which PDisk starts to admit "
+                         "level compactions one at a time (EnableVDiskPlannedCompaction). It stops one color below. "
+                         "0 admits them one at a time always",
+            MinValue: 0,
+            MaxValue: 60,
+            DefaultValue: 20 }];
+        optional uint64 SystemReserveChunks = 11 [(ControlOptions) = {
+            Description: "Chunks kept below each owner's RED boundary for SYSTEM data and the VDisk metadata it needs. "
+                         "USER and recovery allocations cannot spend this reserve; SYSTEM and maintenance (compaction, "
+                         "garbage collection) are not limited by it. 0 disables the policy",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
+        optional uint64 MaintenanceReserveChunks = 12 [(ControlOptions) = {
+            Description: "Additional chunks withheld from USER allocations only, as workspace for recovery and maintenance. "
+                         "Effective when SystemReserveChunks is nonzero; only actual chunk releases replenish headroom",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 0 }];
+        optional uint64 IdleDeviceProbeIntervalSeconds = 13 [(ControlOptions) = {
+            Description: "Issue a one-sector PDisk health read after this many seconds without successful physical I/O. "
+                         "Successful DDisk/PersistentBuffer direct I/O also resets the idle interval. 0 disables probes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {
@@ -2855,7 +2897,11 @@ message THealthCheckConfig {
 }
 
 message TBlobCacheConfig {
-    optional uint64 MaxSizeBytes = 1 [default = 1073741824];
+    optional uint64 MaxSizeBytes = 1 [default = 1048576000]; // 1000 MiB
+    optional uint64 MaxInFlightBytes = 2 [default = 262144000];
+    optional uint64 MaxRequestBytes = 3 [default = 8388608];
+    optional uint64 ReadDeadlineMs = 4 [default = 30000];
+    optional uint64 WriteProtectDurationMs = 5 [default = 3600000];
 }
 
 message TColumnShardConfig {

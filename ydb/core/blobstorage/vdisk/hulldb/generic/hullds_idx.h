@@ -318,17 +318,20 @@ namespace NKikimr {
         bool IsFreshRotationPending() const {
             return Fresh.IsRotationPending();
         }
-        ui64 GetFreshReservationShortfall(const TFreshOutputEstimate& record) const {
-            return Fresh.GetCurReservationShortfall(record);
+        ui64 GetFreshReservationShortfall(const TFreshOutputEstimate& record, bool unsequenced) const {
+            return Fresh.GetCurReservationShortfall(record, unsequenced);
         }
         void AddFreshReservedChunks(const TVector<TChunkIdx>& chunks) {
             Fresh.AddCurReservedChunks(chunks);
         }
-        void AdmitToFresh(const TFreshOutputEstimate& record) {
-            Fresh.AdmitInFlight(record);
+        void AdmitToFresh(const TFreshOutputEstimate& record, bool unsequenced) {
+            Fresh.AdmitInFlight(record, unsequenced);
         }
-        void LandInFresh(const TFreshOutputEstimate& record) {
-            Fresh.LandInFlight(record);
+        void SequenceInFresh(const TFreshOutputEstimate& record) {
+            Fresh.SequenceInFlight(record);
+        }
+        void LandInFresh(const TFreshOutputEstimate& record, bool unsequenced) {
+            Fresh.LandInFlight(record, unsequenced);
         }
         bool FreshWouldOutgrowSst(const TFreshOutputEstimate& record) const {
             return Fresh.WouldOutgrowSst(record);

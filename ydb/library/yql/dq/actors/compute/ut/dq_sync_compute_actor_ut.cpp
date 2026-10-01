@@ -8,6 +8,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
@@ -22,6 +23,7 @@
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -374,6 +376,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     TMultiType* WideRowTransformedType = nullptr;
     TString LogPrefix;
     TMockSinkState::TPtr SinkState = MakeIntrusive<TMockSinkState>();
+    IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     TSyncComputeActorTestFixture(
             NDqProto::EDataTransportVersion transportVersion = NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0,
@@ -729,7 +732,7 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
                 EdgeActor,
                 LogPrefix,
                 &task,
-                CreateAsyncIoFactory(SinkState),
+                AsyncIoFactory ? AsyncIoFactory : CreateAsyncIoFactory(SinkState),
                 FunctionRegistry.Get(),
                 runtimeSettings,
                 memoryLimits,
@@ -1385,6 +1388,292 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
     }
 };
 
+// Emits consecutive ids and checkpoints the offset of the last emitted row.
+class TCheckpointedSource: public IDqComputeActorAsyncInput, public NActors::TActor<TCheckpointedSource> {
+public:
+    static constexpr ui64 StateVersion = 7;
+
+    struct TState: public TThrRefBase {
+        std::atomic<ui64> Rows = 0;
+        std::atomic<ui64> LoadCalls = 0;
+    };
+
+    TCheckpointedSource(const IDqAsyncIoFactory::TSourceArguments& args, ui64 endOffset, bool finish,
+        TIntrusivePtr<TState> state, TVector<ui64> timestamps)
+        : TActor(&TCheckpointedSource::StateFunc)
+        , InputIndex(args.InputIndex)
+        , HolderFactory(args.HolderFactory)
+        , EndOffset(endOffset)
+        , Finish(finish)
+        , State(std::move(state))
+        , Timestamps(std::move(timestamps))
+    {}
+
+    ui64 GetInputIndex() const override { return InputIndex; }
+    const TDqAsyncStats& GetIngressStats() const override { return IngressStats; }
+
+    i64 GetAsyncInputData(TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64) override {
+        i64 bytes = 0;
+        while (Offset < EndOffset) {
+            NUdf::TUnboxedValue* items;
+            auto row = HolderFactory.CreateDirectArrayHolder(2, items);
+            items[0] = NUdf::TUnboxedValuePod(static_cast<i32>(++Offset));
+            items[1] = NUdf::TUnboxedValuePod(Timestamps.empty() ? ui64{1} : Timestamps.at(Offset - 1));
+            batch.emplace_back(std::move(row));
+            ++State->Rows;
+            bytes += sizeof(i32) + sizeof(ui64);
+        }
+        finished = Finish;
+        return bytes;
+    }
+
+    void SaveState(const NDqProto::TCheckpoint&, TSourceState& state) override {
+        state.Data.emplace_back(ToString(Offset), StateVersion);
+    }
+
+    void LoadState(const TSourceState& state) override {
+        Y_ENSURE(state.InputIndex == InputIndex);
+        Y_ENSURE(state.DataSize() == 1);
+        Y_ENSURE(state.Data.front().Version == StateVersion);
+        Offset = FromString<ui64>(state.Data.front().Blob);
+        ++State->LoadCalls;
+    }
+
+    void CommitState(const NDqProto::TCheckpoint&) override {}
+    void PassAway() override { TActor::PassAway(); }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
+    )
+
+    const ui64 InputIndex;
+    const THolderFactory& HolderFactory;
+    const ui64 EndOffset;
+    const bool Finish;
+    const TIntrusivePtr<TState> State;
+    const TVector<ui64> Timestamps;
+    TDqAsyncStats IngressStats;
+    ui64 Offset = 0;
+};
+
+struct TSyncComputeActorRestoreFixture: TSyncComputeActorTestFixture {
+    enum class ESourceRestore { Explicit, Checkpoint, Empty };
+
+    TSyncComputeActorRestoreFixture() {
+        RowType = TStructTypeBuilder(TypeEnv)
+            .Add("id", TDataType::Create(NUdf::TDataType<i32>::Id, TypeEnv))
+            .Add("ts", TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv))
+            .Build();
+    }
+
+    void GenerateSumProgram(NDqProto::TDqTask& task, i64 intervalUs = 10) {
+        TProgramBuilder pb(TypeEnv, *FunctionRegistry);
+        const auto input = pb.Arg(pb.NewStreamType(RowType));
+        const auto interval = [&](i64 us) {
+            return pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
+                NUdf::TStringRef(reinterpret_cast<const char*>(&us), sizeof(us)));
+        };
+        const auto output = pb.MultiHoppingCore(input,
+            [&](TRuntimeNode) { return pb.NewDataLiteral<ui32>(0); },
+            [&](TRuntimeNode item) { return pb.Member(item, "ts"); },
+            [&](TRuntimeNode item) { return pb.Member(item, "id"); },
+            [&](TRuntimeNode item, TRuntimeNode state) { return pb.Add(state, pb.Member(item, "id")); },
+            [](TRuntimeNode state) { return state; },
+            [](TRuntimeNode state) { return state; },
+            [&](TRuntimeNode lhs, TRuntimeNode rhs) { return pb.Add(lhs, rhs); },
+            [&](TRuntimeNode, TRuntimeNode state, TRuntimeNode time) {
+                const auto windowEnd = pb.Unwrap(time,
+                    pb.NewDataLiteral<NUdf::EDataSlot::String>(NUdf::TStringRef("Missing window end")), "", 0, 0);
+                return pb.NewStruct({{"id", state}, {"ts", windowEnd}});
+            },
+            interval(10), interval(intervalUs), interval(intervalUs), pb.NewDataLiteral<bool>(true), pb.NewDataLiteral<bool>(false),
+            {}, {}, {}, {}, /* checkMinWindowStart */ true);
+        TStructLiteralBuilder program(TypeEnv);
+        program.Add("Program", output);
+        program.Add("Inputs", pb.NewTuple({input}));
+        program.Add("Parameters", pb.Arg(pb.NewEmptyStructType()));
+        task.MutableProgram()->SetRaw(SerializeNode(program.Build(), TypeEnv));
+        task.MutableProgram()->SetRuntimeVersion(NDqProto::RUNTIME_VERSION_YQL_1_0);
+        // GetTaskCheckpointingMode enables source checkpointing for the PQ source type.
+        task.AddInputs()->MutableSource()->SetType(TString(PqSource));
+    }
+
+    auto StartRestoreActor(NDqProto::TDqTask& task, ui64 taskId, ui64 endOffset, bool suspended, TVector<ui64> timestamps = {}) {
+        auto sourceState = MakeIntrusive<TCheckpointedSource::TState>();
+        auto factory = MakeIntrusive<TDqAsyncIoFactory>();
+        factory->RegisterSource(TString(PqSource), [=](IDqAsyncIoFactory::TSourceArguments&& args) {
+            auto* source = new TCheckpointedSource(args, endOffset, suspended, sourceState, timestamps);
+            return std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>{source, source};
+        });
+        AsyncIoFactory = factory;
+        task.SetId(taskId);
+        task.SetCreateSuspended(suspended);
+        auto actor = CreateTestSyncComputeActor(task);
+        ActorSystem.EnableScheduleForActor(actor, true);
+        ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvState>(EdgeActor);
+        return std::pair{actor, sourceState};
+    }
+
+    void RegisterRestoreCoordinator(NActors::TActorId actor) {
+        ActorSystem.Send(actor, CheckpointCoordinator,
+            new TEvDqCompute::TEvNewCheckpointCoordinator(CoordinatorGeneration, TString(GraphId)));
+        UNIT_ASSERT(ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvNewCheckpointCoordinatorAck>(CheckpointCoordinator));
+    }
+
+    TVector<std::pair<i32, ui64>> ReadHoppingOutput(const IDqInputChannel::TPtr& output) {
+        TVector<std::pair<i32, ui64>> rows;
+        i32 sum = 0;
+        while (ReceiveData([&](const NUdf::TUnboxedValue& value, ui32 column) {
+            if (column == 0) {
+                sum = value.Get<i32>();
+            } else {
+                rows.emplace_back(sum, value.Get<ui64>());
+            }
+            return true;
+        }, [](TInstant) {}, [] {}, output)) {}
+        return rows;
+    }
+
+    void CheckForeignRestore(ESourceRestore sourceRestore, i32 expectedSum, bool restoreProgram = true) {
+        using namespace NDqProto::NDqStateLoadPlan;
+        CheckpointCoordinator = ActorSystem.AllocateEdgeActor();
+        const auto storage = ActorSystem.AllocateEdgeActor();
+        ActorSystem.RegisterService(MakeCheckpointStorageID(), storage);
+
+        // Save a real running sum (1 + 2 + 3) and source offset 3.
+        NDqProto::TDqTask donorTask;
+        GenerateSumProgram(donorTask);
+        auto donorOutput = AddDummyOutputChannel(donorTask, OutputChannelId, RowType);
+        auto [donor, donorSource] = StartRestoreActor(donorTask, InputTaskId, 3, false);
+        RegisterRestoreCoordinator(donor);
+        WaitFor([&] { return donorSource->Rows.load() == 3; }, "donor source did not emit its rows");
+        ActorSystem.Send(donor, CheckpointCoordinator,
+            new TEvDqCompute::TEvInjectCheckpoint(CheckpointId, CoordinatorGeneration, NDqProto::CHECKPOINT_TYPE_SNAPSHOT));
+        auto save = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvSaveTaskState>(storage);
+        UNIT_ASSERT(save);
+        UNIT_ASSERT_VALUES_EQUAL(save->Get()->TaskId, InputTaskId);
+        auto saved = std::move(save->Get()->State);
+        UNIT_ASSERT(saved.MiniKqlProgram);
+        UNIT_ASSERT(!saved.MiniKqlProgram->Data.Blob.empty());
+        UNIT_ASSERT_VALUES_EQUAL(saved.Sources.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(saved.Sources.front().Data.front().Blob, "3");
+        // Isolate donor checkpoint/statistics events from the actor being restored.
+        EdgeActor = ActorSystem.AllocateEdgeActor();
+        DstEdgeActor = ActorSystem.AllocateEdgeActor();
+        NDqProto::TDqTask task;
+        GenerateSumProgram(task);
+        auto output = AddDummyOutputChannel(task, OutputChannelId, RowType);
+        auto [actor, source] = StartRestoreActor(task, ThisTaskId, 5, true);
+        RegisterRestoreCoordinator(actor);
+
+        TTaskPlan plan;
+        plan.SetStateType(STATE_TYPE_FOREIGN);
+        plan.MutableProgram()->SetStateType(restoreProgram ? STATE_TYPE_FOREIGN : STATE_TYPE_EMPTY);
+        if (restoreProgram) {
+            plan.MutableProgram()->SetState(saved.MiniKqlProgram->Data.Blob);
+        }
+        auto& sourcePlan = *plan.AddSources();
+        sourcePlan.SetInputIndex(0);
+        sourcePlan.SetStateType(sourceRestore == ESourceRestore::Empty ? STATE_TYPE_EMPTY : STATE_TYPE_FOREIGN);
+        if (sourceRestore != ESourceRestore::Empty) {
+            auto& mapping = *sourcePlan.AddForeignTasksSources();
+            mapping.SetTaskId(InputTaskId);
+            mapping.SetInputIndex(0);
+        }
+        if (sourceRestore == ESourceRestore::Explicit) {
+            // Explicit offset 4 must override the mapping to the donor's offset 3.
+            sourcePlan.SetState("4");
+            sourcePlan.SetStateVersion(TCheckpointedSource::StateVersion);
+        }
+        ActorSystem.Send(actor, CheckpointCoordinator,
+            new TEvDqCompute::TEvRestoreFromCheckpoint(CheckpointId, CoordinatorGeneration, CoordinatorGeneration, plan));
+        if (sourceRestore == ESourceRestore::Checkpoint) {
+            auto request = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvGetTaskState>(storage);
+            UNIT_ASSERT(request);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(request->Get()->TaskIds.front(), InputTaskId);
+            UNIT_ASSERT_VALUES_EQUAL(source->LoadCalls.load(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), 0);
+            auto response = MakeHolder<TEvDqCompute::TEvGetTaskStateResult>(request->Get()->Checkpoint, TIssues{}, CoordinatorGeneration);
+            // Only the source is mapped from storage; the explicit program must take precedence.
+            saved.MiniKqlProgram->Data.Blob = "must not load the donor program from storage";
+            response->States.emplace_back(std::move(saved));
+            ActorSystem.Send(request->Sender, storage, response.Release());
+        }
+        auto restored = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvRestoreFromCheckpointResult>(CheckpointCoordinator);
+        UNIT_ASSERT(restored);
+        const auto& record = restored->Get()->Record;
+        UNIT_ASSERT_C(record.GetStatus() == NDqProto::TEvRestoreFromCheckpointResult::OK, record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(record.GetTaskId(), ThisTaskId);
+        UNIT_ASSERT_VALUES_EQUAL(record.GetCheckpoint().GetId(), CheckpointId);
+        UNIT_ASSERT_VALUES_EQUAL(source->LoadCalls.load(), sourceRestore == ESourceRestore::Empty ? 0 : 1);
+        UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), 0); // Restore must not start execution.
+
+        ActorSystem.Send(actor, CheckpointCoordinator, new TEvDqCompute::TEvRun());
+        const auto rows = ReadHoppingOutput(output);
+        const ui64 offset = sourceRestore == ESourceRestore::Empty ? 0 : sourceRestore == ESourceRestore::Explicit ? 4 : 3;
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rows.front().first, expectedSum);
+        UNIT_ASSERT_VALUES_EQUAL(rows.front().second, 10);
+        UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), 5 - offset);
+    }
+
+    void CheckForgedHoppingBoundary(bool restoreSource) {
+        using namespace NDqProto::NDqStateLoadPlan;
+        CheckpointCoordinator = ActorSystem.AllocateEdgeActor();
+        ActorSystem.RegisterService(MakeCheckpointStorageID(), ActorSystem.AllocateEdgeActor());
+        NDqProto::TDqTask task;
+        GenerateSumProgram(task, /* intervalUs */ 30);
+        auto output = AddDummyOutputChannel(task, OutputChannelId, RowType);
+        auto [actor, source] = StartRestoreActor(task, ThisTaskId, 5, true, {95, 100, 110, 130, 140});
+        RegisterRestoreCoordinator(actor);
+
+        // Same wire format as the recovery planner: only the lower bound, no keys or aggregate data.
+        // Construct it here so these tests also work without the FQ recovery-planner changes.
+        TString hoppingState;
+        WriteUi32(hoppingState, static_cast<ui32>(EMkqlStateType::SIMPLE_BLOB));
+        WriteUi32(hoppingState, 3); // MultiHopping state version with MinWindowStartIndex.
+        WriteUi64(hoppingState, 10); // Minimum window start: 100 us / 10 us hop.
+        WriteUi32(hoppingState, 0); // Empty key map.
+        WriteBool(hoppingState, false); // Not finished.
+        TString programState;
+        TNodeStateHelper::AddNodeState(programState, hoppingState);
+
+        TTaskPlan plan;
+        plan.SetStateType(STATE_TYPE_FOREIGN);
+        plan.MutableProgram()->SetStateType(STATE_TYPE_FOREIGN);
+        plan.MutableProgram()->SetState(programState);
+        auto& sourcePlan = *plan.AddSources();
+        sourcePlan.SetInputIndex(0);
+        sourcePlan.SetStateType(restoreSource ? STATE_TYPE_FOREIGN : STATE_TYPE_EMPTY);
+        if (restoreSource) {
+            sourcePlan.SetState("1"); // Start reading at the event exactly on the 100 us boundary.
+            sourcePlan.SetStateVersion(TCheckpointedSource::StateVersion);
+        }
+        ActorSystem.Send(actor, CheckpointCoordinator,
+            new TEvDqCompute::TEvRestoreFromCheckpoint(CheckpointId, CoordinatorGeneration, CoordinatorGeneration, plan));
+        auto restored = ActorSystem.GrabEdgeEvent<TEvDqCompute::TEvRestoreFromCheckpointResult>(CheckpointCoordinator);
+        UNIT_ASSERT(restored);
+        UNIT_ASSERT_C(restored->Get()->Record.GetStatus() == NDqProto::TEvRestoreFromCheckpointResult::OK,
+            restored->Get()->Record.DebugString());
+        UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(source->LoadCalls.load(), restoreSource ? 1 : 0);
+
+        ActorSystem.Send(actor, CheckpointCoordinator, new TEvDqCompute::TEvRun());
+        const auto rows = ReadHoppingOutput(output);
+        // Only complete windows starting at or after 100 us, including for the new key.
+        // The event at 95 us must not contribute, while the one at 100 us must contribute.
+        const TVector<std::pair<i32, ui64>> expected = {{5, 130}, {7, 140}, {9, 150}, {9, 160}, {5, 170}};
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), expected.size());
+        for (size_t i = 0; i < rows.size(); ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(rows[i].first, expected[i].first);
+            UNIT_ASSERT_VALUES_EQUAL(rows[i].second, expected[i].second);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(source->Rows.load(), restoreSource ? 4 : 5);
+    }
+};
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
@@ -1538,6 +1827,30 @@ Y_UNIT_TEST_SUITE(TSyncComputeActorTest) {
 }
 
 Y_UNIT_TEST_SUITE(TSyncComputeActorCheckpointsTest) {
+    Y_UNIT_TEST_F(ForeignRestoreHoppingBoundaryOnly, TSyncComputeActorRestoreFixture) {
+        CheckForgedHoppingBoundary(false);
+    }
+
+    Y_UNIT_TEST_F(ForeignRestoreHoppingBoundaryAndExplicitSource, TSyncComputeActorRestoreFixture) {
+        CheckForgedHoppingBoundary(true);
+    }
+
+    Y_UNIT_TEST_F(ForeignRestoreExplicitProgramAndSource, TSyncComputeActorRestoreFixture) {
+        CheckForeignRestore(ESourceRestore::Explicit, 11);
+    }
+
+    Y_UNIT_TEST_F(ForeignRestoreExplicitProgramAndCheckpointSource, TSyncComputeActorRestoreFixture) {
+        CheckForeignRestore(ESourceRestore::Checkpoint, 15);
+    }
+
+    Y_UNIT_TEST_F(ForeignRestoreExplicitProgramAndEmptySource, TSyncComputeActorRestoreFixture) {
+        CheckForeignRestore(ESourceRestore::Empty, 21);
+    }
+
+    Y_UNIT_TEST_F(ForeignRestoreEmptyProgramAndExplicitSource, TSyncComputeActorRestoreFixture) {
+        CheckForeignRestore(ESourceRestore::Explicit, 5, false);
+    }
+
     Y_UNIT_TEST_F(CheckpointCommitAcknowledgedBySink, TSyncComputeActorTestFixture) {
         LogPrefix = "Checkpoint commit (sync sink): ";
         NDqProto::TDqTask task;

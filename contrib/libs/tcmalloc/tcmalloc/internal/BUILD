@@ -150,7 +150,10 @@ cc_library(
     visibility = [
         "//tcmalloc:__subpackages__",
     ],
-    deps = [":config"],
+    deps = [
+        ":config",
+        "@com_google_absl//absl/base:core_headers",
+    ],
 )
 
 cc_test(
@@ -204,6 +207,20 @@ cc_library(
         "//tcmalloc:malloc_extension",
         "@com_google_absl//absl/functional:function_ref",
         "@com_google_absl//absl/time",
+    ],
+)
+
+cc_library(
+    name = "gwp_asan_state",
+    hdrs = ["gwp_asan_state.h"],
+    copts = TCMALLOC_DEFAULT_COPTS,
+    visibility = [
+        "//tcmalloc:__subpackages__",
+    ],
+    deps = [
+        ":config",
+        ":logging",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -358,20 +375,6 @@ cc_library(
     deps = [
         ":config",
         ":page_size",
-    ],
-)
-
-cc_library(
-    name = "mismatched_delete_state",
-    hdrs = ["mismatched_delete_state.h"],
-    copts = TCMALLOC_DEFAULT_COPTS,
-    visibility = [
-        "//tcmalloc:__subpackages__",
-    ],
-    deps = [
-        ":config",
-        ":logging",
-        "@com_google_absl//absl/types:span",
     ],
 )
 

@@ -5,12 +5,14 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/vdisk/common/disk_part.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_context.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_dbtype.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <util/generic/vector.h>
 #include <util/generic/buffer.h>
 #include <util/stream/output.h>
 #include <util/string/printf.h>
 #include <util/ysaveload.h>
+#include <array>
 
 // FIXME: only for TIngressCache (put it to vdisk/common)
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
@@ -139,12 +141,15 @@ namespace NKikimr {
         // Reserve chunks for compacting Fresh before accepting the writes that fill it
         // (EnableVDiskFreshSpaceProjection). See TFreshData and TFreshAdmissionGate.
         const bool FreshChunkReservation;
+        // Max<ui32>() generation block alone lets us drop all data of the tablet, see IsCompleteTabletDeletionBlock
+        const bool CollectByCompleteDeletionBlock;
 
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
 
         NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
+        std::array<NMonGroup::TLsmCompactionRankGroup, ui32(EHullDbType::Max)> LsmCompactionRankGroups;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
 
         THullCtx(
@@ -164,7 +169,8 @@ namespace NKikimr {
                 ui32 hullCompLevel0MaxSstsAtOnce,
                 ui32 hullCompSortedPartsNum,
                 bool freshChunkReservation = false,
-                ui32 appendBlockSize = 4096
+                ui32 appendBlockSize = 4096,
+                bool collectByCompleteDeletionBlock = false
         );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);

@@ -71,7 +71,10 @@ FROM (
     FROM
         $input
     GROUP BY
-        ROLLUP (key AS key, Substring(value, 1, 1) AS prefix)
+        ROLLUP (
+            key AS key,
+            Substring(value, 1, 1) AS prefix
+        )
     ORDER BY
         key
 );

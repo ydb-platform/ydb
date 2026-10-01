@@ -583,14 +583,9 @@ runs:
             echo "35 [OOM dmesg (try $RETRY)]($OOM_DMESG_LOG_URL)" >> $SUMMARY_LINKS
           fi
 
-          if [ -n "$MONITOR_PID" ] && kill -0 "$MONITOR_PID" 2>/dev/null; then
-            kill "$MONITOR_PID" 2>/dev/null || true
-            wait "$MONITOR_PID" 2>/dev/null || true
-          fi
-          if [ -n "$MONITOR_RESOURCES_PID" ] && kill -0 "$MONITOR_RESOURCES_PID" 2>/dev/null; then
-            kill "$MONITOR_RESOURCES_PID" 2>/dev/null || true
-            wait "$MONITOR_RESOURCES_PID" 2>/dev/null || true
-          fi
+          for p in "$MONITOR_PID" "$MONITOR_RESOURCES_PID"; do
+            { [ -n "$p" ] && kill "$p" 2>/dev/null && wait "$p" 2>/dev/null; } || true
+          done
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || POSTPROCESS_RC=$?
 
@@ -609,47 +604,10 @@ runs:
           ya_dir=$(pwd)
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl) || true
 
-          set +e
-          TESTS_METRICS_DIR="$CURRENT_PUBLIC_DIR/tests_metrics"
-          mkdir -p "$TESTS_METRICS_DIR"
-          DASHBOARD_ARGS=()
-          if [ -n "$DASHBOARD_SANITIZER" ]; then
-            DASHBOARD_ARGS+=(--sanitizer "$DASHBOARD_SANITIZER")
-          fi
-          TRY_LINKS=""
-          for i in $(seq 1 $RETRY); do TRY_LINKS="${TRY_LINKS}try_$i/tests_metrics/dashboard.html,"; done
-          TRY_LINKS="${TRY_LINKS%,}"
-          if timeout 120 python3 .github/scripts/utils/dashboard/test_metrics/tests_resource_dashboard.py \
-            --report "$CURRENT_REPORT" \
-            --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
-            --top-n 500 \
-            --out-html "$TESTS_METRICS_DIR/dashboard.html" \
-            --out-trace "$TESTS_METRICS_DIR/trace.json" \
-            --out-stats "$TESTS_METRICS_DIR/stats.json" \
-            --resources-jsonl "$RESOURCES_JSONL" \
-            --build-preset "$BUILD_PRESET" \
-            --runner "${RUNNER_NAME}" \
-            --pr "${PR_NUMBER}" \
-            --branch "${BRANCH_NAME}" \
-            --commit "${ORIGINAL_HEAD}" \
-            --artifacts-url "${PUBLIC_DIR_URL}" \
-            --try-links "$TRY_LINKS" \
-            --repo "${GITHUB_REPOSITORY}" \
-            --repo-root . \
-            "${DASHBOARD_ARGS[@]}" > "$TESTS_METRICS_DIR/dashboard_build.log" 2>&1; then
-            rm -f "$TESTS_METRICS_DIR/dashboard_build.log"
-          else
-            mv "$TESTS_METRICS_DIR/dashboard_build.log" "$TESTS_METRICS_DIR/dashboard_error.log"
-            rm -f "$TESTS_METRICS_DIR/dashboard.html" \
-              "$TESTS_METRICS_DIR/trace.json" \
-              "$TESTS_METRICS_DIR/stats.json" \
-              "$TESTS_METRICS_DIR/dashboard_suggestions.json" \
-              "$TESTS_METRICS_DIR/trace_chunks.csv"
-            echo "Dashboard generation failed (see dashboard_error.log in artifacts)"
-          fi
-          cp -f "$RESOURCES_JSONL" "$TESTS_METRICS_DIR/resources_monitor.jsonl" 2>/dev/null
-          cp -f ram_usage.txt "$TESTS_METRICS_DIR/ram_usage_legacy.txt" 2>/dev/null
-          set -e
+          CURRENT_REPORT="$CURRENT_REPORT" RESOURCES_JSONL="$RESOURCES_JSONL" \
+          RETRY="$RETRY" DASHBOARD_SANITIZER="$DASHBOARD_SANITIZER" \
+          BRANCH_NAME="$BRANCH_NAME" ORIGINAL_HEAD="$ORIGINAL_HEAD" \
+          bash .github/scripts/utils/dashboard/build_tests_dashboard.sh || true
 
           # generate test_bloat
           ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?

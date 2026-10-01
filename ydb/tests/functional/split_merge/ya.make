@@ -5,12 +5,8 @@ ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 FORK_SUBTESTS()
 SPLIT_FACTOR(45)
 
-IF (SANITIZER_TYPE)
-    SIZE(LARGE)
-    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
+SIZE(LARGE)
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 TEST_SRCS(
     test_split_merge.py

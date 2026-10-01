@@ -94,14 +94,15 @@ def build_rows(base_config, storage_pools, show_donors=False):
 
     rows = []
     for group in group_map:
-        for vslot_data in group_map[group].VSlotId:
+        group_info = group_map[group]
+        for vslot_data in group_info.VSlotId:
             vslot = vslot_map[common.get_vslot_id(vslot_data)]
-            rows.append(make_row(group, group_to_sp_name, node_fqdn_map, pdisk_map, vslot_data,
+            rows.append(make_row(group_info, group_to_sp_name, node_fqdn_map, pdisk_map, vslot_data,
                                  vslot.GroupGeneration, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx,
                                  vslot.VDiskMetrics, vslot.Status, vslot.VDiskKind, vslot.ReadOnly, False))
             if show_donors:
                 for donor in vslot.Donors:
-                    rows.append(make_row(group, group_to_sp_name, node_fqdn_map, pdisk_map, donor.VSlotId,
+                    rows.append(make_row(group_info, group_to_sp_name, node_fqdn_map, pdisk_map, donor.VSlotId,
                                          donor.VDiskId.GroupGeneration, donor.VDiskId.Ring,
                                          donor.VDiskId.Domain, donor.VDiskId.VDisk,
                                          donor.VDiskMetrics, None, None, None, True))

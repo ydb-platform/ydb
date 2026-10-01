@@ -525,19 +525,24 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
         auto maxInflightBytes = GetMaxInflightBytes();
 
         if (Storage) {
-            // a confirmation of the finish carries no bytes and may pass the checkpoints still in the storage
-            if (!data.ConfirmFinish && ((SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes))) {
+            // A confirmation of the finish carries no bytes, the window does not hold it back. It must not pass
+            // the checkpoints still in the storage, the peer lets the channel go on it; after an early finish
+            // they are not wanted and it goes at once
+            bool spill = data.ConfirmFinish
+                ? !EarlyFinished.load() && (!SpilledChunks.empty() || !LoadingQueue.empty())
+                : (SpilledBytes.load() > 0) || (PushBytes.load() >= RemotePopBytes.load() + maxInflightBytes);
+            if (spill) {
                 if (SpilledChunks.empty()) {
                     LOG_D("START SPILLING, ChannelId=" << Info.ChannelId << ", PushBytes=" << PushBytes.load()
                         << ", PopBytes=" << RemotePopBytes.load() << ", SpilledBytes=" << SpilledBytes.load() << ", data.Bytes=" << data.Bytes
                     );
                 }
-                SpilledChunks.push_back({static_cast<ui32>(data.Bytes), finished || data.Checkpoint.Defined()});
+                SpilledChunks.push_back({static_cast<ui32>(data.Bytes), finished || data.ConfirmFinish || data.Checkpoint.Defined()});
                 SpilledBytes += data.Bytes;
                 Storage->Put(++HeadBlobId, DataToBuffer(std::move(data)));
                 spilled = true;
                 fillLevel = Storage->IsFull() ? EDqFillLevel::HardLimit : EDqFillLevel::SoftLimit;
-                if (EarlyFinished.load()) {
+                if (EarlyFinished.load() || ConfirmFinishSent.load()) {
                     // nothing opens the window any more, see ReloadSpilled
                     ReloadSpilled(nodeState, self);
                 }
@@ -568,8 +573,26 @@ void TOutputDescriptor::PushDataChunk(TDataChunk&& data, TNodeState* nodeState, 
     *OutputBufferBytes += chunkBytes;
 
     if (!spilled) {
+        auto confirmFinish = data.ConfirmFinish;
         nodeState->PushDataChunk(std::move(data), self);
+        if (confirmFinish) {
+            std::lock_guard lock(FlowControlMutex);
+            OnFinishConfirmed();
+        }
     }
+}
+
+// The confirmation of the finish is with the session: the channel is complete. Under FlowControlMutex
+void TOutputDescriptor::OnFinishConfirmed() {
+    Finished.store(true);
+    if (FinishEpoch) {
+        (*FinishEpoch)++;
+    }
+    ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+}
+
+bool TOutputDescriptor::IsStorageEmpty() const {
+    return !Storage || (SpilledChunks.empty() && LoadingQueue.empty());
 }
 
 // The peer reads no more: the data in the storage is never wanted and must not hold back the control
@@ -614,17 +637,22 @@ void TOutputDescriptor::DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr
 
         TDataChunk data;
         BufferToData(data, std::move(info.Buffer));
+        auto confirmFinish = data.ConfirmFinish;
         nodeState->PushDataChunk(std::move(data), self);
         SpilledBytes -= info.Bytes;
 
         LoadingQueue.pop();
+        if (confirmFinish) {
+            OnFinishConfirmed();
+        }
     }
 }
 
-// The storage is read as far as the window allows - or all the way after an early finish: the peer does
-// not open the window any more and what is left to read is the control chunks
+// The storage is read as far as the window allows - or all the way after an early finish or once the peer has
+// popped the finish: what is left to read is the control chunks, and the window may not open any more
 void TOutputDescriptor::ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
-    while (!SpilledChunks.empty() && (EarlyFinished.load() || PushBytes.load() < RemotePopBytes.load() + GetMaxInflightBytes())) {
+    while (!SpilledChunks.empty() && (EarlyFinished.load() || ConfirmFinishSent.load()
+        || PushBytes.load() < RemotePopBytes.load() + GetMaxInflightBytes())) {
         auto chunk = SpilledChunks.front();
         SpilledChunks.pop_front();
         Y_ENSURE(TailBlobId < HeadBlobId);
@@ -639,8 +667,12 @@ void TOutputDescriptor::ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOu
         if (LoadingQueue.empty() && info.Loaded) {
             TDataChunk data;
             BufferToData(data, std::move(info.Buffer));
+            auto confirmFinish = data.ConfirmFinish;
             nodeState->PushDataChunk(std::move(data), self);
             SpilledBytes -= chunk.Bytes;
+            if (confirmFinish) {
+                OnFinishConfirmed();
+            }
         } else {
             LoadingQueue.emplace(std::move(info));
         }
@@ -704,7 +736,8 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
         }
 
         flushed = PushBytes.load() == RemotePopBytes.load();
-        if (flushed && FinishPushed.load()) {
+        // what is still in the storage is a checkpoint after the finish, or the confirmation of the finish
+        if (flushed && FinishPushed.load() && IsStorageEmpty()) {
             LOG_T(nodeState->LogPrefix << "OD FINISH, ChannelId=" << Info.ChannelId
                 << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
                 << ", RemotePopBytes=" << bytes
@@ -804,9 +837,20 @@ void TOutputDescriptor::UpdateMemoryPressure(bool memoryPressure, TNodeState* no
 }
 
 void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finishing, bool memoryPressure, TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self) {
-    // The receiver reports Finishing with every pop after the finish chunk, the confirmation goes once -
-    // and before Finished is set, here or by the flush of UpdatePopBytes: the output actor it wakes up
-    // sees the channel complete, the confirmation counted with the rest
+    bool active = !IsTerminatedOrAborted();
+    if (active) {
+        // before UpdatePopBytes, so that the fill level is recomputed with the new inflight window
+        UpdateMemoryPressure(memoryPressure, nodeState);
+        // before the confirmation of the finish, which completes the channel: an early finish is seen with it
+        if (earlyFinish) {
+            HandleEarlyFinish(nodeState, self);
+            PushDataChunk(TDataChunk(true), nodeState, self);
+        }
+    }
+    // The receiver reports Finishing with every pop after the finish chunk, the confirmation goes once - and
+    // the channel is finished only once the confirmation is with the session, see OnFinishConfirmed: the
+    // output actor it wakes up sees the channel complete, the confirmation counted with the rest. Before the
+    // flush of UpdatePopBytes, which may finish the channel as well
     if (finishing && !ConfirmFinishSent.exchange(true)) {
         TDataChunk data;
         data.ConfirmFinish = true;
@@ -817,26 +861,8 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finis
             << ", OA=" << Info.OutputActorId << ", IA=" << Info.InputActorId
             << ", EarlyFinished=" << EarlyFinished.load());
     }
-    if (!IsTerminatedOrAborted()) {
-        // before UpdatePopBytes, so that the fill level is recomputed with the new inflight window
-        UpdateMemoryPressure(memoryPressure, nodeState);
-        if (earlyFinish) {
-            HandleEarlyFinish(nodeState, self);
-            PushDataChunk(TDataChunk(true), nodeState, self);
-        }
-        if (popBytes) {
-            UpdatePopBytes(popBytes, nodeState, self);
-        }
-    }
-    if (finishing) {
-        Finished.store(true);
-        {
-            std::lock_guard lock(FlowControlMutex);
-            if (FinishEpoch) {
-                (*FinishEpoch)++;
-            }
-        }
-        ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    if (active && popBytes) {
+        UpdatePopBytes(popBytes, nodeState, self);
     }
 }
 
@@ -873,7 +899,7 @@ void TOutputDescriptor::StorageWakeupHandler(TNodeState* nodeState, std::shared_
     }
 
     DrainLoadingQueue(nodeState, self);
-    if (EarlyFinished.load()) {
+    if (EarlyFinished.load() || ConfirmFinishSent.load()) {
         ReloadSpilled(nodeState, self);
     }
 }

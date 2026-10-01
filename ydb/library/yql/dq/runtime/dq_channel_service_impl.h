@@ -344,6 +344,8 @@ public:
     void SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch);
     void StorageWakeupHandler(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     // all under FlowControlMutex
+    void OnFinishConfirmed();
+    bool IsStorageEmpty() const;
     void DropSpilledData();
     void DrainLoadingQueue(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);
     void ReloadSpilled(TNodeState* nodeState, std::shared_ptr<TOutputDescriptor> self);

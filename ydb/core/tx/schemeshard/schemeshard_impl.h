@@ -744,7 +744,7 @@ public:
     bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType = {});
     bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
     bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
-    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const;
+    bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr, ui64 count = 1) const;
     bool CheckInFlightLimit(NKikimrSchemeOp::EOperationType opType, TString& errStr) const;
     bool CanCreateSnapshot(const TPathId& tablePathId, TTxId txId, NKikimrScheme::EStatus& status, TString& errStr) const;
 

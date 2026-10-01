@@ -196,6 +196,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
         auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
         resourceManager.SetQueryMemoryLimit(memoryLimit);
+        resourceManager.SetKqpLevelCacheMaxSizeBytes(0);
         // the memory arena charges the prepaid memory of the query tasks to the same node total: no headroom, units
         // almost free and small MKQL limits keep that charge to about 1 MiB next to the row dispatcher allocations
         resourceManager.SetExecutionUnitMemory(100);

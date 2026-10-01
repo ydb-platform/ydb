@@ -301,7 +301,7 @@ struct TRpcServices {
         EvGrpcRuntimeRequest,
         EvNodeCheckRequest,
         EvStreamWriteRefreshToken,    // internal call, pair to EvRefreshToken
-        EvRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
+        EvHttpRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
         EvRequestAuthAndCheckResult,
         // !!! DO NOT ADD NEW REQUEST !!!
     };
@@ -1932,11 +1932,11 @@ public:
     EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 };
 
-class TEvRequestAuthAndCheck
+class TEvHttpRequestAuthAndCheck
     : public IRequestProxyCtx
-    , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
+    , public TEventLocal<TEvHttpRequestAuthAndCheck, TRpcServices::EvHttpRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(
+    TEvHttpRequestAuthAndCheck(
         const TString& database,
         const TMaybe<TString>& ydbToken,
         NActors::TActorId sender,

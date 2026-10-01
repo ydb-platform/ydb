@@ -509,23 +509,11 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
   {% endlist %}
 - Go
 
-  The function converts a float32 vector to a binary representation and executes a parameterized query:
+  Use `sugar.Embedding` from Go SDK v3.153.0 or later to serialize the vector. Then execute a parameterized query:
 
 
   ```go
-  import (
-      "encoding/binary"
-      "math"
-  )
-
-  func convertVectorToBytes(vector []float32) []byte {
-      buf := make([]byte, len(vector)*4+1)
-      for i, v := range vector {
-      binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
-      }
-      buf[len(buf)-1] = 0x01
-      return buf
-  }
+  import "github.com/ydb-platform/ydb-go-sdk/v3/sugar"
 
   func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
       query := fmt.Sprintf(`
@@ -546,7 +534,7 @@ In {{ ydb-short-name }} tables, vectors are stored as a serialized byte sequence
       rows = append(rows, types.StructValue(
           types.StructFieldValue("id", types.UTF8Value(item.ID)),
           types.StructFieldValue("document", types.UTF8Value(item.Document)),
-          types.StructFieldValue("embedding", types.BytesValue(convertVectorToBytes(item.Embedding))),
+          types.StructFieldValue("embedding", sugar.Embedding(item.Embedding...)),
       ))
       }
 
@@ -1509,7 +1497,7 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
       row, err := db.Query().Query(ctx, q,
       query.WithParameters(
-          ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
+          ydb.ParamsBuilder().Param("$embedding").Any(sugar.Embedding(embedding...)).Build(),
       ),
       )
       if err != nil {

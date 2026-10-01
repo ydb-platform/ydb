@@ -17,15 +17,15 @@ namespace NKikimr::NGRpcService {
             return std::make_shared<const NPathAliasing::TPathNormalizer>(config);
         }
 
-        std::unique_ptr<TEvRequestAuthAndCheck> MakeRequest() {
-            return std::make_unique<TEvRequestAuthAndCheck>(
+        std::unique_ptr<TEvHttpRequestAuthAndCheck> MakeRequest() {
+            return std::make_unique<TEvHttpRequestAuthAndCheck>(
                 "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id");
         }
 
-        class TNamedRequest final : public TEvRequestAuthAndCheck {
+        class TNamedRequest final : public TEvHttpRequestAuthAndCheck {
         public:
             explicit TNamedRequest(TString method)
-                : TEvRequestAuthAndCheck(
+                : TEvHttpRequestAuthAndCheck(
                     "/raw", TMaybe<TString>{}, TActorId{}, TAuditMode::NonModifying(), "peer", "request-id")
                 , Method_(std::move(method))
             {}

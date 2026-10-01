@@ -502,22 +502,10 @@
 
 - Go
 
-    Функция конвертирует вектор float32 в бинарное представление и выполняет параметризованный запрос:
+    Для сериализации вектора используйте `sugar.Embedding` из Go SDK версии v3.153.0 или новее. Затем выполните параметризованный запрос:
 
     ```go
-    import (
-        "encoding/binary"
-        "math"
-    )
-
-    func convertVectorToBytes(vector []float32) []byte {
-        buf := make([]byte, len(vector)*4+1)
-        for i, v := range vector {
-        binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
-        }
-        buf[len(buf)-1] = 0x01
-        return buf
-    }
+    import "github.com/ydb-platform/ydb-go-sdk/v3/sugar"
 
     func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
         query := fmt.Sprintf(`
@@ -538,7 +526,7 @@
         rows = append(rows, types.StructValue(
             types.StructFieldValue("id", types.UTF8Value(item.ID)),
             types.StructFieldValue("document", types.UTF8Value(item.Document)),
-            types.StructFieldValue("embedding", types.BytesValue(convertVectorToBytes(item.Embedding))),
+            types.StructFieldValue("embedding", sugar.Embedding(item.Embedding...)),
         ))
         }
 
@@ -1500,7 +1488,7 @@
 
         row, err := db.Query().Query(ctx, q,
         query.WithParameters(
-            ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
+            ydb.ParamsBuilder().Param("$embedding").Any(sugar.Embedding(embedding...)).Build(),
         ),
         )
         if err != nil {

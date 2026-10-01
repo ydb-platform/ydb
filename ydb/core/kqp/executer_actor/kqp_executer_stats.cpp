@@ -1067,7 +1067,7 @@ void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& st
 }
 
 ui64 TQueryExecutionStats::EstimateCollectMem() {
-    ui64 result = 0;
+    ui64 result = CollectCurrentQueryStats ? CurrentTaskStats.capacity() * sizeof(TCurrentTaskStats) : 0;
     for (auto& [_, stageStat] : StageStats) {
         result += stageStat.EstimateMem();
     }
@@ -1237,6 +1237,15 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
     if (taskId) {
+        if (CollectCurrentQueryStats) {
+            AFL_ENSURE(taskId <= TaskCount);
+            CurrentTaskStats.resize(TaskCount);
+            auto& current = CurrentTaskStats[taskId - 1];
+            CurrentMemoryBytes -= current.MemoryBytes;
+            current.MemoryBytes = state == NDqProto::COMPUTE_STATE_EXECUTING
+                ? stats.GetMemoryUsage() : 0;
+            CurrentMemoryBytes += current.MemoryBytes;
+        }
         // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
         // FillStats then sends empty Tasks. Do not ENSURE — that would mask
         // the real failure issues from COMPUTE_STATE_FAILURE.
@@ -1245,6 +1254,26 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         }
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
+        if (CollectCurrentQueryStats) {
+            auto readIngressBytes = stats.GetTasks(0).GetIngressBytes();
+            if (!CollectFullStats(StatsMode) && TasksGraph) {
+                const auto& task = TasksGraph->GetTask(taskId);
+                const auto& stage = TasksGraph->GetStageInfo(task.StageId);
+                if (task.Meta.ScanTask && (stage.Meta.IsDatashard() || stage.Meta.IsOlap())) {
+                    // Scan compute actors include scan bytes in IngressBytes only in FULL/PROFILE.
+                    // BASIC already carries the same counter in table stats.
+                    for (const auto& table : stats.GetTasks(0).GetTables()) {
+                        if (table.GetTablePath() == stage.Meta.TablePath) {
+                            readIngressBytes += table.GetReadBytes();
+                        }
+                    }
+                }
+            }
+            auto& current = CurrentTaskStats[taskId - 1];
+            CurrentReadIngressBytes -= current.ReadIngressBytes;
+            current.ReadIngressBytes = std::max(current.ReadIngressBytes, readIngressBytes);
+            CurrentReadIngressBytes += current.ReadIngressBytes;
+        }
     }
 
     for (auto& taskStats : stats.GetTasks()) {
@@ -1552,6 +1581,22 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     ExportAggAsyncStats(data.Pop, *stats.MutablePop());
     ExportAggAsyncStats(data.Egress, *stats.MutableEgress());
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
+}
+
+TCurrentQueryResources TQueryExecutionStats::GetCurrentQueryResources() const {
+    TCurrentQueryResources result;
+    result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    result.ComputeMemoryBytes = CurrentMemoryBytes;
+    result.ReadIngressBytes = CurrentReadIngressBytes;
+    return result;
+}
+
+TCurrentExecStatsReport TQueryExecutionStats::TakeCurrentStats(bool finished) {
+    auto current = GetCurrentQueryResources();
+    if (finished) {
+        current.ComputeMemoryBytes = 0;
+    }
+    return {current, ++CurrentStatsSequenceNo};
 }
 
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {

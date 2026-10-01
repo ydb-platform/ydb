@@ -4,6 +4,7 @@
 #include <ydb/core/protos/base.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/tx/replication/common/family_settings.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -12,6 +13,66 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr::NReplication::NService {
+
+namespace {
+
+class TFamilyKeyParser: public NJson::TParserCallbacks {
+public:
+    explicit TFamilyKeyParser(NJson::TJsonValue& value)
+        : TParserCallbacks(value)
+    {
+    }
+
+    bool OnOpenMap() override {
+        const bool isFamilyMap = CurrentState == AFTER_MAP_KEY && Key == "columnFamilies";
+        if (!TParserCallbacks::OnOpenMap()) {
+            return false;
+        }
+
+        if (isFamilyMap) {
+            FamilyMaps.push_back(ValuesStack.back());
+        }
+
+        return true;
+    }
+
+    bool OnMapKey(const TStringBuf& key) override {
+        if (!FamilyMaps.empty() && FamilyMaps.back() == ValuesStack.back() && FamilyMaps.back()->Has(key)) {
+            DuplicateFamily = key;
+            return false;
+        }
+
+        return TParserCallbacks::OnMapKey(key);
+    }
+
+    bool OnCloseMap() override {
+        if (!FamilyMaps.empty() && FamilyMaps.back() == ValuesStack.back()) {
+            FamilyMaps.pop_back();
+        }
+
+        return TParserCallbacks::OnCloseMap();
+    }
+
+    TString DuplicateFamily;
+
+private:
+    TVector<const NJson::TJsonValue*> FamilyMaps;
+};
+
+} // namespace
+
+bool TChangeRecordBuilder::ParseJsonBody(TStringBuf body, NJson::TJsonValue& json, TString& error) {
+    TMemoryInput input(body.data(), body.size());
+    TFamilyKeyParser parser(json);
+    if (NJson::ReadJson(&input, &parser)) {
+        return true;
+    }
+
+    error = parser.DuplicateFamily
+        ? TStringBuilder() << "duplicate column family: " << parser.DuplicateFamily
+        : TString("cannot parse JSON");
+    return false;
+}
 
 ui64 TChangeRecord::GetGroup() const {
     return 0;
@@ -204,6 +265,10 @@ void TChangeRecord::RewriteTxId(ui64 value) {
 }
 
 bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema, TString& error) const {
+    if (!IsValidJson(error)) {
+        return false;
+    }
+
     if (GetKind() != EKind::CdcSchemaChange) {
         error = "record is not a schema change";
         return false;
@@ -245,8 +310,67 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
     schema.MutableVersion()->SetStep(timestamp.GetArray()[0].GetUInteger());
     schema.MutableVersion()->SetTxId(timestamp.GetArray()[1].GetUInteger());
 
+    const bool hasFamilies = table.Has("columnFamilies");
+    THashSet<TString> families;
+    if (hasFamilies) {
+        if (!table["columnFamilies"].IsMap() || !table["columnFamilies"].GetMap().contains("default")) {
+            error = "schema record has invalid column families: default family is required";
+            return false;
+        }
+
+        TVector<TString> names;
+        for (const auto& [name, definition] : table["columnFamilies"].GetMap()) {
+            if (name.empty() || !definition.IsMap()
+                || !definition.Has("compression") || !definition["compression"].IsString()
+                || !definition.Has("cacheMode") || !definition["cacheMode"].IsString())
+            {
+                error = TStringBuilder() << "schema record has invalid column family: " << name;
+                return false;
+            }
+
+            const auto compression = CompressionFromString(definition["compression"].GetString());
+            const auto cacheMode = CacheModeFromString(definition["cacheMode"].GetString());
+            if (!IsValidCompression(compression) || !IsValidCacheMode(cacheMode)) {
+                error = TStringBuilder() << "schema record has invalid column family: " << name;
+                return false;
+            }
+
+            for (const auto& [setting, value] : definition.GetMap()) {
+                if (setting != "data" && setting != "compression" && setting != "cacheMode") {
+                    error = TStringBuilder() << "unsupported setting '" << setting << "' in column family " << name;
+                    return false;
+                }
+            }
+
+            if (definition.Has("data")) {
+                const auto& data = definition["data"];
+                if (!data.IsMap() || data.GetMap().size() != 1 || !data.Has("media")
+                    || !data["media"].IsString() || data["media"].GetString().empty())
+                {
+                    error = TStringBuilder() << "invalid data setting in column family " << name;
+                    return false;
+                }
+            }
+
+            names.push_back(name);
+            families.insert(name);
+        }
+
+        Sort(names);
+        for (const auto& name : names) {
+            const auto& definition = table["columnFamilies"][name];
+            auto* family = schema.AddFamilies();
+            family->SetName(name);
+            family->SetCompression(CompressionFromString(definition["compression"].GetString()));
+            family->SetCacheMode(CacheModeFromString(definition["cacheMode"].GetString()));
+            if (definition.Has("data")) {
+                family->SetMedia(definition["data"]["media"].GetString());
+            }
+        }
+    }
+
     THashSet<TString> columns;
-    TVector<std::pair<TString, TString>> orderedColumns;
+    TVector<TString> orderedColumns;
     orderedColumns.reserve(table["columns"].GetMap().size());
     for (const auto& [name, description] : table["columns"].GetMap()) {
         if (name.empty() || !description.IsMap() || !description.Has("type")
@@ -256,15 +380,31 @@ bool TChangeRecord::TryGetSchemaChange(NKikimrReplication::TSchemaChange& schema
             return false;
         }
 
+        if (hasFamilies) {
+            if (!description.Has("family") || !description["family"].IsString()
+                || !families.contains(description["family"].GetString()))
+            {
+                error = TStringBuilder() << "schema record column '" << name << "' has an unknown or missing family";
+                return false;
+            }
+        } else if (description.Has("family")) {
+            error = TStringBuilder() << "schema record column '" << name << "' has a family without columnFamilies";
+            return false;
+        }
+
         columns.insert(name);
-        orderedColumns.emplace_back(name, description["type"].GetString());
+        orderedColumns.push_back(name);
     }
 
     Sort(orderedColumns);
-    for (const auto& [name, type] : orderedColumns) {
+    for (const auto& name : orderedColumns) {
+        const auto& description = table["columns"][name];
         auto* column = schema.AddColumns();
         column->SetName(name);
-        column->SetType(type);
+        column->SetType(description["type"].GetString());
+        if (hasFamilies) {
+            column->SetFamily(description["family"].GetString());
+        }
     }
 
     THashSet<TString> keys;

@@ -504,7 +504,7 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context);
+    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
@@ -512,8 +512,8 @@ public:
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
         THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
-        TOperationContext& context);
-    void AbortOperationPropose(const TTxId txId, TOperationContext& context);
+        TProposeContext& context);
+    void AbortOperationPropose(const TTxId txId, TProposeContext& context);
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;

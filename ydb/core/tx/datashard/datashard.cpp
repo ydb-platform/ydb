@@ -4180,8 +4180,9 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
     UpdateTableStats(ctx);
     SendPeriodicTableStats(ctx);
 
-    // Followers run periodic tasks only with EnableFollowerStats on. The next
-    // tick reports what the sync has loaded
+    // Followers run periodic tasks only with EnableFollowerStats on. The sync
+    // usually completes right away and is reported below, while a sync that
+    // has to wait is reported on the next tick
     if (IsFollower() &&
         AppData(ctx)->FeatureFlags.GetEnableDataShardDetailedMetrics() &&
         SyncSchemeOnFollowerNeeded &&

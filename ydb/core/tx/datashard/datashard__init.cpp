@@ -926,6 +926,7 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
         ready &= SysGetUi64(db, Schema::Sys_CurrentSchemeShardId, CurrentSchemeShardId);
+        ready &= SysGetUi64(db, Schema::Sys_StatisticsDisabled, StatisticsDisabled);
         ready &= SysGetUi64(db, Schema::Sys_SubDomainTablesMetricsLevel, subDomainTablesMetricsLevel);
         ready &= SnapshotManager.ReloadSys(db);
         if (!ready) {
@@ -1069,7 +1070,8 @@ ITransaction* TDataShard::CreateTxSyncSchemeOnFollower() {
 // The sync loads rows of Sys, UserTables and Snapshots only, and every local
 // scheme change writes the UserTables row in the same commit. The executor
 // cannot tell which tables have changed, so any data update of the follower
-// triggers the next periodic sync
+// triggers the next periodic sync. Note that the leader keeps persisting its
+// low watermark for KeepSnapshotTimeout after its last write
 void TDataShard::OnFollowerDataUpdated() {
     SyncSchemeOnFollowerNeeded = true;
 }
@@ -1078,4 +1080,3 @@ void TDataShard::OnFollowerDataUpdated() {
 
 
 #undef YDB_LOG_THIS_FILE_COMPONENT
-

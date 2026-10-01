@@ -10,6 +10,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_writer.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/metadata.h>
 
+#include <cstring>
+
 #include <algorithm>
 
 #include <util/generic/algorithm.h>
@@ -125,12 +127,9 @@ static TVector<ReadRange> CoalesceReadRanges(TVector<ReadRange> ranges) {
 
 class TParquetSparseRandomAccessFile final : public arrow::io::RandomAccessFile {
 public:
-    static std::shared_ptr<TParquetSparseRandomAccessFile> Create(std::shared_ptr<TParquetSparseFile> file) {
-        return std::make_shared<TParquetSparseRandomAccessFile>(std::move(file));
-    }
-
-    explicit TParquetSparseRandomAccessFile(std::shared_ptr<TParquetSparseFile> file)
+    TParquetSparseRandomAccessFile(std::shared_ptr<TParquetSparseFile> file, arrow::MemoryPool* pool)
         : File(std::move(file))
+        , Pool(pool)
     {
     }
 
@@ -168,16 +167,22 @@ public:
             return arrow::Status::Invalid("invalid ReadAt arguments");
         }
 
-        auto data = File->ReadBytes(static_cast<ui64>(position), static_cast<ui64>(nbytes));
-        if (!data) {
+        if (!File->HasBytes(static_cast<ui64>(position), static_cast<ui64>(nbytes))) {
             return arrow::Status::Invalid("parquet byte range is not loaded");
         }
 
-        return arrow::Buffer::FromString(std::move(*data));
+        ARROW_ASSIGN_OR_RAISE(auto buffer, arrow::AllocateBuffer(nbytes, Pool));
+        if (!File->CopyBytes(static_cast<ui64>(position), static_cast<ui64>(nbytes),
+                reinterpret_cast<char*>(buffer->mutable_data())))
+        {
+            return arrow::Status::Invalid("parquet byte range is not loaded");
+        }
+        return std::shared_ptr<arrow::Buffer>(std::move(buffer));
     }
 
 private:
     std::shared_ptr<TParquetSparseFile> File;
+    arrow::MemoryPool* const Pool;
     int64_t Position = 0;
 };
 
@@ -274,10 +279,24 @@ bool TParquetSparseFile::IsFullyBuffered() const {
     return HasBytes(0, FileSize);
 }
 
+bool TParquetSparseFile::CopyBytes(ui64 offset, ui64 length, char* out) const {
+    if (!HasBytes(offset, length)) {
+        return false;
+    }
+    if (length == 0) {
+        return true;
+    }
+
+    const auto it = FindSegment(offset);
+    memcpy(out, it->Data.data() + (offset - it->Offset), length);
+    return true;
+}
+
 std::shared_ptr<arrow::io::RandomAccessFile> TParquetSparseFile::MakeRandomAccessFile(
-    const std::shared_ptr<TParquetSparseFile>& owner) const
+    const std::shared_ptr<TParquetSparseFile>& owner,
+    arrow::MemoryPool* pool) const
 {
-    return TParquetSparseRandomAccessFile::Create(owner);
+    return std::make_shared<TParquetSparseRandomAccessFile>(owner, pool);
 }
 
 TParquetFetchRange TParquetSparseFile::FooterTailRange(ui64 contentLength) {

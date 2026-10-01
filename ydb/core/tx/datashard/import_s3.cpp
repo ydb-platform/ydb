@@ -502,8 +502,25 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             return Finish(false, "Parquet import is disabled by feature flag EnableImportInParquet");
         }
 
+        const TString previousETag = ETag;
+        const ui64 previousContentLength = ContentLength;
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
+
+        // HEAD is repeated on every restart. The engine was made for the
+        // object of the first one, and the object may have been replaced since
+        // then. With nothing done with it yet, the engine is made anew for the
+        // new one; otherwise the import fails here, with the reason, rather
+        // than on the mismatch it would meet later.
+        if (Engine && (ETag != previousETag || ContentLength != previousContentLength)) {
+            if (Engine->HasLiveState()
+                || (DirectImport && DirectImport->State() != TDirectImportWriter::EState::Pending))
+            {
+                return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                    << ": the data file has changed during the import");
+            }
+            Engine.Reset();
+        }
 
         if (!ContentLength && Settings.EncryptionSettings.EncryptedBackup) {
             // Encrypted file can not have zero length

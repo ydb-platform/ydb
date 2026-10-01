@@ -13,6 +13,10 @@
 #include <expected>
 #include <memory>
 
+namespace arrow {
+class MemoryPool;
+}
+
 namespace parquet {
 class FileMetaData;
 }
@@ -100,6 +104,10 @@ public:
 
     // The metadata of the open file, parsed once for everyone who needs it.
     virtual std::shared_ptr<parquet::FileMetaData> GetFileMetadata() const = 0;
+
+    // The pool the decoding takes its memory from, with its limit. The bytes
+    // of the file that Arrow reads are to come from it as well.
+    virtual arrow::MemoryPool* GetMemoryPool() = 0;
 
     virtual std::expected<void, TString> OpenRowGroup(ui32 rowGroupIndex) = 0;
 

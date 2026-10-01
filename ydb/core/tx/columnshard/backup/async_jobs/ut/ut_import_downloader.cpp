@@ -429,6 +429,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         info.DataETag = "etag";
         info.DownloadState.MutableParquet()->SetCommittedRowGroups(1);
         info.DownloadState.MutableParquet()->SetChecksumOffset(100);
+        info.DownloadState.SetEncryptedDeserializerState("the state of a decryption");
         runtime->Send(new IEventHandle(importActorId, edge, new TEvDataShard::TEvStoreS3DownloadInfo(0, info)));
 
         const auto stored = runtime->GrabEdgeEvent<TEvDataShard::TEvS3DownloadInfo>(handle);
@@ -436,6 +437,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         UNIT_ASSERT_VALUES_EQUAL(*stored->Info.DataETag, "etag");
         UNIT_ASSERT_VALUES_EQUAL(stored->Info.DownloadState.GetParquet().GetCommittedRowGroups(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stored->Info.DownloadState.GetParquet().GetChecksumOffset(), 100);
+        UNIT_ASSERT_VALUES_EQUAL(stored->Info.DownloadState.GetEncryptedDeserializerState(), "the state of a decryption");
     }
 }
 

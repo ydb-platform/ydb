@@ -2,6 +2,7 @@
 
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/tx/datashard/export_data_format.h>
 #include <ydb/core/tx/datashard/import_s3_engine.h>
 #include <ydb/core/tx/datashard/import_data_parser.h>
@@ -1356,6 +1357,48 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         result = engine->PutRange(retried.Range, Slice(source, retried.Range));
         UNIT_ASSERT(!result);
         UNIT_ASSERT_C(result.error().Contains("was not reserved"), result.error());
+    }
+
+    Y_UNIT_TEST(EncryptedCsvTakesAFinishedCheckpointWithoutTheDecryptionState) {
+        // The old binary stored the checkpoint of a finished direct import as
+        // ProcessedBytes = ContentLength with no download state. Nothing is
+        // left to decrypt there, so it is taken; a checkpoint inside the file
+        // still needs the state of the decryption.
+        const TString source(1024, 'x'); // never read
+        const TEngineFixture fixture;
+        const auto makeEngine = [&]() {
+            TImportS3EngineSettings settings;
+            settings.DataFormat = EDataFormat::YdbDump;
+            settings.CompressionCodec = ECompressionCodec::None;
+            settings.ContentLength = source.size();
+            settings.ReadBatchSize = 128;
+            settings.BufferSizeLimit = 1_MB;
+            settings.EncryptionKey = NBackup::TEncryptionKey(TString(32, 'k'));
+            settings.EncryptionIV = NBackup::TEncryptionIV::Generate();
+            return ExtractValue(CreateImportS3Engine(settings, fixture.TableInfo, fixture.Scheme));
+        };
+
+        {
+            auto engine = makeEngine();
+            const auto result = engine->RestoreFromState(/*processedBytes=*/1, {});
+            UNIT_ASSERT_C(!result, "a checkpoint inside an encrypted file was taken without the decryption state");
+            UNIT_ASSERT_STRING_CONTAINS(result.error(), "encrypted CSV checkpoint has no deserializer state");
+        }
+        {
+            auto engine = makeEngine();
+            AssertSuccess(engine->RestoreFromState(source.size(), {}));
+
+            TMemoryPool pool(256);
+            const auto unexpectedRow = [](const TVector<TCell>&, const TVector<TCell>&) -> std::expected<void, TString> {
+                UNIT_FAIL("a finished import emitted a row");
+                return {};
+            };
+            const auto unexpectedChecksum = [](TStringBuf) {
+                UNIT_FAIL("a finished import hashed data");
+            };
+            const auto data = ExtractValue(engine->GetData(pool, unexpectedRow, unexpectedChecksum));
+            UNIT_ASSERT(data.Status == IImportS3Engine::EDataStatus::Finished);
+        }
     }
 
     Y_UNIT_TEST(ZstdContinuesThroughEmptyLinesWithinAFrame) {
@@ -2975,6 +3018,36 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 // answer for a range that was loaded in several puts proves those puts were
 // merged.
 Y_UNIT_TEST_SUITE(TParquetSparseFileTest) {
+    Y_UNIT_TEST(ReadAtCopiesIntoThePoolOnce) {
+        // What Arrow reads from the sparse file is one copy of the loaded
+        // bytes, in memory of the pool it is given, where the decoding limit
+        // counts it. It is released with the buffer.
+        const TString content = MakePseudoRandomAscii(300);
+        auto file = std::make_shared<TParquetSparseFile>(content.size());
+        AssertSuccess(file->PutRange(100, content.substr(100, 200)));
+
+        arrow::ProxyMemoryPool pool(arrow::default_memory_pool());
+        const auto reader = file->MakeRandomAccessFile(file, &pool);
+
+        auto read = reader->ReadAt(150, 100);
+        UNIT_ASSERT_C(read.ok(), read.status().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(reinterpret_cast<const char*>((*read)->data()), (*read)->size()),
+            TStringBuf(content).SubStr(150, 100));
+        // Arrow rounds an allocation up to 64 bytes: what the pool holds is
+        // the capacity of the buffer, and nothing else.
+        UNIT_ASSERT_VALUES_EQUAL(pool.bytes_allocated(), (*read)->capacity());
+        UNIT_ASSERT_GE((*read)->capacity(), 100);
+        UNIT_ASSERT_LT((*read)->capacity(), 100 + 64);
+
+        read->reset();
+        UNIT_ASSERT_VALUES_EQUAL(pool.bytes_allocated(), 0);
+
+        // a range that is not loaded is an error, not a read of something else
+        const auto missing = reader->ReadAt(50, 100);
+        UNIT_ASSERT(!missing.ok());
+        UNIT_ASSERT_VALUES_EQUAL(pool.bytes_allocated(), 0);
+    }
+
     Y_UNIT_TEST(MergesTouchingRangesPutInAnyOrder) {
         TParquetSparseFile file(300);
         AssertSuccess(file.PutRange(200, TString(100, 'c')));

@@ -3,6 +3,7 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/interfaces.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
 
 #include <expected>
 
@@ -44,8 +45,14 @@ public:
 
     bool IsFullyBuffered() const;
 
+    // The bytes of the range, which must be loaded, copied to out.
+    bool CopyBytes(ui64 offset, ui64 length, char* out) const;
+
+    // A file over the loaded bytes for Arrow. What Arrow reads from it is
+    // copied once, into memory of the pool, where it is counted.
     std::shared_ptr<arrow::io::RandomAccessFile> MakeRandomAccessFile(
-        const std::shared_ptr<TParquetSparseFile>& owner) const;
+        const std::shared_ptr<TParquetSparseFile>& owner,
+        arrow::MemoryPool* pool = arrow::default_memory_pool()) const;
 
     static TParquetFetchRange FooterTailRange(ui64 contentLength);
 

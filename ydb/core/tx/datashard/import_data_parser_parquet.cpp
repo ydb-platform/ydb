@@ -381,8 +381,7 @@ private:
 };
 
 struct TParquetFileSession {
-    // The first one, so that it outlives everything that holds its memory.
-    std::unique_ptr<TDecodeMemoryPool> Memory;
+    TDecodeMemoryPool* Memory = nullptr; // the parser's, which outlives the session
     std::shared_ptr<arrow::io::RandomAccessFile> Source;
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
     std::vector<int> ColumnIndices; // parquet leaf columns to decode, in scheme order
@@ -458,6 +457,7 @@ public:
     // that limit a row group the engine accepts can be decoded.
     explicit TParquetDataParser(ui64 bufferSizeLimit)
         : DecodeMemoryLimit(bufferSizeLimit > Max<ui64>() / 2 ? Max<ui64>() : 2 * bufferSizeLimit)
+        , Memory(DecodeMemoryLimit)
     {
     }
 
@@ -558,7 +558,8 @@ public:
         }
 
         auto session = std::make_unique<TParquetFileSession>();
-        session->Memory = std::make_unique<TDecodeMemoryPool>(DecodeMemoryLimit);
+        session->Memory = &Memory;
+        Memory.ResetRefused();
         session->Source = std::move(source);
 
         if (auto result = CheckSchemaNesting(*session->Source); !result) {
@@ -566,11 +567,11 @@ public:
         }
 
         parquet::arrow::FileReaderBuilder builder;
-        if (auto st = builder.Open(session->Source, parquet::ReaderProperties(session->Memory.get())); !st.ok()) {
+        if (auto st = builder.Open(session->Source, parquet::ReaderProperties(session->Memory)); !st.ok()) {
             return std::unexpected(TStringBuilder() << "failed to open parquet file: " << st.ToString());
         }
 
-        builder.memory_pool(session->Memory.get());
+        builder.memory_pool(session->Memory);
         builder.properties(parquet::ArrowReaderProperties(/*use_threads*/ false));
 
         if (auto st = builder.Build(&session->FileReader); !st.ok()) {
@@ -658,6 +659,10 @@ public:
             rowGroups.push_back(info);
         }
         return rowGroups;
+    }
+
+    arrow::MemoryPool* GetMemoryPool() override {
+        return &Memory;
     }
 
     std::shared_ptr<parquet::FileMetaData> GetFileMetadata() const override {
@@ -871,7 +876,7 @@ private:
         // The memory of the columns the cast makes is within the limit of the
         // decoding as well: a cast that is refused is a batch that is refused.
         Session->Memory->ResetRefused();
-        arrow::compute::ExecContext context(Session->Memory.get());
+        arrow::compute::ExecContext context(Session->Memory);
 
         for (const auto& [name, type] : Session->CastColumns) {
             const int index = batch->schema()->GetFieldIndex(name);
@@ -973,7 +978,7 @@ private:
         if (pieces.size() == 1) {
             return std::move(pieces.front());
         }
-        auto joined = arrow::Concatenate(pieces, Session->Memory.get());
+        auto joined = arrow::Concatenate(pieces, Session->Memory);
         if (!joined.ok()) {
             return std::unexpected(TStringBuilder() << "failed to join the pieces of parquet column '"
                 << ColumnMeta[column].Name << "': " << joined.status().ToString());
@@ -1120,6 +1125,7 @@ private:
 
 private:
     const ui64 DecodeMemoryLimit; // 0 = no limit
+    TDecodeMemoryPool Memory; // declared before Session, which holds memory of it
     TVector<TColumnMeta> ColumnMeta;
     std::vector<std::pair<TString, NScheme::TTypeInfo>> YdbSchema; // what the converter takes the columns for
     ui32 KeyCount = 0;

@@ -582,7 +582,12 @@ public:
             return std::unexpected(TStringBuilder() << "processed byte position " << processedBytes
                 << " exceeds source size " << ContentLength);
         }
-        if (Encrypted && processedBytes > 0 && state.GetEncryptedDeserializerState().empty()) {
+        // A checkpoint at the end of the file has nothing left to decrypt, and
+        // the old binary stored one without a state when a direct import
+        // finished.
+        if (Encrypted && processedBytes > 0 && processedBytes < ContentLength
+            && state.GetEncryptedDeserializerState().empty())
+        {
             return std::unexpected("encrypted CSV checkpoint has no deserializer state");
         }
         if (!Encrypted && !state.GetEncryptedDeserializerState().empty()) {
@@ -1249,7 +1254,9 @@ private:
     }
 
     std::expected<void, TString> InitializeRowGroups() {
-        if (auto result = Parser->OpenMetadata(SparseFile->MakeRandomAccessFile(SparseFile)); !result) {
+        if (auto result = Parser->OpenMetadata(
+                SparseFile->MakeRandomAccessFile(SparseFile, Parser->GetMemoryPool())); !result)
+        {
             return result;
         }
         const auto metadata = Parser->GetFileMetadata();

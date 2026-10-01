@@ -83,11 +83,9 @@ public:
 
     void Handle(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev) {
         // Nothing is stored here: the downloader gets back what it asks to
-        // store. That does for the checkpoint of a Parquet file, which the
-        // downloader sends when it starts over after a failed read: it is a
-        // position in the file. It does not for the state of a decryption,
-        // which an import into a column table does not have.
-        AFL_VERIFY(ev->Get()->Info.DownloadState.GetEncryptedDeserializerState().empty());
+        // store and goes on with it, whether that is the checkpoint of a
+        // Parquet file or the state of the decryption of an encrypted CSV one.
+        // After a restart of the tablet the import starts over anyway.
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(ev->Get()->Info));
     }
 

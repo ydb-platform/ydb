@@ -38,6 +38,23 @@ std::shared_ptr<NAccessor::IChunkedArray> IndexInDictionary(const std::shared_pt
         .GetAccessorVerified();
 }
 
+std::shared_ptr<arrow::compute::ScalarFunction> MakeSliceUnsafeFunction() {
+    auto function = std::make_shared<arrow::compute::ScalarFunction>("slice_unsafe", arrow::compute::Arity::Unary(), nullptr);
+    arrow::compute::ScalarKernel kernel;
+    kernel.signature = arrow::compute::KernelSignature::Make({ arrow::uint32() }, arrow::uint32());
+    kernel.exec = [](arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* result) {
+        const auto* input = batch.values[0].array()->GetValues<ui32>(1);
+        const auto& resultArray = *result->array();
+        // This is incorrect for chunked arrays, must account for offset in buffer,
+        // otherwise consecutive chunks will overwrite each other's output.
+        auto* output = reinterpret_cast<ui32*>(resultArray.buffers[1]->mutable_data());
+        std::copy_n(input, batch.length, output);
+        return arrow::Status::OK();
+    };
+    TStatusValidator::Validate(function->AddKernel(std::move(kernel)));
+    return function;
+}
+
 }
 
 Y_UNIT_TEST_SUITE(Functions) {
@@ -224,6 +241,26 @@ Y_UNIT_TEST_SUITE(Functions) {
         UNIT_ASSERT(input->GetDataType()->Equals(timestampType));
         UNIT_ASSERT(inputComposite->GetChunks()[0]->GetChunkedArray()->type()->Equals(timestampType));
         UNIT_ASSERT(inputComposite->GetChunks()[1]->GetChunkedArray()->type()->Equals(timestampType));
+    }
+
+    Y_UNIT_TEST(KernelCallExpandsMultiChunkCompositePart) {
+        NAccessor::TCompositeChunkedArray::TBuilder innerBuilder(arrow::uint32());
+        innerBuilder.AddChunk(std::make_shared<NAccessor::TTrivialArray>(NumVecToArray(arrow::uint32(), { 10, 11 })));
+        innerBuilder.AddChunk(std::make_shared<NAccessor::TTrivialArray>(NumVecToArray(arrow::uint32(), { 12, 13 })));
+
+        NAccessor::TCompositeChunkedArray::TBuilder outerBuilder(arrow::uint32());
+        outerBuilder.AddChunk(std::make_shared<NAccessor::TTrivialArray>(NumVecToArray(arrow::uint32(), { 1 })));
+        outerBuilder.AddChunk(innerBuilder.Finish());
+
+        TAccessorsCollection resources(5);
+        resources.AddVerified(1, outerBuilder.Finish(), false);
+        TKernelFunction function(MakeSliceUnsafeFunction());
+        const auto result = function.Call(TExecFunctionContext(TColumnChainInfo::BuildVector({ 1 })), resources)
+                                .DetachResult()
+                                .GetAccessorVerified();
+
+        const auto values = TStatusValidator::GetValid(arrow::Concatenate(result->GetChunkedArray()->chunks()));
+        UNIT_ASSERT(values->Equals(*NumVecToArray(arrow::uint32(), { 1, 10, 11, 12, 13 })));
     }
 };
 

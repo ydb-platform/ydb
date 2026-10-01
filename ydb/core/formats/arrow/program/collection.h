@@ -341,7 +341,13 @@ public:
                     const auto dictionary = std::static_pointer_cast<TDictionaryArray>(chunk);
                     parts.emplace_back(dictionary);
                 } else {
-                    parts.emplace_back(arrow::Datum(chunk->GetChunkedArray()));
+                    // Some kernels do not support arrow chunked arrays, so unwrap them here.
+                    // Expect that those are trivial/sparsed and do not trigger data copying.
+                    const auto chunked = chunk->GetChunkedArray();
+                    parts.reserve(parts.size() + chunked->num_chunks());
+                    for (const auto& array : chunked->chunks()) {
+                        parts.emplace_back(array);
+                    }
                 }
             }
             SpecialArgument.emplace(index, true, std::move(parts));

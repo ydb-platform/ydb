@@ -228,6 +228,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         });
         f.Runtime.GetAppData().FeatureFlags.SetEnableColumnshardCutHistory(false);
         f.Restart(NewGroup);
+        f.Restart();
         f.Drive();
         UNIT_ASSERT(f.Runtime.GetAppData().FeatureFlags.GetEnableCutHistory());
         UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
@@ -295,6 +296,32 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_STRING_CONTAINS(rebootedPage->Get()->Html, "TimestampUs: 123456789");
     }
 
+    Y_UNIT_TEST(CurrentAndFutureIntervalsAreSkipped) {
+        TFixture f;
+        f.Controller->DisableBackground(EBackground::GC);
+        const ui32 nextGeneration = f.Controller->GetTheOnlyShard()->Generation() + 1;
+        f.History.emplace_back(nextGeneration, NewGroup);
+        f.History.emplace_back(nextGeneration + 1, OldGroup);
+        f.History.emplace_back(nextGeneration + 2, NewGroup);
+        std::vector<ui32> cutFrom;
+        auto observer = f.Runtime.AddObserver<TEvTablet::TEvCutTabletHistory>([&](TEvTablet::TEvCutTabletHistory::TPtr& ev) {
+            if (ev->Get()->Record.GetChannel() == FirstDataChannel) {
+                cutFrom.push_back(ev->Get()->Record.GetFromGeneration());
+                ev.Reset();
+            }
+        });
+        f.Restart();
+        UNIT_ASSERT_VALUES_EQUAL(f.Controller->GetTheOnlyShard()->Generation(), nextGeneration);
+        f.Drive();
+        UNIT_ASSERT_C(cutFrom.empty(), "intervals ending at or after the current generation must not be cut");
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 0u);
+
+        f.Restart();
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(cutFrom.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cutFrom.front(), 0u);
+    }
+
     Y_UNIT_TEST(PendingGCIntervalsStaySkippedUntilReboot) {
         TFixture f;
         f.Controller->DisableBackground(EBackground::Compaction);
@@ -326,6 +353,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             }
         });
         f.Restart(NewGroup);
+        f.Restart();
         UNIT_ASSERT(continuation);
         const auto* shard = f.Controller->GetTheOnlyShard();
         const ui32 to = f.History.back().first;
@@ -374,6 +402,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 0u, "queued old blob must be the sole remaining cut blocker");
         holdScan = true;
         f.Restart(OldGroup);
+        f.Restart();
         UNIT_ASSERT(continuation);
         storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(
             f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator());
@@ -511,6 +540,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Drive();
         const ui32 emptyReusedFrom = f.History.back().first;
         f.Restart(NewGroup);
+        f.Restart();
         f.Drive();
         UNIT_ASSERT_C(cutFrom.contains(emptyReusedFrom), "an earlier live use of this group must not pin a later empty interval");
         UNIT_ASSERT(!f.LiveOldBlobs().empty());
@@ -521,7 +551,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(false);
         f.Restart(NewGroup);
         const ui32 secondFrom = f.History.back().first;
-        f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(true);
         std::map<ui32, ui32> cuts;
         std::map<ui32, TAutoPtr<IEventHandle>> failed;
         TAutoPtr<IEventHandle> commit;
@@ -548,6 +577,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             }
         });
         f.Restart(OldGroup);
+        f.Runtime.GetAppData().FeatureFlags.SetEnableCutHistory(true);
+        f.Restart();
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(cuts[0], 1u);
         UNIT_ASSERT_VALUES_EQUAL(cuts[secondFrom], 1u);
@@ -599,6 +630,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
             }
         });
         f.Restart(NewGroup);
+        f.Restart();
         f.Drive();
         UNIT_ASSERT(continuation);
         f.Controller->DisableBackground(EBackground::GC);
@@ -687,6 +719,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         });
         const ui64 scans = f.Samples("Scan");
         f.Restart(NewGroup);
+        f.Restart();
         f.Drive();
         UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), scans + 1);
         UNIT_ASSERT_VALUES_EQUAL(cuts, inheritPortionStorage ? 1u : 0u);

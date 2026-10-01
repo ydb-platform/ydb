@@ -99,19 +99,31 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 class TSaveStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
 private:
     const TPathId PathId;
-    const std::vector<TStatisticsItem> Items;
-    bool SavingFullRows = false;
+    std::vector<TStatisticsItem> SampledItems;
+    std::vector<TStatisticsItem> FullItems;
+    bool SavingSampledRows = true;
 
 public:
     TSaveStatisticsQuery(
         const TString& database, const TPathId& pathId, std::vector<TStatisticsItem> items)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
-        , Items(std::move(items))
-    {}
+    {
+        for (auto& item : items) {
+            if (item.Sampling) {
+                SampledItems.push_back(std::move(item));
+            } else {
+                FullItems.push_back(std::move(item));
+            }
+        }
+    }
 
     void OnRunQuery() override {
-        if (Items.empty()) {
+        if (SavingSampledRows && SampledItems.empty()) {
+            SavingSampledRows = false;
+        }
+        const auto& items = SavingSampledRows ? SampledItems : FullItems;
+        if (items.empty()) {
             Finish();
             return;
         }
@@ -123,36 +135,32 @@ public:
                 data: String,
                 local_path_id: Uint64,
                 owner_id: Uint64,
-                sampled: Bool,
                 stat_type: Uint32
             >>;
 
             UPSERT INTO `)" << StatisticsTablePath << R"(`
         )";
-        if (!SavingFullRows) {
+        if (SavingSampledRows) {
             sql << R"(
                 (column_tags, local_path_id, owner_id, sampled_data, stat_type)
             SELECT column_tags, local_path_id, owner_id, data AS sampled_data, stat_type
-            FROM AS_TABLE($rows)
-            WHERE sampled;
+            FROM AS_TABLE($rows);
             )";
         } else {
             sql << R"(
                 (column_tags, data, local_path_id, owner_id, sampled_data, stat_type)
             SELECT column_tags, data, local_path_id, owner_id, NULL AS sampled_data, stat_type
-            FROM AS_TABLE($rows)
-            WHERE NOT sampled;
+            FROM AS_TABLE($rows);
             )";
         }
 
         NYdb::TParamsBuilder params;
         auto& rows = params.AddParam("$rows").BeginList();
-        for (const auto& item : Items) {
+        for (const auto& item : items) {
             auto& row = rows.AddListItem().BeginStruct();
             row.AddMember("column_tags").String(SerializeColumnTags(item.ColumnTags));
             row.AddMember("local_path_id").Uint64(PathId.LocalPathId);
             row.AddMember("owner_id").Uint64(PathId.OwnerId);
-            row.AddMember("sampled").Bool(item.Sampling.has_value());
             row.AddMember("stat_type").Uint32(static_cast<ui32>(item.Type));
             if (item.Sampling) {
                 NKikimrStat::TSampledStatistic payload;
@@ -167,14 +175,22 @@ public:
         rows.EndList().Build();
 
         // Separate statements avoid multiple write effects in RBO; one transaction keeps the batch atomic.
-        RunDataQuery(sql, &params, SavingFullRows ? TTxControl::ContinueAndCommitTx() : TTxControl::BeginTx());
+        TTxControl txControl = TTxControl::BeginAndCommitTx();
+        if (SavingSampledRows && !FullItems.empty()) {
+            txControl = TTxControl::BeginTx();
+        } else if (!SavingSampledRows && !SampledItems.empty()) {
+            txControl = TTxControl::ContinueAndCommitTx();
+        }
+        RunDataQuery(sql, &params, txControl);
     }
 
     void OnQueryResult() override {
-        if (!SavingFullRows) {
-            SavingFullRows = true;
-            OnRunQuery();
-            return;
+        if (SavingSampledRows) {
+            SavingSampledRows = false;
+            if (!FullItems.empty()) {
+                OnRunQuery();
+                return;
+            }
         }
         Finish();
     }

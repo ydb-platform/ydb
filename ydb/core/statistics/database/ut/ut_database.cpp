@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(StatisticsSaveLoad) {
         sampled.Sampling = result->Get()->Sampling;
         TBlockEvents<NKqp::TEvKqp::TEvQueryRequest> fullSave(runtime, [](const auto& ev) {
             const auto& sql = ev->Get()->GetQuery();
-            return sql.Contains(StatisticsTablePath) && sql.Contains("WHERE NOT sampled");
+            return sql.Contains(StatisticsTablePath) && sql.Contains("NULL AS sampled_data");
         });
         runtime.Register(CreateSaveStatisticsQuery(sender, "/Root/Database", pathId,
             {TStatisticsItem(3, type, "another-column"), std::move(anotherType), std::move(sampled)}));

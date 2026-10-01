@@ -128,11 +128,7 @@ public:
 #define CreateScopedTopicExt(TOPIC, SETTINGS,...) \
     CreateTopic((TOPIC), (SETTINGS), ## __VA_ARGS__); \
     Y_DEFER { \
-        try { \
-            DropTopic((TOPIC), ## __VA_ARGS__); \
-        } catch(...) { \
-            Cerr << "Caught exception during DropTopic(" << (TOPIC) << "):\n" << CurrentExceptionMessage() << Endl; \
-        } \
+        DropTopic((TOPIC), ## __VA_ARGS__); \
     }
 #define CreateScopedTopic(TOPIC) CreateScopedTopicExt((TOPIC), std::nullopt, false)
 

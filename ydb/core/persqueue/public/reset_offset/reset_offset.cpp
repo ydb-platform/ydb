@@ -95,8 +95,8 @@ void TResetOffsetActor::DoReset() {
 }
 
 void TResetOffsetActor::Handle(TEvPQ::TEvResetOffsetResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvResetOffsetResponse",
-        {"ev", ev->Get()->Record.ShortDebugString()});
+    LOG_D("Handle TEvPQ::TEvResetOffsetResponse"
+        << " ev=" << ev->Get()->Record.ShortDebugString());
 
     const ui32 partitionId = ev->Get()->GetPartitionId();
     auto it = Partitions.find(partitionId);
@@ -240,9 +240,9 @@ void TResetOffsetActor::RequestPartitionIfNeeded(ui32 partitionId, TPartitionSta
 }
 
 void TResetOffsetActor::ReplyIfPossible() {
-    LOG_D("ReplyIfPossible: PendingPartitions PendingRetries",
-        {"pendingPartitions", PendingPartitions},
-        {"pendingRetries", PendingRetries});
+    LOG_D("ReplyIfPossible: PendingPartitions PendingRetries"
+        << " pendingPartitions=" << PendingPartitions
+        << " pendingRetries=" << PendingRetries);
     if (PendingPartitions > 0 || PendingRetries > 0) {
         return;
     }
@@ -257,8 +257,8 @@ void TResetOffsetActor::SendToTablet(ui64 tabletId, IEventBase* ev, ui64 cookie)
 }
 
 void TResetOffsetActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error",
-        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
+    LOG_I("Reply error"
+        << " statusCodeName=" << Ydb::StatusIds::StatusCode_Name(errorCode));
     Send(ParentId, new TEvResetOffsetResult(errorCode, std::move(errorMessage)));
     PassAway();
 }

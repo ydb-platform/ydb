@@ -1262,6 +1262,20 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 ordinary->MutableKey()->SetPDiskId(1);
                 ordinary->MutableKey()->SetVSlotId(1001);
                 ordinary->MutableInfo()->SetGroupId(43);
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetStoragePoolsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetStoragePoolsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetBoxId(1);
+                entry->MutableKey()->SetStoragePoolId(7);
+                entry->MutableInfo()->SetName("ddisk-pool");
+            } else if (ev->GetTypeRewrite() == NSysView::TEvSysView::EvGetGroupsResponse) {
+                auto& record = ev->Get<NSysView::TEvSysView::TEvGetGroupsResponse>()->Record;
+                record.ClearEntries();
+                auto* entry = record.AddEntries();
+                entry->MutableKey()->SetGroupId(42);
+                entry->MutableInfo()->SetBoxId(1);
+                entry->MutableInfo()->SetStoragePoolId(7);
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateRequest) {
                 UNIT_ASSERT_VALUES_EQUAL(ev->Get<TEvWhiteboard::TEvPDiskStateRequest>()->Record.GetIncludeDDiskState(), includeDDisks);
             } else if (ev->GetTypeRewrite() == TEvWhiteboard::EvPDiskStateResponse) {
@@ -1363,6 +1377,11 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     UNIT_ASSERT_VALUES_EQUAL(nodes.size(), 1);
                     // A successful empty whiteboard response does not trigger the nodes VDisk fallback.
                     checkDisks(nodes[0], sample, false);
+                    if (includeDDisks) {
+                        for (ui32 i = 0; i < 3; ++i) {
+                            UNIT_ASSERT_VALUES_EQUAL(nodes[0]["DDisks"][i]["StoragePoolName"].GetString(), "ddisk-pool");
+                        }
+                    }
                 }
             }
         }

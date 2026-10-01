@@ -92,6 +92,8 @@ class TJsonNodes : public TViewerPipeClient {
     bool ResourceBoardInfoProcessed = false;
     bool PDisksProcessed = false;
 
+    THashMap<std::pair<ui64, ui64>, TString> DDiskStoragePoolNames;
+    THashMap<ui32, std::pair<ui64, ui64>> DDiskGroupPools;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse>> StoragePoolsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse>> GroupsResponse;
     std::optional<TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse>> VSlotsResponse;
@@ -1266,6 +1268,14 @@ public:
         } else if (!FilterGroupIds.empty() || FieldsRequired.test(+ENodeFields::VDisks)) {
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
+        }
+        if (IncludeDDisks) {
+            if (!StoragePoolsResponse) {
+                StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            }
+            if (!GroupsResponse) {
+                GroupsResponse = MakeCachedRequestBSControllerGroups();
+            }
         }
         if (With != EWith::Everything || (!FilterDatabase && Type == EType::Storage)) {
             if (!PDisksResponse) {
@@ -3066,6 +3076,11 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr& ev) {
+        if (IncludeDDisks) {
+            for (const auto& entry : ev->Get()->Record.GetEntries()) {
+                DDiskStoragePoolNames[std::make_pair(entry.GetKey().GetBoxId(), entry.GetKey().GetStoragePoolId())] = entry.GetInfo().GetName();
+            }
+        }
         if (StoragePoolsResponse->Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
@@ -3073,6 +3088,11 @@ public:
     }
 
     void Handle(NSysView::TEvSysView::TEvGetGroupsResponse::TPtr& ev) {
+        if (IncludeDDisks) {
+            for (const auto& entry : ev->Get()->Record.GetEntries()) {
+                DDiskGroupPools[entry.GetKey().GetGroupId()] = {entry.GetInfo().GetBoxId(), entry.GetInfo().GetStoragePoolId()};
+            }
+        }
         if (GroupsResponse->Set(std::move(ev))) {
             ProcessResponses();
             RequestDone();
@@ -3550,6 +3570,13 @@ public:
                                 ddisk.SetPDiskId(key.GetPDiskId());
                                 ddisk.SetDDiskSlotId(key.GetVSlotId());
                                 ddisk.SetGroupId(entry.GetInfo().GetGroupId());
+                                const auto group = DDiskGroupPools.find(ddisk.GetGroupId());
+                                if (group != DDiskGroupPools.end()) {
+                                    const auto pool = DDiskStoragePoolNames.find(group->second);
+                                    if (pool != DDiskStoragePoolNames.end()) {
+                                        ddisk.SetStoragePoolName(pool->second);
+                                    }
+                                }
                                 if (!ddisk.HasHasWhiteboardData()) {
                                     ddisk.SetHasWhiteboardData(false);
                                 }

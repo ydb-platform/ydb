@@ -615,7 +615,12 @@ namespace NKikimr::NBsController {
 
             Groups.ForEach([&](TGroupId groupId, const TGroupInfo& groupInfo) {
                 if (!virtualGroupsOnly || groupFilter.contains(groupId)) {
-                   Serialize(pb->AddGroup(), groupInfo, finder, BridgeInfo.get());
+                    auto* group = pb->AddGroup();
+                    Serialize(group, groupInfo, finder, BridgeInfo.get());
+                    const auto& pools = StoragePools.Get();
+                    if (const auto pool = pools.find(groupInfo.StoragePoolId); pool != pools.end()) {
+                        group->SetStoragePoolName(pool->second.Name);
+                    }
                 }
             });
         }

@@ -789,6 +789,7 @@ message TDDiskTabletListResponse {
         optional uint32 UnavailablePersistentBufferCount = 6;
         // Maximum of unavailable DDisk and Persistent Buffer counts across all DBGs.
         optional uint32 Degrade = 7;
+        optional string DiskId = 9; // NBS volume identifier; absent for older/unavailable reporters
     }
 
     reserved 2;
@@ -834,6 +835,9 @@ message TDDiskDiskListResponse {
         // Fractions, absent when the role is unused or monitoring is unavailable.
         optional double DDiskOccupancy = 6; // underlying PDisk owner occupancy
         optional double PersistentBufferOccupancy = 7; // relative to MaxChunks
+        optional string StoragePoolName = 10;
+        optional string DDiskPath = 11; // node-relative actor monitoring path
+        optional string PersistentBufferId = 12; // stable service actor ID
 
     }
 

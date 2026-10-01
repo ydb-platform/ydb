@@ -249,6 +249,7 @@ void TPartitionActor::ReportTabletState(const TActorContext& ctx)
         NNodeWhiteboard::TEvWhiteboard::TEvWhiteboard::TEvTabletStateUpdate>(
         TabletID(),
         STATE_WORK);
+    request->Record.SetNbsDiskId(VolumeConfig.GetDiskId());
 
     NYdb::NBS::Send(ctx, service, std::move(request));
 }

@@ -1,5 +1,6 @@
 #include <ydb/library/actors/testlib/scoped_allocation_cache.h>
 #include "subsystems/allocation_cache.h"
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include "actor_bootstrapped.h"
 #include "subsystems/stats.h"
 

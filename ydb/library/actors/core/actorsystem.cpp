@@ -1,5 +1,6 @@
 #include "defs.h"
 #include "subsystems/allocation_cache.h"
+#include <ydb/library/actors/core/subsystems/async_frame_cache.h>
 #include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
@@ -27,6 +28,10 @@
 #include <ydb/library/actors/util/rc_buf.h>
 
 namespace NActors {
+
+    TActorSystemSetup::TActorSystemSetup()
+        : AsyncFrameCacheSizeBytes(TAsyncFrameCache::DefaultSizeBytes)
+    {}
 
     namespace {
         template<class TCallback>

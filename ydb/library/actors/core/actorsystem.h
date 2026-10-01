@@ -3,7 +3,6 @@
 #include "defs.h"
 
 #include "config.h"
-#include "subsystems/async_frame_cache.h"
 #include "event.h"
 #include "executor_pool.h"
 #include "log_settings.h"
@@ -106,10 +105,12 @@ namespace NActors {
     };
 
     struct TActorSystemSetup {
+        TActorSystemSetup();
+
         ui32 NodeId = 0;
 
         // Idle coroutine allocation bytes per worker; zero disables retention.
-        size_t AsyncFrameCacheSizeBytes = TAsyncFrameCache::DefaultSizeBytes;
+        size_t AsyncFrameCacheSizeBytes;
 
         // Either Executors or CpuManager must be initialized
         ui32 ExecutorsCount = 0;

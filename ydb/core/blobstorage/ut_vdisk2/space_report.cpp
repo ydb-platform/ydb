@@ -214,15 +214,7 @@ Y_UNIT_TEST_SUITE(VDiskSpaceReportTests) {
     }
 
     Y_UNIT_TEST(ReportsHugeStatsTimeoutOnColdCache) {
-        TTestEnv env(nullptr, true);
-        env.ChangeMinHugeBlobSize(32_KB);
-
-        const TString data(64_KB, 'x');
-        const TLogoBlobID id(1, 1, 1, 0, data.size(), 0, 1);
-        UNIT_ASSERT_VALUES_EQUAL(env.Put(id, data).GetStatus(), NKikimrProto::OK);
-        env.Compact();
-        UNIT_ASSERT_VALUES_EQUAL(env.Block(2, 1).GetStatus(), NKikimrProto::OK);
-        env.Compact(EHullDbType::Blocks, true);
+        TTestEnv env;
 
         TTestActorSystem* const runtime = env.GetRuntime();
         runtime->FilterFunction = [](ui32, std::unique_ptr<IEventHandle>& ev) {

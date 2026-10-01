@@ -71,9 +71,25 @@ void SendPQTabletConfig(
     ActorIdToProto(edge, tx->MutableAckTo());
     runtime.SendToPipe(tabletId, edge, plan.Release(), 0, GetPipeConfigWithRetries());
 
-    auto* ack = runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(handle);
+    // Повтор может послать тот же шаг: MinStep не растёт, пока брошенный план не обработан.
+    // TxId в предикате, иначе заберём ACK старой попытки и упадём уже после этого.
+    auto* ack = runtime.GrabEdgeEventIf<TEvTxProcessing::TEvPlanStepAck>(handle,
+        [tabletId, planStep, txId](const TEvTxProcessing::TEvPlanStepAck& ev) {
+            if (ev.Record.GetTabletId() != tabletId || ev.Record.GetStep() != planStep) {
+                return false;
+            }
+            for (const ui64 id : ev.Record.GetTxId()) {
+                if (id == txId) {
+                    return true;
+                }
+            }
+            return false;
+        });
     UNIT_ASSERT(ack);
-    auto* accepted = runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(handle);
+    auto* accepted = runtime.GrabEdgeEventIf<TEvTxProcessing::TEvPlanStepAccepted>(handle,
+        [tabletId, planStep](const TEvTxProcessing::TEvPlanStepAccepted& ev) {
+            return ev.Record.GetTabletId() == tabletId && ev.Record.GetStep() == planStep;
+        });
     UNIT_ASSERT(accepted);
     auto* complete = grabResult();
     UNIT_ASSERT(complete);
@@ -182,7 +198,7 @@ NKikimrPQ::TPQTabletConfig MakePQTabletConfig(
 }
 
 // Ответы оборванного SendPQTabletConfig уже лежат в ящике edge. Снимаем их до
-// повтора. То, что таблетка пришлёт позже, отсекает фильтр по TxId в SendPQTabletConfig.
+// повтора. То, что таблетка пришлёт позже, отсекают фильтры в SendPQTabletConfig.
 void DropPendingPqConfigReplies(TTestActorRuntime& runtime, const TActorId& edge) {
     auto events = runtime.CaptureMailboxEvents(edge.Hint(), edge.NodeId());
     NActors::TEventsList keep;

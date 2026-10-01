@@ -49,7 +49,6 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
 
     const auto pathId = context.GetObjectPath()->Base()->PathId;
     auto* ssContext = context.GetSSOperationContext();
-    ssContext->MemChanges.GrabColumnTable(ssContext->SS, pathId);
     auto tableInfo = ssContext->SS->ColumnTables.TakeAlterVerified(pathId);
     ssContext->DbChanges.PersistColumnTableAlterRemove(pathId);
     ssContext->DbChanges.PersistColumnTable(pathId);

@@ -9,14 +9,199 @@
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/threading/future/future.h>
-#include <util/generic/algorithm.h>
+#include <util/generic/guid.h>
 
+#include <chrono>
+#include <list>
+#include <mutex>
 #include <optional>
+
+namespace NYql {
+namespace {
+
+// The baseline SDK keeps STOP callbacks until their database state is destroyed.
+// Give each cache entry its own state: evicting and recreating a client must not
+// append callbacks to a state held alive by another client or a query stream.
+class TMetadataCredentialsFactory final : public NYdb::ICredentialsProviderFactory {
+public:
+    explicit TMetadataCredentialsFactory(std::shared_ptr<NYdb::ICredentialsProviderFactory> inner)
+        : Inner_(std::move(inner))
+        , Identity_(std::string("ydb-remote-metadata:") + std::string(CreateGuidAsString()))
+    {
+    }
+
+    NYdb::TCredentialsProviderPtr CreateProvider() const override {
+        return Inner_->CreateProvider();
+    }
+
+    NYdb::TCredentialsProviderPtr CreateProvider(std::weak_ptr<NYdb::ICoreFacility> facility) const override {
+        return Inner_->CreateProvider(std::move(facility));
+    }
+
+    std::string GetClientIdentity() const override {
+        return Identity_;
+    }
+
+private:
+    const std::shared_ptr<NYdb::ICredentialsProviderFactory> Inner_;
+    const std::string Identity_;
+};
+
+class TMetadataClientCache final : public IYdbRemoteMetadataClientCache {
+public:
+    TMetadataClientCache(const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver,
+                        size_t maxEntries, TDuration idleTimeout)
+        : Driver_(driver)
+        , TlsDriver_(tlsDriver)
+        , MaxEntries_(maxEntries)
+        , IdleTimeout_(idleTimeout)
+    {
+    }
+
+    std::shared_ptr<NYdb::NTable::TTableClient> GetClient(
+        const TString& endpoint, const TString& database, bool useTls,
+        const TString& structuredToken, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) override {
+        Y_ENSURE(credentialsFactory, "Native YDB metadata credentials factory is missing");
+        // Exact token equality isolates rotated secrets, including a new value
+        // behind the same secret reference. Keys never leave this bounded cache.
+        const TKey key{endpoint, database, structuredToken, useTls, std::move(credentialsFactory)};
+        std::list<TEntry> retired;
+        {
+            std::lock_guard lock(Mutex_);
+            Expire(retired);
+            if (auto client = Find(key)) {
+                return client;
+            }
+        }
+
+        // Credential providers and SDK construction may execute callbacks. Do
+        // not hold the cache lock across either them or client destruction.
+        auto innerCredentials = key.CredentialsFactory->Create(structuredToken, false);
+        Y_ENSURE(innerCredentials, "Native YDB metadata credentials could not be initialized");
+        auto credentials = std::make_shared<TMetadataCredentialsFactory>(std::move(innerCredentials));
+        auto client = std::make_shared<NYdb::NTable::TTableClient>(useTls ? TlsDriver_ : Driver_,
+            NYdb::NTable::TClientSettings()
+                .Database(database)
+                .DiscoveryEndpoint(endpoint)
+                .DiscoveryMode(NYdb::EDiscoveryMode::Off)
+                .SslCredentials(NYdb::TSslCredentials(useTls))
+                .CredentialsProviderFactory(std::move(credentials))
+                .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1).MinPoolSize(0).RetryLimit(0)));
+        const auto keyBytes = key.Bytes();
+        if (!MaxEntries_ || keyBytes > MaxKeyBytes) {
+            return client;
+        }
+        {
+            std::lock_guard lock(Mutex_);
+            Expire(retired);
+            if (auto existing = Find(key)) {
+                return existing;
+            }
+            while (!Entries_.empty() && (Entries_.size() >= MaxEntries_ || KeyBytes_ + keyBytes > MaxKeyBytes)) {
+                Retire(Entries_.begin(), retired);
+            }
+            Entries_.push_back({key, client, std::chrono::steady_clock::now()});
+            KeyBytes_ += keyBytes;
+        }
+        return client;
+    }
+
+private:
+    struct TKey {
+        TString Endpoint;
+        TString Database;
+        TString Token;
+        bool UseTls;
+        IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
+
+        bool operator==(const TKey&) const = default;
+
+        size_t Bytes() const {
+            return Endpoint.size() + Database.size() + Token.size();
+        }
+    };
+
+    struct TEntry {
+        TKey Key;
+        std::shared_ptr<NYdb::NTable::TTableClient> Client;
+        std::chrono::steady_clock::time_point LastUsed;
+    };
+
+    std::shared_ptr<NYdb::NTable::TTableClient> Find(const TKey& key) {
+        for (auto it = Entries_.begin(); it != Entries_.end(); ++it) {
+            if (it->Key == key) {
+                it->LastUsed = std::chrono::steady_clock::now();
+                auto client = it->Client;
+                Entries_.splice(Entries_.end(), Entries_, it);
+                return client;
+            }
+        }
+        return {};
+    }
+
+    void Retire(std::list<TEntry>::iterator it, std::list<TEntry>& retired) {
+        KeyBytes_ -= it->Key.Bytes();
+        retired.splice(retired.end(), Entries_, it);
+    }
+
+    void Expire(std::list<TEntry>& retired) {
+        const auto now = std::chrono::steady_clock::now();
+        while (!Entries_.empty() && static_cast<ui64>(std::chrono::duration_cast<std::chrono::microseconds>(
+                now - Entries_.front().LastUsed).count()) >= IdleTimeout_.MicroSeconds()) {
+            Retire(Entries_.begin(), retired);
+        }
+    }
+
+    static constexpr size_t MaxKeyBytes = 1 << 20;
+    const NYdb::TDriver Driver_;
+    const NYdb::TDriver TlsDriver_;
+    const size_t MaxEntries_;
+    const TDuration IdleTimeout_;
+    std::mutex Mutex_;
+    std::list<TEntry> Entries_;
+    size_t KeyBytes_ = 0;
+};
+
+} // namespace
+
+std::shared_ptr<IYdbRemoteMetadataClientCache> CreateYdbRemoteMetadataClientCache(
+    const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, size_t maxEntries, TDuration idleTimeout) {
+    return std::make_shared<TMetadataClientCache>(driver, tlsDriver, maxEntries, idleTimeout);
+}
+
+} // namespace NYql
 
 namespace NYql::NYdbRemote {
 namespace {
 
 using namespace NNodes;
+
+TString ColumnTypeName(const Ydb::Type& type) {
+    const bool optional = type.has_optional_type();
+    const auto& item = optional ? type.optional_type().item() : type;
+    TString name;
+    if (item.has_type_id()) {
+        name = Ydb::Type::PrimitiveTypeId_Name(item.type_id());
+        if (name.empty()) {
+            name = TStringBuilder() << "primitive type " << static_cast<int>(item.type_id());
+        }
+    } else if (item.has_decimal_type()) {
+        name = TStringBuilder() << "Decimal(" << item.decimal_type().precision() << "," << item.decimal_type().scale() << ")";
+    } else if (item.has_pg_type()) {
+        name = TStringBuilder() << "Pg(oid=" << item.pg_type().oid() << ")";
+    } else {
+        name = TStringBuilder() << "type kind " << static_cast<int>(item.type_case());
+    }
+    if (optional) {
+        return TStringBuilder() << "Optional<" << name << ">";
+    }
+    return name;
+}
+
+TString UnsupportedColumn(const TString& name, const Ydb::Type& type) {
+    return TStringBuilder() << "Native YDB does not support column '" << name << "' of type "
+        << ColumnTypeName(type) << "; all table columns must have supported types";
+}
 
 bool ParseRead(const TYdbRemoteRead& read, TString& table, TExprContext& ctx) {
     const auto& node = read.Ref();
@@ -91,13 +276,13 @@ private:
             Error = "Native YDB metadata deadline exceeded";
         }
         if (Error) {
-            Close();
+            FinishTable();
             return false;
         }
         return true;
     }
 
-    TDuration RemainingTimeout(TDuration cap = TDuration::Max()) {
+    TDuration RemainingTimeout() {
         if (Context_.Cancellation.IsCancellationRequested()) {
             Error = "Native YDB metadata cancelled";
             return TDuration::Zero();
@@ -107,7 +292,7 @@ private:
             Error = "Native YDB metadata deadline exceeded";
             return TDuration::Zero();
         }
-        return Min(Context_.Deadline - now, cap);
+        return Context_.Deadline - now;
     }
 
     void StartNextTable() {
@@ -125,19 +310,11 @@ private:
         auto self = shared_from_this();
         try {
             const auto& cluster = State_->Clusters.at(Requests[Index_].Key.first);
-            const auto credentials = State_->CredentialsFactory->Create(
-                State_->Tokens.at(Requests[Index_].Key.first), false);
-            Client_ = std::make_shared<NYdb::NTable::TTableClient>(cluster.UseTls ? State_->TlsDriver : State_->Driver,
-                NYdb::NTable::TClientSettings()
-                    .Database(cluster.Database)
-                    .DiscoveryEndpoint(cluster.Endpoint)
-                    .DiscoveryMode(NYdb::EDiscoveryMode::Off)
-                    .SslCredentials(NYdb::TSslCredentials(cluster.UseTls))
-                    .CredentialsProviderFactory(credentials)
-                    .SessionPoolSettings(NYdb::NTable::TSessionPoolSettings().MaxActiveSessions(1).MinPoolSize(0).RetryLimit(0)));
+            Client_ = State_->MetadataClientCache->GetClient(cluster.Endpoint, cluster.Database, cluster.UseTls,
+                State_->Tokens.at(Requests[Index_].Key.first), State_->CredentialsFactory);
             const auto remaining = RemainingTimeout();
             if (!remaining) {
-                Close();
+                FinishTable();
                 return;
             }
             Client_->CreateSession(NYdb::NTable::TCreateSessionSettings()
@@ -158,7 +335,7 @@ private:
         } catch (...) {
             // Credential providers may put credentials in exception text.
             Error = "Native YDB metadata client initialization failed";
-            Close();
+            FinishTable();
         }
     }
 
@@ -173,7 +350,7 @@ private:
             const TString tablePath = key.second.StartsWith('/') ? key.second : cluster.Database + "/" + key.second;
             const auto remaining = RemainingTimeout();
             if (!remaining) {
-                Close();
+                FinishTable();
                 return;
             }
             Session_->DescribeTable(tablePath, NYdb::NTable::TDescribeTableSettings()
@@ -193,15 +370,19 @@ private:
                     } catch (...) {
                         self->Error = "Native YDB DescribeTable failed";
                     }
-                    self->Close();
+                    self->FinishTable();
                 });
         } catch (...) {
             Error = "Native YDB DescribeTable failed";
-            Close();
+            FinishTable();
         }
     }
 
     void FinishTable() {
+        // CreateSession returns a standalone session. Its SDK deleter already
+        // sends DeleteSession with a separate bounded cleanup timeout. Waiting
+        // for another Close here both duplicated that RPC and failed successful
+        // metadata reads when cleanup was slow or unavailable.
         Session_.reset();
         Client_.reset();
         if (Context_.Cancellation.IsCancellationRequested()) {
@@ -215,43 +396,6 @@ private:
         }
         ++Index_;
         StartNextTable();
-    }
-
-    void Close() {
-        if (!Session_ || Context_.Cancellation.IsCancellationRequested() || TInstant::Now() >= Context_.Deadline) {
-            // Skip further provider RPCs when cancellation/deadline is observed.
-            // The existing SDK may issue its own DeleteSession on destruction;
-            // that cleanup has a separate SDK timeout.
-            FinishTable();
-            return;
-        }
-        auto self = shared_from_this();
-        try {
-            const auto remaining = RemainingTimeout(TDuration::Seconds(5));
-            if (!remaining) {
-                FinishTable();
-                return;
-            }
-            Session_->Close(NYdb::NTable::TCloseSessionSettings()
-                .ClientTimeout(remaining).OperationTimeout(remaining))
-                .Subscribe([self](const NYdb::TAsyncStatus& future) {
-                    try {
-                        if (!future.GetValue().IsSuccess() && !self->Error) {
-                            self->Error = "Native YDB metadata session cleanup failed";
-                        }
-                    } catch (...) {
-                        if (!self->Error) {
-                            self->Error = "Native YDB metadata session cleanup failed";
-                        }
-                    }
-                    self->FinishTable();
-                });
-        } catch (...) {
-            if (!Error) {
-                Error = "Native YDB metadata session cleanup failed";
-            }
-            FinishTable();
-        }
     }
 
     const TState::TPtr State_;
@@ -331,8 +475,12 @@ public:
             TVector<const TItemExprType*> items;
             for (auto& [name, type] : request.Schema.Columns) {
                 const auto* annotation = ParseColumnType(type, ctx);
-                if (!annotation || name == BlockLengthColumnName) {
-                    ctx.AddError(TIssue({}, "Native YDB does not support the type or name of a column"));
+                if (!annotation) {
+                    ctx.AddError(TIssue({}, UnsupportedColumn(name, type)));
+                    return TStatus::Error;
+                }
+                if (name == BlockLengthColumnName) {
+                    ctx.AddError(TIssue({}, TStringBuilder() << "Native YDB column '" << name << "' uses a reserved name"));
                     return TStatus::Error;
                 }
                 if (!table.ColumnTypes.emplace(name, std::move(type)).second) {
@@ -414,7 +562,7 @@ bool ExtractMetadataSchema(const Ydb::Table::DescribeTableResult& description,
         const auto& type = column.type();
         const auto& item = type.has_optional_type() ? type.optional_type().item() : type;
         if (!item.has_type_id()) {
-            error = "Native YDB does not support the type of a column";
+            error = UnsupportedColumn(column.name(), type);
             return false;
         }
     }

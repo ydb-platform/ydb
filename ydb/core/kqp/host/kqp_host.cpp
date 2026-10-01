@@ -1954,10 +1954,11 @@ private:
             return;
         }
 
-        YQL_ENSURE(FederatedQuerySetup->NativeYdbDriver && FederatedQuerySetup->NativeYdbTlsDriver, "Missing native YDB drivers");
+        const auto& resources = FederatedQuerySetup->NativeYdbResources;
+        YQL_ENSURE(resources, "Missing native YDB resources");
         auto provider = NYql::CreateYdbRemoteDataProviders(
-            TypesCtx.Get(), *FederatedQuerySetup->NativeYdbDriver, *FederatedQuerySetup->NativeYdbTlsDriver,
-            FederatedQuerySetup->CredentialsFactory);
+            TypesCtx.Get(), *resources->GetDriver(false), *resources->GetDriver(true),
+            FederatedQuerySetup->CredentialsFactory, TInstant::Max(), resources->GetMetadataClientCache());
         TypesCtx->AddDataSource(NYql::YdbRemoteProviderName, std::move(provider.Source));
         TypesCtx->AddDataSink(NYql::YdbRemoteProviderName, std::move(provider.Sink));
     }

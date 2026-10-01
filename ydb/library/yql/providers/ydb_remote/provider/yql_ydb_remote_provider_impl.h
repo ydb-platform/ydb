@@ -38,12 +38,15 @@ struct TState : public TThrRefBase {
 
     TState(TTypeAnnotationContext* types, const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver,
            IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
-           TInstant metadataDeadline = TInstant::Max())
+           TInstant metadataDeadline = TInstant::Max(),
+           std::shared_ptr<IYdbRemoteMetadataClientCache> metadataClientCache = {})
         : Types(types)
         , Driver(driver)
         , TlsDriver(tlsDriver)
         , CredentialsFactory(std::move(credentialsFactory))
         , MetadataDeadline(metadataDeadline == TInstant::Max() ? TInstant::Now() + TDuration::Seconds(60) : metadataDeadline)
+        , MetadataClientCache(metadataClientCache ? std::move(metadataClientCache)
+            : CreateYdbRemoteMetadataClientCache(driver, tlsDriver))
     {
     }
 
@@ -53,6 +56,7 @@ struct TState : public TThrRefBase {
     const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     // One local budget for the whole metadata batch, including all tables.
     const TInstant MetadataDeadline;
+    const std::shared_ptr<IYdbRemoteMetadataClientCache> MetadataClientCache;
     THashMap<TString, TCluster> Clusters;
     THashMap<TString, TString> Tokens;
     THashSet<TString> ValidClusters;

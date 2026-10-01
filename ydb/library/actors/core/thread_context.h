@@ -83,9 +83,8 @@ namespace NActors {
         TExecutionContext ExecutionContext;
         TMailboxContext MailboxContext;
         TExecutionStats *ExecutionStats = nullptr;
-        // Generic cache set for the current physical worker, or a scoped binding.
-
-
+        // Borrowed family caches, populated by the allocation-cache subsystem.
+        std::vector<void*> AllocationCachePointers;
 
         bool IsEnoughCpu = true;
         TWaitingStats<ui64> *WaitingStats = nullptr;

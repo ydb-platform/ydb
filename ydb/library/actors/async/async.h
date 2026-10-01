@@ -1226,11 +1226,11 @@ namespace NActors {
 
         class TAsyncFrameAllocator {
         public:
-            static void* operator new(size_t size) {
+            Y_FORCE_INLINE static void* operator new(size_t size) {
                 return TAsyncFrameCacheFrontend::Allocate(size);
             }
 
-            static void operator delete(void* frame, size_t size) noexcept {
+            Y_FORCE_INLINE static void operator delete(void* frame, size_t size) noexcept {
                 TAsyncFrameCacheFrontend::Free(frame, size);
             }
         };

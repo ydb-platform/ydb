@@ -38,15 +38,12 @@ struct TAllocationCacheProcessStats {
     }
 };
 
-// Concrete atomic records. The subsystem owns worker records; standalone caches
-// own their records locally. Readers receive only value snapshots.
-class alignas(64) TAllocationCacheCounters {
-public:
-    TAllocationCacheCounters(size_t binCount, size_t minimumSize)
-        : Counts(std::make_unique<std::atomic<size_t>[]>(binCount))
-        , BinCount(binCount)
-        , MinimumSize(minimumSize)
-    {}
+// Read-only view of counters embedded in a cache. The subsystem registers this
+// view and removes it under its statistics mutex before destroying the cache.
+struct TAllocationCacheCounters {
+    const std::atomic<size_t>* Counts = nullptr;
+    size_t BinCount = 0;
+    size_t MinimumSize = 0;
 
     TAllocationCacheProcessStats GetCachedStats() const noexcept {
         TAllocationCacheProcessStats stats;
@@ -57,10 +54,6 @@ public:
         }
         return stats;
     }
-
-    std::unique_ptr<std::atomic<size_t>[]> Counts;
-    const size_t BinCount;
-    const size_t MinimumSize;
 };
 
 // Raw blocks only: clients construct/destroy objects and must return blocks allocated
@@ -87,12 +80,8 @@ public:
     using TProcessStats = TAllocationCacheProcessStats;
 
 public:
-    using TCounters = TAllocationCacheCounters;
-
-    explicit TAllocationCache(size_t sizeBytes, TCounters* counters = nullptr)
-        : OwnedCounters(counters ? nullptr : std::make_unique<TCounters>(BinCount, MinAllocationSize))
-        , Counters(counters ? counters : OwnedCounters.get())
-        , SizeBytes(sizeBytes)
+    explicit TAllocationCache(size_t sizeBytes)
+        : SizeBytes(sizeBytes)
     {}
     ~TAllocationCache() {
         for (size_t index = 0; index < BinCount; ++index) {
@@ -102,12 +91,12 @@ public:
                 head = frame->Next;
                 DeleteFrame(frame, BinCapacity(index));
             }
-            Counters->Counts[index].store(0, std::memory_order_relaxed);
+            Counts[index].store(0, std::memory_order_relaxed);
         }
     }
 
-    [[nodiscard]] void* Allocate(size_t size);
-    void Release(void* frame, size_t size) noexcept;
+    [[nodiscard]] Y_FORCE_INLINE void* Allocate(size_t size);
+    Y_FORCE_INLINE void Release(void* frame, size_t size) noexcept;
 
     // Owner-thread diagnostics; off-thread readers must use GetCachedStats.
     TStats GetStats() const noexcept {
@@ -115,7 +104,7 @@ public:
         stats.CachedBytes = CachedBytes;
         stats.HeapAllocations = HeapAllocations;
         for (size_t index = 0; index < BinCount; ++index) {
-            if (const auto frames = Counters->Counts[index].load(std::memory_order_relaxed)) {
+            if (const auto frames = Counts[index].load(std::memory_order_relaxed)) {
                 ++stats.SizeClasses;
                 stats.CachedFrames += frames;
             }
@@ -130,15 +119,20 @@ public:
     // Safe from any thread. Reads only the per-bin idle frame counts, so it is
     // approximate while the owner allocates or releases and exact when the
     // owner is quiescent.
+    // Borrowed view for cold registration; the caller must protect cache lifetime.
+    TAllocationCacheCounters GetCountersView() const noexcept {
+        return {Counts.data(), BinCount, MinAllocationSize};
+    }
+
     TProcessStats GetCachedStats() const noexcept {
-        return Counters->GetCachedStats();
+        return GetCountersView().GetCachedStats();
     }
 
 
 public:
     static TAllocationCache* GetCurrent() noexcept;
 
-    [[nodiscard]] static void* AllocateCurrent(size_t size) {
+    [[nodiscard]] Y_FORCE_INLINE static void* AllocateCurrent(size_t size) {
         if (auto* cache = GetCurrent()) {
             return cache->Allocate(size);
         }
@@ -158,7 +152,7 @@ public:
         return frame;
     }
 
-    static void Free(void* frame, size_t size) noexcept {
+    Y_FORCE_INLINE static void Free(void* frame, size_t size) noexcept {
         if (auto* cache = GetCurrent()) {
             cache->Release(frame, size);
         } else {
@@ -231,8 +225,7 @@ private:
     // The cache owner is the only writer. Use loads/stores, not atomic
     // read-modify-write operations, on the allocation and release paths.
     // Other threads may only load these counts (see GetCachedStats).
-    std::unique_ptr<TCounters> OwnedCounters;
-    TCounters* Counters;
+    std::array<std::atomic<size_t>, BinCount> Counts{};
 
     const size_t SizeBytes;
     size_t CachedBytes = 0;
@@ -242,7 +235,7 @@ private:
 // has to be inline, so that compiler fold it in the coroutine allocation path
 // (allocation size in that case is not runtime and rather a constant)
 template<class TTag>
-inline void* TAllocationCache<TTag>::Allocate(size_t size) {
+Y_FORCE_INLINE void* TAllocationCache<TTag>::Allocate(size_t size) {
     if (size <= MaxAllocationSize) {
         const auto index = BinIndex(size);
         auto& head = Bins[index];
@@ -251,7 +244,7 @@ inline void* TAllocationCache<TTag>::Allocate(size_t size) {
             UnpoisonMemory(frame, sizeof(TIdleFrameLink));
             head = frame->Next;
             CachedBytes -= BinCapacity(index);
-            auto& count = Counters->Counts[index];
+            auto& count = Counts[index];
             count.store(count.load(std::memory_order_relaxed) - 1, std::memory_order_relaxed);
             PrepareAllocatedFrame(frame, size, BinCapacity(index));
             return frame;
@@ -265,7 +258,7 @@ inline void* TAllocationCache<TTag>::Allocate(size_t size) {
 // has to be inline, so that compiler fold it in the coroutine allocation path
 // (allocation size in that case is not runtime and rather a constant)
 template<class TTag>
-inline void TAllocationCache<TTag>::Release(void* frame, size_t size) noexcept {
+Y_FORCE_INLINE void TAllocationCache<TTag>::Release(void* frame, size_t size) noexcept {
     if (size <= MaxAllocationSize) {
         const auto index = BinIndex(size);
         const auto capacity = BinCapacity(index);
@@ -275,7 +268,7 @@ inline void TAllocationCache<TTag>::Release(void* frame, size_t size) noexcept {
             head = ::new (frame) TIdleFrameLink{head};
             PoisonIdleFrame(frame, capacity);
             CachedBytes += capacity;
-            auto& count = Counters->Counts[index];
+            auto& count = Counts[index];
             count.store(count.load(std::memory_order_relaxed) + 1, std::memory_order_relaxed);
             return;
         }

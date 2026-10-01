@@ -354,10 +354,6 @@ namespace NActors {
         void InitializeExecutorThread(TThreadContext* context);
         void CleanupExecutorThread(TThreadContext* context);
 
-        // Idle coroutine frames retained by this actor system's worker threads.
-        // Safe from any thread; approximate while workers allocate or release.
-        TAllocationCacheProcessStats GetAsyncFrameCacheStats() const;
-
         template<class T>
         void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {
             Y_ABORT_UNLESS(!StartExecuted.load(), "cannot register subsystem after actor system start");

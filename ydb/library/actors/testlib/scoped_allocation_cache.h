@@ -20,8 +20,8 @@ public:
             TAllocationCacheWorker::SetCurrent(&BoundCaches);
         } else {
             OwnedContext = std::make_unique<TThreadContext>(0, nullptr, nullptr);
-            TAllocationCacheWorker::SetCurrent(&BoundCaches);
             TlsThreadContext = OwnedContext.get();
+            TAllocationCacheWorker::SetCurrent(&BoundCaches);
         }
     }
 

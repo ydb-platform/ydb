@@ -6,6 +6,11 @@ namespace NActors {
 
 namespace {
     thread_local TAllocationCacheWorker* CurrentWorker = nullptr;
+    std::atomic<size_t> FamilyCounter = 0;
+}
+
+size_t TAllocationCacheFamilyRegistry::NextId() noexcept {
+    return FamilyCounter.fetch_add(1, std::memory_order_relaxed);
 }
 
 TAllocationCacheWorker* TAllocationCacheWorker::GetCurrent() noexcept {
@@ -14,6 +19,9 @@ TAllocationCacheWorker* TAllocationCacheWorker::GetCurrent() noexcept {
 
 void TAllocationCacheWorker::SetCurrent(TAllocationCacheWorker* worker) noexcept {
     CurrentWorker = worker;
+    if (TlsThreadContext) {
+        TlsThreadContext->AllocationCachePointers = worker ? worker->CachePointers : std::vector<void*>{};
+    }
 }
 
 TAllocationCacheSubSystem::~TAllocationCacheSubSystem() {
@@ -21,14 +29,13 @@ TAllocationCacheSubSystem::~TAllocationCacheSubSystem() {
 }
 
 TAllocationCacheWorker::~TAllocationCacheWorker() {
-    Caches.clear();
     if (Owner) {
         Owner->UnregisterWorker(Counters);
     }
+    Caches.clear();
 }
 
-void TAllocationCacheSubSystem::RegisterFamily(size_t family, size_t budget,
-        size_t binCount, size_t minimumSize, TFactory factory) {
+void TAllocationCacheSubSystem::RegisterFamily(size_t family, size_t budget, TFactory factory) {
     Y_ABORT_UNLESS(!Frozen, "allocation cache families are frozen");
     if (Families.size() <= family) {
         Families.resize(family + 1);
@@ -36,7 +43,7 @@ void TAllocationCacheSubSystem::RegisterFamily(size_t family, size_t budget,
     Y_ABORT_UNLESS(!Families[family].Factory, "duplicate allocation cache family");
     Y_ABORT_UNLESS(budget <= std::numeric_limits<size_t>::max() - WorkerBudget);
     WorkerBudget += budget;
-    Families[family] = {binCount, minimumSize, std::move(factory)};
+    Families[family] = {std::move(factory)};
 }
 
 void TAllocationCacheSubSystem::OnBeforeStart(TActorSystem&) {
@@ -72,15 +79,14 @@ void TAllocationCacheSubSystem::OnExecutorThreadStop(TThreadContext*) {
 std::unique_ptr<TAllocationCacheWorker> TAllocationCacheSubSystem::CreateWorker() {
     Y_ABORT_UNLESS(Frozen);
     auto counters = std::make_unique<TAllocationCacheWorkerCounters>();
-    counters->Families.reserve(Families.size());
+    counters->Families.resize(Families.size());
     auto worker = std::make_unique<TAllocationCacheWorker>();
     worker->Caches.reserve(Families.size());
     worker->CachePointers.resize(Families.size());
     for (size_t family = 0; family < Families.size(); ++family) {
         const auto& config = Families[family];
-        counters->Families.emplace_back(config.BinCount, config.MinimumSize);
         if (config.Factory) {
-            worker->Caches.push_back(config.Factory(&counters->Families.back()));
+            worker->Caches.push_back(config.Factory(&counters->Families[family]));
             worker->CachePointers[family] = worker->Caches.back().get();
         }
     }

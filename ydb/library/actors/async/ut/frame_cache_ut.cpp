@@ -197,7 +197,7 @@ namespace {
         }
         // The actor system sums the idle frames retained by its own workers.
         // The suspended roots are live, so only the released lazy frames count.
-        const auto cached = system.GetAsyncFrameCacheStats();
+        const auto cached = system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TAsyncFrameCacheFrontend::FamilyId());
         if (budget) {
             UNIT_ASSERT(cached.CachedFrames >= 1);
             UNIT_ASSERT(cached.CachedBytes >= cached.CachedFrames * TAsyncFrameCacheTag::MinAllocationSize);

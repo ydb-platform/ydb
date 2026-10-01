@@ -3,6 +3,7 @@
 
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/subsystems/stats.h>
+#include <ydb/library/actors/core/subsystems/allocation_cache.h>
 #include <util/generic/vector.h>
 
 namespace NActors {
@@ -53,7 +54,11 @@ public:
         }
         THarmonizerStats harmonizerStats;
         statsSubSystem.GetHarmonizerStats(harmonizerStats);
-        ActorSystemCounters.Set(harmonizerStats, ctx.ActorSystem()->GetAsyncFrameCacheStats());
+        TAllocationCacheProcessStats frameCacheStats;
+        if (const auto* cacheSystem = ctx.ActorSystem()->GetSubSystem<TAllocationCacheSubSystem>()) {
+            frameCacheStats = cacheSystem->GetCachedStats(TAsyncFrameCacheFrontend::FamilyId());
+        }
+        ActorSystemCounters.Set(harmonizerStats, frameCacheStats);
         actor->OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }

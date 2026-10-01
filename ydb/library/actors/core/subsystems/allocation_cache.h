@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/allocation_cache.h>
 #include <ydb/library/actors/core/subsystem.h>
+#include <ydb/library/actors/core/thread_context.h>
 
 #include <functional>
 #include <mutex>
@@ -10,10 +11,12 @@ namespace NActors {
 
 // Frontends register each tag's size classes, budget and cache factory during
 // dependency resolution. OnBeforeStart freezes this configuration. Executor
-// thread hooks create one cache per family and publish the worker in private TLS;
+// thread hooks create one cache per family and publish their pointers in the
+// thread context;
 // Allocate/Free select a concrete cache directly, without virtual calls or locks.
-// The subsystem owns executor workers and their atomic counter records. Workers
-// destroy caches before unregistering counters; the subsystem outlives workers.
+// Workers own caches with embedded atomic counters. The subsystem stores borrowed
+// counter views. Workers unregister these views before destroying their caches;
+// the subsystem outlives workers.
 // Statistics readers hold WorkersMutex while sampling records, so concurrent
 // worker removal cannot invalidate them. Values are approximate during activity.
 // Family budgets limit retained block capacity, excluding metadata. Missing
@@ -24,9 +27,15 @@ namespace NActors {
 // The factory supplies the matching typed deleter; hot-path calls use CachePointers.
 using TLocalAllocationCache = std::unique_ptr<void, void (*)(void*)>;
 
+// Process-wide ids shared by every actor system, independent of subsystem ids.
+class TAllocationCacheFamilyRegistry {
+public:
+    static size_t NextId() noexcept;
+};
+
 class TAllocationCacheSubSystem;
 struct TAllocationCacheWorkerCounters {
-    // Built once before publication; never resized while caches borrow addresses.
+    // Read-only views; registration protects their lifetime during sampling.
     std::vector<TAllocationCacheCounters> Families;
 };
 
@@ -77,7 +86,7 @@ class TAllocationCacheSubSystem final : public ISubSystem {
 public:
     using TFactory = std::function<TLocalAllocationCache(TAllocationCacheCounters*)>;
     ~TAllocationCacheSubSystem() override;
-    void RegisterFamily(size_t family, size_t budget, size_t binCount, size_t minimumSize, TFactory factory);
+    void RegisterFamily(size_t family, size_t budget, TFactory factory);
     void OnBeforeStart(TActorSystem&) override;
     void OnExecutorThreadStart(TThreadContext* context) override;
     void OnExecutorThreadStop(TThreadContext* context) override;
@@ -89,8 +98,6 @@ private:
     friend class TAllocationCacheWorker;
     void UnregisterWorker(TAllocationCacheWorkerCounters* counters);
     struct TFamily {
-        size_t BinCount = 0;
-        size_t MinimumSize = 0;
         TFactory Factory;
     };
     std::vector<TFamily> Families;
@@ -118,10 +125,13 @@ class TAllocationCacheFrontend : public ISubSystem {
 public:
     explicit TAllocationCacheFrontend(size_t budget)
         : Budget(budget)
-    {}
+    {
+        (void)FamilyId();
+    }
 
     static size_t FamilyId() noexcept {
-        return TSubSystemRegistry::TItem<TAllocationCacheFrontend<TTag>>::Index();
+        static const size_t id = TAllocationCacheFamilyRegistry::NextId();
+        return id;
     }
 
     TSubSystemDependencies GetDependencies() const override {
@@ -131,19 +141,20 @@ public:
     void OnDependenciesResolved(const TResolvedSubSystemDependencies& dependencies) override {
         auto* system = static_cast<TAllocationCacheSubSystem*>(dependencies.front().Instance);
         system->RegisterFamily(FamilyId(), Budget,
-            TAllocationCache<TTag>::BinCount, TAllocationCache<TTag>::MinAllocationSize,
             [budget = Budget](TAllocationCacheCounters* counters) {
-                return TLocalAllocationCache(new TAllocationCache<TTag>(budget, counters), [](void* cache) {
+                auto cache = TLocalAllocationCache(new TAllocationCache<TTag>(budget), [](void* cache) {
                     delete static_cast<TAllocationCache<TTag>*>(cache);
                 });
+                *counters = static_cast<TAllocationCache<TTag>*>(cache.get())->GetCountersView();
+                return cache;
             });
     }
 
-    [[nodiscard]] static void* Allocate(size_t size) {
+    [[nodiscard]] Y_FORCE_INLINE static void* Allocate(size_t size) {
         return TAllocationCache<TTag>::AllocateCurrent(size);
     }
 
-    static void Free(void* block, size_t size) noexcept {
+    Y_FORCE_INLINE static void Free(void* block, size_t size) noexcept {
         TAllocationCache<TTag>::Free(block, size);
     }
 
@@ -161,8 +172,14 @@ TAllocationCache<TTag>* TAllocationCacheWorker::Get() const noexcept {
 
 template<class TTag>
 TAllocationCache<TTag>* TAllocationCache<TTag>::GetCurrent() noexcept {
-    auto* worker = TAllocationCacheWorker::GetCurrent();
-    return worker ? worker->Get<TTag>() : nullptr;
+    auto* context = TlsThreadContext;
+    if (!context) {
+        return nullptr;
+    }
+    const size_t family = TAllocationCacheFrontend<TTag>::FamilyId();
+    return family < context->AllocationCachePointers.size()
+        ? static_cast<TAllocationCache<TTag>*>(context->AllocationCachePointers[family])
+        : nullptr;
 }
 
 } // namespace NActors

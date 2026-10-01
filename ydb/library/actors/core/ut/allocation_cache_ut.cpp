@@ -48,11 +48,11 @@ public:
         , PreviousWorker(TAllocationCacheWorker::GetCurrent())
         , Context(0, nullptr, nullptr)
     {
-        TAllocationCacheWorker::SetCurrent(worker);
         TlsThreadContext = &Context;
+        TAllocationCacheWorker::SetCurrent(worker);
     }
 
-    ~TWorkerBinding() { TAllocationCacheWorker::SetCurrent(PreviousWorker); TlsThreadContext = Previous; }
+    ~TWorkerBinding() { TlsThreadContext = Previous; TAllocationCacheWorker::SetCurrent(PreviousWorker); }
 
 private:
     TThreadContext* Previous;
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TOtherFrontend::FamilyId()).CachedBytes, 512);
         UNIT_ASSERT_VALUES_EQUAL(TSmallFrontend::Allocate(65), small);
         TSmallFrontend::Free(small, 65);
-        UNIT_ASSERT_VALUES_EQUAL(system.GetAsyncFrameCacheStats().CachedBytes, 0);
+        UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TAsyncFrameCacheFrontend::FamilyId()).CachedBytes, 0);
     }
 
     Y_UNIT_TEST(ScopedCoroutineBindingPreservesOtherFamilies) {

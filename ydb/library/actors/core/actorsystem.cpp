@@ -637,11 +637,4 @@ namespace NActors {
         });
     }
 
-    TAllocationCacheProcessStats TActorSystem::GetAsyncFrameCacheStats() const {
-        if (const auto* system = GetSubSystem<TAllocationCacheSubSystem>()) {
-            return system->GetCachedStats(TAsyncFrameCacheFrontend::FamilyId());
-        }
-        return {};
-    }
-
 }

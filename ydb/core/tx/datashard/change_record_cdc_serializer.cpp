@@ -394,8 +394,9 @@ protected:
             Y_ENSURE(id == 0 || name != "default",
                 "Cannot serialize unnamed non-default column family: " << id);
             auto& definition = families[name];
-            if (const auto& kind = family.StorageConfig.GetData().GetPreferredPoolKind()) {
-                definition["data"]["media"] = kind;
+            const auto& data = family.StorageConfig.GetData();
+            if (!data.GetAllowOtherKinds() && data.GetPreferredPoolKind()) {
+                definition["data"]["media"] = data.GetPreferredPoolKind();
             }
             definition["compression"] = family.Codec == NTable::NPage::ECodec::Plain ? "off" : "lz4";
             definition["cacheMode"] = family.CacheMode == NTable::NPage::ECacheMode::Regular

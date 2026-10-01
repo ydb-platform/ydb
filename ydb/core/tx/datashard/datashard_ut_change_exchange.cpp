@@ -4924,7 +4924,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
             {.Name = "empty", .ColumnCodec = NKikimrSchemeOp::ColumnCodecLZ4}));
         WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
-            {.Name = "archive", .DataPoolKind = "ssd"}));
+            {.Name = "archive", .DataPoolKind = "test", .AllowOtherDataPoolKinds = false}));
         WaitTxNotification(server, edgeActor, AsyncAlterColumnFamily(server, "/Root", "Table",
             {.Name = "archive", .ResetDataPoolKind = true}));
         RebootTablet(runtime, shards.front(), edgeActor);
@@ -4962,18 +4962,18 @@ Y_UNIT_TEST_SUITE(Cdc) {
         AssertColumn(added, "value", "Uint32", "archive");
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"].GetMap().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(added["columnFamilies"]["default"]["compression"].GetString(), "off");
-        AssertFamily(added, "archive", "lz4", "regular", "hdd");
+        AssertFamily(added, "archive", "lz4", "regular");
 
         const auto& modified = tableAt(3);
-        AssertFamily(modified, "archive", "off", "regular", "hdd");
+        AssertFamily(modified, "archive", "off", "regular");
         AssertColumn(modified, "value", "Uint32", "archive");
 
         const auto& empty = tableAt(4);
         UNIT_ASSERT_VALUES_EQUAL(empty["columnFamilies"].GetMap().size(), 3);
         AssertFamily(empty, "empty", "lz4", "regular");
-        AssertFamily(empty, "archive", "off", "regular", "hdd");
+        AssertFamily(empty, "archive", "off", "regular");
 
-        AssertFamily(tableAt(5), "archive", "off", "regular", "ssd");
+        AssertFamily(tableAt(5), "archive", "off", "regular", "test");
         AssertFamily(tableAt(6), "archive", "off", "regular");
         AssertFamily(tableAt(7), "archive", "off", "in_memory");
         AssertFamily(tableAt(8), "archive", "off", "regular");

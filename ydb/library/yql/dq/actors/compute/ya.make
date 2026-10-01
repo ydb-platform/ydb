@@ -1,8 +1,8 @@
 LIBRARY()
 
 SRCS(
-    dq_task_runner_exec_ctx.cpp
     dq_async_compute_actor.cpp
+    dq_checkpoints_states.cpp
     dq_compute_actor_async_io_factory.cpp
     dq_compute_actor_channels.cpp
     dq_compute_actor_checkpoints.cpp
@@ -12,6 +12,7 @@ SRCS(
     dq_compute_issues_buffer.cpp
     dq_request_context.h
     dq_request_context.cpp
+    dq_task_runner_exec_ctx.cpp
 )
 
 PEERDIR(
@@ -23,6 +24,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/compute/events
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
+    ydb/library/yql/dq/comp_nodes/operator_memory_quota
     ydb/library/yql/dq/proto
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/runtime/streaming
@@ -32,6 +34,7 @@ PEERDIR(
     yql/essentials/public/issue
     ydb/core/quoter/public
     library/cpp/html/escape
+    library/cpp/time_provider
 )
 
 YQL_LAST_ABI_VERSION()

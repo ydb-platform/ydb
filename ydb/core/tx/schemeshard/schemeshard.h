@@ -548,6 +548,7 @@ namespace TEvSchemeShard {
             ui64 TenantSysViewProcessor;
             ui64 TenantStatisticsAggregator;
             ui64 TenantGraphShard;
+            ui64 TenantWasmCompileController;
             TString RootACL;
         };
 
@@ -567,6 +568,7 @@ namespace TEvSchemeShard {
             Record.SetTenantSysViewProcessor(_.TenantSysViewProcessor);
             Record.SetTenantStatisticsAggregator(_.TenantStatisticsAggregator);
             Record.SetTenantGraphShard(_.TenantGraphShard);
+            Record.SetTenantWasmCompileController(_.TenantWasmCompileController);
 
             Record.SetTenantRootACL(_.RootACL);
         }
@@ -624,6 +626,10 @@ namespace TEvSchemeShard {
 
         void SetTenantGraphShard(ui64 gs) {
             Record.SetTenantGraphShard(gs);
+        }
+
+        void SetTenantWasmCompileController(ui64 wcc) {
+            Record.SetTenantWasmCompileController(wcc);
         }
     };
 

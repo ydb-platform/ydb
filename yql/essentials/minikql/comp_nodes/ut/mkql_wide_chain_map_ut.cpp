@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using NTest::TUtf8;
 using NYql::NUdf::TUnboxedValueComparatorStreamView;
@@ -196,5 +195,4 @@ Y_UNIT_TEST_LLVM(TestDotCalculateUnusedField) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideChain1MapTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

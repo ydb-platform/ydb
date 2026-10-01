@@ -3,6 +3,7 @@
 #include <ydb/library/actors/interconnect/interconnect_counters.h>
 #include <ydb/library/actors/interconnect/outgoing_stream.h>
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -14,6 +15,20 @@ using namespace NActors;
 namespace {
 
 struct TEvTestSerialization : public TEventPB<TEvTestSerialization, NInterconnectTest::TEvTestSerialization, 123> {};
+
+struct TEvLyingXdcSection
+    : TEventPB<TEvLyingXdcSection, NInterconnectTest::TEvTestSerialization, 124>
+{
+    TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+        if (!allowExternalDataChannel) {
+            return {};
+        }
+        TEventSerializationInfo info;
+        info.IsExtendedFormat = true;
+        info.Sections.push_back(TEventSectionInfo{0, EventMaxByteSize + 1, 0, 0, false, false});
+        return info;
+    }
+};
 
 struct TXdcPushData {
     EXdcCommand Command = EXdcCommand::PUSH_DATA;
@@ -265,9 +280,150 @@ void AssertChecksumsWhenDisablingIsNotNegotiated(bool useXxhash) {
     UNIT_ASSERT_VALUES_EQUAL(*pushData.Checksum, CalculateExpectedChecksum(event.XdcPayloadData, useXxhash));
 }
 
+class TProcessUndeliveredActor : public TActorBootstrapped<TProcessUndeliveredActor> {
+public:
+    TProcessUndeliveredActor(TActorId replyTo, bool completeSerializer)
+        : ReplyTo(replyTo)
+        , CompleteSerializer(completeSerializer)
+    {}
+
+    void Bootstrap() {
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+        metrics->SetPeerInfo("peer", "1", "peer");
+
+        auto releaseCallback = [](THolder<IEventBase>) {};
+        TEventHolderPool pool(common, releaseCallback);
+
+        TSessionParams params;
+        params.AllowRdmaSendReceive = !CompleteSerializer;
+
+        auto memPool = CompleteSerializer
+            ? std::shared_ptr<NInterconnect::NRdma::IMemPool>()
+            : NInterconnect::NRdma::CreateDummyMemPool(true);
+        TEventOutputChannel channel(1, 1, CompleteSerializer ? 1 : 64 << 20,
+            metrics, params, memPool);
+
+        auto* ev = new TEvTestSerialization;
+        ev->Record.SetBuffer(CompleteSerializer
+            ? TString("serialized event larger than configured limit")
+            : TString(2 * TTcpPacketBuf::PacketDataLen, 'X'));
+        auto evHandle = MakeHolder<IEventHandle>(
+            SelfId(), ReplyTo, ev, IEventHandle::FlagTrackDelivery);
+        channel.Push(*evHandle, pool, TInstant::Zero());
+
+        NInterconnect::TOutgoingStream mainStream(memPool);
+        NInterconnect::TOutgoingStream xdcStream;
+        if (!CompleteSerializer) {
+            Y_ABORT_UNLESS(mainStream.PreallocateForWriting(
+                TTcpPacketBuf::FullPacketSize));
+        }
+        TTcpPacketOutTask task(params, mainStream, xdcStream, !CompleteSerializer);
+
+        if (CompleteSerializer) {
+            bool eventTooLarge = false;
+            try {
+                channel.FeedBuf(task, 1);
+            } catch (const TExSerializedEventTooLarge&) {
+                eventTooLarge = true;
+            }
+            Y_ABORT_UNLESS(eventTooLarge);
+        } else {
+            Y_ABORT_UNLESS(!channel.FeedBuf(task, 1));
+        }
+        Y_ABORT_UNLESS(channel.State == TEventOutputChannel::EState::BODY);
+        channel.ProcessUndelivered(pool, nullptr);
+
+        PassAway();
+    }
+
+private:
+    const TActorId ReplyTo;
+    const bool CompleteSerializer;
+};
+
+void AssertXdcDeclareNotSerialized(IEventBase* ev, ui32 maxSerializedEventSize) {
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+    std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+    metrics->SetPeerInfo("peer", "1", "peer");
+
+    auto releaseCallback = [](THolder<IEventBase>) {};
+    TEventHolderPool pool(common, releaseCallback);
+
+    TSessionParams params;
+    params.UseExternalDataChannel = true;
+
+    TEventOutputChannel channel(1, 1, maxSerializedEventSize, metrics, params, nullptr);
+    auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+    channel.Push(*evHandle, pool, TInstant::Zero());
+
+    NInterconnect::TOutgoingStream mainStream;
+    NInterconnect::TOutgoingStream xdcStream;
+    TTcpPacketOutTask task(params, mainStream, xdcStream);
+
+    UNIT_ASSERT_EXCEPTION(channel.FeedBuf(task, 1), TExSerializedEventTooLarge);
+    UNIT_ASSERT(channel.State == TEventOutputChannel::EState::BODY);
+    UNIT_ASSERT(ProduceString(xdcStream).empty());
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(EventOutputChannel) {
+    Y_UNIT_TEST(PropagatesSerializedEventTooLargeFromCoroutineSerializer) {
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+        metrics->SetPeerInfo("peer", "1", "peer");
+
+        auto releaseCallback = [](THolder<IEventBase>) {};
+        TEventHolderPool pool(common, releaseCallback);
+
+        TSessionParams params;
+        TEventOutputChannel channel(1, 1, 1, metrics, params, nullptr);
+
+        auto* ev = new TEvTestSerialization;
+        ev->Record.SetBuffer("serialized event larger than configured limit");
+        auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+        channel.Push(*evHandle, pool, TInstant::Zero());
+
+        NInterconnect::TOutgoingStream mainStream;
+        NInterconnect::TOutgoingStream xdcStream;
+        TTcpPacketOutTask task(params, mainStream, xdcStream);
+
+        UNIT_ASSERT_EXCEPTION(channel.FeedBuf(task, 1), TExSerializedEventTooLarge);
+    }
+
+    Y_UNIT_TEST(AbortsActiveCoroutineSerializerOnUndelivered) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Register(new TProcessUndeliveredActor(edge, false));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* event = runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(event->SourceType, TEvTestSerialization::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(event->Reason, TEvents::TEvUndelivered::Disconnected);
+    }
+
+    Y_UNIT_TEST(ReleasesCompletedCoroutineSerializerOnUndelivered) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Register(new TProcessUndeliveredActor(edge, true));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* event = runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(event->SourceType, TEvTestSerialization::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(event->Reason, TEvents::TEvUndelivered::Disconnected);
+    }
+
     Y_UNIT_TEST(DisabledPayloadChecksums) {
         AssertDisabledPayloadChecksums(false);
         AssertDisabledPayloadChecksums(true);
@@ -281,5 +437,20 @@ Y_UNIT_TEST_SUITE(EventOutputChannel) {
     Y_UNIT_TEST(DisablingChecksumsNotNegotiated) {
         AssertChecksumsWhenDisablingIsNotNegotiated(false);
         AssertChecksumsWhenDisablingIsNotNegotiated(true);
+    }
+
+    Y_UNIT_TEST(RejectsOversizedXdcDeclare) {
+        auto* ev = new TEvTestSerialization;
+        ev->AddPayload(TRope(TString(8192, 'x')));
+        UNIT_ASSERT(ev->AllowExternalDataChannel());
+        UNIT_ASSERT_GT(ev->CalculateSerializedSize(), 1024u);
+        AssertXdcDeclareNotSerialized(ev, 1024);
+    }
+
+    Y_UNIT_TEST(RejectsXdcDeclareWhenSectionExceedsEventMaxByteSize) {
+        auto* ev = new TEvLyingXdcSection;
+        ev->Record.SetBlobID(1);
+        UNIT_ASSERT_GT(ev->CalculateSerializedSize(), 0u);
+        AssertXdcDeclareNotSerialized(ev, EventMaxByteSize);
     }
 }

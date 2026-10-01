@@ -476,7 +476,7 @@ protected:
 
     void AllColumns() override {
         Y_DEBUG_ABORT_UNLESS(Source_);
-        return Source_->AllColumns();
+        Source_->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
@@ -520,7 +520,10 @@ protected:
         return Source_->GetWriteSettings();
     }
 
-protected:
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        Source_->SetCompositeSelect(composite);
+    }
+
     void SetSource(ISource* source) {
         Source_ = source;
     }
@@ -578,7 +581,6 @@ protected:
         return result ? result : ISource::FindColumnMistype(name);
     }
 
-protected:
     TColumns Columns_;
 };
 
@@ -986,11 +988,8 @@ TNodePtr BuildInvalidSubqueryRef(TPosition subqueryPos) {
 class TTableSource: public IRealSource {
 public:
     TTableSource(TPosition pos, const TTableRef& table, const TString& label)
-        : IRealSource(pos)
-        , Table_(table)
-        , FakeSource_(BuildFakeSource(pos))
+        : TTableSource(pos, table, label, table.Options, nullptr)
     {
-        SetLabel(label.empty() ? Table_.ShortName() : label);
     }
 
     void GetInputTables(TTableList& tableList) const override {
@@ -1042,15 +1041,7 @@ public:
         samplingRate = PrepareSamplingRate(pos, sampleClause, samplingRate);
 
         auto sampleSettings = Q(Y(Q(modeName), Y("EvaluateAtom", Y("ToString", samplingRate)), Y("EvaluateAtom", Y("ToString", samplingSeed))));
-        auto sampleOption = Q(Y(Q("sample"), sampleSettings));
-        if (Table_.Options) {
-            if (!Table_.Options->Init(ctx, this)) {
-                return false;
-            }
-            Table_.Options = L(Table_.Options, sampleOption);
-        } else {
-            Table_.Options = Y(sampleOption);
-        }
+        SamplingOption_ = Q(Y(Q("sample"), sampleSettings));
         return true;
     }
 
@@ -1058,12 +1049,24 @@ public:
         Y_UNUSED(ctx);
         TTableHints merged = contextHints;
         MergeHints(merged, hints);
-        Table_.Options = BuildInputOptions(pos, merged);
+        TableOptions_ = BuildInputOptions(pos, merged);
         return true;
     }
 
     bool SetViewName(TContext& ctx, TPosition pos, const TString& view) override {
         return Table_.Keys->SetViewName(ctx, pos, view);
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Table_.Options = TableOptions_;
+        if (SamplingOption_) {
+            if (Table_.Options && !Table_.Options->Init(ctx, this)) {
+                return false;
+            }
+
+            Table_.Options = L(Table_.Options ? Table_.Options : Y(), SamplingOption_);
+        }
+        return IRealSource::DoInit(ctx, src);
     }
 
     TNodePtr Build(TContext& ctx) override {
@@ -1078,7 +1081,7 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TTableSource(Pos_, Table_, GetLabel());
+        return new TTableSource(Pos_, Table_, GetLabel(), TableOptions_, SamplingOption_);
     }
 
     bool IsTableSource() const override {
@@ -1089,6 +1092,23 @@ protected:
     TTableRef Table_;
 
 private:
+    TTableSource(
+        TPosition pos,
+        const TTableRef& table,
+        const TString& label,
+        TNodePtr tableOptions,
+        TNodePtr samplingOption)
+        : IRealSource(pos)
+        , Table_(table)
+        , TableOptions_(std::move(tableOptions))
+        , SamplingOption_(std::move(samplingOption))
+        , FakeSource_(BuildFakeSource(pos))
+    {
+        SetLabel(label.empty() ? Table_.ShortName() : label);
+    }
+
+    TNodePtr TableOptions_;
+    TNodePtr SamplingOption_;
     const TSourcePtr FakeSource_;
 };
 
@@ -1557,6 +1577,8 @@ public:
         Y_DEBUG_ABORT_UNLESS(Subselects_.size() > 1);
     }
 
+    void RebindNestedProxySources();
+
     void GetInputTables(TTableList& tableList) const override {
         for (const auto& select : Subselects_) {
             select->GetInputTables(tableList);
@@ -1711,6 +1733,7 @@ public:
     TNodePtr DoClone() const final {
         auto newSource = MakeIntrusive<TCompositeSelect>(Pos_, Source_->CloneSource(), OriginalSource_->CloneSource(), Settings_);
         newSource->SetSubselects(CloneContainer(Subselects_), CloneContainer(Grouping_), CloneContainer(GroupByExpr_));
+        newSource->RebindNestedProxySources();
         return newSource;
     }
 
@@ -2253,11 +2276,19 @@ public:
         return terms;
     }
 
+    ISource* RealSource() const {
+        return Source_.Get();
+    }
+
     TNodePtr DoClone() const final {
         return new TSelectCore(Pos_, Source_->CloneSource(), CloneContainer(GroupByExpr_),
                                CloneContainer(GroupBy_), CompactGroupBy_, GroupBySuffix_, AssumeSorted_, CloneContainer(OrderBy_),
                                SafeClone(Having_), CloneContainer(WinSpecs_), SafeClone(LegacyHoppingWindowSpec_),
                                CloneContainer(Terms_), Distinct_, Without_, ForceWithout_, SelectStream_, Settings_, TColumnsSets(UniqueSets_), TColumnsSets(DistinctSets_));
+    }
+
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        RealSource()->SetCompositeSelect(composite);
     }
 
 private:
@@ -2607,7 +2638,6 @@ private:
         return Y("block", Q(L(block, Y("return", "core"))));
     }
 
-private:
     TSourcePtr Source_;
     TVector<TNodePtr> GroupByExpr_;
     TVector<TNodePtr> DistinctAggrExpr_;
@@ -2879,7 +2909,6 @@ private:
         return terms;
     }
 
-private:
     TSourcePtr Source_;
     TNodePtr With_;
     const bool WithExtFunction_;
@@ -2946,6 +2975,12 @@ public:
 
     ISource* GetCompositeSource() override {
         return CompositeSelect_;
+    }
+
+    void SetCompositeSelect(TCompositeSelect* composite) override {
+        YQL_ENSURE(!Holder_);
+        CompositeSelect_ = composite;
+        Source_ = composite->RealSource();
     }
 
     bool AddGrouping(TContext& ctx, const TVector<TString>& columns, TString& hintColumn) override {
@@ -3020,6 +3055,12 @@ private:
     mutable TSet<TString> GroupByColumns_;
     mutable TVector<ui64> Hints_;
 };
+
+void TCompositeSelect::RebindNestedProxySources() {
+    for (const auto& select : Subselects_) {
+        select->SetCompositeSelect(this);
+    }
+}
 
 namespace {
 TSourcePtr DoBuildSelectCore(
@@ -3251,7 +3292,7 @@ public:
     }
 
     void AddTmpWindowColumn(const TString& column) override {
-        return Source_->AddTmpWindowColumn(column);
+        Source_->AddTmpWindowColumn(column);
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {
@@ -3682,9 +3723,10 @@ public:
             input = Y(ctx.UseUnordered(*Source_) ? "OrderedMap" : "Map", input, extraMembersLambda);
         }
 
-        return Y("SqlCombineInput", input, presortKeySelector, presortDirection,
-                 BuildLambda(Pos_, Y("row"), extractKey),
-                 BuildLambda(Pos_, Y("row"), Arg_));
+        return Y("SqlCombineInput", input,
+                 Y("Void"), presortKeySelector, presortDirection,
+                 Y("Void"), BuildLambda(Pos_, Y("row"), extractKey),
+                 Y("Void"), BuildLambda(Pos_, Y("row"), Arg_));
     }
 
     TPtr CloneCombineInputSource() const {

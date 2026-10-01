@@ -79,8 +79,20 @@ public:
     using TPtr = std::shared_ptr<IReplyAdapter>;
     virtual ~IReplyAdapter() = default;
 
+    struct TRequestStats {
+        TStringBuf RequestName;
+        TDuration Latency;
+        bool Success = false;
+        int HttpResponseCode = 0;
+        size_t BytesRead = 0;
+        size_t BytesWritten = 0;
+    };
+
     NActors::TActorId GetRecipient(const NActors::TActorId& defaultValue) {
         return CustomRecipient.value_or(defaultValue);
+    }
+
+    virtual void CollectStats(const TRequestStats& /*stats*/) const {
     }
 
     virtual std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<TEvListObjectsResponse>&& ev) const = 0;
@@ -124,6 +136,12 @@ public:
 
     NActors::TActorId GetRecipient(const NActors::TActorId& defaultValue) const {
         return Adapter ? Adapter->GetRecipient(defaultValue) : defaultValue;
+    }
+
+    void CollectStats(const IReplyAdapter::TRequestStats& stats) const {
+        if (Adapter) {
+            Adapter->CollectStats(stats);
+        }
     }
 
     template <class TBaseEventObject>

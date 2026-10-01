@@ -1,0 +1,18 @@
+/* custom error: At function: YtCreateTable! */
+/* custom error: Strict Yson type is not allowed to write, please use Optional<Yson> for column(s): "ys_list": Optional<List<Yson>> */
+
+/*
+ * DDL counterpart of YQLOVERYT-398. CREATE TABLE is lowered to YtPublish only during physical
+ * optimization, so the strict Yson check has to be done in HandleCreate - otherwise it fires in
+ * the repeat type annotation and is escalated to S_FATAL ("An abnormal situation found").
+ * The "At function: YtCreateTable!" expectation above pins that.
+ */
+
+USE plato;
+
+PRAGMA yt.UseNativeYtTypes;
+
+CREATE TABLE Output (
+    key      String NOT NULL,
+    ys_list  List<Yson>
+);

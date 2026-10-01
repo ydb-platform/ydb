@@ -20,6 +20,33 @@ namespace NYqlLangModule {
 
 namespace {
 
+void GetFullClusterMappingFromGateways(
+    const NYql::TGatewaysConfig& gateways,
+    THashMap<TString, TString>& clusterMapping)
+{
+    GetClusterMappingFromGateways(gateways, clusterMapping);
+    if (gateways.HasPostgresql()) {
+        AddClusters(gateways.GetPostgresql().GetClusterMapping(),
+                    TString{NYql::PgProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasPq()) {
+        AddClusters(gateways.GetPq().GetClusterMapping(),
+                    TString{NYql::PqProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasSolomon()) {
+        AddClusters(gateways.GetSolomon().GetClusterMapping(),
+                    TString{NYql::SolomonProviderName},
+                    &clusterMapping);
+    }
+    if (gateways.HasStat()) {
+        AddClusters(gateways.GetStat().GetClusterMapping(),
+                    TString{NYql::StatProviderName},
+                    &clusterMapping);
+    }
+}
+
 void ParseLangVersion(TStringBuf langVersion, NSQLTranslation::TTranslationSettings& settings) {
     if (langVersion.empty()) {
         return;
@@ -28,26 +55,38 @@ void ParseLangVersion(TStringBuf langVersion, NSQLTranslation::TTranslationSetti
     YQL_ENSURE(NYql::ParseLangVersion(langVersion, settings.LangVer));
 }
 
-void ParseGatewaysConfig(TStringBuf cfg, NSQLTranslation::TTranslationSettings& settings) {
-    if (cfg.empty()) {
+void ParseGatewaysConfig(
+    TStringBuf cfg,
+    TStringBuf cfgPatch,
+    NSQLTranslation::TTranslationSettings& settings)
+{
+    if (cfg.empty() && cfgPatch.empty()) {
         return;
     }
 
     NYql::TGatewaysConfig config;
-    if (!google::protobuf::TextFormat::ParseFromString(cfg, &config)) {
+    if (!cfg.empty() && !google::protobuf::TextFormat::ParseFromString(cfg, &config)) {
         ythrow yexception() << "Failed to parse gateways config";
+    }
+
+    if (!cfgPatch.empty()) {
+        NYql::TGatewaysConfig configPatch;
+        if (!google::protobuf::TextFormat::ParseFromString(cfgPatch, &configPatch)) {
+            ythrow yexception() << "Failed to parse gateways config patch";
+        }
+        config.MergeFrom(configPatch);
     }
 
     NSQLTranslation::TExtendedSqlFlags sqlFlags = NYql::TGatewaySQLFlags::FromTesting(config).ToMap();
 
-    GetClusterMappingFromGateways(config, settings.ClusterMapping);
+    GetFullClusterMappingFromGateways(config, settings.ClusterMapping);
     NSQLTranslation::ParseTranslationSettings(sqlFlags, settings);
 }
 
 void ParseTranslationSettings(const TSql2YqlInput& input, NSQLTranslation::TTranslationSettings& settings) {
     settings.SyntaxVersion = 1;
     ParseLangVersion(input.LangVersion, settings);
-    ParseGatewaysConfig(input.GatewaysCfg, settings);
+    ParseGatewaysConfig(input.GatewaysCfg, input.GatewaysCfgPatch, settings);
 }
 
 NSQLTranslation::TTranslators Translators(TMaybe<size_t> maxParseTreeDepth) {

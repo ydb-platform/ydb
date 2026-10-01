@@ -1,7 +1,7 @@
 PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
-ENV(YDB_USE_IN_MEMORY_PDISKS=true)
+ENV(YDB_USE_IN_MEMORY_PDISKS=false)
 ENV(YDB_VECTOR_WORKLOAD_PATH="ydb/tests/stress/vector_workload/workload_vector")
 ENV(YDB_FULLTEXT_WORKLOAD_PATH="ydb/tests/stress/fulltext_workload/workload_fulltext")
 

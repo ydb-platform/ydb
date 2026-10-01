@@ -1,0 +1,12 @@
+/*
+ * Positive counterpart of YQLOVERYT-398: without native YT types the destination row spec gets
+ * zero NativeYtTypeFlags, so a strict Yson nested into a container is stored in the legacy
+ * representation and the write succeeds.
+ */
+
+USE plato;
+
+PRAGMA yt.UseNativeYtTypes = '0';
+
+INSERT INTO Output WITH TRUNCATE
+SELECT * FROM Input;

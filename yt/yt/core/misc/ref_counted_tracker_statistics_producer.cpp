@@ -1,5 +1,6 @@
 #include "ref_counted_tracker_statistics_producer.h"
 
+#include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/fluent.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
@@ -55,7 +56,7 @@ TYsonProducer CreateRefCountedTrackerStatisticsProducer()
 class TCachingRefCountedTrackerStatisticsManager
 {
 public:
-    TYsonProducer GetProducer()
+    TYsonProducer GetProducer() const
     {
         return Producer_;
     }
@@ -63,7 +64,7 @@ public:
 private:
     TCachingRefCountedTrackerStatisticsManager()
         : Producer_(BIND([this] (IYsonConsumer* consumer) {
-            Produce(consumer, *GetCachedStatistics());
+            consumer->OnRaw(GetCachedYson());
         }))
     { }
 
@@ -71,34 +72,37 @@ private:
 
     const TYsonProducer Producer_;
 
-    static constexpr auto CachedStatisticsTtl = TDuration::Seconds(5);
+    static constexpr auto CachedYsonTtl = TDuration::Seconds(5);
 
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, CachedStatisticsLock_);
-    TIntrusivePtr<TRefCountedTrackerStatistics> CachedStatistics_;
-    TInstant CachedStatisticsUpdateTime_;
+    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, CachedYsonLock_);
+    TYsonString CachedStatisticsYson_;
+    TInstant CachedYsonUpdateTime_;
 
-    TIntrusivePtr<TRefCountedTrackerStatistics> GetCachedStatistics()
+    // Renders the process-global ref-counted tracker statistics into YSON at most
+    // once per TTL for the whole process. Multiple monitoring managers (one per daemon,
+    // e.g. inside a multidaemon) share this single rendering instead of each walking the
+    // tracker and serializing the identical data on every update.
+    TYsonString GetCachedYson()
     {
         auto now = TInstant::Now();
 
         // Fast path.
         {
-            auto guard = Guard(CachedStatisticsLock_);
-            if (CachedStatistics_ && now < CachedStatisticsUpdateTime_ + CachedStatisticsTtl) {
-                return CachedStatistics_;
+            auto guard = Guard(CachedYsonLock_);
+            if (CachedStatisticsYson_ && now < CachedYsonUpdateTime_ + CachedYsonTtl) {
+                return CachedStatisticsYson_;
             }
         }
 
-        // Slow path.
-        auto statistics = New<TRefCountedTrackerStatistics>(TRefCountedTracker::Get()->GetStatistics());
+        // Slow path: walk the tracker and serialize outside the lock.
+        auto yson = ConvertToYsonString(CreateRefCountedTrackerStatisticsProducer());
         {
-            auto guard = Guard(CachedStatisticsLock_);
-            if (!CachedStatistics_ || now > CachedStatisticsUpdateTime_ + CachedStatisticsTtl) {
-                // Avoid destruction under spinlock.
-                std::swap(CachedStatistics_, statistics);
-                CachedStatisticsUpdateTime_ = now;
+            auto guard = Guard(CachedYsonLock_);
+            if (!CachedStatisticsYson_ || now > CachedYsonUpdateTime_ + CachedYsonTtl) {
+                CachedStatisticsYson_ = std::move(yson);
+                CachedYsonUpdateTime_ = now;
             }
-            return CachedStatistics_;
+            return CachedStatisticsYson_;
         }
     }
 };

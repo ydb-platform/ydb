@@ -1,3 +1,26 @@
+$input = AsList(
+    <|value: "glfilter=7893318%3A7949252&glfilter=5099461%3A12103637&glfilter=8292645%3A1&hid=90404&onstock=0&local-offers-first=0"|>,
+    <|value: ""|>,
+    <|value: "&"|>,
+    <|value: "&&"|>,
+    <|value: "="|>,
+    <|value: "&="|>,
+    <|value: "=&"|>,
+    <|value: "&=="|>,
+    <|value: "&==&"|>,
+    <|value: "==&"|>,
+    <|value: "=&="|>,
+    <|value: "=a"|>,
+    <|value: "a"|>,
+    <|value: "a="|>,
+    <|value: "&a=b"|>,
+    <|value: "a=a+b&b=b+c"|>,
+    <|value: "a=a+b=&b=b+=c"|>,
+    <|value: "a=1&a=2"|>,
+    <|value: ";a=b"|>,
+    <|value: "a=a+b;b=b+c"|>,
+);
+
 SELECT
     value,
     Url::QueryStringToList(value, false AS Strict) AS base_list,
@@ -12,4 +35,4 @@ SELECT
     Url::BuildQueryString(Url::QueryStringToDict(value, true AS KeepBlankValues, false AS Strict)) AS keep_blank_dict_build,
     Url::QueryStringToDict(value, ";" AS Separator, false AS Strict) AS sep_semicol_dict,
     Url::BuildQueryString(Url::QueryStringToDict(value, ";" AS Separator, false AS Strict), ";" AS Separator) AS sep_semicol_dict_build,
-FROM Input;
+FROM AS_TABLE($input);

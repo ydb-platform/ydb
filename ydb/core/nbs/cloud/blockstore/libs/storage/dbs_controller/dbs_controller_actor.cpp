@@ -148,11 +148,24 @@ void TDbsControllerActor::StateInit(TAutoPtr<NActors::IEventHandle>& ev)
 STFUNC(TDbsControllerActor::StateWork)
 {
     switch (ev->GetTypeRewrite()) {
-        cFunc(TEvents::TEvPoison::EventType, PassAway);
-
         HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
         HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
         HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
+        HFunc(
+            TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest,
+            HandleUpdateDDiskMapRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapRequest,
+            HandleRemoveTabletDDiskMapRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvGetPartitionsForNodeRequest,
+            HandleGetPartitionsForNodeRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvNodeMaintenancePermissionRequest,
+            HandleNodeMaintenancePermissionRequest);
+        HFunc(
+            TEvDbsControllerPrivate::TEvDiskMaintenancePermissionRequest,
+            HandleDiskMaintenancePermissionRequest);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

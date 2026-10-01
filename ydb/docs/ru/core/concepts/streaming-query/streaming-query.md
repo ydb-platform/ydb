@@ -29,6 +29,8 @@
 * **Внешние приложения** — через [{{ ydb-short-name }} SDK](../../reference/ydb-sdk/index.md) или [Kafka API](../../reference/kafka-api/index.md). Например, сервис отправляет события телеметрии или логи в топик {{ ydb-short-name }}, а потоковый запрос обрабатывает их.
 * **CDC (Change Data Capture)** — потоки изменений из таблиц, реализуемые через встроенные [топики](../datamodel/topic.md). Позволяют реагировать на вставки, обновления и удаления записей в реальном времени. Подробнее: [{#T}](../cdc.md).
 
+При ручном изменении числа партиций в топике потоковый запрос будет автоматически перезапущен. После перезапуска будет происходить чтение всех партиций. Чтение из топиков с автопартиционированием не поддерживается.
+
 ### Приёмники {#sinks}
 
 **Топики** — для передачи результатов другим системам или следующим этапам обработки.
@@ -81,6 +83,8 @@
 ## Язык запросов {#syntax}
 
 Потоковые запросы пишутся на [YQL](../../yql/reference/index.md) и поддерживают привычные SQL-конструкции: [SELECT](../../yql/reference/syntax/select/index.md), [WHERE](../../yql/reference/syntax/select/where.md), [GROUP BY](../../yql/reference/syntax/select/group-by.md), [JOIN](../../yql/reference/syntax/select/join.md). Для работы с временными окнами используется [GROUP BY HOP](../../yql/reference/syntax/select/group-by.md#group-by-hop){% if feature_match_recogznize==true %}, для поиска паттернов — [MATCH_RECOGNIZE](../../yql/reference/syntax/select/match_recognize.md){% endif %}.
+
+Один потоковый запрос может читать несколько входных топиков, использовать конструкцию [UNION ALL](../../yql/reference/syntax/select/union.md#union-all) для объединения потоков данных и писать результат в несколько выходных топиков и/или таблиц (см. подробнее в статьях [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats) и [{#T}](../../dev/streaming-query/table-writing.md)).
 
 ## См. также
 

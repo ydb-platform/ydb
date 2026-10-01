@@ -214,8 +214,8 @@ private:
     void ThrowResolveError()
     {
         THROW_ERROR_EXCEPTION(NYTree::EErrorCode::ResolveError, "Failed to resolve YPath")
-            << TErrorAttribute("full_path", Tokenizer_.GetPath())
-            << TErrorAttribute("resolved_prefix", Tokenizer_.GetPrefix());
+            .With("full_path", Tokenizer_.GetPath())
+            .With("resolved_prefix", Tokenizer_.GetPrefix());
     }
 
     void ThrowNoAttributes()

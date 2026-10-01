@@ -234,7 +234,7 @@ void LoadFromSource(
         }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -252,7 +252,7 @@ void LoadFromSource(
         parameter = NYson::ConvertToYsonString(TTraits::AsNode(source));
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -275,7 +275,7 @@ void LoadFromSource(
         }
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -299,7 +299,7 @@ void LoadFromSource(
         parameter->Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, pathGetter);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -318,7 +318,7 @@ void LoadFromSource(
         parameter.Load(std::move(source), /*postprocess*/ false, /*setDefaults*/ false, pathGetter);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -334,7 +334,7 @@ void LoadFromSource(
         Deserialize(parameter, std::move(source), /*postprocess*/ false, /*setDefaults*/ false, unrecognizedStrategy);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error reading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -360,7 +360,7 @@ void LoadFromSource(
             unrecognizedStrategy);
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -392,7 +392,7 @@ void LoadFromSource(
 
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -422,7 +422,7 @@ void LoadFromSource(
         });
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -453,7 +453,7 @@ void LoadFromSource(
         });
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error loading parameter %v", pathGetter())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -972,7 +972,7 @@ void TYsonStructParameter<TValue>::PostprocessParameter(TYsonStructBase* self, c
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Validation failed at %v",
                 !pathGetter ? "root" : pathGetter())
-                    << ex;
+                    .With(ex);
         }
     }
 }

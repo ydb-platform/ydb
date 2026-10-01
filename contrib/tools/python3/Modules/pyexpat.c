@@ -371,7 +371,7 @@ my_CharacterDataHandler(void *userData, const XML_Char *data, int len)
     if (self->buffer == NULL)
         call_character_handler(self, data, len);
     else {
-        if ((self->buffer_used + len) > self->buffer_size) {
+        if (len > (self->buffer_size - self->buffer_used)) {
             if (flush_character_buffer(self) < 0)
                 return;
             /* handler might have changed; drop the rest on the floor
@@ -1053,6 +1053,7 @@ pyexpat_xmlparser_ExternalEntityParserCreate_impl(xmlparseobject *self,
     new_parser->specified_attributes = self->specified_attributes;
     new_parser->in_callback = 0;
     new_parser->ns_prefixes = self->ns_prefixes;
+    new_parser->reparse_deferral_enabled = self->reparse_deferral_enabled;
     new_parser->itself = XML_ExternalEntityParserCreate(self->itself, context,
                                                         encoding);
     // The new subparser will make use of the parent XML_Parser inside of Expat.

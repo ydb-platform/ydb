@@ -12,6 +12,7 @@ SRCS(
     ydb_bridge_v1.proto
     ydb_clickhouse_internal_v1.proto
     ydb_datastreams_v1.proto
+    ydb_distributed_storage_v1.proto
     ydb_dynamic_config_v1.proto
     ydb_logstore_v1.proto
     ydb_maintenance_v1.proto

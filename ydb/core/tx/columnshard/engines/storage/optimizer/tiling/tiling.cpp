@@ -347,13 +347,16 @@ struct TLevel {
         }
         auto height = Intersections.GetMaxCount();
         Counters.Portions->SetHeight(height);
+        TOptimizationPriority priority;
         if (height < 2) {
-            return TOptimizationPriority::Zero();
+            priority = TOptimizationPriority::Zero();
+        } else if (height >= i32(settings.Factor)) {
+            priority = TOptimizationPriority::Critical(height);
+        } else {
+            priority = TOptimizationPriority::LevelOptimization(height);
         }
-        if (height >= i32(settings.Factor)) {
-            return TOptimizationPriority::Critical(height);
-        }
-        return TOptimizationPriority::LevelOptimization(height);
+        Counters.Portions->SetOverload(priority.GetLevel());
+        return priority;
     }
 
     void Add(const TPortionInfo::TPtr& p) {

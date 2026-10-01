@@ -40,18 +40,17 @@ public:
     void SetPollingPeriod(TDuration pollingPeriod);
 
 private:
-    static constexpr TCpuInstant SentinelMinEnqueuedAt = std::numeric_limits<TCpuInstant>::max();
+    static constexpr TCpuInstant UnlockedNotifyInstant = 0;
+    static constexpr TCpuInstant SentinelMinEnqueuedAtInstant = std::numeric_limits<TCpuInstant>::max();
 
     const TIntrusivePtr<NThreading::TEventCount> EventCount_;
     const NProfiling::TCounter WakeupCounter_;
     const NProfiling::TCounter WakeupByTimeoutCounter_;
 
     std::atomic<TDuration> PollingPeriod_;
-    std::atomic<bool> NotifyLock_ = false;
-    // LockedInstant is used for debug and check purpose.
-    std::atomic<TCpuInstant> LockedInstant_ = 0;
+    std::atomic<TCpuInstant> NotifyInstant_ = UnlockedNotifyInstant;
     std::atomic<bool> PollingWaiterLock_ = false;
-    std::atomic<TCpuInstant> MinEnqueuedAt_ = SentinelMinEnqueuedAt;
+    std::atomic<TCpuInstant> MinEnqueuedAtInstant_ = SentinelMinEnqueuedAtInstant;
 
     // Returns true if was locked.
     bool UnlockNotifies();

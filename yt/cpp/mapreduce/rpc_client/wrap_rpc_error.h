@@ -33,9 +33,11 @@ template <typename TResult>
 TResult WaitAndProcess(TFuture<TResult> future) {
     try {
         if constexpr (std::is_same_v<TResult, void>) {
-            NConcurrency::WaitFor(future).ThrowOnError();
+            NConcurrency::WaitFor(future)
+                .ThrowOnError();
         } else {
-            auto result = NConcurrency::WaitFor(future).ValueOrThrow();
+            auto result = NConcurrency::WaitFor(future)
+                .ValueOrThrow();
             return result;
         }
     } catch (TErrorException ex) {

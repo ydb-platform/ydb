@@ -1,7 +1,8 @@
 import asyncio
 import socket
 import sys
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+import weakref
+from typing import Any, Final, Optional
 
 from .abc import AbstractResolver, ResolveResult
 
@@ -19,7 +20,14 @@ except ImportError:  # pragma: no cover
 
 _NUMERIC_SOCKET_FLAGS = socket.AI_NUMERICHOST | socket.AI_NUMERICSERV
 _NAME_SOCKET_FLAGS = socket.NI_NUMERICHOST | socket.NI_NUMERICSERV
-_SUPPORTS_SCOPE_ID = sys.version_info >= (3, 9, 0)
+_AI_ADDRCONFIG = socket.AI_ADDRCONFIG
+if hasattr(socket, "AI_MASK"):
+    _AI_ADDRCONFIG &= socket.AI_MASK
+_IS_WINDOWS = sys.platform == "win32"
+
+
+def _is_windows_localhost(host: str) -> bool:
+    return _IS_WINDOWS and host.rstrip(".").casefold() == "localhost"
 
 
 class ThreadedResolver(AbstractResolver):
@@ -29,28 +37,39 @@ class ThreadedResolver(AbstractResolver):
     concurrent.futures.ThreadPoolExecutor is used by default.
     """
 
-    def __init__(self, loop: Optional[asyncio.AbstractEventLoop] = None) -> None:
+    def __init__(self, loop: asyncio.AbstractEventLoop | None = None) -> None:
         self._loop = loop or asyncio.get_event_loop()
 
     async def resolve(
         self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
-    ) -> List[ResolveResult]:
-        infos = await self._loop.getaddrinfo(
-            host,
-            port,
-            type=socket.SOCK_STREAM,
-            family=family,
-            # flags=socket.AI_ADDRCONFIG,
-        )
+    ) -> list[ResolveResult]:
+        try:
+            infos = await self._loop.getaddrinfo(
+                host,
+                port,
+                type=socket.SOCK_STREAM,
+                family=family,
+                # flags=_AI_ADDRCONFIG,
+            )
+        except socket.gaierror:
+            if not _is_windows_localhost(host):
+                raise
+            infos = await self._loop.getaddrinfo(
+                host,
+                port,
+                type=socket.SOCK_STREAM,
+                family=family,
+                flags=0,
+            )
 
-        hosts: List[ResolveResult] = []
+        hosts: list[ResolveResult] = []
         for family, _, proto, _, address in infos:
             if family == socket.AF_INET6:
                 if len(address) < 3:
                     # IPv6 is not supported by Python build,
                     # or IPv6 is not enabled in the host
                     continue
-                if address[3] and _SUPPORTS_SCOPE_ID:
+                if address[3]:
                     # This is essential for link-local IPv6 addresses.
                     # LL IPv6 is a VERY rare case. Strictly speaking, we should use
                     # getnameinfo() unconditionally, but performance makes sense.
@@ -85,14 +104,24 @@ class AsyncResolver(AbstractResolver):
 
     def __init__(
         self,
-        loop: Optional[asyncio.AbstractEventLoop] = None,
+        loop: asyncio.AbstractEventLoop | None = None,
         *args: Any,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         if aiodns is None:
             raise RuntimeError("Resolver requires aiodns library")
 
-        self._resolver = aiodns.DNSResolver(*args, **kwargs)
+        self._loop = loop or asyncio.get_event_loop()
+        self._manager: _DNSResolverManager | None = None
+        # If custom args are provided, create a dedicated resolver instance
+        # This means each AsyncResolver with custom args gets its own
+        # aiodns.DNSResolver instance
+        if args or kwargs:
+            self._resolver = aiodns.DNSResolver(*args, **kwargs)
+            return
+        # Use the shared resolver from the manager for default arguments
+        self._manager = _DNSResolverManager()
+        self._resolver = self._manager.get_resolver(self, self._loop)
 
         if not hasattr(self._resolver, "gethostbyname"):
             # aiodns 1.1 is not available, fallback to DNSResolver.query
@@ -100,24 +129,34 @@ class AsyncResolver(AbstractResolver):
 
     async def resolve(
         self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET
-    ) -> List[ResolveResult]:
+    ) -> list[ResolveResult]:
         try:
-            resp = await self._resolver.getaddrinfo(
-                host,
-                port=port,
-                type=socket.SOCK_STREAM,
-                family=family,
-                flags=socket.AI_ADDRCONFIG,
-            )
+            try:
+                resp = await self._resolver.getaddrinfo(
+                    host,
+                    port=port,
+                    type=socket.SOCK_STREAM,
+                    family=family,
+                    flags=_AI_ADDRCONFIG,
+                )
+            except aiodns.error.DNSError:
+                if not _is_windows_localhost(host):
+                    raise
+                resp = await self._resolver.getaddrinfo(
+                    host,
+                    port=port,
+                    type=socket.SOCK_STREAM,
+                    family=family,
+                    flags=0,
+                )
         except aiodns.error.DNSError as exc:
             msg = exc.args[1] if len(exc.args) >= 1 else "DNS lookup failed"
             raise OSError(None, msg) from exc
-        hosts: List[ResolveResult] = []
+        hosts: list[ResolveResult] = []
         for node in resp.nodes:
-            address: Union[Tuple[bytes, int], Tuple[bytes, int, int, int]] = node.addr
-            family = node.family
-            if family == socket.AF_INET6:
-                if len(address) > 3 and address[3] and _SUPPORTS_SCOPE_ID:
+            address: tuple[bytes, int] | tuple[bytes, int, int, int] = node.addr
+            if node.family == socket.AF_INET6:
+                if len(address) > 3 and address[3]:
                     # This is essential for link-local IPv6 addresses.
                     # LL IPv6 is a VERY rare case. Strictly speaking, we should use
                     # getnameinfo() unconditionally, but performance makes sense.
@@ -130,7 +169,7 @@ class AsyncResolver(AbstractResolver):
                     resolved_host = address[0].decode("ascii")
                     port = address[1]
             else:  # IPv4
-                assert family == socket.AF_INET
+                assert node.family == socket.AF_INET
                 resolved_host = address[0].decode("ascii")
                 port = address[1]
             hosts.append(
@@ -138,7 +177,7 @@ class AsyncResolver(AbstractResolver):
                     hostname=host,
                     host=resolved_host,
                     port=port,
-                    family=family,
+                    family=node.family,
                     proto=0,
                     flags=_NUMERIC_SOCKET_FLAGS,
                 )
@@ -151,11 +190,8 @@ class AsyncResolver(AbstractResolver):
 
     async def _resolve_with_query(
         self, host: str, port: int = 0, family: int = socket.AF_INET
-    ) -> List[Dict[str, Any]]:
-        if family == socket.AF_INET6:
-            qtype = "AAAA"
-        else:
-            qtype = "A"
+    ) -> list[dict[str, Any]]:
+        qtype: Final = "AAAA" if family == socket.AF_INET6 else "A"
 
         try:
             resp = await self._resolver.query(host, qtype)
@@ -182,8 +218,84 @@ class AsyncResolver(AbstractResolver):
         return hosts
 
     async def close(self) -> None:
-        self._resolver.cancel()
+        if self._manager:
+            # Release the resolver from the manager if using the shared resolver
+            self._manager.release_resolver(self, self._loop)
+            self._manager = None  # Clear reference to manager
+            self._resolver = None  # type: ignore[assignment] # Clear reference to resolver
+            return
+        # Otherwise cancel our dedicated resolver
+        if self._resolver is not None:
+            self._resolver.cancel()
+        self._resolver = None  # type: ignore[assignment] # Clear reference
 
 
-_DefaultType = Type[Union[AsyncResolver, ThreadedResolver]]
+class _DNSResolverManager:
+    """Manager for aiodns.DNSResolver objects.
+
+    This class manages shared aiodns.DNSResolver instances
+    with no custom arguments across different event loops.
+    """
+
+    _instance: Optional["_DNSResolverManager"] = None
+
+    def __new__(cls) -> "_DNSResolverManager":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._init()
+        return cls._instance
+
+    def _init(self) -> None:
+        # Use WeakKeyDictionary to allow event loops to be garbage collected
+        self._loop_data: weakref.WeakKeyDictionary[
+            asyncio.AbstractEventLoop,
+            tuple[aiodns.DNSResolver, weakref.WeakSet[AsyncResolver]],
+        ] = weakref.WeakKeyDictionary()
+
+    def get_resolver(
+        self, client: "AsyncResolver", loop: asyncio.AbstractEventLoop
+    ) -> "aiodns.DNSResolver":
+        """Get or create the shared aiodns.DNSResolver instance for a specific event loop.
+
+        Args:
+            client: The AsyncResolver instance requesting the resolver.
+                   This is required to track resolver usage.
+            loop: The event loop to use for the resolver.
+        """
+        # Create a new resolver and client set for this loop if it doesn't exist
+        if loop not in self._loop_data:
+            resolver = aiodns.DNSResolver(loop=loop)
+            client_set: weakref.WeakSet[AsyncResolver] = weakref.WeakSet()
+            self._loop_data[loop] = (resolver, client_set)
+        else:
+            # Get the existing resolver and client set
+            resolver, client_set = self._loop_data[loop]
+
+        # Register this client with the loop
+        client_set.add(client)
+        return resolver
+
+    def release_resolver(
+        self, client: "AsyncResolver", loop: asyncio.AbstractEventLoop
+    ) -> None:
+        """Release the resolver for an AsyncResolver client when it's closed.
+
+        Args:
+            client: The AsyncResolver instance to release.
+            loop: The event loop the resolver was using.
+        """
+        # Remove client from its loop's tracking
+        current_loop_data = self._loop_data.get(loop)
+        if current_loop_data is None:
+            return
+        resolver, client_set = current_loop_data
+        client_set.discard(client)
+        # If no more clients for this loop, cancel and remove its resolver
+        if not client_set:
+            if resolver is not None:
+                resolver.cancel()
+            del self._loop_data[loop]
+
+
+_DefaultType = type[AsyncResolver | ThreadedResolver]
 DefaultResolver: _DefaultType = AsyncResolver if aiodns_default else ThreadedResolver

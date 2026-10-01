@@ -15,6 +15,7 @@ SRCS(
     ring_queue_ut.cpp
     sentinel_optional_ut.cpp
     sharded_set_ut.cpp
+    skip_list_ut.cpp
     slot_map_ut.cpp
     static_ring_queue_ut.cpp
     three_level_stable_vector_ut.cpp

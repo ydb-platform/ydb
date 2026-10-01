@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         TChunkConstructionData info(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
         auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
         AFL_VERIFY(dictData);
         TString dictionaryBlobOnly(blobAndMeta.Blob.data(), dictData->DictionaryBlobSize);
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         // Dictionary has 300 distinct values + null slot = 301 variants -> uint16 positions
         AFL_VERIFY(dict->GetPositions()->type()->id() == arrow::Type::UINT16);
 
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         const auto* dictData = dynamic_cast<const TDictionaryAccessorData*>(blobAndMeta.Meta.get());
         AFL_VERIFY(dictData);
         AFL_VERIFY(dictData->PositionsBlobSize > 0);
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             ("numDistinct", numDistinct)("withNulls", withNulls)("expected", static_cast<int>(expectedPositionsType))("actual", static_cast<int>(dict->GetPositions()->type()->id()));
         AFL_VERIFY(dict->GetDictionary()->length() == numDistinct + (withNulls ? 1 : 0));
 
-        auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(dict, info);
+        auto blobAndMeta = NDictionary::TConstructor().SerializeToBlobAndMeta(dict, info);
         TChunkConstructionData infoWithMeta(
             arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer(),
             std::nullopt, blobAndMeta.Meta);
@@ -289,5 +289,35 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
         AFL_VERIFY((ui32)visited[0]->length() < dict->GetRecordsCount())("len", visited[0]->length());
         AFL_VERIFY(PrepareToCompare(visited[0]->ToString()) == R"(["ab","abc","abcd",null])")(
             "actual", PrepareToCompare(visited[0]->ToString()));
+    }
+
+    void CheckVisitValuesWithoutNullsPreservesDataSize(const std::shared_ptr<IChunkedArray>& source) {
+        TChunkConstructionData info(
+            source->GetRecordsCount(), nullptr, source->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(source, info).DetachResult());
+
+        std::shared_ptr<arrow::Array> decoded;
+        dict->VisitValues([&](std::shared_ptr<arrow::Array> array) {
+            decoded = std::move(array);
+        });
+
+        AFL_VERIFY(!HasNulls(decoded));
+        AFL_VERIFY(GetArrayDataSize(decoded) == GetArrayDataSize(source->GetChunkedArray()->chunk(0)));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesStringDataSize) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abc");
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
+    }
+
+    Y_UNIT_TEST(VisitValuesWithoutNullsPreservesBooleanDataSize) {
+        TTrivialArray::TPlainBuilder<arrow::BooleanType> builder;
+        builder.AddValue(0, true);
+        builder.AddValue(1, false);
+        builder.AddValue(2, true);
+        CheckVisitValuesWithoutNullsPreservesDataSize(builder.Finish(3));
     }
 };

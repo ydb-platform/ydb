@@ -82,6 +82,7 @@ TSchemeEntry::TSchemeEntry(const ::Ydb::Scheme::Entry& proto)
     : Name(proto.name())
     , Owner(proto.owner())
     , Type(ConvertProtoEntryType(proto.type()))
+    , InterruptInheritance(proto.interrupt_permission_inheritance())
     , SizeBytes(proto.size_bytes())
     , CreatedAt(proto.created_at())
 {

@@ -3,6 +3,17 @@
 #include "defs.h"
 #include "mood.h"
 
+#include <ydb/core/base/blobstorage_pdisk_category.h>
+#include <ydb/core/base/blobstorage_grouptype.h>
+#include <ydb/core/tablet_flat/flat_cxx_database.h>
+
+#include <ydb/core/protos/blobstorage_base.pb.h>
+#include <ydb/core/protos/blobstorage_base3.pb.h>
+#include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/blobstorage_disk_color.pb.h>
+#include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
+#include <ydb/core/protos/bridge.pb.h>
+
 namespace NKikimr {
 
 namespace NBsController {
@@ -28,7 +39,7 @@ struct Schema : NIceDb::Schema {
         struct NodeID : Column<1, Node::ID::ColumnType> {}; // PK
         struct PDiskID : Column<2, Node::NextPDiskID::ColumnType> {}; // PK
         struct Path : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory;};
+        struct Category : Column<4, NScheme::NTypeIds::Uint64> { using Type = TPDiskCategory; };
         //struct SystemConfig : Column<5, NScheme::NTypeIds::String> {};
         //struct PhysicalLocation : Column<6, NScheme::NTypeIds::String> {};
         struct Guid : Column<7, NScheme::NTypeIds::Uint64> {};
@@ -466,6 +477,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<TargetGroupId, Stage, LastError, LastErrorTimestamp, FirstErrorTimestamp, ErrorCount>;
     };
 
+    struct DirectBlockGroupTabletState : Table<133> {
+        struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
+        struct Revision : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastChangedAt : Column<3, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+
+        using TKey = TableKey<TabletId>;
+        using TColumns = TableColumns<TabletId, Revision, LastChangedAt>;
+    };
+
     struct DirectBlockGroupClaims : Table<134> {
         struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {}; // PK
         struct DirectBlockGroupId : Column<2, NScheme::NTypeIds::Uint64> {}; // PK
@@ -501,6 +521,7 @@ struct Schema : NIceDb::Schema {
         DriveSerial,
         BlobDepotDeleteQueue,
         BridgeSyncState,
+        DirectBlockGroupTabletState,
         DirectBlockGroupClaims
     >;
 

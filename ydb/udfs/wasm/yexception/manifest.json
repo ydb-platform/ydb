@@ -1,0 +1,14 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Yexception",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk"],
+  "functions": [
+    {
+      "name": "fail",
+      "argument_types": [],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

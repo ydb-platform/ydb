@@ -74,6 +74,58 @@ TString MetricTypeToString(MetricType type) {
     }
 }
 
+// Error bodies carry a JSON "message" with the actual reason, e.g. SHARD_NOT_EXISTS
+// and the shard key that was tried. Only that field is surfaced, never the raw body.
+// The status code is always reported: anything unexpected about the body (not JSON,
+// not an object, no "message", oversized) just leaves the code as the whole
+// description, so a diagnostic can never turn one failure into another.
+TString DescribeHttpError(const NYql::IHTTPGateway::TContent& content) {
+    constexpr size_t maxParsedBodySize = 64_KB;
+    constexpr size_t maxDescriptionSize = 1_KB;
+
+    TStringBuilder result;
+    result << "HTTP " << content.HttpResponseCode;
+
+    try {
+        const TStringBuf body(content.data(), content.size());
+        if (body.empty() || body.size() > maxParsedBodySize) {
+            return result;
+        }
+
+        NJson::TJsonValue json;
+        if (!NJson::ReadJsonTree(body, &json)) {
+            return result;
+        }
+
+        const NJson::TJsonValue* message = nullptr;
+        if (!json.GetValuePointer("message", &message) || !message->IsString()) {
+            return result;
+        }
+
+        const TString& description = message->GetString();
+        const TStringBuf trimmed = TStringBuf(description).Trunc(maxDescriptionSize);
+
+        // The message reaches logs and issue messages, so drop control characters that
+        // would mangle them. Newlines and tabs are kept: the monitoring api puts one
+        // line per replica, and those lines carry the shard key.
+        TString sanitized(trimmed);
+        for (auto& c : sanitized) {
+            if (static_cast<unsigned char>(c) < ' ' && c != '\n' && c != '\t') {
+                c = ' ';
+            }
+        }
+
+        result << ": " << sanitized;
+        if (description.size() > trimmed.size()) {
+            result << "...";
+        }
+    } catch (...) {
+        // Keep whatever has been built so far, which always includes the status code.
+    }
+
+    return result;
+}
+
 TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response, const TSelectors& knownSelectors) {
     TGetLabelsResult result;
 
@@ -83,9 +135,8 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        // Do not log the raw response body — it may contain sensitive information.
         return TGetLabelsResponse(TStringBuilder() <<
-            "Monitoring api get labels request failed with HTTP " << response.Content.HttpResponseCode);
+            "Monitoring api get labels request failed with " << DescribeHttpError(response.Content));
     }
 
     NJson::TJsonValue json;
@@ -123,9 +174,8 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        // Do not log the raw response body — it may contain sensitive metric data.
         return TListMetricsResponse(TStringBuilder() <<
-            "Monitoring api list metrics request failed with HTTP " << response.Content.HttpResponseCode);
+            "Monitoring api list metrics request failed with " << DescribeHttpError(response.Content));
     }
 
     NJson::TJsonValue json;
@@ -178,9 +228,8 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        // Do not log the raw response body — it may contain sensitive label values.
         return TListMetricsLabelsResponse(TStringBuilder() <<
-            "Monitoring api list metrics labels request failed with HTTP " << response.Content.HttpResponseCode);
+            "Monitoring api list metrics labels request failed with " << DescribeHttpError(response.Content));
     }
 
     NJson::TJsonValue json;
@@ -509,6 +558,8 @@ public:
             fullSelectors.erase("project");
         }
 
+        // Monium keeps the metric name in the "name" label: the quoted-name form used
+        // by cloud monitoring is accepted there but matches nothing.
         TString program = BuildSelectorsProgram(fullSelectors, isMonitoring);
 
         return GetData(program, from, to);
@@ -571,6 +622,7 @@ private:
                 auth = TStringBuilder() << "OAuth " << authToken;
                 break;
             case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+            case NSo::NProto::ESolomonClusterType::CT_MONIUM:
                 auth = TStringBuilder() << "Bearer " << authToken;
                 break;
             default:
@@ -744,7 +796,7 @@ private:
     ReadRequest BuildGetDataRequest(const TString& program, TInstant from, TInstant to) const {
         ReadRequest request;
 
-        if (Settings.GetClusterType() == NProto::CT_SOLOMON) {
+        if (Settings.GetClusterType() == NProto::CT_SOLOMON || Settings.GetClusterType() == NProto::CT_MONIUM) {
             request.mutable_container()->set_project_id(Settings.GetProject());
         } else {
             request.mutable_container()->set_folder_id(Settings.GetCluster());

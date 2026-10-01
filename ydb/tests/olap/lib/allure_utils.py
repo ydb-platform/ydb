@@ -4,7 +4,8 @@ import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
-from ydb.tests.olap.lib.utils import external_param_is_true, get_ci_version, get_self_version
+from ydb.tests.olap.lib.utils import external_param_is_true, get_ci_version, get_test_tools_version
+import os
 from urllib.parse import urlencode
 from datetime import datetime
 from copy import deepcopy
@@ -869,8 +870,14 @@ def allure_test_description(
 
     test_info = deepcopy(YdbCluster.get_cluster_info())
     test_info['ci_version'] = get_ci_version()
-    test_info['test_tools_version'] = get_self_version()
     test_info.update(addition_table_strings)
+    # Prefer resolved CI tools revision (test_version → main/pr/sha) over local VCS fallback.
+    test_info['test_tools_version'] = get_test_tools_version()
+    ci_launch_url = os.getenv('CI_LAUNCH_URL') or ''
+    if ci_launch_url:
+        test_info['ci_launch_url'] = (
+            f"<a target='_blank' href='{ci_launch_url}'>arcadia run</a>"
+        )
 
     _set_monitoring(test_info, start_time, end_time)
     _set_coredumps(test_info, start_time, end_time)

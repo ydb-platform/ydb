@@ -17,6 +17,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/string_utils/base64
+    library/cpp/time_provider
     library/cpp/yson
     yql/essentials/ast/serialize
     yql/essentials/minikql

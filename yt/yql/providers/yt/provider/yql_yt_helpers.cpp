@@ -3,6 +3,8 @@
 #include "yql_yt_op_hash.h"
 #include "yql_yt_optimize.h"
 
+#include <functional>
+
 #include <yt/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
@@ -13,11 +15,13 @@
 #include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -173,7 +177,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
 
     if (lambdaBody.IsCallable("WithWorld")) {
         syncList.emplace(lambdaBody.ChildPtr(1), syncList.size());
-        return true;
+        return IsYtIsolatedLambdaImpl(lambdaBody.Head(), syncList, usedCluster, supportsDq, mode, visited);
     }
 
     if (!lambdaBody.GetTypeAnn()->IsComposable()) {
@@ -219,7 +223,8 @@ IGraphTransformer::TStatus EstimateDataSize(IYtGateway::TPathStatResult& result,
             }
         }
 
-        if (useColumnarStat) {
+        const bool hasRLS = pathInfo->Table->Meta && pathInfo->Table->Meta->HasRLS;
+        if (useColumnarStat && !hasRLS) {
             TMaybe<TVector<TString>> overrideColumns;
             if (columns && pathInfo->Table->RowSpec && (pathInfo->Table->RowSpec->StrictSchema || nullptr == FindPtr(*columns, YqlOthersColumnName))) {
                 overrideColumns = columns;
@@ -446,6 +451,22 @@ TExprNode::TListType GetNodesToCalculateImpl(const TExprNode::TPtr& input, bool 
                 }
             }
         }
+        else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
+            TYtPublish publish = maybePublish.Cast();
+            for (auto setting: publish.Settings()) {
+                switch (FromString<EYtSettingType>(setting.Name().Value())) {
+                case EYtSettingType::UserAttrs:
+                    if (uniqNodes.insert(setting.Value().Cast().Raw()).second) {
+                        if (NeedCalc(setting.Value().Cast())) {
+                            needCalc.push_back(setting.Value().Cast().Ptr());
+                        }
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
         else if (auto maybeSection = TMaybeNode<TYtSection>(node)) {
             TYtSection section = maybeSection.Cast();
             for (auto setting: section.Settings()) {
@@ -598,7 +619,7 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
     TExprNode::TPtr output = input;
 
     TNodeOnNodeOwnedMap remaps;
-    VisitExpr(output, [&remaps, &ctx](const TExprNode::TPtr& node) {
+    std::function<bool(const TExprNode::TPtr&)> visitor = [&remaps, &ctx, &visitor](const TExprNode::TPtr& node) -> bool {
         if (TYtLength::Match(node.Get())) {
             return false;
         }
@@ -621,7 +642,10 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
         }
 
         if (node->IsCallable("WithWorld")) {
-            remaps[node.Get()] = node->HeadPtr();
+            const auto head = node->HeadPtr();
+            VisitExpr(head, visitor);
+            const auto it = remaps.find(head.Get());
+            remaps[node.Get()] = it == remaps.end() ? head : it->second;
             return false;
         }
 
@@ -669,7 +693,8 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
         }
 
         return true;
-    });
+    };
+    VisitExpr(output, visitor);
 
     if (output->IsLambda() && TYtOutput::Match(output->Child(1))) {
         remaps[output->Child(1)] = Build<TYtTableContent>(ctx, output->Child(1)->Pos())
@@ -751,6 +776,26 @@ TYtOutputOpBase GetOutputOp(TYtOutput output, bool takeFirstInHybrid) {
         return tr.Cast().Second();
     }
     return output.Operation().Cast<TYtOutputOpBase>();
+}
+
+TMaybe<TStringBuf> FindReservedColumnName(const TTypeAnnotationNode& rowType, const TYtState& state) {
+    if (rowType.GetKind() != ETypeAnnotationKind::Struct) {
+        return Nothing();
+    }
+
+    const bool defaultForbid = IsAvailableLangVersion(NFeature::YtReservedColumnPrefix.MinLangVer, state.Types->LangVer);
+    const bool forbid = state.Configuration->_ForbidReservedColumns.Get().GetOrElse(defaultForbid);
+    if (!forbid) {
+        return Nothing();
+    }
+
+    for (auto item: rowType.Cast<TStructExprType>()->GetItems()) {
+        if (IsSystemMember(item->GetName())) {
+            return item->GetName();
+        }
+    }
+
+    return Nothing();
 }
 
 TVector<TYtTableBaseInfo::TPtr> GetInputTableInfos(TExprBase input) {
@@ -911,6 +956,8 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .RuntimeLogLevel(state->Types->RuntimeLogLevel)
             .LangVer(state->Types->LangVer)
             .RuntimeSettings(state->Types->RuntimeSettings)
+            .BridgeMode(state->Types->BridgeMode)
+            .BridgeBinaryPath(state->Types->UdfBridgeBinaryPath)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());
@@ -1567,6 +1614,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         TYtPathInfo pathInfo(path);
         const bool hasRowSpec = !!pathInfo.Table->RowSpec;
         const bool tableHasAux = hasRowSpec && pathInfo.Table->RowSpec->HasAuxColumns();
+        const bool tableHasNonNativeDescSort = hasRowSpec && pathInfo.Table->RowSpec->HasNonNativeDescendingSort();
         TMaybe<NYT::TNode> currentNativeType;
         if (hasRowSpec) {
             currentNativeType = pathInfo.GetNativeYtType();
@@ -1577,7 +1625,8 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
         }
         const bool needTableMap = pathInfo.RequiresRemap() || bool(sysColumns)
             || outTable.RowSpec->GetNativeYtTypeFlags() != pathInfo.GetNativeYtTypeFlags()
-            || currentNativeType != outNativeType;
+            || currentNativeType != outNativeType
+            || (tableHasNonNativeDescSort && useNativeDescSort);
         useExplicitColumns = useExplicitColumns || !pathInfo.Table->IsTemp || (tableHasAux && pathInfo.HasColumns());
         needMap = needMap || needTableMap;
         hasAux = hasAux || tableHasAux;
@@ -1618,7 +1667,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
                 }
                 sortIsChanged = outTable.RowSpec->CopySortness(ctx, *rowSpecs[i].first, useNativeYtDefaultColumnOrder, mode);
             } else {
-                sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *rowSpecs[i].first) || sortIsChanged;
+                sortIsChanged = outTable.RowSpec->MakeCommonSortness(ctx, *rowSpecs[i].first, useNativeDescSort) || sortIsChanged;
                 if (rowSpecs[i].second && !sortConstraintEnabled) {
                     sortIsChanged = outTable.RowSpec->KeepPureSortOnly(ctx) || sortIsChanged;
                 }
@@ -2543,6 +2592,22 @@ ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& con
     const auto useNativeYtTypes = config.UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
     const auto nativeTypeCompatibility = config.NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
     return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
+}
+
+void ReportNonWritableBareYsonError(const TPosition& pos, const TStructExprType& rowType, TExprContext& ctx) {
+    TStringBuilder columns;
+    for (auto item: rowType.GetItems()) {
+        if (!item->GetItemType()->HasBareYson()) {
+            continue;
+        }
+        if (!columns.empty()) {
+            columns << ", ";
+        }
+        columns << TString{item->GetName()}.Quote() << ": " << *item->GetItemType();
+    }
+    YQL_ENSURE(!columns.empty(), "Expected at least one column with strict Yson, but got " << static_cast<const TTypeAnnotationNode&>(rowType));
+    ctx.AddError(TIssue(pos, TStringBuilder()
+        << "Strict Yson type is not allowed to write, please use Optional<Yson> for column(s): " << columns));
 }
 
 } // NYql

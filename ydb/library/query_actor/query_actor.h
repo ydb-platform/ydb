@@ -115,7 +115,8 @@ private:
 public:
     static constexpr char ActorName[] = "SQL_QUERY";
 
-    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false, bool isStreamingMode = false);
+    explicit TQueryBase(ui64 logComponent, TString sessionId = {}, TString database = {}, bool isSystemUser = false,
+        bool isStreamingMode = false, TMaybe<TString> userToken = Nothing());
 
     void Bootstrap();
 
@@ -207,8 +208,10 @@ protected:
     const ui64 LogComponent;
     TString Database;
     TString SessionId;
+    TMaybe<TString> RequestType;
     bool IsSystemUser = false;
     bool IsStreamingMode = false;
+    const TMaybe<TString> UserToken;
     TString TxId;
     bool DeleteSession = false;
     bool RunningQuery = false;
@@ -226,6 +229,7 @@ protected:
     TInstant RequestStartTime;
     TDuration AmountRequestsTime;
     ui32 NumberRequests = 0;
+    ui64 NumberOfFetchedRows = 0;
 
     // Opt-in: forward TEvStreamQueryResultPart issues to Finish() on SUCCESS.
     bool ForwardStreamIssuesOnSuccess = false;
@@ -331,7 +335,7 @@ public:
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(status)) {
-            YDB_LOG_NOTICE_COMP(LogComponent, "Retry status after",
+            YDB_LOG_NOTICE_COMP(LogComponent, "Retry scheduled",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"delay", *delay});

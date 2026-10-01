@@ -65,8 +65,8 @@
       "input":{"shape":"DeleteAgentMemoryRequest"},
       "output":{"shape":"DeleteAgentMemoryResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -88,8 +88,8 @@
       "input":{"shape":"DeleteSessionRequest"},
       "output":{"shape":"DeleteSessionResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"},
@@ -108,8 +108,8 @@
       "input":{"shape":"EndSessionRequest"},
       "output":{"shape":"EndSessionResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"},
@@ -128,8 +128,8 @@
       "input":{"shape":"GenerateQueryRequest"},
       "output":{"shape":"GenerateQueryResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -150,8 +150,8 @@
       "input":{"shape":"GetAgentMemoryRequest"},
       "output":{"shape":"GetAgentMemoryResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -161,6 +161,42 @@
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Gets the sessions stored in the memory of the agent.</p>"
+    },
+    "GetExecutionFlowSnapshot":{
+      "name":"GetExecutionFlowSnapshot",
+      "http":{
+        "method":"GET",
+        "requestUri":"/flows/{flowIdentifier}/aliases/{flowAliasIdentifier}/executions/{executionIdentifier}/flowsnapshot",
+        "responseCode":200
+      },
+      "input":{"shape":"GetExecutionFlowSnapshotRequest"},
+      "output":{"shape":"GetExecutionFlowSnapshotResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Retrieves the flow definition snapshot used for a flow execution. The snapshot represents the flow metadata and definition as it existed at the time the execution was started. Note that even if the flow is edited after an execution starts, the snapshot connected to the execution remains unchanged.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>"
+    },
+    "GetFlowExecution":{
+      "name":"GetFlowExecution",
+      "http":{
+        "method":"GET",
+        "requestUri":"/flows/{flowIdentifier}/aliases/{flowAliasIdentifier}/executions/{executionIdentifier}",
+        "responseCode":200
+      },
+      "input":{"shape":"GetFlowExecutionRequest"},
+      "output":{"shape":"GetFlowExecutionResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Retrieves details about a specific flow execution, including its status, start and end times, and any errors that occurred during execution.</p>"
     },
     "GetInvocationStep":{
       "name":"GetInvocationStep",
@@ -209,8 +245,8 @@
       "output":{"shape":"InvokeAgentResponse"},
       "errors":[
         {"shape":"ModelNotReadyException"},
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -219,7 +255,7 @@
         {"shape":"AccessDeniedException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<note> </note> <p>Sends a prompt for the agent to process and respond to. Note the following fields for the request:</p> <ul> <li> <p>To continue the same conversation with an agent, use the same <code>sessionId</code> value in the request.</p> </li> <li> <p>To activate trace enablement, turn <code>enableTrace</code> to <code>true</code>. Trace enablement helps you follow the agent's reasoning process that led it to the information it processed, the actions it took, and the final result it yielded. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/agents-test.html#trace-events\">Trace enablement</a>.</p> </li> <li> <p>End a conversation by setting <code>endSession</code> to <code>true</code>.</p> </li> <li> <p>In the <code>sessionState</code> object, you can include attributes for the session or prompt or, if you configured an action group to return control, results from invocation of the action group.</p> </li> </ul> <p>The response contains both <b>chunk</b> and <b>trace</b> attributes.</p> <p>The final response is returned in the <code>bytes</code> field of the <code>chunk</code> object. The <code>InvokeAgent</code> returns one chunk for the entire interaction.</p> <ul> <li> <p>The <code>attribution</code> object contains citations for parts of the response.</p> </li> <li> <p>If you set <code>enableTrace</code> to <code>true</code> in the request, you can trace the agent's steps and reasoning process that led it to the response.</p> </li> <li> <p>If the action predicted was configured to return control, the response returns parameters for the action, elicited from the user, in the <code>returnControl</code> field.</p> </li> <li> <p>Errors are also surfaced in the response.</p> </li> </ul>"
+      "documentation":"<p><note> </note> <p>Sends a prompt for the agent to process and respond to. Note the following fields for the request:</p> <ul> <li> <p>To continue the same conversation with an agent, use the same <code>sessionId</code> value in the request.</p> </li> <li> <p>To activate trace enablement, turn <code>enableTrace</code> to <code>true</code>. Trace enablement helps you follow the agent's reasoning process that led it to the information it processed, the actions it took, and the final result it yielded. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/agents-test.html#trace-events\">Trace enablement</a>.</p> </li> <li> <p>End a conversation by setting <code>endSession</code> to <code>true</code>.</p> </li> <li> <p>In the <code>sessionState</code> object, you can include attributes for the session or prompt or, if you configured an action group to return control, results from invocation of the action group.</p> </li> </ul> <p>The response contains both <b>chunk</b> and <b>trace</b> attributes.</p> <p>The final response is returned in the <code>bytes</code> field of the <code>chunk</code> object. The <code>InvokeAgent</code> returns one chunk for the entire interaction.</p> <ul> <li> <p>The <code>attribution</code> object contains citations for parts of the response.</p> </li> <li> <p>If you set <code>enableTrace</code> to <code>true</code> in the request, you can trace the agent's steps and reasoning process that led it to the response.</p> </li> <li> <p>If the action predicted was configured to return control, the response returns parameters for the action, elicited from the user, in the <code>returnControl</code> field.</p> </li> <li> <p>Errors are also surfaced in the response.</p> </li> </ul></p>"
     },
     "InvokeFlow":{
       "name":"InvokeFlow",
@@ -231,8 +267,8 @@
       "input":{"shape":"InvokeFlowRequest"},
       "output":{"shape":"InvokeFlowResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -253,8 +289,8 @@
       "input":{"shape":"InvokeInlineAgentRequest"},
       "output":{"shape":"InvokeInlineAgentResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -264,6 +300,42 @@
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p> Invokes an inline Amazon Bedrock agent using the configurations you provide with the request. </p> <ul> <li> <p>Specify the following fields for security purposes.</p> <ul> <li> <p>(Optional) <code>customerEncryptionKeyArn</code> – The Amazon Resource Name (ARN) of a KMS key to encrypt the creation of the agent.</p> </li> <li> <p>(Optional) <code>idleSessionTTLinSeconds</code> – Specify the number of seconds for which the agent should maintain session information. After this time expires, the subsequent <code>InvokeInlineAgent</code> request begins a new session.</p> </li> </ul> </li> <li> <p>To override the default prompt behavior for agent orchestration and to use advanced prompts, include a <code>promptOverrideConfiguration</code> object. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/advanced-prompts.html\">Advanced prompts</a>.</p> </li> <li> <p>The agent instructions will not be honored if your agent has only one knowledge base, uses default prompts, has no action group, and user input is disabled.</p> </li> </ul> <note> </note>"
+    },
+    "ListFlowExecutionEvents":{
+      "name":"ListFlowExecutionEvents",
+      "http":{
+        "method":"GET",
+        "requestUri":"/flows/{flowIdentifier}/aliases/{flowAliasIdentifier}/executions/{executionIdentifier}/events",
+        "responseCode":200
+      },
+      "input":{"shape":"ListFlowExecutionEventsRequest"},
+      "output":{"shape":"ListFlowExecutionEventsResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Lists events that occurred during a flow execution. Events provide detailed information about the execution progress, including node inputs and outputs, flow inputs and outputs, condition results, and failure events.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>"
+    },
+    "ListFlowExecutions":{
+      "name":"ListFlowExecutions",
+      "http":{
+        "method":"GET",
+        "requestUri":"/flows/{flowIdentifier}/executions",
+        "responseCode":200
+      },
+      "input":{"shape":"ListFlowExecutionsRequest"},
+      "output":{"shape":"ListFlowExecutionsResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Lists all executions of a flow. Results can be paginated and include summary information about each execution, such as status, start and end times, and the execution's Amazon Resource Name (ARN).</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>"
     },
     "ListInvocationSteps":{
       "name":"ListInvocationSteps",
@@ -365,8 +437,8 @@
       "input":{"shape":"PutInvocationStepRequest"},
       "output":{"shape":"PutInvocationStepResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"ThrottlingException"},
@@ -386,8 +458,8 @@
       "input":{"shape":"RerankRequest"},
       "output":{"shape":"RerankResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -408,8 +480,8 @@
       "input":{"shape":"RetrieveRequest"},
       "output":{"shape":"RetrieveResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -430,8 +502,8 @@
       "input":{"shape":"RetrieveAndGenerateRequest"},
       "output":{"shape":"RetrieveAndGenerateResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -452,8 +524,8 @@
       "input":{"shape":"RetrieveAndGenerateStreamRequest"},
       "output":{"shape":"RetrieveAndGenerateStreamResponse"},
       "errors":[
-        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
         {"shape":"InternalServerException"},
         {"shape":"DependencyFailedException"},
@@ -463,6 +535,49 @@
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Queries a knowledge base and generates responses based on the retrieved results, with output in streaming format.</p> <note> <p>The CLI doesn't support streaming operations in Amazon Bedrock, including <code>InvokeModelWithResponseStream</code>.</p> </note> <p>This operation requires permission for the <code> bedrock:RetrieveAndGenerate</code> action.</p>"
+    },
+    "StartFlowExecution":{
+      "name":"StartFlowExecution",
+      "http":{
+        "method":"POST",
+        "requestUri":"/flows/{flowIdentifier}/aliases/{flowAliasIdentifier}/executions",
+        "responseCode":200
+      },
+      "input":{"shape":"StartFlowExecutionRequest"},
+      "output":{"shape":"StartFlowExecutionResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"DependencyFailedException"},
+        {"shape":"BadGatewayException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ServiceQuotaExceededException"}
+      ],
+      "documentation":"<p>Starts an execution of an Amazon Bedrock flow. Unlike flows that run until completion or time out after five minutes, flow executions let you run flows asynchronously for longer durations. Flow executions also yield control so that your application can perform other tasks.</p> <p>This operation returns an Amazon Resource Name (ARN) that you can use to track and manage your flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>"
+    },
+    "StopFlowExecution":{
+      "name":"StopFlowExecution",
+      "http":{
+        "method":"POST",
+        "requestUri":"/flows/{flowIdentifier}/aliases/{flowAliasIdentifier}/executions/{executionIdentifier}/stop",
+        "responseCode":200
+      },
+      "input":{"shape":"StopFlowExecutionRequest"},
+      "output":{"shape":"StopFlowExecutionResponse"},
+      "errors":[
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"InternalServerException"},
+        {"shape":"DependencyFailedException"},
+        {"shape":"BadGatewayException"},
+        {"shape":"ThrottlingException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p>Stops an Amazon Bedrock flow's execution. This operation prevents further processing of the flow and changes the execution status to <code>Aborted</code>.</p>"
     },
     "TagResource":{
       "name":"TagResource",
@@ -613,6 +728,10 @@
     "ActionGroupInvocationOutput":{
       "type":"structure",
       "members":{
+        "metadata":{
+          "shape":"Metadata",
+          "documentation":"<p>Contains information about the action group output.</p>"
+        },
         "text":{
           "shape":"ActionGroupOutputString",
           "documentation":"<p>The JSON-formatted string returned by the API invoked by the action group.</p>"
@@ -673,8 +792,7 @@
     },
     "AdditionalModelRequestFieldsValue":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "document":true
     },
     "AgentActionGroup":{
@@ -783,6 +901,10 @@
           "shape":"String",
           "documentation":"<p>The output's agent collaborator name.</p>"
         },
+        "metadata":{
+          "shape":"Metadata",
+          "documentation":"<p>Contains information about the output from the agent collaborator.</p>"
+        },
         "output":{
           "shape":"AgentCollaboratorOutputPayload",
           "documentation":"<p>The output's output.</p>"
@@ -817,6 +939,10 @@
       "max":10,
       "min":0,
       "pattern":"^[0-9a-zA-Z]+$"
+    },
+    "AgentTraces":{
+      "type":"list",
+      "member":{"shape":"TracePart"}
     },
     "AgentVersion":{
       "type":"string",
@@ -973,6 +1099,25 @@
         }
       },
       "documentation":"<p>Contains citations for a part of an agent response.</p>"
+    },
+    "AudioSegment":{
+      "type":"structure",
+      "required":["s3Uri"],
+      "members":{
+        "s3Uri":{
+          "shape":"AudioSegmentS3UriString",
+          "documentation":"<p>The S3 URI where this specific audio segment is stored in the multimodal storage destination.</p>"
+        },
+        "transcription":{
+          "shape":"String",
+          "documentation":"<p>The text transcription of the audio segment content.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about an audio segment retrieved from a knowledge base, including its location and transcription.</p> <p>This data type is used in the following API operations:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html#API_agent-runtime_Retrieve_ResponseSyntax\">Retrieve response</a> – in the <code>audio</code> field</p> </li> </ul>"
+    },
+    "AudioSegmentS3UriString":{
+      "type":"string",
+      "min":1
     },
     "BadGatewayException":{
       "type":"structure",
@@ -1215,6 +1360,10 @@
         "files":{
           "shape":"Files",
           "documentation":"<p>Contains output files, if generated by code execution.</p>"
+        },
+        "metadata":{
+          "shape":"Metadata",
+          "documentation":"<p>Contains information about the output from the code interpreter.</p>"
         }
       },
       "documentation":"<p>Contains the JSON-formatted string returned by the API invoked by the code interpreter.</p>"
@@ -1312,6 +1461,30 @@
     "Collaborators":{
       "type":"list",
       "member":{"shape":"Collaborator"}
+    },
+    "ConditionResultEvent":{
+      "type":"structure",
+      "required":[
+        "nodeName",
+        "satisfiedConditions",
+        "timestamp"
+      ],
+      "members":{
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the condition node that evaluated the conditions.</p>"
+        },
+        "satisfiedConditions":{
+          "shape":"SatisfiedConditions",
+          "documentation":"<p>A list of conditions that were satisfied during the evaluation.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the condition evaluation occurred.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about a condition evaluation result during a flow execution. This event is generated when a condition node in the flow evaluates its conditions.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
     },
     "ConfirmationState":{
       "type":"string",
@@ -1485,6 +1658,16 @@
       "type":"string",
       "enum":["RETURN_CONTROL"]
     },
+    "CustomOrchestration":{
+      "type":"structure",
+      "members":{
+        "executor":{
+          "shape":"OrchestrationExecutor",
+          "documentation":"<p>The structure of the executor invoking the actions in custom orchestration. </p>"
+        }
+      },
+      "documentation":"<p>Contains details of the custom orchestration configured for the agent. </p>"
+    },
     "CustomOrchestrationTrace":{
       "type":"structure",
       "members":{
@@ -1551,8 +1734,7 @@
     },
     "DeleteAgentMemoryResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteSessionRequest":{
       "type":"structure",
@@ -1568,8 +1750,7 @@
     },
     "DeleteSessionResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DependencyFailedException":{
       "type":"structure",
@@ -1589,8 +1770,7 @@
     },
     "Document":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "document":true
     },
     "Double":{
@@ -1725,9 +1905,17 @@
     "FailureTrace":{
       "type":"structure",
       "members":{
+        "failureCode":{
+          "shape":"Integer",
+          "documentation":"<p>The failure code for the trace.</p>"
+        },
         "failureReason":{
           "shape":"FailureReasonString",
           "documentation":"<p>The reason the interaction failed.</p>"
+        },
+        "metadata":{
+          "shape":"Metadata",
+          "documentation":"<p>Information about the failure that occurred.</p>"
         },
         "traceId":{
           "shape":"TraceId",
@@ -1839,13 +2027,16 @@
     },
     "FilterValue":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "document":true
     },
     "FinalResponse":{
       "type":"structure",
       "members":{
+        "metadata":{
+          "shape":"Metadata",
+          "documentation":"<p>Contains information about the invoke agent operation.</p>"
+        },
         "text":{
           "shape":"FinalResponseString",
           "documentation":"<p>The text in the response to the user.</p>"
@@ -1887,11 +2078,268 @@
         "INPUT_REQUIRED"
       ]
     },
+    "FlowControlNodeType":{
+      "type":"string",
+      "enum":[
+        "Iterator",
+        "Loop"
+      ]
+    },
+    "FlowErrorCode":{
+      "type":"string",
+      "enum":[
+        "VALIDATION",
+        "INTERNAL_SERVER",
+        "NODE_EXECUTION_FAILED"
+      ]
+    },
+    "FlowExecutionContent":{
+      "type":"structure",
+      "members":{
+        "document":{
+          "shape":"Document",
+          "documentation":"<p>The document content of the field, which can contain text or structured data.</p>"
+        }
+      },
+      "documentation":"<p>Contains the content of an flow execution input or output field.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true,
+      "union":true
+    },
+    "FlowExecutionError":{
+      "type":"structure",
+      "members":{
+        "error":{
+          "shape":"FlowExecutionErrorType",
+          "documentation":"<p>The error code for the type of error that occurred.</p>"
+        },
+        "message":{
+          "shape":"String",
+          "documentation":"<p>A descriptive message that provides details about the error.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node in the flow where the error occurred (if applicable).</p>"
+        }
+      },
+      "documentation":"<p>Contains information about an error that occurred during an flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>"
+    },
+    "FlowExecutionErrorType":{
+      "type":"string",
+      "enum":["ExecutionTimedOut"]
+    },
+    "FlowExecutionErrors":{
+      "type":"list",
+      "member":{"shape":"FlowExecutionError"}
+    },
+    "FlowExecutionEvent":{
+      "type":"structure",
+      "members":{
+        "conditionResultEvent":{
+          "shape":"ConditionResultEvent",
+          "documentation":"<p>Contains information about a condition evaluation result during the flow execution. This event is generated when a condition node in the flow evaluates its conditions.</p>"
+        },
+        "flowFailureEvent":{
+          "shape":"FlowFailureEvent",
+          "documentation":"<p>Contains information about a failure that occurred at the flow level during execution.</p>"
+        },
+        "flowInputEvent":{
+          "shape":"FlowExecutionInputEvent",
+          "documentation":"<p>Contains information about the inputs provided to the flow at the start of execution.</p>"
+        },
+        "flowOutputEvent":{
+          "shape":"FlowExecutionOutputEvent",
+          "documentation":"<p>Contains information about the outputs produced by the flow at the end of execution.</p>"
+        },
+        "nodeActionEvent":{
+          "shape":"NodeActionEvent",
+          "documentation":"<p>Contains information about an action (operation) called by a node during execution.</p>"
+        },
+        "nodeDependencyEvent":{
+          "shape":"NodeDependencyEvent",
+          "documentation":"<p>Contains information about an internal trace of a specific node during execution.</p>"
+        },
+        "nodeFailureEvent":{
+          "shape":"NodeFailureEvent",
+          "documentation":"<p>Contains information about a failure that occurred at a specific node during execution.</p>"
+        },
+        "nodeInputEvent":{
+          "shape":"NodeInputEvent",
+          "documentation":"<p>Contains information about the inputs provided to a specific node during execution.</p>"
+        },
+        "nodeOutputEvent":{
+          "shape":"NodeOutputEvent",
+          "documentation":"<p>Contains information about the outputs produced by a specific node during execution.</p>"
+        }
+      },
+      "documentation":"<p>Represents an event that occurred during an flow execution. This is a union type that can contain one of several event types, such as node input and output events; flow input and output events; condition node result events, or failure events.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "union":true
+    },
+    "FlowExecutionEventType":{
+      "type":"string",
+      "enum":[
+        "Node",
+        "Flow"
+      ]
+    },
+    "FlowExecutionEvents":{
+      "type":"list",
+      "member":{"shape":"FlowExecutionEvent"},
+      "max":10,
+      "min":0
+    },
     "FlowExecutionId":{
       "type":"string",
       "max":100,
       "min":2,
       "pattern":"^[0-9a-zA-Z._:-]+$"
+    },
+    "FlowExecutionIdentifier":{
+      "type":"string",
+      "max":2048,
+      "min":0,
+      "pattern":"^[a-zA-Z0-9-]{1,36}$|^(arn:aws:bedrock:[a-z0-9-]{1,20}:[0-9]{12}:flow/[0-9a-zA-Z]{10}/alias/[0-9a-zA-Z]{10}/execution/[a-zA-Z0-9-]{1,36})$"
+    },
+    "FlowExecutionInputEvent":{
+      "type":"structure",
+      "required":[
+        "fields",
+        "nodeName",
+        "timestamp"
+      ],
+      "members":{
+        "fields":{
+          "shape":"FlowInputFields",
+          "documentation":"<p>A list of input fields provided to the flow.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node that receives the inputs.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the inputs are provided.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the inputs provided to the flow at the start of a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "FlowExecutionName":{
+      "type":"string",
+      "max":36,
+      "min":0,
+      "pattern":"^[a-zA-Z0-9-]{1,36}$"
+    },
+    "FlowExecutionOutputEvent":{
+      "type":"structure",
+      "required":[
+        "fields",
+        "nodeName",
+        "timestamp"
+      ],
+      "members":{
+        "fields":{
+          "shape":"FlowOutputFields",
+          "documentation":"<p>A list of output fields produced by the flow.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node that produces the outputs.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the outputs are produced.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the outputs produced by the flow during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "FlowExecutionRoleArn":{
+      "type":"string",
+      "max":2048,
+      "min":0,
+      "pattern":"^arn:aws(-[^:]+)?:iam::([0-9]{12})?:role/(service-role/)?.+$"
+    },
+    "FlowExecutionStatus":{
+      "type":"string",
+      "enum":[
+        "Running",
+        "Succeeded",
+        "Failed",
+        "TimedOut",
+        "Aborted"
+      ]
+    },
+    "FlowExecutionSummaries":{
+      "type":"list",
+      "member":{"shape":"FlowExecutionSummary"},
+      "max":10,
+      "min":0
+    },
+    "FlowExecutionSummary":{
+      "type":"structure",
+      "required":[
+        "createdAt",
+        "executionArn",
+        "flowAliasIdentifier",
+        "flowIdentifier",
+        "flowVersion",
+        "status"
+      ],
+      "members":{
+        "createdAt":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the flow execution was created.</p>"
+        },
+        "endedAt":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the flow execution ended. This field is only populated when the execution has completed, failed, timed out, or been aborted.</p>"
+        },
+        "executionArn":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The Amazon Resource Name (ARN) that uniquely identifies the flow execution.</p>"
+        },
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias used for the execution.</p>"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow.</p>"
+        },
+        "flowVersion":{
+          "shape":"Version",
+          "documentation":"<p>The version of the flow used for the execution.</p>"
+        },
+        "status":{
+          "shape":"FlowExecutionStatus",
+          "documentation":"<p>The current status of the flow execution.</p> <p>Flow executions time out after 24 hours.</p>"
+        }
+      },
+      "documentation":"<p>Contains summary information about a flow execution, including its status, timestamps, and identifiers.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>"
+    },
+    "FlowFailureEvent":{
+      "type":"structure",
+      "required":[
+        "errorCode",
+        "errorMessage",
+        "timestamp"
+      ],
+      "members":{
+        "errorCode":{
+          "shape":"FlowErrorCode",
+          "documentation":"<p>The error code that identifies the type of failure that occurred.</p>"
+        },
+        "errorMessage":{
+          "shape":"String",
+          "documentation":"<p>A descriptive message that provides details about the failure.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the failure occurred.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about a failure that occurred at the flow level during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
     },
     "FlowIdentifier":{
       "type":"string",
@@ -1937,6 +2385,31 @@
       "sensitive":true,
       "union":true
     },
+    "FlowInputField":{
+      "type":"structure",
+      "required":[
+        "content",
+        "name"
+      ],
+      "members":{
+        "content":{
+          "shape":"FlowExecutionContent",
+          "documentation":"<p>The content of the input field, which can contain text or structured data.</p>"
+        },
+        "name":{
+          "shape":"NodeInputName",
+          "documentation":"<p>The name of the input field as defined in the flow's input schema.</p>"
+        }
+      },
+      "documentation":"<p>Represents an input field provided to a flow during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "FlowInputFields":{
+      "type":"list",
+      "member":{"shape":"FlowInputField"},
+      "max":5,
+      "min":1
+    },
     "FlowInputs":{
       "type":"list",
       "member":{"shape":"FlowInput"},
@@ -1979,6 +2452,38 @@
       "event":true,
       "sensitive":true
     },
+    "FlowNodeIODataType":{
+      "type":"string",
+      "enum":[
+        "String",
+        "Number",
+        "Boolean",
+        "Object",
+        "Array"
+      ]
+    },
+    "FlowNodeInputCategory":{
+      "type":"string",
+      "enum":[
+        "LoopCondition",
+        "ReturnValueToLoopStart",
+        "ExitLoop"
+      ]
+    },
+    "FlowNodeInputExpression":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "sensitive":true
+    },
+    "FlowNodeInputName":{
+      "type":"string",
+      "pattern":"^[a-zA-Z]([_]?[0-9a-zA-Z]){1,50}$"
+    },
+    "FlowNodeOutputName":{
+      "type":"string",
+      "pattern":"^[a-zA-Z]([_]?[0-9a-zA-Z]){1,50}$"
+    },
     "FlowOutputContent":{
       "type":"structure",
       "members":{
@@ -2014,6 +2519,31 @@
       "documentation":"<p>Contains information about an output from prompt flow invoction.</p>",
       "event":true,
       "sensitive":true
+    },
+    "FlowOutputField":{
+      "type":"structure",
+      "required":[
+        "content",
+        "name"
+      ],
+      "members":{
+        "content":{
+          "shape":"FlowExecutionContent",
+          "documentation":"<p>The content of the output field, which can contain text or structured data.</p>"
+        },
+        "name":{
+          "shape":"NodeOutputName",
+          "documentation":"<p>The name of the output field as defined in the flow's output schema.</p>"
+        }
+      },
+      "documentation":"<p>Represents an output field produced by a flow during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "FlowOutputFields":{
+      "type":"list",
+      "member":{"shape":"FlowOutputField"},
+      "max":5,
+      "min":1
     },
     "FlowResponseStream":{
       "type":"structure",
@@ -2083,7 +2613,11 @@
         },
         "nodeActionTrace":{
           "shape":"FlowTraceNodeActionEvent",
-          "documentation":"<p>Contains information about an action (operation) called by a node. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/flows-trace.html\">Track each step in your prompt flow by viewing its trace in Amazon Bedrock</a>.</p>"
+          "documentation":"<p>Contains information about an action (operation) called by a node.</p>"
+        },
+        "nodeDependencyTrace":{
+          "shape":"FlowTraceDependencyEvent",
+          "documentation":"<p>Contains information about an internal trace of a node.</p>"
         },
         "nodeInputTrace":{
           "shape":"FlowTraceNodeInputEvent",
@@ -2140,6 +2674,30 @@
       "max":5,
       "min":1
     },
+    "FlowTraceDependencyEvent":{
+      "type":"structure",
+      "required":[
+        "nodeName",
+        "timestamp",
+        "traceElements"
+      ],
+      "members":{
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node that generated the dependency trace.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The date and time that the dependency trace was generated.</p>"
+        },
+        "traceElements":{
+          "shape":"TraceElements",
+          "documentation":"<p>The trace elements containing detailed information about the dependency.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about a dependency trace event in the flow.</p>",
+      "sensitive":true
+    },
     "FlowTraceEvent":{
       "type":"structure",
       "required":["trace"],
@@ -2169,6 +2727,14 @@
         "operationName":{
           "shape":"String",
           "documentation":"<p>The name of the operation that the node called.</p>"
+        },
+        "operationRequest":{
+          "shape":"Document",
+          "documentation":"<p>The request payload sent to the downstream service.</p>"
+        },
+        "operationResponse":{
+          "shape":"Document",
+          "documentation":"<p>The response payload received from the downstream service.</p>"
         },
         "requestId":{
           "shape":"String",
@@ -2222,6 +2788,34 @@
       "documentation":"<p>Contains information about the input into a node. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/flows-trace.html\">Track each step in your prompt flow by viewing its trace in Amazon Bedrock</a>.</p>",
       "sensitive":true
     },
+    "FlowTraceNodeInputExecutionChain":{
+      "type":"list",
+      "member":{"shape":"FlowTraceNodeInputExecutionChainItem"},
+      "sensitive":true
+    },
+    "FlowTraceNodeInputExecutionChainItem":{
+      "type":"structure",
+      "required":[
+        "nodeName",
+        "type"
+      ],
+      "members":{
+        "index":{
+          "shape":"Integer",
+          "documentation":"<p>The index position of this item in the execution chain.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node in the execution chain.</p>"
+        },
+        "type":{
+          "shape":"FlowControlNodeType",
+          "documentation":"<p>The type of execution chain item. Supported values are Iterator and Loop.</p>"
+        }
+      },
+      "documentation":"<p>Represents an item in the execution chain for flow trace node input tracking.</p>",
+      "sensitive":true
+    },
     "FlowTraceNodeInputField":{
       "type":"structure",
       "required":[
@@ -2229,13 +2823,29 @@
         "nodeInputName"
       ],
       "members":{
+        "category":{
+          "shape":"FlowNodeInputCategory",
+          "documentation":"<p>The category of the input field.</p>"
+        },
         "content":{
           "shape":"FlowTraceNodeInputContent",
           "documentation":"<p>The content of the node input.</p>"
         },
+        "executionChain":{
+          "shape":"FlowTraceNodeInputExecutionChain",
+          "documentation":"<p>The execution path through nested nodes like iterators and loops.</p>"
+        },
         "nodeInputName":{
           "shape":"NodeInputName",
           "documentation":"<p>The name of the node input.</p>"
+        },
+        "source":{
+          "shape":"FlowTraceNodeInputSource",
+          "documentation":"<p>The source node that provides input data to this field.</p>"
+        },
+        "type":{
+          "shape":"FlowNodeIODataType",
+          "documentation":"<p>The data type of the input field for compatibility validation.</p>"
         }
       },
       "documentation":"<p>Contains information about a field in the input into a node. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/flows-trace.html\">Track each step in your prompt flow by viewing its trace in Amazon Bedrock</a>.</p>",
@@ -2246,6 +2856,30 @@
       "member":{"shape":"FlowTraceNodeInputField"},
       "max":5,
       "min":1
+    },
+    "FlowTraceNodeInputSource":{
+      "type":"structure",
+      "required":[
+        "expression",
+        "nodeName",
+        "outputFieldName"
+      ],
+      "members":{
+        "expression":{
+          "shape":"FlowNodeInputExpression",
+          "documentation":"<p>The expression used to extract data from the source.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the source node that provides the input data.</p>"
+        },
+        "outputFieldName":{
+          "shape":"FlowNodeOutputName",
+          "documentation":"<p>The name of the output field from the source node.</p>"
+        }
+      },
+      "documentation":"<p>Represents the source of input data for a flow trace node field.</p>",
+      "sensitive":true
     },
     "FlowTraceNodeOutputContent":{
       "type":"structure",
@@ -2293,9 +2927,17 @@
           "shape":"FlowTraceNodeOutputContent",
           "documentation":"<p>The content of the node output.</p>"
         },
+        "next":{
+          "shape":"FlowTraceNodeOutputNextList",
+          "documentation":"<p>The next node that receives output data from this field.</p>"
+        },
         "nodeOutputName":{
           "shape":"NodeOutputName",
           "documentation":"<p>The name of the node output.</p>"
+        },
+        "type":{
+          "shape":"FlowNodeIODataType",
+          "documentation":"<p>The data type of the output field for compatibility validation.</p>"
         }
       },
       "documentation":"<p>Contains information about a field in the output from a node. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/flows-trace.html\">Track each step in your prompt flow by viewing its trace in Amazon Bedrock</a>.</p>",
@@ -2306,6 +2948,29 @@
       "member":{"shape":"FlowTraceNodeOutputField"},
       "max":2,
       "min":1
+    },
+    "FlowTraceNodeOutputNext":{
+      "type":"structure",
+      "required":[
+        "inputFieldName",
+        "nodeName"
+      ],
+      "members":{
+        "inputFieldName":{
+          "shape":"FlowNodeInputName",
+          "documentation":"<p>The name of the input field in the next node that receives the data.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the next node that receives the output data.</p>"
+        }
+      },
+      "documentation":"<p>Represents the next node that receives output data from a flow trace.</p>",
+      "sensitive":true
+    },
+    "FlowTraceNodeOutputNextList":{
+      "type":"list",
+      "member":{"shape":"FlowTraceNodeOutputNext"}
     },
     "Function":{
       "type":"string",
@@ -2581,6 +3246,143 @@
         "nextToken":{
           "shape":"NextToken",
           "documentation":"<p>If the total number of results is greater than the maxItems value provided in the request, use this token when making another request in the <code>nextToken</code> field to return the next batch of results.</p>"
+        }
+      }
+    },
+    "GetExecutionFlowSnapshotRequest":{
+      "type":"structure",
+      "required":[
+        "executionIdentifier",
+        "flowAliasIdentifier",
+        "flowIdentifier"
+      ],
+      "members":{
+        "executionIdentifier":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The unique identifier of the flow execution.</p>",
+          "location":"uri",
+          "locationName":"executionIdentifier"
+        },
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias used for the flow execution.</p>",
+          "location":"uri",
+          "locationName":"flowAliasIdentifier"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow.</p>",
+          "location":"uri",
+          "locationName":"flowIdentifier"
+        }
+      }
+    },
+    "GetExecutionFlowSnapshotResponse":{
+      "type":"structure",
+      "required":[
+        "definition",
+        "executionRoleArn",
+        "flowAliasIdentifier",
+        "flowIdentifier",
+        "flowVersion"
+      ],
+      "members":{
+        "customerEncryptionKeyArn":{
+          "shape":"KmsKeyArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the customer managed KMS key that's used to encrypt the flow snapshot.</p>"
+        },
+        "definition":{
+          "shape":"String",
+          "documentation":"<p>The flow definition used for the flow execution, including the nodes, connections, and configuration at the time when the execution started.</p> <p>The definition returns as a string that follows the structure of a <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent_FlowDefinition.html\">FlowDefinition</a> object.</p>"
+        },
+        "executionRoleArn":{
+          "shape":"FlowExecutionRoleArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM service role that's used by the flow execution.</p>"
+        },
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias used for the flow execution.</p>"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow.</p>"
+        },
+        "flowVersion":{
+          "shape":"Version",
+          "documentation":"<p>The version of the flow used for the flow execution.</p>"
+        }
+      }
+    },
+    "GetFlowExecutionRequest":{
+      "type":"structure",
+      "required":[
+        "executionIdentifier",
+        "flowAliasIdentifier",
+        "flowIdentifier"
+      ],
+      "members":{
+        "executionIdentifier":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The unique identifier of the flow execution to retrieve.</p>",
+          "location":"uri",
+          "locationName":"executionIdentifier"
+        },
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias used for the execution.</p>",
+          "location":"uri",
+          "locationName":"flowAliasIdentifier"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow.</p>",
+          "location":"uri",
+          "locationName":"flowIdentifier"
+        }
+      }
+    },
+    "GetFlowExecutionResponse":{
+      "type":"structure",
+      "required":[
+        "executionArn",
+        "flowAliasIdentifier",
+        "flowIdentifier",
+        "flowVersion",
+        "startedAt",
+        "status"
+      ],
+      "members":{
+        "endedAt":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the flow execution ended. This field is only populated when the execution has completed, failed, timed out, or been aborted.</p>"
+        },
+        "errors":{
+          "shape":"FlowExecutionErrors",
+          "documentation":"<p>A list of errors that occurred during the flow execution. Each error includes an error code, message, and the node where the error occurred, if applicable.</p>"
+        },
+        "executionArn":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The Amazon Resource Name (ARN) that uniquely identifies the flow execution.</p>"
+        },
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias used for the execution.</p>"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow.</p>"
+        },
+        "flowVersion":{
+          "shape":"Version",
+          "documentation":"<p>The version of the flow used for the execution.</p>"
+        },
+        "startedAt":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the flow execution started.</p>"
+        },
+        "status":{
+          "shape":"FlowExecutionStatus",
+          "documentation":"<p>The current status of the flow execution.</p> <p>Flow executions time out after 24 hours.</p>"
         }
       }
     },
@@ -3049,6 +3851,10 @@
           "shape":"GuardrailAssessmentList",
           "documentation":"<p>The details of the input assessments used in the Guardrail Trace.</p>"
         },
+        "metadata":{
+          "shape":"Metadata",
+          "documentation":"<p>Contains information about the Guardrail output.</p>"
+        },
         "outputAssessments":{
           "shape":"GuardrailAssessmentList",
           "documentation":"<p>The details of the output assessments used in the Guardrail Trace.</p>"
@@ -3343,6 +4149,18 @@
     "InlineAgentTracePart":{
       "type":"structure",
       "members":{
+        "callerChain":{
+          "shape":"CallerChain",
+          "documentation":"<p>The caller chain for the trace part.</p>"
+        },
+        "collaboratorName":{
+          "shape":"Name",
+          "documentation":"<p>The collaborator name for the trace part.</p>"
+        },
+        "eventTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The time that trace occurred. </p>"
+        },
         "sessionId":{
           "shape":"SessionId",
           "documentation":"<p>The unique identifier of the session with the agent.</p>"
@@ -3422,6 +4240,39 @@
     "InputFiles":{
       "type":"list",
       "member":{"shape":"InputFile"}
+    },
+    "InputImage":{
+      "type":"structure",
+      "required":[
+        "format",
+        "inlineContent"
+      ],
+      "members":{
+        "format":{
+          "shape":"InputImageFormat",
+          "documentation":"<p>The format of the input image. Supported formats include png, gif, jpeg, and webp.</p>"
+        },
+        "inlineContent":{
+          "shape":"InputImageInlineContentBlob",
+          "documentation":"<p>The base64-encoded image data for inline image content. Maximum size is 5MB.</p>"
+        }
+      },
+      "documentation":"<p>Contains the image data for multimodal knowledge base queries, including format and content.</p> <p>This data type is used in the following API operations:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html#API_agent-runtime_Retrieve_RequestSyntax\">Retrieve request</a> – in the <code>image</code> field</p> </li> </ul>"
+    },
+    "InputImageFormat":{
+      "type":"string",
+      "enum":[
+        "png",
+        "jpeg",
+        "gif",
+        "webp"
+      ]
+    },
+    "InputImageInlineContentBlob":{
+      "type":"blob",
+      "max":5242880,
+      "min":1,
+      "sensitive":true
     },
     "InputPrompt":{
       "type":"structure",
@@ -3696,6 +4547,10 @@
           "shape":"MemoryId",
           "documentation":"<p>The unique identifier of the agent memory.</p>"
         },
+        "promptCreationConfigurations":{
+          "shape":"PromptCreationConfigurations",
+          "documentation":"<p>Specifies parameters that control how the service populates the agent prompt for an <code>InvokeAgent</code> request. You can control which aspects of previous invocations in the same agent session the service uses to populate the agent prompt. This gives you more granular control over the contextual history that is used to process the current request.</p>"
+        },
         "sessionId":{
           "shape":"SessionId",
           "documentation":"<p>The unique identifier of the session. Use the same value across requests to continue the same conversation.</p>",
@@ -3822,6 +4677,10 @@
           "shape":"AgentCollaboration",
           "documentation":"<p> Defines how the inline collaborator agent handles information across multiple collaborator agents to coordinate a final response. The inline collaborator agent can also be the supervisor. </p>"
         },
+        "agentName":{
+          "shape":"Name",
+          "documentation":"<p>The name for the agent.</p>"
+        },
         "bedrockModelConfigurations":{
           "shape":"InlineBedrockModelConfigurations",
           "documentation":"<p>Model settings for the request.</p>"
@@ -3834,13 +4693,17 @@
           "shape":"Collaborators",
           "documentation":"<p> List of collaborator inline agents. </p>"
         },
+        "customOrchestration":{
+          "shape":"CustomOrchestration",
+          "documentation":"<p>Contains details of the custom orchestration configured for the agent. </p>"
+        },
         "customerEncryptionKeyArn":{
           "shape":"KmsKeyArn",
           "documentation":"<p> The Amazon Resource Name (ARN) of the Amazon Web Services KMS key to use to encrypt your inline agent. </p>"
         },
         "enableTrace":{
           "shape":"Boolean",
-          "documentation":"<p> Specifies whether to turn on the trace or not to track the agent's reasoning process. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/trace-events.html\">Using trace</a>. <pre><code> &lt;/p&gt; </code></pre>"
+          "documentation":"<p> Specifies whether to turn on the trace or not to track the agent's reasoning process. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/trace-events.html\">Using trace</a>. </p>"
         },
         "endSession":{
           "shape":"Boolean",
@@ -3874,6 +4737,14 @@
           "shape":"KnowledgeBases",
           "documentation":"<p> Contains information of the knowledge bases to associate with. </p>"
         },
+        "orchestrationType":{
+          "shape":"OrchestrationType",
+          "documentation":"<p>Specifies the type of orchestration strategy for the agent. This is set to DEFAULT orchestration type, by default. </p>"
+        },
+        "promptCreationConfigurations":{
+          "shape":"PromptCreationConfigurations",
+          "documentation":"<p>Specifies parameters that control how the service populates the agent prompt for an <code>InvokeInlineAgent</code> request. You can control which aspects of previous invocations in the same agent session the service uses to populate the agent prompt. This gives you more granular control over the contextual history that is used to process the current request.</p>"
+        },
         "promptOverrideConfiguration":{
           "shape":"PromptOverrideConfiguration",
           "documentation":"<p> Configurations for advanced prompts used to override the default prompts to enhance the accuracy of the inline agent. </p>"
@@ -3900,7 +4771,7 @@
       "members":{
         "completion":{
           "shape":"InlineAgentResponseStream",
-          "documentation":"<p> <pre><code> &lt;/p&gt; </code></pre>"
+          "documentation":"<p>The inline agent's response to the user prompt. </p>"
         },
         "contentType":{
           "shape":"MimeType",
@@ -4001,6 +4872,10 @@
     "KnowledgeBaseLookupOutput":{
       "type":"structure",
       "members":{
+        "metadata":{
+          "shape":"Metadata",
+          "documentation":"<p>Contains information about the knowledge base output.</p>"
+        },
         "retrievedReferences":{
           "shape":"RetrievedReferences",
           "documentation":"<p>Contains metadata about the sources cited for the generated response.</p>"
@@ -4010,11 +4885,18 @@
     },
     "KnowledgeBaseQuery":{
       "type":"structure",
-      "required":["text"],
       "members":{
+        "image":{
+          "shape":"InputImage",
+          "documentation":"<p>An image to include in the knowledge base query for multimodal retrieval.</p>"
+        },
         "text":{
           "shape":"KnowledgeBaseQueryTextString",
           "documentation":"<p>The text of the query made to the knowledge base.</p>"
+        },
+        "type":{
+          "shape":"KnowledgeBaseQueryType",
+          "documentation":"<p>The type of query being performed.</p>"
         }
       },
       "documentation":"<p>Contains the query made to the knowledge base.</p> <p>This data type is used in the following API operations:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html#API_agent-runtime_Retrieve_RequestSyntax\">Retrieve request</a> – in the <code>retrievalQuery</code> field</p> </li> </ul>",
@@ -4022,8 +4904,15 @@
     },
     "KnowledgeBaseQueryTextString":{
       "type":"string",
-      "max":1000,
+      "max":20000,
       "min":0
+    },
+    "KnowledgeBaseQueryType":{
+      "type":"string",
+      "enum":[
+        "TEXT",
+        "IMAGE"
+      ]
     },
     "KnowledgeBaseRetrievalConfiguration":{
       "type":"structure",
@@ -4137,6 +5026,111 @@
       "max":2048,
       "min":0,
       "pattern":"^arn:(aws[a-zA-Z-]*)?:lambda:[a-z]{2}(-gov)?-[a-z]+-\\d{1}:\\d{12}:function:[a-zA-Z0-9-_\\.]+(:(\\$LATEST|[a-zA-Z0-9-_]+))?$"
+    },
+    "ListFlowExecutionEventsRequest":{
+      "type":"structure",
+      "required":[
+        "eventType",
+        "executionIdentifier",
+        "flowAliasIdentifier",
+        "flowIdentifier"
+      ],
+      "members":{
+        "eventType":{
+          "shape":"FlowExecutionEventType",
+          "documentation":"<p>The type of events to retrieve. Specify <code>Node</code> for node-level events or <code>Flow</code> for flow-level events.</p>",
+          "location":"querystring",
+          "locationName":"eventType"
+        },
+        "executionIdentifier":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The unique identifier of the flow execution.</p>",
+          "location":"uri",
+          "locationName":"executionIdentifier"
+        },
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias used for the execution.</p>",
+          "location":"uri",
+          "locationName":"flowAliasIdentifier"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow.</p>",
+          "location":"uri",
+          "locationName":"flowIdentifier"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of events to return in a single response. If more events exist than the specified maxResults value, a token is included in the response so that the remaining results can be retrieved.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>A token to retrieve the next set of results. This value is returned in the response if more results are available.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        }
+      }
+    },
+    "ListFlowExecutionEventsResponse":{
+      "type":"structure",
+      "required":["flowExecutionEvents"],
+      "members":{
+        "flowExecutionEvents":{
+          "shape":"FlowExecutionEvents",
+          "documentation":"<p>A list of events that occurred during the flow execution. Events can include node inputs and outputs, flow inputs and outputs, condition results, and failure events.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>A token to retrieve the next set of results. This value is returned if more results are available.</p>"
+        }
+      }
+    },
+    "ListFlowExecutionsRequest":{
+      "type":"structure",
+      "required":["flowIdentifier"],
+      "members":{
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias to list executions for.</p>",
+          "location":"querystring",
+          "locationName":"flowAliasIdentifier"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow to list executions for.</p>",
+          "location":"uri",
+          "locationName":"flowIdentifier"
+        },
+        "maxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p>The maximum number of flow executions to return in a single response. If more executions exist than the specified <code>maxResults</code> value, a token is included in the response so that the remaining results can be retrieved.</p>",
+          "location":"querystring",
+          "locationName":"maxResults"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>A token to retrieve the next set of results. This value is returned in the response if more results are available.</p>",
+          "location":"querystring",
+          "locationName":"nextToken"
+        }
+      }
+    },
+    "ListFlowExecutionsResponse":{
+      "type":"structure",
+      "required":["flowExecutionSummaries"],
+      "members":{
+        "flowExecutionSummaries":{
+          "shape":"FlowExecutionSummaries",
+          "documentation":"<p>A list of flow execution summaries. Each summary includes the execution ARN, flow identifier, flow alias identifier, flow version, status, and timestamps.</p>"
+        },
+        "nextToken":{
+          "shape":"NextToken",
+          "documentation":"<p>A token to retrieve the next set of results. This value is returned if more results are available.</p>"
+        }
+      }
     },
     "ListInvocationStepsRequest":{
       "type":"structure",
@@ -4270,6 +5264,10 @@
         }
       }
     },
+    "Long":{
+      "type":"long",
+      "box":true
+    },
     "MaxResults":{
       "type":"integer",
       "documentation":"<p>Max Results.</p>",
@@ -4365,12 +5363,32 @@
     "Metadata":{
       "type":"structure",
       "members":{
+        "clientRequestId":{
+          "shape":"String",
+          "documentation":"<p>A unique identifier associated with the downstream invocation. This ID can be used for tracing, debugging, and identifying specific invocations in customer logs or systems.</p>"
+        },
+        "endTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>In the final response, <code>endTime</code> is the end time of the agent invocation operation.</p>"
+        },
+        "operationTotalTimeMs":{
+          "shape":"Long",
+          "documentation":"<p>The total time it took for the agent to complete execution. This field is only set for the final response.</p>"
+        },
+        "startTime":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>In the final response, <code>startTime</code> is the start time of the agent invocation operation.</p>"
+        },
+        "totalTimeMs":{
+          "shape":"Long",
+          "documentation":"<p> The total execution time for the specific invocation being processed (model, knowledge base, guardrail, agent collaborator, or code interpreter). It represents how long the individual invocation took.</p>"
+        },
         "usage":{
           "shape":"Usage",
-          "documentation":"<p>Contains details of the foundation model usage.</p>"
+          "documentation":"<p>Specific to model invocation and contains details about the usage of a foundation model.</p>"
         }
       },
-      "documentation":"<p>Provides details of the foundation model.</p>",
+      "documentation":"<p>Provides information about the execution process for different types of invocations, such as model invocation, knowledge base invocation, agent collaborator invocation, guardrail invocation, and code interpreter Invocation.</p>",
       "sensitive":true
     },
     "MetadataAttributeSchema":{
@@ -4509,17 +5527,339 @@
       "min":1,
       "pattern":"^\\S*$"
     },
+    "NodeActionEvent":{
+      "type":"structure",
+      "required":[
+        "nodeName",
+        "operationName",
+        "requestId",
+        "serviceName",
+        "timestamp"
+      ],
+      "members":{
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node that called the operation.</p>"
+        },
+        "operationName":{
+          "shape":"String",
+          "documentation":"<p>The name of the operation that the node called.</p>"
+        },
+        "operationRequest":{
+          "shape":"Document",
+          "documentation":"<p>The request payload sent to the downstream service.</p>"
+        },
+        "operationResponse":{
+          "shape":"Document",
+          "documentation":"<p>The response payload received from the downstream service.</p>"
+        },
+        "requestId":{
+          "shape":"String",
+          "documentation":"<p>The ID of the request that the node made to the operation.</p>"
+        },
+        "serviceName":{
+          "shape":"String",
+          "documentation":"<p>The name of the service that the node called.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The date and time that the operation was called.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about an action (operation) called by a node during execution.</p>",
+      "sensitive":true
+    },
+    "NodeDependencyEvent":{
+      "type":"structure",
+      "required":[
+        "nodeName",
+        "timestamp",
+        "traceElements"
+      ],
+      "members":{
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node that generated the dependency trace.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The date and time that the dependency trace was generated.</p>"
+        },
+        "traceElements":{
+          "shape":"NodeTraceElements",
+          "documentation":"<p>The trace elements containing detailed information about the node execution.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about an internal trace of a specific node during execution.</p>",
+      "sensitive":true
+    },
+    "NodeErrorCode":{
+      "type":"string",
+      "enum":[
+        "VALIDATION",
+        "DEPENDENCY_FAILED",
+        "BAD_GATEWAY",
+        "INTERNAL_SERVER"
+      ]
+    },
+    "NodeExecutionContent":{
+      "type":"structure",
+      "members":{
+        "document":{
+          "shape":"Document",
+          "documentation":"<p>The document content of the field, which can contain text or structured data.</p>"
+        }
+      },
+      "documentation":"<p>Contains the content of a flow node's input or output field for a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true,
+      "union":true
+    },
+    "NodeFailureEvent":{
+      "type":"structure",
+      "required":[
+        "errorCode",
+        "errorMessage",
+        "nodeName",
+        "timestamp"
+      ],
+      "members":{
+        "errorCode":{
+          "shape":"NodeErrorCode",
+          "documentation":"<p>The error code that identifies the type of failure that occurred at the node.</p>"
+        },
+        "errorMessage":{
+          "shape":"String",
+          "documentation":"<p>A descriptive message that provides details about the node failure.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node where the failure occurred.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the node failure occurred.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about a failure that occurred at a specific node during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "NodeInputEvent":{
+      "type":"structure",
+      "required":[
+        "fields",
+        "nodeName",
+        "timestamp"
+      ],
+      "members":{
+        "fields":{
+          "shape":"NodeInputFields",
+          "documentation":"<p>A list of input fields provided to the node.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node that received the inputs.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the inputs were provided to the node.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the inputs provided to a specific node during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "NodeInputExecutionChain":{
+      "type":"list",
+      "member":{"shape":"NodeInputExecutionChainItem"}
+    },
+    "NodeInputExecutionChainItem":{
+      "type":"structure",
+      "required":[
+        "nodeName",
+        "type"
+      ],
+      "members":{
+        "index":{
+          "shape":"Integer",
+          "documentation":"<p>The index position of this item in the execution chain.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node in the execution chain.</p>"
+        },
+        "type":{
+          "shape":"FlowControlNodeType",
+          "documentation":"<p>The type of execution chain item. Supported values are Iterator and Loop.</p>"
+        }
+      },
+      "documentation":"<p>Represents an item in the execution chain for node input tracking.</p>"
+    },
+    "NodeInputField":{
+      "type":"structure",
+      "required":[
+        "content",
+        "name"
+      ],
+      "members":{
+        "category":{
+          "shape":"FlowNodeInputCategory",
+          "documentation":"<p>The category of the input field.</p>"
+        },
+        "content":{
+          "shape":"NodeExecutionContent",
+          "documentation":"<p>The content of the input field, which can contain text or structured data.</p>"
+        },
+        "executionChain":{
+          "shape":"NodeInputExecutionChain",
+          "documentation":"<p>The execution path through nested nodes like iterators and loops.</p>"
+        },
+        "name":{
+          "shape":"NodeInputName",
+          "documentation":"<p>The name of the input field as defined in the node's input schema.</p>"
+        },
+        "source":{
+          "shape":"NodeInputSource",
+          "documentation":"<p>The source node that provides input data to this field.</p>"
+        },
+        "type":{
+          "shape":"FlowNodeIODataType",
+          "documentation":"<p>The data type of the input field for compatibility validation.</p>"
+        }
+      },
+      "documentation":"<p>Represents an input field provided to a node during a flow execution.</p>",
+      "sensitive":true
+    },
+    "NodeInputFields":{
+      "type":"list",
+      "member":{"shape":"NodeInputField"},
+      "max":5,
+      "min":1
+    },
     "NodeInputName":{
       "type":"string",
       "pattern":"^[a-zA-Z]([_]?[0-9a-zA-Z]){0,99}$"
+    },
+    "NodeInputSource":{
+      "type":"structure",
+      "required":[
+        "expression",
+        "nodeName",
+        "outputFieldName"
+      ],
+      "members":{
+        "expression":{
+          "shape":"FlowNodeInputExpression",
+          "documentation":"<p>The expression used to extract data from the source.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the source node that provides the input data.</p>"
+        },
+        "outputFieldName":{
+          "shape":"FlowNodeOutputName",
+          "documentation":"<p>The name of the output field from the source node.</p>"
+        }
+      },
+      "documentation":"<p>Represents the source of input data for a node field.</p>"
     },
     "NodeName":{
       "type":"string",
       "pattern":"^[a-zA-Z]([_]?[0-9a-zA-Z]){0,99}$"
     },
+    "NodeOutputEvent":{
+      "type":"structure",
+      "required":[
+        "fields",
+        "nodeName",
+        "timestamp"
+      ],
+      "members":{
+        "fields":{
+          "shape":"NodeOutputFields",
+          "documentation":"<p>A list of output fields produced by the node.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the node that produced the outputs.</p>"
+        },
+        "timestamp":{
+          "shape":"DateTimestamp",
+          "documentation":"<p>The timestamp when the outputs were produced by the node.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about the outputs produced by a specific node during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "NodeOutputField":{
+      "type":"structure",
+      "required":[
+        "content",
+        "name"
+      ],
+      "members":{
+        "content":{
+          "shape":"NodeExecutionContent",
+          "documentation":"<p>The content of the output field, which can contain text or structured data.</p>"
+        },
+        "name":{
+          "shape":"NodeOutputName",
+          "documentation":"<p>The name of the output field as defined in the node's output schema.</p>"
+        },
+        "next":{
+          "shape":"NodeOutputNextList",
+          "documentation":"<p>The next node that receives output data from this field.</p>"
+        },
+        "type":{
+          "shape":"FlowNodeIODataType",
+          "documentation":"<p>The data type of the output field for compatibility validation.</p>"
+        }
+      },
+      "documentation":"<p>Represents an output field produced by a node during a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "NodeOutputFields":{
+      "type":"list",
+      "member":{"shape":"NodeOutputField"},
+      "max":2,
+      "min":1
+    },
     "NodeOutputName":{
       "type":"string",
       "pattern":"^[a-zA-Z]([_]?[0-9a-zA-Z]){0,99}$"
+    },
+    "NodeOutputNext":{
+      "type":"structure",
+      "required":[
+        "inputFieldName",
+        "nodeName"
+      ],
+      "members":{
+        "inputFieldName":{
+          "shape":"FlowNodeInputName",
+          "documentation":"<p>The name of the input field in the next node that receives the data.</p>"
+        },
+        "nodeName":{
+          "shape":"NodeName",
+          "documentation":"<p>The name of the next node that receives the output data.</p>"
+        }
+      },
+      "documentation":"<p>Represents the next node that receives output data.</p>",
+      "sensitive":true
+    },
+    "NodeOutputNextList":{
+      "type":"list",
+      "member":{"shape":"NodeOutputNext"}
+    },
+    "NodeTraceElements":{
+      "type":"structure",
+      "members":{
+        "agentTraces":{
+          "shape":"AgentTraces",
+          "documentation":"<p>Agent trace information for the node execution.</p>"
+        }
+      },
+      "documentation":"<p>Contains trace elements for node execution tracking.</p>",
+      "sensitive":true,
+      "union":true
     },
     "NodeType":{
       "type":"string",
@@ -4698,6 +6038,17 @@
       },
       "documentation":"<p>Settings for how the model processes the prompt prior to retrieval and generation.</p>"
     },
+    "OrchestrationExecutor":{
+      "type":"structure",
+      "members":{
+        "lambda":{
+          "shape":"LambdaArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Lambda function containing the business logic that is carried out upon invoking the action. </p>"
+        }
+      },
+      "documentation":"<p>The structure of the executor invoking the actions in custom orchestration.</p>",
+      "union":true
+    },
     "OrchestrationModelInvocationOutput":{
       "type":"structure",
       "members":{
@@ -4748,6 +6099,13 @@
       "documentation":"<p>Details about the orchestration step, in which the agent determines the order in which actions are executed and which knowledge bases are retrieved.</p>",
       "sensitive":true,
       "union":true
+    },
+    "OrchestrationType":{
+      "type":"string",
+      "enum":[
+        "DEFAULT",
+        "CUSTOM_ORCHESTRATION"
+      ]
     },
     "OutputFile":{
       "type":"structure",
@@ -5053,6 +6411,25 @@
       "max":10,
       "min":0
     },
+    "PromptCreationConfigurations":{
+      "type":"structure",
+      "members":{
+        "excludePreviousThinkingSteps":{
+          "shape":"Boolean",
+          "documentation":"<p>If <code>true</code>, the service removes any content between <code>&lt;thinking&gt;</code> tags from previous conversations in an agent session. The service will only remove content from already processed turns. This helps you remove content which might not be useful for current and subsequent invocations. This can reduce the input token count and potentially save costs. The default value is <code>false</code>.</p>"
+        },
+        "previousConversationTurnsToInclude":{
+          "shape":"PromptCreationConfigurationsPreviousConversationTurnsToIncludeInteger",
+          "documentation":"<p>The number of previous conversations from the ongoing agent session to include in the conversation history of the agent prompt, during the current invocation. This gives you more granular control over the context that the model is made aware of, and helps the model remove older context which is no longer useful during the ongoing agent session.</p>"
+        }
+      },
+      "documentation":"<p>Specifies parameters that control how the service populates the agent prompt for an <code>InvokeAgent</code> or <code>InvokeInlineAgent</code> request. You can control which aspects of previous invocations in the same agent session the service uses to populate the agent prompt. This gives you more granular control over the contextual history that is used to process the current request.</p>"
+    },
+    "PromptCreationConfigurationsPreviousConversationTurnsToIncludeInteger":{
+      "type":"integer",
+      "box":true,
+      "min":0
+    },
     "PromptOverrideConfiguration":{
       "type":"structure",
       "required":["promptConfigurations"],
@@ -5086,7 +6463,7 @@
       "members":{
         "textPromptTemplate":{
           "shape":"TextPromptTemplate",
-          "documentation":"<p>The template for the prompt that's sent to the model for response generation. You can include prompt placeholders, which become replaced before the prompt is sent to the model to provide instructions and context to the model. In addition, you can include XML tags to delineate meaningful sections of the prompt template.</p> <p>For more information, see the following resources:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-config.html#kb-test-config-sysprompt\">Knowledge base prompt templates</a> </p> </li> <li> <p> <a href=\"https://docs.anthropic.com/claude/docs/use-xml-tags\">Use XML tags with Anthropic Claude models</a> </p> </li> </ul>"
+          "documentation":"<p>The template for the prompt that's sent to the model for response generation. You can include prompt placeholders, which become replaced before the prompt is sent to the model to provide instructions and context to the model. In addition, you can include XML tags to delineate meaningful sections of the prompt template.</p> <p>For more information, see the following resources:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-config.html#kb-test-config-sysprompt\">Knowledge base prompt templates</a> </p> </li> <li> <p> <a href=\"https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags\">Use XML tags with Anthropic Claude models</a> </p> </li> </ul>"
         }
       },
       "documentation":"<p>Contains the template for the prompt that's sent to the model for response generation. For more information, see <a href=\"https://docs.aws.amazon.com/bedrock/latest/userguide/kb-test-config.html#kb-test-config-sysprompt\">Knowledge base prompt templates</a>.</p> <p>This data type is used in the following API operations:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerate.html#API_agent-runtime_RetrieveAndGenerate_RequestSyntax\">RetrieveAndGenerate request</a> – in the <code>filter</code> field</p> </li> </ul>"
@@ -5423,7 +6800,7 @@
         },
         "index":{
           "shape":"RerankResultIndexInteger",
-          "documentation":"<p>The ranking of the document. The lower a number, the higher the document is ranked.</p>"
+          "documentation":"<p>The original index of the document from the input sources array.</p>"
         },
         "relevanceScore":{
           "shape":"Float",
@@ -5709,6 +7086,10 @@
     "RetrievalResultContent":{
       "type":"structure",
       "members":{
+        "audio":{
+          "shape":"AudioSegment",
+          "documentation":"<p>Audio segment information when the retrieval result contains audio content.</p>"
+        },
         "byteContent":{
           "shape":"String",
           "documentation":"<p>A data URI with base64-encoded content from the data source. The URI is in the following format: returned in the following format: <code>data:image/jpeg;base64,${base64-encoded string}</code>.</p>"
@@ -5724,6 +7105,10 @@
         "type":{
           "shape":"RetrievalResultContentType",
           "documentation":"<p>The type of content in the retrieval result.</p>"
+        },
+        "video":{
+          "shape":"VideoSegment",
+          "documentation":"<p>Video segment information when the retrieval result contains video content.</p>"
         }
       },
       "documentation":"<p>Contains information about a chunk of text from a data source in the knowledge base. If the result is from a structured data source, the cell in the database and the type of the value is also identified.</p> <p>This data type is used in the following API operations:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html#API_agent-runtime_Retrieve_ResponseSyntax\">Retrieve response</a> – in the <code>content</code> field</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerate.html#API_agent-runtime_RetrieveAndGenerate_ResponseSyntax\">RetrieveAndGenerate response</a> – in the <code>content</code> field</p> </li> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_InvokeAgent.html#API_agent-runtime_InvokeAgent_ResponseSyntax\">InvokeAgent response</a> – in the <code>content</code> field</p> </li> </ul>",
@@ -5769,7 +7154,9 @@
       "enum":[
         "TEXT",
         "IMAGE",
-        "ROW"
+        "ROW",
+        "AUDIO",
+        "VIDEO"
       ]
     },
     "RetrievalResultCustomDocumentLocation":{
@@ -5863,8 +7250,7 @@
     },
     "RetrievalResultMetadataValue":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "document":true
     },
     "RetrievalResultS3Location":{
@@ -5942,7 +7328,7 @@
       "members":{
         "text":{
           "shape":"RetrieveAndGenerateInputTextString",
-          "documentation":"<p>The query made to the knowledge base.</p>"
+          "documentation":"<p>The query made to the knowledge base, in characters.</p>"
         }
       },
       "documentation":"<p>Contains the query made to the knowledge base.</p> <p>This data type is used in the following API operations:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_RetrieveAndGenerate.html#API_agent-runtime_RetrieveAndGenerate_RequestSyntax\">RetrieveAndGenerate request</a> – in the <code>input</code> field</p> </li> </ul>",
@@ -6355,6 +7741,24 @@
       "min":1,
       "pattern":"^s3://[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]/.{1,1024}$"
     },
+    "SatisfiedCondition":{
+      "type":"structure",
+      "required":["conditionName"],
+      "members":{
+        "conditionName":{
+          "shape":"String",
+          "documentation":"<p>The name of the condition that was satisfied.</p>"
+        }
+      },
+      "documentation":"<p>Represents a condition that was satisfied during a condition node evaluation in a flow execution.</p> <note> <p>Flow executions is in preview release for Amazon Bedrock and is subject to change.</p> </note>",
+      "sensitive":true
+    },
+    "SatisfiedConditions":{
+      "type":"list",
+      "member":{"shape":"SatisfiedCondition"},
+      "max":5,
+      "min":1
+    },
     "SearchType":{
       "type":"string",
       "enum":[
@@ -6528,6 +7932,91 @@
       "box":true,
       "min":0
     },
+    "StartFlowExecutionRequest":{
+      "type":"structure",
+      "required":[
+        "flowAliasIdentifier",
+        "flowIdentifier",
+        "inputs"
+      ],
+      "members":{
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias to use for the flow execution.</p>",
+          "location":"uri",
+          "locationName":"flowAliasIdentifier"
+        },
+        "flowExecutionName":{
+          "shape":"FlowExecutionName",
+          "documentation":"<p>The unique name for the flow execution. If you don't provide one, a system-generated name is used.</p>"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow to execute.</p>",
+          "location":"uri",
+          "locationName":"flowIdentifier"
+        },
+        "inputs":{
+          "shape":"FlowInputs",
+          "documentation":"<p>The input data required for the flow execution. This must match the input schema defined in the flow.</p>"
+        },
+        "modelPerformanceConfiguration":{
+          "shape":"ModelPerformanceConfiguration",
+          "documentation":"<p>The performance settings for the foundation model used in the flow execution.</p>"
+        }
+      }
+    },
+    "StartFlowExecutionResponse":{
+      "type":"structure",
+      "members":{
+        "executionArn":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The Amazon Resource Name (ARN) that uniquely identifies the flow execution.</p>"
+        }
+      }
+    },
+    "StopFlowExecutionRequest":{
+      "type":"structure",
+      "required":[
+        "executionIdentifier",
+        "flowAliasIdentifier",
+        "flowIdentifier"
+      ],
+      "members":{
+        "executionIdentifier":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The unique identifier of the flow execution to stop.</p>",
+          "location":"uri",
+          "locationName":"executionIdentifier"
+        },
+        "flowAliasIdentifier":{
+          "shape":"FlowAliasIdentifier",
+          "documentation":"<p>The unique identifier of the flow alias used for the execution.</p>",
+          "location":"uri",
+          "locationName":"flowAliasIdentifier"
+        },
+        "flowIdentifier":{
+          "shape":"FlowIdentifier",
+          "documentation":"<p>The unique identifier of the flow.</p>",
+          "location":"uri",
+          "locationName":"flowIdentifier"
+        }
+      }
+    },
+    "StopFlowExecutionResponse":{
+      "type":"structure",
+      "required":["status"],
+      "members":{
+        "executionArn":{
+          "shape":"FlowExecutionIdentifier",
+          "documentation":"<p>The Amazon Resource Name (ARN) that uniquely identifies the flow execution that was stopped.</p>"
+        },
+        "status":{
+          "shape":"FlowExecutionStatus",
+          "documentation":"<p>The updated status of the flow execution after the stop request. This will typically be ABORTED if the execution was successfully stopped.</p>"
+        }
+      }
+    },
     "StopSequences":{
       "type":"list",
       "member":{"shape":"String"},
@@ -6598,8 +8087,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -6779,6 +8267,18 @@
       "sensitive":true,
       "union":true
     },
+    "TraceElements":{
+      "type":"structure",
+      "members":{
+        "agentTraces":{
+          "shape":"AgentTraces",
+          "documentation":"<p>Agent trace information for the flow execution.</p>"
+        }
+      },
+      "documentation":"<p>Contains trace elements for flow execution tracking.</p>",
+      "sensitive":true,
+      "union":true
+    },
     "TraceId":{
       "type":"string",
       "max":16,
@@ -6877,8 +8377,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateSessionRequest":{
       "type":"structure",
@@ -7021,6 +8520,31 @@
     "Verb":{
       "type":"string",
       "sensitive":true
+    },
+    "Version":{
+      "type":"string",
+      "max":5,
+      "min":1,
+      "pattern":"^(DRAFT|[0-9]{0,4}[1-9][0-9]{0,4})$"
+    },
+    "VideoSegment":{
+      "type":"structure",
+      "required":["s3Uri"],
+      "members":{
+        "s3Uri":{
+          "shape":"VideoSegmentS3UriString",
+          "documentation":"<p>The S3 URI where this specific video segment is stored in the multimodal storage destination.</p>"
+        },
+        "summary":{
+          "shape":"String",
+          "documentation":"<p>A text summary describing the content of the video segment.</p>"
+        }
+      },
+      "documentation":"<p>Contains information about a video segment retrieved from a knowledge base, including its location and summary.</p> <p>This data type is used in the following API operations:</p> <ul> <li> <p> <a href=\"https://docs.aws.amazon.com/bedrock/latest/APIReference/API_agent-runtime_Retrieve.html#API_agent-runtime_Retrieve_ResponseSyntax\">Retrieve response</a> – in the <code>video</code> field</p> </li> </ul>"
+    },
+    "VideoSegmentS3UriString":{
+      "type":"string",
+      "min":1
     }
   },
   "documentation":"<p>Contains APIs related to model invocation and querying of knowledge bases.</p>"

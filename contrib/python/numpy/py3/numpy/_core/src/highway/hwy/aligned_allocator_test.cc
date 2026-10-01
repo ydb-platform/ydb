@@ -84,6 +84,7 @@ class FakeAllocator {
 }  // namespace
 
 namespace hwy {
+namespace {
 
 #if !HWY_TEST_STANDALONE
 class AlignedAllocatorTest : public testing::Test {};
@@ -145,8 +146,8 @@ TEST(AlignedAllocatorTest, TestEmptyAlignedUniquePtr) {
 }
 
 TEST(AlignedAllocatorTest, TestEmptyAlignedFreeUniquePtr) {
-  AlignedFreeUniquePtr<SampleObject<32>> ptr(nullptr, AlignedFreer());
-  AlignedFreeUniquePtr<SampleObject<32>[]> arr(nullptr, AlignedFreer());
+  AlignedFreeUniquePtr<std::array<char, 32>> ptr(nullptr, AlignedFreer());
+  AlignedFreeUniquePtr<std::array<char, 32>[]> arr(nullptr, AlignedFreer());
 }
 
 TEST(AlignedAllocatorTest, TestCustomAlloc) {
@@ -228,19 +229,6 @@ TEST(AlignedAllocatorTest, TestAllocMultipleInt) {
   HWY_ASSERT(ret != size_t{0});
 }
 
-TEST(AlignedAllocatorTest, TestAllocateAlignedObjectWithoutDestructor) {
-  int counter = 0;
-  {
-    // This doesn't call the constructor.
-    auto obj = AllocateAligned<SampleObject<24>>(1);
-    HWY_ASSERT(obj);
-    obj[0].counter_ = &counter;
-  }
-  // Destroying the unique_ptr shouldn't have called the destructor of the
-  // SampleObject<24>.
-  HWY_ASSERT_EQ(0, counter);
-}
-
 TEST(AlignedAllocatorTest, TestMakeUniqueAlignedArrayWithCustomAlloc) {
   FakeAllocator fake_alloc;
   int counter = 0;
@@ -282,8 +270,6 @@ TEST(AlignedAllocatorTest, TestDefaultInit) {
   HWY_ASSERT_EQ((addr1 >> (kBits - 1)) >> (kBits - 1),
                 (addr2 >> (kBits - 1)) >> (kBits - 1));
 }
-
-namespace {
 
 using std::array;
 using std::vector;

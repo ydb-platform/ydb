@@ -52,12 +52,15 @@ try:
     import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_delete as nbs_partition_delete
     import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_get_load_actor_adapter_actor_id as nbs_partition_get_load_actor_adapter_actor_id
     import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_io as nbs_partition_io
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_resize as nbs_partition_resize
     _nbs_partition_modules = [
-        nbs_partition_create, nbs_partition_delete,
+        nbs_partition_create, nbs_partition_delete, nbs_partition_resize,
         nbs_partition_get_load_actor_adapter_actor_id, nbs_partition_io,
     ]
 except ImportError:
     _nbs_partition_modules = []
+
+import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_nbs_dbg_like as cluster_workload_nbs_dbg_like
 
 import sys
 import ydb.apps.dstool.lib.common as common
@@ -65,6 +68,7 @@ import ydb.apps.dstool.lib.common as common
 MODULE_PREFIX = 'dstool_cmd_'
 
 modules = [
+    cluster_workload_nbs_dbg_like,
     cluster_balance, cluster_get, cluster_set, cluster_list, cluster_workload_run,
     node_list,
     box_list,
@@ -85,14 +89,14 @@ default_structure = [
     ('pool', ['list', ('create', ['virtual'])]),
     ('box', ['list']),
     ('node', ['list']),
-    ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),
+    ('cluster', ['balance', 'get', 'set', ('workload', ['run', 'nbs-dbg-like']), 'list']),
 ]
 
 # Only expose the `nbs partition ...` subcommand tree when the modules are
 # available; otherwise argparse would render them as UNIMPLEMETED stubs.
 if _nbs_partition_modules:
     default_structure.append(
-        ('nbs', [('partition', ['create', 'delete', 'get-load-actor-adapter-actor-id', 'io'])]),
+        ('nbs', [('partition', ['create', 'delete', 'resize', 'get-load-actor-adapter-actor-id', 'io'])]),
     )
 
 
@@ -193,6 +197,9 @@ def run_command(command_map, args):
         output.add_line('Group Selection Error: {}'.format(ex))
         output.print(args)
         sys.exit(1)
+    except common.InvalidParameterError:
+        # InvalidParameterError is rendered with command usage by main().
+        raise
     except Exception as ex:
         output.add_line('Unexpected Error: {}'.format(ex))
         output.print(args)

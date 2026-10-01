@@ -187,7 +187,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
 
         ctx.Register(new TAlterConfigsActor(
             SelfId(),
-            Context->UserToken,
+            Context->Token.UserToken,
             resource.ResourceName.value(),
             Context->DatabasePath,
             convertedRetentions.Ms,

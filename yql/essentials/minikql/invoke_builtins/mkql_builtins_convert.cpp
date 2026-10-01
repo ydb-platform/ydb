@@ -1,3 +1,4 @@
+#include "mkql_builtins_impl.h"    // Y_IGNORE
 #include "mkql_builtins_decimal.h" // Y_IGNORE
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
@@ -8,8 +9,11 @@
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/binary_json/read.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <array>
+
+#include <arrow/scalar.h>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -44,7 +48,7 @@ struct TFloatToIntegralImpl {
         auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TIn>(arg, context, block);
         const auto type = Type::getInt32Ty(context);
-        const auto fnType = FunctionType::get(type, {val->getType()}, false);
+        const auto fnType = FunctionType::get(type, {val->getType()}, /*isVarArg=*/false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int (*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
@@ -111,7 +115,7 @@ struct TFloatToIntegralImpl<TIn, bool> {
         auto& module = ctx.Codegen.GetModule();
         const auto val = GetterFor<TIn>(arg, context, block);
         const auto type = Type::getInt32Ty(context);
-        const auto fnType = FunctionType::get(type, {val->getType()}, false);
+        const auto fnType = FunctionType::get(type, {val->getType()}, /*isVarArg=*/false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int (*)(TIn)>(&std::fpclassify)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
@@ -484,8 +488,8 @@ struct TDatetimeScaleUp: public TArithmeticConstraintsUnary<TInput, TOutput> {
         const auto mul = BinaryOperator::CreateMul(ConstantInt::get(cast->getType(), TDatetimeScale<TInput, TOutput>::Modifier), cast, "mul", block);
         const auto wide = SetterFor<TOutput>(mul, context, block);
         if constexpr (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid", block);
             const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             return full;
@@ -520,8 +524,8 @@ struct TDatetimeScaleDown: public TArithmeticConstraintsUnary<TInput, TOutput> {
         const auto cast = StaticCast<TInput, TOutput>(div, context, block);
         const auto wide = SetterFor<TOutput>(cast, context, block);
         if constexpr (Tz) {
-            const uint64_t init[] = {0ULL, 0xFFFFULL};
-            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0ULL, 0xFFFFULL};
+            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init.data()));
             const auto tzid = BinaryOperator::CreateAnd(arg, mask, "tzid", block);
             const auto full = BinaryOperator::CreateOr(wide, tzid, "full", block);
             return full;
@@ -552,8 +556,8 @@ struct TDatetimeTzStub {
     static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
         if constexpr (Cleanup) {
-            const uint64_t init[] = {0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFF0000ULL};
-            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init));
+            const std::array<uint64_t, 2> init = {0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFF0000ULL};
+            const auto mask = ConstantInt::get(arg->getType(), APInt(128, 2, init.data()));
             return BinaryOperator::CreateAnd(arg, mask, "clean", block);
         } else {
             return arg;
@@ -925,6 +929,33 @@ namespace {
 constexpr auto convert = "Convert";
 constexpr auto integral = "ToIntegral";
 constexpr auto decimal = "ToDecimal";
+
+arrow::Status ExecToStringUtf8(arrow::compute::KernelContext*, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+    MKQL_ENSURE(batch.values.size() == 1, "Expected 1 argument");
+
+    const auto& input = batch.values.front();
+    if (input.is_scalar()) {
+        const auto scalar = std::static_pointer_cast<arrow::BaseBinaryScalar>(input.scalar());
+        *res = scalar->is_valid
+                   ? arrow::Datum(std::make_shared<arrow::BinaryScalar>(scalar->value))
+                   : arrow::Datum(arrow::MakeNullScalar(arrow::binary()));
+    } else {
+        const auto& array = *input.array();
+        *res = arrow::ArrayData::Make(arrow::binary(), array.length, array.buffers, array.null_count, array.offset);
+    }
+    return arrow::Status::OK();
+}
+
+void RegisterToStringUtf8(TKernelFamilyBase& kernelFamily) {
+    const std::vector<NUdf::TDataTypeId> argTypes = {NUdf::TDataType<NUdf::TUtf8>::Id};
+    const auto returnType = NUdf::TDataType<char*>::Id;
+    auto kernel = std::make_unique<arrow::compute::ScalarKernel>(
+        std::vector<arrow::compute::InputType>{arrow::utf8()}, arrow::binary(), &ExecToStringUtf8);
+    kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
+    kernel->mem_allocation = arrow::compute::MemAllocation::NO_PREALLOCATE;
+    kernelFamily.Adopt(argTypes, returnType,
+                       std::make_unique<TPlainKernel>(kernelFamily, argTypes, returnType, std::move(kernel), TKernel::ENullMode::Default));
+}
 
 template <typename TInput, typename TOutput>
 void RegisterConvert(IBuiltinFunctionRegistry& registry) {
@@ -1608,5 +1639,10 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterJsonDocumentConvert(registry);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+void RegisterToString(TKernelFamilyMap& kernelFamilyMap) {
+    auto family = std::make_unique<TKernelFamilyBase>();
+    RegisterToStringUtf8(*family);
+    kernelFamilyMap["ToString"] = std::move(family);
+}
+
+} // namespace NKikimr::NMiniKQL

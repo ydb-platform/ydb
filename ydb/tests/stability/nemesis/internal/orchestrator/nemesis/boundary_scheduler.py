@@ -1,12 +1,7 @@
-"""Single-threaded nemesis scheduler that walks the failure-model boundary.
+"""Boundary-walking nemesis scheduler: fill the failure budget each tick, release via RecoveryProbe.
 
-Each tick breaks a random number of things (``cap``), picking uniformly from whatever fits the
-budget, reserving atomically, then sleeps a randomized interval. Replaces the per-type threads in
-``schedule_loop.py``.
-
-Budget is released by the :class:`RecoveryProbe`: self-recovering faults once healthcheck sees the
-host answer again, toggle faults after ``auto_recovery_sec`` via an extract. :meth:`stop` extracts
-whatever is still held, so switching chaos off never leaves the cluster broken.
+``max_per_tick`` is a burst fuse; BYPASS (tablet) chaos is capped by ``max_bypass_per_tick``.
+Without a probe, FULL-guarded types are not offered.
 """
 
 from __future__ import annotations
@@ -14,14 +9,17 @@ from __future__ import annotations
 import logging
 import random
 import threading
+from dataclasses import replace
 from typing import Callable, Sequence
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
+    confirm_timeout_for,
     guard_mode_for,
     impact_scope_for,
     recovery_mode_for as catalog_recovery_mode_for,
     recovery_sec_for,
+    stuck_timeout_for,
     supports_boundary_scheduler,
     target_kind_for,
 )
@@ -34,11 +32,14 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model imp
     GuardMode,
     ImpactScope,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
+    hc_predicate_for,
+    needs_baseline,
+)
 
 logger = logging.getLogger(__name__)
 
-# Curated stability profile, filtered to what this cluster registers (the DC type needs multi-DC).
-# Tablet types are BYPASS; KickTabletsFromNode kills the node, so it is budgeted like a node fault.
+# Stability profile (DC type needs multi-DC; KickTabletsFromNode is FULL like a node kill).
 _STABILITY_PROFILE: tuple[str, ...] = (
     "DataCenterStopNodesNemesis",
     "KillNodeNemesis",
@@ -46,6 +47,8 @@ _STABILITY_PROFILE: tuple[str, ...] = (
     "StopStartNodeNemesis",
     "SafelyBreakDiskNemesis",
     "SafelyCleanupDisksNemesis",
+    "NetworkNemesis",
+    "DnsNemesis",
     "TimeSkewNemesis",
     "KillHiveNemesis",
     "KillCoordinatorNemesis",
@@ -56,10 +59,8 @@ _STABILITY_PROFILE: tuple[str, ...] = (
     "KickTabletsFromNodeNemesis",
 )
 
-# A tick can be slow: every dispatch is an HTTP POST with its own timeout.
-DEFAULT_STOP_JOIN_SEC: float = 10.0
-# ``start()`` must not run on top of a thread a previous ``stop()`` gave up on.
-DEFAULT_RESTART_JOIN_SEC: float = 30.0
+DEFAULT_STOP_JOIN_SEC: float = 10.0  # a tick is many HTTP POSTs
+DEFAULT_RESTART_JOIN_SEC: float = 30.0  # wait out a stop() that gave up mid-tick
 
 
 def default_enabled_types() -> list[str]:
@@ -85,10 +86,13 @@ class BoundaryNemesisScheduler:
         mode_for: Callable[[str], GuardMode] = guard_mode_for,
         recovery_sec_for: Callable[[str], float | None] = recovery_sec_for,
         recovery_mode_for: Callable[[str], str] = catalog_recovery_mode_for,
-        base_interval: float = 60.0,
+        stuck_timeout_for: Callable[[str], float] = stuck_timeout_for,
+        confirm_timeout_for: Callable[[str], float] = confirm_timeout_for,
+        predicate_for: Callable = hc_predicate_for,
+        base_interval: float = 15.0,
         jitter: float = 0.5,
-        max_per_tick: int = 3,
-        default_recovery_sec: float = DEFAULT_RECOVERY_SEC,
+        max_per_tick: int = 16,
+        max_bypass_per_tick: int = 1,
         rng: random.Random | None = None,
         stop_join_sec: float = DEFAULT_STOP_JOIN_SEC,
         restart_join_sec: float = DEFAULT_RESTART_JOIN_SEC,
@@ -104,7 +108,10 @@ class BoundaryNemesisScheduler:
         self._mode_for = mode_for
         self._recovery_sec_for = recovery_sec_for
         self._recovery_mode_for = recovery_mode_for
-        self._default_recovery_sec = float(default_recovery_sec)
+        self._stuck_timeout_for = stuck_timeout_for
+        self._confirm_timeout_for = confirm_timeout_for
+        self._predicate_for = predicate_for
+        self._no_probe_warned = False
         self._rng = rng or random.Random()
         self._cfg_lock = threading.Lock()
         self._enabled = (
@@ -113,6 +120,7 @@ class BoundaryNemesisScheduler:
         self._base_interval = float(base_interval)
         self._jitter = float(jitter)
         self._max_per_tick = max(1, int(max_per_tick))
+        self._max_bypass_per_tick = max(1, int(max_bypass_per_tick))
         self._stop_join_sec = float(stop_join_sec)
         self._restart_join_sec = float(restart_join_sec)
         self._stop = threading.Event()
@@ -125,6 +133,7 @@ class BoundaryNemesisScheduler:
         base_interval: float | None = None,
         jitter: float | None = None,
         max_per_tick: int | None = None,
+        max_bypass_per_tick: int | None = None,
     ) -> None:
         with self._cfg_lock:
             if enabled is not None:
@@ -135,6 +144,8 @@ class BoundaryNemesisScheduler:
                 self._jitter = float(jitter)
             if max_per_tick is not None:
                 self._max_per_tick = max(1, int(max_per_tick))
+            if max_bypass_per_tick is not None:
+                self._max_bypass_per_tick = max(1, int(max_bypass_per_tick))
 
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -142,13 +153,15 @@ class BoundaryNemesisScheduler:
     def status(self) -> dict:
         with self._cfg_lock:
             enabled = list(self._enabled)
-            base, jitter, cap = self._base_interval, self._jitter, self._max_per_tick
+            base, jitter = self._base_interval, self._jitter
+            cap, bypass_cap = self._max_per_tick, self._max_bypass_per_tick
         out: dict = {
             "running": self.running(),
             "enabled_types": enabled,
             "base_interval": base,
             "jitter": jitter,
             "max_per_tick": cap,
+            "max_bypass_per_tick": bypass_cap,
         }
         if self._recovery_probe is not None:
             out["recovery_probe"] = self._recovery_probe.snapshot()
@@ -160,31 +173,41 @@ class BoundaryNemesisScheduler:
         return self._plan_extract is not None and self._recovery_probe is not None
 
     def _menu(
-        self, bypass_used: frozenset[tuple[str, str]] = frozenset()
+        self,
+        bypass_used: frozenset[tuple[str, str]] = frozenset(),
+        skip_types: frozenset[str] = frozenset(),
+        include_bypass: bool = True,
     ) -> list[tuple[str, ChaosTarget, Footprint]]:
         with self._cfg_lock:
             enabled = list(self._enabled)
-        # One snapshot for the whole menu; reserve() re-checks atomically before injecting.
-        view = self._guard.budget_view()
+        view = self._guard.budget_view()  # reserve() re-checks atomically
         impaired = view.touched
         can_extract = self._can_extract()
         menu: list[tuple[str, ChaosTarget, Footprint]] = []
         for nemesis_type in enabled:
-            # A toggle fault with no way to auto-extract would stay broken forever — don't offer it.
+            if nemesis_type in skip_types:
+                continue
+            # Toggle without extract path would stay broken forever.
             if self._recovery_mode_for(nemesis_type) == "extract" and not can_extract:
                 continue
             bypass = self._mode_for(nemesis_type) is GuardMode.BYPASS
+            if bypass and not include_bypass:
+                continue
+            if not bypass and self._recovery_probe is None:
+                # No probe → lease never released → mute FULL types.
+                if not self._no_probe_warned:
+                    self._no_probe_warned = True
+                    logger.warning("no recovery probe wired: FULL-guarded types are muted")
+                continue
             scope = self._scope_for(nemesis_type)
             kind = self._kind_for(nemesis_type)
-            seen: set[str] = set()  # collapse duplicate targets (e.g. one DC exposed per host)
+            seen: set[str] = set()  # e.g. one DC target per host
             for target in self._inventory.entities(kind):
                 key = target.identity_key()
                 if key in seen:
                     continue
                 seen.add(key)
                 if bypass:
-                    # Costs no budget, so it is always offered. Deduped per (type, target) because
-                    # tablet types share one control-host target.
                     if (nemesis_type, key) not in bypass_used:
                         menu.append((nemesis_type, target, Footprint()))
                     continue
@@ -196,60 +219,139 @@ class BoundaryNemesisScheduler:
         return menu
 
     def tick(self) -> int:
-        """One scheduling tick: break up to a random ``cap`` faults. Returns how many were injected."""
+        """Fill the budget up to the boundary; return how many faults were injected."""
         with self._cfg_lock:
-            cap = self._rng.randint(1, self._max_per_tick)
-        added = 0
+            fuse = self._max_per_tick
+            bypass_cap = self._rng.randint(1, self._max_bypass_per_tick)
+        budget_added = 0
+        bypass_added = 0
         bypass_used: set[tuple[str, str]] = set()
-        while added < cap:
-            menu = self._menu(frozenset(bypass_used))
+        paused: set[str] = set()  # e.g. slots with no HC baseline
+        while True:
+            menu = self._menu(
+                frozenset(bypass_used), frozenset(paused),
+                include_bypass=bypass_added < bypass_cap,
+            )
             if not menu:
                 break
             nemesis_type, target, footprint = self._rng.choice(menu)
             if self._mode_for(nemesis_type) is GuardMode.BYPASS:
-                # Nothing to reserve or track — fire and remember it fired.
                 for cmd in self._plan_inject(nemesis_type, target):
                     self._dispatch(cmd)
                 bypass_used.add((nemesis_type, target.identity_key()))
-                added += 1
+                bypass_added += 1
                 continue
-            recovery = self._recovery_sec_for(nemesis_type)
-            if recovery is None:
-                recovery = self._default_recovery_sec
-            # Hold the budget (recovery_sec=None) when the probe will release it by fact: after a
-            # timed extract, or once healthcheck sees the host again. Slot kills have no fail domain
-            # and healthcheck cannot see a single slot restart, so they fall back to the timer.
             by_extract = (
                 self._recovery_mode_for(nemesis_type) == "extract" and self._can_extract()
             )
-            by_healthcheck = (
-                not by_extract
-                and self._recovery_probe is not None
-                and bool(footprint.racks)
-            )
+            kind = self._kind_for(nemesis_type)
+            scope = self._scope_for(nemesis_type)
+            baseline = None
+            if needs_baseline(kind, scope):
+                baseline = self._recovery_probe.alive_compute_baseline()  # before inject
+                if baseline is None:
+                    if nemesis_type not in paused:
+                        logger.warning(
+                            "%s paused this tick: no fresh healthcheck data for a slot baseline",
+                            nemesis_type,
+                        )
+                    paused.add(nemesis_type)
+                    continue
             lease = self._guard.reserve(
                 footprint,
-                recovery_sec=None if (by_extract or by_healthcheck) else recovery,
                 identity_key=target.identity_key(),
+                target=target,
+                nemesis_type=nemesis_type,
+                source="boundary",
             )
             if lease is None:
                 break
-            for cmd in self._plan_inject(nemesis_type, target):
-                self._dispatch(cmd)
-            if by_extract:
-                self._recovery_probe.track(
-                    lease, target, nemesis_type, timeout_sec=recovery,
-                    recover_action=self._extract_action(nemesis_type, target),
+            # Release only if nothing landed; partial fanout must keep the budget + stay tracked.
+            dispatched_any = False
+            recovered = None
+            try:
+                recovered = self._predicate_for(
+                    target,
+                    kind=kind,
+                    scope=scope,
+                    inventory=self._inventory,
+                    baseline=baseline,
+                    nemesis_type=nemesis_type,
                 )
-            elif by_healthcheck:
-                self._recovery_probe.track(lease, target, nemesis_type, timeout_sec=recovery)
-            added += 1
-        return added
+                for cmd in self._plan_inject(nemesis_type, target):
+                    self._dispatch(replace(cmd, lease_id=lease))
+                    dispatched_any = True
+                self._track_reserved(
+                    lease, target, nemesis_type, recovered=recovered, by_extract=by_extract
+                )
+            except Exception:
+                if not dispatched_any:
+                    self._guard.release(
+                        lease,
+                        reason="abort",
+                        target=target,
+                        nemesis_type=nemesis_type,
+                        source="boundary",
+                    )
+                    raise
+                logger.exception(
+                    "dispatch/track failed after applying %s on %s; holding budget",
+                    nemesis_type, target.identity_key(),
+                )
+                try:
+                    self._track_reserved(
+                        lease, target, nemesis_type, recovered=recovered, by_extract=by_extract
+                    )
+                except Exception:
+                    logger.exception(
+                        "failed to track after partial dispatch of %s on %s; "
+                        "budget held without probe",
+                        nemesis_type, target.identity_key(),
+                    )
+                raise
+            budget_added += 1
+            if budget_added >= fuse:
+                break
+        return budget_added + bypass_added
 
-    def _extract_action(self, nemesis_type: str, target: ChaosTarget) -> Callable[[], None]:
+    def _track_reserved(
+        self,
+        lease: str,
+        target: ChaosTarget,
+        nemesis_type: str,
+        *,
+        recovered: Callable,
+        by_extract: bool,
+    ) -> None:
+        """Register a reserved lease with the recovery probe."""
+        if by_extract:
+            self._recovery_probe.track(
+                lease, target, nemesis_type,
+                recovered=recovered,
+                stuck_timeout_sec=self._stuck_timeout_for(nemesis_type),
+                recover_action=self._extract_action(nemesis_type, target, lease),
+                extract_after_sec=self._extract_after_sec(nemesis_type),
+                confirm_timeout_sec=self._confirm_timeout_for(nemesis_type),
+            )
+        else:
+            self._recovery_probe.track(
+                lease, target, nemesis_type,
+                recovered=recovered,
+                stuck_timeout_sec=self._stuck_timeout_for(nemesis_type),
+            )
+
+    def _extract_after_sec(self, nemesis_type: str) -> float:
+        recovery = self._recovery_sec_for(nemesis_type)
+        return float(recovery) if recovery is not None else DEFAULT_RECOVERY_SEC
+
+    def _extract_action(self, nemesis_type: str, target: ChaosTarget, lease: str) -> Callable[[], None]:
         def _recover() -> None:
             for cmd in self._plan_extract(nemesis_type, target):
-                self._dispatch(cmd)
+                ok = self._dispatch(replace(cmd, lease_id=lease))
+                if ok is False:
+                    raise RuntimeError(
+                        f"extract dispatch failed for {nemesis_type} on {target.identity_key()}"
+                    )
         return _recover
 
     # -- loop ---------------------------------------------------------------
@@ -276,8 +378,7 @@ class BoundaryNemesisScheduler:
         if t is not None and t.is_alive():
             if not self._stop.is_set():
                 return  # already running
-            # A previous stop() gave up on a slow tick. Returning here would report "started" while
-            # the stop flag kills the old thread and the probe stays down — no budget ever released.
+            # Previous stop() gave up; wait so we do not start a second thread.
             logger.warning(
                 "start(): previous scheduler thread is still stopping; waiting up to %.0fs",
                 self._restart_join_sec,
@@ -288,8 +389,6 @@ class BoundaryNemesisScheduler:
                     f"previous scheduler thread is still shutting down after "
                     f"{self._restart_join_sec:.0f}s; not starting a second one"
                 )
-        if self._recovery_probe is not None:
-            self._recovery_probe.start()
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -301,14 +400,12 @@ class BoundaryNemesisScheduler:
             t.join(timeout=self._stop_join_sec)
             if t.is_alive():
                 logger.warning(
-                    "scheduler thread still inside a tick %.0fs after stop; stopping the probe "
+                    "scheduler thread still inside a tick %.0fs after stop; draining extracts "
                     "anyway — start() will wait for it",
                     self._stop_join_sec,
                 )
         if self._recovery_probe is not None:
-            self._recovery_probe.stop()
-            # Nothing else extracts them, so stopping chaos would leave a node stopped / disk
-            # broken / clock skewed. After the join, so no lease is extracted twice.
+            # Drain toggles after join so nothing is extracted twice; probe stays app-owned.
             try:
                 drained = self._recovery_probe.drain_extracts()
             except Exception:

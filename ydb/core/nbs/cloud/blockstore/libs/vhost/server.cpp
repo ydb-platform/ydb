@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/diagnostics/vhost_stats.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/durable_wrapper.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage_gate.h>
@@ -21,8 +22,10 @@
 
 #include <util/folder/path.h>
 #include <util/generic/map.h>
+#include <util/generic/scope.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
+#include <util/system/event.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>
 
@@ -105,6 +108,11 @@ struct TRequest
 
     std::atomic_flag Completed = false;
 
+    // Signaled when the ProcessRequest call that linked this request
+    // returns. Stop waits on this so the endpoint is not destroyed while
+    // the executor is still inside that call.
+    TManualEvent ProcessRequestFinished;
+
     TRequest(
         ui64 requestId,
         TVhostRequestPtr vhostRequest,
@@ -134,6 +142,9 @@ using TRequestPtr = TIntrusivePtr<TRequest>;
 
 struct TAppContext
 {
+    ILoggingServicePtr Logging;
+    ITimerPtr Timer;
+    ISchedulerPtr Scheduler;
     IVHostStatsPtr VHostStats;
     IVhostQueueFactoryPtr VhostQueueFactory;
     IDeviceHandlerFactoryPtr DeviceHandlerFactory;
@@ -159,6 +170,7 @@ private:
     TAppContext& AppCtx;
     // Single device handler shared by all vhost queues of this endpoint.
     const IDeviceHandlerPtr DeviceHandler;
+    const IDurableStoragePtr DurableStorage;
     const TStorageGatePtr StorageGate;
     const TString SocketPath;
     const TStorageOptions Options;
@@ -180,6 +192,7 @@ public:
     TEndpoint(
         TAppContext& appCtx,
         IDeviceHandlerPtr deviceHandler,
+        IDurableStoragePtr durableStorage,
         ITraceServicePtr traceService,
         TStorageGatePtr storageGate,
         TString socketPath,
@@ -188,6 +201,7 @@ public:
         TVector<IVhostQueuePtr> queues)
         : AppCtx(appCtx)
         , DeviceHandler(std::move(deviceHandler))
+        , DurableStorage(std::move(durableStorage))
         , StorageGate(std::move(storageGate))
         , SocketPath(std::move(socketPath))
         , Options(options)
@@ -265,6 +279,7 @@ public:
         auto future = VhostDevice->Stop();
 
         auto cancelError = MakeError(E_CANCELLED, "Vhost endpoint is stopping");
+        TVector<TRequestPtr> requestsToWait;
         with_lock (RequestsLock) {
             TLog& Log = AppCtx.Log;
             STORAGE_INFO(
@@ -275,9 +290,17 @@ public:
             RequestsInFlight.ForEach(
                 [&](TRequest* request)
                 {
+                    requestsToWait.push_back(request);
                     CompleteRequest(*request, cancelError);
                     request->Unlink();
                 });
+        }
+
+        // Outside RequestsLock. The executor signals ProcessRequestFinished at
+        // the end of ProcessRequest and may still need the lock before
+        // that. Requests that already returned are signaled.
+        for (const auto& request: requestsToWait) {
+            request->ProcessRequestFinished.Wait();
         }
 
         if (deleteSocket) {
@@ -296,10 +319,12 @@ public:
         return future;
     }
 
-    void Attach(ITraceServicePtr traceService, IStoragePtr storage)
+    void
+    Attach(ITraceServicePtr traceService, IStoragePtr storage, ui32 generation)
     {
         TraceServiceGate.Attach(std::move(traceService));
         StorageGate->Attach(std::move(storage));
+        DurableStorage->RestartRequests(generation);
     }
 
     void Detach()
@@ -326,21 +351,30 @@ public:
     // a single device handler.
     void ProcessRequest(TVhostRequestPtr vhostRequest)
     {
+        // Holds the endpoint until this call returns. A request that is
+        // dequeued but not yet linked is invisible to Stop's wait.
+        auto self = shared_from_this();
+
         const auto requestType = vhostRequest->Type;
         auto request = RegisterRequest(std::move(vhostRequest));
         if (!request) {
             return;
         }
 
+        Y_DEFER
+        {
+            request->ProcessRequestFinished.Signal();
+        };
+
         switch (requestType) {
             case EBlockStoreRequest::WriteBlocks:
-                ProcessRequest<TWriteBlocksLocalMethod>(std::move(request));
+                ProcessRequest<TWriteBlocksLocalMethod>(request);
                 break;
             case EBlockStoreRequest::ReadBlocks:
-                ProcessRequest<TReadBlocksLocalMethod>(std::move(request));
+                ProcessRequest<TReadBlocksLocalMethod>(request);
                 break;
             case EBlockStoreRequest::ZeroBlocks:
-                ProcessRequest<TZeroBlocksMethod>(std::move(request));
+                ProcessRequest<TZeroBlocksMethod>(request);
                 break;
             default:
                 Y_ABORT(
@@ -541,6 +575,8 @@ private:
 public:
     TServer(
         ILoggingServicePtr logging,
+        ITimerPtr timer,
+        ISchedulerPtr scheduler,
         IVHostStatsPtr vhostStats,
         IVhostQueueFactoryPtr vhostQueueFactory,
         IDeviceHandlerFactoryPtr deviceHandlerFactory,
@@ -596,6 +632,8 @@ private:
 
 TServer::TServer(
     ILoggingServicePtr logging,
+    ITimerPtr timer,
+    ISchedulerPtr scheduler,
     IVHostStatsPtr vhostStats,
     IVhostQueueFactoryPtr vhostQueueFactory,
     IDeviceHandlerFactoryPtr deviceHandlerFactory,
@@ -603,6 +641,9 @@ TServer::TServer(
     TVhostCallbacks callbacks)
 {
     Log = logging->CreateLog("BLOCKSTORE_VHOST");
+    Logging = std::move(logging);
+    Timer = std::move(timer);
+    Scheduler = std::move(scheduler);
     VHostStats = std::move(vhostStats);
     VhostQueueFactory = std::move(vhostQueueFactory);
     DeviceHandlerFactory = std::move(deviceHandlerFactory);
@@ -669,7 +710,10 @@ TFuture<NProto::TError> TServer::StartEndpoint(
                                  << " has already been started");
 
             STORAGE_INFO("Reattach storage to " << options.DiskId.Quote());
-            (*endpoint)->Attach(std::move(traceService), std::move(storage));
+            (*endpoint)->Attach(
+                std::move(traceService),
+                std::move(storage),
+                options.Generation);
             return MakeFuture(error);
         }
 
@@ -684,13 +728,22 @@ TFuture<NProto::TError> TServer::StartEndpoint(
 
     TStorageGatePtr storageGate =
         std::make_shared<TStorageGate>(std::move(storage));
+
+    IDurableStoragePtr durableStorage = CreateDurableStorageWrapper(
+        Logging,
+        storageGate,
+        Timer,
+        Scheduler,
+        options.Generation);
+
     // Single device handler shared by all vhost queues of this endpoint.
     // The whole storage-wrapper chain is built once per endpoint.
-    auto deviceHandler = CreateDeviceHandler(options, storageGate);
+    auto deviceHandler = CreateDeviceHandler(options, durableStorage);
 
     auto endpoint = std::make_shared<TEndpoint>(
         *this,
         std::move(deviceHandler),
+        std::move(durableStorage),
         std::move(traceService),
         std::move(storageGate),
         socketPath,
@@ -909,6 +962,9 @@ IDeviceHandlerPtr TServer::CreateDeviceHandler(
     const TStorageOptions& options,
     IStoragePtr storage)
 {
+    Y_ABORT_UNLESS(IsSupportedBlockSize(options.BlockSize));
+    Y_ABORT_UNLESS(options.StripeSize % options.BlockSize == 0);
+
     TDeviceHandlerParams params{
         .Storage = CreateWrappers(options, std::move(storage)),
         .DiskId = options.DiskId,
@@ -930,6 +986,8 @@ IDeviceHandlerPtr TServer::CreateDeviceHandler(
 
 IServerPtr CreateServer(
     ILoggingServicePtr logging,
+    ITimerPtr timer,
+    ISchedulerPtr scheduler,
     IVHostStatsPtr vhostStats,
     IVhostQueueFactoryPtr vhostQueueFactory,
     IDeviceHandlerFactoryPtr deviceHandlerFactory,
@@ -938,6 +996,8 @@ IServerPtr CreateServer(
 {
     return std::make_shared<TServer>(
         std::move(logging),
+        std::move(timer),
+        std::move(scheduler),
         std::move(vhostStats),
         std::move(vhostQueueFactory),
         std::move(deviceHandlerFactory),

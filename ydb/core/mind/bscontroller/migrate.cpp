@@ -1,5 +1,6 @@
 #include "impl.h"
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/driver_lib/version/version.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER
 

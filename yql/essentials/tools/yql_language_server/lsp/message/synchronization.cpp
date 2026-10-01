@@ -1,5 +1,7 @@
 #include "synchronization.h"
 
+#include <yql/essentials/utils/json/reflection.h>
+
 namespace NLsp {
 
 bool TTextDocumentContentChangeEvent::IsIncremental() const {
@@ -17,30 +19,9 @@ JSON_DEFINE_FROM(NLsp::TVersionedTextDocumentIdentifier, json) {
     return x;
 }
 
-JSON_DEFINE_FROM(NLsp::TDidOpenTextDocumentParams, json) {
-    NLsp::TDidOpenTextDocumentParams x;
-    JSON_MOVE_FROM(json, "textDocument", x.TextDocument);
-    return x;
-}
-
-JSON_DEFINE_FROM(NLsp::TTextDocumentContentChangeEvent, json) {
-    NLsp::TTextDocumentContentChangeEvent x;
-    JSON_MOVE_FROM(json, "range", x.Range);
-    JSON_MOVE_FROM(json, "text", x.Text);
-    return x;
-}
-
-JSON_DEFINE_FROM(NLsp::TDidChangeTextDocumentParams, json) {
-    NLsp::TDidChangeTextDocumentParams x;
-    JSON_MOVE_FROM(json, "textDocument", x.TextDocument);
-    JSON_MOVE_FROM(json, "contentChanges", x.ContentChanges);
-    return x;
-}
-
-JSON_DEFINE_FROM(NLsp::TDidCloseTextDocumentParams, json) {
-    NLsp::TDidCloseTextDocumentParams x;
-    JSON_MOVE_FROM(json, "textDocument", x.TextDocument);
-    return x;
-}
+YQL_DERIVE_JSON_FROM(NLsp::TDidOpenTextDocumentParams);
+YQL_DERIVE_JSON_FROM(NLsp::TTextDocumentContentChangeEvent);
+YQL_DERIVE_JSON_FROM(NLsp::TDidChangeTextDocumentParams);
+YQL_DERIVE_JSON_FROM(NLsp::TDidCloseTextDocumentParams);
 
 } // namespace NYql::NJson

@@ -120,9 +120,30 @@
             "Match": {"Type": "Callable", "Name": "YtflowSourceMap!"}
         },
         {
+            "Name": "TYtflowTransformSourceMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowTransformSourceMap!"}
+        },
+        {
             "Name": "TYtflowTransformMap",
             "Base": "TYtflowMapBase",
             "Match": {"Type": "Callable", "Name": "YtflowTransformMap!"},
+            "Children": [
+                {"Index": 5, "Name": "GroupByColumns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TYtflowSwiftMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowSwiftMap!"},
+            "Children": [
+                {"Index": 5, "Name": "GroupByColumns", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TYtflowExtend",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowExtend!"},
             "Children": [
                 {"Index": 5, "Name": "GroupByColumns", "Type": "TCoAtomList"}
             ]

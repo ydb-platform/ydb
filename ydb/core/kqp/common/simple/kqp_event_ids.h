@@ -54,6 +54,7 @@ struct TKqpEvents {
         EvListCompileCacheQueriesResponse,
         EvWarmupComplete,
         EvStartWarmup,
+        EvCurrentQueryStats,
     };
 
     static_assert (EvCompileInvalidateRequest + 1 == EvAbortExecution);
@@ -70,7 +71,9 @@ struct TKqpExecuterEvents {
         EvStreamDataAck,
         EvTableResolveStatus,
         EvShardsResolveStatus,
-        EvDelayedExecution
+        EvDelayedExecution,
+        EvPqTopicResolveStatus,
+        EvCurrentExecutionStats,
     };
 };
 

@@ -68,6 +68,16 @@ TCompletionList TBaseLspApi::Completion(const TCompletionParams& params) const {
     throw TLspException::MethodNotFound(Method.TextDocument.Completion);
 }
 
+TDocumentDiagnosticReport TBaseLspApi::Diagnostic(TDocumentDiagnosticParams params) const {
+    Y_UNUSED(params);
+    throw TLspException::MethodNotFound(Method.TextDocument.Diagnostic);
+}
+
+TVector<TTextEdit> TBaseLspApi::Formatting(const TDocumentFormattingParams& params) const {
+    Y_UNUSED(params);
+    throw TLspException::MethodNotFound(Method.TextDocument.Formatting);
+}
+
 void TBaseLspApi::Send(NJsonRpc::TJsonRpcResponse response) const {
     Out_->Receive(std::move(response));
 }
@@ -112,6 +122,16 @@ void TBaseLspApi::Receive(NJsonRpc::TJsonRpcRequest request) {
     else if (m == Method.TextDocument.Completion) {
         auto params = Parse<TCompletionParams>(std::move(request.Params));
         execute(Completion(params));
+    }
+
+    else if (m == Method.TextDocument.Diagnostic) {
+        auto params = Parse<TDocumentDiagnosticParams>(std::move(request.Params));
+        execute(Diagnostic(params));
+    }
+
+    else if (m == Method.TextDocument.Formatting) {
+        auto params = Parse<TDocumentFormattingParams>(std::move(request.Params));
+        execute(Formatting(params));
     }
 
     else {

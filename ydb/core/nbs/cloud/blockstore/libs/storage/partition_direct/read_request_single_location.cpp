@@ -37,7 +37,7 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "Read"},
-           {"lsn", ToString(readHint.Lsn)},
+           {"pBufferKey", readHint.PBufferKey.Print()},
            {"r", request->Headers.Range.Print()},
            {"vr", readHint.VChunkRange.Print()}}))
     , VChunkConfig(vChunkConfig)
@@ -46,6 +46,7 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetReadRequestTimeout())
+    , SgList(Request->Sglist.CreateDepender())
     , ReadHint(std::move(readHint))
 {
     ReadHint.Lock.Arm();
@@ -98,7 +99,16 @@ void TReadSingleLocationRequestExecutor::StartReading()
     auto host = candidates.First();
     if (!host) {
         if (Requested == Failed) {
-            Reply(MakeError(E_REJECTED, ExtendedDebugState()));
+            TStringBuilder message;
+            message << "Read from all available hosts failed. "
+                    << ExtendedDebugState();
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s %s",
+                LogTitle.GetWithTime().c_str(),
+                message.c_str());
+            Reply(MakeError(E_REJECTED, std::move(message)));
         } else {
             LOG_DEBUG(
                 *ActorSystem,
@@ -111,7 +121,7 @@ void TReadSingleLocationRequestExecutor::StartReading()
     }
     Requested.Set(*host);
 
-    const bool fromDDisk = ReadHint.Lsn == 0;
+    const bool fromDDisk = ReadHint.PBufferKey.Lsn == 0;
 
     const size_t tryCount = Requested.Count();
     NActors::NLog::EPriority printPriority =
@@ -127,25 +137,26 @@ void TReadSingleLocationRequestExecutor::StartReading()
         "%s Will read from %s of %s, try %lu",
         LogTitle.GetWithTime().c_str(),
         fromDDisk ? "DDisk" : "PBuffer",
-        PrintHostIndex(*host).c_str(),
+        PrintHostAndNode(*host).c_str(),
         tryCount);
 
     ScheduleHedging(DirectBlockGroup->GetOracle()->GetReadHedgingDelay(
         *host,
-        ReadHint.Lsn == 0 ? EDataLocation::DDisk : EDataLocation::PBuffer));
+        ReadHint.PBufferKey.Lsn == 0 ? EDataLocation::DDisk
+                                     : EDataLocation::PBuffer));
 
     auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
                                   VChunkConfig.GetVChunkIndex(),
                                   *host,
                                   ReadHint.VChunkRange,
-                                  Request->Sglist,
+                                  SgList,
                                   TraceId)
                             : DirectBlockGroup->ReadBlocksFromPBuffer(
                                   VChunkConfig.GetVChunkIndex(),
                                   *host,
-                                  ReadHint.Lsn,
+                                  ReadHint.PBufferKey,
                                   ReadHint.VChunkRange,
-                                  Request->Sglist,
+                                  SgList,
                                   TraceId);
     future.Subscribe(
         [self = shared_from_this(), host = *host]   //
@@ -172,10 +183,10 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s %s: %s, %s",
+        "%s Response from %s: %s, %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(host).c_str(),
-        FormatError(response.Error).c_str(),
+        PrintHostAndNode(host).c_str(),
+        FormatError(response.Error).Quote().c_str(),
         ExtendedDebugState().c_str());
 
     StartReading();
@@ -203,7 +214,7 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
             NKikimrServices::NBS_PARTITION,
             "%s [!] Reply error: %s %s",
             LogTitle.GetWithTime().c_str(),
-            FormatError(error).c_str(),
+            FormatError(error).Quote().c_str(),
             ExtendedDebugState().c_str());
     } else {
         LOG_DEBUG(
@@ -215,7 +226,7 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
     }
 
     ReadHint.Lock.Disarm();
-    Request->Sglist.Close();
+    SgList.Close();
 
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
 }
@@ -309,6 +320,12 @@ TString TReadSingleLocationRequestExecutor::ExtendedDebugState() const
     result << ",r:" << Requested.Print();
     result << ",f:" << Failed.Print();
     return result;
+}
+
+TString TReadSingleLocationRequestExecutor::PrintHostAndNode(
+    THostIndex host) const
+{
+    return PrintHostAndNodeId(host, DirectBlockGroup->GetNodeId(host));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

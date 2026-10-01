@@ -1,5 +1,24 @@
+#pragma once
+
 #include "kqp_operator.h"
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+
+namespace NKikimr::NKqp {
+
+// A CBO column is named by its decimal ID, as in expression members, and
+// qualified by the relation of the CBO leaf that outputs it.
+inline TJoinColumn MakeCBOColumn(const TString& relation, TInfoUnitId id) {
+    return TJoinColumn(relation, ToString(id));
+}
+
+inline TInfoUnitId GetCBOColumnId(const TJoinColumn& column) {
+    TInfoUnitId id;
+    Y_ENSURE(TryFromString(column.AttributeName, id) && id != TUnorderedIUs::InvalidBit,
+        "CBO column " << column.RelName << "." << column.AttributeName << " is not an RBO ID");
+    return id;
+}
+
+} // namespace NKikimr::NKqp
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -37,7 +56,10 @@ struct TRBORelOptimizerNode : public TRelOptimizerNode {
 };
 
 struct TRBOProviderContext : public TKqpProviderContext {
-    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin) : TKqpProviderContext(kqpCtx, optLevel, useBlockHashJoin) {}
+    TRBOProviderContext(const TKqpOptimizeContext& kqpCtx, const int optLevel, bool useBlockHashJoin, const TColumnLineage& lineage)
+        : TKqpProviderContext(kqpCtx, optLevel, useBlockHashJoin)
+        , Lineage(lineage)
+    {}
 
     virtual bool IsJoinApplicable(
         const std::shared_ptr<IBaseOptimizerNode>& left,
@@ -46,11 +68,8 @@ struct TRBOProviderContext : public TKqpProviderContext {
         const TVector<TJoinColumn>& rightJoinKeys,
         NKqp::EJoinAlgoType joinAlgo,
         EJoinKind joinKind
-    ) override {
-        if (joinAlgo != NKqp::EJoinAlgoType::MapJoin && joinAlgo != NKqp::EJoinAlgoType::GraceJoin) {
-            return false;
-        }
-        return TKqpProviderContext::IsJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind);
-    }
+    ) override;
+
+    const TColumnLineage& Lineage;
 };
 }

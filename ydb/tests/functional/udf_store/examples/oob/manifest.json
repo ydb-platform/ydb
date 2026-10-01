@@ -1,0 +1,29 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Oob",
+  "module_extension": "wasm",
+  "required_libraries": [],
+  "functions": [
+    {
+      "name": "crash",
+      "argument_types": [],
+      "result_type": "Optional<Int64>"
+    },
+    {
+      "name": "bad_index",
+      "argument_types": [],
+      "result_type": "Optional<Int64>"
+    },
+    {
+      "name": "null_deref",
+      "argument_types": [],
+      "result_type": "Optional<Int64>"
+    },
+    {
+      "name": "bad_ref",
+      "argument_types": [],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

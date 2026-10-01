@@ -10,7 +10,7 @@ LIBRARY()
 NO_COMPILER_WARNINGS()
 
 ADDINCL(
-    GLOBAL ydb/library/nmslib/include
+    ydb/library/nmslib/include
 )
 
 SRCS(

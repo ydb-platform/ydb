@@ -240,8 +240,16 @@ private:
             {"count", nShardScans},
             {"traceId", TraceId()});
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
-        ExecuteScanTx();
+        ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::ScanExecuterRunTasks,
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Run tasks",
+                .Phase = "RunTasks",
+                .Component = "DqExecution",
+            }, NWilson::EFlags::AUTO_END);
+
+        if (!ExecuteScanTx()) {
+            return;
+        }
 
         if (CheckExecutionComplete()) {
             return;
@@ -257,24 +265,21 @@ public:
         AlreadyReplied = true;
 
         ResponseEv->Record.MutableResponse()->SetStatus(Ydb::StatusIds::SUCCESS);
+        EndQueryTraceSpan(ExecuterStateSpan, Ydb::StatusIds::SUCCESS);
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, ResponseEv->ResultsSize());
-
-        if (ExecuterSpan) {
-            ExecuterSpan.EndOk();
-        }
 
         PassAway();
     }
 
 private:
-    void ExecuteScanTx() {
-
+    [[nodiscard]] bool ExecuteScanTx() {
         if (!BuildPlannerAndSubmitTasks()) {
-            return;
+            return false;
         }
 
         LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, Planner->GetUnassignedTasksCount(), Planner->GetUnassignedTasksCount());
+        return true;
     }
 
 private:

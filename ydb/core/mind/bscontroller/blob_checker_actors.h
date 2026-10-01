@@ -2,6 +2,9 @@
 
 #include "defs.h"
 
+#include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/base/logoblob.h>
+
 #include <unordered_map>
 
 namespace NKikimr {

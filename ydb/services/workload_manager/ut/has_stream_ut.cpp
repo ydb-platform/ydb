@@ -104,9 +104,9 @@ Y_UNIT_TEST_SUITE(TQueryClassifierStreamingAlwaysPostClassify) {
             {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
         });
         TClassifyContext ctx{.PoolId = "", .AppName = "", .UserToken = nullptr};
-        auto classifier = CreateQueryClassifier(poolSnap, TClassifierConfigsView{}, TEST_DB, std::move(ctx));
+        auto classifier = CreateQueryClassifier(poolSnap, TClassifierConfigsView{}, TEST_DB, std::move(ctx), std::nullopt);
 
-        NKqp::TUserRequestContext userRequestContext;
+        NKqp::TUserRequestContext userRequestContext{};
         userRequestContext.IsStreamingQuery = true;
         auto result = classifier->PreCompileClassify(userRequestContext);
         UNIT_ASSERT_VALUES_EQUAL(GetPoolId(result), "default");
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierStreamingAlwaysPostClassify) {
         });
         TClassifyContext ctx{.PoolId = "explicit_pool", .AppName = "", .UserToken = nullptr};
         auto classifier = CreateQueryClassifier(
-            poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
+            poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx), std::nullopt);
 
         NKqp::TUserRequestContext userRequestContext;
         userRequestContext.IsStreamingQuery = true;

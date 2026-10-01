@@ -136,11 +136,17 @@ class QuerySessionPool:
         self._current_size += 1
         try:
             session = await self._create_new_session()
-        except Exception as e:
+        except Exception:
             # TODO: this exception could be retried via retrier, so no need to log error here. Probably we should retry this right in create_new_session method.
             logger.warning("Failed to create new session")
             self._current_size -= 1
-            raise e
+            raise
+        except BaseException:
+            # asyncio.CancelledError does not derive from Exception, so without this
+            # branch a task cancelled while its session is being created would leave
+            # _current_size incremented forever and permanently lose a pool slot.
+            self._current_size -= 1
+            raise
 
         return session
 
@@ -219,6 +225,7 @@ class QuerySessionPool:
         parameters: Optional[dict] = None,
         retry_settings: Optional[RetrySettings] = None,
         *args,
+        pool_id: Optional[str] = None,
         **kwargs,
     ) -> List[convert.ResultSet]:
         """Special interface to execute a one-shot queries in a safe, retriable way.
@@ -228,6 +235,7 @@ class QuerySessionPool:
         :param query: A query, yql or sql text.
         :param parameters: dict with parameters and YDB types;
         :param retry_settings: RetrySettings object.
+        :param pool_id: Optional resource pool ID for routing the query to a specific resource pool.
 
         :return: Result sets or exception in case of execution errors.
         """
@@ -236,7 +244,7 @@ class QuerySessionPool:
 
         async def wrapped_callee():
             async with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
-                it = await session.execute(query, parameters, *args, **kwargs)
+                it = await session.execute(query, parameters, *args, pool_id=pool_id, **kwargs)
                 return await convert.aggregate_result_sets_by_index_async(it)
 
         return await retry_operation_async(wrapped_callee, retry_settings)

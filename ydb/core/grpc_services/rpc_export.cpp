@@ -19,6 +19,8 @@
 #include <util/generic/ptr.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -246,7 +248,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         paths.emplace_back(this->GetDatabaseName()); // first entry is database
         paths.emplace_back(CommonSourcePath); // second entry is common source path
         for (const auto& item : TTraits::GetItems(settings)) {
-            TString userSpecifiedPath = CanonizePath(item.source_path());
+            TString userSpecifiedPath = CanonizePath(
+                this->Request->NormalizePath(item.source_path()));
             TString fullPath;
             if (HasCommonSourcePathPrefix(userSpecifiedPath) || userSpecifiedPath == CommonSourcePath) {
                 fullPath = userSpecifiedPath; // Full path
@@ -344,8 +347,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
 
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (request->ResultSet.empty()) {
             return this->Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
@@ -488,7 +494,10 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             }
 
             if (!entry.DomainInfo) {
-                LOG_E("Got empty domain info");
+                YDB_LOG_ERROR("Got empty domain info",
+                    {"logPrefix", GetLogPrefix()},
+                    {"selfId", this->SelfId()},
+                    {"txId", this->TxId});
                 return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
             }
 
@@ -511,8 +520,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void Handle(TEvExport::TEvCreateExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record.GetResponse();
 
-        LOG_D("Handle TEvExport::TEvCreateExportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvExport::TEvCreateExportResponse",
+            {"logPrefix", GetLogPrefix()},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
+            {"record", record.ShortDebugString()});
 
         this->Reply(TExportConv::ToOperation(record.GetEntry()));
     }
@@ -520,7 +532,9 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
         if constexpr (TTraits::HasSourcePath) {
-            CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
+            // /Foo/Bar, but empty result for empty source_path
+            CommonSourcePath = CanonizePath(
+                this->Request->NormalizePath(settings.source_path()));
         }
         if (CommonSourcePath.empty()) {
             CommonSourcePath = CanonizePath(this->GetDatabaseName());

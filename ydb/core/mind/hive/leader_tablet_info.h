@@ -75,6 +75,7 @@ public:
     bool WasAliveSinceCutHistory = true;
     NKikimrHive::TEvReassignTablet::EHiveReassignReason ChannelProfileReassignReason;
     ui32 KnownGeneration;
+    ui32 ConfirmedStorageVersion;
     TTabletCategoryInfo* Category;
     TList<TFollowerGroup> FollowerGroups;
     TList<TFollowerTabletInfo> Followers;
@@ -98,6 +99,7 @@ public:
         , ObjectId(0, 0)
         , ChannelProfileReassignReason(NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO)
         , KnownGeneration(0)
+        , ConfirmedStorageVersion(0)
         , Category(nullptr)
         , BootMode(NKikimrHive::TABLET_BOOT_MODE_DEFAULT)
         , PendingUnlockSeqNo(0)
@@ -108,11 +110,21 @@ public:
     }
 
     bool IsReadyToWork() const {
-        return !NeedToReleaseFromParent && State == ETabletState::ReadyToWork && !IsBootingSuppressed();
+        return !NeedToReleaseFromParent
+            && State == ETabletState::ReadyToWork
+            && !HasUnconfirmedStorage()
+            && !IsBootingSuppressed();
     }
 
     bool IsReadyToBlockStorage() const {
         return State == ETabletState::BlockStorage;
+    }
+
+    bool HasUnconfirmedStorage() const {
+        return State == ETabletState::BlockStorage
+            || (ConfirmedStorageVersion != Max<ui32>()
+                && TabletStorageInfo
+                && ConfirmedStorageVersion < TabletStorageInfo->Version);
     }
 
     bool IsDeleting() const {
@@ -298,6 +310,8 @@ public:
         return SetLockedToActor(TActorId(), TDuration());
     }
 
+    void RestoreLockedTabletMetrics();
+
     void ActualizeTabletStatistics(TInstant now);
 
     void ResetTabletGroupsRequests() {
@@ -320,7 +334,7 @@ public:
     void ReleaseAllocationUnits();
     bool AcquireAllocationUnit(ui32 channelId);
     bool ReleaseAllocationUnit(ui32 channelId);
-    const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* FindFreeAllocationUnit(ui32 channelId);
+    const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* FindFreeAllocationUnit(ui32 channelId);
     TString GetChannelStoragePoolName(const TTabletChannelInfo& channel) const;
     TString GetChannelStoragePoolName(const TChannelProfiles::TProfile::TChannel& channel) const;
     TString GetChannelStoragePoolName(ui32 channelId) const;

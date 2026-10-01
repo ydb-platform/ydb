@@ -301,8 +301,64 @@ private:
     const bool WithFinalStageRules;
 };
 
+struct TValidateStreamingConstraintsInfo {
+    const bool ValidateCheckpoints = true;
+    TNodeMap<bool> VisitedNodes;
+    bool HasErrors = false;
+    TExprContext& Ctx;
+
+    void ValidateCheckpointsUsage(const TExprNode::TPtr& node) {
+        if (!ValidateCheckpoints) {
+            return;
+        }
+
+        const auto& name = node->Content();
+        if (!node->GetConstraint<TStreamingConstraintNode>()) {
+            // Sanity check, that all checkpointed callables are used in streaming context
+            if (CheckpointCallables.contains(name)) {
+                HasErrors = true;
+                YQL_CLOG(WARN, ProviderKqp) << "Found checkpointed callable in non streaming context: " << KqpExprToPrettyString(*node, Ctx);
+                Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Callable with checkpoints: '" << node->Content() << "' cannot be used outside streaming context"));
+            }
+            return;
+        }
+
+        if (!UnsupportedCheckpointsCallables.contains(name)) {
+            return;
+        }
+
+        HasErrors = true;
+        YQL_CLOG(WARN, ProviderKqp) << "Found streaming processing node incompatible with checkpoints: " << KqpExprToPrettyString(*node, Ctx);
+
+        if (name == "Take"sv || name == "Limit"sv) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), "Checkpoints are not supported for LIMIT operator, query may produce unstable results"));
+        } else if (name == "Skip"sv) {
+            Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), "Checkpoints are not supported for OFFSET operator, query may produce unstable results"));
+        } else {
+            Ctx.AddError(TIssue(Ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing with checkpoints: '" << node->Content() << "'"));
+        }
+    }
+
+private:
+    // Callables which passes streaming constraints but incompatible with checkpoints
+    inline static const std::unordered_set<std::string_view> UnsupportedCheckpointsCallables = {
+        TCoSkip::CallableName(), TCoTake::CallableName(), TCoLimit::CallableName(),
+        "TakeWhile"sv, "SkipWhile"sv, "TakeWhileInclusive"sv, "SkipWhileInclusive"sv,
+        "WideTakeWhile"sv, "WideSkipWhile"sv, "WideTakeWhileInclusive"sv, "WideSkipWhileInclusive"sv,
+        TCoPruneAdjacentKeys::CallableName(), TCoPruneKeys::CallableName(),
+        TCoMapNext::CallableName(), TCoChain1Map::CallableName(), "WideChain1Map"sv
+    };
+
+    // Callables for which will be unconditionally allocated checkpoint storage slot
+    inline static const std::unordered_set<std::string_view> CheckpointCallables = {
+        TCoMultiHoppingCore::CallableName(), "TimeOrderRecover"sv, "MatchRecognizeCore"sv
+    };
+};
+
 // Validate that infinite sources handled only by supported functions
-bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<bool>& visitedNodes, bool& hasErrors, TExprContext& ctx) {
+bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TValidateStreamingConstraintsInfo& info) {
+    auto& visitedNodes = info.VisitedNodes;
+    auto& hasErrors = info.HasErrors;
     if (const auto [it, inserted] = visitedNodes.emplace(node.Get(), false); !inserted || hasErrors) {
         return it->second;
     }
@@ -311,7 +367,7 @@ bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<
 
     // Validate that all sub-nodes are not streaming
     for (const auto& child : node->Children()) {
-        if (ValidateStreamingConstraintsInternal(child, visitedNodes, hasErrors, ctx)) {
+        if (ValidateStreamingConstraintsInternal(child, info)) {
             isStreaming = true;
         }
         if (hasErrors) {
@@ -319,25 +375,30 @@ bool ValidateStreamingConstraintsInternal(const TExprNode::TPtr& node, TNodeMap<
         }
     }
 
-    if (node->IsCallable() && !node->GetConstraint<TStreamingConstraintNode>() && isStreaming && !hasErrors) {
-        hasErrors = true;
-        YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing: '" << node->Content() << "'"));
+    if (node->IsCallable() && !hasErrors) {
+        if (isStreaming && !node->GetConstraint<TStreamingConstraintNode>()) {
+            auto& ctx = info.Ctx;
+            hasErrors = true;
+            YQL_CLOG(WARN, ProviderKqp) << "Found invalid streaming processing node: " << KqpExprToPrettyString(*node, ctx);
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unsupported callable for streaming processing: '" << node->Content() << "'"));
+        } else {
+            info.ValidateCheckpointsUsage(node);
+        }
     }
 
     return visitedNodes[node.Get()] = isStreaming;
 }
 
-bool ValidateStreamingConstraints(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, TExprContext& ctx) {
-    TNodeMap<bool> visitedNodes;
-    bool hasErrors = false;
-    ValidateStreamingConstraintsInternal(tx.Stages().Ptr(), visitedNodes, hasErrors, ctx);
-    ValidateStreamingConstraintsInternal(tx.Results().Ptr(), visitedNodes, hasErrors, ctx);
+bool ValidateStreamingConstraints(ui64 txIdx, const TKqpPhysicalTx& tx, THashSet<std::pair<ui64, ui64>>& streamingTxResults, bool validateCheckpoints, TExprContext& ctx) {
+    TValidateStreamingConstraintsInfo info = {.ValidateCheckpoints = validateCheckpoints, .Ctx = ctx};
+    ValidateStreamingConstraintsInternal(tx.Stages().Ptr(), info);
+    ValidateStreamingConstraintsInternal(tx.Results().Ptr(), info);
 
-    if (hasErrors) {
+    if (info.HasErrors) {
         return false;
     }
 
+    const auto& visitedNodes = info.VisitedNodes;
     for (size_t i = 0; i < tx.Results().Size(); ++i) {
         const auto it = visitedNodes.find(tx.Results().Item(i).Raw());
         YQL_ENSURE(it != visitedNodes.end(), "Result " << i << " of tx " << txIdx << " is not visited during streaming constraints validation");
@@ -679,6 +740,7 @@ class TKqpTxsPeepholeTransformer : public TSyncTransformerBase {
 public:
     TKqpTxsPeepholeTransformer(TTypeAnnotationContext& typesCtx, TKikimrConfiguration::TPtr config)
         : ValidateConstraints(config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false) && config->OptValidateStreamingConstraints.Get().GetOrElse(true))
+        , ValidateCheckpointsUsage(config->OptValidateStreamingCheckpoints.Get().GetOrElse(true) && !config->DisableCheckpoints.Get().GetOrElse(false))
     {
         TxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
@@ -742,7 +804,7 @@ private:
         }
 
         TKqpPhysicalTx physicalTx(expr);
-        if (ValidateConstraints && !ValidateStreamingConstraints(txIdx, physicalTx, streamingTxResults, ctx)) {
+        if (ValidateConstraints && !ValidateStreamingConstraints(txIdx, physicalTx, streamingTxResults, ValidateCheckpointsUsage, ctx)) {
             return {};
         }
 
@@ -751,6 +813,7 @@ private:
 
     TAutoPtr<IGraphTransformer> TxTransformer;
     const bool ValidateConstraints = false;
+    const bool ValidateCheckpointsUsage = false;
 };
 
 } // anonymous namespace

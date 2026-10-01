@@ -21,13 +21,19 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+{% if backend_name == "YDB" and oss == true %}
+
+You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
+
+{% endif %}
+
 Parameters for all index types:
 
-* - maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
+* maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
 
-- If the parameter is not specified, the default value `32` or `MaxBuildIndexShardsInFlight` is currently used, whichever is smaller. `MaxBuildIndexShardsInFlight` defaults to `1000`. In future versions, the default parallelism selection logic may change.
-- You can set a lower limit to reduce the impact of index building on database performance.
-- You can also set a higher limit to speed up index building if you have sufficient hardware resources.
+  - If the parameter is not specified, the default value `32` or `MaxBuildIndexShardsInFlight` is currently used, whichever is smaller. `MaxBuildIndexShardsInFlight` defaults to `1000`. In future versions, the default parallelism selection logic may change.
+  - You can set a lower limit to reduce the impact of index building on database performance.
+  - You can also set a higher limit to speed up index building if you have enough hardware resources.
 
 Parameters specific to vector indexes:
 
@@ -47,15 +53,13 @@ Parameters specific to full-text indexes:
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
-{% if backend_name == "YDB" and oss == true %}
+### Parameters of the local min_max index {#local-min-max}
 
-You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
-
-{% endif %}
+{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), via `ADD INDEX`, [only local bloom indexes are supported](#local-bloom).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), only local indexes are supported via `ADD INDEX`: [bloom index](#local-bloom) and [min_max index](#local-min-max).
 
 Features of local bloom indexes:
 
@@ -64,6 +68,16 @@ Features of local bloom indexes:
 {% note info "Limitations" %}
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
+
+Features of the local min_max index:
+
+{% include [min_max_index_features.md](../_includes/min_max_index_features.md) %}
+
+{% note info "Limitations" %}
+
+{% include [min_max_index_limitations.md](../_includes/min_max_index_limitations.md) %}
 
 {% endnote %}
 
@@ -136,16 +150,29 @@ ALTER TABLE `/Root/Table`
     false_positive_probability = 0.01,
     case_sensitive = true
   );
+```
 
-# # Changing index parameters {#alter-index}
 
-Индексы имеют параметры, зависящие от типа, которые можно настраивать. Глобальные индексы, [синхронные](yfmvar-0-yfmvarend#sync) или [асинхронные](yfmvar-1-yfmvarend#async), реализованы в виде скрытых таблиц, и их параметры автоматического партиционирования и реплик можно регулировать так же, как и настройки обычных таблиц.
+min_max index:
+
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_created_at LOCAL USING min_max
+  ON (created_at);
+```
+
+
+## Changing index parameters {#alter-index}
+
+Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
 
 {% note info %}
 
-В настоящее время задание настроек партиционирования вторичных индексов при создании индекса не поддерживается ни в операторе [`ALTER TABLE ADD INDEX`](#add-index), ни в операторе [`CREATE TABLE INDEX`](../create_table/secondary_index.md).
+Currently, setting partitioning parameters for secondary indexes when creating an index is not supported either in the [`ALTER TABLE ADD INDEX`](#add-index) statement or in the [`CREATE TABLE INDEX`](../create_table/secondary_index.md) statement.
 
 {% endnote %}
+
 
 ```yql
 ALTER TABLE <table_name> ALTER INDEX <index_name> SET <setting_name> <value>;
@@ -169,6 +196,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
     * `FALSE_POSITIVE_PROBABILITY`
     * `NGRAM_SIZE` and `CASE_SENSITIVE` (only for `bloom_ngram_filter`)
+  * The min_max index does not support `ALTER INDEX`.
 
 {% note info %}
 

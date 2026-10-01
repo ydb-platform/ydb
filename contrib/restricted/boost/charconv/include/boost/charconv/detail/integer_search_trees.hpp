@@ -32,7 +32,7 @@ BOOST_CHARCONV_CXX14_CONSTEXPR int num_digits(T x) noexcept
 }
 
 template <>
-BOOST_CHARCONV_CXX14_CONSTEXPR int num_digits(std::uint32_t x) noexcept
+BOOST_CHARCONV_HOST_DEVICE BOOST_CHARCONV_CXX14_CONSTEXPR int num_digits(std::uint32_t x) noexcept
 {
     if (x >= UINT32_C(10000))
     {
@@ -76,7 +76,7 @@ BOOST_CHARCONV_CXX14_CONSTEXPR int num_digits(std::uint32_t x) noexcept
 }
 
 template <>
-BOOST_CHARCONV_CXX14_CONSTEXPR int num_digits(std::uint64_t x) noexcept
+BOOST_CHARCONV_HOST_DEVICE BOOST_CHARCONV_CXX14_CONSTEXPR int num_digits(std::uint64_t x) noexcept
 {
     if (x >= UINT64_C(10000000000))
     {

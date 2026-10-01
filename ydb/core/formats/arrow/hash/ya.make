@@ -6,10 +6,7 @@ PEERDIR(
     ydb/core/formats/arrow/switch
     ydb/library/actors/core
     ydb/library/services
-    ydb/library/actors/protos
     ydb/library/formats/arrow/hash
-    ydb/library/formats/arrow/common
-    ydb/library/formats/arrow/simple_builder
 )
 
 SRCS(

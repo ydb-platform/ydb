@@ -405,8 +405,8 @@ std::vector<TCell> MakeTestCells(const std::vector<TTypeInfo>& types, ui32 value
     return cells;
 }
 
-TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options,
-    const std::set<std::string>& notNullColumns) {
+TString MakeTestBlobValues(const std::vector<ui64>& values, const std::vector<NArrow::NTest::TTestColumn>& columns,
+    const TTestBlobOptions& options, const std::set<std::string>& notNullColumns) {
     NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME, notNullColumns);
     const auto startStatus = batchBuilder.Start(NArrow::NTest::TTestColumn::ConvertToPairs(columns));
     UNIT_ASSERT_C(startStatus.ok(), startStatus.ToString());
@@ -422,20 +422,8 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
 
     std::vector<TString> mem;
     std::vector<TTypeInfo> types = TTestSchema::ExtractTypes(columns);
-    // insert, not ordered
-    for (size_t i = range.first; i < range.second; i += 2) {
-        std::vector<TCell> cells = MakeTestCells(types, i, mem);
-        for (auto& pos : nullPositions) {
-            cells[pos] = TCell();
-        }
-        for (auto& pos : samePositions) {
-            cells[pos] = MakeTestCell(types[pos], options.SameValue, mem);
-        }
-        NKikimr::TDbTupleRef unused;
-        batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), types.size()));
-    }
-    for (size_t i = range.first + 1; i < range.second; i += 2) {
-        std::vector<TCell> cells = MakeTestCells(types, i, mem);
+    for (ui64 value : values) {
+        std::vector<TCell> cells = MakeTestCells(types, value, mem);
         for (auto& pos : nullPositions) {
             cells[pos] = TCell();
         }
@@ -454,6 +442,19 @@ TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTes
     TString blob = batchBuilder.Finish();
     UNIT_ASSERT(!blob.empty());
     return blob;
+}
+
+TString MakeTestBlob(std::pair<ui64, ui64> range, const std::vector<NArrow::NTest::TTestColumn>& columns, const TTestBlobOptions& options,
+    const std::set<std::string>& notNullColumns) {
+    std::vector<ui64> values;
+    values.reserve(range.second > range.first ? range.second - range.first : 0);
+    for (ui64 i = range.first; i < range.second; i += 2) {
+        values.push_back(i);
+    }
+    for (ui64 i = range.first + 1; i < range.second; i += 2) {
+        values.push_back(i);
+    }
+    return MakeTestBlobValues(values, columns, options, notNullColumns);
 }
 
 TSerializedTableRange MakeTestRange(
@@ -638,16 +639,16 @@ NTxUT::TPlanStep SetupSchema(
     using namespace NTxUT;
     TString txBody;
     auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
-    if (table.InStore) {
-        txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
-    } else {
+    if (table.Standalone) {
         txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
+    } else {
+        txBody = TTestSchema::CreateInitShardTxBody(pathId, false, table.Schema, table.Pk, specials);
     }
     return SetupSchema(runtime, sender, txBody, txId);
 }
 
-NTxUT::TPlanStep PrepareTablet(
-    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
+NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema,
+    const ui32 keySize, const bool standalone) {
     using namespace NTxUT;
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -655,7 +656,7 @@ NTxUT::TPlanStep PrepareTablet(
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     runtime.DispatchEvents(options);
 
-    TestTableDescription tableDescription;
+    TestTableDescription tableDescription{ .Standalone = standalone };
     tableDescription.Schema = schema;
     tableDescription.Pk = {};
     for (ui64 i = 0; i < keySize; ++i) {
@@ -664,18 +665,6 @@ NTxUT::TPlanStep PrepareTablet(
     }
     TActorId sender = runtime.AllocateEdgeActor();
     return SetupSchema(runtime, sender, tableId, tableDescription);
-}
-
-NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody) {
-    using namespace NTxUT;
-    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
-
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
-    runtime.DispatchEvents(options);
-
-    TActorId sender = runtime.AllocateEdgeActor();
-    return SetupSchema(runtime, sender, schemaTxBody, 100);
 }
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(

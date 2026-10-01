@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/protos/blob_checker.pb.h>
+#include <ydb/core/base/logoblob.h>
 
 namespace NKikimr {
 namespace NBsController {

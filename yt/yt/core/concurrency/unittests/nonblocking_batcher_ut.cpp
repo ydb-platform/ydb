@@ -73,6 +73,35 @@ TEST(TNonblockingBatcherTest, Duration)
     ASSERT_EQ(WaitForFast(e2).ValueOrThrow(), std::vector<int>({2, 3}));
 }
 
+TEST(TNonblockingBatcherTest, UpdateSettingsShortensActiveTimer)
+{
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), TDuration::Days(365));
+    batcher->Enqueue(1);
+    auto batch = batcher->DequeueBatch();
+    ASSERT_FALSE(batch.IsSet());
+
+    Sleep(Quantum * 2);
+    batcher->UpdateSettings(Quantum, TBatchSizeLimiter(2), false);
+
+    Sleep(Quantum / 2);
+    ASSERT_TRUE(batch.IsSet());
+    ASSERT_EQ(WaitForFast(batch).ValueOrThrow(), std::vector<int>({1}));
+}
+
+TEST(TNonblockingBatcherTest, UpdateBatchDurationShortensActiveTimer)
+{
+    auto batcher = New<TNonblockingBatcher<int>>(TBatchSizeLimiter(2), TDuration::Days(365));
+    batcher->Enqueue(1);
+    auto batch = batcher->DequeueBatch();
+    ASSERT_FALSE(batch.IsSet());
+
+    batcher->UpdateBatchDuration(TDuration::MilliSeconds(10));
+
+    Sleep(Quantum);
+    ASSERT_TRUE(batch.IsSet());
+    ASSERT_EQ(WaitForFast(batch).ValueOrThrow(), std::vector<int>({1}));
+}
+
 TEST(TNonblockingBatcherTest, Dequeue)
 {
     auto timeout = Quantum;

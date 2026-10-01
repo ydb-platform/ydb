@@ -1,16 +1,10 @@
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from functools import update_wrapper
 from threading import Lock
-from typing import ContextManager, TypeVar, overload
-
-if sys.version_info >= (3, 10):
-    from typing import ParamSpec
-else:
-    from typing_extensions import ParamSpec
+from typing import ContextManager, ParamSpec, TypeVar, overload
 
 P = ParamSpec("P")
 T = TypeVar("T")

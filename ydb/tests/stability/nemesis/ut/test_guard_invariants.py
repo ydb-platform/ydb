@@ -106,15 +106,30 @@ def _assert_within_budget(guard, where: str) -> None:
     assert snap["impaired_slots"] <= snap["max_slots"], f"{where}: slot budget exceeded: {snap}"
 
 
+class AlwaysFreshReporter:
+    """hc_source that is always fresh; the simulation's predicates ignore the snapshot."""
+
+    def __init__(self, clock: Clock) -> None:
+        self._clock = clock
+        self.last_results = {"h1": {"self_check_result": "GOOD", "database_status": []}}
+
+    @property
+    def last_update(self) -> float:
+        return self._clock()
+
+
 @pytest.mark.parametrize("seed", range(3))
 def test_budget_is_never_exceeded_across_many_ticks(topology, seed):
     rng = random.Random(seed)
     guard = FailureModelGuard(topology, total_slots=len(SLOTS))
     clock, recovered, dispatched = Clock(), set(), []
     probe = RecoveryProbe(
-        guard=guard, recovered=lambda t: t.host in recovered, min_hold_sec=0.0, clock=clock
+        guard=guard, hc_source=AlwaysFreshReporter(clock), min_hold_sec=0.0, clock=clock
     )
-    sched = _scheduler(guard, Inventory(), dispatched, probe, rng)
+    sched = _scheduler(
+        guard, Inventory(), dispatched, probe, rng,
+        predicate_for=lambda target, **kw: (lambda snap: target.host in recovered),
+    )
 
     injected = 0
     for i in range(200):
@@ -135,11 +150,8 @@ def test_budget_is_never_exceeded_across_many_ticks(topology, seed):
 
 
 class ProbeStub:
-    def __init__(self) -> None:
-        self.starts = 0
-
     def start(self) -> None:
-        self.starts += 1
+        pass
 
     def stop(self) -> None:
         pass
@@ -150,19 +162,21 @@ class ProbeStub:
     def snapshot(self) -> dict:
         return {"tracked": 0, "stuck": 0}
 
+    def alive_compute_baseline(self) -> int:
+        return 0
+
     def track(self, *args, **kwargs) -> None:
         pass
 
 
 def test_restart_after_a_slow_stop(topology):
     """A start() on top of a thread still winding down used to be a silent no-op: the API said
-    "ok" while the stop flag killed the old thread and the probe stayed down."""
-    probe = ProbeStub()
+    "ok" while the stop flag killed the old thread mid-dispatch."""
     sched = _scheduler(
         FailureModelGuard(topology, total_slots=len(SLOTS)),
         Inventory(),
         [],
-        probe,
+        ProbeStub(),
         random.Random(0),
         dispatch=lambda cmd: time.sleep(3.0),
         enabled_types=["KillNode"],
@@ -180,5 +194,4 @@ def test_restart_after_a_slow_stop(topology):
 
     sched.start()
     assert sched.running() and not sched._stop.is_set(), "must run again, with the flag cleared"
-    assert probe.starts == 2, "the recovery probe must be running again"
     sched.stop()

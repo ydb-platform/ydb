@@ -11,6 +11,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -99,7 +100,7 @@ struct TRequestCreatePQ {
         const TVector<TString>& readRules = {"user"},
         const TVector<TString>& important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
-        ui64 sourceIdMaxCount = 6000000,
+        ui64 sourceIdMaxCount = NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts(),
         ui64 sourceIdLifetime = 86400,
         std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     )
@@ -487,6 +488,7 @@ struct TPQTestClusterInfo {
     TString Balancer;
     bool Enabled;
     ui64 Weight = 1000;
+    bool IsFnx = false;
 };
 
 static THashMap<TString, TPQTestClusterInfo> DEFAULT_CLUSTERS_LIST = {
@@ -506,6 +508,9 @@ private:
     const ui16 GRpcPort;
     NClient::TKikimr Kikimr;
     THolder<NYdb::TDriver> Driver;
+    // Authenticated driver for Topic/PQv1 schema ops. Main Driver stays
+    // unauthenticated: FullInit YQL and many UTs rely on that.
+    THolder<NYdb::TDriver> AdminDriver;
     std::unique_ptr<NKikimrClient::TGRpcServer::Stub> Stub;
 
     ui64 TopicsVersion = 0;
@@ -550,6 +555,21 @@ public:
         return rs;
     }
 
+    TMaybe<NYdb::TResultSet> TryRunYqlDataQuery(TString query) {
+        auto tableClient = NYdb::NTable::TTableClient(*Driver);
+        auto sessionResult = tableClient.CreateSession().GetValueSync();
+        if (!sessionResult.IsSuccess()) {
+            return Nothing();
+        }
+        auto qr = sessionResult.GetSession().ExecuteDataQuery(
+            query,
+            NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+        if (!qr.IsSuccess() || qr.GetResultSets().empty()) {
+            return Nothing();
+        }
+        return qr.GetResultSet(0);
+    }
+
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query) {
         NYdb::TParamsBuilder builder;
         return RunYqlDataQueryWithParams(query, builder.Build());
@@ -563,12 +583,19 @@ public:
         , Kikimr(GetClientConfig())
     {
         TString endpoint = TStringBuilder() << "localhost:" << GRpcPort;
+        const TString database = databaseName ? *databaseName : TString("/Root");
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(endpoint)
+            .SetDatabase(database)
             .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
-        if (databaseName)
-            driverConfig.SetDatabase(*databaseName);
         Driver.Reset(MakeHolder<NYdb::TDriver>(driverConfig));
+
+        auto adminDriverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase(database)
+            .SetAuthToken(BUILTIN_ACL_ROOT)
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        AdminDriver.Reset(MakeHolder<NYdb::TDriver>(adminDriverConfig));
 
         grpc::ChannelArguments args;
         if (settings.GrpcMaxMessageSize != 0)
@@ -584,6 +611,7 @@ public:
     }
 
     ~TFlatMsgBusPQClient() {
+        AdminDriver->Stop(true);
         Driver->Stop(true);
     }
 
@@ -662,7 +690,7 @@ public:
         MkDir("/Root/PQ", "Config");
         MkDir("/Root/PQ/Config", "V2");
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE `/Root/PQ/Config/V2/Cluster` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Cluster` (
                 name Utf8,
                 balancer Utf8,
                 local Bool,
@@ -670,7 +698,7 @@ public:
                 weight Uint64,
                 PRIMARY KEY (name)
             );
-            CREATE TABLE `/Root/PQ/Config/V2/Topics` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Topics` (
                 path Utf8,
                 dc Utf8,
                 PRIMARY KEY (path, dc)
@@ -678,7 +706,7 @@ public:
         )___");
 
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE `/Root/PQ/Config/V2/Versions` (
+            CREATE TABLE IF NOT EXISTS `/Root/PQ/Config/V2/Versions` (
                 name Utf8,
                 version Int64,
                 PRIMARY KEY (name)
@@ -714,6 +742,7 @@ public:
             UNIT_ASSERT_EQUAL(info.Balancer, trackerInfo.Balancer);
             UNIT_ASSERT_EQUAL(info.Enabled, trackerInfo.IsEnabled);
             UNIT_ASSERT_EQUAL(info.Weight, trackerInfo.Weight);
+            UNIT_ASSERT_EQUAL(info.IsFnx, trackerInfo.IsFnx);
         };
 
         TInstant now = TInstant::Now();
@@ -790,6 +819,31 @@ public:
             )___", name.c_str(), (local ? "true" : "false"), (enabled ? "true" : "false"));
 
         RunYqlDataQuery(query);
+    }
+
+    void UpsertCluster(
+        const TString& name,
+        const TString& balancer,
+        bool local,
+        bool enabled,
+        ui64 weight)
+    {
+        TStringBuilder query;
+        query << "UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight) VALUES (\""
+              << name << "\", \"" << balancer << "\", " << (local ? "true" : "false") << ", "
+              << (enabled ? "true" : "false") << ", " << weight << ");\n"
+              << "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) "
+              << "SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == \"Cluster\";";
+        RunYqlDataQuery(TString(query));
+    }
+
+    void UpsertBalancer(const TString& name, const TString& clustersCsv, i64 version = 1) {
+        TStringBuilder query;
+        query << "UPSERT INTO `/Root/PQ/Config/V2/Balancer` (name, clusters) VALUES (\""
+              << name << "\", \"" << clustersCsv << "\");\n"
+              << "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES (\"Balancer\", "
+              << version << ");";
+        RunYqlDataQuery(TString(query));
     }
 
     void DisableDC() {
@@ -980,12 +1034,227 @@ public:
         } while (true);
     }
 
+    TString ResolveTopicSdkPath(const TString& name) const {
+        if (UseConfigTables && !name.StartsWith("/Root")) {
+            return TopicPrefix + name;
+        }
+        return name;
+    }
+
+    static NYdb::NTopic::EAutoPartitioningStrategy ConvertPartitionStrategyType(
+        NKikimrPQ::TPQTabletConfig::TPartitionStrategyType type)
+    {
+        using NKikimrPQ::TPQTabletConfig;
+        switch (type) {
+            case TPQTabletConfig::CAN_SPLIT:
+                return NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp;
+            case TPQTabletConfig::CAN_SPLIT_AND_MERGE:
+                return NYdb::NTopic::EAutoPartitioningStrategy::ScaleUpAndDown;
+            case TPQTabletConfig::PAUSED:
+                return NYdb::NTopic::EAutoPartitioningStrategy::Paused;
+            default:
+                return NYdb::NTopic::EAutoPartitioningStrategy::Disabled;
+        }
+    }
+
+    static Ydb::PersQueue::V1::AutoPartitioningStrategy ConvertPartitionStrategyTypePq(
+        NKikimrPQ::TPQTabletConfig::TPartitionStrategyType type)
+    {
+        using NKikimrPQ::TPQTabletConfig;
+        switch (type) {
+            case TPQTabletConfig::CAN_SPLIT:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP;
+            case TPQTabletConfig::CAN_SPLIT_AND_MERGE:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP_AND_DOWN;
+            case TPQTabletConfig::PAUSED:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_PAUSED;
+            default:
+                return Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_DISABLED;
+        }
+    }
+
+    static NYdb::NPersQueue::TCredentials MakeMirrorCredentials(
+        const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom)
+    {
+        Ydb::PersQueue::V1::Credentials credentials;
+        if (mirrorFrom.HasCredentials()) {
+            const auto& src = mirrorFrom.GetCredentials();
+            if (src.HasOauthToken()) {
+                credentials.set_oauth_token(src.GetOauthToken());
+            } else if (src.HasJwtParams()) {
+                credentials.set_jwt_params(src.GetJwtParams());
+            } else if (src.HasIam()) {
+                credentials.mutable_iam()->set_endpoint(src.GetIam().GetEndpoint());
+                credentials.mutable_iam()->set_service_account_key(src.GetIam().GetServiceAccountKey());
+            } else {
+                credentials.set_oauth_token("test_token");
+            }
+        } else {
+            // PQv1 requires credentials; msgbus MirrorFrom often omitted them.
+            credentials.set_oauth_token("test_token");
+        }
+        return NYdb::NPersQueue::TCredentials(credentials);
+    }
+
+    template <typename TTopicSettings>
+    static typename TTopicSettings::TRemoteMirrorRuleSettings MakeRemoteMirrorRuleSettings(
+        const NKikimrPQ::TMirrorPartitionConfig& mirrorFrom)
+    {
+        TString endpoint = mirrorFrom.GetEndpoint();
+        if (mirrorFrom.GetEndpointPort()) {
+            endpoint = TStringBuilder() << endpoint << ":" << mirrorFrom.GetEndpointPort();
+        }
+        if (mirrorFrom.GetUseSecureConnection()) {
+            endpoint = TStringBuilder() << "grpcs://" << endpoint;
+        }
+
+        auto rule = typename TTopicSettings::TRemoteMirrorRuleSettings()
+            .Endpoint(std::string(endpoint))
+            .TopicPath(std::string(mirrorFrom.GetTopic()))
+            .ConsumerName(std::string(mirrorFrom.GetConsumer()))
+            .Credentials(MakeMirrorCredentials(mirrorFrom));
+        if (mirrorFrom.GetReadFromTimestampsMs()) {
+            rule.StartingMessageTimestamp(TInstant::MilliSeconds(mirrorFrom.GetReadFromTimestampsMs()));
+        }
+        // Authenticated mirror reads require a database; msgbus often omitted both
+        // credentials and database. PQv1 forces credentials, so default database too.
+        rule.Database(std::string(mirrorFrom.HasDatabase() ? mirrorFrom.GetDatabase() : "/Root"));
+        return rule;
+    }
+
+    void CreateTopicViaTopicSdk(const TRequestCreatePQ& createRequest) {
+        const TString path = ResolveTopicSdkPath(createRequest.Topic);
+        auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
+
+        NYdb::NTopic::TCreateTopicSettings settings;
+        settings.PartitioningSettings(createRequest.NumParts, createRequest.NumParts);
+        settings.RetentionPeriod(TDuration::Seconds(createRequest.LifetimeS));
+        settings.PartitionWriteSpeedBytesPerSecond(createRequest.WriteSpeed);
+        settings.PartitionWriteBurstBytes(createRequest.WriteSpeed);
+        settings.SetSupportedCodecs({
+            NYdb::NTopic::ECodec::RAW,
+            NYdb::NTopic::ECodec::GZIP,
+            NYdb::NTopic::ECodec::LZOP,
+        });
+        settings.AddAttribute("_allow_unauthenticated_read", "true");
+        settings.AddAttribute("_allow_unauthenticated_write", "true");
+        if (createRequest.SourceIdMaxCount != NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts()) {
+            settings.AddAttribute("_max_partition_message_groups_seqno_stored", ToString(createRequest.SourceIdMaxCount));
+        }
+        if (createRequest.SourceIdLifetime != 86400) {
+            settings.AddAttribute(
+                "_message_group_seqno_retention_period_ms",
+                ToString(createRequest.SourceIdLifetime * 1000));
+        }
+
+        if (createRequest.PartitionStrategy) {
+            const auto& ps = *createRequest.PartitionStrategy;
+            // Initial count is NumParts; MinPartitionCount is an autoscaling bound.
+            settings.PartitioningSettings(
+                createRequest.NumParts,
+                ps.GetMaxPartitionCount() ? ps.GetMaxPartitionCount() : createRequest.NumParts,
+                NYdb::NTopic::TAutoPartitioningSettings(
+                    ConvertPartitionStrategyType(ps.GetPartitionStrategyType()),
+                    TDuration::Seconds(ps.GetScaleThresholdSeconds()),
+                    ps.GetScaleDownPartitionWriteSpeedThresholdPercent(),
+                    ps.GetScaleUpPartitionWriteSpeedThresholdPercent()));
+        }
+
+        THashSet<TString> important(createRequest.Important.begin(), createRequest.Important.end());
+        for (const auto& user : createRequest.ReadRules) {
+            settings.BeginAddConsumer(user)
+                .Important(important.contains(user))
+                .EndAddConsumer();
+        }
+
+        Cerr << "PQ Client: create topic via Topic SDK: " << path << Endl;
+        auto res = topicClient.CreateTopic(path, settings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    void CreateTopicViaPersQueueSdk(const TRequestCreatePQ& createRequest) {
+        Y_ABORT_UNLESS(createRequest.MirrorFrom);
+        const TString path = ResolveTopicSdkPath(createRequest.Topic);
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
+
+        NYdb::NPersQueue::TCreateTopicSettings settings;
+        settings.PartitionsCount(createRequest.NumParts);
+        settings.RetentionPeriod(TDuration::Seconds(createRequest.LifetimeS));
+        settings.MaxPartitionWriteSpeed(createRequest.WriteSpeed);
+        settings.MaxPartitionWriteBurst(createRequest.WriteSpeed);
+        settings.SupportedCodecs({
+            NYdb::NPersQueue::ECodec::RAW,
+            NYdb::NPersQueue::ECodec::GZIP,
+            NYdb::NPersQueue::ECodec::LZOP,
+        });
+        settings.AllowUnauthenticatedRead(true);
+        settings.AllowUnauthenticatedWrite(true);
+        // LocalDC comes from remote_mirror_rule; do not set ClientWriteDisabled.
+        settings.RemoteMirrorRule(std::make_optional(
+            MakeRemoteMirrorRuleSettings<NYdb::NPersQueue::TCreateTopicSettings>(*createRequest.MirrorFrom)));
+
+        if (createRequest.PartitionStrategy) {
+            const auto& ps = *createRequest.PartitionStrategy;
+            // Initial partition count comes from NumParts (msgbus SetNumPartitions).
+            // MinPartitionCount is an autoscaling bound and may be lower than NumParts
+            // (e.g. RootPartitionOverlap starts dst wider than strategy min).
+            settings.PartitionsCount(createRequest.NumParts);
+            settings.MaxPartitionsCount(std::make_optional<uint64_t>(
+                ps.GetMaxPartitionCount() ? ps.GetMaxPartitionCount() : createRequest.NumParts));
+            settings.AutoPartitioningStrategy(std::make_optional(
+                ConvertPartitionStrategyTypePq(ps.GetPartitionStrategyType())));
+            settings.StabilizationWindow(std::make_optional(TDuration::Seconds(ps.GetScaleThresholdSeconds())));
+            settings.DownUtilizationPercent(std::make_optional<uint64_t>(
+                ps.GetScaleDownPartitionWriteSpeedThresholdPercent()));
+            settings.UpUtilizationPercent(std::make_optional<uint64_t>(
+                ps.GetScaleUpPartitionWriteSpeedThresholdPercent()));
+        }
+
+        THashSet<TString> important(createRequest.Important.begin(), createRequest.Important.end());
+        std::vector<NYdb::NPersQueue::TReadRuleSettings> readRules;
+        for (const auto& user : createRequest.ReadRules) {
+            readRules.push_back(
+                NYdb::NPersQueue::TReadRuleSettings()
+                    .ConsumerName(std::string(user))
+                    .Important(important.contains(user)));
+        }
+        settings.ReadRules(readRules);
+
+        Cerr << "PQ Client: create topic via PersQueue SDK (mirror): " << path << Endl;
+        auto res = pqClient.CreateTopic(path, settings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    // Msgbus-only create for semantics Topic/PQv1 cannot express (LowWatermark,
+    // consumers without service_type under DisallowDefaultClientServiceType).
+    void CreateTopicViaMsgBus(const TRequestCreatePQ& createRequest, bool doWait = true) {
+        const TInstant start = TInstant::Now();
+        ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
+        CallPersQueueGRPC(createRequest.GetRequest()->Record);
+        AddTopic(createRequest.Topic);
+        while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+        }
+        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) < prevVersion + 1) {
+            Sleep(TDuration::MilliSeconds(500));
+            UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
+        }
+    }
+
     void CreateTopic(const TRequestCreatePQ& createRequest, bool doWait = true) {
         const TInstant start = TInstant::Now();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(createRequest.Topic);
 
-        CallPersQueueGRPC(createRequest.GetRequest()->Record);
+        // Non-mirror → Topic SDK (authenticated driver). Mirrors → PersQueue
+        // RemoteMirrorRule. Call CreateTopicViaMsgBus for LowWatermark / empty
+        // service_type migration UTs.
+        if (createRequest.MirrorFrom) {
+            CreateTopicViaPersQueueSdk(createRequest);
+        } else {
+            CreateTopicViaTopicSdk(createRequest);
+        }
 
         AddTopic(createRequest.Topic);
         while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
@@ -1009,7 +1278,7 @@ public:
         TVector<TString> rr = {"user"},
         TVector<TString> important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
-        ui64 sourceIdMaxCount = 6000000,
+        ui64 sourceIdMaxCount = NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts(),
         ui64 sourceIdLifetime = 86400,
         std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     ) {
@@ -1032,7 +1301,7 @@ public:
             .PartitionsCount(nParts)
             .ReadRules({NYdb::NPersQueue::TReadRuleSettings().ConsumerName("user")});
         settings.RetentionPeriod(TDuration::Seconds(lifetimeS));
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
         auto res = pqClient.AlterTopic(path, settings);
         if (UseConfigTables) {  // ToDo - legacy
             AlterTopic();
@@ -1050,16 +1319,40 @@ public:
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {}
     ) {
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
-        TRequestAlterPQ requestDescr(name, nParts, cacheSize, lifetimeS, fillPartitionConfig, mirrorFrom);
-        THolder<NMsgBusProxy::TBusPersQueue> alterRequest = requestDescr.GetRequest();
 
         ui32 prevVersion = GetTopicVersionFromMetadata(name);
         while (prevVersion == 0) {
             Sleep(TDuration::MilliSeconds(500));
-
             prevVersion = GetTopicVersionFromMetadata(name);
         }
-        CallPersQueueGRPC(alterRequest->Record);
+
+        const TString path = ResolveTopicSdkPath(name);
+        if (mirrorFrom) {
+            // Topic API has no mirror rule; use PersQueue SDK RemoteMirrorRule.
+            auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
+            NYdb::NPersQueue::TAlterTopicSettings settings;
+            settings.PartitionsCount(nParts);
+            if (fillPartitionConfig) {
+                settings.RetentionPeriod(TDuration::Seconds(lifetimeS));
+            }
+            settings.RemoteMirrorRule(std::make_optional(
+                MakeRemoteMirrorRuleSettings<NYdb::NPersQueue::TAlterTopicSettings>(*mirrorFrom)));
+
+            Cerr << "PQ Client: alter topic via PersQueue SDK (mirror): " << path << Endl;
+            auto res = pqClient.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        } else {
+            auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
+            NYdb::NTopic::TAlterTopicSettings settings;
+            settings.AlterPartitioningSettings(nParts, nParts);
+            if (fillPartitionConfig) {
+                settings.SetRetentionPeriod(TDuration::Seconds(lifetimeS));
+            }
+
+            Cerr << "PQ Client: alter topic via Topic SDK: " << path << Endl;
+            auto res = topicClient.AlterTopic(path, settings).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
         Cerr << "Alter got " << prevVersion << "\n";
 
         const TInstant start = TInstant::Now();
@@ -1085,9 +1378,9 @@ public:
     }
 
     NYdb::TStatus DropTopic(const TString& path) {
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
         Cerr << "Drop topic: " << path << Endl;
-        auto res = pqClient.DropTopic(path).GetValueSync();
+        auto res = topicClient.DropTopic(path).GetValueSync();
         UNIT_ASSERT(res.IsSuccess());
         return res;
     }
@@ -1098,12 +1391,13 @@ public:
     ) {
 
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
-        THolder<NMsgBusProxy::TBusPersQueue> deleteRequest = TRequestDeletePQ{name}.GetRequest();
+        const TString path = ResolveTopicSdkPath(name);
+        auto topicClient = NYdb::NTopic::TTopicClient(*AdminDriver);
+        Cerr << "PQ Client: drop topic via Topic SDK: " << path << Endl;
+        auto res = topicClient.DropTopic(path).GetValueSync();
 
-        CallPersQueueGRPC(deleteRequest->Record);
-
-        // wait for drop completion
         if (expectedStatus == NPersQueue::NErrorCode::OK) {
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             ui32 i = 0;
             for (; i < 500; ++i) {
                 TAutoPtr<NMsgBusProxy::TBusResponse> r = TryDropPersQueueGroup("/Root/PQ", name);
@@ -1114,6 +1408,12 @@ public:
                 Sleep(TDuration::MilliSeconds(50));
             }
             UNIT_ASSERT_C(i < 500, "Drop is taking too long"); //25 seconds
+        } else {
+            UNIT_ASSERT_C(!res.IsSuccess(), "expected drop failure");
+            UNIT_ASSERT_C(
+                expectedStatus == NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                TStringBuilder() << "DeleteTopic2 via Topic SDK currently maps only UNKNOWN_TOPIC failures, got "
+                                 << (ui32)expectedStatus);
         }
         RemoveTopic(name);
         const TInstant start = TInstant::Now();
@@ -1494,7 +1794,7 @@ public:
             path = TStringBuilder() << "/Root/PQ/" << params.Name;
         }
 
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
+        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*AdminDriver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
         settings.FederationAccount(params.Account);
         settings.SupportedCodecs(params.Codecs);

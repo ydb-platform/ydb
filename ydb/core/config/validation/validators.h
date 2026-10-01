@@ -50,6 +50,10 @@ EValidationResult ValidateColumnShardConfig(
     const NKikimrConfig::TColumnShardConfig& columnShardConfig,
     std::vector<TString>& msg);
 
+EValidationResult ValidateCompositeConveyorConfig(
+    const NKikimrConfig::TCompositeConveyorConfig& compositeConveyorConfig,
+    std::vector<TString>& msg);
+
 EValidationResult ValidateMonitoringConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
@@ -66,6 +70,6 @@ EValidationResult ValidateConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig);
+TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig);
 
 } // namespace NKikimr::NConfig

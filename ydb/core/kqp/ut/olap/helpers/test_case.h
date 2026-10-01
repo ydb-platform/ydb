@@ -1,0 +1,247 @@
+#pragma once
+#include "writer.h"
+#include "local.h"
+
+#include <ranges>
+
+namespace NKikimr::NKqp {
+
+const std::string AGG_OPERATOR_NAMES { "DqPhyHashCombine|WideCombiner" };
+
+bool CheckOperatorPresentInAst(const std::string_view ast, const std::string_view operatorName);
+
+class TExpectedLimitChecker {
+private:
+    std::optional<ui32> ExpectedLimit;
+    std::optional<ui32> ExpectedResultCount;
+    ui32 CheckScanData = 0;
+    ui32 CheckScanTask = 0;
+public:
+    TExpectedLimitChecker& SetExpectedLimit(const ui32 value) {
+        ExpectedLimit = value;
+        ExpectedResultCount = value;
+        return *this;
+    }
+    TExpectedLimitChecker& SetExpectedResultCount(const ui32 value) {
+        ExpectedResultCount = value;
+        return *this;
+    }
+    bool CheckExpectedLimitOnScanData(const ui32 resultCount) {
+        if (!ExpectedResultCount) {
+            return true;
+        }
+        ++CheckScanData;
+        UNIT_ASSERT_LE(resultCount, *ExpectedResultCount);
+        return true;
+    }
+    bool CheckExpectedLimitOnScanTask(const ui32 taskLimit) {
+        if (!ExpectedLimit) {
+            return true;
+        }
+        ++CheckScanTask;
+        UNIT_ASSERT_EQUAL(taskLimit, *ExpectedLimit);
+        return true;
+    }
+    bool CheckFinish() const {
+        if (!ExpectedLimit) {
+            return true;
+        }
+        return CheckScanData && CheckScanTask;
+    }
+};
+
+class TExpectedRecordChecker {
+private:
+    std::optional<ui32> ExpectedColumnsCount;
+    ui32 CheckScanData = 0;
+public:
+    TExpectedRecordChecker& SetExpectedColumnsCount(const ui32 value) {
+        ExpectedColumnsCount = value;
+        return *this;
+    }
+    bool CheckExpectedOnScanData(const ui32 columnsCount) {
+        if (!ExpectedColumnsCount) {
+            return true;
+        }
+        ++CheckScanData;
+        UNIT_ASSERT_EQUAL(columnsCount, *ExpectedColumnsCount);
+        return true;
+    }
+    bool CheckFinish() const {
+        if (!ExpectedColumnsCount) {
+            return true;
+        }
+        return CheckScanData;
+    }
+};
+
+class TOlapTestCase {
+private:
+    TString Query;
+    TString ExpectedReply;
+    std::vector<std::string> ExpectedPlanOptions;
+    bool Pushdown = true;
+    std::string ExpectedReadNodeType;
+    TExpectedLimitChecker LimitChecker;
+    TExpectedRecordChecker RecordChecker;
+    bool UseLlvm = true;
+public:
+    void FillExpectedAggregationGroupByPlanOptions() {
+        AddExpectedPlanOptions(AGG_OPERATOR_NAMES);
+    }
+    TString GetFixedQuery() const {
+        TStringBuilder queryFixed;
+        queryFixed << "--!syntax_v1" << Endl;
+        if (!Pushdown) {
+            queryFixed << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
+        }
+        if (!UseLlvm) {
+            queryFixed << "PRAGMA Kikimr.UseLlvm = \"false\";" << Endl;
+        }
+        queryFixed << "PRAGMA Kikimr.OptUseFinalizeByKey;" << Endl;
+
+        queryFixed << Query << Endl;
+        Cerr << "REQUEST:\n" << queryFixed << Endl;
+        return queryFixed;
+    }
+    TOlapTestCase() = default;
+    TExpectedLimitChecker& MutableLimitChecker() {
+        return LimitChecker;
+    }
+    TExpectedRecordChecker& MutableRecordChecker() {
+        return RecordChecker;
+    }
+    bool GetPushdown() const {
+        return Pushdown;
+    }
+    TOlapTestCase& SetPushdown(const bool value = true) {
+        Pushdown = value;
+        return *this;
+    }
+    bool CheckFinished() const {
+        return LimitChecker.CheckFinish();
+    }
+
+    const TString& GetQuery() const {
+        return Query;
+    }
+    TOlapTestCase& SetQuery(const TString& value) {
+        Query = value;
+        return *this;
+    }
+    TOlapTestCase& SetUseLlvm(const bool value) {
+        UseLlvm = value;
+        return *this;
+    }
+    const TString& GetExpectedReply() const {
+        return ExpectedReply;
+    }
+    TOlapTestCase& SetExpectedReply(const TString& value) {
+        ExpectedReply = value;
+        return *this;
+    }
+
+    TOlapTestCase& AddExpectedPlanOptions(const std::string& value) {
+        ExpectedPlanOptions.emplace_back(value);
+        return *this;
+    }
+
+    const std::vector<std::string>& GetExpectedPlanOptions() const {
+        return ExpectedPlanOptions;
+    }
+
+    TOlapTestCase& SetExpectedReadNodeType(const std::string& value) {
+        ExpectedReadNodeType = value;
+        return *this;
+    }
+
+    const std::string& GetExpectedReadNodeType() const {
+        return ExpectedReadNodeType;
+    }
+};
+
+template <typename TClient>
+auto StreamExplainQuery(const TString& query, TClient& client) {
+    if constexpr (std::is_same_v<NYdb::NTable::TTableClient, TClient>) {
+        NYdb::NTable::TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+        return client.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+    } else {
+        NYdb::NQuery::TExecuteQuerySettings scanSettings;
+        scanSettings.ExecMode(NYdb::NQuery::EExecMode::Explain);
+        return client.StreamExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), scanSettings).GetValueSync();
+    }
+}
+
+template <typename TClient>
+void CheckPlanForAggregatePushdown(
+    const TString& query,
+    TClient& client,
+    const std::vector<std::string>& expectedPlanNodes,
+    const std::string& readNodeType)
+{
+    auto res = StreamExplainQuery(query, client);
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    auto planRes = CollectStreamResult(res);
+    auto ast = planRes.QueryStats->Getquery_ast();
+    Cerr << "JSON Plan:" << Endl;
+    Cerr << planRes.PlanJson.GetOrElse("NO_PLAN") << Endl;
+    Cerr << "AST:" << Endl;
+    Cerr << ast << Endl;
+    for (auto planNode : expectedPlanNodes) {
+        UNIT_ASSERT_C(CheckOperatorPresentInAst(ast, planNode),
+            TStringBuilder() << planNode << " was not found. Query: " << query);
+    }
+    UNIT_ASSERT_C(ast.find("SqueezeToDict") == std::string::npos, TStringBuilder() << "SqueezeToDict denied for aggregation requests. Query: " << query);
+
+    if (!readNodeType.empty()) {
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(*planRes.PlanJson, &planJson, true);
+        auto readNode = FindPlanNodeByKv(planJson, "Node Type", readNodeType.c_str());
+        UNIT_ASSERT(readNode.IsDefined());
+
+        auto& operators = readNode.GetMapSafe().at("Operators").GetArraySafe();
+        for (auto& op : operators) {
+            if (op.GetMapSafe().at("Name") == "TableFullScan") {
+                auto ssaProgram = op.GetMapSafe().at("SsaProgram");
+                UNIT_ASSERT(ssaProgram.IsDefined());
+                UNIT_ASSERT(FindPlanNodes(ssaProgram, "Projection").size());
+                break;
+            }
+        }
+    }
+}
+
+void TestOlapTableBase(const std::vector<TOlapTestCase>& cases);
+
+void TestOlapTableInternal(const std::vector<TOlapTestCase>& cases);
+
+void TestOlapTable(const std::vector<TOlapTestCase>& cases);
+
+template <typename TClient>
+auto StreamExecuteQuery(const TOlapTestCase& testCase, TClient& client) {
+    if constexpr (std::is_same_v<NYdb::NTable::TTableClient, TClient>) {
+        return client.StreamExecuteScanQuery(testCase.GetFixedQuery()).GetValueSync();
+    } else {
+        return client.StreamExecuteQuery(
+            testCase.GetFixedQuery(),
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+    }
+}
+
+template <typename TClient>
+void RunTestCaseWithClient(const TOlapTestCase& testCase, TClient& client) {
+    auto it = StreamExecuteQuery(testCase, client);
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    TString result = StreamResultToYson(it);
+    if (!testCase.GetExpectedReply().empty()) {
+        CompareYson(result, testCase.GetExpectedReply());
+    }
+}
+
+void WriteTestDataForTableWithNulls(TKikimrRunner& kikimr, TString testTable);
+
+void TestTableWithNulls(const std::vector<TOlapTestCase>& cases, const bool genericQuery = false);
+
+}

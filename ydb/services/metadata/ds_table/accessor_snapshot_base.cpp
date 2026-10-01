@@ -6,6 +6,8 @@
 
 #include <util/string/escape.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::METADATA_PROVIDER
+
 namespace NKikimr::NMetadata::NProvider {
 
 void TDSAccessorBase::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& /*qResult*/, NFetcher::ISnapshot::TPtr snapshot) {
@@ -13,7 +15,8 @@ void TDSAccessorBase::OnNewParsedSnapshot(Ydb::Table::ExecuteQueryResult&& /*qRe
 }
 
 void TDSAccessorBase::OnConstructSnapshotError(const TString& errorMessage) {
-    ALS_ERROR(NKikimrServices::METADATA_PROVIDER) << "cannot construct snapshot: " << errorMessage;
+    YDB_LOG_ERROR("Cannot construct",
+        {"snapshot", errorMessage});
 }
 
 void TDSAccessorBase::Handle(NRequest::TEvRequestFailed::TPtr& ev) {
@@ -82,7 +85,10 @@ void TDSAccessorBase::Handle(TEvRecheckExistence::TPtr& ev) {
 void TDSAccessorBase::Handle(TTableExistsActor::TEvController::TEvError::TPtr& ev) {
     auto it = ExistenceChecks.find(ev->Get()->GetPath());
     if (it == ExistenceChecks.end() || it->second.RetryCount == 0) {
-        AFL_ERROR(NKikimrServices::METADATA_PROVIDER)("action", "cannot detect path existence")("path", ev->Get()->GetPath())("error", ev->Get()->GetErrorMessage());
+        YDB_LOG_ERROR("",
+            {"action", "cannot detect path existence"},
+            {"path", ev->Get()->GetPath()},
+            {"error", ev->Get()->GetErrorMessage()});
     }
     if (it != ExistenceChecks.end()) {
         ++it->second.RetryCount;

@@ -132,11 +132,11 @@ extern "C" char InputBufReadSlowThunk(TInputBuf& in) {
 }
 
 extern "C" void InputBufReadManySlowThunk(TInputBuf& in, char* buffer, size_t count) {
-    return in.ReadManySlow(buffer, count);
+    in.ReadManySlow(buffer, count);
 }
 
 extern "C" void InputBufSkipManySlowThunk(TInputBuf& in, size_t count) {
-    return in.SkipManySlow(count);
+    in.SkipManySlow(count);
 }
 
 char TInputBuf::ReadSlow() {

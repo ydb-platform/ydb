@@ -102,7 +102,7 @@ namespace NActors {
         TCoroutineChunkSerializer();
         ~TCoroutineChunkSerializer();
 
-        void SetSerializingEvent(const IEventBase *event, bool withCachedSizes);
+        void SetSerializingEvent(const IEventBase *event, bool withCachedSizes, bool withCord);
         void DiscardEvent() { Event = nullptr; };
         void Abort();
         std::span<TChunk> FeedBuf(void* data, size_t size,
@@ -129,6 +129,7 @@ namespace NActors {
 
         bool WriteRope(const TRope *rope) override;
         bool WriteString(const TString *s) override;
+        bool WriteCord(const y_absl::Cord& cord) override;
 
         NProtoBuf::io::CodedOutputStream *GetCodedOutputStream() override {
             if (!WithCachedSizes) {
@@ -140,10 +141,14 @@ namespace NActors {
             return CodedOutputStream.get();
         }
 
+        std::vector<y_absl::Cord>& GetCords() {
+            return Cords;
+        }
+
     protected:
         void DoRun() override;
         void Resume();
-        void Produce(const void* data, size_t size,
+        void Produce(const void* data, ssize_t size,
             const NInterconnect::NRdma::TMemRegion* memRegion);
         bool WriteAliasedRawImpl(const void* data, int size,
             const NInterconnect::NRdma::TMemRegion* memRegion);
@@ -156,6 +161,7 @@ namespace NActors {
         TMutableContiguousSpan Buffer;
         size_t TotalSizeRemain;
         std::vector<TChunk> Chunks;
+        TChunk LastChunk{nullptr, 0, nullptr};
         EAliasedMode AliasedMode = EAliasedMode::PassThrough;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;
@@ -163,7 +169,9 @@ namespace NActors {
         bool SerializationSuccess;
         bool Finished = false;
         bool WithCachedSizes = false;
+        bool WithCord = false;
         std::unique_ptr<NProtoBuf::io::CodedOutputStream> CodedOutputStream;
+        std::vector<y_absl::Cord> Cords;
     };
 
     struct TProtoArenaHolder : public TAtomicRefCount<TProtoArenaHolder> {
@@ -502,6 +510,7 @@ namespace NActors {
                 copy.MergeFrom(base);
                 base.Swap(&copy);
                 PreSerializedData.clear();
+                TBase::InvalidateCachedByteSize(); // cached size may be incorrect now
             }
             return TBase::Record;
         }
@@ -539,14 +548,6 @@ namespace NActors {
 
         ui32 CalculateSerializedSize() const override {
             return PreSerializedData.size() + TBase::CalculateSerializedSize();
-        }
-
-        size_t GetCachedByteSize() const {
-            return PreSerializedData.size() + TBase::GetCachedByteSize();
-        }
-
-        ui32 CalculateSerializedSizeCached() const override {
-            return GetCachedByteSize();
         }
 
         TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {

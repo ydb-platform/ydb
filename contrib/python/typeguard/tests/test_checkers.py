@@ -14,7 +14,9 @@ from typing import (
     AnyStr,
     BinaryIO,
     Callable,
+    ClassVar,
     Collection,
+    Concatenate,
     ContextManager,
     Dict,
     ForwardRef,
@@ -25,7 +27,7 @@ from typing import (
     Literal,
     Mapping,
     MutableMapping,
-    Optional,
+    ParamSpec,
     Protocol,
     Sequence,
     Set,
@@ -33,6 +35,7 @@ from typing import (
     TextIO,
     Tuple,
     Type,
+    TypeGuard,
     TypeVar,
     Union,
 )
@@ -50,7 +53,7 @@ from typeguard import (
     check_type_internal,
     suppress_type_checks,
 )
-from typeguard._checkers import is_typeddict
+from typeguard._checkers import _sentinel_types, is_typeddict
 from typeguard._utils import qualified_name
 
 from . import (
@@ -70,11 +73,6 @@ if sys.version_info >= (3, 11):
     SubclassableAny = Any
 else:
     from typing_extensions import Any as SubclassableAny
-
-if sys.version_info >= (3, 10):
-    from typing import Concatenate, ParamSpec, TypeGuard
-else:
-    from typing_extensions import Concatenate, ParamSpec, TypeGuard
 
 P = ParamSpec("P")
 
@@ -292,6 +290,13 @@ class TestLiteral:
         pytest.raises(TypeCheckError, check_type, 0, Literal[False])
         pytest.raises(TypeCheckError, check_type, 1, Literal[True])
 
+    def test_literal_bool_after_equal_int(self):
+        # the matching bool must be found even when an == equal int precedes it
+        check_type(True, Literal[1, True])
+        check_type(True, Literal[True, 1])
+        check_type(False, Literal[0, False])
+        check_type(False, Literal[False, 0])
+
     def test_literal_illegal_value(self):
         pytest.raises(TypeError, check_type, 4, Literal[1, 1.1]).match(
             r"Illegal literal value: 1.1$"
@@ -482,7 +487,7 @@ class TestTypedDict:
         ],
     )
     def test_typed_dict(
-        self, value, total: bool, error_re: Optional[str], typing_provider
+        self, value, total: bool, error_re: str | None, typing_provider
     ):
         class DummyDict(typing_provider.TypedDict, total=total):
             x: int
@@ -805,12 +810,6 @@ class TestFrozenSet:
         pytest.param(
             tuple,
             id="builtin",
-            marks=[
-                pytest.mark.skipif(
-                    sys.version_info < (3, 9),
-                    reason="builtins.tuple is not parametrizable before Python 3.9",
-                )
-            ],
         ),
     ],
 )
@@ -902,15 +901,7 @@ class TestUnion:
         "annotation",
         [
             pytest.param(Union[str, int], id="pep484"),
-            pytest.param(
-                ForwardRef("str | int"),
-                id="pep604",
-                marks=[
-                    pytest.mark.skipif(
-                        sys.version_info < (3, 10), reason="Requires Python 3.10+"
-                    )
-                ],
-            ),
+            pytest.param(ForwardRef("str | int"), id="pep604"),
         ],
     )
     @pytest.mark.parametrize(
@@ -963,7 +954,6 @@ class TestUnion:
         sys.implementation.name != "cpython",
         reason="Test relies on CPython's reference counting behavior",
     )
-    @pytest.mark.skipif(sys.version_info < (3, 10), reason="UnionType requires 3.10")
     def test_uniontype_reference_leak(self):
         class Leak:
             def __del__(self):
@@ -995,11 +985,9 @@ class TestUnion:
         inner3()
         assert not leaked
 
-    @pytest.mark.skipif(sys.version_info < (3, 10), reason="UnionType requires 3.10")
     def test_raw_uniontype_success(self):
         check_type(str | int, types.UnionType)
 
-    @pytest.mark.skipif(sys.version_info < (3, 10), reason="UnionType requires 3.10")
     def test_raw_uniontype_fail(self):
         if sys.version_info < (3, 14):
             expected_type = r"\w+\.UnionType"
@@ -1345,6 +1333,36 @@ class TestProtocol:
                 f"'member'"
             )
 
+    def test_class_against_protocol_ignores_instance_attributes(self) -> None:
+        # Checking a class (not an instance) against type[Protocol] must not
+        # flag instance attributes as missing; only ClassVar members are
+        # required on the class itself. See issue #499.
+        class MyProtocol(Protocol):
+            foo: str
+
+        class Foo:
+            def __init__(self) -> None:
+                self.foo = "bar"
+
+        check_type(Foo, type[MyProtocol])
+
+    def test_class_against_protocol_requires_classvar(self) -> None:
+        class MyProtocol(Protocol):
+            bar: ClassVar[int]
+
+        class Missing:
+            pass
+
+        pytest.raises(TypeCheckError, check_type, Missing, type[MyProtocol]).match(
+            f"is not compatible with the {MyProtocol.__qualname__} protocol "
+            f"because it has no attribute named 'bar'"
+        )
+
+        class Present:
+            bar = 3
+
+        check_type(Present, type[MyProtocol])
+
     def test_missing_method(self) -> None:
         class MyProtocol(Protocol):
             def meth(self) -> None:
@@ -1655,6 +1673,27 @@ def test_any_subclass():
         pass
 
     check_type(Foo(), int)
+
+
+@pytest.mark.parametrize("sentinel_type", _sentinel_types)
+def test_sentinel(sentinel_type):
+    MISSING = sentinel_type("MISSING")
+    check_type(MISSING, MISSING)
+    pytest.raises(TypeCheckError, check_type, None, MISSING)
+
+
+@pytest.mark.parametrize("sentinel_type", _sentinel_types)
+def test_sentinel_in_union(sentinel_type):
+    MISSING = sentinel_type("MISSING")
+    check_type(MISSING, str | MISSING)
+    check_type("foo", str | MISSING)
+    with pytest.raises(
+        TypeCheckError, match=r"did not match any element in the union"
+    ) as exc:
+        check_type(42, str | MISSING)
+
+    assert "str: is not an instance of str" in str(exc.value)
+    assert "MISSING" in str(exc.value)
 
 
 def test_none():

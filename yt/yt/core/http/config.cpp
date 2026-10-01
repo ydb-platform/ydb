@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <yt/yt/core/dns/dns_resolver.h>
+
 #include <yt/yt/core/net/config.h>
 
 namespace NYT::NHttp {
@@ -66,6 +68,12 @@ void TServerConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("enable_per_path_request_profiling", &TThis::EnablePerPathRequestProfiling)
         .Default(false);
+
+    registrar.Parameter("enable_content_encoding", &TThis::EnableContentEncoding)
+        .Default(false);
+    registrar.Parameter("compression_thread_count", &TThis::CompressionThreadCount)
+        .Default(1)
+        .GreaterThan(0);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -75,10 +83,12 @@ void TClientConfig::Register(TRegistrar registrar)
     registrar.Parameter("max_idle_connections", &TThis::MaxIdleConnections)
         .Default(0)
         .GreaterThanOrEqual(0);
-    registrar.Parameter("dialer", &TThis::Dialer)
-        .DefaultNew();
+    registrar.Parameter("dns_resolve_options", &TThis::DnsResolveOptions)
+        .Default();
     registrar.Parameter("omit_question_mark_for_empty_query", &TThis::OmitQuestionMarkForEmptyQuery)
         .Default(false);
+    registrar.Parameter("dialer", &TThis::Dialer)
+        .DefaultNew();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

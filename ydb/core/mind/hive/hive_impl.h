@@ -208,6 +208,7 @@ protected:
     friend class TTxMonEvent_ObjectStats;
     friend class TTxMonEvent_StorageRebalance;
     friend class TTxMonEvent_Subactors;
+    friend class TTxMonEvent_ShrinkPool;
     friend class TTxKillNode;
     friend class TTxLoadEverything;
     friend class TTxRestartTablet;
@@ -245,6 +246,10 @@ protected:
     friend class TTxUpdateLastReassign;
     friend class TTxShrinkPoolReply;
     friend class TTxShrinkPool;
+    friend class TTxUpdateDomain;
+    friend class TTxConfigureScaleRecommender;
+    friend class TTxProcessBootQueue;
+    friend class TTxUnlockTabletExecution;
 
     friend class TDeleteTabletActor;
 
@@ -256,8 +261,10 @@ protected:
     THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
+    // starts a new reassign for every tablet in the list
     void StartReassignActor(std::vector<TReassignOperation> operations, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IReassignCallback> callback);
-    void StartReassignActor(std::vector<TReassignOperation> operations);
+    // continues reassigns of tablets that were left in the middle of it (e.g. by a Hive restart)
+    void ContinueInterruptedReassigns(std::vector<TReassignOperation> operations);
     void StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     NJson::TJsonValue GetBalancerProgressJson();
@@ -283,7 +290,7 @@ protected:
                                            TEvTablet::TEvTabletDead::EReason reason);
     ITransaction* CreateBootTablet(TTabletId tabletId);
     ITransaction* CreateKillNode(TNodeId nodeId, const TActorId& local);
-    ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters> groups = {});
+    ITransaction* CreateUpdateTabletGroups(TTabletId tabletId, TVector<NKikimrBlobStorage::TGroupMetrics::TGroupParameters> groups = {});
     ITransaction* CreateCheckTablets();
     ITransaction* CreateSyncTablets(const TActorId &local, NKikimrLocal::TEvSyncTablets& rec);
     ITransaction* CreateStopTablet(TTabletId tabletId, const TActorId& actorToNotify);
@@ -489,6 +496,7 @@ protected:
     std::unordered_set<TNodeId> ConnectedNodes;
     TString LastReassignStatus;
     ui32 ReassignsRunning = 0;
+    TRequests Requests;
 
     // normalized to be sorted list of unique values
     std::vector<TTabletTypes::EType> BalancerIgnoreTabletTypes; // built from CurrentConfig
@@ -634,6 +642,7 @@ protected:
     void Handle(TEvPrivate::TEvReassignInactiveGroupsComplete::TPtr& ev);
     void Handle(TEvPrivate::TEvMoveDataComplete::TPtr& ev);
     void Handle(TEvHive::TEvShrinkStoragePoolDone::TPtr& ev);
+    void Handle(TEvPrivate::TEvLogHangingRequests::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -650,9 +659,9 @@ protected:
     STATEFN(StateInit);
     STATEFN(StateWork);
 
-    void SendToBSControllerPipe(IEventBase* payload);
-    void SendToRootHivePipe(IEventBase* payload);
-    void SendToConsolePipe(IEventBase* payload);
+    void SendToBSControllerPipe(IEventBase* payload, bool track);
+    void SendToRootHivePipe(IEventBase* payload, bool track);
+    void SendToConsolePipe(IEventBase* payload, bool track);
     void RestartBSControllerPipe();
     void RestartRootHivePipe();
 
@@ -722,6 +731,11 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterDeleteTabletQueueSize();
     void UpdateCounterTabletsDeleting();
     void UpdateCounterTabletsReassigning(i64 tabletsReassigningDiff);
+    void UpdateCounterShrinkRemainingHistory();
+    void OnShrinkMoveDataSent(i64 inFlight, i64 queued);
+    void OnShrinkMoveDataAnswered(i64 inFlight, i64 queued);
+    void OnShrinkMoveDataRetried();
+    void OnShrinkMoveDataFinished();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -743,6 +757,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
             const TMetrics& after,
             NKikimr::NHive::TResourceRawValues deltaRaw,
             NKikimr::NHive::TResourceNormalizedValues deltaNormalized);
+    void ResetTotalResourceValues();
     void FillTabletInfo(NKikimrHive::TEvResponseHiveInfo& response, ui64 tabletId, const TLeaderTabletInfo* info, const NKikimrHive::TEvRequestHiveInfo& req);
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
@@ -1058,6 +1073,14 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
         return CurrentConfig.GetUseTabletUsageEstimate();
     }
 
+    double GetTabletImpactToPin() const {
+        return CurrentConfig.GetTabletImpactToPin();
+    }
+
+    double GetTabletImpactShareToPin() const {
+        return CurrentConfig.GetTabletImpactShareToPin();
+    }
+
     TDuration GetBalanceCountersRefreshFrequency() const {
         return TDuration::MilliSeconds(CurrentConfig.GetBalanceCountersRefreshFrequency());
     }
@@ -1110,6 +1133,7 @@ protected:
         TNodeId MaxUsageNodeId;
         double Scatter;
         TResourceNormalizedValues ScatterByResource;
+        TResourceNormalizedValues MinResourceNormValues;
         std::vector<TNodeStat> Values;
     };
 
@@ -1132,7 +1156,7 @@ protected:
             const TMetrics& after,
             const TTabletInfo* tablet);
     static void DivideMetrics(TMetrics& metrics, ui64 divider);
-    TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters>& groups);
+    TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TGroupMetrics::TGroupParameters>& groups);
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();
     void RequestFreeSequence();

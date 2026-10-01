@@ -15,11 +15,7 @@
 #include <boost/property_map/property_map.hpp>
 #include <boost/graph/properties.hpp>
 #include <boost/graph/planar_detail/bucket_sort.hpp>
-
-#include <boost/geometry/algorithms/crosses.hpp>
-#include <boost/geometry/geometries/linestring.hpp>
-#include <boost/geometry/core/coordinate_type.hpp>
-
+#include <boost/multiprecision/cpp_int.hpp>
 #include <boost/numeric/conversion/cast.hpp>
 
 #include <algorithm>
@@ -28,32 +24,50 @@
 
 namespace boost
 {
-// Overload of make from Boost.Geometry.
-template<typename Geometry, typename Graph, typename GridPositionMap>
-Geometry make(typename graph_traits<Graph>::edge_descriptor e,
-              Graph const &g,
-              GridPositionMap const &drawing)
-{
-    auto e_source(source(e, g));
-    auto e_target(target(e, g));
-    using Float = typename geometry::coordinate_type<Geometry>::type;
-    return {{numeric_cast<Float>(drawing[e_source].x), numeric_cast<Float>(drawing[e_source].y)},
-            {numeric_cast<Float>(drawing[e_target].x), numeric_cast<Float>(drawing[e_target].y)}};
+
+template<typename Int128>
+int orientation2d(Int128 ax, Int128 ay,
+                  Int128 bx, Int128 by,
+                  Int128 cx, Int128 cy) {
+    // If coordinates are in [0, 2^63], this will not overflow.
+    const Int128 detleft = (bx - ax) * (cy - ay);
+    const Int128 detright = (by - ay) * (cx - ax);
+    return detleft > detright ? 1 : (detleft == detright ? 0 : -1);
 }
 
-// Overload of crosses from Boost.Geometry.
+template<typename Point>
+bool between(const Point& a, const Point& b, const Point& c) {
+    return (b.y == a.y ?
+          std::min(a.x, b.x) < c.x && c.x < std::max(a.x, b.x)
+        : std::min(a.y, b.y) < c.y && c.y < std::max(a.y, b.y));
+}
+
+// Crosses in the sense the e and f intersect but are not equal and the
+// intersection set is not a shared endpoint.
 template<typename Graph, typename GridPositionMap>
 bool crosses(typename graph_traits<Graph>::edge_descriptor e,
              typename graph_traits<Graph>::edge_descriptor f,
              Graph const &g,
              GridPositionMap const &drawing)
 {
-    using geometry::crosses;
-    using geometry::model::linestring;
-    using geometry::model::d2::point_xy;
-    using linestring2d = geometry::model::linestring<geometry::model::d2::point_xy<double>>;
-    return crosses(make<linestring2d>(e, g, drawing),
-                   make<linestring2d>(f, g, drawing));
+    const auto& p1 = drawing[source(e, g)];
+    const auto& p2 = drawing[target(e, g)];
+    const auto& q1 = drawing[source(f, g)];
+    const auto& q2 = drawing[target(f, g)];
+
+    using boost::multiprecision::int128_t;
+    int o1 = orientation2d<int128_t>(p1.x, p1.y, p2.x, p2.y, q1.x, q1.y);
+    int o2 = orientation2d<int128_t>(p1.x, p1.y, p2.x, p2.y, q2.x, q2.y);
+    int o3 = orientation2d<int128_t>(q1.x, q1.y, q2.x, q2.y, p1.x, p1.y);
+    int o4 = orientation2d<int128_t>(q1.x, q1.y, q2.x, q2.y, p2.x, p2.y);
+
+    // X-like crossing of (p1, p2), (q1, q2)
+    return ((o1 * o2 < 0) && (o3 * o4 < 0))
+        // T-like crossing, e.g. q1 in (p1, p2), or partial overlap
+        || (o1 == 0 && between(p1, p2, q1))
+        || (o2 == 0 && between(p1, p2, q2))
+        || (o3 == 0 && between(q1, q2, p1))
+        || (o4 == 0 && between(q1, q2, p2));
 }
 
 template < typename Graph, typename GridPositionMap, typename VertexIndexMap >

@@ -100,7 +100,7 @@ For a database to survive the failure of one data center in a cluster using the 
 
 ## Additional information
 
-* [Documentation for DevOps engineers](../devops/index.md)
+* [Cluster Administration documentation](../devops/index.md)
 * [{#T}](../reference/configuration/domains_config.md#domains-blob)
 * [Cluster configuration file examples](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
 
@@ -110,4 +110,4 @@ For a database to survive the failure of one data center in a cluster using the 
 
 {% endif %}
 
-[*recommended-node-count]: Using fewer nodes will limit the cluster's ability to [automatically recover](../maintenance/manual/selfheal.md).
+[*recommended-node-count]: Using fewer nodes will limit the cluster's ability to [automatically recover](../devops/concepts/selfheal-storage.md).

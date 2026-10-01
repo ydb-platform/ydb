@@ -582,25 +582,30 @@ struct Schema : NIceDb::Schema {
     };
 
     struct QuerySessions : Table<13> {
-        struct SessionId          : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct NodeId             : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct State              : Column<3, NScheme::NTypeIds::Utf8> {};
-        struct Query              : Column<4, NScheme::NTypeIds::Utf8> {};
-        struct QueryCount         : Column<5, NScheme::NTypeIds::Uint32> {};
-        struct ClientAddress      : Column<6, NScheme::NTypeIds::Utf8> {};
-        struct ClientPID          : Column<7, NScheme::NTypeIds::Utf8> {};
-        struct ClientUserAgent    : Column<8, NScheme::NTypeIds::Utf8> {};
-        struct ClientSdkBuildInfo : Column<9, NScheme::NTypeIds::Utf8> {};
-        struct ApplicationName    : Column<10, NScheme::NTypeIds::Utf8> {};
-        struct SessionStartAt     : Column<11, NScheme::NTypeIds::Timestamp> {};
-        struct QueryStartAt       : Column<12, NScheme::NTypeIds::Timestamp> {};
-        struct StateChangeAt      : Column<13, NScheme::NTypeIds::Timestamp> {};
-        struct UserSID            : Column<14, NScheme::NTypeIds::Utf8> {};
-        struct WmPoolId           : Column<17, NScheme::NTypeIds::Utf8> {};
-        struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
-        struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
-        struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
-        struct TraceId            : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct SessionId            : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct NodeId               : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct State                : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct Query                : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct QueryCount           : Column<5, NScheme::NTypeIds::Uint32> {};
+        struct ClientAddress        : Column<6, NScheme::NTypeIds::Utf8> {};
+        struct ClientPID            : Column<7, NScheme::NTypeIds::Utf8> {};
+        struct ClientUserAgent      : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct ClientSdkBuildInfo   : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct ApplicationName      : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct SessionStartAt       : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct QueryStartAt         : Column<12, NScheme::NTypeIds::Timestamp> {};
+        struct StateChangeAt        : Column<13, NScheme::NTypeIds::Timestamp> {};
+        struct UserSID              : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct WmPoolId             : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct WmState              : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct WmEnterTime          : Column<19, NScheme::NTypeIds::Timestamp> {};
+        struct WmExitTime           : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct TraceId              : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct WmClassifiedBy       : Column<22, NScheme::NTypeIds::Utf8> {};
+        struct DurationUs           : Column<23, NScheme::NTypeIds::Uint64> {};
+        struct CpuTimeUs            : Column<24, NScheme::NTypeIds::Uint64> {};
+        struct ComputeMemoryBytes   : Column<25, NScheme::NTypeIds::Uint64> {};
+        struct ReadIngressBytesRate : Column<26, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -622,7 +627,12 @@ struct Schema : NIceDb::Schema {
             WmState,
             WmEnterTime,
             WmExitTime,
-            TraceId>;
+            TraceId,
+            WmClassifiedBy,
+            DurationUs,
+            CpuTimeUs,
+            ComputeMemoryBytes,
+            ReadIngressBytesRate>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {
@@ -943,6 +953,38 @@ struct Schema : NIceDb::Schema {
             SuspendedUntil,
             LastExecutionId,
             PreviousExecutionIds>;
+    };
+
+    struct UdfModules : Table<27> {
+        struct Uid               : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Md5               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Name              : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct ModuleType        : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Version           : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Size              : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ChunkCount        : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct CompileStatus     : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct CompileError      : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct CreatedAt         : Column<10, NScheme::NTypeIds::Timestamp> {};
+        struct CompileStartedAt  : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct CompileFinishedAt : Column<12, NScheme::NTypeIds::Timestamp> {};
+        struct Manifest          : Column<13, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Uid>;
+        using TColumns = TableColumns<
+            Uid,
+            Md5,
+            Name,
+            ModuleType,
+            Version,
+            Size,
+            ChunkCount,
+            CompileStatus,
+            CompileError,
+            CreatedAt,
+            CompileStartedAt,
+            CompileFinishedAt,
+            Manifest>;
     };
 };
 

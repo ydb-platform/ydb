@@ -18,17 +18,19 @@ import weakref
 import botocore
 import botocore.auth
 from botocore.awsrequest import create_request_object, prepare_request_dict
-from botocore.compat import OrderedDict
+from botocore.compat import OrderedDict, get_current_datetime
 from botocore.exceptions import (
     ParamValidationError,
     UnknownClientMethodError,
     UnknownSignatureVersionError,
     UnsupportedSignatureVersionError,
 )
-from botocore.utils import ArnParser, datetime2timestamp
-
-# Keep these imported.  There's pre-existing code that uses them.
-from botocore.utils import fix_s3_host  # noqa
+from botocore.tokens import FrozenAuthToken
+from botocore.utils import (
+    ArnParser,
+    datetime2timestamp,
+    fix_s3_host,  # noqa: F401
+)
 
 
 class RequestSigner:
@@ -285,9 +287,12 @@ class RequestSigner:
             )
 
         if cls.REQUIRES_TOKEN is True:
-            frozen_token = None
-            if self._auth_token is not None:
+            if self._auth_token and not isinstance(
+                self._auth_token, FrozenAuthToken
+            ):
                 frozen_token = self._auth_token.get_frozen_token()
+            else:
+                frozen_token = self._auth_token
             auth = cls(frozen_token)
             return auth
 
@@ -723,7 +728,7 @@ class S3PostPresigner:
         policy = {}
 
         # Create an expiration date for the policy
-        datetime_now = datetime.datetime.utcnow()
+        datetime_now = get_current_datetime()
         expire_date = datetime_now + datetime.timedelta(seconds=expires_in)
         policy['expiration'] = expire_date.strftime(botocore.auth.ISO8601)
 

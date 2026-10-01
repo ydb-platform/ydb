@@ -1,0 +1,39 @@
+/* dq can not */
+/* dqfile can not */
+use plato;
+
+$min_date = ($a, $b) -> (IF($a IS NULL, $b, IF($b IS NULL, $a, IF($a < $b, $a, $b))));
+$max_date = ($a, $b) -> (IF($a IS NULL OR $b IS NULL, NULL, IF($a > $b, $a, $b)));
+
+$overlaps = ($a, $b) -> (
+    IF(
+        $a.date_from IS NOT NULL AND $b.date_to IS NOT NULL AND $a.date_from >= $b.date_to, FALSE,
+        IF(
+            $b.date_from IS NOT NULL AND $a.date_to IS NOT NULL AND $b.date_from >= $a.date_to, FALSE,
+            TRUE
+        )
+    )
+);
+
+$f = ($key, $left, $right) -> (
+    ListNotNull(
+        ListFlatten(
+            ListMap(
+                $left, ($x) -> (
+                    ListMap(
+                        $right, ($y) -> (
+                            IF($overlaps($x, $y), <|key: $key, value1: $x.value, value2: $y.value, date_from: $max_date($x.date_from, $y.date_from), date_to: $min_date($x.date_to, $y.date_to)|>, NULL)
+                        )
+                    )
+                )
+            )
+        )
+    )
+);
+
+COMBINE Input1 AS t1
+    PRESORT id, date_from, date_to
+WITH Input2 as t2
+    PRESORT id, date_from, date_to
+ON t1.id = t2.id
+USING $f(TableRow(), TableRow());

@@ -7,6 +7,8 @@
 #include <util/string/builder.h>
 #include <util/system/datetime.h>
 
+#include <variant>
+
 namespace NYdb::NBS {
 
 namespace {
@@ -163,36 +165,14 @@ TString TLogTitle::GetPartitionPrefix(
 
 TChildLogTitle TLogTitle::GetChild(const ui64 startTime) const
 {
-    TStringBuilder childPrefix;
-    childPrefix << CachedPrefix;
-    const auto duration = CyclesToDurationSafe(startTime - StartTime);
-    childPrefix << " t:" << FormatDuration(duration);
-
-    return {childPrefix, startTime};
+    return MakeChild(startTime, std::span<const TLogParam>{});
 }
 
-TChildLogTitle TLogTitle::GetChildWithTags(
+TChildLogTitle TLogTitle::MakeChild(
     const ui64 startTime,
-    std::span<const std::pair<TString, TString>> additionalTags) const
+    std::span<const TLogParam> tags) const
 {
-    TStringBuilder childPrefix;
-    childPrefix << CachedPrefix;
-
-    for (const auto& [key, value]: additionalTags) {
-        childPrefix << " " << key << ":" << value;
-    }
-
-    const auto duration = CyclesToDurationSafe(startTime - StartTime);
-    childPrefix << " t:" << FormatDuration(duration);
-
-    return {childPrefix, startTime};
-}
-
-TChildLogTitle TLogTitle::GetChildWithTags(
-    const ui64 startTime,
-    std::initializer_list<std::pair<TString, TString>> additionalTags) const
-{
-    return GetChildWithTags(startTime, std::span(additionalTags));
+    return {CachedPrefix, StartTime, startTime, tags};
 }
 
 TString TLogTitle::Get(EDetails details) const
@@ -272,16 +252,36 @@ void TLogTitle::Rebuild()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TChildLogTitle::TChildLogTitle(TString cachedPrefix, ui64 startTime)
-    : CachedPrefix(std::move(cachedPrefix))
+TChildLogTitle::TChildLogTitle(
+    TString parentPrefix,
+    ui64 parentStartTime,
+    ui64 startTime,
+    std::span<const TLogParam> tags)
+    : ParentPrefix(std::move(parentPrefix))
+    , ParentStartTime(parentStartTime)
     , StartTime(startTime)
-{}
+    , TagCount(tags.size())
+{
+    Y_DEBUG_ABORT_UNLESS(tags.size() <= MaxLogTagCount);
+    for (size_t i = 0; i < TagCount; ++i) {
+        Tags[i] = tags[i];
+    }
+}
 
 TString TChildLogTitle::GetWithTime() const
 {
-    const auto duration = CyclesToDurationSafe(GetCycleCount() - StartTime);
     TStringBuilder builder;
-    builder << CachedPrefix << " + " << FormatDuration(duration) << "]";
+    builder << ParentPrefix;
+
+    if (TagCount) {
+        builder << " ";
+        NBlockStore::PrintParams(builder.Out, {Tags.data(), TagCount});
+    }
+
+    const auto sinceParent = CyclesToDurationSafe(StartTime - ParentStartTime);
+    const auto sinceStart = CyclesToDurationSafe(GetCycleCount() - StartTime);
+    builder << " t:" << FormatDuration(sinceParent) << " + "
+            << FormatDuration(sinceStart) << "]";
     return builder;
 }
 

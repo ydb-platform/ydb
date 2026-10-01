@@ -18,8 +18,6 @@ class TTabletCountersBase;
 
 namespace NPQ {
 
-class TPartitionId;
-
 NActors::IActor* CreateMirrorer(const ui64 tabletId,
                                 const NActors::TActorId& tabletActor,
                                 const NActors::TActorId& partitionActor,

@@ -2,8 +2,7 @@
 
 #include <yql/essentials/public/udf/udf_counter.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 using TStringRef = NYql::NUdf::TStringRef;
 
@@ -13,5 +12,4 @@ constexpr TStringRef Operator_Aggregation("Operator.Aggregation.");
 
 constexpr TStringRef Counter_OutputRows("OutputRows");
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

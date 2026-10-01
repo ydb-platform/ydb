@@ -42,6 +42,7 @@ struct TEvPrivate {
         EvProcessTabletMetrics,
         EvReassignInactiveGroupsComplete,
         EvMoveDataComplete,
+        EvLogHangingRequests,
         EvEnd
     };
 
@@ -163,6 +164,8 @@ struct TEvPrivate {
 
         TEvMoveDataComplete(const TString& poolName, bool success) : PoolName(poolName), Success(success) {}
     };
+
+    struct TEvLogHangingRequests : TEventLocal<TEvLogHangingRequests, EvLogHangingRequests> {};
 };
 
 } // NHive

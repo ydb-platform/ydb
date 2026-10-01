@@ -10,6 +10,9 @@
 
 #include <ydb/core/blobstorage/nodewarden/distconf.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
+#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
+
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
@@ -69,7 +72,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        pdisk->NumActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+        pdisk->NumActiveDynamicSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
     }
 }
 
@@ -119,8 +122,7 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
     }
 }
 
-bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
+bool TBlobStorageController::TGroupInfo::FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
         TBlobStorageController *self) const {
     if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
@@ -157,8 +159,8 @@ bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
     }
 }
 
-bool TBlobStorageController::TGroupInfo::FillInResources(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {
+bool TBlobStorageController::TGroupInfo::FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb,
+        bool useExpectedSlotCount) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
     std::optional<ui64> size;
     std::optional<double> iops;
@@ -173,21 +175,25 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
 
-        const ui32 maxSlots = pdisk->GetEffectiveExpectedSlotCount();
+        const ui32 expectedSlotCount = pdisk->GetEffectiveExpectedSlotCount();
 
         ui64 vdiskSlotSize = 0;
         const ui32 weight = pdisk->GetOwnerWeight(GroupSizeInUnits);
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
-            const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->NumActiveSlots;
+            const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
+                ? expectedSlotCount
+                : pdisk->NumActiveDynamicSlots + pdisk->StaticSlotUsage;
             vdiskSlotSize = metrics.GetTotalSize() / shareFactor * weight;
         }
         if (vdiskSlotSize) {
             size = Min(size.value_or(Max<ui64>()), vdiskSlotSize);
         }
 
-        const ui32 shareFactor = (countMaxSlots && maxSlots) ? maxSlots : pdisk->VSlotsOnPDisk.size();
+        const ui32 shareFactor = (useExpectedSlotCount && expectedSlotCount)
+            ? expectedSlotCount
+            : pdisk->VSlotsOnPDisk.size() + pdisk->StaticSlotUsage;
         if (metrics.HasMaxIOPS()) {
             iops = Min(iops.value_or(Max<double>()), metrics.GetMaxIOPS() * 100 / shareFactor * 0.01);
         }
@@ -229,8 +235,7 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
     return Topology->GetQuorumChecker().CheckQuorumForGroup(vdisksWithAllMetrics);
 }
 
-bool TBlobStorageController::TGroupInfo::FillInVDiskResources(
-        NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const {
+bool TBlobStorageController::TGroupInfo::FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const {
     Y_ABORT_UNLESS(Topology);
     TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
 
@@ -273,7 +278,8 @@ NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const T
     }
 }
 
-void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
+void TBlobStorageController::OnActivateExecutor(const TActorContext& ctx) {
+    Y_UNUSED(ctx);
     StartConsoleInteraction();
 
     // create stat processor
@@ -900,17 +906,17 @@ void TBlobStorageController::ValidateInternalState() {
     // here we compare different structures to ensure that the memory state is sane
 #ifndef NDEBUG
     for (const auto& [pdiskId, pdisk] : PDisks) {
-        ui32 numActiveSlots = 0;
+        ui32 numActiveDynamicSlots = 0;
         for (const auto& [vslotId, vslot] : pdisk->VSlotsOnPDisk) {
             Y_ABORT_UNLESS(vslot == FindVSlot(TVSlotId(pdiskId, vslotId)));
             Y_ABORT_UNLESS(vslot->PDisk == pdisk.Get());
             if (!vslot->IsBeingDeleted()) {
                 const TGroupInfo* group = FindGroup(vslot->GroupId);
                 Y_ABORT_UNLESS(group);
-                numActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+                numActiveDynamicSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
             }
         }
-        Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);
+        Y_ABORT_UNLESS(pdisk->NumActiveDynamicSlots == numActiveDynamicSlots);
     }
     for (const auto& [vslotId, vslot] : VSlots) {
         Y_ABORT_UNLESS(vslot->VSlotId == vslotId);
@@ -968,6 +974,22 @@ void TBlobStorageController::ValidateInternalState() {
 #endif
 }
 
+void TBlobStorageController::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+    ConsoleInteraction->Handle(ev);
+}
+
+void TBlobStorageController::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+    if (ev->Get()->ClientId == CmsPipe) {
+        // The CMS pipe actor has died (e.g. exhausted its retry policy after
+        // a CMS tablet restart). Drop the stale actor id so that the next
+        // revision-change notification recreates the pipe instead of
+        // silently sending data to a dead actor forever.
+        CmsPipe = TActorId();
+        return;
+    }
+    ConsoleInteraction->Handle(ev);
+}
+
 STFUNC(TBlobStorageController::StateWork) {
     const ui32 type = ev->GetTypeRewrite();
     THPTimer timer;
@@ -1012,8 +1034,8 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerReplaceConfigRequest, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerFetchConfigRequest, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, ConsoleInteraction->Handle);
-        hFunc(TEvTabletPipe::TEvClientConnected, ConsoleInteraction->Handle);
-        hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
+        hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
@@ -1022,6 +1044,8 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
+        hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
+        hFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTablet, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR("StateWork unexpected event",
@@ -1062,6 +1086,9 @@ void TBlobStorageController::PassAway() {
         if (const auto& actorId = info.VirtualGroupSetupMachineId) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
+    }
+    if (CmsPipe) {
+        NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
     }
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, GetNameserviceActorId(), SelfId(),
         nullptr, 0));

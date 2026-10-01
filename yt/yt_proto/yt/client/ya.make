@@ -8,6 +8,10 @@ PEERDIR(
     yt/yt_proto/yt/core
 )
 
+IF (JAVA_PROTO)
+    DEFAULT_JDK_VERSION(11)
+ENDIF()
+
 INCLUDE(${ARCADIA_ROOT}/yt/gradle.inc)
 
 SRCS(

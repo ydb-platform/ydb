@@ -29,6 +29,42 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     Public-Domain        024e982077879678e19c5ddd1276e460
+BELONGS ya.make
+    License text:
+        then no longer be fully in the public domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        README.md [47:47]
+
+KEEP     Public-Domain        0acb811ff476c8509f8d3f811bfc65be
+BELONGS ya.make
+    License text:
+        \## Public Domain
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        README.md [39:39]
+
+KEEP     Public-Domain        3ff3b8c28b98045478398ad660ce6c5f
+BELONGS ya.make
+    License text:
+        The SQLite source code is in the public domain.  See
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        README.md [41:41]
+
 KEEP     Public-Domain        657cab1322a8f004d04e037b6739d21a
 BELONGS ya.make
     License text:
@@ -39,7 +75,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        sqlite3.c [180531:180531]
+        sqlite3.c [185570:185570]
 
 SKIP     LicenseRef-scancode-proprietary-license 8426a059ede424b00bf0246f20b5d31f
 BELONGS ya.make
@@ -52,7 +88,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
     Files with this license:
-        sqlite3.c [68092:68092]
+        sqlite3.c [69922:69922]
 
 KEEP     blessing             85b808eb169d4456ed67e0cf819b320f
 BELONGS ya.make
@@ -63,154 +99,166 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : https://spdx.org/licenses/blessing, https://sqlite.org/src/artifact/df5091916dbb40e6
     Files with this license:
-        sqlite3.c [30:35]
-        sqlite3.c [90:95]
-        sqlite3.c [144:149]
-        sqlite3.c [315:320]
-        sqlite3.c [10938:10943]
-        sqlite3.c [12807:12812]
-        sqlite3.c [13403:13408]
-        sqlite3.c [14008:14013]
-        sqlite3.c [15017:15022]
-        sqlite3.c [15045:15050]
-        sqlite3.c [15342:15347]
-        sqlite3.c [15590:15595]
-        sqlite3.c [16017:16022]
-        sqlite3.c [16670:16675]
-        sqlite3.c [16865:16870]
-        sqlite3.c [21220:21225]
-        sqlite3.c [21330:21335]
-        sqlite3.c [22112:22117]
-        sqlite3.c [22510:22515]
-        sqlite3.c [22528:22533]
-        sqlite3.c [23625:23630]
-        sqlite3.c [25040:25045]
-        sqlite3.c [25490:25495]
-        sqlite3.c [25580:25585]
-        sqlite3.c [25642:25647]
-        sqlite3.c [25936:25941]
-        sqlite3.c [26467:26472]
-        sqlite3.c [27157:27162]
-        sqlite3.c [27745:27750]
-        sqlite3.c [28109:28114]
-        sqlite3.c [28328:28333]
-        sqlite3.c [28725:28730]
-        sqlite3.c [28751:28756]
-        sqlite3.c [29219:29224]
-        sqlite3.c [31593:31598]
-        sqlite3.c [32897:32902]
-        sqlite3.c [33057:33062]
-        sqlite3.c [33334:33339]
-        sqlite3.c [33872:33877]
-        sqlite3.c [35624:35629]
-        sqlite3.c [35716:35721]
-        sqlite3.c [36195:36200]
-        sqlite3.c [37177:37182]
-        sqlite3.c [45328:45333]
-        sqlite3.c [51533:51538]
-        sqlite3.c [52464:52469]
-        sqlite3.c [52878:52883]
-        sqlite3.c [53806:53811]
-        sqlite3.c [55089:55094]
-        sqlite3.c [55594:55599]
-        sqlite3.c [55618:55623]
-        sqlite3.c [63493:63498]
-        sqlite3.c [67674:67679]
-        sqlite3.c [67693:67698]
-        sqlite3.c [68723:68728]
-        sqlite3.c [80066:80071]
-        sqlite3.c [80836:80841]
-        sqlite3.c [82838:82843]
-        sqlite3.c [88264:88269]
-        sqlite3.c [90566:90571]
-        sqlite3.c [90761:90766]
-        sqlite3.c [99672:99677]
-        sqlite3.c [100191:100196]
-        sqlite3.c [102960:102965]
-        sqlite3.c [103391:103396]
-        sqlite3.c [103834:103839]
-        sqlite3.c [104094:104099]
-        sqlite3.c [106258:106263]
-        sqlite3.c [113010:113015]
-        sqlite3.c [115314:115319]
-        sqlite3.c [117305:117310]
-        sqlite3.c [117925:117930]
-        sqlite3.c [118196:118201]
-        sqlite3.c [123891:123896]
-        sqlite3.c [124434:124439]
-        sqlite3.c [125456:125461]
-        sqlite3.c [127959:127964]
-        sqlite3.c [129438:129443]
-        sqlite3.c [132602:132607]
-        sqlite3.c [132746:132751]
-        sqlite3.c [132766:132771]
-        sqlite3.c [134365:134370]
-        sqlite3.c [137939:137944]
-        sqlite3.c [139017:139022]
-        sqlite3.c [147361:147366]
-        sqlite3.c [147561:147566]
-        sqlite3.c [149044:149049]
-        sqlite3.c [150406:150411]
-        sqlite3.c [150725:150730]
-        sqlite3.c [151141:151146]
-        sqlite3.c [152498:152503]
-        sqlite3.c [152520:152525]
-        sqlite3.c [155930:155935]
-        sqlite3.c [157803:157808]
-        sqlite3.c [164636:164641]
-        sqlite3.c [167742:167747]
-        sqlite3.c [173196:173201]
-        sqlite3.c [174539:174544]
-        sqlite3.c [174832:174837]
-        sqlite3.c [174853:174858]
-        sqlite3.c [174886:174891]
-        sqlite3.c [174923:174928]
-        sqlite3.c [179858:179863]
-        sqlite3.c [180193:180198]
-        sqlite3.c [180485:180490]
-        sqlite3.c [180697:180702]
-        sqlite3.c [187269:187274]
-        sqlite3.c [187828:187833]
-        sqlite3.c [189124:189129]
-        sqlite3.c [189510:189515]
-        sqlite3.c [190175:190180]
-        sqlite3.c [190698:190703]
-        sqlite3.c [190935:190940]
-        sqlite3.c [191396:191401]
-        sqlite3.c [197215:197220]
-        sqlite3.c [198973:198978]
-        sqlite3.c [199373:199378]
-        sqlite3.c [199759:199764]
-        sqlite3.c [203143:203148]
-        sqlite3.c [207548:207553]
-        sqlite3.c [209568:209573]
-        sqlite3.c [210126:210131]
-        sqlite3.c [210391:210396]
-        sqlite3.c [210482:210487]
-        sqlite3.c [216447:216452]
-        sqlite3.c [217354:217359]
-        sqlite3.c [223838:223843]
-        sqlite3.c [224414:224419]
-        sqlite3.c [225296:225301]
-        sqlite3.c [226773:226778]
-        sqlite3.c [227490:227495]
-        sqlite3.c [227899:227904]
-        sqlite3.c [228883:228888]
-        sqlite3.c [232019:232024]
-        sqlite3.c [232580:232585]
-        sqlite3.c [239868:239873]
-        sqlite3.c [242821:242826]
-        sqlite3.c [243990:243995]
-        sqlite3.c [245406:245411]
-        sqlite3.c [246185:246190]
-        sqlite3.c [246530:246535]
-        sqlite3.c [247328:247333]
+        sqlite3.c [38:43]
+        sqlite3.c [98:103]
+        sqlite3.c [152:157]
+        sqlite3.c [323:328]
+        sqlite3.c [11173:11178]
+        sqlite3.c [13122:13127]
+        sqlite3.c [13768:13773]
+        sqlite3.c [14398:14403]
+        sqlite3.c [15452:15457]
+        sqlite3.c [15480:15485]
+        sqlite3.c [15777:15782]
+        sqlite3.c [16029:16034]
+        sqlite3.c [16455:16460]
+        sqlite3.c [17115:17120]
+        sqlite3.c [17310:17315]
+        sqlite3.c [21787:21792]
+        sqlite3.c [21897:21902]
+        sqlite3.c [22688:22693]
+        sqlite3.c [23093:23098]
+        sqlite3.c [23111:23116]
+        sqlite3.c [24229:24234]
+        sqlite3.c [26047:26052]
+        sqlite3.c [26497:26502]
+        sqlite3.c [26587:26592]
+        sqlite3.c [26649:26654]
+        sqlite3.c [26943:26948]
+        sqlite3.c [27474:27479]
+        sqlite3.c [28164:28169]
+        sqlite3.c [28752:28757]
+        sqlite3.c [29116:29121]
+        sqlite3.c [29335:29340]
+        sqlite3.c [29732:29737]
+        sqlite3.c [29758:29763]
+        sqlite3.c [30226:30231]
+        sqlite3.c [32595:32600]
+        sqlite3.c [33914:33919]
+        sqlite3.c [34074:34079]
+        sqlite3.c [34351:34356]
+        sqlite3.c [34920:34925]
+        sqlite3.c [36813:36818]
+        sqlite3.c [36905:36910]
+        sqlite3.c [37387:37392]
+        sqlite3.c [38369:38374]
+        sqlite3.c [46662:46667]
+        sqlite3.c [52876:52881]
+        sqlite3.c [53815:53820]
+        sqlite3.c [54229:54234]
+        sqlite3.c [55167:55172]
+        sqlite3.c [56450:56455]
+        sqlite3.c [56955:56960]
+        sqlite3.c [56979:56984]
+        sqlite3.c [64922:64927]
+        sqlite3.c [69504:69509]
+        sqlite3.c [69523:69528]
+        sqlite3.c [70554:70559]
+        sqlite3.c [82023:82028]
+        sqlite3.c [82793:82798]
+        sqlite3.c [84848:84853]
+        sqlite3.c [90387:90392]
+        sqlite3.c [92929:92934]
+        sqlite3.c [93124:93129]
+        sqlite3.c [102294:102299]
+        sqlite3.c [102812:102817]
+        sqlite3.c [105581:105586]
+        sqlite3.c [106030:106035]
+        sqlite3.c [106473:106478]
+        sqlite3.c [106735:106740]
+        sqlite3.c [109022:109027]
+        sqlite3.c [116153:116158]
+        sqlite3.c [118467:118472]
+        sqlite3.c [120487:120492]
+        sqlite3.c [121107:121112]
+        sqlite3.c [121378:121383]
+        sqlite3.c [127085:127090]
+        sqlite3.c [127628:127633]
+        sqlite3.c [128659:128664]
+        sqlite3.c [131418:131423]
+        sqlite3.c [132904:132909]
+        sqlite3.c [136280:136285]
+        sqlite3.c [136424:136429]
+        sqlite3.c [136444:136449]
+        sqlite3.c [138071:138076]
+        sqlite3.c [141814:141819]
+        sqlite3.c [142902:142907]
+        sqlite3.c [151522:151527]
+        sqlite3.c [151722:151727]
+        sqlite3.c [153284:153289]
+        sqlite3.c [154655:154660]
+        sqlite3.c [154987:154992]
+        sqlite3.c [155403:155408]
+        sqlite3.c [156779:156784]
+        sqlite3.c [156801:156806]
+        sqlite3.c [160252:160257]
+        sqlite3.c [162128:162133]
+        sqlite3.c [169358:169363]
+        sqlite3.c [172468:172473]
+        sqlite3.c [178017:178022]
+        sqlite3.c [179394:179399]
+        sqlite3.c [179687:179692]
+        sqlite3.c [179708:179713]
+        sqlite3.c [179741:179746]
+        sqlite3.c [179778:179783]
+        sqlite3.c [184894:184899]
+        sqlite3.c [185232:185237]
+        sqlite3.c [185524:185529]
+        sqlite3.c [185736:185741]
+        sqlite3.c [192368:192373]
+        sqlite3.c [192928:192933]
+        sqlite3.c [194224:194229]
+        sqlite3.c [194610:194615]
+        sqlite3.c [195275:195280]
+        sqlite3.c [195798:195803]
+        sqlite3.c [196035:196040]
+        sqlite3.c [196497:196502]
+        sqlite3.c [202334:202339]
+        sqlite3.c [204092:204097]
+        sqlite3.c [204492:204497]
+        sqlite3.c [204878:204883]
+        sqlite3.c [210339:210344]
+        sqlite3.c [214627:214632]
+        sqlite3.c [216651:216656]
+        sqlite3.c [217242:217247]
+        sqlite3.c [217507:217512]
+        sqlite3.c [217598:217603]
+        sqlite3.c [223565:223570]
+        sqlite3.c [224473:224478]
+        sqlite3.c [231446:231451]
+        sqlite3.c [232072:232077]
+        sqlite3.c [232989:232994]
+        sqlite3.c [234489:234494]
+        sqlite3.c [235243:235248]
+        sqlite3.c [235655:235660]
+        sqlite3.c [236696:236701]
+        sqlite3.c [239959:239964]
+        sqlite3.c [240550:240555]
+        sqlite3.c [249620:249625]
+        sqlite3.c [252738:252743]
+        sqlite3.c [253969:253974]
+        sqlite3.c [255430:255435]
+        sqlite3.c [256209:256214]
+        sqlite3.c [256554:256559]
+        sqlite3.c [257353:257358]
         sqlite3.h [4:9]
-        sqlite3.h [10627:10632]
-        sqlite3.h [12496:12501]
+        sqlite3.h [10854:10859]
+        sqlite3.h [12803:12808]
         sqlite3ext.h [4:9]
         test_multiplex.c [4:9]
         test_multiplex.h [4:9]
+
+KEEP     Public-Domain        95e11b32ae6897fc5394cac118969dc7
+BELONGS ya.make
+    License text:
+        Because SQLite is in the public domain, we do not normally accept pull
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        README.md [44:44]
 
 SKIP     GPL-2.0-only AND GCC-exception-2.0 bc44563fd05423df115b7b82deab1b49
 BELONGS ya.make
@@ -224,16 +272,16 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
     Files with this license:
-        sqlite3.c [5248:5249]
-        sqlite3.h [4937:4938]
+        sqlite3.c [5317:5318]
+        sqlite3.h [4998:4999]
     Scancode info:
         Original SPDX id: GCC-exception-2.0
         Score           : 3.64
         Match type      : NOTICE
         Links           : https://spdx.org/licenses/GCC-exception-2.0
     Files with this license:
-        sqlite3.c [5248:5249]
-        sqlite3.h [4937:4938]
+        sqlite3.c [5317:5318]
+        sqlite3.h [4998:4999]
 
 KEEP     blessing             c8d1f000b61e9d05df188f11a758a806
 BELONGS ya.make
@@ -257,7 +305,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
     Files with this license:
-        sqlite3.c [124550:124550]
+        sqlite3.c [127744:127744]
 
 KEEP     Public-Domain        f14cda0580418473b9b9cbd71db6f933
 BELONGS ya.make
@@ -270,4 +318,4 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        sqlite3.c [30120:30121]
+        sqlite3.c [31147:31148]

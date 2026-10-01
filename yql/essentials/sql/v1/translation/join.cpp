@@ -350,7 +350,6 @@ protected:
         return KeysInitializing_;
     }
 
-protected:
     TVector<TString> JoinOps_;
     TVector<TNodePtr> JoinExprs_;
     TVector<TJoinLinkSettings> JoinLinkSettings_;

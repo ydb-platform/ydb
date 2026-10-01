@@ -1,7 +1,10 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
+#include <util/generic/algorithm.h>
 #include <cctype>
 #include "http_proxy.h"
+
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
 
 namespace NHttp {
 
@@ -20,7 +23,8 @@ public:
     IActor* AddOutgoingConnection(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), event);
         TActorId connectionId = Register(connectionSocket);
-        ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
+        YDB_LOG_DEBUG("Connection created",
+            {"connectionId", connectionId});
         Connections.emplace(connectionId);
         return connectionSocket;
     }
@@ -74,12 +78,12 @@ protected:
 
     void Handle(TEvHttpProxy::TEvHttpIncomingResponse::TPtr& event) {
         Y_UNUSED(event);
-        ALOG_ERROR(HttpLog, "Event TEvHttpIncomingResponse shouldn't be in proxy, it should go to the http connection owner directly");
+        YDB_LOG_ERROR("Event TEvHttpIncomingResponse shouldn't be in proxy, it should go to the http connection owner directly");
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingResponse::TPtr& event) {
         Y_UNUSED(event);
-        ALOG_ERROR(HttpLog, "Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
+        YDB_LOG_ERROR("Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
     }
 
     template<typename TEventType>
@@ -94,12 +98,15 @@ protected:
             auto itAvailableConnection = AvailableConnections.find(destination);
             if (itAvailableConnection != AvailableConnections.end()) {
                 TActorId availableConnection = itAvailableConnection->second;
-                ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
+                YDB_LOG_DEBUG("Reusing connection for destination",
+                    {"availableConnection", availableConnection},
+                    {"destination", destination});
                 AvailableConnections.erase(itAvailableConnection);
                 Send(Forward(availableConnection, std::move(event)));
                 return;
             } else {
-                ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
+                YDB_LOG_DEBUG("Creating a new connection for destination",
+                    {"destination", destination});
             }
         }
         AddOutgoingConnection(event);
@@ -120,16 +127,20 @@ protected:
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr& event) {
         if (AvailableConnections.size() < MAX_REUSABLE_CONNECTIONS) {
-            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
+            YDB_LOG_DEBUG("Connection available for destination",
+                {"connectionID", event->Get()->ConnectionID},
+                {"destination", event->Get()->Destination});
             AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
         } else {
-            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " not added to available connections, limit reached");
+            YDB_LOG_DEBUG("Connection not added to available connections, limit reached",
+                {"connectionID", event->Get()->ConnectionID});
             Send(event->Get()->ConnectionID, new NActors::TEvents::TEvPoisonPill());
         }
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr& event) {
-        ALOG_DEBUG(HttpLog, "Connection closed " << event->Get()->ConnectionID);
+        YDB_LOG_DEBUG("Connection closed",
+            {"connectionID", event->Get()->ConnectionID});
         Connections.erase(event->Get()->ConnectionID);
         auto range = AvailableConnections.equal_range(event->Get()->Destination);
         for (auto it = range.first; it != range.second; ++it) {
@@ -141,7 +152,9 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvRegisterHandler::TPtr& event) {
-        ALOG_TRACE(HttpLog, "Register handler " << event->Get()->Path << " to " << event->Get()->Handler);
+        YDB_LOG_TRACE("Register handler",
+            {"path", event->Get()->Path},
+            {"handler", event->Get()->Handler});
         Handlers.RegisterHandler(event->Get()->Path, event->Get()->Handler);
     }
 
@@ -187,7 +200,9 @@ protected:
                     }
                     if (address) {
                         memcpy(address->SockAddr(), pAddr->ai_addr, pAddr->ai_addrlen);
-                        ALOG_DEBUG(HttpLog, "Host " << host << " resolved to " << address->ToString());
+                        YDB_LOG_DEBUG("Host resolved",
+                            {"host", host},
+                            {"address", address->ToString()});
                         if (it == Hosts.end()) {
                             it = Hosts.emplace(host, THostEntry()).first;
                         }
@@ -422,46 +437,65 @@ void TrimEnd(TString& target, char delim) {
     }
 }
 
-TString GetObfuscatedData(TString data, const THeaders& headers) {
-    TStringBuf authorization(headers["Authorization"]);
-    TStringBuf cookie(headers["Cookie"]);
-    TStringBuf set_cookie(headers["Set-Cookie"]);
-    TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-    TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
-    if (!authorization.empty()) {
-        auto pos = data.find(authorization);
-        if (pos != TString::npos) {
-            data.replace(pos, authorization.size(), TString("<obfuscated>"));
+TString GetObfuscatedData(TStringBuf data) {
+    static constexpr TStringBuf SensitiveHeaders[] = {
+        "Authorization",
+        "Cookie",
+        "Set-Cookie",
+        "X-Ydb-Auth-Ticket",
+        "X-Ydb-Iam-Token",
+        "X-YaCloud-SubjectToken",
+    };
+
+    TString result;
+    result.reserve(data.size());
+    while (!data.empty()) {
+        const size_t lineEnd = data.find('\n');
+        TStringBuf line = data.substr(0, lineEnd);
+        if (lineEnd != TStringBuf::npos) {
+            // Match the parser's handling of LF and CRLF line endings.
+            line = TrimEnd(line, '\r');
         }
-    }
-    if (!cookie.empty()) {
-        auto pos = data.find(cookie);
-        if (pos != TString::npos) {
-            data.replace(pos, cookie.size(), TString("<obfuscated>"));
+        if (line.empty()) {
+            // The rest is the body and must not be interpreted as headers.
+            result += data;
+            break;
         }
-    }
-    if (!set_cookie.empty()) {
-        auto pos = data.find(set_cookie);
-        if (pos != TString::npos) {
-            data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+
+        const size_t colon = line.find(':');
+        const TStringBuf headerName = line.substr(0, colon);
+        const auto isSensitiveHeader = [headerName](TStringBuf sensitiveHeader) {
+            return TEqNoCase()(headerName, sensitiveHeader);
+        };
+
+        if (colon != TStringBuf::npos && AnyOf(SensitiveHeaders, isSensitiveHeader)) {
+            size_t valueBegin = colon + 1;
+            while (valueBegin < line.size() && (line[valueBegin] == ' ' || line[valueBegin] == '\t')) {
+                ++valueBegin;
+            }
+
+            result += line.substr(0, valueBegin);
+
+            if (valueBegin < line.size()) {
+                result += "<obfuscated>";
+            }
+        } else {
+            result += line;
         }
-    }
-    if (!x_ydb_auth_ticket.empty()) {
-        auto pos = data.find(x_ydb_auth_ticket);
-        if (pos != TString::npos) {
-            data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+
+        if (lineEnd == TStringBuf::npos) {
+            break;
         }
+
+        result += data.substr(line.size(), lineEnd + 1 - line.size());
+        data.Skip(lineEnd + 1);
     }
-    if (!x_yacloud_subjecttoken.empty()) {
-        auto pos = data.find(x_yacloud_subjecttoken);
-        if (pos != TString::npos) {
-            data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
-        }
+
+    if (result.size() > 2000) {
+        return result.substr(0, 1000) + " --- <truncated> --- " + result.substr(result.size() - 1000);
     }
-    if (data.size() > 2000) {
-        return data.substr(0, 1000) + " --- <truncated> --- " + data.substr(data.size() - 1000);
-    }
-    return data;
+
+    return result;
 }
 
 TString ToHex(size_t value) {

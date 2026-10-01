@@ -150,6 +150,7 @@ message TConfigItem {
         CompGroupedMemoryLimiterConfig = 92;
         BlockstoreConfigItem = 93;
         PrivateDatabaseConfigItem = 94;
+        UdfStoreConfigItem = 95;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

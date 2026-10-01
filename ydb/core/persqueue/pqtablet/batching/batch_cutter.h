@@ -1,10 +1,13 @@
 #pragma once
 
-#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/core/protos/msgbus_pq.pb.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
+
+#include <expected>
 
 namespace NKikimr::NPQ::NBatching {
 
@@ -14,24 +17,27 @@ struct TBatchCutterData {
     NKikimrPQClient::TDataChunk DataChunk;
     const TReadResult& ReadResult;
 
-    TBatchCutterData(const TReadResult& readResult, NKikimrPQClient::TDataChunk&& dataChunk) : DataChunk(dataChunk), ReadResult(readResult) {}
+    TBatchCutterData(const TReadResult& readResult, NKikimrPQClient::TDataChunk&& dataChunk)
+        : ReadResult(readResult)
+    {
+        DataChunk.Swap(&dataChunk);
+    }
+
+    TBatchCutterData(TReadResult&&, NKikimrPQClient::TDataChunk&&) = delete;
 };
 
 class IBatchCutter {
 public:
     virtual ~IBatchCutter() = default;
 
-    virtual TVector<TReadResult> Cut(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
-    virtual THashMap<TString, ui64> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
+    virtual std::expected<TVector<TReadResult>, TString> Cut(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
+    virtual std::expected<THashMap<TString, ui64>, TString> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const = 0;
 };
 
 class TKafkaBatchCutter : public IBatchCutter {
 public:
-    TKafkaBatchCutter() = default;
-    ~TKafkaBatchCutter() = default;
-
-    TVector<TReadResult> Cut(const TBatchCutterData& data, ui64 readStartOffset) const override final;
-    THashMap<TString, ui64> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const override final;
+    std::expected<TVector<TReadResult>, TString> Cut(const TBatchCutterData& data, ui64 readStartOffset) const override final;
+    std::expected<THashMap<TString, ui64>, TString> GetKeys(const TBatchCutterData& data, ui64 readStartOffset) const override final;
 };
 
 } // namespace NKikimr::NPQ::NBatching

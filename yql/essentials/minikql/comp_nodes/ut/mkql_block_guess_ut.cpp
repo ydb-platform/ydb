@@ -16,6 +16,13 @@ void TestBlockGuess(const TVector<TInputData>& data, const TVector<TExpectedData
     });
 }
 
+template <typename TInputData, typename TExpectedData>
+void TestBlockGuess(const TVector<TInputData>& data, const TVector<TExpectedData>& expected, const std::string_view& memberName) {
+    TBlockHelper().TestKernelFuzzied(data, expected, [memberName](TSetup<false>& setup, TRuntimeNode variantValue) {
+        return setup.PgmBuilder->BlockGuess(variantValue, memberName);
+    });
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockGuessTest) {
@@ -24,35 +31,35 @@ Y_UNIT_TEST(TupleVariant_Ui32Ui64_Index0) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{1}}, TVariant{ui64{2}}, TVariant{ui32{3}}};
     TVector<TMaybe<ui32>> expected = {ui32{1}, Nothing(), ui32{3}};
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(TupleVariant_Ui32Ui64_Index1) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{1}}, TVariant{ui64{2}}, TVariant{ui32{3}}};
     TVector<TMaybe<ui64>> expected = {Nothing(), ui64{2}, Nothing()};
-    TestBlockGuess(data, expected, 1u);
+    TestBlockGuess(data, expected, 1U);
 }
 
 Y_UNIT_TEST(TupleVariant_AllSameAlternative) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{10}}, TVariant{ui32{20}}, TVariant{ui32{30}}};
     TVector<TMaybe<ui32>> expected = {ui32{10}, ui32{20}, ui32{30}};
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(TupleVariant_NoneMatchAlternative) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TVariant> data = {TVariant{ui32{1}}, TVariant{ui32{2}}, TVariant{ui32{3}}};
     TVector<TMaybe<ui64>> expected = {Nothing(), Nothing(), Nothing()};
-    TestBlockGuess(data, expected, 1u);
+    TestBlockGuess(data, expected, 1U);
 }
 
 Y_UNIT_TEST(TupleVariant_StringAlternative) {
     using TVariant = std::variant<ui32, TString>;
     TVector<TVariant> data = {TVariant{ui32{42}}, TVariant{TString{"hello"}}, TVariant{ui32{7}}};
     TVector<TMaybe<TString>> expected = {Nothing(), TMaybe<TString>{"hello"}, Nothing()};
-    TestBlockGuess(data, expected, 1u);
+    TestBlockGuess(data, expected, 1U);
 }
 
 Y_UNIT_TEST(TupleVariant_TupleAlternative) {
@@ -68,29 +75,29 @@ Y_UNIT_TEST(TupleVariant_TupleAlternative) {
         Nothing(),
         TMaybe<TTupleAlternative>{TTupleAlternative{ui32{3}, TString{"b"}}},
     };
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(TupleVariant_PgIntAlternative) {
     using TVariant = std::variant<TPgInt, ui64>;
     TVector<TVariant> data = {TVariant{TPgInt{10}}, TVariant{ui64{20}}, TVariant{TPgInt{30}}};
     TVector<TMaybe<TPgInt>> expected = {TMaybe<TPgInt>{TPgInt{10}}, Nothing(), TMaybe<TPgInt>{TPgInt{30}}};
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(TupleVariant_OptionalAlternative_DoubleOptional) {
     using TVariant = std::variant<TMaybe<ui32>, ui64>;
     TVector<TVariant> data = {
-        TVariant{TMaybe<ui32>{10u}},
-        TVariant{ui64{20u}},
+        TVariant{TMaybe<ui32>{10U}},
+        TVariant{ui64{20U}},
         TVariant{TMaybe<ui32>{}},
     };
     TVector<TMaybe<TMaybe<ui32>>> expected = {
-        TMaybe<TMaybe<ui32>>{TMaybe<ui32>{10u}},
+        TMaybe<TMaybe<ui32>>{TMaybe<ui32>{10U}},
         TMaybe<TMaybe<ui32>>{},
         TMaybe<TMaybe<ui32>>{TMaybe<ui32>{}},
     };
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(OptionalTupleVariant_NullRows) {
@@ -101,14 +108,14 @@ Y_UNIT_TEST(OptionalTupleVariant_NullRows) {
         TMaybe<TVariant>{TVariant{ui32{3}}},
     };
     TVector<TMaybe<ui32>> expected = {ui32{1}, Nothing(), ui32{3}};
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(OptionalTupleVariant_AllNull) {
     using TVariant = std::variant<ui32, ui64>;
     TVector<TMaybe<TVariant>> data = {TMaybe<TVariant>{}, TMaybe<TVariant>{}, TMaybe<TVariant>{}};
     TVector<TMaybe<ui32>> expected = {Nothing(), Nothing(), Nothing()};
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(OptionalTupleVariant_NoNull) {
@@ -119,7 +126,7 @@ Y_UNIT_TEST(OptionalTupleVariant_NoNull) {
         TMaybe<TVariant>{TVariant{ui32{3}}},
     };
     TVector<TMaybe<ui32>> expected = {ui32{1}, Nothing(), ui32{3}};
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(OptionalTupleVariant_MixedNull) {
@@ -130,7 +137,7 @@ Y_UNIT_TEST(OptionalTupleVariant_MixedNull) {
         TMaybe<TVariant>{TVariant{ui64{20}}},
     };
     TVector<TMaybe<ui64>> expected = {ui64{10}, Nothing(), ui64{20}};
-    TestBlockGuess(data, expected, 1u);
+    TestBlockGuess(data, expected, 1U);
 }
 
 Y_UNIT_TEST(OptionalTupleVariant_SomeFieldsSet_StringAlternative) {
@@ -147,7 +154,7 @@ Y_UNIT_TEST(OptionalTupleVariant_SomeFieldsSet_StringAlternative) {
         Nothing(),
         TMaybe<TString>{"world"},
     };
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(OptionalTupleVariant_AllFieldsSet_StringAlternative) {
@@ -162,7 +169,7 @@ Y_UNIT_TEST(OptionalTupleVariant_AllFieldsSet_StringAlternative) {
         TMaybe<TString>{"bar"},
         TMaybe<TString>{"baz"},
     };
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(TupleVariant_OptionalString_AllStringsSet) {
@@ -177,7 +184,7 @@ Y_UNIT_TEST(TupleVariant_OptionalString_AllStringsSet) {
         TMaybe<TMaybe<TString>>{TMaybe<TString>{"bar"}},
         TMaybe<TMaybe<TString>>{TMaybe<TString>{"baz"}},
     };
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(TupleVariant_OptionalDouble_AllDoublesSet) {
@@ -192,7 +199,7 @@ Y_UNIT_TEST(TupleVariant_OptionalDouble_AllDoublesSet) {
         TMaybe<TMaybe<double>>{TMaybe<double>{2.5}},
         TMaybe<TMaybe<double>>{TMaybe<double>{3.5}},
     };
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(OptionalTupleVariant_AllVariantsOmitted_StringAlternative) {
@@ -203,7 +210,7 @@ Y_UNIT_TEST(OptionalTupleVariant_AllVariantsOmitted_StringAlternative) {
         TMaybe<TVariant>{},
     };
     TVector<TMaybe<TString>> expected = {Nothing(), Nothing(), Nothing()};
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
 }
 
 Y_UNIT_TEST(TupleVariant_OptionalString_AllStringsOmitted) {
@@ -218,7 +225,21 @@ Y_UNIT_TEST(TupleVariant_OptionalString_AllStringsOmitted) {
         TMaybe<TMaybe<TString>>{TMaybe<TString>{}},
         TMaybe<TMaybe<TString>>{TMaybe<TString>{}},
     };
-    TestBlockGuess(data, expected, 0u);
+    TestBlockGuess(data, expected, 0U);
+}
+
+Y_UNIT_TEST(OptionalStructVariant_NoNull) {
+    using TFirstMember = NTest::TStructMember<"x", ui32>;
+    using TSecondMember = NTest::TStructMember<"y", ui64>;
+    using TVariant = NTest::TStructVariant<TFirstMember, TSecondMember>;
+
+    TVector<TMaybe<TVariant>> data = {
+        TMaybe<TVariant>{TVariant{TFirstMember{1}}},
+        TMaybe<TVariant>{TVariant{TSecondMember{2}}},
+        TMaybe<TVariant>{TVariant{TFirstMember{3}}},
+    };
+    TVector<TMaybe<ui32>> expected = {ui32{1}, Nothing(), ui32{3}};
+    TestBlockGuess(data, expected, "x");
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockGuessTest)

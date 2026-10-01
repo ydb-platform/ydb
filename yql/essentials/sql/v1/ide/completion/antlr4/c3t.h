@@ -18,62 +18,58 @@
 namespace NSQLComplete {
 
 template <class G>
-class TC3Engine: public IC3Engine {
+class TC3Engine: public IC3Engine, private IC3Engine::TConfig {
 public:
     explicit TC3Engine(TConfig config)
-        : Chars_()
-        , Lexer_(&Chars_)
-        , Tokens_(&Lexer_)
-        , Parser_(&Tokens_)
-        , CompletionCore_(&Parser_)
-        , IgnoredRules_(std::move(config.IgnoredRules))
-        , DisabledPreviousByToken_(std::move(config.DisabledPreviousByToken))
-        , ForcedPreviousByToken_(std::move(config.ForcedPreviousByToken))
+        : IC3Engine::TConfig(std::move(config))
     {
-        Lexer_.removeErrorListeners();
-        Parser_.removeErrorListeners();
-
-        CompletionCore_.ignoredTokens = std::move(config.IgnoredTokens);
-        CompletionCore_.preferredRules = std::move(config.PreferredRules);
-
-        for (TRuleId rule : IgnoredRules_) {
-            CompletionCore_.preferredRules.emplace(rule);
+        for (TRuleId rule : IgnoredRules) {
+            PreferredRules.emplace(rule);
         }
 
         PurifyForcedTokens();
     }
 
-    TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) override {
-        Assign(text);
-        auto candidates = CompletionCore_.collectCandidates(caretTokenIndex);
-        return Converted(std::move(candidates), caretTokenIndex);
+    TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) const override {
+        antlr4::ANTLRInputStream chars(text);
+        typename G::TLexer lexer(&chars);
+        antlr4::BufferedTokenStream tokens(&lexer);
+        typename G::TParser parser(&tokens);
+
+        lexer.removeErrorListeners();
+        parser.removeErrorListeners();
+
+        tokens.fill();
+
+        c3::CodeCompletionCore c3(&parser);
+        c3.ignoredTokens = IgnoredTokens;
+        c3.preferredRules = PreferredRules;
+
+        c3::CandidatesCollection candidates = c3.collectCandidates(caretTokenIndex);
+        return Converted(std::move(candidates), caretTokenIndex, tokens);
     }
 
 private:
     void PurifyForcedTokens() {
-        for (auto it = ForcedPreviousByToken_.begin(); it != ForcedPreviousByToken_.end();) {
+        for (auto it = ForcedPreviousByToken.begin(); it != ForcedPreviousByToken.end();) {
             const auto& [token, previous] = *it;
             if (previous.empty()) {
-                CompletionCore_.ignoredTokens.emplace(token);
-                it = ForcedPreviousByToken_.erase(it);
+                IgnoredTokens.emplace(token);
+                it = ForcedPreviousByToken.erase(it);
             } else {
                 it = std::next(it);
             }
         }
     }
 
-    void Assign(TStringBuf prefix) {
-        Chars_.load(prefix.Data(), prefix.Size(), /* lenient = */ false);
-        Lexer_.reset();
-        Tokens_.setTokenSource(&Lexer_);
-        Tokens_.fill();
-    }
-
-    TC3Candidates Converted(c3::CandidatesCollection candidates, size_t caretTokenIndex) {
+    TC3Candidates Converted(
+        c3::CandidatesCollection candidates,
+        size_t caretTokenIndex,
+        const antlr4::BufferedTokenStream& tokens) const {
         TC3Candidates converted;
 
         for (auto& [token, following] : candidates.tokens) {
-            if (IsIgnored(token, caretTokenIndex)) {
+            if (IsIgnored(token, caretTokenIndex, tokens)) {
                 continue;
             }
 
@@ -92,24 +88,27 @@ private:
         return converted;
     }
 
-    bool IsIgnored(TTokenId token, size_t caretTokenIndex) {
-        auto previous = PreviousToken(caretTokenIndex);
+    bool IsIgnored(
+        TTokenId token,
+        size_t caretTokenIndex,
+        const antlr4::BufferedTokenStream& tokens) const {
+        auto previous = PreviousToken(caretTokenIndex, tokens);
 
-        auto disabled = DisabledPreviousByToken_.find(token);
-        auto forced = ForcedPreviousByToken_.find(token);
+        auto disabled = DisabledPreviousByToken.find(token);
+        auto forced = ForcedPreviousByToken.find(token);
 
-        return (disabled != DisabledPreviousByToken_.end() && disabled->second.contains(previous)) ||
-               (forced != ForcedPreviousByToken_.end() && !forced->second.contains(previous));
+        return (disabled != DisabledPreviousByToken.end() && disabled->second.contains(previous)) ||
+               (forced != ForcedPreviousByToken.end() && !forced->second.contains(previous));
     }
 
     [[nodiscard]] bool IsIgnored(TRuleId head, const std::vector<TRuleId> tail) const {
-        return IgnoredRules_.contains(head) ||
-               AnyOf(tail, [this](TRuleId r) { return IgnoredRules_.contains(r); });
+        return IgnoredRules.contains(head) ||
+               AnyOf(tail, [this](TRuleId r) { return IgnoredRules.contains(r); });
     }
 
-    TTokenId PreviousToken(size_t caretTokenIndex) {
+    static TTokenId PreviousToken(size_t caretTokenIndex, const antlr4::BufferedTokenStream& tokens) {
         ssize_t index = static_cast<ssize_t>(caretTokenIndex) - 1;
-        while (0 <= index && Tokens_.get(index)->getChannel() == antlr4::Token::HIDDEN_CHANNEL) {
+        while (0 <= index && tokens.get(index)->getChannel() == antlr4::Token::HIDDEN_CHANNEL) {
             --index;
         }
 
@@ -117,18 +116,8 @@ private:
             return antlr4::Token::INVALID_TYPE;
         }
 
-        return Tokens_.get(index)->getType();
+        return tokens.get(index)->getType();
     }
-
-    antlr4::ANTLRInputStream Chars_;
-    G::TLexer Lexer_;
-    antlr4::BufferedTokenStream Tokens_;
-    G::TParser Parser_;
-    c3::CodeCompletionCore CompletionCore_;
-
-    std::unordered_set<TRuleId> IgnoredRules_;
-    std::unordered_map<TTokenId, std::unordered_set<TTokenId>> DisabledPreviousByToken_;
-    std::unordered_map<TTokenId, std::unordered_set<TTokenId>> ForcedPreviousByToken_;
 };
 
 } // namespace NSQLComplete

@@ -1,0 +1,4 @@
+/* custom error: ListFromRange over Decimal is not available before language version 2026.02 */
+SELECT
+    ListFromRange(Decimal('1', 3, 0), Decimal('5', 3, 0), Decimal('1', 3, 0))
+;

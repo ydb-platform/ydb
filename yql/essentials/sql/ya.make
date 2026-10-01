@@ -21,6 +21,8 @@ RECURSE(
     pg
     pg_dummy
     settings
-    v0
     v1
+)
+RECURSE_FOR_TESTS(
+    ut
 )

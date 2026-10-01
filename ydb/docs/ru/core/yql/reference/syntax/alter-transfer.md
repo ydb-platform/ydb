@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 -->
 # ALTER TRANSFER
 
 Вызов `ALTER TRANSFER` изменяет параметры и состояние экземпляра [трансфера](../../../concepts/transfer.md).
@@ -23,7 +24,6 @@ ALTER TRANSFER <name> [SET USING lambda | SET (option = value [, ...])]
 
 * {% include [x](../_includes/transfer_flush.md) %}
 
-* {% include [x](../_includes/transfer_metrics_level_internal.md) %}
 * Настройки для аутентификации в базе топика одним из способов:
 
   {% include [x](_includes/async_replication_authentification.md) %}

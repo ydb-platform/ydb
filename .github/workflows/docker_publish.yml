@@ -30,6 +30,11 @@ on:
         required: true
         default: trunk
         description: "docker image tag"
+
+permissions:
+  contents: read
+  packages: write  # push to ghcr.io
+
 jobs:
   build:
     runs-on: [self-hosted, auto-provisioned]
@@ -39,14 +44,25 @@ jobs:
         with:
           ref: ${{ inputs.dockerfile_branch || 'main' }}
           path: main
+          persist-credentials: false
           sparse-checkout: |
             .github
+
+      - name: Checkout Docker acceptance tests
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: workflow
+          persist-credentials: false
+          sparse-checkout: |
+            .github/docker/tests
 
       - name: Checkout repository for build ydbd
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.ydbd_git_ref || 'main' }}
           path: ydbd
+          persist-credentials: false
 
       - name: get revision for ydbd
         shell: bash
@@ -60,12 +76,14 @@ jobs:
         with:
           ref: ${{ inputs.cli_git_ref || 'main' }}
           path: cli
+          persist-credentials: false
 
       - name: Checkout repository for build local_ydb binary
         uses: actions/checkout@v5
         with:
           ref: ${{ inputs.local_ydb_git_ref || 'main' }}
           path: local_ydb
+          persist-credentials: false
 
       - name: Set up Docker buildx
         uses: docker/setup-buildx-action@v4
@@ -110,28 +128,35 @@ jobs:
           cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
           cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max
 
-      - name: Test docker image
-        continue-on-error: false
-        run: |
-          docker run -d --rm --name local-ydb-test ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
-          sleep 61  # Wait for the health check to run (--start-period=60s --interval=1s)
-          if [ "$(docker inspect --format='{{json .State.Health.Status}}' local-ydb-test)" != "\"healthy\"" ]; then
-            echo "Container is not healthy"
-            docker inspect --format='{{json .State.Health}}' local-ydb-test
-            docker logs local-ydb-test
-            exit 1
-          fi
-          docker stop local-ydb-test || true
+      - name: Run Docker acceptance tests
+        env:
+          ACCEPTANCE_ARTIFACTS: ${{ runner.temp }}/local-ydb-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          EXPECTED_REVISION: ${{ steps.get-sha.outputs.SHA }}
+          IMAGE: ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
+        run: bash workflow/.github/docker/tests/run_acceptance_tests.sh
 
-      - name: Push docker image
-        uses: docker/build-push-action@v7
+      - name: Upload Docker acceptance diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
         with:
-          context: .
-          file: main/.github/docker/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: linux/amd64
-          provenance: false
-          cache-from: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }}
-          cache-to: type=s3,name=local_ydb,region=ru-central1,bucket=${{ vars.AWS_BUCKET }},endpoint_url=${{ vars.AWS_ENDPOINT }},access_key_id=${{ secrets.AWS_KEY_ID }},secret_access_key=${{ secrets.AWS_KEY_VALUE }},mode=max
+          name: docker-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/local-ydb-acceptance-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+
+      - name: Push accepted docker image
+        env:
+          ACCEPTED_IMAGE: ghcr.io/${{ github.repository_owner }}/local-ydb:${{ inputs.image_tag || 'trunk' }}
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          accepted_image_id=$(docker image inspect --format '{{.Id}}' "$ACCEPTED_IMAGE")
+          while IFS= read -r tag; do
+            if [ -z "$tag" ]; then
+              continue
+            fi
+            tag_image_id=$(docker image inspect --format '{{.Id}}' "$tag")
+            if [ "$tag_image_id" != "$accepted_image_id" ]; then
+              echo "Tag $tag does not reference the accepted image $accepted_image_id"
+              exit 1
+            fi
+            docker push "$tag"
+          done <<< "$IMAGE_TAGS"

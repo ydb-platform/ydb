@@ -46,6 +46,7 @@ public:
                       TTransactionBase* tx = nullptr) override;
 
     NThreading::TFuture<void> WaitEvent() override;
+    NThreading::TFuture<bool> Flush() override;
 
     // Empty maybe - block till all work is done. Otherwise block at most at closeTimeout duration.
     bool Close(TDuration closeTimeout = TDuration::Max()) override;

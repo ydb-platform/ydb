@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_tokenizer = stdenv.mkDerivation rec {
     pname = "boost_tokenizer";
-    version = "1.91.0";
+    version = "1.92.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "tokenizer";
       rev = "boost-${version}";
-      hash = "sha256-xjnAXQ+c7G6CMB1RggAERkCdh0+2rKMAIv28dDScEfk=";
+      hash = "sha256-rDxOh/aLjA9PvjMoO2Eae8hNEmfP43DS3/KouMeuABQ=";
     };
   };
 }

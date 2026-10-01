@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20260526.0)
+VERSION(20260817.0)
 
-ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20260526.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/abseil/abseil-cpp/archive/20260817.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -33,7 +33,9 @@ NO_UTIL()
 
 SRCS(
     absl/base/casts.cc
+    absl/base/internal/cpu_detect.cc
     absl/base/internal/cycleclock.cc
+    absl/base/internal/hardening.cc
     absl/base/internal/low_level_alloc.cc
     absl/base/internal/poison.cc
     absl/base/internal/raw_logging.cc
@@ -51,7 +53,6 @@ SRCS(
     absl/container/internal/hashtablez_sampler_force_weak_definition.cc
     absl/container/internal/raw_hash_set.cc
     absl/crc/crc32c.cc
-    absl/crc/internal/cpu_detect.cc
     absl/crc/internal/crc.cc
     absl/crc/internal/crc_cord_state.cc
     absl/crc/internal/crc_memcpy_fallback.cc

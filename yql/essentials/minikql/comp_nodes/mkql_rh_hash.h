@@ -5,11 +5,12 @@
 #include <util/system/types.h>
 #include <util/generic/bitops.h>
 #include <util/generic/yexception.h>
+#include <array>
 #include <vector>
 #include <span>
 
 #include <yql/essentials/minikql/mkql_rh_hash_utils.h>
-#include <yql/essentials/utils/is_pod.h>
+#include <yql/essentials/utils/meta/struct.h>
 #include <yql/essentials/utils/prefetch.h>
 
 #include <util/digest/city.h>
@@ -27,14 +28,14 @@ struct TRobinHoodDefaultSettings {
 template <typename TKey>
 struct TRobinHoodBatchRequestItem {
     // input
-    alignas(TKey) char KeyStorage[sizeof(TKey)];
+    alignas(TKey) std::array<char, sizeof(TKey)> KeyStorage;
 
     const TKey& GetKey() const {
-        return *reinterpret_cast<const TKey*>(KeyStorage);
+        return *reinterpret_cast<const TKey*>(KeyStorage.data());
     }
 
     void ConstructKey(const TKey& key) {
-        new (KeyStorage) TKey(key);
+        new (KeyStorage.data()) TKey(key);
     }
 
     // intermediate data
@@ -110,12 +111,12 @@ protected:
         }
     }
 
+public:
     TRobinHoodHashBase(const TRobinHoodHashBase&) = delete;
     TRobinHoodHashBase(TRobinHoodHashBase&&) = delete;
     void operator=(const TRobinHoodHashBase&) = delete;
     void operator=(TRobinHoodHashBase&&) = delete;
 
-public:
     // returns iterator
     Y_FORCE_INLINE char* Insert(TKey key, bool& isNew) {
         auto hash = HashLocal_(key);
@@ -430,15 +431,15 @@ private:
         }
     }
 
-    void AdvancePointer(char*& ptr, char* begin, char* end) const {
+    void AdvancePointer(char*& ptr, char* begin, const char* end) const {
         ptr += AsDeriv().GetCellSize();
         ptr = (ptr == end) ? begin : ptr;
     }
 
     static ui64 GetSelfHash(void* self) {
-        char buf[sizeof(void*)];
-        WriteUnaligned<void*>(buf, self);
-        return CityHash64(buf, sizeof(buf));
+        std::array<char, sizeof(void*)> buf;
+        WriteUnaligned<void*>(buf.data(), self);
+        return CityHash64(buf.data(), buf.size());
     }
 
 protected:
@@ -466,7 +467,6 @@ private:
         return static_cast<TDeriv&>(*this);
     }
 
-private:
     ui64 Size_ = 0;
     ui64 Capacity_;
     ui64 CapacityShift_;

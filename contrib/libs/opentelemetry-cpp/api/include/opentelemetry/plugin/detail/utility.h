@@ -3,13 +3,13 @@
 
 #pragma once
 
-#if __EXCEPTIONS
+#include "opentelemetry/version.h"
+
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
 #  include <new>
-#endif  // __EXCEPTIONS
+#endif  // OPENTELEMETRY_HAVE_EXCEPTIONS
 
 #include <string>
-
-#include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace plugin
@@ -17,22 +17,24 @@ namespace plugin
 namespace detail
 {
 inline void CopyErrorMessage(const char *source, std::string &destination) noexcept
-#if __EXCEPTIONS
-try
-#endif
 {
-  if (source == nullptr)
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+  try
+#endif
+  {
+    if (source == nullptr)
+    {
+      return;
+    }
+    destination.assign(source);
+  }
+#if OPENTELEMETRY_HAVE_EXCEPTIONS
+  catch (const std::bad_alloc &)
   {
     return;
   }
-  destination.assign(source);
-}
-#if __EXCEPTIONS
-catch (const std::bad_alloc &)
-{
-  return;
-}
 #endif
+}
 }  // namespace detail
 }  // namespace plugin
 OPENTELEMETRY_END_NAMESPACE

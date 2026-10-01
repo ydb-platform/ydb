@@ -1,4 +1,6 @@
 select Knn::ToBinaryStringFloat(null) is null;
+select Knn::ToBinaryStringFloat16(null) is null;
+select Knn::ToBinaryStringBFloat16(null) is null;
 select Knn::ToBinaryStringUint8(null) is null;
 select Knn::ToBinaryStringBit(null) is null;
 select Knn::FloatFromBinaryString(null) is null;

@@ -3,8 +3,6 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cctype>
 #include <cstdlib>
 #include <map>
 #include <memory>
@@ -29,12 +27,35 @@ namespace propagation
 // The carrier supports two usage scenarios:
 //
 // 1. Extract (default constructor): Reads context from environment variables.
-//    Get() reads from TRACEPARENT, TRACESTATE, BAGGAGE environment variables.
-//    Set() is a no-op. Values are cached on first access for lifetime management.
+//    Get() reads directly from the process environment on every call. Callers should
+//    create a carrier and call Extract() once during process initialization and retain
+//    the resulting Context for the lifetime of the process or task. Keys are normalized
+//    to environment variable names before lookup (e.g. "traceparent" -> "TRACEPARENT").
+//    Set() is a no-op.
 //
 // 2. Inject (shared_ptr constructor): Writes context to a provided map.
-//    Set() writes to the provided std::map. Keys are automatically converted
-//    from lowercase header names to uppercase environment variable names.
+//    Set() writes to the provided std::map. Keys are automatically converted from
+//    lowercase header names to uppercase environment variable names. The resulting map
+//    is then typically merged into the environment of a child process before spawning.
+//
+// Operational guidance (non-normative):
+//
+// - Initialization-time extraction: Extract context once at program startup and thread
+//   the resulting Context through the rest of the application. Do not repeatedly call
+//   Get() on a long-lived carrier; environment variables are intended to be set by the
+//   parent before this process starts and should not change during process lifetime.
+//
+// - Child process environment handling: To propagate context to a child process, create
+//   a carrier with an env_map, call Inject() to populate the map, then merge the map
+//   into the child process environment (e.g., via execve/posix_spawn env, or equivalent
+//   platform APIs) before spawning. Create separate maps for child processes with
+//   different contexts.
+//
+// - Security considerations: Environment variables are visible to all code within the
+//   process and may be visible to other processes or users with sufficient permissions.
+//   Do not propagate sensitive information (credentials, secrets) via environment
+//   variable carriers. In multi-tenant environments, consider the extra exposure risk
+//   of environment variables being accessible to co-located processes.
 
 class EnvironmentCarrier : public TextMapCarrier
 {
@@ -47,34 +68,38 @@ public:
       : env_map_ptr_(std::move(env_map))
   {}
 
-  // Returns the value associated with the passed key.
-  // Always reads from process environment variables (with caching).
-  // The key is automatically converted to uppercase.
+  // Returns the value of the environment variable corresponding to the normalized form of key.
+  // The key is normalized per spec before lookup (e.g. "traceparent" -> "TRACEPARENT").
+  // Returns an empty string_view if the variable is not set.
+  //
+  // The returned string_view is valid for the lifetime of this carrier object.
+  //
+  // Note: values are cached on first access. This is safe because environment variables used
+  // for context propagation are set by the parent process before this process starts and are
+  // not expected to change during process lifetime. Caching also ensures that the returned
+  // string_view remains valid for the lifetime of the carrier, regardless of when it is read.
   nostd::string_view Get(nostd::string_view key) const noexcept override
   {
-    std::string env_name = ToEnvName(key);
+    std::string env_name = NormalizeKey(key);
 
-    // Check cache first
-    auto cache_it = cache_.find(std::string(key));
+    // Cache is keyed by normalized name for consistent lookup
+    auto cache_it = cache_.find(env_name);
     if (cache_it != cache_.end())
     {
       return cache_it->second;
     }
 
-    // Read from environment
     const char *value = std::getenv(env_name.c_str());
     if (value != nullptr)
     {
-      // Cache for lifetime management (string_view requires stable storage)
-      cache_[std::string(key)] = std::string(value);
-      return cache_[std::string(key)];
+      cache_[env_name] = std::string(value);
+      return cache_[env_name];
     }
     return "";
   }
 
   // Stores the key-value pair in the map if one was provided at construction.
-  // Otherwise, this operation is a no-op.
-  // The key is automatically converted to uppercase.
+  // The key is normalized per spec before writing.
   void Set(nostd::string_view key, nostd::string_view value) noexcept override
   {
     if (!env_map_ptr_)
@@ -82,24 +107,49 @@ public:
       return;
     }
 
-    std::string env_name               = ToEnvName(key);
-    env_map_ptr_->operator[](env_name) = std::string(value);
+    env_map_ptr_->operator[](NormalizeKey(key)) = std::string(value);
   }
 
 private:
   std::shared_ptr<std::map<std::string, std::string>> env_map_ptr_;
   mutable std::map<std::string, std::string> cache_;
 
-  // Converts a header name to an environment variable name.
-  // e.g., "traceparent" -> "TRACEPARENT", "my-key" -> "MY_KEY",
-  //        "my.complex.key" -> "MY_COMPLEX_KEY"
-  static std::string ToEnvName(nostd::string_view key)
+  // Normalizes a key to an environment variable name per the OTel spec:
+  //   - empty key is normalized to "_"
+  //   - ASCII letters are uppercased
+  //   - characters that are not ASCII letters, digits, or '_' are replaced with '_'
+  //   - a leading '_' is prepended if the first character is a digit
+  // Examples:
+  //   ""            -> "_"
+  //   "traceparent" -> "TRACEPARENT"
+  //   "x-b3-traceid"-> "X_B3_TRACEID"
+  //   "1bad"        -> "_1BAD"
+  static std::string NormalizeKey(nostd::string_view key)
   {
-    std::string env_name(key);
-    std::transform(env_name.begin(), env_name.end(), env_name.begin(), [](unsigned char c) {
-      return static_cast<char>(std::isalnum(c) ? std::toupper(c) : '_');
-    });
-    return env_name;
+    // Spec: empty key normalizes to "_"
+    if (key.empty())
+    {
+      return "_";
+    }
+
+    std::string result(key);
+    for (auto &c : result)
+    {
+      unsigned char uc = static_cast<unsigned char>(c);
+      if (uc >= 'a' && uc <= 'z')
+      {
+        c = static_cast<char>(uc - ('a' - 'A'));
+      }
+      else if (!((uc >= 'A' && uc <= 'Z') || (uc >= '0' && uc <= '9') || uc == '_'))
+      {
+        c = '_';
+      }
+    }
+    if (result[0] >= '0' && result[0] <= '9')
+    {
+      result.insert(result.begin(), '_');
+    }
+    return result;
   }
 };
 

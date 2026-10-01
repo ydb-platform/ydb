@@ -1270,36 +1270,6 @@ dict[str, int])}, memo)
             ).strip()
         )
 
-    @pytest.mark.skipif(sys.version_info >= (3, 10), reason="Requires Python < 3.10")
-    def test_pep604_assign(self) -> None:
-        node = parse(
-            dedent(
-                """
-                Union = None
-
-                def foo() -> None:
-                    x: int | str = otherfunc()
-                """
-            )
-        )
-        TypeguardTransformer().visit(node)
-        assert (
-            unparse(node)
-            == dedent(
-                """
-                from typeguard import TypeCheckMemo
-                from typeguard._functions import check_variable_assignment
-                from typing import Union as Union_
-                Union = None
-
-                def foo() -> None:
-                    memo = TypeCheckMemo(globals(), locals())
-                    x: int | str = check_variable_assignment(otherfunc(), \
-[('x', Union_[int, str])], memo)
-                """
-            ).strip()
-        )
-
     def test_multi_assign(self) -> None:
         node = parse(
             dedent(
@@ -1513,7 +1483,7 @@ check_variable_assignment
                 def foo() -> None:
                     memo = TypeCheckMemo(globals(), locals())
                     x: int
-                    if (x := check_variable_assignment(otherfunc(), [[('x', int)]], \
+                    if (x := check_variable_assignment(otherfunc(), [('x', int)], \
 memo)):
                         pass
                 """
@@ -1542,7 +1512,7 @@ check_variable_assignment
                 def foo(x: int) -> None:
                     memo = TypeCheckMemo(globals(), locals())
                     check_argument_types_internal('foo', {'x': (x, int)}, memo)
-                    if (x := check_variable_assignment(otherfunc(), [[('x', int)]], memo)):
+                    if (x := check_variable_assignment(otherfunc(), [('x', int)], memo)):
                         pass
                 """
             ).strip()
@@ -2001,6 +1971,35 @@ def test_literal() -> None:
             from typeguard import TypeCheckMemo
             from typeguard._functions import check_argument_types_internal
             from typing import Literal
+
+            def foo(x: Literal['a', 'b']) -> None:
+                memo = TypeCheckMemo(globals(), locals())
+                check_argument_types_internal('foo', {'x': (x, Literal['a', 'b'])}, memo)
+            """
+        ).strip()
+    )
+
+
+def test_literal_wildcard_import() -> None:
+    # Regression test for #489
+    node = parse(
+        dedent(
+            """
+            from typing import *
+
+            def foo(x: Literal['a', 'b']) -> None:
+                pass
+            """
+        )
+    )
+    TypeguardTransformer().visit(node)
+    assert (
+        unparse(node)
+        == dedent(
+            """
+            from typeguard import TypeCheckMemo
+            from typeguard._functions import check_argument_types_internal
+            from typing import *
 
             def foo(x: Literal['a', 'b']) -> None:
                 memo = TypeCheckMemo(globals(), locals())

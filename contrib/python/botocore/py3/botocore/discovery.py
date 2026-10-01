@@ -185,7 +185,8 @@ class EndpointDiscoveryManager:
         if not self._always_discover and not discovery_required:
             # Discovery set to only run on required operations
             logger.debug(
-                f'Optional discovery disabled. Skipping discovery for Operation: {operation}'
+                'Optional discovery disabled. Skipping discovery for Operation: %s',
+                operation,
             )
             return None
 

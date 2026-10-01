@@ -4,9 +4,9 @@ This section describes the data formats of [streaming queries](../../concepts/gl
 
 ## Supported data formats {#formats}
 
-{{ ydb-short-name }} supports built-in data formats (predefined by default) and custom formats (configurable by the user for specific tasks).
+{{ ydb-short-name }} supports built-in data formats (predefined by default) and custom formats (configured by the user for specific tasks).
 
-The list of built-in data formats in {{ ydb-short-name }} is given below:
+Below is the list of data formats built into {{ ydb-short-name }}:
 
 - [`csv_with_names`](#csv_with_names)
 - [`tsv_with_names`](#tsv_with_names)
@@ -72,6 +72,8 @@ END DO
 
 
 For more details on functions: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
+
+If a single streaming query writes to multiple topics, all output topics must be different.
 
 ## Formats for reading data {#read_formats}
 
@@ -159,7 +161,7 @@ END DO
 
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON array of objects.
 
-Example of correct data (as a list of JSON objects):
+Example of valid data (as a list of JSON objects):
 
 
 ```json
@@ -170,7 +172,7 @@ Example of correct data (as a list of JSON objects):
 ```
 
 
-Example of incorrect data (each message contains a separate JSON object, but these objects are not combined into a list):
+Example of invalid data (each message contains a separate JSON object, but these objects are not combined into a list):
 
 
 ```json
@@ -210,7 +212,7 @@ END DO
 This format is based on the [JSON representation](https://en.wikipedia.org/wiki/JSON) of data. In this format, each message must be a JSON object. This format is used when transferring data through streaming systems, such as Apache Kafka or [{{ydb-full-name}} Topics](../../concepts/datamodel/topic.md).
 Multiple separate JSONs in a single message are not supported; a JSON list is also not supported.
 
-Example of correct data (in a single message):
+Example of valid data (in a single message):
 
 
 ```json
@@ -218,7 +220,7 @@ Example of correct data (in a single message):
 ```
 
 
-Example of incorrect data:
+Example of invalid data:
 
 
 ```json
@@ -259,12 +261,12 @@ This format is based on the [JSON representation](https://en.wikipedia.org/wiki/
 
 In this format, each message must contain:
 
-- A correctly represented JSON object in each individual line of the file
-- JSON objects in correct representation combined into a list.
+- An object in valid JSON representation on each separate line of the file.
+- Objects in valid JSON representation combined into a list.
 
 The `json_as_string` format does not split the input JSON document into fields, but represents each message as a single JSON object (or a single line). This format is convenient when the list of fields is not the same across all rows and can vary.
 
-Example of correct data:
+Example of valid data:
 
 
 ```json
@@ -458,7 +460,7 @@ END DO
 ```
 
 
-For more details on functions:
+For more information about functions:
 
 - [Yson::ConvertTo](../../yql/reference/udf/list/yson#ysonconvertto)
 - [FLATTEN COLUMNS](../../yql/reference/syntax/select/flatten.md#flatten-columns).
@@ -501,7 +503,7 @@ END DO
 ```
 
 
-For more details on functions:
+For more information about functions:
 
 - [String::SplitToList](../../yql/reference/udf/list/string.md#splittolist)
 - [DictLookup](../../yql/reference/builtins/dict.md#dictlookup)

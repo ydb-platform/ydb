@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest) {
 Y_UNIT_TEST_LLVM(TestDictLength) {
@@ -19,7 +18,7 @@ Y_UNIT_TEST_LLVM(TestDictLength) {
     const auto payload2 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("B"));
     const auto payload3 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("C"));
     const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
+                                                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), /*multi=*/false);
     const auto dict = pgmBuilder.NewDict(dictType, {{key1, payload1}, {key2, payload2}, {key2, payload3}});
     const auto pgmReturn = pgmBuilder.Length(dict);
 
@@ -37,7 +36,7 @@ Y_UNIT_TEST_LLVM(TestDictContains) {
     const auto payload2 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("B"));
     const auto payload3 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("C"));
     const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
+                                                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), /*multi=*/false);
     const auto dict = pgmBuilder.NewDict(dictType, {{key1, payload1}, {key2, payload2}, {key2, payload3}});
     const auto keys = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<ui32>{1, 2, 3});
 
@@ -60,7 +59,7 @@ Y_UNIT_TEST_LLVM(TestDictLookup) {
     const auto payload2 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("B"));
     const auto payload3 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("C"));
     const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
-                                                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
+                                                 pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), /*multi=*/false);
     const auto dict = pgmBuilder.NewDict(dictType, {{key1, payload1}, {key2, payload2}, {key2, payload3}});
     const auto keys = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<ui32>{1, 2, 3});
 
@@ -287,5 +286,4 @@ Y_UNIT_TEST_LLVM(TestHashedMultiDictLookup) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLDictRelatedNodesTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

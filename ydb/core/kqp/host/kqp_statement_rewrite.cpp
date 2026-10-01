@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/host/kqp_host_impl.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/provider/rewrite_io_utils.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes_gen/yql_expr_nodes_gen.h>
@@ -221,6 +222,8 @@ std::optional<TCreateTableAsResult> RewriteCreateTableAs(
     const auto rowType = type->Cast<NYql::TStructExprType>();
     YQL_ENSURE(rowType);
 
+    const bool useCsWriteAffinity = IsOlapCreateTableAs(root, exprCtx) && sessionCtx->ConfigPtr()->GetEnableCsWriteAffinity();
+
     auto create = exprCtx.ReplaceNode(std::move(root), insertData.Ref(), exprCtx.NewCallable(pos, "Void", {}));
 
     auto columns = create->Child(4)->Child(1)->Child(1);
@@ -230,9 +233,9 @@ std::optional<TCreateTableAsResult> RewriteCreateTableAs(
     }
 
     auto primaryKey = create->Child(4)->Child(2)->Child(1);
-    THashSet<TStringBuf> primariKeyColumns;
+    TVector<TStringBuf> primaryKeyColumns;
     primaryKey->ForEachChild([&](const auto& child) {
-        primariKeyColumns.insert(child.Content());
+        primaryKeyColumns.push_back(child.Content());
     });
 
     std::vector<NYql::TExprNodePtr> columnNodes;
@@ -309,6 +312,26 @@ std::optional<TCreateTableAsResult> RewriteCreateTableAs(
         exprCtx.NewList(pos, {
             exprCtx.NewAtom(pos, "AllowInconsistentWrites"),
         }));
+
+    if (useCsWriteAffinity) {
+        NYql::TExprNode::TListType partitionColumnsList;
+        if (settings.PartitionBy.IsValid()) {
+            YQL_ENSURE(settings.PartitionBy.Cast().Ref().ChildrenSize() > 0);
+            for (const auto& col : settings.PartitionBy.Cast()) {
+                partitionColumnsList.push_back(exprCtx.NewAtom(pos, col.Value()));
+            }
+        } else {
+            YQL_ENSURE(!primaryKeyColumns.empty());
+            for (const auto& col : primaryKeyColumns) {
+                partitionColumnsList.push_back(exprCtx.NewAtom(pos, TString(col)));
+            }
+        }
+        insertSettings.push_back(
+            exprCtx.NewList(pos, {
+                exprCtx.NewAtom(pos, "CtasShardingColumns"),
+                exprCtx.NewList(pos, std::move(partitionColumnsList)),
+            }));
+    }
 
     const auto insert = exprCtx.NewCallable(pos, "Write!", {
         topLevelRead == nullptr ? exprCtx.NewWorld(pos) : exprCtx.NewCallable(pos, "Left!", {topLevelRead.Get()}),

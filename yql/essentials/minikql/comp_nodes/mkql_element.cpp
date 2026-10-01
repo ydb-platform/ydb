@@ -3,8 +3,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -50,17 +49,17 @@ constexpr bool IsTupleOptional(EOptionalityHandlerStrategy strategy) {
 
 template <bool IsOptional>
 class TElementsWrapper: public TMutableCodegeneratorNode<TElementsWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorNode<TElementsWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TElementsWrapper<IsOptional>>;
 
 public:
     TElementsWrapper(TComputationMutables& mutables, IComputationNode* array)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
-        , Array(array)
+        , Array_(array)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        const auto& array = Array->GetValue(compCtx);
+        const auto& array = Array_->GetValue(compCtx);
         if constexpr (IsOptional) {
             return array ? NUdf::TUnboxedValuePod(reinterpret_cast<ui64>(array.GetElements())) : NUdf::TUnboxedValuePod();
         } else {
@@ -69,10 +68,10 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto array = GetNodeValue(Array, ctx, block);
+        const auto array = GetNodeValue(Array_, ctx, block);
         const auto elementsType = PointerType::getUnqual(array->getType());
 
         if constexpr (IsOptional) {
@@ -101,34 +100,34 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Array);
+        this->DependsOn(Array_);
     }
 
-    IComputationNode* const Array;
+    IComputationNode* const Array_;
 };
 
 template <EOptionalityHandlerStrategy Strategy>
 class TElementWrapper: public TMutableCodegeneratorPtrNode<TElementWrapper<Strategy>> {
-    typedef TMutableCodegeneratorPtrNode<TElementWrapper<Strategy>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TElementWrapper<Strategy>>;
 
 public:
     TElementWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* cache, IComputationNode* array, ui32 index)
         : TBaseComputation(mutables, kind)
-        , Cache(cache)
-        , Array(array)
-        , Index(index)
+        , Cache_(cache)
+        , Array_(array)
+        , Index_(index)
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        if (Cache->GetDependentsCount() > 1U) {
-            const auto cache = Cache->GetValue(ctx);
+        if (Cache_->GetDependentsCount() > 1U) {
+            const auto cache = Cache_->GetValue(ctx);
             if (IsTupleOptional(Strategy) && !cache) {
                 return NUdf::TUnboxedValue();
             }
             const auto elements = cache.Get<ui64>();
             if (elements) {
-                auto element = reinterpret_cast<const NUdf::TUnboxedValuePod*>(elements)[Index];
+                auto element = reinterpret_cast<const NUdf::TUnboxedValuePod*>(elements)[Index_];
                 if constexpr (Strategy == EOptionalityHandlerStrategy::IntersectOptionals) {
                     return element;
                 } else if constexpr (Strategy == EOptionalityHandlerStrategy::AddOptionalToChild) {
@@ -141,13 +140,13 @@ public:
             }
         }
 
-        const auto& array = Array->GetValue(ctx);
+        const auto& array = Array_->GetValue(ctx);
         if constexpr (Strategy == EOptionalityHandlerStrategy::IntersectOptionals) {
-            return array ? array.GetElement(Index) : NUdf::TUnboxedValue();
+            return array ? array.GetElement(Index_) : NUdf::TUnboxedValue();
         } else if constexpr (Strategy == EOptionalityHandlerStrategy::AddOptionalToChild) {
-            return array ? NUdf::TUnboxedValue(array.GetElement(Index).MakeOptional()) : NUdf::TUnboxedValue();
+            return array ? NUdf::TUnboxedValue(array.GetElement(Index_).MakeOptional()) : NUdf::TUnboxedValue();
         } else if constexpr (Strategy == EOptionalityHandlerStrategy::ReturnChildAsIs) {
-            return array.GetElement(Index);
+            return array.GetElement(Index_);
         } else {
             static_assert(false, "Unsupported type.");
         }
@@ -158,8 +157,8 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto array = GetNodeValue(Array, ctx, block);
-        const auto index = ConstantInt::get(Type::getInt32Ty(context), Index);
+        const auto array = GetNodeValue(Array_, ctx, block);
+        const auto index = ConstantInt::get(Type::getInt32Ty(context), Index_);
         if constexpr (IsTupleOptional(Strategy)) {
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
             const auto zero = BasicBlock::Create(context, "zero", ctx.Func);
@@ -177,7 +176,7 @@ public:
                 const auto load = new LoadInst(valueType, pointer, "load", block);
                 new StoreInst(MakeOptional(context, load, block), pointer, block);
             }
-            if (Array->IsTemporaryValue()) {
+            if (Array_->IsTemporaryValue()) {
                 CleanupBoxed(array, ctx, block);
             }
             BranchInst::Create(exit, block);
@@ -185,7 +184,7 @@ public:
             block = exit;
         } else if constexpr (Strategy == EOptionalityHandlerStrategy::ReturnChildAsIs) {
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetElement>(pointer, array, ctx.Codegen, block, index);
-            if (Array->IsTemporaryValue()) {
+            if (Array_->IsTemporaryValue()) {
                 CleanupBoxed(array, ctx, block);
             }
         } else {
@@ -193,13 +192,13 @@ public:
         }
     }
 
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
-        if (Cache->GetDependentsCount() <= 1U) {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
+        if (Cache_->GetDependentsCount() <= 1U) {
             return DoGenerateGetElement(ctx, pointer, block);
         }
 
         auto& context = ctx.Codegen.GetContext();
-        const auto cache = GetNodeValue(Cache, ctx, block);
+        const auto cache = GetNodeValue(Cache_, ctx, block);
 
         const auto fast = BasicBlock::Create(context, "fast", ctx.Func);
         const auto slow = BasicBlock::Create(context, "slow", ctx.Func);
@@ -228,7 +227,7 @@ public:
         BranchInst::Create(fast, slow, fill, block);
 
         block = fast;
-        const auto index = ConstantInt::get(Type::getInt32Ty(context), this->Index);
+        const auto index = ConstantInt::get(Type::getInt32Ty(context), this->Index_);
         const auto ptr = GetElementPtrInst::CreateInBounds(cache->getType(), elements, {index}, "ptr", block);
         const auto item = new LoadInst(cache->getType(), ptr, "item", block);
 
@@ -250,13 +249,13 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Array);
-        this->DependsOn(Cache);
+        this->DependsOn(Array_);
+        this->DependsOn(Cache_);
     }
 
-    IComputationNode* const Cache;
-    IComputationNode* const Array;
-    const ui32 Index;
+    IComputationNode* const Cache_;
+    IComputationNode* const Array_;
+    const ui32 Index_;
 };
 
 IComputationNode* WrapElements(IComputationNode* array, const TComputationNodeFactoryContext& ctx, bool isOptional) {
@@ -328,5 +327,4 @@ IComputationNode* WrapMember(TCallable& callable, const TComputationNodeFactoryC
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

@@ -162,3 +162,157 @@ Y_UNIT_TEST(MultipleNonBmp) {
 }
 
 } // Y_UNIT_TEST_SUITE(ToBytesTests)
+
+Y_UNIT_TEST_SUITE(FromBytesTests) {
+
+Y_UNIT_TEST(ZeroBytes) {
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(0, "hello"), (TPosition{0, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(0, ""), (TPosition{0, 0}));
+}
+
+Y_UNIT_TEST(AsciiSameLine) {
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(3, "hello"), (TPosition{0, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(5, "hello"), (TPosition{0, 5}));
+}
+
+Y_UNIT_TEST(AsciiMultiline) {
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(6, "hello\nworld"), (TPosition{1, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(11, "hello\nworld"), (TPosition{1, 5}));
+}
+
+Y_UNIT_TEST(EmptyLines) {
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(2, "a\n\nb"), (TPosition{1, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(3, "a\n\nb"), (TPosition{2, 0}));
+}
+
+Y_UNIT_TEST(CrLfLineEndings) {
+    TStringBuf text = "hello\r\nworld";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(5, text), (TPosition{0, 5}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(7, text), (TPosition{1, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(12, text), (TPosition{1, 5}));
+}
+
+Y_UNIT_TEST(LoneCrIsACharacter) {
+    TStringBuf text = "hello\rworld";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(5, text), (TPosition{0, 5}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(6, text), (TPosition{0, 6}));
+}
+
+Y_UNIT_TEST(MultibyteUtf8SameLine) {
+    TStringBuf text = "привет";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(0, text), (TPosition{0, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(2, text), (TPosition{0, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(6, text), (TPosition{0, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(12, text), (TPosition{0, 6}));
+}
+
+Y_UNIT_TEST(MultibyteUtf8Multiline) {
+    TStringBuf text = "привет\nмир";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(13, text), (TPosition{1, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(19, text), (TPosition{1, 3}));
+}
+
+Y_UNIT_TEST(TabCharacters) {
+    TStringBuf text = "\thello";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(0, text), (TPosition{0, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(1, text), (TPosition{0, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(6, text), (TPosition{0, 6}));
+}
+
+Y_UNIT_TEST(ThreeByteUtf8) {
+    TStringBuf text = "中文";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(0, text), (TPosition{0, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(3, text), (TPosition{0, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(6, text), (TPosition{0, 2}));
+}
+
+Y_UNIT_TEST(MixedAsciiAndMultibyte) {
+    TStringBuf text = "aпbq";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(1, text), (TPosition{0, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(3, text), (TPosition{0, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(4, text), (TPosition{0, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(5, text), (TPosition{0, 4}));
+}
+
+Y_UNIT_TEST(NonBmpCodePoints) {
+    TStringBuf text = "a😀b";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(0, text), (TPosition{0, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(1, text), (TPosition{0, 1}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(5, text), (TPosition{0, 3}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(6, text), (TPosition{0, 4}));
+}
+
+Y_UNIT_TEST(SingleEmoji) {
+    TStringBuf text = "😀";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(4, text), (TPosition{0, 2}));
+}
+
+Y_UNIT_TEST(MultipleNonBmp) {
+    TStringBuf text = "😀😃";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(4, text), (TPosition{0, 2}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(8, text), (TPosition{0, 4}));
+}
+
+Y_UNIT_TEST(TrailingNewline) {
+    TStringBuf text = "hello\n";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(6, text), (TPosition{1, 0}));
+}
+
+Y_UNIT_TEST(ManyEmptyLines) {
+    TStringBuf text = "\n\n\n";
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(0, text), (TPosition{0, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(1, text), (TPosition{1, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(2, text), (TPosition{2, 0}));
+    UNIT_ASSERT_VALUES_EQUAL(FromBytes(3, text), (TPosition{3, 0}));
+}
+
+Y_UNIT_TEST(BytesOutOfRange) {
+    UNIT_ASSERT_EXCEPTION(FromBytes(6, "hello"), NLsp::TLspException);
+    UNIT_ASSERT_EXCEPTION(FromBytes(1, ""), NLsp::TLspException);
+}
+
+Y_UNIT_TEST(MidMultibyteSequence) {
+    TStringBuf text = "п";
+    UNIT_ASSERT_EXCEPTION(FromBytes(1, text), NLsp::TLspException);
+    UNIT_ASSERT_EXCEPTION(FromBytes(1, "中文"), NLsp::TLspException);
+    UNIT_ASSERT_EXCEPTION(FromBytes(2, "中文"), NLsp::TLspException);
+}
+
+Y_UNIT_TEST(RoundtripOnQueryWithInterestingSymbols) {
+    const TString text =
+        "SELECT 'привет', x AS столбец\n"
+        "FROM таблица -- комментарий 中文\n"
+        "WHERE 😊 = 1 AND tag = \"a\\\"b\"\r\n"
+        "\tORDER BY цена; -- emoji: 🎉\n";
+
+    for (size_t byteA = 0; byteA <= text.size(); ++byteA) {
+        const bool isCRLF =
+            (0 < byteA && byteA < text.size() &&
+             text[byteA - 1] == '\r' && text[byteA] == '\n');
+
+        TPosition positionA;
+        try {
+            positionA = FromBytes(byteA, text);
+        } catch (const TLspException& e) {
+            continue; // unlucky byte
+        }
+
+        const size_t byteB = ToBytes(positionA, text);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            byteB,
+            byteA + isCRLF,
+            "" << "position " << positionA << ", "
+               << "byte A " << byteA << ", "
+               << "byte B " << byteB);
+
+        const TPosition positionB = FromBytes(byteB, text);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            positionB,
+            positionA,
+            "" << "byte " << byteA << ", "
+               << "position A " << positionA << ", "
+               << "position B " << positionB);
+    }
+}
+
+} // Y_UNIT_TEST_SUITE(FromBytesTests)

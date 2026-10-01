@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 
 #include "opentelemetry/sdk/configuration/span_exporter_configuration.h"
@@ -21,15 +22,20 @@ namespace configuration
 class BatchSpanProcessorConfiguration : public SpanProcessorConfiguration
 {
 public:
+  static constexpr std::size_t kDefaultScheduleDelayMs    = 5000;
+  static constexpr std::size_t kDefaultExportTimeoutMs    = 30000;
+  static constexpr std::size_t kDefaultMaxQueueSize       = 2048;
+  static constexpr std::size_t kDefaultMaxExportBatchSize = 512;
+
   void Accept(SpanProcessorConfigurationVisitor *visitor) const override
   {
     visitor->VisitBatch(this);
   }
 
-  std::size_t schedule_delay{0};
-  std::size_t export_timeout{0};
-  std::size_t max_queue_size{0};
-  std::size_t max_export_batch_size{0};
+  std::size_t schedule_delay{kDefaultScheduleDelayMs};
+  std::size_t export_timeout{kDefaultExportTimeoutMs};
+  std::size_t max_queue_size{kDefaultMaxQueueSize};
+  std::size_t max_export_batch_size{kDefaultMaxExportBatchSize};
   std::unique_ptr<SpanExporterConfiguration> exporter;
 };
 

@@ -10,6 +10,8 @@
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::RPC_REQUEST
+
 namespace NKikimr::NGRpcService {
 
 namespace {
@@ -118,7 +120,7 @@ private:
         }
 
         ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), 0, 0, Request->GetWilsonTraceId());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -143,7 +145,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"message", message});
 
         Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
         Reply(Ydb::StatusIds::INTERNAL_ERROR);
@@ -225,7 +228,7 @@ private:
 
         Fill(ev->Record.MutableRequest());
 
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), ev.Release(), 0, 0, Request->GetWilsonTraceId());
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
@@ -245,7 +248,8 @@ private:
     }
 
     void InternalError(const TString& message) {
-        ALOG_ERROR(NKikimrServices::RPC_REQUEST, "Internal error, message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"message", message});
 
         Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, message));
         Reply(Ydb::StatusIds::INTERNAL_ERROR);

@@ -3,7 +3,6 @@
 #include <library/cpp/yson/node/node.h>
 #include <util/generic/vector.h>
 #include <ydb/core/protos/kqp_tablemetadata.pb.h>
-#include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/scheme_types/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
@@ -23,17 +22,11 @@ struct TSchemeColumn {
     NScheme::TTypeInfo PType;
     bool KeyColumn;
     bool Nullable;
-
-    bool operator==(const TSchemeColumn& other) const = default;
-
-    TString ToString() const;
-    TString TypeName() const;
 };
 
 struct TScheme {
     using TPtr = std::shared_ptr<TScheme>;
 
-    TVector<TSchemeColumn> TopicColumns;
     TVector<TSchemeColumn> TableColumns;
 
     TVector<NKikimrKqp::TKqpColumnMetadataProto> StructMetadata;

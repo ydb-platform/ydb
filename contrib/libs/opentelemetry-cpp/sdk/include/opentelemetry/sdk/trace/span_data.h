@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -20,6 +21,7 @@
 #include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk/trace/recordable.h"
+#include "opentelemetry/sdk/trace/span_limits.h"
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_id.h"
 #include "opentelemetry/trace/span_metadata.h"
@@ -38,9 +40,12 @@ namespace trace
 class SpanDataEvent
 {
 public:
-  SpanDataEvent(std::string name,
-                opentelemetry::common::SystemTimestamp timestamp,
-                const opentelemetry::common::KeyValueIterable &attributes);
+  SpanDataEvent(
+      std::string name,
+      opentelemetry::common::SystemTimestamp timestamp,
+      const opentelemetry::common::KeyValueIterable &attributes,
+      std::uint32_t attribute_count_limit      = (std::numeric_limits<std::uint32_t>::max)(),
+      std::size_t attribute_value_length_limit = (std::numeric_limits<std::size_t>::max)());
 
   /**
    * Get the name for this event
@@ -61,10 +66,17 @@ public:
   const std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> &
   GetAttributes() const noexcept;
 
+  /**
+   * Get the number of attributes dropped due to the per-event attribute count limit.
+   * @return the number of attributes dropped
+   */
+  std::uint32_t GetDroppedAttributesCount() const noexcept { return dropped_attributes_count_; }
+
 private:
   std::string name_;
   opentelemetry::common::SystemTimestamp timestamp_;
   opentelemetry::sdk::common::AttributeMap attribute_map_;
+  std::uint32_t dropped_attributes_count_{0};
 };
 
 /**
@@ -73,8 +85,11 @@ private:
 class SpanDataLink
 {
 public:
-  SpanDataLink(opentelemetry::trace::SpanContext span_context,
-               const opentelemetry::common::KeyValueIterable &attributes);
+  SpanDataLink(
+      opentelemetry::trace::SpanContext span_context,
+      const opentelemetry::common::KeyValueIterable &attributes,
+      std::uint32_t attribute_count_limit      = (std::numeric_limits<std::uint32_t>::max)(),
+      std::size_t attribute_value_length_limit = (std::numeric_limits<std::size_t>::max)());
 
   /**
    * Get the attributes for this link
@@ -89,9 +104,17 @@ public:
    */
   const opentelemetry::trace::SpanContext &GetSpanContext() const noexcept { return span_context_; }
 
+  /**
+   * Get the number of attributes dropped due to the per-link
+   * attribute count limit.
+   * @return the number of attributes dropped
+   */
+  std::uint32_t GetDroppedAttributesCount() const noexcept { return dropped_attributes_count_; }
+
 private:
   opentelemetry::trace::SpanContext span_context_;
   opentelemetry::sdk::common::AttributeMap attribute_map_;
+  std::uint32_t dropped_attributes_count_{0};
 };
 
 /**
@@ -235,7 +258,15 @@ public:
 
   void SetDuration(std::chrono::nanoseconds duration) noexcept override;
 
+  void SetSpanLimits(const SpanLimits &limits) noexcept override;
+
   void SetInstrumentationScope(const InstrumentationScope &instrumentation_scope) noexcept override;
+
+  std::uint32_t GetDroppedAttributesCount() const noexcept { return dropped_attributes_count_; }
+
+  std::uint32_t GetDroppedEventsCount() const noexcept { return dropped_events_count_; }
+
+  std::uint32_t GetDroppedLinksCount() const noexcept { return dropped_links_count_; }
 
 private:
   opentelemetry::trace::SpanContext span_context_{false, false};
@@ -252,6 +283,10 @@ private:
   opentelemetry::trace::SpanKind span_kind_{opentelemetry::trace::SpanKind::kInternal};
   const opentelemetry::sdk::resource::Resource *resource_{nullptr};
   const InstrumentationScope *instrumentation_scope_{nullptr};
+  SpanLimits limits_{SpanLimits::NoLimits()};
+  std::uint32_t dropped_attributes_count_{0};
+  std::uint32_t dropped_events_count_{0};
+  std::uint32_t dropped_links_count_{0};
 };
 }  // namespace trace
 }  // namespace sdk

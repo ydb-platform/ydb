@@ -372,7 +372,7 @@ void ToProtoArrayImpl(
     const TEnumIndexedArray<E, T, Min, Max>& originalArray)
 {
     serializedArray->Clear();
-    for (auto key : TEnumTraits<E>::GetDomainValues()) {
+    for (auto key : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (originalArray.IsValidIndex(key)) {
             const auto& value = originalArray[key];
             auto* pair = serializedArray->Add();
@@ -387,7 +387,7 @@ void FromProtoArrayImpl(
     TEnumIndexedArray<E, T, Min, Max>* originalArray,
     const TSerializedArray& serializedArray)
 {
-    for (auto key : TEnumTraits<E>::GetDomainValues()) {
+    for (auto key : TEnumTraits<E>::template GetDomainValues</*AllowAmbiguousValues*/ true>()) {
         if (originalArray->IsValidIndex(key)) {
             (*originalArray)[key] = T{};
         }
@@ -448,8 +448,8 @@ void CheckedFromProtoArrayImpl(
 
     if (std::ssize(*originalArray) != serializedArray.size()) {
         THROW_ERROR_EXCEPTION("Duplicate elements in a serialized hash set")
-            << TErrorAttribute("unique_element_count", originalArray->size())
-            << TErrorAttribute("total_element_count", serializedArray.size());
+            .With("unique_element_count", originalArray->size())
+            .With("total_element_count", serializedArray.size());
     }
 }
 
@@ -504,8 +504,8 @@ void ToProto(
         auto [_, emplaced] = serializedMap->emplace(ToProto<TSerializedKey>(key), ToProto<TSerializedValue>(value));
         if (!emplaced) {
             THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map serialization")
-                << TErrorAttribute("key", key)
-                << TErrorAttribute("serialized_key", ToProto<TSerializedKey>(key));
+                .With("key", key)
+                .With("serialized_key", ToProto<TSerializedKey>(key));
         }
     }
 }
@@ -557,8 +557,8 @@ void FromProto(
         auto [_, emplaced] = originalMap->emplace(FromProto<TKey>(serializedKey), FromProto<TValue>(serializedValue));
         if (!emplaced) {
             THROW_ERROR_EXCEPTION("Found duplicate key during protobuf map deserialization")
-                << TErrorAttribute("serialized_key", serializedKey)
-                << TErrorAttribute("key", FromProto<TKey>(serializedKey));
+                .With("serialized_key", serializedKey)
+                .With("key", FromProto<TKey>(serializedKey));
         }
     }
 }
@@ -566,20 +566,20 @@ void FromProto(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TSerialized, NYT::NDetail::CToProtoOriginal TOriginal, class... TArgs>
-auto ToProto(const TOriginal& original, TArgs&&... args)
+auto ToProto(TOriginal&& original, TArgs&&... args)
 {
     using NYT::ToProto;
-    typename NYT::NDetail::TToProtoResult<TSerialized, TOriginal>::T serialized;
-    ToProto(&serialized, original, std::forward<TArgs>(args)...);
+    typename NYT::NDetail::TToProtoResult<TSerialized, std::remove_cvref_t<TOriginal>>::T serialized;
+    ToProto(&serialized, std::forward<TOriginal>(original), std::forward<TArgs>(args)...);
     return serialized;
 }
 
 template <class TOriginal, class TSerialized, class... TArgs>
-TOriginal FromProto(const TSerialized& serialized, TArgs&&... args)
+TOriginal FromProto(TSerialized&& serialized, TArgs&&... args)
 {
     using NYT::FromProto;
     TOriginal original;
-    FromProto(&original, serialized, std::forward<TArgs>(args)...);
+    FromProto(&original, std::forward<TSerialized>(serialized), std::forward<TArgs>(args)...);
     return original;
 }
 

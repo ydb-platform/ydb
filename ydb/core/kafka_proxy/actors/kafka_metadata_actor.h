@@ -3,8 +3,8 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/core/client/server/ic_nodes_cache_service.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
-#include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/core/discovery/discovery.h>
 #include <ydb/core/kafka_proxy/kafka_listener.h>
 #include <ydb/core/persqueue/events/internal.h>

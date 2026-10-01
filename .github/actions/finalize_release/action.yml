@@ -44,13 +44,6 @@ runs:
       run: |
         PR_TITLE="${{ inputs.product-name }} release ${{ inputs.version }}"
         printf -v PR_BODY '%s\n' \
-          '### Changelog entry' \
-          '' \
-          '### Changelog category' \
-          '' \
-          '* Not for changelog (changelog entry is not required)' \
-          '' \
-          '### Description for reviewers' \
           "Automated release PR for ${{ inputs.product-name }} version ${{ inputs.version }}"
         PR_URL=$(gh pr create \
           --title "$PR_TITLE" \

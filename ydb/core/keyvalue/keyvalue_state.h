@@ -265,11 +265,12 @@ protected:
     // blob moving stage
     bool MoveDataBlobMovingIsInProgress = false;
     bool MoveDataBlobMovingNeedsAnotherPass = false;
-    TString MoveDataKey;
+    std::optional<TString> MoveDataKey;
     ui32 MoveDataChainIndex = 0;
     bool MoveDataRecordTouched = false;
     TLogoBlobID MoveDataBlobId;
     THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
+    ui64 MoveDataBlobsMoved = 0;
     // trash checking stage
     std::optional<ui64> MoveDataTrashCheckingVacuumGeneration = {}; // not set for Trash, set for TrashForVacuum
     TLogoBlobID MoveDataTrashCheckingBlobId;
@@ -317,6 +318,7 @@ protected:
     ui64 PostponedIntermediatesCount = 0;
     ui64 IntermediatesInFlight;
     ui64 RoInlineIntermediatesInFlight;
+    THashSet<ui64> DataRequestsInFlight;
     ui64 DeletesPerRequestLimit;
 
     TTabletCountersBase *TabletCounters;
@@ -342,10 +344,13 @@ protected:
     TMemorizableControlWrapper RejectNonExistentStorageChannel;
     TControlWrapper UsePerChannelReadQueues_Base;
     TMemorizableControlWrapper UsePerChannelReadQueues;
+    std::optional<TMemorizableControlWrapper> RequestsInFlightLimit;
 
     std::shared_ptr<TKeyValueStateLifetimeToken> LifetimeToken = std::make_shared<TKeyValueStateLifetimeToken>();
 
     bool RejectNonExistentStorageChannelEnabled(const TActorContext& ctx);
+    bool TryAcquireRequestSlot(TIntermediate& intermediate, const TActorContext& ctx);
+    void ReleaseRequestSlot(TIntermediate& intermediate);
 
 public:
     TKeyValueState();
@@ -425,10 +430,15 @@ public:
     bool NeedMoveBlob(const TLogoBlobID& blobId) const;
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> AdvanceMoveData(ISimpleDb& db);
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> BlobCopied(
-        const TLogoBlobID& blobId, const TLogoBlobID& newBlobId, ISimpleDb& db);
+        TEvKeyValue::TEvBlobCopied::EResult result,
+        const TLogoBlobID& blobId,
+        const TLogoBlobID& newBlobId,
+        ISimpleDb& db);
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TryCheckTrash();
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> CheckTrash();
-    void FinishMoveData(const TActorContext& ctx);
+    void ResetMoveData();
+    void FinishMoveDataSuccess(const TActorContext& ctx);
+    void FinishMoveDataNotEnoughSpace(const TActorContext& ctx);
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,
@@ -688,6 +698,7 @@ public:
                     ctx, info, TEvKeyValue::TEvNotify::ConvertStatus(status), intermediate->Stat,
                     intermediate->AcquiredChannels);
         } else { //metrics change report in OnRequestComplete is not done
+            ReleaseRequestSlot(*intermediate);
             ResourceMetrics->TryUpdate(ctx);
             RequestInputTime.erase(intermediate->RequestUid);
         }

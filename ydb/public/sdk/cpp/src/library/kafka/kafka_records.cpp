@@ -3,6 +3,7 @@
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <array>
+#include <bit>
 #include <limits>
 
 #include <util/stream/mem.h>
@@ -14,6 +15,8 @@ namespace NKafka {
 namespace {
 
 static constexpr size_t WriteBufferChunkSize = 1 << 16;
+static constexpr size_t RecordBatchLengthOffset =
+    sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
 static constexpr size_t RecordBatchCrcOffset =
     sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type) +
     sizeof(TKafkaRecordBatch::BatchLengthMeta::Type) +
@@ -21,6 +24,15 @@ static constexpr size_t RecordBatchCrcOffset =
     sizeof(TKafkaRecordBatch::MagicMeta::Type);
 static constexpr size_t RecordBatchCrcBodyOffset =
     RecordBatchCrcOffset + sizeof(TKafkaRecordBatch::CrcMeta::Type);
+
+TBuffer TakeRecordBatchBody(TKafkaReadable& readable, TKafkaInt32 batchLength) {
+    if (batchLength < 0) {
+        ythrow yexception() << "invalid Kafka record batch length " << batchLength;
+    }
+    NPrivate::EnsureLengthFitsRemaining(readable, batchLength, "records", TKafkaRecordBatch::BatchLengthMeta::Name);
+    const auto bodyBytes = readable.Bytes(static_cast<size_t>(batchLength));
+    return TBuffer(bodyBytes.data(), bodyBytes.size());
+}
 
 void EnsureSupportedCompressionType(ECompressionType compressionType) {
     switch (compressionType) {
@@ -148,8 +160,12 @@ TString SerializeRecordBatchRecords(
 
 // The returned entries keep TKafkaBytes views into `buffer`, so the caller must
 // keep `buffer` alive for as long as the entries are used.
-std::vector<TKafkaRecordBatchV0> ReadLegacyRecordEntries(const TBuffer& buffer, TKafkaVersion magic) {
-    TKafkaReadable readable(buffer);
+std::vector<TKafkaRecordBatchV0> ReadLegacyRecordEntries(
+    const TBuffer& buffer,
+    TKafkaVersion magic,
+    const TKafkaReadable& limitsFrom)
+{
+    TKafkaReadable readable(buffer, limitsFrom);
     std::vector<TKafkaRecordBatchV0> entries;
 
     while (readable.left() > 0) {
@@ -242,7 +258,7 @@ void ForEachLegacyRecordBatch(
             TStringBuf(value.data(), value.size()),
             compressionType);
         TBuffer innerBuffer(decompressed.data(), decompressed.size());
-        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(innerBuffer, magic);
+        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(innerBuffer, magic, recordsReadable);
         consumer.OnCompressed(entry, compressionType, innerEntries);
     }
 }
@@ -612,40 +628,45 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
     }
     NPrivate::Read<BaseOffsetMeta>(_readable, _version, BaseOffset);
     NPrivate::Read<BatchLengthMeta>(_readable, _version, BatchLength);
-    NPrivate::Read<PartitionLeaderEpochMeta>(_readable, _version, PartitionLeaderEpoch);
-    NPrivate::Read<MagicMeta>(_readable, _version, Magic);
+    TBuffer bodyBuffer = TakeRecordBatchBody(_readable, BatchLength);
+    TKafkaReadable body(bodyBuffer, _readable);
+
+    NPrivate::Read<PartitionLeaderEpochMeta>(body, _version, PartitionLeaderEpoch);
+    NPrivate::Read<MagicMeta>(body, _version, Magic);
     if (2 != Magic) {
         ythrow yexception() << "Supported only RecordBatch version 2 but " << (ui16)Magic;
     }
 
-    NPrivate::Read<CrcMeta>(_readable, _version, Crc);
-    NPrivate::Read<AttributesMeta>(_readable, _version, Attributes);
-    if (CompressionType() != ECompressionType::NONE && !_readable.GetAllowCompressed()) {
+    NPrivate::Read<CrcMeta>(body, _version, Crc);
+    NPrivate::Read<AttributesMeta>(body, _version, Attributes);
+    if (CompressionType() != ECompressionType::NONE && !body.GetAllowCompressed()) {
         ythrow yexception() << "Supported only CompressionType::NONE";
     }
     EnsureSupportedCompressionType(CompressionType());
 
-    NPrivate::Read<LastOffsetDeltaMeta>(_readable, _version, LastOffsetDelta);
-    NPrivate::Read<BaseTimestampMeta>(_readable, _version, BaseTimestamp);
-    NPrivate::Read<MaxTimestampMeta>(_readable, _version, MaxTimestamp);
-    NPrivate::Read<ProducerIdMeta>(_readable, _version, ProducerId);
-    NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
-    NPrivate::Read<BaseSequenceMeta>(_readable, _version, BaseSequence);
+    NPrivate::Read<LastOffsetDeltaMeta>(body, _version, LastOffsetDelta);
+    NPrivate::Read<BaseTimestampMeta>(body, _version, BaseTimestamp);
+    NPrivate::Read<MaxTimestampMeta>(body, _version, MaxTimestamp);
+    NPrivate::Read<ProducerIdMeta>(body, _version, ProducerId);
+    NPrivate::Read<ProducerEpochMeta>(body, _version, ProducerEpoch);
+    NPrivate::Read<BaseSequenceMeta>(body, _version, BaseSequence);
     RecordsMeta::Type().swap(Records);
 
     if (CompressionType() == ECompressionType::NONE) {
-        NPrivate::Read<RecordsMeta>(_readable, _version, Records);
+        NPrivate::Read<RecordsMeta>(body, _version, Records);
         for (auto& record : Records) {
             record.OwnPayload();
         }
     } else {
-        const TKafkaInt32 recordsCount = NPrivate::ReadArraySize<RecordsMeta>(_readable, _version);
+        const TKafkaInt32 recordsCount = NPrivate::ReadArraySize<RecordsMeta>(body, _version);
         EnsureValidRecordBatchRecordsCount(recordsCount);
-        const auto compressed = _readable.Bytes(_readable.left());
+        const auto compressed = body.Bytes(body.left());
         const TString decompressed = DecompressRecordBatchPayload(
             TStringBuf(compressed.data(), compressed.size()), CompressionType());
         TBuffer buffer(decompressed.data(), decompressed.size());
-        TKafkaReadable recordsReadable(buffer);
+        TKafkaReadable recordsReadable(buffer, body);
+        NPrivate::EnsureArrayAllocationFits<RecordsMeta::ItemTypeDesc>(
+            recordsReadable, recordsCount, sizeof(TKafkaRecord), RecordsMeta::Name);
         Records.resize(recordsCount);
         using ItemStrategy = NPrivate::TypeStrategy<
             RecordsMeta,
@@ -714,6 +735,12 @@ i32 TKafkaRecordBatch::Size(TKafkaVersion _version) const {
     return _collector.Size;
 }
 
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta) {
+    // Kafka uses Java long addition, which wraps modulo 2^64. Add unsigned
+    // values to avoid C++ signed overflow, then interpret the resulting bits.
+    return std::bit_cast<i64>(static_cast<ui64>(baseTimestamp) + static_cast<ui64>(timestampDelta));
+}
+
 
 //
 // TKafkaBatchHeader
@@ -740,17 +767,20 @@ void TKafkaBatchHeader::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
     }
     NPrivate::Read<BaseOffsetMeta>(_readable, _version, BaseOffset);
     NPrivate::Read<BatchLengthMeta>(_readable, _version, BatchLength);
-    NPrivate::Read<PartitionLeaderEpochMeta>(_readable, _version, PartitionLeaderEpoch);
-    NPrivate::Read<MagicMeta>(_readable, _version, Magic);
-    NPrivate::Read<CrcMeta>(_readable, _version, Crc);
-    NPrivate::Read<AttributesMeta>(_readable, _version, Attributes);
-    NPrivate::Read<LastOffsetDeltaMeta>(_readable, _version, LastOffsetDelta);
-    NPrivate::Read<BaseTimestampMeta>(_readable, _version, BaseTimestamp);
-    NPrivate::Read<MaxTimestampMeta>(_readable, _version, MaxTimestamp);
-    NPrivate::Read<ProducerIdMeta>(_readable, _version, ProducerId);
-    NPrivate::Read<ProducerEpochMeta>(_readable, _version, ProducerEpoch);
-    NPrivate::Read<BaseSequenceMeta>(_readable, _version, BaseSequence);
-    NPrivate::Read<RecordsCountMeta>(_readable, _version, RecordsCount);
+    TBuffer bodyBuffer = TakeRecordBatchBody(_readable, BatchLength);
+    TKafkaReadable body(bodyBuffer, _readable);
+
+    NPrivate::Read<PartitionLeaderEpochMeta>(body, _version, PartitionLeaderEpoch);
+    NPrivate::Read<MagicMeta>(body, _version, Magic);
+    NPrivate::Read<CrcMeta>(body, _version, Crc);
+    NPrivate::Read<AttributesMeta>(body, _version, Attributes);
+    NPrivate::Read<LastOffsetDeltaMeta>(body, _version, LastOffsetDelta);
+    NPrivate::Read<BaseTimestampMeta>(body, _version, BaseTimestamp);
+    NPrivate::Read<MaxTimestampMeta>(body, _version, MaxTimestamp);
+    NPrivate::Read<ProducerIdMeta>(body, _version, ProducerId);
+    NPrivate::Read<ProducerEpochMeta>(body, _version, ProducerEpoch);
+    NPrivate::Read<BaseSequenceMeta>(body, _version, BaseSequence);
+    NPrivate::Read<RecordsCountMeta>(body, _version, RecordsCount);
     EnsureValidRecordBatchRecordsCount(RecordsCount);
 }
 
@@ -894,7 +924,7 @@ void NPrivate::ReadLegacyRecordBatch(
 {
     const auto data = readable.Bytes(length);
     TBuffer buffer(data.data(), data.size());
-    TKafkaReadable recordsReadable(buffer);
+    TKafkaReadable recordsReadable(buffer, readable);
 
     batch = {};
     batch.Magic = 2;
@@ -924,7 +954,7 @@ TKafkaBatchHeader ReadLegacyRecordBatchHeader(
 {
     const auto data = readable.Bytes(length);
     TBuffer buffer(data.data(), data.size());
-    TKafkaReadable recordsReadable(buffer);
+    TKafkaReadable recordsReadable(buffer, readable);
 
     // Legacy batches (magic 0/1) do not have a v2 RecordBatch header on wire.
     // BaseSequence, ProducerId, Crc, etc. stay at ctor defaults.
@@ -967,11 +997,35 @@ TKafkaRecordBatch ReadRecordBatch(TStringBuf data) {
     return batch;
 }
 
+bool SetKafkaBatchBaseOffset(TString& data, ui64 baseOffset) {
+    const auto header = ReadKafkaBatchHeader(data);
+    if (!header || header->Magic < TKafkaRecordBatch::MagicMeta::Default) {
+        return false;
+    }
+
+    const size_t baseOffsetSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
+    TKafkaWriteBuffer buffer(baseOffsetSize);
+    TKafkaWritable writable(buffer);
+    writable << static_cast<TKafkaRecordBatch::BaseOffsetMeta::Type>(baseOffset);
+
+    data.replace(0, baseOffsetSize, buffer.AsString());
+    return true;
+}
+
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version) {
     TKafkaWriteBuffer buffer(WriteBufferChunkSize);
     TKafkaWritable writable(buffer);
     batch.Write(writable, version);
     TString result = buffer.AsString();
+    if (result.size() >= RecordBatchLengthOffset + sizeof(TKafkaRecordBatch::BatchLengthMeta::Type)) {
+        WriteKafkaInt32(
+            result,
+            RecordBatchLengthOffset,
+            static_cast<TKafkaInt32>(
+                result.size()
+                - sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type)
+                - sizeof(TKafkaRecordBatch::BatchLengthMeta::Type)));
+    }
     if (result.size() >= RecordBatchCrcBodyOffset) {
         const ui32 crc = Crc32c(result.data() + RecordBatchCrcBodyOffset, result.size() - RecordBatchCrcBodyOffset);
         WriteKafkaInt32(result, RecordBatchCrcOffset, static_cast<TKafkaInt32>(crc));

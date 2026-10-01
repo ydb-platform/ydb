@@ -7,9 +7,10 @@
 #include <yql/essentials/sql/v1/ide/completion/antlr4/c3t.h>
 #include <yql/essentials/sql/v1/ide/completion/antlr4/vocabulary.h>
 
-#include <yql/essentials/sql/v1/ide/completion/syntax/ansi.h>
 #include <yql/essentials/sql/v1/ide/completion/syntax/format.h>
 #include <yql/essentials/sql/v1/ide/completion/syntax/grammar.h>
+
+#include <yql/essentials/sql/v1/ide/pure_ast/ansi.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -65,7 +66,7 @@ public:
     {
     }
 
-    TLocalSyntaxContext Analyze(TCompletionInput input) override {
+    TLocalSyntaxContext Analyze(TCompletionInput input) const override {
         TMaterializedInput materialized = {
             .Text = TString(input.Text),
             .CursorPosition = input.CursorPosition,
@@ -177,7 +178,7 @@ private:
         return resolved;
     }
 
-    TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) {
+    TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) const {
         auto enclosing = context.Enclosing();
 
         size_t caretTokenIndex = context.Cursor.NextTokenIndex;
@@ -283,6 +284,11 @@ private:
         if (AnyOf(candidates.Rules, RuleAdapted(IsLikelyExistingTableStack))) {
             object.Kinds.emplace(EObjectKind::Folder);
             object.Kinds.emplace(EObjectKind::Table);
+        }
+
+        if (AnyOf(candidates.Rules, RuleAdapted(IsLikelyExistingViewStack))) {
+            object.Kinds.emplace(EObjectKind::Folder);
+            object.Kinds.emplace(EObjectKind::View);
         }
 
         if (object.Kinds.empty() && !AnyOf(candidates.Rules, RuleAdapted(IsLikelyTableArgStack))) {
@@ -408,7 +414,7 @@ private:
     }
 
     NSQLTranslation::ILexer::TPtr Lexer_;
-    TC3Engine<G> C3_;
+    const TC3Engine<G> C3_;
 };
 
 class TLocalSyntaxAnalysis: public ILocalSyntaxAnalysis {
@@ -423,14 +429,14 @@ public:
     {
     }
 
-    TLocalSyntaxContext Analyze(TCompletionInput input) override {
-        auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
+    TLocalSyntaxContext Analyze(TCompletionInput input) const override {
+        auto isAnsiLexer = NSQLPureAST::IsAnsiQuery(TString(input.Text));
         auto& engine = GetSpecializedEngine(isAnsiLexer);
         return engine.Analyze(input);
     }
 
 private:
-    ILocalSyntaxAnalysis& GetSpecializedEngine(bool isAnsiLexer) {
+    const ILocalSyntaxAnalysis& GetSpecializedEngine(bool isAnsiLexer) const {
         if (isAnsiLexer) {
             return AnsiEngine_;
         }

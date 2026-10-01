@@ -6,10 +6,13 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/http_database_param.h>
 #include <ydb/core/base/mon_auth.h>
 #include <ydb/core/base/monitoring_provider.h>
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/base/http_database_access_verdict.h>
+#include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/mon/audit/audit.h>
 #include <ydb/core/protos/mon.pb.h>
 #include <ydb/core/util/wildcard.h>
@@ -55,39 +58,36 @@ struct TIssueInfo {
     }
 };
 
-bool HasJsonContent(const NHttp::THttpIncomingRequest* request) {
-    if (request->Method == "POST") {
-        const TStringBuf header = request->ContentType.Before(';');
-        return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
-    }
-    return false;
+TString ExtractMonDatabaseParam(const NHttp::THttpIncomingRequest* request) {
+    NHttp::THeaders headers(request->Headers);
+    return ExtractHttpDatabaseParamFromUrl(request->URL, request->Method, request->Body, headers.Get("Content-Type"));
 }
 
-TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
-    NHttp::TUrlParameters urlParams(request->URL);
-    TString database = urlParams["database"];
-    if (database) {
-        return database;
-    }
-    if (HasJsonContent(request)) {
-        NJson::TJsonValue requestData;
-        if (NJson::ReadJsonTree(request->Body, &requestData)) {
-            return requestData["database"].GetString(); // empty if not string or no such key
-        }
-    }
-    return {};
+void InitMonHttpIncomingRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
+    event->Database = ExtractMonDatabaseParam(event->Request.Get());
 }
 
 void LogAuthorizedHttpRequest(
     const TAppData* appData,
+    const NKikimr::NGRpcService::IGRpcProxyCounters::TPtr& grpcProxyCounters,
     const NGRpcService::TEvRequestAuthAndCheckResult* result,
-    const NHttp::THttpIncomingRequest& request)
+    const NHttp::THttpIncomingRequest& request,
+    const TString& database)
 {
     const TString address = request.Address ? request.Address->ToString() : "";
     const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
     const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
     const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
-    const TString database = result ? result->Database : GetDatabase(&request);
+    const NGRpcService::EHttpDatabaseAccessVerdict verdict = result
+        ? result->DatabaseAccessVerdict
+        : NGRpcService::EHttpDatabaseAccessVerdict::Ok;
+    const bool wouldDeny = verdict != NGRpcService::EHttpDatabaseAccessVerdict::Ok;
+    const TString verdictStr(ToString(verdict));
+    if (wouldDeny && grpcProxyCounters && userToken &&
+        IsStrictDatabaseOnlyToken(appData, userToken->GetSerializedToken()))
+    {
+        grpcProxyCounters->IncDatabaseHttpAccessDenyCounter();
+    }
     YDB_LOG_NOTICE(
         "Send request"
             << " [" << address << "]"
@@ -95,13 +95,17 @@ void LogAuthorizedHttpRequest(
             << " " << request.Method
             << " " << request.URL
             << " highest_access_level=" << accessLevel
-            << " database=" << database,
+            << " database=" << database
+            << " database_access_verdict=" << verdictStr
+            << " would_deny=" << (wouldDeny ? 1 : 0),
         {"address", address},
         {"user", user},
         {"method", request.Method},
         {"url", request.URL},
         {"highest_access_level", accessLevel},
-        {"database", database});
+        {"database", database},
+        {"database_access_verdict", verdictStr},
+        {"would_deny", wouldDeny ? "1" : "0"});
 }
 
 const Ydb::Issue::IssueMessage* FindDeepestIssue(const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues) {
@@ -201,31 +205,51 @@ void ReplyCsrfError(const TActorContext& ctx, NHttp::TEvHttpProxy::TEvHttpIncomi
 
 } // namespace
 
-IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
+IEventHandle* GetRequestAuthAndCheckHandle(
+    const NActors::TActorId& owner,
+    const TString& database,
+    const TString& ticket,
+    TString peerName,
+    TString requestId)
+{
+    if (requestId.empty()) {
+        requestId = CreateGuidAsString();
+        YDB_LOG_NOTICE("Monitoring request has no request id, generated a new one",
+            {"requestId", requestId},
+            {"peerName", peerName},
+            {"database", database});
+    }
+
     return new NActors::IEventHandle(
         NGRpcService::CreateGRpcRequestProxyId(),
         owner,
-        new NKikimr::NGRpcService::TEvRequestAuthAndCheck(
+        new NKikimr::NGRpcService::TEvHttpRequestAuthAndCheck(
             database,
             ticket ? TMaybe<TString>(ticket) : Nothing(),
             owner,
             NGRpcService::TAuditMode::Modifying(NGRpcService::TAuditMode::TLogClassConfig::ClusterAdmin),
-            std::move(peerName)),
+            std::move(peerName),
+            std::move(requestId)),
         IEventHandle::FlagTrackDelivery
     );
 }
 
-NActors::IEventHandle* SelectAuthorizationScheme(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
+NActors::IEventHandle* SelectAuthorizationScheme(
+    const NActors::TActorId& owner,
+    const TString& database,
+    NHttp::THttpIncomingRequest* request)
+{
     NHttp::THeaders headers(request->Headers);
     NHttp::TCookies cookies(headers["Cookie"]);
     TStringBuf ydbSessionId = cookies["ydb_session_id"];
     TStringBuf authorization = headers["Authorization"];
+    TString requestId(headers["x-request-id"]);
     if (!authorization.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, TString(authorization), NMonitoring::NAudit::ExtractRemoteAddress(request), requestId);
     } else if (!ydbSessionId.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, TString("Login ") + TString(ydbSessionId), NMonitoring::NAudit::ExtractRemoteAddress(request), requestId);
     } else if (!request->MTlsClientCertificate.empty()) {
-        return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request));
+        return GetRequestAuthAndCheckHandle(owner, database, request->MTlsClientCertificate, NMonitoring::NAudit::ExtractRemoteAddress(request), requestId);
     } else {
         return nullptr;
     }
@@ -294,13 +318,19 @@ IMonPage* TMon::RegisterActorPage(TIndexMonPage* index, const TString& relPath,
     });
 }
 
-NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::THttpIncomingRequest* request) {
-    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, request);
+NActors::IEventHandle* TMon::DefaultAuthorizer(const NActors::TActorId& owner, NHttp::TEvHttpProxy::TEvHttpIncomingRequest* event) {
+    NHttp::THttpIncomingRequest* request = event->Request.Get();
+    NActors::IEventHandle* eventHandle = SelectAuthorizationScheme(owner, event->Database, request);
     if (eventHandle != nullptr) {
         return eventHandle;
     }
 
-    return GetRequestAuthAndCheckHandle(owner, GetDatabase(request), "", NMonitoring::NAudit::ExtractRemoteAddress(request));
+    return GetRequestAuthAndCheckHandle(
+        owner,
+        event->Database,
+        "",
+        NMonitoring::NAudit::ExtractRemoteAddress(request),
+        TString(NHttp::THeaders(request->Headers)["x-request-id"]));
 }
 
 // compatibility layer
@@ -466,10 +496,11 @@ public:
         if (Event->Get()->Request->Method == "OPTIONS") {
             return ReplyOptionsAndPassAway();
         }
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Become(&THttpMonLegacyActorRequest::StateFunc);
         if (ActorMonPage->Authorizer) {
-            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = ActorMonPage->Authorizer(SelfId(), Event->Get());
             if (handle) {
                 TActivationContext::Send(handle);
                 return;
@@ -620,11 +651,11 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
-            LogAuthorizedHttpRequest(AppData(), result, *request);
+            LogAuthorizedHttpRequest(AppData(), ActorMonPage->GrpcProxyCounters, result, *request, Event->Get()->Database);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
-            Container, serializedToken), IEventHandle::FlagTrackDelivery);
+            Container, serializedToken, Event->Get()->Database), IEventHandle::FlagTrackDelivery);
     }
 
     void HandleUndelivered(TEvents::TEvUndelivered::TPtr&) {
@@ -1138,14 +1169,21 @@ public:
     TMon::TRegisterHandlerFields Fields;
     TMon::TRequestAuthorizer Authorizer;
     NMonitoring::NAudit::TAuditCtx AuditCtx;
+    NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
     NHttp::TEvHttpProxy::TEvSubscribeForCancel::TPtr CancelSubscriber;
     bool CsrfCookieSet = false;
 
-    THttpMonAuthorizedActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, const TMon::TRegisterHandlerFields& fields, TMon::TRequestAuthorizer authorizer)
+    THttpMonAuthorizedActorRequest(
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event,
+        const TMon::TRegisterHandlerFields& fields,
+        TMon::TRequestAuthorizer authorizer,
+        NKikimr::NGRpcService::IGRpcProxyCounters::TPtr grpcProxyCounters
+    )
         : Event(std::move(event))
         , Request(Event->Get()->Request)
         , Fields(fields)
         , Authorizer(std::move(authorizer))
+        , GrpcProxyCounters(std::move(grpcProxyCounters))
     {}
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1153,10 +1191,11 @@ public:
     }
 
     void Bootstrap() {
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event);
         Send(Event->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         if (Fields.AuthMode != TMon::EAuthMode::Disabled && Authorizer) {
-            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
                 Send(handle);
                 Become(&THttpMonAuthorizedActorRequest::StateWork);
@@ -1269,7 +1308,7 @@ public:
 
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         if (Authorizer) {
-            LogAuthorizedHttpRequest(AppData(), result, *Request);
+            LogAuthorizedHttpRequest(AppData(), GrpcProxyCounters, result, *Request, Event->Get()->Database);
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }
@@ -1380,9 +1419,10 @@ public:
     }
 
     void Bootstrap() {
+        InitMonHttpIncomingRequest(Event->Get());
         AuditCtx.InitAudit(Event, NeedAudit);
         if (Authorizer) {
-            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get()->Request.Get());
+            NActors::IEventHandle* handle = Authorizer(SelfId(), Event->Get());
             if (handle) {
                 Send(handle);
                 Become(&THttpMonAuthorizedPageRequest::StateWork);
@@ -1597,13 +1637,20 @@ THttpMonPageService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring:
 // receives everyhing not related to actor communcation, converts them to request-actors
 class THttpMonIndexService : public TActor<THttpMonIndexService> {
 public:
-    THttpMonIndexService(const TActorId& httpProxyActorId, TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
-                         TVector<TString> allowedSIDs, TMon::TRequestAuthorizer authorizer, const TString& redirectRoot = {}, bool needMonLegacyAudit = true)
+    THttpMonIndexService(
+        const TActorId& httpProxyActorId,
+        TIntrusivePtr<NMonitoring::TIndexMonPage> indexMonPage,
+        TVector<TString> allowedSIDs,
+        TMon::TRequestAuthorizer authorizer,
+        NKikimr::NGRpcService::IGRpcProxyCounters::TPtr grpcProxyCounters,
+        const TString& redirectRoot = {},
+        bool needMonLegacyAudit = true)
         : TActor(&THttpMonIndexService::StateWork)
         , HttpProxyActorId(httpProxyActorId)
         , IndexMonPage(std::move(indexMonPage))
         , AllowedSIDs(std::move(allowedSIDs))
         , Authorizer(std::move(authorizer))
+        , GrpcProxyCounters(std::move(grpcProxyCounters))
         , RedirectRoot(redirectRoot)
         , NeedMonLegacyAudit(needMonLegacyAudit)
     {
@@ -1687,7 +1734,7 @@ public:
         while (!url.empty()) {
             auto it = Handlers.find(TString(url));
             if (it != Handlers.end()) {
-                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer));
+                Register(new THttpMonAuthorizedActorRequest(std::move(ev), it->second, Authorizer, GrpcProxyCounters));
                 return;
             } else {
                 if (url.EndsWith('/')) {
@@ -1725,6 +1772,7 @@ public:
     std::unordered_map<TString, TMon::TRegisterHandlerFields> Handlers;
     TVector<TString> AllowedSIDs;
     TMon::TRequestAuthorizer Authorizer;
+    NKikimr::NGRpcService::IGRpcProxyCounters::TPtr GrpcProxyCounters;
     TString RedirectRoot;
     bool NeedMonLegacyAudit;
 };
@@ -1792,6 +1840,9 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
     Y_ABORT_UNLESS(actorSystem);
     TGuard<TMutex> g(Mutex);
     ActorSystem = actorSystem;
+    if (auto* appData = ActorSystem->AppData<NKikimr::TAppData>()) {
+        GrpcProxyCounters = NKikimr::NGRpcService::CreateGRpcProxyCounters(appData->Counters);
+    }
     Register(new TIndexRedirectMonPage(IndexMonPage));
     Register(new NMonitoring::TVersionMonPage);
     Register(new NMonitoring::TBootstrapCssMonPage);
@@ -1815,11 +1866,11 @@ std::future<void> TMon::Start(TActorSystem* actorSystem) {
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo),
+        new THttpMonIndexService(HttpProxyActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, Config.RedirectMainPageTo),
         TMailboxType::ReadAsFilled,
         executorPool);
     HttpAuthMonServiceActorId = ActorSystem->Register(
-        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, Config.RedirectMainPageTo, false),
+        new THttpMonIndexService(HttpMonServiceActorId, IndexMonPage, Config.AllowedSIDs, Config.Authorizer, GrpcProxyCounters, Config.RedirectMainPageTo, false),
         TMailboxType::ReadAsFilled,
         executorPool);
     RegisterLwtrace();
@@ -1910,6 +1961,7 @@ NMonitoring::TIndexMonPage* TMon::RegisterIndexPage(const TString& path, const T
 void TMon::RegisterActorMonPage(const TActorMonPageInfo& pageInfo) {
     if (ActorSystem) {
         TActorMonPage* actorMonPage = static_cast<TActorMonPage*>(pageInfo.Page.Get());
+        actorMonPage->GrpcProxyCounters = GrpcProxyCounters;
         auto& actorId = ActorServices[pageInfo.Path];
         if (actorId) {
             ActorSystem->Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, {}, nullptr, 0));

@@ -49,4 +49,43 @@ size_t ToBytes(TPosition position, TStringBuf text) {
     return cur - reinterpret_cast<const unsigned char*>(text.data());
 }
 
+TPosition FromBytes(size_t bytes, TStringBuf text) {
+    const auto error = [&](size_t i) {
+        return NLsp::TLspException::BadRequest()
+               << "(spot " << i << ") bad utf-8 or byte offset " << bytes;
+    };
+
+    if (bytes > text.size()) {
+        throw error(0);
+    }
+
+    TPosition position;
+    const unsigned char* cur = reinterpret_cast<const unsigned char*>(text.data());
+    const unsigned char* const end = cur + text.size();
+    const unsigned char* const target = cur + bytes;
+
+    while (cur < target) {
+        if (*cur == '\n') {
+            ++position.Line;
+            position.Character = 0;
+            ++cur;
+        } else if (cur + 1 < end && *cur == '\r' && cur[1] == '\n') {
+            ++position.Line;
+            position.Character = 0;
+            cur += 2;
+        } else {
+            wchar32 rune;
+            if (ReadUTF8CharAndAdvance(rune, cur, end) != RECODE_OK) {
+                throw error(1);
+            }
+            if (cur > target) {
+                throw error(2);
+            }
+            position.Character += rune >= 0x10000 ? 2 : 1;
+        }
+    }
+
+    return position;
+}
+
 } // namespace NLsp

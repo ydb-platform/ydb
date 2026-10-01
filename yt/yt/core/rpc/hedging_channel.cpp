@@ -107,8 +107,8 @@ public:
             responseHandler = ResponseHandler_;
         }
 
-        YT_LOG_DEBUG_IF(backup, "Request acknowledged by backup (RequestId: %v)",
-            Request_->GetRequestId());
+        YT_TLOG_DEBUG_IF(backup, "Request acknowledged by backup")
+            .With("RequestId", Request_->GetRequestId());
 
         responseHandler->HandleAcknowledgement();
     }
@@ -131,16 +131,16 @@ public:
         }
 
         if (backup) {
-            YT_LOG_DEBUG("Response received from backup (RequestId: %v)",
-                Request_->GetRequestId());
+            YT_TLOG_DEBUG("Response received from backup")
+                .With("RequestId", Request_->GetRequestId());
 
             NRpc::NProto::TResponseHeader header;
             if (!TryParseResponseHeader(message, &header)) {
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error parsing response header from backup")
-                    << TErrorAttribute(BackupFailedKey, Request_->GetRequestId())
-                    << TErrorAttribute("request_id", Request_->GetRequestId()),
+                    .With(BackupFailedKey, Request_->GetRequestId())
+                    .With("request_id", Request_->GetRequestId()),
                     address);
                 return;
             }
@@ -169,11 +169,11 @@ public:
             TDelayedExecutor::CancelAndClear(DeadlineCookie_);
         }
 
-        YT_LOG_DEBUG_IF(backup, "Request failed at backup (RequestId: %v)",
-            Request_->GetRequestId());
+        YT_TLOG_DEBUG_IF(backup, "Request failed at backup")
+            .With("RequestId", Request_->GetRequestId());
 
         if (backup) {
-            error <<= TErrorAttribute(BackupFailedKey, true);
+            error.Add(BackupFailedKey, true);
         }
         responseHandler->HandleError(std::move(error), address);
     }
@@ -272,8 +272,8 @@ private:
             }
         }
 
-        YT_LOG_DEBUG("Resending request to backup (RequestId: %v)",
-            Request_->GetRequestId());
+        YT_TLOG_DEBUG("Resending request to backup")
+            .With("RequestId", Request_->GetRequestId());
 
         auto responseHandler = New<THedgingResponseHandler>(this, true);
 

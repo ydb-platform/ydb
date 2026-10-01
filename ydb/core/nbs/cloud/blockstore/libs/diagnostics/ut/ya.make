@@ -2,6 +2,8 @@ UNITTEST_FOR(ydb/core/nbs/cloud/blockstore/libs/diagnostics)
 
 SRCS(
     dbg_counters_ut.cpp
+    vchunk_counters_ut.cpp
+    volume_counters_ut.cpp
 )
 
 PEERDIR(

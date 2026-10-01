@@ -53,6 +53,7 @@ PEERDIR(
     ydb/core/kesus/proxy
     ydb/core/kesus/tablet
     ydb/core/keyvalue
+    ydb/core/blob_depot
     ydb/core/test_tablet
     ydb/core/kqp
     ydb/core/kqp/federated_query
@@ -66,6 +67,7 @@ PEERDIR(
     ydb/core/mind/bscontroller
     ydb/core/mind/hive
     ydb/core/node_whiteboard
+    ydb/core/path_aliasing
     ydb/core/persqueue
     ydb/core/persqueue/deferred_publish
     ydb/core/protos
@@ -103,6 +105,8 @@ PEERDIR(
     ydb/public/lib/base
     ydb/public/lib/deprecated/kicli
     ydb/public/sdk/cpp/src/client/driver
+    ydb/public/sdk/cpp/src/client/persqueue_public
+    ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/table
@@ -112,6 +116,9 @@ PEERDIR(
     ydb/services/discovery
     ydb/services/ymq
     ydb/core/tx/conveyor/service
+    ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor_composite/service
+    ydb/core/tx/conveyor_composite/usage
     ydb/core/tx/priorities/service
     ydb/core/tx/priorities/usage
     ydb/core/tx/limiter/grouped_memory/usage

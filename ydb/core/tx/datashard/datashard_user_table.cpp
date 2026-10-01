@@ -92,7 +92,7 @@ void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EStat
 
     it->second.State = state;
 
-    // This isn't really necessary now, because no one rely on index state
+    // CDC schema events read index state from the serialized table description.
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
 
@@ -325,6 +325,12 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
+    // On the alter path descr is a delta, but the schemeshard always resends the
+    // current detailed metrics settings in it, so an absent Configured status
+    // means the override was never set or was dropped.
+    DetailedMetricsLevel = descr.GetDetailedMetricsSettings().HasConfigured()
+        ? descr.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()
+        : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
     if (descr.GetPartitionConfig().HasUniqueIndexKeySize()) {
@@ -384,7 +390,6 @@ void TUserTable::AlterSchema() {
         partConfig.AddStorageRooms()->CopyFrom(*room.second);
     }
 
-    // FIXME: these generated column families are incorrect!
     partConfig.ClearColumnFamilies();
     for (const auto& f : Families) {
         const TUserFamily& family = f.second;
@@ -392,9 +397,11 @@ void TUserTable::AlterSchema() {
         columnFamily->SetId(f.first);
         columnFamily->SetName(family.GetName());
         columnFamily->SetStorage(family.Storage);
-        columnFamily->SetColumnCodec(family.ColumnCodec);
+        columnFamily->SetColumnCodec(family.Codec == NTable::NPage::ECodec::Plain
+            ? NKikimrSchemeOp::ColumnCodecPlain : NKikimrSchemeOp::ColumnCodecLZ4);
         columnFamily->SetColumnCache(family.ColumnCache);
         columnFamily->SetColumnCacheMode(family.ColumnCacheMode);
+        columnFamily->MutableStorageConfig()->CopyFrom(family.StorageConfig);
         columnFamily->SetRoom(family.GetRoomId());
     }
 
@@ -421,6 +428,15 @@ void TUserTable::AlterSchema() {
 
     ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
     IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+
+    // Keep the persisted schema in sync with the parsed level, so that a restart
+    // does not resurrect an override, which an alter has just dropped
+    if (DetailedMetricsLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified) {
+        schema.MutableDetailedMetricsSettings()->MutableConfigured()
+            ->SetMetricsLevel(DetailedMetricsLevel);
+    } else {
+        schema.ClearDetailedMetricsSettings();
+    }
 
     schema.SetName(Name);
     schema.SetPath(Path);

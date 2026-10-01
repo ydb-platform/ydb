@@ -257,6 +257,9 @@ protected:
 
     void TestWriteToTopic50();
 
+    void TestTxWriteMidCommitReconnectAssertsParentOffsets();
+    void TestTxWriteSmallMaxMemoryMidBatchReconnectAssertsParentOffsets();
+
     struct TAvgWriteBytes {
         std::uint64_t PerSec = 0;
         std::uint64_t PerMin = 0;

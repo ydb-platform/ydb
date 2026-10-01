@@ -163,6 +163,31 @@ const NKikimrPQ::TPQTabletConfig::TPartition* GetPartitionConfig(const NKikimrPQ
     return nullptr;
 }
 
+const NKikimrPQ::TPartitionConfig::TReadQuota* GetReadQuota(const NKikimrPQ::TPQTabletConfig& config, const TString& clientId) {
+    return FindIfPtr(config.GetPartitionConfig().GetReadQuota(), [&](const auto& quota) {
+        return quota.GetClientId() == clientId;
+    });
+}
+
+NKikimrPQ::TPartitionConfig::TReadQuota* GetOrAddReadQuota(NKikimrPQ::TPQTabletConfig& config, const TString& clientId) {
+    auto* partConfig = config.MutablePartitionConfig();
+    auto* quota = FindIfPtr(*partConfig->MutableReadQuota(), [&](const auto& quota) {
+        return quota.GetClientId() == clientId;
+    });
+    if (quota) {
+        return quota;
+    }
+    auto* newQuota = partConfig->AddReadQuota();
+    newQuota->SetClientId(clientId);
+    return newQuota;
+}
+
+void ClearReadQuotaExceptWithoutConsumer(NKikimrPQ::TPQTabletConfig& config) {
+    EraseIf(*config.MutablePartitionConfig()->MutableReadQuota(), [&](const auto& quota) {
+        return quota.GetClientId() != CLIENTID_WITHOUT_CONSUMER;
+    });
+}
+
 TPartitionGraph::TPartitionGraph() {
 }
 
@@ -300,21 +325,33 @@ std::unordered_map<ui32, TPartitionGraph::Node> BuildGraph(const TCollection& pa
 
     std::deque<TPartitionGraph::Node*> queue;
 
-    for (const auto& p : partitions) {
-        auto& node = result[GetPartitionId(p)];
+    auto findNode = [&](auto id) -> TPartitionGraph::Node* {
+        auto it = result.find(static_cast<ui32>(id));
+        return it == result.end() ? nullptr : &it->second;
+    };
 
-        node.DirectChildren.reserve(p.ChildPartitionIdsSize());
-        for (auto id : p.GetChildPartitionIds()) {
-            node.DirectChildren.push_back(&result[id]);
+    for (const auto& p : partitions) {
+        auto* node = findNode(GetPartitionId(p));
+        if (!node) {
+            continue;
         }
 
-        node.DirectParents.reserve(p.ParentPartitionIdsSize());
+        node->DirectChildren.reserve(p.ChildPartitionIdsSize());
+        for (auto id : p.GetChildPartitionIds()) {
+            if (auto* child = findNode(id)) {
+                node->DirectChildren.push_back(child);
+            }
+        }
+
+        node->DirectParents.reserve(p.ParentPartitionIdsSize());
         for (auto id : p.GetParentPartitionIds()) {
-            node.DirectParents.push_back(&result[id]);
+            if (auto* parent = findNode(id)) {
+                node->DirectParents.push_back(parent);
+            }
         }
 
         if (p.GetParentPartitionIds().empty()) {
-            queue.push_back(&node);
+            queue.push_back(node);
         }
     }
 

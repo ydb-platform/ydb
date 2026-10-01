@@ -44,6 +44,7 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/feature_flags_configurator.h>
 #include <ydb/core/cms/console/immediate_controls_configurator.h>
+#include <ydb/core/cms/console/interconnect_configurator.h>
 #include <ydb/core/cms/console/jaeger_tracing_configurator.h>
 #include <ydb/core/cms/console/log_settings_configurator.h>
 #include <ydb/core/cms/console/validators/core_validators.h>
@@ -114,7 +115,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy/ss_proxy.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct_tablet/partition_direct.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/dbs_controller.h>
 #endif
 
@@ -169,6 +170,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/mediator/mediator.h>
 #include <ydb/core/tx/replication/controller/controller.h>
 #include <ydb/core/tx/replication/service/service.h>
@@ -219,6 +221,7 @@
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
+#include <ydb/core/tx/general_cache/service/service.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
 #include <ydb/core/tx/priorities/service/service.h>
@@ -230,6 +233,7 @@
 #include <ydb/core/backup/controller/tablet.h>
 
 #include <ydb/services/udf_store/service.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 
 #include <ydb/library/actors/protos/services_common.pb.h>
 
@@ -324,26 +328,12 @@ IKikimrServicesInitializer::IKikimrServicesInitializer(const TKikimrRunConfig& r
 
 // TBasicServicesInitializer
 
-void AddExecutorPool(
-    TCpuManagerConfig& cpuManager,
-    const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
-    const NKikimrConfig::TActorSystemConfig& systemConfig,
-    ui32 poolId,
-    const NKikimr::TAppData* appData)
-{
-    const auto counters = GetServiceCounters(appData->Counters, "utils");
-    NActorSystemConfigHelpers::AddExecutorPool(cpuManager, poolConfig, systemConfig, poolId, counters);
-}
-
 static TCpuManagerConfig CreateCpuManagerConfig(const NKikimrConfig::TActorSystemConfig& config,
                                                 const NKikimr::TAppData* appData)
 {
     TCpuManagerConfig cpuManager;
     cpuManager.Shared.United = config.GetUseUnitedPool();
-    cpuManager.PingInfoByPool.resize(config.GetExecutor().size());
-    for (int poolId = 0; poolId < config.GetExecutor().size(); poolId++) {
-        AddExecutorPool(cpuManager, config.GetExecutor(poolId), config, poolId, appData);
-    }
+    NActorSystemConfigHelpers::AddExecutorPools(cpuManager, config, GetServiceCounters(appData->Counters, "utils"));
     return cpuManager;
 }
 
@@ -599,10 +589,20 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.V2.ChecksumEvents = v2.GetChecksumEvents();
         result.V2.EnableSQPOLL = v2.GetEnableSQPOLL();
         result.V2.EnablePreserializeEvents = v2.GetEnablePreserializeEvents();
-        result.V2.UringEngineThreads = v2.GetUringEngineThreads();
-        result.V2.UringEngineRingsPerShard = v2.GetUringEngineRingsPerShard();
-        result.V2.UringEngineSqThreadIdleMs = v2.GetUringEngineSqThreadIdleMs();
+        result.V2.Threads = v2.GetThreads();
+        result.V2.RingsPerShard = v2.GetRingsPerShard();
+        result.V2.SqThreadIdleMs = v2.GetSqThreadIdleMs();
         result.V2.ShareRingsAmongThreads = v2.GetShareRingsAmongThreads();
+        result.V2.EnableFixedFiles = v2.GetEnableFixedFiles();
+        result.V2.FixedFilesPerRing = v2.GetFixedFilesPerRing();
+        result.V2.EnableProvidedBuffers = v2.GetEnableProvidedBuffers();
+        result.V2.PoolBufCount = v2.GetPoolBufCount();
+        result.V2.MinWriteBufferSize = v2.GetMinWriteBufferSizeKB() << 10;
+        result.V2.MaxWriteBufferSize = v2.GetMaxWriteBufferSizeKB() << 10;
+        result.V2.MinReadBufferSize = v2.GetMinReadBufferSizeKB() << 10;
+        result.V2.MaxReadBufferSize = v2.GetMaxReadBufferSizeKB() << 10;
+        result.V2.MinSerializeWindowSize = v2.GetMinSerializeWindowSizeKB() << 10;
+        result.V2.MaxSerializeWindowSize = v2.GetMaxSerializeWindowSizeKB() << 10;
     }
 
     return result;
@@ -628,6 +628,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
+    setup->AsyncFrameCacheSizeBytes = systemConfig.GetAsyncFrameCacheSizeBytes();
 
     auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
@@ -700,6 +701,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             auto settings = GetInterconnectSettings(icConfig, numNodes, dataCenters.size());
             setup->InterconnectCollectSubscriptionStackTrace = settings.CollectSubscriptionStackTrace;
             ui32 interconnectPoolId = GetInterconnectThreadPoolId(appData);
+            auto interconnectSessionPoolIds =
+                NActorSystemConfigHelpers::GetInterconnectSessionExecutorPoolIds(systemConfig);
+            if (interconnectSessionPoolIds.empty()) {
+                interconnectSessionPoolIds.push_back(interconnectPoolId);
+            }
+            const TInterconnectSessionPoolMapping interconnectSessionPoolMapping(
+                std::move(interconnectSessionPoolIds));
 
             for (const auto& channel : icConfig.GetChannel()) {
                 const auto index = channel.GetIndex();
@@ -742,7 +750,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                        NInterconnect::NRdma::TRdmaRuntimeParams{-1, static_cast<int>(icConfig.GetRdmaMaxWr()), 0, 0},
+                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()), icConfig.GetEnableRdmaSendReceive()),
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));
@@ -759,26 +767,31 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->MonCounters = interconectCounters;
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
+            icCommon->DestructorId = GetDestructActorID();
 
-            if (settings.V2.Enable) {
+            if (settings.V2.Threads) {
                 // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
+                // This is keyed on Threads, not on Settings.V2.Enable: Enable only gates handshake
+                // negotiation and can be flipped later by a cluster config update, so the engine has to be
+                // in place beforehand. Zero Threads means the node never runs v2, whatever Enable says.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
                 // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
-                icCommon->UringEngineV2 = CreateUringEngine(settings.V2.UringEngineThreads,
-                    interconectCounters->GetSubgroup("subsystem", "uring"),
-                    settings.V2.EnableSQPOLL,
-                    settings.V2.UringEngineRingsPerShard,
-                    settings.V2.UringEngineSqThreadIdleMs,
-                    settings.V2.ShareRingsAmongThreads,
-                    GetDestructActorID());
+                // The engine takes its parameters from Common, so Settings/MonCounters/DestructorId must
+                // already be filled in by this point.
+                icCommon->UringEngineV2 = CreateUringEngine(icCommon);
                 setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
                     if (engine) {
                         engine->SetActorSystem(actorSystem);
                     }
                 });
             }
-            icCommon->DestructorId = GetDestructActorID();
+            // Follows cluster config updates and flips Settings.V2.Enable on this Common, so that switching
+            // the cluster to interconnect v2 does not need a restart. Registered unconditionally: it also
+            // warns when v2 is turned on for a node that has no engine to run it (see above).
+            setup->LocalServices.emplace_back(TActorId(), TActorSetupCmd(
+                NConsole::CreateInterconnectConfigurator(icCommon), TMailboxType::ReadAsFilled, systemPoolId));
+
             icCommon->DestructorQueueSize = destructorQueueSize;
             icCommon->HandshakeBallastSize = icConfig.GetHandshakeBallastSize();
             icCommon->LocalScopeId = ScopeId.GetInterconnectScopeId();
@@ -804,6 +817,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 CHANNEL(IC_TABLETS_SMALL),
                 CHANNEL(IC_TABLETS_MEDIUM),
                 CHANNEL(IC_TABLETS_LARGE),
+                CHANNEL(IC_DQ_DATA),
+                CHANNEL(IC_DQ_CONTROL),
             };
 
             if (icConfig.GetEnforceScopeValidation()) {
@@ -958,7 +973,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 maxNode = Max(maxNode, node.first);
             }
             setup->Interconnect.ProxyActors.resize(maxNode + 1);
-            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(icCommon, interconnectPoolId);
+            setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(icCommon, interconnectSessionPoolMapping);
 
             std::unordered_set<ui32> staticIds;
 
@@ -967,7 +982,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 if (destId != NodeId) {
                     staticIds.insert(destId);
                     setup->Interconnect.ProxyActors[destId] = TActorSetupCmd(new TInterconnectProxyTCP(destId, icCommon),
-                        TMailboxType::ReadAsFilled, interconnectPoolId);
+                        TMailboxType::ReadAsFilled, interconnectSessionPoolMapping.GetPoolId(destId));
                 } else {
                     TFederatedQueryInitializer::SetIcPort(node.second.second);
                     icCommon->TechnicalSelfHostName = node.second.Host;
@@ -1161,13 +1176,16 @@ TBSNodeWardenInitializer::TBSNodeWardenInitializer(const TKikimrRunConfig& runCo
 
 void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                   const NKikimr::TAppData* appData) {
-    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig(new TRealPDiskServiceFactory()));
+    setup->RegisterSubSystem<IPDiskSubsystem>(CreatePDiskSubsystem());
+    TIntrusivePtr<TNodeWardenConfig> nodeWardenConfig(new TNodeWardenConfig());
+    nodeWardenConfig->BlobStorageExecutorPoolIds =
+        NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(Config.GetActorSystemConfig());
     if (Config.HasBlobStorageConfig()) {
         const auto& bsc = Config.GetBlobStorageConfig();
-        nodeWardenConfig->FeatureFlags = Config.GetFeatureFlags();
-        nodeWardenConfig->BlobStorageConfig.CopyFrom(bsc);
+        nodeWardenConfig->FeatureFlags = std::make_unique<NKikimrConfig::TFeatureFlags>(Config.GetFeatureFlags());
+        nodeWardenConfig->BlobStorageConfig->CopyFrom(bsc);
         if (Config.HasNameserviceConfig()) {
-            nodeWardenConfig->NameserviceConfig.CopyFrom(Config.GetNameserviceConfig());
+            nodeWardenConfig->NameserviceConfig->CopyFrom(Config.GetNameserviceConfig());
         }
         if (Config.HasVDiskConfig()) {
             nodeWardenConfig->AllVDiskKinds->Merge(Config.GetVDiskConfig());
@@ -1199,16 +1217,16 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         nodeWardenConfig->EnableVDiskCooldownTimeout = true;
     }
     if (Config.HasDomainsConfig()) {
-        nodeWardenConfig->DomainsConfig.emplace(Config.GetDomainsConfig());
+        nodeWardenConfig->DomainsConfig = std::make_unique<NKikimrConfig::TDomainsConfig>(Config.GetDomainsConfig());
     }
     if (Config.HasSelfManagementConfig()) {
-        nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
+        nodeWardenConfig->SelfManagementConfig = std::make_unique<NKikimrConfig::TSelfManagementConfig>(Config.GetSelfManagementConfig());
     }
     if (Config.HasBridgeConfig()) {
-        nodeWardenConfig->BridgeConfig.emplace(Config.GetBridgeConfig());
+        nodeWardenConfig->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(Config.GetBridgeConfig());
     }
     if (Config.HasDynamicNodeConfig()) {
-        nodeWardenConfig->DynamicNodeConfig.emplace(Config.GetDynamicNodeConfig());
+        nodeWardenConfig->DynamicNodeConfig = std::make_unique<NKikimrConfig::TDynamicNodeConfig>(Config.GetDynamicNodeConfig());
     }
 
     if (Config.HasConfigDirPath()) {
@@ -1224,6 +1242,47 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
         const auto& storageConfig = Config.GetNbsConfig().GetNbsStorageConfig();
         if (storageConfig.HasGlobalDDiskConfig()) {
             nodeWardenConfig->DDiskConfig = storageConfig.GetGlobalDDiskConfig();
+        }
+        if (storageConfig.HasEnableChecksums()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetEnableChecksums(
+                storageConfig.GetEnableChecksums());
+        }
+        if (storageConfig.HasCheckChecksumBeforeWrite()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetCheckChecksumBeforeWrite(
+                storageConfig.GetCheckChecksumBeforeWrite());
+        }
+        if (storageConfig.HasCheckChecksumWhenRead()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetCheckChecksumWhenRead(
+                storageConfig.GetCheckChecksumWhenRead());
+        }
+        if (storageConfig.HasIdleSpinUs()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetIdleSpinUs(
+                storageConfig.GetIdleSpinUs());
+        }
+        if (storageConfig.HasIntegrityChecksumCacheBytes()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetIntegrityChecksumCacheBytes(
+                storageConfig.GetIntegrityChecksumCacheBytes());
+        }
+        if (storageConfig.HasDevNullMode()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetDevNullMode(storageConfig.GetDevNullMode());
         }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();
@@ -1278,7 +1337,7 @@ void TStateStorageServiceInitializer::InitializeServices(NActors::TActorSystemSe
 
     std::unique_ptr<IActor> proxyActor;
 
-    for (const NKikimrConfig::TDomainsConfig::TStateStorage &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
+    for (const NKikimrConfig::TStateStorageConfig &ssconf : Config.GetDomainsConfig().GetStateStorage()) {
         Y_ABORT_UNLESS(ssconf.GetSSId() == 1);
 
         BuildStateStorageInfos(ssconf, ssrInfo, ssbInfo, sbrInfo);
@@ -1356,6 +1415,7 @@ void TLocalServiceInitializer::InitializeServices(
     addToLocalConfig(TTabletTypes::StatisticsAggregator, &NStat::CreateStatisticsAggregator, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::GraphShard, &NGraph::CreateGraphShard, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BackupController, &NBackup::CreateBackupController, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::WasmCompileController, &NUdfStore::CreateWasmCompileController, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
@@ -1419,14 +1479,9 @@ void TBlobCacheInitializer::InitializeServices(
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
-    std::optional<ui64> maxCacheSize;
-    if (Config.HasBlobCacheConfig()) {
-        if (Config.GetBlobCacheConfig().HasMaxSizeBytes()) {
-            maxCacheSize = Config.GetBlobCacheConfig().GetMaxSizeBytes();
-        }
-    }
+    const NBlobCache::TBlobCacheSettings settings = NBlobCache::TBlobCacheSettings::FromProto(Config.GetBlobCacheConfig());
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
-        TActorSetupCmd(NBlobCache::CreateBlobCache(maxCacheSize, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
+        TActorSetupCmd(NBlobCache::CreateBlobCache(settings, blobCacheGroup), TMailboxType::ReadAsFilled, appData->UserPoolId)));
 }
 
 // TLoggerInitializer
@@ -2624,7 +2679,7 @@ void TCompDiskLimiterInitializer::InitializeServices(NActors::TActorSystemSetup*
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup = tabletGroup->GetSubgroup("type", "TX_COMP_DISK_LIMITER");
 
-        auto service = NLimiter::TCompDiskOperator::CreateService(serviceConfig, countersGroup);
+        auto service = NLimiter::CreateService<NLimiter::TCompDiskLimiterPolicy>(serviceConfig, countersGroup);
 
         setup->LocalServices.push_back(std::make_pair(
             NLimiter::TCompDiskOperator::MakeServiceId(NodeId),
@@ -2670,7 +2725,7 @@ void TGeneralCachePortionsMetadataInitializer::InitializeServices(NActors::TActo
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_PORTIONS_METADATA");
 
-    auto service = NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::CreateService(*serviceConfig, conveyorGroup);
+    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>(*serviceConfig, conveyorGroup);
 
     setup->LocalServices.push_back(
         std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::MakeServiceId(NodeId),
@@ -2694,7 +2749,7 @@ void TGeneralCacheColumnDataInitializer::InitializeServices(NActors::TActorSyste
     TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
     TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_GENERAL_CACHE_COLUMN_DATA");
 
-    auto service = NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TColumnDataCachePolicy>::CreateService(*serviceConfig, conveyorGroup);
+    auto service = NGeneralCache::CreateService<NOlap::NGeneralCache::TColumnDataCachePolicy>(*serviceConfig, conveyorGroup);
 
     setup->LocalServices.push_back(
         std::make_pair(NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TColumnDataCachePolicy>::MakeServiceId(NodeId),
@@ -2708,14 +2763,12 @@ TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunCon
 
 void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     const NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
-        if (Config.HasCompositeConveyorConfig()) {
-            return Config.GetCompositeConveyorConfig();
-        }
         NKikimrConfig::TCompositeConveyorConfig result;
         if (Config.HasCompConveyorConfig()) {
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             protoLink.SetWeight(1);
@@ -2732,6 +2785,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Compaction));
             protoLink.SetWeight(1);
@@ -2743,6 +2797,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
@@ -2750,8 +2805,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
                 protoWorkersPool.SetWorkersCount(Config.GetInsertConveyorConfig().GetWorkersCountDouble());
             } else if (Config.GetInsertConveyorConfig().HasWorkersCount()) {
                 protoWorkersPool.SetWorkersCount(Config.GetInsertConveyorConfig().GetWorkersCount());
-            } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
-                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
+            } else if (Config.GetInsertConveyorConfig().HasDefaultFractionOfThreadsCount()) {
+                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetInsertConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(0.2);
             }
@@ -2759,6 +2814,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Insert));
             protoLink.SetWeight(1);
@@ -2769,6 +2825,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             protoLink.SetWeight(1);
@@ -2776,8 +2833,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
                 protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCountDouble());
             } else if (Config.GetScanConveyorConfig().HasWorkersCount()) {
                 protoWorkersPool.SetWorkersCount(Config.GetScanConveyorConfig().GetWorkersCount());
-            } else if (Config.GetCompConveyorConfig().HasDefaultFractionOfThreadsCount()) {
-                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetCompConveyorConfig().GetDefaultFractionOfThreadsCount());
+            } else if (Config.GetScanConveyorConfig().HasDefaultFractionOfThreadsCount()) {
+                protoWorkersPool.SetDefaultFractionOfThreadsCount(Config.GetScanConveyorConfig().GetDefaultFractionOfThreadsCount());
             } else {
                 protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
             }
@@ -2785,21 +2842,45 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
             protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
             protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Scan));
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
         }
 
-        NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
-        protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
-        NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
-        NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
-        protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
-        protoLink.SetWeight(1);
-        protoWorkersPool.SetDefaultFractionOfThreadsCount(0.3);
+        {
+            NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
+            protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+            NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
+            protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
+            protoLink.SetWeight(1);
+            protoWorkersPool.SetDefaultFractionOfThreadsCount(0.3);
+        }
 
-        return result;
+        {
+            NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
+            protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Normalizer));
+            NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
+            protoWorkersPool.SetName("WP::" + ::ToString(NConveyorComposite::ESpecialTaskCategory::Normalizer));
+            NKikimrConfig::TCompositeConveyorConfig::TWorkerPoolCategoryLink& protoLink = *protoWorkersPool.AddLinks();
+            protoLink.SetCategory(::ToString(NConveyorComposite::ESpecialTaskCategory::Normalizer));
+            protoLink.SetWeight(1);
+            protoWorkersPool.SetDefaultFractionOfThreadsCount(0.33);
+        }
+
+        if (!Config.HasCompositeConveyorConfig()) {
+            return result;
+        }
+        auto overlaid = NConveyorComposite::NConfig::TConfig::OverlayYamlOnDefaults(result, Config.GetCompositeConveyorConfig());
+        if (overlaid.IsFail()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot overlay composite conveyor config")(
+                "error", overlaid.GetErrorMessage())("action", "keeping synthesized composite conveyor defaults");
+            return result;
+        }
+        return overlaid.DetachResult();
     }();
 
     auto serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig);
@@ -2814,10 +2895,16 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMPOSITE_CONVEYOR");
 
-        auto service = NConveyorComposite::TServiceOperator::CreateService(*serviceConfig, conveyorGroup);
+        const auto registerService = [&](const ui32 poolId, bool useBatchPool) {
+            auto poolConveyorGroup = conveyorGroup->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
+            auto service = NConveyorComposite::CreateService(*serviceConfig, poolConveyorGroup);
+            setup->LocalServices.push_back(std::make_pair(
+                NConveyorComposite::TServiceOperator::MakeServiceId(NodeId, useBatchPool),
+                TActorSetupCmd(service, TMailboxType::HTSwap, poolId)));
+        };
 
-        setup->LocalServices.push_back(std::make_pair(
-            NConveyorComposite::TServiceOperator::MakeServiceId(NodeId), TActorSetupCmd(service, TMailboxType::HTSwap, appData->UserPoolId)));
+        registerService(appData->UserPoolId, false);
+        registerService(appData->BatchPoolId, true);
     }
 }
 
@@ -3407,6 +3494,18 @@ void TOverloadManagerInitializer::InitializeServices(NActors::TActorSystemSetup*
         TActorSetupCmd(NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
+TFlowControlManagerInitializer::TFlowControlManagerInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TFlowControlManagerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup =
+        NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::BuildCountersGroup(appData->Counters);
+
+    setup->LocalServices.push_back(std::make_pair(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(NodeId),
+        TActorSetupCmd(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::CreateService(countersGroup), TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
 
 TNbsServiceInitializer::TNbsServiceInitializer(const TKikimrRunConfig &runConfig)
@@ -3425,7 +3524,7 @@ void TNbsServiceInitializer::InitializeServices(NActors::TActorSystemSetup *setu
 
 TUdfStoreInitializer::TUdfStoreInitializer(const TKikimrRunConfig& runConfig, TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> functionRegistry)
     : IKikimrServicesInitializer(runConfig)
-    , FunctionRegistry(functionRegistry) {
+    , FunctionRegistry(std::move(functionRegistry)) {
 }
 
 void TUdfStoreInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {

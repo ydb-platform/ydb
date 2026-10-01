@@ -11,8 +11,10 @@ const char* const TracingTraceIdMetadataKey = "yt-tracing-trace-id";
 const char* const TracingSpanIdMetadataKey = "yt-tracing-span-id";
 const char* const TracingSampledMetadataKey = "yt-tracing-sampled";
 const char* const TracingDebugMetadataKey = "yt-tracing-debug";
+const char* const TracingTraceParentMetadataKey = "traceparent";
 
 const char* const RequestIdMetadataKey = "yt-request-id";
+const char* const StartTimeMetadataKey = "yt-start-time";
 const char* const UserMetadataKey = "yt-user";
 const char* const UserTagMetadataKey = "yt-user-tag";
 const char* const UserAgentMetadataKey = "user-agent";
@@ -34,8 +36,10 @@ const THashSet<TStringBuf>& GetNativeMetadataKeys()
         TracingSpanIdMetadataKey,
         TracingSampledMetadataKey,
         TracingDebugMetadataKey,
+        TracingTraceParentMetadataKey,
 
         RequestIdMetadataKey,
+        StartTimeMetadataKey,
         UserMetadataKey,
         UserTagMetadataKey,
         UserAgentMetadataKey,

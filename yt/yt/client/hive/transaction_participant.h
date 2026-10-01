@@ -42,8 +42,9 @@ struct ITransactionParticipant
         const std::vector<std::string>& strongOrderingTags,
         const std::vector<TCellId>& cellIdsToSyncWith,
         const NRpc::TAuthenticationIdentity& identity,
-        NTransactionClient::TTransactionSignature expectedPrepareSignature) = 0;
-    virtual TFuture<void> MakeTransactionReadyToCommit(
+        NTransactionClient::TTransactionSignature expectedPrepareSignature,
+        int targetCommitApprovalCount) = 0;
+    virtual TFuture<void> RecordCommitTimestamp(
         TTransactionId transactionId,
         TTimestamp commitTimestamp,
         NApi::TClusterTag commitTimestampClusterTag,

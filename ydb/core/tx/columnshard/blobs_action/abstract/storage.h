@@ -91,7 +91,7 @@ public:
 
     void Stop();
 
-    const NSplitter::TSplitSettings& GetBlobSplitSettings() const;
+    NSplitter::TSplitSettings GetBlobSplitSettings() const;
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
 
@@ -142,6 +142,9 @@ public:
         AFL_VERIFY(IsReady());
         auto result = DoStartReadingAction();
         result->SetCounters(Counters->GetConsumerCounter(consumerId)->GetReadCounters());
+        if (consumerId == NBlobOperations::EConsumer::GENERAL_COMPACTION) {
+            result->SetCacheAfterRead(false);
+        }
         return result;
     }
 

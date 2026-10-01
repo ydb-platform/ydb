@@ -22,8 +22,8 @@ TMD5Hash MD5FromString(TStringBuf data)
     TMD5Hash hash;
     if (data.size() != hash.size()) {
         THROW_ERROR_EXCEPTION("Invalid MD5 hash size")
-            << TErrorAttribute("expected", hash.size())
-            << TErrorAttribute("actual", data.size());
+            .With("expected", hash.size())
+            .With("actual", data.size());
     }
 
     std::copy(data.begin(), data.end(), hash.begin());
@@ -111,8 +111,8 @@ TSha1Hash Sha1FromString(TStringBuf data)
     TSha1Hash hash;
     if (data.size() != hash.size()) {
         THROW_ERROR_EXCEPTION("Invalid Sha1 hash size")
-            << TErrorAttribute("expected", hash.size())
-            << TErrorAttribute("actual", data.size());
+            .With("expected", hash.size())
+            .With("actual", data.size());
     }
 
     std::copy(data.begin(), data.end(), hash.begin());
@@ -279,7 +279,7 @@ std::string GenerateCryptoStrongRandomString(int length)
         return std::string{data, static_cast<size_t>(length)};
     } else {
         THROW_ERROR_EXCEPTION("Failed to generate %v random bytes", length)
-            << TErrorAttribute("openssl_error_code", ERR_get_error());
+            .With("openssl_error_code", ERR_get_error());
     }
 }
 

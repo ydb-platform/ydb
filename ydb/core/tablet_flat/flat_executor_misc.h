@@ -9,6 +9,8 @@
 #include "flat_writer_conf.h"
 #include "flat_comp.h"
 
+#include <ydb/core/protos/blobstorage_base.pb.h>
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
@@ -31,6 +33,7 @@ namespace NTabletFlatExecutor {
         NTable::TEpoch Epoch = NTable::TEpoch::Zero();   /* Result epoch of compacted part */
         NTable::NPage::TConf Layout;
         NWriter::TConf Writer;
+        NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         THolder<NTable::TCompactionParams> Params;
         NTable::TRowVersionRanges::TSnapshot RemovedRowVersions;
 

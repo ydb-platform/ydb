@@ -208,6 +208,7 @@ bool TTablesManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     Self->Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, tablesManagerLocal.GetTtl().size());
 
     Self->TablesManager = std::move(tablesManagerLocal);
+    Self->ApplyColumnShardConfig();
     return true;
 }
 

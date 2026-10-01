@@ -15,11 +15,59 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 
+#include <optional>
+#include <utility>
+
 #include <util/system/valgrind.h>
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
 namespace NDataShard {
+
+// One writer's position in a lock's uncommitted write chain
+struct TLockWriteSeqNum {
+    ui64 WriterIndex = 0;
+    ui64 WriteSeqNum = 0;
+};
+
+// Last uncommitted write for one WriterIndex.
+struct TWriteSeqNumState {
+    ui64 WriterIndex = 0;
+    ui64 WriteSeqNum = 0;
+    TString SerializedResult; // last TEvWriteResult; empty if none
+};
+
+// ELockFlags type safe enum
+
+enum class ELockFlags : ui64 {
+    None = 0,
+    Frozen = 1,
+    WholeShard = 2,
+    Persistent = 4,
+    Removed = 8,
+    Pessimistic = 16,
+    PersistentMask = Frozen,
+};
+
+using ELockFlagsRaw = std::underlying_type<ELockFlags>::type;
+
+inline ELockFlags operator|(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) | ELockFlagsRaw(b)); }
+inline ELockFlags operator&(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) & ELockFlagsRaw(b)); }
+inline ELockFlags& operator|=(ELockFlags& a, ELockFlags b) { return a = a | b; }
+inline ELockFlags& operator&=(ELockFlags& a, ELockFlags b) { return a = a & b; }
+inline ELockFlags operator~(ELockFlags c) { return ELockFlags(~ELockFlagsRaw(c)); }
+inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
+
+// Info about an ancestor shard that originally held a persistent lock whose uncommitted
+// writes were transferred to this shard during split/merge.
+struct TAncestorLock {
+    ui64 TabletId = 0;      // ancestor shard
+    ui32 Generation = 0;
+    ui64 Counter = 0;
+    TInstant CreationTime;
+    ELockFlags Flags = ELockFlags::None;
+    THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates; // WriterIndex -> state
+};
 
 class ILocksDb {
 protected:
@@ -40,6 +88,7 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
+        TVector<TWriteSeqNumState> WriteSeqNumStates;
         ui64 VictimQuerySpanId = 0;
         ui64 BreakerQuerySpanId = 0;
         ui32 BreakerNodeId = 0;
@@ -47,6 +96,7 @@ public:
         TVector<TLockRange> Ranges;
         TVector<ui64> Conflicts;
         TVector<ui64> VolatileDependencies;
+        TVector<TAncestorLock> AncestorLocks;
 
         // In-memory migration only (not persistent)
         TRowVersion BreakVersion = TRowVersion::Max();
@@ -68,6 +118,12 @@ public:
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
+    virtual void PersistLockWriteSeqNum(ui64 lockId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
+    virtual void PersistRemoveLockWriteSeqNum(ui64 lockId, ui64 writerIndex) = 0;
+    virtual void PersistAddAncestorLock(ui64 lockId, const TAncestorLock& lock) = 0;
+    virtual void PersistRemoveAncestorLock(ui64 lockId, ui64 tabletId) = 0;
+    virtual void PersistAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex, ui64 writeSeqNum, const TString& serializedResult) = 0;
+    virtual void PersistRemoveAncestorLockWriteSeqNum(ui64 lockId, ui64 tabletId, ui64 writerIndex) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -217,27 +273,6 @@ struct TPendingSubscribeLock {
         return LockId != 0;
     }
 };
-
-// ELockFlags type safe enum
-
-enum class ELockFlags : ui64 {
-    None = 0,
-    Frozen = 1,
-    WholeShard = 2,
-    Persistent = 4,
-    Removed = 8,
-    Pessimistic = 16,
-    PersistentMask = Frozen,
-};
-
-using ELockFlagsRaw = std::underlying_type<ELockFlags>::type;
-
-inline ELockFlags operator|(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) | ELockFlagsRaw(b)); }
-inline ELockFlags operator&(ELockFlags a, ELockFlags b) { return ELockFlags(ELockFlagsRaw(a) & ELockFlagsRaw(b)); }
-inline ELockFlags& operator|=(ELockFlags& a, ELockFlags b) { return a = a | b; }
-inline ELockFlags& operator&=(ELockFlags& a, ELockFlags b) { return a = a & b; }
-inline ELockFlags operator~(ELockFlags c) { return ELockFlags(~ELockFlagsRaw(c)); }
-inline bool operator!(ELockFlags c) { return ELockFlagsRaw(c) == 0; }
 
 // ELockConflictFlags type safe enum
 
@@ -445,7 +480,51 @@ public:
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
 
+    ui64 GetWriteSeqNum(ui64 writerIndex) const {
+        auto it = WriteSeqNumStates.find(writerIndex);
+        return it != WriteSeqNumStates.end() ? it->second.WriteSeqNum : 0;
+    }
+    std::optional<ui64> FindOtherWriter(ui64 writerIndex) const {
+        for (const auto& [idx, state] : WriteSeqNumStates) {
+            if (idx != writerIndex && state.WriteSeqNum != 0) {
+                return idx;
+            }
+        }
+        return std::nullopt;
+    }
+    TVector<TLockWriteSeqNum> GetWriteSeqNums() const {
+        TVector<TLockWriteSeqNum> result;
+        result.reserve(WriteSeqNumStates.size());
+        for (const auto& [idx, state] : WriteSeqNumStates) {
+            if (state.WriteSeqNum) {
+                result.push_back(TLockWriteSeqNum{idx, state.WriteSeqNum});
+            }
+        }
+        return result;
+    }
+    // TLock reports a single writer; DataShard enforces one writer per lock.
+    TLockWriteSeqNum GetLockWriteSeqNum() const {
+        auto seqs = GetWriteSeqNums();
+        return seqs.size() == 1 ? seqs[0] : TLockWriteSeqNum{};
+    }
+    bool SetWriteSeqNum(ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
+
+    const TWriteSeqNumState* FindWriteSeqNumState(ui64 writerIndex) const {
+        auto it = WriteSeqNumStates.find(writerIndex);
+        return it != WriteSeqNumStates.end() ? &it->second : nullptr;
+    }
+    const THashMap<ui64, TWriteSeqNumState>& GetWriteSeqNumStates() const { return WriteSeqNumStates; }
+    void SetWriteSeqNumResult(ui64 writerIndex, TString serializedResult, ILocksDb* db = nullptr);
+
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
+
+    const THashMap<ui64, TAncestorLock>& GetAncestorLocks() const { return AncestorLocks; }
+    void AddAncestorLock(TAncestorLock lock);
+
+    ui64 GetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex) const;
+    const TWriteSeqNumState* FindAncestorWriteSeqNumState(ui64 dataShard, ui64 writerIndex) const;
+    bool SetAncestorWriteSeqNum(ui64 dataShard, ui64 writerIndex, ui64 writeSeqNum, ILocksDb* db);
+    void SetAncestorWriteSeqNumResult(ui64 dataShard, ui64 writerIndex, TString serializedResult, ILocksDb* db);
 
 private:
     void MakeShardLock();
@@ -492,6 +571,8 @@ private:
 
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
+    THashMap<ui64, TWriteSeqNumState> WriteSeqNumStates;
+    THashMap<ui64, TAncestorLock> AncestorLocks;  // TabletId -> TAncestorLock
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -918,6 +999,7 @@ private:
 
     TLockInfo::TPtr GetOrAddLock(ui64 lockId, ui32 lockNodeId);
     TLockInfo::TPtr AddLock(const ILocksDb::TLockRow& row);
+    TLockInfo::TPtr AddLockToPersist(ui64 lockId, ui32 lockNodeId);
     TLockInfo::TPtr RestoreInMemoryLock(const ILocksDb::TLockRow& row);
     void RemoveOneLock(ui64 lockId, ILocksDb* db = nullptr);
 
@@ -936,6 +1018,23 @@ struct TLocksUpdate {
     // QuerySpanId captured at the moment a lock break is first detected (AddBreakLock).
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
+
+    struct TWriteSeqNumUpdate {
+        const ui64 WriterIndex;
+        // These uncommitted write position in the writer chains; ApplyLocks persists them on the lock.
+        TMaybe<ui64> SetWriteSeqNum;
+        // Same for operations that touched ancestor shards;
+        THashMap<ui64, ui64> SetAncestorWriteSeqNums;
+
+        bool ThisShardDuplicateWrite = false;
+        absl::flat_hash_set<ui64> AncestorShardsWithDuplicateWrites;
+
+        explicit TWriteSeqNumUpdate(ui64 writerIndex)
+            : WriterIndex(writerIndex)
+        {}
+    };
+
+    TMaybe<TWriteSeqNumUpdate> WriteSeqNumUpdate;
 
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
@@ -971,7 +1070,8 @@ struct TLocksUpdate {
     ~TLocksUpdate();
 
     bool HasLocks() const {
-        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks);
+        return bool(AffectedTables) || bool(ReadConflictLocks) || bool(WriteConflictLocks)
+            || HasSeqNumDuplicateWrites();
     }
 
     void AddRangeLock(const TRangeKey& range) {
@@ -1052,6 +1152,22 @@ struct TLocksUpdate {
     void BreakSetLocks() {
         BreakOwn = true;
     }
+
+    bool HasSeqNumDuplicateWrites() const {
+        if (!WriteSeqNumUpdate) {
+            return false;
+        }
+        return WriteSeqNumUpdate->ThisShardDuplicateWrite
+            || !WriteSeqNumUpdate->AncestorShardsWithDuplicateWrites.empty();
+    }
+
+    bool HasSeqNumUpdates() const {
+        if (!WriteSeqNumUpdate) {
+            return false;
+        }
+        return WriteSeqNumUpdate->SetWriteSeqNum
+            || !WriteSeqNumUpdate->SetAncestorWriteSeqNums.empty();
+    }
 };
 
 struct TLocksCache {
@@ -1087,6 +1203,10 @@ public:
         : Self(new TLocksDataShardAdapter<T>(self))
         , Locker(self)
     {}
+
+    ui64 SelfShardId() const {
+        return Self->TabletID();
+    }
 
     void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) {
         Y_ENSURE(!Update, "Cannot setup a recursive update");
@@ -1133,7 +1253,7 @@ public:
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(ui64 lockId);
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
-    void CommitLock(const TArrayRef<const TCell>& syslockKey);
+    void CommitLock(ui64 lockId);
     void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void SetLock(const TTableId& tableId, const TTableRange& range);
     void SetWriteLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
@@ -1240,6 +1360,9 @@ public:
         }
     }
 
+    void RestoreLockFromSplitSrc(ui64 srcTabletId, ILocksDb::TLockRow&& row, ILocksDb& db);
+    void RestoreConflictFromSplitSrc(ui64 lockId, ui64 conflictId, ILocksDb& db);
+
 private:
     THolder<TLocksDataShard> Self;
     TLockLocker Locker;
@@ -1248,8 +1371,12 @@ private:
     TLocksCache* Cache = nullptr;
     ILocksDb* Db = nullptr;
 
-    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
-    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
+    TLock MakeLock(
+        ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+        const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const;
+    TLock MakeAndLogLock(
+        ui64 lockTxId, ui64 shardId, ui32 generation, ui64 counter,
+        const TPathId& pathId, bool hasWrites, TLockWriteSeqNum writeSeqNum) const;
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;

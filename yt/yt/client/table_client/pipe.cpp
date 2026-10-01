@@ -74,7 +74,7 @@ struct TSchemafulPipeData final
     void HandleCancel(const TError& error)
     {
         Fail(TError(NYT::EErrorCode::Canceled, "Pipe reader canceled")
-            << error);
+            .With(error));
     }
 
     void Fail(const TError& error)

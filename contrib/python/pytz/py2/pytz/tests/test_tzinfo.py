@@ -27,8 +27,8 @@ from pytz.tzinfo import DstTzInfo, StaticTzInfo  # noqa
 
 # I test for expected version to ensure the correct version of pytz is
 # actually being tested.
-EXPECTED_VERSION = '2026.2'
-EXPECTED_OLSON_VERSION = '2026b'
+EXPECTED_VERSION = '2026.3.post1'
+EXPECTED_OLSON_VERSION = '2026c'
 
 fmt = '%Y-%m-%d %H:%M:%S %Z%z'
 
@@ -669,6 +669,16 @@ class LocalTestCase(unittest.TestCase):
             for dst in [True, timedelta(1), False, timedelta(0)]:
                 loc_time = loc_tz.localize(ambiguous_naive, is_dst=dst)
                 self.assertEqual(loc_time.strftime(fmt), expected[not dst])
+
+        # Boundary dates: localize must not raise OverflowError when the
+        # datetime is at or near the representable extremes (issue #108).
+        loc_tz = pytz.timezone('US/Pacific')
+        # datetime.max date
+        loc_time = loc_tz.localize(datetime(9999, 12, 31))
+        self.assertEqual(loc_time.date(), datetime(9999, 12, 31).date())
+        # datetime.min date
+        loc_time = loc_tz.localize(datetime(1, 1, 1))
+        self.assertEqual(loc_time.date(), datetime(1, 1, 1).date())
 
     def testNormalize(self):
         tz = pytz.timezone('US/Eastern')

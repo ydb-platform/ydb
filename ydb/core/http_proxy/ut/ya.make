@@ -33,6 +33,7 @@ PEERDIR(
 SRCS(
     json_proto_conversion_ut.cpp
     http_ut.cpp
+    utils_ut.cpp
 )
 
 RESOURCE(

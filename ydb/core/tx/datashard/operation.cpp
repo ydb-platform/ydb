@@ -361,3 +361,7 @@ void TOperation::OnCleanup(TDataShard&, std::vector<std::unique_ptr<IEventHandle
 
 } // namespace NDataShard
 } // namespace NKikimr
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

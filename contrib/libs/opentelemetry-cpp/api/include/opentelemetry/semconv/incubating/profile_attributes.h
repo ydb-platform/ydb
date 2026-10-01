@@ -91,6 +91,11 @@ static constexpr const char *kGo = "go";
  */
 static constexpr const char *kRust = "rust";
 
+/**
+  <a href="https://en.wikipedia.org/wiki/LuaJIT">LuaJIT</a>
+ */
+static constexpr const char *kLuajit = "luajit";
+
 }  // namespace ProfileFrameTypeValues
 
 }  // namespace profile

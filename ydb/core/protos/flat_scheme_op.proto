@@ -12,7 +12,7 @@ import "ydb/core/protos/replication.proto";
 import "ydb/core/protos/s3_settings.proto";
 import "ydb/core/protos/schemeshard/operations.proto";
 import "ydb/core/protos/subdomains.proto";
-import "ydb/core/protos/sys_view_types.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/table_stats.proto";
 import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/test_shard_control.proto";
@@ -102,9 +102,8 @@ message TColumnCompression {
 
 message TDefaultExpressionColumnDescription {
     optional string ExprText = 1;
-    optional string Context = 2;
-    repeated string DependencyColumnNames = 3;
-    optional bool Stored = 4 [default = false];
+    repeated string DependencyColumnNames = 2;
+    optional bool Stored = 3 [default = false];
 }
 
 message TColumnDescription {
@@ -265,6 +264,7 @@ message TTTLSettings {
 
     message TEvictionToExternalStorageSettings {
         optional string Storage = 1;
+        optional string ObjectKeyPrefix = 2;
     }
 
     message TTier {
@@ -292,69 +292,6 @@ message TTTLSettings {
     }
 
     reserved 3;
-}
-
-/**
- * The parameters for the detailed metrics for the given table.
- */
-message TTableDetailedMetricsSettings {
-    /**
-     * The level at which detailed metrics are aggregated and reported.
-     */
-    enum EMetricsLevel {
-        /**
-         * The detailed metrics level is not specified.
-         */
-        MetricsLevelUnspecified = 0;
-
-        /**
-         * All detailed metrics are disabled for the given table.
-         */
-        MetricsLevelDisabled = 1;
-
-        /**
-         * Detailed metrics are aggregated and reported for the entire table.
-         */
-        MetricsLevelTable = 2;
-
-        /**
-         * Detailed metrics are aggregated and reported for individual partitions.
-         */
-        MetricsLevelPartition = 3;
-    }
-
-    /**
-     * The container for the detailed metrics settings, which are explicitly configured.
-     */
-    message TConfigured {
-        /**
-         * The level at which detailed metrics are aggregated and reported.
-         */
-        optional EMetricsLevel MetricsLevel = 1;
-    }
-
-    /**
-     * The container for the detailed metrics settings, which are explicitly removed.
-     */
-    message TNotConfigured {
-    }
-
-    oneof Status {
-        /**
-         * Set, if the detailed metrics settings are explicitly configured.
-         */
-        TConfigured Configured = 1;
-
-        /**
-         * Set, if the detailed metrics settings are explicitly removed.
-         *
-         * @note This is used in ALTER TABLE requests to remove the detailed metrics settings,
-         *       which are currently configured for the given table. If the detailed metrics
-         *       settings are not configured, the corresponding DetailedMetricsSettings field
-         *       in the table description will not be set.
-         */
-        TNotConfigured NotConfigured = 2;
-    }
 }
 
 message TTableReplicationConfig {
@@ -486,6 +423,10 @@ message TTableDescription {
     // Multi-column statistics.
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
     repeated string DropMultiColumnStatistics = 54;
+
+    // Actual number of table partitions (shards), always filled in describe
+    // results, so clients don't need to request the TablePartitions list.
+    optional uint64 PartitionCount = 55;
 }
 
 message TCompressionOptions {
@@ -674,6 +615,7 @@ message TOlapIndexDescription {
 enum EMultiColumnStatisticsType {
     MULTI_COLUMN_STATISTICS_UNSPECIFIED = 0;
     COUNT_MIN_SKETCH = 1;
+    EQ_HEIGHT_HISTOGRAM = 2;
 }
 
 // Multi-column table statistics
@@ -816,6 +758,8 @@ message TColumnTableSchemeOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TColumnTableSchema {
@@ -862,6 +806,8 @@ message TColumnTableRequestedOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
+    optional bool CacheBlobsAfterWrite = 8 [default = false];
 }
 
 message TAlterColumnTableSchema {
@@ -1477,6 +1423,7 @@ message TIndexAlteringConfig {
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
+    repeated string DataColumnNames = 10;
 }
 
 message TIndexedTableCreationConfig {
@@ -1969,6 +1916,8 @@ message TUpgradeSubDomain {
 message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
+    optional bool IsRebuild = 3 [ default = false ];
+    optional string RebuildIndexName = 4;
 }
 
 message TIndexBuildControl {
@@ -2653,7 +2602,8 @@ message TExportMetadata {
 
 message TSysViewDescription {
     optional string Name = 1;
-    optional NKikimrSysView.ESysViewType Type = 2;
+    // Numeric ESysViewType
+    optional int32 Type = 2 [default = 1];
     optional NKikimrProto.TPathID SourceObject = 3;
 }
 
@@ -2704,4 +2654,5 @@ message TStreamingQueryProperties {
 message TStreamingQueryDescription {
     optional string Name = 1;
     optional TStreamingQueryProperties Properties = 2;
+    optional NActorsProto.TActorId OperationOwnerActorId = 3;
 }

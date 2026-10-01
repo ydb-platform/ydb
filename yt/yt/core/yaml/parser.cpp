@@ -323,16 +323,16 @@ private:
         // to unclear exceptions during parsing.
         auto yamlErrorType = static_cast<EYamlErrorType>(Parser_.error);
         auto error = TError("YAML parser error: %v", Parser_.problem)
-            << TErrorAttribute("yaml_error_type", yamlErrorType)
-            << TErrorAttribute("problem_offset", Parser_.problem_offset)
-            << TErrorAttribute("problem_value", Parser_.problem_value)
-            << TErrorAttribute("problem_mark", Parser_.problem_mark);
+            .With("yaml_error_type", yamlErrorType)
+            .With("problem_offset", Parser_.problem_offset)
+            .With("problem_value", Parser_.problem_value)
+            .With("problem_mark", Parser_.problem_mark);
         if (Parser_.context) {
-            error <<= TErrorAttribute("context", Parser_.context);
-            error <<= TErrorAttribute("context_mark", Parser_.context_mark);
+            error.Add("context", Parser_.context);
+            error.Add("context_mark", Parser_.context_mark);
         }
         if (!ReadError_.IsOK()) {
-            error <<= ReadError_;
+            error.Add(ReadError_);
         }
 
         THROW_ERROR error;

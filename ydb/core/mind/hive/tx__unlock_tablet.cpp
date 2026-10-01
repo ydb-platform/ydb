@@ -76,7 +76,7 @@ public:
             NIceDb::TUpdate<Schema::Tablet::LockedReconnectTimeout>(tablet->LockedReconnectTimeout.MilliSeconds()));
 
         if (PreviousOwner) {
-            if (Self->CurrentConfig.GetLockedTabletsSendMetrics() && !tablet->IsDeleting()) {
+            if (!tablet->IsDeleting()) {
                 tablet->BecomeStopped();
             }
             // Notify previous owner that its lock ownership has been lost
@@ -96,7 +96,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
     }
 
 private:

@@ -6,6 +6,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/storage_pools.h>
+#include <ydb/core/base/storage_pool_kinds.h>
 #include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_factory.h>

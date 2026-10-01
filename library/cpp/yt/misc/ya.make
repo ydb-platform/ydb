@@ -13,6 +13,12 @@ PEERDIR(
     library/cpp/yt/mpl
 )
 
+IF (SANITIZER_TYPE == "address" OR SANITIZER_TYPE == "leak")
+    PEERDIR(
+        library/cpp/sanitizer/include
+    )
+ENDIF()
+
 CHECK_DEPENDENT_DIRS(
     ALLOW_ONLY ALL
     build

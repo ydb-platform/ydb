@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.blobstorage_disk_color_pb2 as disk_color
 import ydb.apps.dstool.lib.table as table
 import ydb.apps.dstool.lib.common as common
@@ -45,7 +46,7 @@ def do(args):
         if attr == 'PDiskSpaceColorBorder':
             row[attr] = disk_color.TPDiskSpaceColor.E.Name(value)
         elif attr == 'SerialManagementStage':
-            row[attr] = kikimr_bsconfig.TSerialManagementStage.E.Name(value)
+            row[attr] = kikimr_bs3.TSerialManagementStage.E.Name(value)
         else:
             row[attr] = value
 

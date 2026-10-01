@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from .bit_generator import BitGenerator
 from .mtrand import RandomState
 from ._philox import Philox

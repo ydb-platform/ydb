@@ -2,8 +2,7 @@
 #include <yql/essentials/minikql/mkql_runtime_version.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest) {
 // TDOD: fixme
@@ -112,5 +111,4 @@ Y_UNIT_TEST_LLVM(TestDoNotCalculateSkipped) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

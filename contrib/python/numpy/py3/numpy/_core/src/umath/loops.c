@@ -780,13 +780,49 @@ BYTE_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_byte
+_BYTE_squared_exponentiation_helper(npy_byte base, npy_byte exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_byte out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 BYTE_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_byte in2 = *(npy_byte *)ip2;
+        #if 1
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_byte in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_byte in1 = *(npy_byte *)ip1;
+
+            *((npy_byte *) op1) = _BYTE_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_byte in1 = *(npy_byte *)ip1;
         npy_byte in2 = *(npy_byte *)ip2;
-        npy_byte out;
 
 #if 1
         if (in2 < 0) {
@@ -804,16 +840,9 @@ BYTE_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_byte *) op1) = out;
+        *((npy_byte *) op1) = _BYTE_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -991,13 +1020,49 @@ UBYTE_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_ubyte
+_UBYTE_squared_exponentiation_helper(npy_ubyte base, npy_ubyte exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_ubyte out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 UBYTE_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_ubyte in2 = *(npy_ubyte *)ip2;
+        #if 0
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_ubyte in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_ubyte in1 = *(npy_ubyte *)ip1;
+
+            *((npy_ubyte *) op1) = _UBYTE_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_ubyte in1 = *(npy_ubyte *)ip1;
         npy_ubyte in2 = *(npy_ubyte *)ip2;
-        npy_ubyte out;
 
 #if 0
         if (in2 < 0) {
@@ -1015,16 +1080,9 @@ UBYTE_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_ubyte *) op1) = out;
+        *((npy_ubyte *) op1) = _UBYTE_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -1202,13 +1260,49 @@ SHORT_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_short
+_SHORT_squared_exponentiation_helper(npy_short base, npy_short exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_short out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 SHORT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_short in2 = *(npy_short *)ip2;
+        #if 1
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_short in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_short in1 = *(npy_short *)ip1;
+
+            *((npy_short *) op1) = _SHORT_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_short in1 = *(npy_short *)ip1;
         npy_short in2 = *(npy_short *)ip2;
-        npy_short out;
 
 #if 1
         if (in2 < 0) {
@@ -1226,16 +1320,9 @@ SHORT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_short *) op1) = out;
+        *((npy_short *) op1) = _SHORT_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -1413,13 +1500,49 @@ USHORT_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_ushort
+_USHORT_squared_exponentiation_helper(npy_ushort base, npy_ushort exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_ushort out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 USHORT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_ushort in2 = *(npy_ushort *)ip2;
+        #if 0
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_ushort in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_ushort in1 = *(npy_ushort *)ip1;
+
+            *((npy_ushort *) op1) = _USHORT_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_ushort in1 = *(npy_ushort *)ip1;
         npy_ushort in2 = *(npy_ushort *)ip2;
-        npy_ushort out;
 
 #if 0
         if (in2 < 0) {
@@ -1437,16 +1560,9 @@ USHORT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_ushort *) op1) = out;
+        *((npy_ushort *) op1) = _USHORT_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -1624,13 +1740,49 @@ INT_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_int
+_INT_squared_exponentiation_helper(npy_int base, npy_int exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_int out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 INT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_int in2 = *(npy_int *)ip2;
+        #if 1
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_int in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_int in1 = *(npy_int *)ip1;
+
+            *((npy_int *) op1) = _INT_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_int in1 = *(npy_int *)ip1;
         npy_int in2 = *(npy_int *)ip2;
-        npy_int out;
 
 #if 1
         if (in2 < 0) {
@@ -1648,16 +1800,9 @@ INT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_int *) op1) = out;
+        *((npy_int *) op1) = _INT_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -1835,13 +1980,49 @@ UINT_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_uint
+_UINT_squared_exponentiation_helper(npy_uint base, npy_uint exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_uint out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 UINT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_uint in2 = *(npy_uint *)ip2;
+        #if 0
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_uint in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_uint in1 = *(npy_uint *)ip1;
+
+            *((npy_uint *) op1) = _UINT_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_uint in1 = *(npy_uint *)ip1;
         npy_uint in2 = *(npy_uint *)ip2;
-        npy_uint out;
 
 #if 0
         if (in2 < 0) {
@@ -1859,16 +2040,9 @@ UINT_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_uint *) op1) = out;
+        *((npy_uint *) op1) = _UINT_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -2046,13 +2220,49 @@ LONG_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_long
+_LONG_squared_exponentiation_helper(npy_long base, npy_long exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_long out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 LONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_long in2 = *(npy_long *)ip2;
+        #if 1
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_long in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_long in1 = *(npy_long *)ip1;
+
+            *((npy_long *) op1) = _LONG_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_long in1 = *(npy_long *)ip1;
         npy_long in2 = *(npy_long *)ip2;
-        npy_long out;
 
 #if 1
         if (in2 < 0) {
@@ -2070,16 +2280,9 @@ LONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_long *) op1) = out;
+        *((npy_long *) op1) = _LONG_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -2257,13 +2460,49 @@ ULONG_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_ulong
+_ULONG_squared_exponentiation_helper(npy_ulong base, npy_ulong exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_ulong out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 ULONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_ulong in2 = *(npy_ulong *)ip2;
+        #if 0
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_ulong in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_ulong in1 = *(npy_ulong *)ip1;
+
+            *((npy_ulong *) op1) = _ULONG_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_ulong in1 = *(npy_ulong *)ip1;
         npy_ulong in2 = *(npy_ulong *)ip2;
-        npy_ulong out;
 
 #if 0
         if (in2 < 0) {
@@ -2281,16 +2520,9 @@ ULONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_ulong *) op1) = out;
+        *((npy_ulong *) op1) = _ULONG_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -2468,13 +2700,49 @@ LONGLONG_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_longlong
+_LONGLONG_squared_exponentiation_helper(npy_longlong base, npy_longlong exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_longlong out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 LONGLONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_longlong in2 = *(npy_longlong *)ip2;
+        #if 1
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_longlong in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_longlong in1 = *(npy_longlong *)ip1;
+
+            *((npy_longlong *) op1) = _LONGLONG_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_longlong in1 = *(npy_longlong *)ip1;
         npy_longlong in2 = *(npy_longlong *)ip2;
-        npy_longlong out;
 
 #if 1
         if (in2 < 0) {
@@ -2492,16 +2760,9 @@ LONGLONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, v
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_longlong *) op1) = out;
+        *((npy_longlong *) op1) = _LONGLONG_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
@@ -2679,13 +2940,49 @@ ULONGLONG_bitwise_xor_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
+static inline npy_ulonglong
+_ULONGLONG_squared_exponentiation_helper(npy_ulonglong base, npy_ulonglong exponent_two, int first_bit) {
+   // Helper method to calculate power using squared exponentiation
+   // The algorithm is partly unrolled. The second and third argument are the exponent//2 and the first bit of the exponent
+   npy_ulonglong out = first_bit ? base : 1;
+   while (exponent_two > 0) {
+        base *= base;
+        if (exponent_two & 1) {
+            out *= base;
+        }
+        exponent_two >>= 1;
+    }
+   return out;
+}
+
 NPY_NO_EXPORT void
 ULONGLONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
+    if (steps[1]==0) {
+        // stride for second argument is 0
+        BINARY_DEFS
+        const npy_ulonglong in2 = *(npy_ulonglong *)ip2;
+        #if 0
+            if (in2 < 0) {
+                npy_gil_error(PyExc_ValueError,
+                              "Integers to negative integer powers are not allowed.");
+                return;
+            }
+        #endif
+
+        int first_bit = in2 & 1;
+        npy_ulonglong in2start = in2 >> 1;
+
+        BINARY_LOOP_SLIDING {
+            npy_ulonglong in1 = *(npy_ulonglong *)ip1;
+
+            *((npy_ulonglong *) op1) = _ULONGLONG_squared_exponentiation_helper(in1, in2start, first_bit);
+        }
+        return;
+    }
     BINARY_LOOP {
         npy_ulonglong in1 = *(npy_ulonglong *)ip1;
         npy_ulonglong in2 = *(npy_ulonglong *)ip2;
-        npy_ulonglong out;
 
 #if 0
         if (in2 < 0) {
@@ -2703,22 +3000,15 @@ ULONGLONG_power(char **args, npy_intp const *dimensions, npy_intp const *steps, 
             continue;
         }
 
-        out = in2 & 1 ? in1 : 1;
+        int first_bit = in2 & 1;
         in2 >>= 1;
-        while (in2 > 0) {
-            in1 *= in1;
-            if (in2 & 1) {
-                out *= in1;
-            }
-            in2 >>= 1;
-        }
-        *((npy_ulonglong *) op1) = out;
+        *((npy_ulonglong *) op1) = _ULONGLONG_squared_exponentiation_helper(in1, in2, first_bit);
     }
 }
 
 
-#line 517
-#line 520
+#line 546
+#line 549
 NPY_NO_EXPORT void
 BYTE_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2729,7 +3019,7 @@ BYTE_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *N
     }
 }
 
-#line 520
+#line 549
 NPY_NO_EXPORT void
 BYTE_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2741,8 +3031,8 @@ BYTE_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *N
 }
 
 
-#line 517
-#line 520
+#line 546
+#line 549
 NPY_NO_EXPORT void
 SHORT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2753,7 +3043,7 @@ SHORT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
     }
 }
 
-#line 520
+#line 549
 NPY_NO_EXPORT void
 SHORT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2765,8 +3055,8 @@ SHORT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
 }
 
 
-#line 517
-#line 520
+#line 546
+#line 549
 NPY_NO_EXPORT void
 INT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2777,7 +3067,7 @@ INT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NP
     }
 }
 
-#line 520
+#line 549
 NPY_NO_EXPORT void
 INT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2789,8 +3079,8 @@ INT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NP
 }
 
 
-#line 517
-#line 520
+#line 546
+#line 549
 NPY_NO_EXPORT void
 LONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2801,7 +3091,7 @@ LONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *N
     }
 }
 
-#line 520
+#line 549
 NPY_NO_EXPORT void
 LONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2813,8 +3103,8 @@ LONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *N
 }
 
 
-#line 517
-#line 520
+#line 546
+#line 549
 NPY_NO_EXPORT void
 LONGLONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2825,7 +3115,7 @@ LONGLONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     }
 }
 
-#line 520
+#line 549
 NPY_NO_EXPORT void
 LONGLONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2838,8 +3128,8 @@ LONGLONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
 
 
 
-#line 537
-#line 540
+#line 566
+#line 569
 NPY_NO_EXPORT void
 UBYTE_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2850,7 +3140,7 @@ UBYTE_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
     }
 }
 
-#line 540
+#line 569
 NPY_NO_EXPORT void
 UBYTE_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2862,8 +3152,8 @@ UBYTE_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
 }
 
 
-#line 537
-#line 540
+#line 566
+#line 569
 NPY_NO_EXPORT void
 USHORT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2874,7 +3164,7 @@ USHORT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
     }
 }
 
-#line 540
+#line 569
 NPY_NO_EXPORT void
 USHORT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2886,8 +3176,8 @@ USHORT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
 }
 
 
-#line 537
-#line 540
+#line 566
+#line 569
 NPY_NO_EXPORT void
 UINT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2898,7 +3188,7 @@ UINT_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *N
     }
 }
 
-#line 540
+#line 569
 NPY_NO_EXPORT void
 UINT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2910,8 +3200,8 @@ UINT_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *N
 }
 
 
-#line 537
-#line 540
+#line 566
+#line 569
 NPY_NO_EXPORT void
 ULONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2922,7 +3212,7 @@ ULONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
     }
 }
 
-#line 540
+#line 569
 NPY_NO_EXPORT void
 ULONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2934,8 +3224,8 @@ ULONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
 }
 
 
-#line 537
-#line 540
+#line 566
+#line 569
 NPY_NO_EXPORT void
 ULONGLONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2946,7 +3236,7 @@ ULONGLONG_gcd(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
     }
 }
 
-#line 540
+#line 569
 NPY_NO_EXPORT void
 ULONGLONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2965,7 +3255,7 @@ ULONGLONG_lcm(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
  *       than the cast we used to do.
  */
 
-#line 562
+#line 591
 NPY_NO_EXPORT void
 LONGLONG_Qq_bool_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -2996,7 +3286,7 @@ LONGLONG_qQ_bool_equal(char **args, npy_intp const *dimensions, npy_intp const *
     }
 }
 
-#line 562
+#line 591
 NPY_NO_EXPORT void
 LONGLONG_Qq_bool_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3027,7 +3317,7 @@ LONGLONG_qQ_bool_not_equal(char **args, npy_intp const *dimensions, npy_intp con
     }
 }
 
-#line 562
+#line 591
 NPY_NO_EXPORT void
 LONGLONG_Qq_bool_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3058,7 +3348,7 @@ LONGLONG_qQ_bool_less(char **args, npy_intp const *dimensions, npy_intp const *s
     }
 }
 
-#line 562
+#line 591
 NPY_NO_EXPORT void
 LONGLONG_Qq_bool_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3089,7 +3379,7 @@ LONGLONG_qQ_bool_less_equal(char **args, npy_intp const *dimensions, npy_intp co
     }
 }
 
-#line 562
+#line 591
 NPY_NO_EXPORT void
 LONGLONG_Qq_bool_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3120,7 +3410,7 @@ LONGLONG_qQ_bool_greater(char **args, npy_intp const *dimensions, npy_intp const
     }
 }
 
-#line 562
+#line 591
 NPY_NO_EXPORT void
 LONGLONG_Qq_bool_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3205,7 +3495,7 @@ TIMEDELTA_sign(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 650
+#line 679
 
 NPY_NO_EXPORT void
 DATETIME_isnat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -3233,7 +3523,7 @@ DATETIME__ones_like(char **args, npy_intp const *dimensions, npy_intp const *ste
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 DATETIME_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3246,7 +3536,7 @@ DATETIME_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 DATETIME_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3259,7 +3549,7 @@ DATETIME_greater(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 DATETIME_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3272,7 +3562,7 @@ DATETIME_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 DATETIME_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3285,7 +3575,7 @@ DATETIME_less(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 DATETIME_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3312,7 +3602,7 @@ DATETIME_not_equal(char **args, npy_intp const *dimensions, npy_intp const *step
 }
 
 
-#line 711
+#line 740
 NPY_NO_EXPORT void
 DATETIME_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3332,7 +3622,7 @@ DATETIME_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps,
 }
 
 
-#line 711
+#line 740
 NPY_NO_EXPORT void
 DATETIME_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3353,7 +3643,7 @@ DATETIME_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps,
 
 
 
-#line 735
+#line 764
 NPY_NO_EXPORT void
 DATETIME_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3372,7 +3662,7 @@ DATETIME_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
     }
 }
 
-#line 735
+#line 764
 NPY_NO_EXPORT void
 DATETIME_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3393,7 +3683,7 @@ DATETIME_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
 
 
 
-#line 650
+#line 679
 
 NPY_NO_EXPORT void
 TIMEDELTA_isnat(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
@@ -3421,7 +3711,7 @@ TIMEDELTA__ones_like(char **args, npy_intp const *dimensions, npy_intp const *st
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 TIMEDELTA_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3434,7 +3724,7 @@ TIMEDELTA_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, 
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 TIMEDELTA_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3447,7 +3737,7 @@ TIMEDELTA_greater(char **args, npy_intp const *dimensions, npy_intp const *steps
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 TIMEDELTA_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3460,7 +3750,7 @@ TIMEDELTA_greater_equal(char **args, npy_intp const *dimensions, npy_intp const 
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 TIMEDELTA_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3473,7 +3763,7 @@ TIMEDELTA_less(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 681
+#line 710
 NPY_NO_EXPORT void
 TIMEDELTA_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3500,7 +3790,7 @@ TIMEDELTA_not_equal(char **args, npy_intp const *dimensions, npy_intp const *ste
 }
 
 
-#line 711
+#line 740
 NPY_NO_EXPORT void
 TIMEDELTA_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3520,7 +3810,7 @@ TIMEDELTA_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps
 }
 
 
-#line 711
+#line 740
 NPY_NO_EXPORT void
 TIMEDELTA_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3541,7 +3831,7 @@ TIMEDELTA_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps
 
 
 
-#line 735
+#line 764
 NPY_NO_EXPORT void
 TIMEDELTA_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3560,7 +3850,7 @@ TIMEDELTA_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 735
+#line 764
 NPY_NO_EXPORT void
 TIMEDELTA_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3968,8 +4258,8 @@ TIMEDELTA_mm_qm_divmod(char **args, npy_intp const *dimensions, npy_intp const *
  *****************************************************************************
  */
 
-#line 1151
-#line 1155
+#line 1180
+#line 1184
 NPY_NO_EXPORT void
 FLOAT_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -3981,7 +4271,7 @@ FLOAT_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1155
+#line 1184
 NPY_NO_EXPORT void
 FLOAT_logical_or(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4014,7 +4304,7 @@ FLOAT_logical_not(char **args, npy_intp const *dimensions, npy_intp const *steps
 }
 
 #if !1
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 FLOAT_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4025,7 +4315,7 @@ FLOAT_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 FLOAT_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4036,7 +4326,7 @@ FLOAT_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 FLOAT_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4047,7 +4337,7 @@ FLOAT_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 FLOAT_signbit(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4220,8 +4510,8 @@ FLOAT_ldexp_int64(char **args, npy_intp const *dimensions, npy_intp const *steps
 }
 
 
-#line 1151
-#line 1155
+#line 1180
+#line 1184
 NPY_NO_EXPORT void
 DOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4233,7 +4523,7 @@ DOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const *step
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1155
+#line 1184
 NPY_NO_EXPORT void
 DOUBLE_logical_or(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4266,7 +4556,7 @@ DOUBLE_logical_not(char **args, npy_intp const *dimensions, npy_intp const *step
 }
 
 #if !1
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 DOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4277,7 +4567,7 @@ DOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 DOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4288,7 +4578,7 @@ DOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 DOUBLE_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4299,7 +4589,7 @@ DOUBLE_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, 
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 DOUBLE_signbit(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4472,8 +4762,8 @@ DOUBLE_ldexp_int64(char **args, npy_intp const *dimensions, npy_intp const *step
 }
 
 
-#line 1151
-#line 1155
+#line 1180
+#line 1184
 NPY_NO_EXPORT void
 LONGDOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4485,7 +4775,7 @@ LONGDOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const *
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1155
+#line 1184
 NPY_NO_EXPORT void
 LONGDOUBLE_logical_or(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4518,7 +4808,7 @@ LONGDOUBLE_logical_not(char **args, npy_intp const *dimensions, npy_intp const *
 }
 
 #if !0
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 LONGDOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4529,7 +4819,7 @@ LONGDOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps,
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 LONGDOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4540,7 +4830,7 @@ LONGDOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps,
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 LONGDOUBLE_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4551,7 +4841,7 @@ LONGDOUBLE_isfinite(char **args, npy_intp const *dimensions, npy_intp const *ste
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1191
+#line 1220
 NPY_NO_EXPORT void
 LONGDOUBLE_signbit(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4731,7 +5021,7 @@ LONGDOUBLE_ldexp_int64(char **args, npy_intp const *dimensions, npy_intp const *
  *****************************************************************************
  */
 
-#line 1376
+#line 1405
 NPY_NO_EXPORT void
 LONGDOUBLE_add(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4782,7 +5072,7 @@ LONGDOUBLE_add_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
-#line 1376
+#line 1405
 NPY_NO_EXPORT void
 LONGDOUBLE_subtract(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4833,7 +5123,7 @@ LONGDOUBLE_subtract_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
-#line 1376
+#line 1405
 NPY_NO_EXPORT void
 LONGDOUBLE_multiply(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4884,7 +5174,7 @@ LONGDOUBLE_multiply_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
-#line 1376
+#line 1405
 NPY_NO_EXPORT void
 LONGDOUBLE_divide(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4936,7 +5226,7 @@ LONGDOUBLE_divide_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 
 
 
-#line 1431
+#line 1460
 NPY_NO_EXPORT void
 LONGDOUBLE_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4948,7 +5238,7 @@ LONGDOUBLE_equal(char **args, npy_intp const *dimensions, npy_intp const *steps,
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1431
+#line 1460
 NPY_NO_EXPORT void
 LONGDOUBLE_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4960,7 +5250,7 @@ LONGDOUBLE_not_equal(char **args, npy_intp const *dimensions, npy_intp const *st
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1431
+#line 1460
 NPY_NO_EXPORT void
 LONGDOUBLE_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4972,7 +5262,7 @@ LONGDOUBLE_less(char **args, npy_intp const *dimensions, npy_intp const *steps, 
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1431
+#line 1460
 NPY_NO_EXPORT void
 LONGDOUBLE_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4984,7 +5274,7 @@ LONGDOUBLE_less_equal(char **args, npy_intp const *dimensions, npy_intp const *s
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1431
+#line 1460
 NPY_NO_EXPORT void
 LONGDOUBLE_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -4996,7 +5286,7 @@ LONGDOUBLE_greater(char **args, npy_intp const *dimensions, npy_intp const *step
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1431
+#line 1460
 NPY_NO_EXPORT void
 LONGDOUBLE_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5065,7 +5355,7 @@ LONGDOUBLE_ldexp(char **args, npy_intp const *dimensions, npy_intp const *steps,
  */
 
 
-#line 1505
+#line 1534
 NPY_NO_EXPORT void
 HALF_add(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5117,7 +5407,7 @@ HALF_add_indexed(void *NPY_UNUSED(context),
     return 0;
 }
 
-#line 1505
+#line 1534
 NPY_NO_EXPORT void
 HALF_subtract(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5169,7 +5459,7 @@ HALF_subtract_indexed(void *NPY_UNUSED(context),
     return 0;
 }
 
-#line 1505
+#line 1534
 NPY_NO_EXPORT void
 HALF_multiply(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5221,7 +5511,7 @@ HALF_multiply_indexed(void *NPY_UNUSED(context),
     return 0;
 }
 
-#line 1505
+#line 1534
 NPY_NO_EXPORT void
 HALF_divide(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5276,7 +5566,7 @@ HALF_divide_indexed(void *NPY_UNUSED(context),
 
 #define _HALF_LOGICAL_AND(a,b) (!npy_half_iszero(a) && !npy_half_iszero(b))
 #define _HALF_LOGICAL_OR(a,b) (!npy_half_iszero(a) || !npy_half_iszero(b))
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5287,7 +5577,7 @@ HALF_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
     }
 }
 
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5298,7 +5588,7 @@ HALF_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5309,7 +5599,7 @@ HALF_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *
     }
 }
 
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5320,7 +5610,7 @@ HALF_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, 
     }
 }
 
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5331,7 +5621,7 @@ HALF_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     }
 }
 
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5342,7 +5632,7 @@ HALF_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *step
     }
 }
 
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5353,7 +5643,7 @@ HALF_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 1565
+#line 1594
 NPY_NO_EXPORT void
 HALF_logical_or(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5386,7 +5676,7 @@ HALF_logical_not(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 1601
+#line 1630
 NPY_NO_EXPORT void
 HALF_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5397,7 +5687,7 @@ HALF_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1601
+#line 1630
 NPY_NO_EXPORT void
 HALF_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5408,7 +5698,7 @@ HALF_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void 
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1601
+#line 1630
 NPY_NO_EXPORT void
 HALF_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5419,7 +5709,7 @@ HALF_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 1601
+#line 1630
 NPY_NO_EXPORT void
 HALF_signbit(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5460,7 +5750,7 @@ HALF_nextafter(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 1645
+#line 1674
 NPY_NO_EXPORT void
 HALF_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5499,7 +5789,7 @@ HALF_maximum_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
-#line 1645
+#line 1674
 NPY_NO_EXPORT void
 HALF_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5539,7 +5829,7 @@ HALF_minimum_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 
 
 
-#line 1688
+#line 1717
 NPY_NO_EXPORT void
 HALF_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5578,7 +5868,7 @@ HALF_fmax_indexed(PyArrayMethod_Context *NPY_UNUSED(context),
 }
 
 
-#line 1688
+#line 1717
 NPY_NO_EXPORT void
 HALF_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5827,11 +6117,11 @@ HALF_ldexp_int64(char **args, npy_intp const *dimensions, npy_intp const *steps,
 #define CEQ(xr,xi,yr,yi) (xr == yr && xi == yi)
 #define CNE(xr,xi,yr,yi) (xr != yr || xi != yi)
 
-#line 1944
+#line 1973
 
 #if !1
 // CFLOAT & CDOUBLE defined by 'loops_arithm_fp.dispatch.c.src'
-#line 1953
+#line 1982
 NPY_NO_EXPORT void
 CFLOAT_add(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -5884,7 +6174,7 @@ NPY_NO_EXPORT int CFLOAT_add_indexed
     return 0;
 }
 
-#line 1953
+#line 1982
 NPY_NO_EXPORT void
 CFLOAT_subtract(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6012,7 +6302,7 @@ CFLOAT_divide(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
 }
 
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CFLOAT_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6025,7 +6315,7 @@ CFLOAT_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CFLOAT_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6038,7 +6328,7 @@ CFLOAT_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *st
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CFLOAT_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6051,7 +6341,7 @@ CFLOAT_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CFLOAT_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6064,7 +6354,7 @@ CFLOAT_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CFLOAT_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6077,7 +6367,7 @@ CFLOAT_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CFLOAT_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6091,7 +6381,7 @@ CFLOAT_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps,
 }
 
 
-#line 2102
+#line 2131
 NPY_NO_EXPORT void
 CFLOAT_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6104,7 +6394,7 @@ CFLOAT_logical_and(char **args, npy_intp const *dimensions, npy_intp const *step
     }
 }
 
-#line 2102
+#line 2131
 NPY_NO_EXPORT void
 CFLOAT_logical_or(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6142,7 +6432,7 @@ CFLOAT_logical_not(char **args, npy_intp const *dimensions, npy_intp const *step
     }
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CFLOAT_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6154,7 +6444,7 @@ CFLOAT_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CFLOAT_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6166,7 +6456,7 @@ CFLOAT_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CFLOAT_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6293,7 +6583,7 @@ CFLOAT_sign(char **args, npy_intp const *dimensions, npy_intp const *steps, void
     }
 }
 
-#line 2274
+#line 2303
 NPY_NO_EXPORT void
 CFLOAT_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6312,7 +6602,7 @@ CFLOAT_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2274
+#line 2303
 NPY_NO_EXPORT void
 CFLOAT_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6332,7 +6622,7 @@ CFLOAT_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, v
 }
 
 
-#line 2297
+#line 2326
 NPY_NO_EXPORT void
 CFLOAT_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6353,7 +6643,7 @@ CFLOAT_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, void
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2297
+#line 2326
 NPY_NO_EXPORT void
 CFLOAT_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6376,11 +6666,11 @@ CFLOAT_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, void
 
 
 
-#line 1944
+#line 1973
 
 #if !1
 // CFLOAT & CDOUBLE defined by 'loops_arithm_fp.dispatch.c.src'
-#line 1953
+#line 1982
 NPY_NO_EXPORT void
 CDOUBLE_add(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6433,7 +6723,7 @@ NPY_NO_EXPORT int CDOUBLE_add_indexed
     return 0;
 }
 
-#line 1953
+#line 1982
 NPY_NO_EXPORT void
 CDOUBLE_subtract(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6561,7 +6851,7 @@ CDOUBLE_divide(char **args, npy_intp const *dimensions, npy_intp const *steps, v
 }
 
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CDOUBLE_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6574,7 +6864,7 @@ CDOUBLE_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, 
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CDOUBLE_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6587,7 +6877,7 @@ CDOUBLE_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *s
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CDOUBLE_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6600,7 +6890,7 @@ CDOUBLE_less(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CDOUBLE_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6613,7 +6903,7 @@ CDOUBLE_less_equal(char **args, npy_intp const *dimensions, npy_intp const *step
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CDOUBLE_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6626,7 +6916,7 @@ CDOUBLE_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CDOUBLE_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6640,7 +6930,7 @@ CDOUBLE_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps
 }
 
 
-#line 2102
+#line 2131
 NPY_NO_EXPORT void
 CDOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6653,7 +6943,7 @@ CDOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const *ste
     }
 }
 
-#line 2102
+#line 2131
 NPY_NO_EXPORT void
 CDOUBLE_logical_or(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6691,7 +6981,7 @@ CDOUBLE_logical_not(char **args, npy_intp const *dimensions, npy_intp const *ste
     }
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CDOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6703,7 +6993,7 @@ CDOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CDOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6715,7 +7005,7 @@ CDOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, vo
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CDOUBLE_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6842,7 +7132,7 @@ CDOUBLE_sign(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     }
 }
 
-#line 2274
+#line 2303
 NPY_NO_EXPORT void
 CDOUBLE_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6861,7 +7151,7 @@ CDOUBLE_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, 
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2274
+#line 2303
 NPY_NO_EXPORT void
 CDOUBLE_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6881,7 +7171,7 @@ CDOUBLE_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, 
 }
 
 
-#line 2297
+#line 2326
 NPY_NO_EXPORT void
 CDOUBLE_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6902,7 +7192,7 @@ CDOUBLE_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2297
+#line 2326
 NPY_NO_EXPORT void
 CDOUBLE_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6925,11 +7215,11 @@ CDOUBLE_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
 
 
 
-#line 1944
+#line 1973
 
 #if !0
 // CFLOAT & CDOUBLE defined by 'loops_arithm_fp.dispatch.c.src'
-#line 1953
+#line 1982
 NPY_NO_EXPORT void
 CLONGDOUBLE_add(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -6982,7 +7272,7 @@ NPY_NO_EXPORT int CLONGDOUBLE_add_indexed
     return 0;
 }
 
-#line 1953
+#line 1982
 NPY_NO_EXPORT void
 CLONGDOUBLE_subtract(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7110,7 +7400,7 @@ CLONGDOUBLE_divide(char **args, npy_intp const *dimensions, npy_intp const *step
 }
 
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CLONGDOUBLE_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7123,7 +7413,7 @@ CLONGDOUBLE_greater(char **args, npy_intp const *dimensions, npy_intp const *ste
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CLONGDOUBLE_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7136,7 +7426,7 @@ CLONGDOUBLE_greater_equal(char **args, npy_intp const *dimensions, npy_intp cons
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CLONGDOUBLE_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7149,7 +7439,7 @@ CLONGDOUBLE_less(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CLONGDOUBLE_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7162,7 +7452,7 @@ CLONGDOUBLE_less_equal(char **args, npy_intp const *dimensions, npy_intp const *
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CLONGDOUBLE_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7175,7 +7465,7 @@ CLONGDOUBLE_equal(char **args, npy_intp const *dimensions, npy_intp const *steps
     }
 }
 
-#line 2084
+#line 2113
 NPY_NO_EXPORT void
 CLONGDOUBLE_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7189,7 +7479,7 @@ CLONGDOUBLE_not_equal(char **args, npy_intp const *dimensions, npy_intp const *s
 }
 
 
-#line 2102
+#line 2131
 NPY_NO_EXPORT void
 CLONGDOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7202,7 +7492,7 @@ CLONGDOUBLE_logical_and(char **args, npy_intp const *dimensions, npy_intp const 
     }
 }
 
-#line 2102
+#line 2131
 NPY_NO_EXPORT void
 CLONGDOUBLE_logical_or(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7240,7 +7530,7 @@ CLONGDOUBLE_logical_not(char **args, npy_intp const *dimensions, npy_intp const 
     }
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CLONGDOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7252,7 +7542,7 @@ CLONGDOUBLE_isnan(char **args, npy_intp const *dimensions, npy_intp const *steps
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CLONGDOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7264,7 +7554,7 @@ CLONGDOUBLE_isinf(char **args, npy_intp const *dimensions, npy_intp const *steps
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2144
+#line 2173
 NPY_NO_EXPORT void
 CLONGDOUBLE_isfinite(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7391,7 +7681,7 @@ CLONGDOUBLE_sign(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 2274
+#line 2303
 NPY_NO_EXPORT void
 CLONGDOUBLE_maximum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7410,7 +7700,7 @@ CLONGDOUBLE_maximum(char **args, npy_intp const *dimensions, npy_intp const *ste
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2274
+#line 2303
 NPY_NO_EXPORT void
 CLONGDOUBLE_minimum(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7430,7 +7720,7 @@ CLONGDOUBLE_minimum(char **args, npy_intp const *dimensions, npy_intp const *ste
 }
 
 
-#line 2297
+#line 2326
 NPY_NO_EXPORT void
 CLONGDOUBLE_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7451,7 +7741,7 @@ CLONGDOUBLE_fmax(char **args, npy_intp const *dimensions, npy_intp const *steps,
     npy_clear_floatstatus_barrier((char*)dimensions);
 }
 
-#line 2297
+#line 2326
 NPY_NO_EXPORT void
 CLONGDOUBLE_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -7488,9 +7778,9 @@ CLONGDOUBLE_fmin(char **args, npy_intp const *dimensions, npy_intp const *steps,
  *****************************************************************************
  */
 
-#line 2338
+#line 2367
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7525,7 +7815,7 @@ OBJECT_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, voi
     }
 }
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_OO_O_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7561,9 +7851,9 @@ OBJECT_OO_O_equal(char **args, npy_intp const *dimensions, npy_intp const *steps
 }
 
 
-#line 2338
+#line 2367
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7598,7 +7888,7 @@ OBJECT_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps,
     }
 }
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_OO_O_not_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7634,9 +7924,9 @@ OBJECT_OO_O_not_equal(char **args, npy_intp const *dimensions, npy_intp const *s
 }
 
 
-#line 2338
+#line 2367
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7671,7 +7961,7 @@ OBJECT_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, v
     }
 }
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_OO_O_greater(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7707,9 +7997,9 @@ OBJECT_OO_O_greater(char **args, npy_intp const *dimensions, npy_intp const *ste
 }
 
 
-#line 2338
+#line 2367
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7744,7 +8034,7 @@ OBJECT_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *st
     }
 }
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_OO_O_greater_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7780,9 +8070,9 @@ OBJECT_OO_O_greater_equal(char **args, npy_intp const *dimensions, npy_intp cons
 }
 
 
-#line 2338
+#line 2367
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7817,7 +8107,7 @@ OBJECT_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void
     }
 }
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_OO_O_less(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7853,9 +8143,9 @@ OBJECT_OO_O_less(char **args, npy_intp const *dimensions, npy_intp const *steps,
 }
 
 
-#line 2338
+#line 2367
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {
@@ -7890,7 +8180,7 @@ OBJECT_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps
     }
 }
 
-#line 2343
+#line 2372
 NPY_NO_EXPORT void
 OBJECT_OO_O_less_equal(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func)) {
     BINARY_LOOP {

@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             auto encoder = buffered ? BufferedEncoderCloudJson(&out, 2) : EncoderCloudJson(&out, 2);
             const TString expectedMessage = TStringBuilder()
                 << "metric type '" << metricType << "' is not supported by cloud json format";
-            UNIT_ASSERT_EXCEPTION_CONTAINS_C(emit(encoder.Get(), metricType), yexception, expectedMessage,
+            UNIT_ASSERT_EXCEPTION_CONTAINS_C(emit(encoder.Get(), metricType), TJsonEncodeError, expectedMessage,
                                              TString("buffered: ") + ToString(buffered));
         };
 
@@ -305,6 +305,60 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         doTest(true, EMetricType::HIST);
         doTest(true, EMetricType::LOGHIST);
         doTest(true, EMetricType::DSUMMARY);
+    }
+
+    Y_UNIT_TEST(InvalidUtfLabelsRaiseJsonEncodeError) {
+        const TString invalidUtf("\xff", 1);
+
+        auto doTest = [&](bool buffered, TStringBuf name, TStringBuf value) {
+            TString json;
+            TStringOutput out(json);
+            auto encoder = buffered ? BufferedEncoderCloudJson(&out) : EncoderCloudJson(&out);
+
+            encoder->OnStreamBegin();
+            encoder->OnMetricBegin(EMetricType::GAUGE);
+            encoder->OnLabelsBegin();
+            if (buffered) {
+                encoder->OnLabel(name, value);
+                encoder->OnLabelsEnd();
+                encoder->OnDouble(now, 1.0);
+                encoder->OnMetricEnd();
+                encoder->OnStreamEnd();
+                UNIT_ASSERT_EXCEPTION(encoder->Close(), TJsonEncodeError);
+            } else {
+                UNIT_ASSERT_EXCEPTION(encoder->OnLabel(name, value), TJsonEncodeError);
+            }
+        };
+
+        doTest(false, invalidUtf, "value");
+        doTest(false, "name", invalidUtf);
+        doTest(true, invalidUtf, "value");
+        doTest(true, "name", invalidUtf);
+    }
+
+    Y_UNIT_TEST(MissingMetricNameRaisesJsonEncodeError) {
+        auto doTest = [&](bool buffered) {
+            TString json;
+            TStringOutput out(json);
+            auto encoder = buffered ? BufferedEncoderCloudJson(&out) : EncoderCloudJson(&out);
+
+            encoder->OnStreamBegin();
+            encoder->OnMetricBegin(EMetricType::GAUGE);
+            encoder->OnLabelsBegin();
+            encoder->OnLabel("label", "value");
+            if (buffered) {
+                encoder->OnLabelsEnd();
+                encoder->OnDouble(now, 1.0);
+                encoder->OnMetricEnd();
+                encoder->OnStreamEnd();
+                UNIT_ASSERT_EXCEPTION_CONTAINS(encoder->Close(), TJsonEncodeError, "label 'name' is not defined");
+            } else {
+                UNIT_ASSERT_EXCEPTION_CONTAINS(encoder->OnLabelsEnd(), TJsonEncodeError, "label 'name' is not defined");
+            }
+        };
+
+        doTest(false);
+        doTest(true);
     }
 
     Y_UNIT_TEST(MetricsWithDifferentLabelOrderGetMerged) {

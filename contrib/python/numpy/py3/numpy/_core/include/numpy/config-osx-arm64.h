@@ -10,6 +10,8 @@
 /* #undef HAVE_FSEEKO */
 /* #undef HAVE_FALLOCATE */
 #define HAVE_STRTOLD_L 1
+/* #undef HAVE_THREAD_LOCAL */
+#define HAVE__THREAD_LOCAL 1
 #define HAVE__THREAD 1
 /* #undef HAVE___DECLSPEC_THREAD_ */
 
@@ -107,6 +109,8 @@
 /* #undef HAVE_LDOUBLE_IEEE_QUAD_BE */
 /* #undef HAVE_LDOUBLE_IBM_DOUBLE_DOUBLE_LE */
 /* #undef HAVE_LDOUBLE_IBM_DOUBLE_DOUBLE_BE */
+
+#define HAVE_EXTERNAL_LAPACK 1
 
 #ifndef __cplusplus
 /* #undef inline */

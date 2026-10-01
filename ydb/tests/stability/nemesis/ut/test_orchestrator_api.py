@@ -107,11 +107,21 @@ def test_scheduler_start_and_stop(client):
 def test_scheduler_start_applies_a_valid_profile(client):
     resp = client.post(
         "/api/scheduler/start",
-        json={"enabled": ["KillNodeNemesis"], "base_interval": 30, "max_per_tick": 2},
+        json={
+            "enabled": ["KillNodeNemesis"],
+            "base_interval": 30,
+            "max_per_tick": 2,
+            "max_bypass_per_tick": 2,
+        },
     )
     assert resp.status_code == 200, resp.data
     assert router.nemesis_scheduler.profiles == [
-        {"enabled": ["KillNodeNemesis"], "base_interval": 30.0, "max_per_tick": 2}
+        {
+            "enabled": ["KillNodeNemesis"],
+            "base_interval": 30.0,
+            "max_per_tick": 2,
+            "max_bypass_per_tick": 2,
+        }
     ]
 
 
@@ -123,6 +133,7 @@ def test_scheduler_start_applies_a_valid_profile(client):
         {"enabled": ["ClusterRollingRestartNemesis"]},   # planner keeps its own targets
         {"jitter": 3},
         {"max_per_tick": 0},
+        {"max_bypass_per_tick": 0},
         {"base_intervall": 30},                         # a typo must not be ignored
     ],
 )

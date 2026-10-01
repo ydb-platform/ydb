@@ -18,17 +18,11 @@ struct TListenerSettings {
     bool TcpNotDelay = false;
 };
 
-enum EErrorAction {
-    Ignore,
-    Abort
-};
-
 using TConnectionCreator = std::function<NActors::IActor* (const NActors::TActorId& listenerActorId,
                                                            TIntrusivePtr<TSocketDescriptor> socket,
                                                            TNetworkConfig::TSocketAddressType address)>;
 
 NActors::IActor* CreateSocketListener(const NActors::TActorId& poller, const TListenerSettings& settings,
-                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service,
-                                      EErrorAction errorAction = EErrorAction::Ignore);
+                                      TConnectionCreator connectionCreator, NKikimrServices::EServiceKikimr service);
 
 } // namespace NKikimr::NRawSocket

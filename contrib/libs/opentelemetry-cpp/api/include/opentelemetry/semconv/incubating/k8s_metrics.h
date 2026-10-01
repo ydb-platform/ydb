@@ -38,29 +38,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sContainerCpuL
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sContainerCpuLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(
       kMetricK8sContainerCpuLimit, descrMetricK8sContainerCpuLimit, unitMetricK8sContainerCpuLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sContainerCpuLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(
       kMetricK8sContainerCpuLimit, descrMetricK8sContainerCpuLimit, unitMetricK8sContainerCpuLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sContainerCpuLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricK8sContainerCpuLimit, descrMetricK8sContainerCpuLimit, unitMetricK8sContainerCpuLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sContainerCpuLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sContainerCpuLimit, descrMetricK8sContainerCpuLimit, unitMetricK8sContainerCpuLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -231,33 +239,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sContainerCpuR
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sContainerCpuRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sContainerCpuRequest,
                                          descrMetricK8sContainerCpuRequest,
                                          unitMetricK8sContainerCpuRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sContainerCpuRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sContainerCpuRequest,
                                           descrMetricK8sContainerCpuRequest,
                                           unitMetricK8sContainerCpuRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sContainerCpuRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sContainerCpuRequest,
                                                    descrMetricK8sContainerCpuRequest,
                                                    unitMetricK8sContainerCpuRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sContainerCpuRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sContainerCpuRequest,
                                                     descrMetricK8sContainerCpuRequest,
                                                     unitMetricK8sContainerCpuRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -416,7 +432,7 @@ CreateAsyncDoubleMetricK8sContainerCpuRequestUtilization(metrics::Meter *meter)
   Maximum ephemeral storage resource limit set for the container.
   <p>
   See
-  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#resourcerequirements-v1-core
+  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcerequirements-v1-core
   for details. <p> updowncounter
  */
 static constexpr const char *kMetricK8sContainerEphemeralStorageLimit =
@@ -461,7 +477,7 @@ CreateAsyncDoubleMetricK8sContainerEphemeralStorageLimit(metrics::Meter *meter)
   Ephemeral storage resource requested for the container.
   <p>
   See
-  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#resourcerequirements-v1-core
+  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcerequirements-v1-core
   for details. <p> updowncounter
  */
 static constexpr const char *kMetricK8sContainerEphemeralStorageRequest =
@@ -503,6 +519,51 @@ CreateAsyncDoubleMetricK8sContainerEphemeralStorageRequest(metrics::Meter *meter
 }
 
 /**
+  The ephemeral storage used by a container.
+  <p>
+  The value for this metric can be compared against @code
+  metric.k8s.container.ephemeral_storage.request @endcode and @code
+  metric.k8s.container.ephemeral_storage.limit @endcode. <p> updowncounter
+ */
+static constexpr const char *kMetricK8sContainerEphemeralStorageUsage =
+    "k8s.container.ephemeral_storage.usage";
+static constexpr const char *descrMetricK8sContainerEphemeralStorageUsage =
+    "The ephemeral storage used by a container.";
+static constexpr const char *unitMetricK8sContainerEphemeralStorageUsage = "By";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sContainerEphemeralStorageUsage(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricK8sContainerEphemeralStorageUsage,
+                                         descrMetricK8sContainerEphemeralStorageUsage,
+                                         unitMetricK8sContainerEphemeralStorageUsage);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sContainerEphemeralStorageUsage(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricK8sContainerEphemeralStorageUsage,
+                                          descrMetricK8sContainerEphemeralStorageUsage,
+                                          unitMetricK8sContainerEphemeralStorageUsage);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sContainerEphemeralStorageUsage(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricK8sContainerEphemeralStorageUsage,
+                                                   descrMetricK8sContainerEphemeralStorageUsage,
+                                                   unitMetricK8sContainerEphemeralStorageUsage);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sContainerEphemeralStorageUsage(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricK8sContainerEphemeralStorageUsage,
+                                                    descrMetricK8sContainerEphemeralStorageUsage,
+                                                    unitMetricK8sContainerEphemeralStorageUsage);
+}
+
+/**
   Deprecated, use @code k8s.container.memory.limit.desired @endcode and @code
   k8s.container.memory.limit.current @endcode instead.
 
@@ -520,33 +581,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sContainerMemo
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sContainerMemoryLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sContainerMemoryLimit,
                                          descrMetricK8sContainerMemoryLimit,
                                          unitMetricK8sContainerMemoryLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sContainerMemoryLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sContainerMemoryLimit,
                                           descrMetricK8sContainerMemoryLimit,
                                           unitMetricK8sContainerMemoryLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sContainerMemoryLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sContainerMemoryLimit,
                                                    descrMetricK8sContainerMemoryLimit,
                                                    unitMetricK8sContainerMemoryLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sContainerMemoryLimit(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sContainerMemoryLimit,
                                                     descrMetricK8sContainerMemoryLimit,
                                                     unitMetricK8sContainerMemoryLimit);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -668,33 +737,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sContainerMemo
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sContainerMemoryRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sContainerMemoryRequest,
                                          descrMetricK8sContainerMemoryRequest,
                                          unitMetricK8sContainerMemoryRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sContainerMemoryRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sContainerMemoryRequest,
                                           descrMetricK8sContainerMemoryRequest,
                                           unitMetricK8sContainerMemoryRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sContainerMemoryRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sContainerMemoryRequest,
                                                    descrMetricK8sContainerMemoryRequest,
                                                    unitMetricK8sContainerMemoryRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sContainerMemoryRequest(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sContainerMemoryRequest,
                                                     descrMetricK8sContainerMemoryRequest,
                                                     unitMetricK8sContainerMemoryRequest);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -802,7 +879,7 @@ CreateAsyncDoubleMetricK8sContainerMemoryRequestDesired(metrics::Meter *meter)
   Indicates whether the container is currently marked as ready to accept traffic, based on its
   readiness probe (1 = ready, 0 = not ready). <p> This metric SHOULD reflect the value of the @code
   ready @endcode field in the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#containerstatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#containerstatus-v1-core">K8s
   ContainerStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sContainerReady = "k8s.container.ready";
@@ -979,7 +1056,7 @@ CreateAsyncDoubleMetricK8sContainerStatusState(metrics::Meter *meter)
   Maximum storage resource limit set for the container.
   <p>
   See
-  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#resourcerequirements-v1-core
+  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcerequirements-v1-core
   for details. <p> updowncounter
  */
 static constexpr const char *kMetricK8sContainerStorageLimit = "k8s.container.storage.limit";
@@ -1023,7 +1100,7 @@ CreateAsyncDoubleMetricK8sContainerStorageLimit(metrics::Meter *meter)
   Storage resource requested for the container.
   <p>
   See
-  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#resourcerequirements-v1-core
+  https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcerequirements-v1-core
   for details. <p> updowncounter
  */
 static constexpr const char *kMetricK8sContainerStorageRequest = "k8s.container.storage.request";
@@ -1069,7 +1146,7 @@ CreateAsyncDoubleMetricK8sContainerStorageRequest(metrics::Meter *meter)
   @deprecated
   {"note": "Replaced by @code k8s.cronjob.job.active @endcode.", "reason": "renamed", "renamed_to":
   "k8s.cronjob.job.active"} <p> This metric aligns with the @code active @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#cronjobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#cronjobstatus-v1-batch">K8s
   CronJobStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sCronjobActiveJobs =
@@ -1081,29 +1158,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sCronjobActive
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sCronjobActiveJobs(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(
       kMetricK8sCronjobActiveJobs, descrMetricK8sCronjobActiveJobs, unitMetricK8sCronjobActiveJobs);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sCronjobActiveJobs(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(
       kMetricK8sCronjobActiveJobs, descrMetricK8sCronjobActiveJobs, unitMetricK8sCronjobActiveJobs);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sCronjobActiveJobs(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricK8sCronjobActiveJobs, descrMetricK8sCronjobActiveJobs, unitMetricK8sCronjobActiveJobs);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sCronjobActiveJobs(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sCronjobActiveJobs, descrMetricK8sCronjobActiveJobs, unitMetricK8sCronjobActiveJobs);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1111,7 +1196,7 @@ CreateAsyncDoubleMetricK8sCronjobActiveJobs(metrics::Meter *meter)
   <p>
   This metric aligns with the @code active @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#cronjobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#cronjobstatus-v1-batch">K8s
   CronJobStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sCronjobJobActive = "k8s.cronjob.job.active";
@@ -1154,7 +1239,7 @@ CreateAsyncDoubleMetricK8sCronjobJobActive(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.daemonset.node.current_scheduled @endcode.", "reason": "renamed",
   "renamed_to": "k8s.daemonset.node.current_scheduled"} <p> This metric aligns with the @code
   currentNumberScheduled @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sDaemonsetCurrentScheduledNodes =
@@ -1167,33 +1252,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sDaemonsetCurr
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sDaemonsetCurrentScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sDaemonsetCurrentScheduledNodes,
                                          descrMetricK8sDaemonsetCurrentScheduledNodes,
                                          unitMetricK8sDaemonsetCurrentScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sDaemonsetCurrentScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sDaemonsetCurrentScheduledNodes,
                                           descrMetricK8sDaemonsetCurrentScheduledNodes,
                                           unitMetricK8sDaemonsetCurrentScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sDaemonsetCurrentScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sDaemonsetCurrentScheduledNodes,
                                                    descrMetricK8sDaemonsetCurrentScheduledNodes,
                                                    unitMetricK8sDaemonsetCurrentScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sDaemonsetCurrentScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sDaemonsetCurrentScheduledNodes,
                                                     descrMetricK8sDaemonsetCurrentScheduledNodes,
                                                     unitMetricK8sDaemonsetCurrentScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1203,7 +1296,7 @@ CreateAsyncDoubleMetricK8sDaemonsetCurrentScheduledNodes(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.daemonset.node.desired_scheduled @endcode.", "reason": "renamed",
   "renamed_to": "k8s.daemonset.node.desired_scheduled"} <p> This metric aligns with the @code
   desiredNumberScheduled @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sDaemonsetDesiredScheduledNodes =
@@ -1216,33 +1309,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sDaemonsetDesi
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sDaemonsetDesiredScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sDaemonsetDesiredScheduledNodes,
                                          descrMetricK8sDaemonsetDesiredScheduledNodes,
                                          unitMetricK8sDaemonsetDesiredScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sDaemonsetDesiredScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sDaemonsetDesiredScheduledNodes,
                                           descrMetricK8sDaemonsetDesiredScheduledNodes,
                                           unitMetricK8sDaemonsetDesiredScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sDaemonsetDesiredScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sDaemonsetDesiredScheduledNodes,
                                                    descrMetricK8sDaemonsetDesiredScheduledNodes,
                                                    unitMetricK8sDaemonsetDesiredScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sDaemonsetDesiredScheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sDaemonsetDesiredScheduledNodes,
                                                     descrMetricK8sDaemonsetDesiredScheduledNodes,
                                                     unitMetricK8sDaemonsetDesiredScheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1252,7 +1353,7 @@ CreateAsyncDoubleMetricK8sDaemonsetDesiredScheduledNodes(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.daemonset.node.misscheduled @endcode.", "reason": "renamed",
   "renamed_to": "k8s.daemonset.node.misscheduled"} <p> This metric aligns with the @code
   numberMisscheduled @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sDaemonsetMisscheduledNodes =
@@ -1265,33 +1366,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sDaemonsetMiss
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sDaemonsetMisscheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sDaemonsetMisscheduledNodes,
                                          descrMetricK8sDaemonsetMisscheduledNodes,
                                          unitMetricK8sDaemonsetMisscheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sDaemonsetMisscheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sDaemonsetMisscheduledNodes,
                                           descrMetricK8sDaemonsetMisscheduledNodes,
                                           unitMetricK8sDaemonsetMisscheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sDaemonsetMisscheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sDaemonsetMisscheduledNodes,
                                                    descrMetricK8sDaemonsetMisscheduledNodes,
                                                    unitMetricK8sDaemonsetMisscheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sDaemonsetMisscheduledNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sDaemonsetMisscheduledNodes,
                                                     descrMetricK8sDaemonsetMisscheduledNodes,
                                                     unitMetricK8sDaemonsetMisscheduledNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1299,7 +1408,7 @@ CreateAsyncDoubleMetricK8sDaemonsetMisscheduledNodes(metrics::Meter *meter)
   <p>
   This metric aligns with the @code currentNumberScheduled @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sDaemonsetNodeCurrentScheduled =
@@ -1344,7 +1453,7 @@ CreateAsyncDoubleMetricK8sDaemonsetNodeCurrentScheduled(metrics::Meter *meter)
 /**
   Number of nodes that should be running the daemon pod (including nodes currently running the
   daemon pod). <p> This metric aligns with the @code desiredNumberScheduled @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sDaemonsetNodeDesiredScheduled =
@@ -1391,7 +1500,7 @@ CreateAsyncDoubleMetricK8sDaemonsetNodeDesiredScheduled(metrics::Meter *meter)
   <p>
   This metric aligns with the @code numberMisscheduled @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sDaemonsetNodeMisscheduled =
@@ -1435,7 +1544,7 @@ CreateAsyncDoubleMetricK8sDaemonsetNodeMisscheduled(metrics::Meter *meter)
 /**
   Number of nodes that should be running the daemon pod and have one or more of the daemon pod
   running and ready. <p> This metric aligns with the @code numberReady @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sDaemonsetNodeReady = "k8s.daemonset.node.ready";
@@ -1483,7 +1592,7 @@ CreateAsyncDoubleMetricK8sDaemonsetNodeReady(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.daemonset.node.ready @endcode.", "reason": "renamed",
   "renamed_to": "k8s.daemonset.node.ready"} <p> This metric aligns with the @code numberReady
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#daemonsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#daemonsetstatus-v1-apps">K8s
   DaemonSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sDaemonsetReadyNodes =
@@ -1495,33 +1604,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sDaemonsetRead
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sDaemonsetReadyNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sDaemonsetReadyNodes,
                                          descrMetricK8sDaemonsetReadyNodes,
                                          unitMetricK8sDaemonsetReadyNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sDaemonsetReadyNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sDaemonsetReadyNodes,
                                           descrMetricK8sDaemonsetReadyNodes,
                                           unitMetricK8sDaemonsetReadyNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sDaemonsetReadyNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sDaemonsetReadyNodes,
                                                    descrMetricK8sDaemonsetReadyNodes,
                                                    unitMetricK8sDaemonsetReadyNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sDaemonsetReadyNodes(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sDaemonsetReadyNodes,
                                                     descrMetricK8sDaemonsetReadyNodes,
                                                     unitMetricK8sDaemonsetReadyNodes);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1531,7 +1648,7 @@ CreateAsyncDoubleMetricK8sDaemonsetReadyNodes(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.deployment.pod.available @endcode.", "reason": "renamed",
   "renamed_to": "k8s.deployment.pod.available"} <p> This metric aligns with the @code
   availableReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#deploymentstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#deploymentstatus-v1-apps">K8s
   DeploymentStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sDeploymentAvailablePods =
@@ -1544,33 +1661,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sDeploymentAva
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sDeploymentAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sDeploymentAvailablePods,
                                          descrMetricK8sDeploymentAvailablePods,
                                          unitMetricK8sDeploymentAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sDeploymentAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sDeploymentAvailablePods,
                                           descrMetricK8sDeploymentAvailablePods,
                                           unitMetricK8sDeploymentAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sDeploymentAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sDeploymentAvailablePods,
                                                    descrMetricK8sDeploymentAvailablePods,
                                                    unitMetricK8sDeploymentAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sDeploymentAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sDeploymentAvailablePods,
                                                     descrMetricK8sDeploymentAvailablePods,
                                                     unitMetricK8sDeploymentAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1580,7 +1705,7 @@ CreateAsyncDoubleMetricK8sDeploymentAvailablePods(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.deployment.pod.desired @endcode.", "reason": "renamed",
   "renamed_to": "k8s.deployment.pod.desired"} <p> This metric aligns with the @code replicas
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#deploymentspec-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#deploymentspec-v1-apps">K8s
   DeploymentSpec</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sDeploymentDesiredPods =
@@ -1592,39 +1717,47 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sDeploymentDes
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sDeploymentDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sDeploymentDesiredPods,
                                          descrMetricK8sDeploymentDesiredPods,
                                          unitMetricK8sDeploymentDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sDeploymentDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sDeploymentDesiredPods,
                                           descrMetricK8sDeploymentDesiredPods,
                                           unitMetricK8sDeploymentDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sDeploymentDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sDeploymentDesiredPods,
                                                    descrMetricK8sDeploymentDesiredPods,
                                                    unitMetricK8sDeploymentDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sDeploymentDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sDeploymentDesiredPods,
                                                     descrMetricK8sDeploymentDesiredPods,
                                                     unitMetricK8sDeploymentDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
   Total number of available replica pods (ready for at least minReadySeconds) targeted by this
   deployment. <p> This metric aligns with the @code availableReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#deploymentstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#deploymentstatus-v1-apps">K8s
   DeploymentStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sDeploymentPodAvailable = "k8s.deployment.pod.available";
@@ -1670,7 +1803,7 @@ CreateAsyncDoubleMetricK8sDeploymentPodAvailable(metrics::Meter *meter)
   <p>
   This metric aligns with the @code replicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#deploymentspec-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#deploymentspec-v1-apps">K8s
   DeploymentSpec</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sDeploymentPodDesired = "k8s.deployment.pod.desired";
@@ -1717,7 +1850,7 @@ CreateAsyncDoubleMetricK8sDeploymentPodDesired(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.hpa.pod.current @endcode.", "reason": "renamed", "renamed_to":
   "k8s.hpa.pod.current"} <p> This metric aligns with the @code currentReplicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
   HorizontalPodAutoscalerStatus</a> <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sHpaCurrentPods =
@@ -1729,29 +1862,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sHpaCurrentPod
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sHpaCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sHpaCurrentPods, descrMetricK8sHpaCurrentPods,
                                          unitMetricK8sHpaCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sHpaCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sHpaCurrentPods, descrMetricK8sHpaCurrentPods,
                                           unitMetricK8sHpaCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sHpaCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricK8sHpaCurrentPods, descrMetricK8sHpaCurrentPods, unitMetricK8sHpaCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sHpaCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sHpaCurrentPods, descrMetricK8sHpaCurrentPods, unitMetricK8sHpaCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1761,7 +1902,7 @@ CreateAsyncDoubleMetricK8sHpaCurrentPods(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.hpa.pod.desired @endcode.", "reason": "renamed", "renamed_to":
   "k8s.hpa.pod.desired"} <p> This metric aligns with the @code desiredReplicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
   HorizontalPodAutoscalerStatus</a> <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sHpaDesiredPods =
@@ -1773,29 +1914,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sHpaDesiredPod
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sHpaDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sHpaDesiredPods, descrMetricK8sHpaDesiredPods,
                                          unitMetricK8sHpaDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sHpaDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sHpaDesiredPods, descrMetricK8sHpaDesiredPods,
                                           unitMetricK8sHpaDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sHpaDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricK8sHpaDesiredPods, descrMetricK8sHpaDesiredPods, unitMetricK8sHpaDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sHpaDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sHpaDesiredPods, descrMetricK8sHpaDesiredPods, unitMetricK8sHpaDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1804,7 +1953,7 @@ CreateAsyncDoubleMetricK8sHpaDesiredPods(metrics::Meter *meter)
   @deprecated
   {"note": "Replaced by @code k8s.hpa.pod.max @endcode.", "reason": "renamed", "renamed_to":
   "k8s.hpa.pod.max"} <p> This metric aligns with the @code maxReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerspec-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerspec-v2-autoscaling">K8s
   HorizontalPodAutoscalerSpec</a> <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sHpaMaxPods = "k8s.hpa.max_pods";
@@ -1815,29 +1964,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sHpaMaxPods = 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sHpaMaxPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sHpaMaxPods, descrMetricK8sHpaMaxPods,
                                          unitMetricK8sHpaMaxPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sHpaMaxPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sHpaMaxPods, descrMetricK8sHpaMaxPods,
                                           unitMetricK8sHpaMaxPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sHpaMaxPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sHpaMaxPods, descrMetricK8sHpaMaxPods,
                                                    unitMetricK8sHpaMaxPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sHpaMaxPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sHpaMaxPods, descrMetricK8sHpaMaxPods,
                                                     unitMetricK8sHpaMaxPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1845,7 +2002,7 @@ CreateAsyncDoubleMetricK8sHpaMaxPods(metrics::Meter *meter)
   <p>
   This metric aligns with the @code averageUtilization @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#metrictarget-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#metrictarget-v2-autoscaling">K8s
   HPA MetricTarget</a>. If the type of the metric is <a
   href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-metrics-apis">@code
   ContainerResource @endcode</a>, the @code k8s.container.name @endcode attribute MUST be set to
@@ -1897,7 +2054,7 @@ CreateAsyncDoubleMetricK8sHpaMetricTargetCpuAverageUtilization(metrics::Meter *m
   <p>
   This metric aligns with the @code averageValue @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#metrictarget-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#metrictarget-v2-autoscaling">K8s
   HPA MetricTarget</a>. If the type of the metric is <a
   href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-metrics-apis">@code
   ContainerResource @endcode</a>, the @code k8s.container.name @endcode attribute MUST be set to
@@ -1949,7 +2106,7 @@ CreateAsyncDoubleMetricK8sHpaMetricTargetCpuAverageValue(metrics::Meter *meter)
   <p>
   This metric aligns with the @code value @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#metrictarget-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#metrictarget-v2-autoscaling">K8s
   HPA MetricTarget</a>. If the type of the metric is <a
   href="https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#support-for-metrics-apis">@code
   ContainerResource @endcode</a>, the @code k8s.container.name @endcode attribute MUST be set to
@@ -2001,7 +2158,7 @@ CreateAsyncDoubleMetricK8sHpaMetricTargetCpuValue(metrics::Meter *meter)
   @deprecated
   {"note": "Replaced by @code k8s.hpa.pod.min @endcode.", "reason": "renamed", "renamed_to":
   "k8s.hpa.pod.min"} <p> This metric aligns with the @code minReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerspec-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerspec-v2-autoscaling">K8s
   HorizontalPodAutoscalerSpec</a> <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sHpaMinPods = "k8s.hpa.min_pods";
@@ -2012,35 +2169,43 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sHpaMinPods = 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sHpaMinPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sHpaMinPods, descrMetricK8sHpaMinPods,
                                          unitMetricK8sHpaMinPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sHpaMinPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sHpaMinPods, descrMetricK8sHpaMinPods,
                                           unitMetricK8sHpaMinPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sHpaMinPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sHpaMinPods, descrMetricK8sHpaMinPods,
                                                    unitMetricK8sHpaMinPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sHpaMinPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sHpaMinPods, descrMetricK8sHpaMinPods,
                                                     unitMetricK8sHpaMinPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
   Current number of replica pods managed by this horizontal pod autoscaler, as last seen by the
   autoscaler. <p> This metric aligns with the @code currentReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
   HorizontalPodAutoscalerStatus</a> <p> updowncounter
  */
 static constexpr const char *kMetricK8sHpaPodCurrent = "k8s.hpa.pod.current";
@@ -2080,7 +2245,7 @@ CreateAsyncDoubleMetricK8sHpaPodCurrent(metrics::Meter *meter)
 /**
   Desired number of replica pods managed by this horizontal pod autoscaler, as last calculated by
   the autoscaler. <p> This metric aligns with the @code desiredReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerstatus-v2-autoscaling">K8s
   HorizontalPodAutoscalerStatus</a> <p> updowncounter
  */
 static constexpr const char *kMetricK8sHpaPodDesired = "k8s.hpa.pod.desired";
@@ -2122,7 +2287,7 @@ CreateAsyncDoubleMetricK8sHpaPodDesired(metrics::Meter *meter)
   <p>
   This metric aligns with the @code maxReplicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerspec-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerspec-v2-autoscaling">K8s
   HorizontalPodAutoscalerSpec</a> <p> updowncounter
  */
 static constexpr const char *kMetricK8sHpaPodMax = "k8s.hpa.pod.max";
@@ -2163,7 +2328,7 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
   <p>
   This metric aligns with the @code minReplicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#horizontalpodautoscalerspec-v2-autoscaling">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#horizontalpodautoscalerspec-v2-autoscaling">K8s
   HorizontalPodAutoscalerSpec</a> <p> updowncounter
  */
 static constexpr const char *kMetricK8sHpaPodMin = "k8s.hpa.pod.min";
@@ -2205,7 +2370,7 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
   @deprecated
   {"note": "Replaced by @code k8s.job.pod.active @endcode.", "reason": "renamed", "renamed_to":
   "k8s.job.pod.active"} <p> This metric aligns with the @code active @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobstatus-v1-batch">K8s
   JobStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sJobActivePods =
@@ -2217,29 +2382,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sJobActivePods
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sJobActivePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sJobActivePods, descrMetricK8sJobActivePods,
                                          unitMetricK8sJobActivePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sJobActivePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sJobActivePods, descrMetricK8sJobActivePods,
                                           unitMetricK8sJobActivePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sJobActivePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricK8sJobActivePods, descrMetricK8sJobActivePods, unitMetricK8sJobActivePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sJobActivePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sJobActivePods, descrMetricK8sJobActivePods, unitMetricK8sJobActivePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2249,7 +2422,7 @@ CreateAsyncDoubleMetricK8sJobActivePods(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.job.pod.desired_successful @endcode.", "reason": "renamed",
   "renamed_to": "k8s.job.pod.desired_successful"} <p> This metric aligns with the @code completions
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobspec-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobspec-v1-batch">K8s
   JobSpec</a>.. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sJobDesiredSuccessfulPods =
@@ -2262,33 +2435,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sJobDesiredSuc
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sJobDesiredSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sJobDesiredSuccessfulPods,
                                          descrMetricK8sJobDesiredSuccessfulPods,
                                          unitMetricK8sJobDesiredSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sJobDesiredSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sJobDesiredSuccessfulPods,
                                           descrMetricK8sJobDesiredSuccessfulPods,
                                           unitMetricK8sJobDesiredSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sJobDesiredSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sJobDesiredSuccessfulPods,
                                                    descrMetricK8sJobDesiredSuccessfulPods,
                                                    unitMetricK8sJobDesiredSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sJobDesiredSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sJobDesiredSuccessfulPods,
                                                     descrMetricK8sJobDesiredSuccessfulPods,
                                                     unitMetricK8sJobDesiredSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2297,7 +2478,7 @@ CreateAsyncDoubleMetricK8sJobDesiredSuccessfulPods(metrics::Meter *meter)
   @deprecated
   {"note": "Replaced by @code k8s.job.pod.failed @endcode.", "reason": "renamed", "renamed_to":
   "k8s.job.pod.failed"} <p> This metric aligns with the @code failed @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobstatus-v1-batch">K8s
   JobStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sJobFailedPods =
@@ -2309,29 +2490,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sJobFailedPods
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sJobFailedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sJobFailedPods, descrMetricK8sJobFailedPods,
                                          unitMetricK8sJobFailedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sJobFailedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sJobFailedPods, descrMetricK8sJobFailedPods,
                                           unitMetricK8sJobFailedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sJobFailedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricK8sJobFailedPods, descrMetricK8sJobFailedPods, unitMetricK8sJobFailedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sJobFailedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sJobFailedPods, descrMetricK8sJobFailedPods, unitMetricK8sJobFailedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2341,7 +2530,7 @@ CreateAsyncDoubleMetricK8sJobFailedPods(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.job.pod.max_parallel @endcode.", "reason": "renamed",
   "renamed_to": "k8s.job.pod.max_parallel"} <p> This metric aligns with the @code parallelism
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobspec-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobspec-v1-batch">K8s
   JobSpec</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sJobMaxParallelPods =
@@ -2353,33 +2542,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sJobMaxParalle
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sJobMaxParallelPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sJobMaxParallelPods,
                                          descrMetricK8sJobMaxParallelPods,
                                          unitMetricK8sJobMaxParallelPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sJobMaxParallelPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sJobMaxParallelPods,
                                           descrMetricK8sJobMaxParallelPods,
                                           unitMetricK8sJobMaxParallelPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sJobMaxParallelPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sJobMaxParallelPods,
                                                    descrMetricK8sJobMaxParallelPods,
                                                    unitMetricK8sJobMaxParallelPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sJobMaxParallelPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sJobMaxParallelPods,
                                                     descrMetricK8sJobMaxParallelPods,
                                                     unitMetricK8sJobMaxParallelPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2387,7 +2584,7 @@ CreateAsyncDoubleMetricK8sJobMaxParallelPods(metrics::Meter *meter)
   <p>
   This metric aligns with the @code active @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobstatus-v1-batch">K8s
   JobStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sJobPodActive = "k8s.job.pod.active";
@@ -2428,7 +2625,7 @@ CreateAsyncDoubleMetricK8sJobPodActive(metrics::Meter *meter)
   <p>
   This metric aligns with the @code completions @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobspec-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobspec-v1-batch">K8s
   JobSpec</a>.. <p> updowncounter
  */
 static constexpr const char *kMetricK8sJobPodDesiredSuccessful = "k8s.job.pod.desired_successful";
@@ -2473,7 +2670,7 @@ CreateAsyncDoubleMetricK8sJobPodDesiredSuccessful(metrics::Meter *meter)
   <p>
   This metric aligns with the @code failed @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobstatus-v1-batch">K8s
   JobStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sJobPodFailed = "k8s.job.pod.failed";
@@ -2514,7 +2711,7 @@ CreateAsyncDoubleMetricK8sJobPodFailed(metrics::Meter *meter)
   <p>
   This metric aligns with the @code parallelism @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobspec-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobspec-v1-batch">K8s
   JobSpec</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sJobPodMaxParallel = "k8s.job.pod.max_parallel";
@@ -2555,7 +2752,7 @@ CreateAsyncDoubleMetricK8sJobPodMaxParallel(metrics::Meter *meter)
   <p>
   This metric aligns with the @code succeeded @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobstatus-v1-batch">K8s
   JobStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sJobPodSuccessful = "k8s.job.pod.successful";
@@ -2597,7 +2794,7 @@ CreateAsyncDoubleMetricK8sJobPodSuccessful(metrics::Meter *meter)
   @deprecated
   {"note": "Replaced by @code k8s.job.pod.successful @endcode.", "reason": "renamed", "renamed_to":
   "k8s.job.pod.successful"} <p> This metric aligns with the @code succeeded @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#jobstatus-v1-batch">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#jobstatus-v1-batch">K8s
   JobStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sJobSuccessfulPods =
@@ -2609,29 +2806,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sJobSuccessful
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sJobSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(
       kMetricK8sJobSuccessfulPods, descrMetricK8sJobSuccessfulPods, unitMetricK8sJobSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sJobSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(
       kMetricK8sJobSuccessfulPods, descrMetricK8sJobSuccessfulPods, unitMetricK8sJobSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sJobSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricK8sJobSuccessfulPods, descrMetricK8sJobSuccessfulPods, unitMetricK8sJobSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sJobSuccessfulPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sJobSuccessfulPods, descrMetricK8sJobSuccessfulPods, unitMetricK8sJobSuccessfulPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2688,33 +2893,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sNodeAllocatab
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sNodeAllocatableCpu(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sNodeAllocatableCpu,
                                          descrMetricK8sNodeAllocatableCpu,
                                          unitMetricK8sNodeAllocatableCpu);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sNodeAllocatableCpu(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sNodeAllocatableCpu,
                                           descrMetricK8sNodeAllocatableCpu,
                                           unitMetricK8sNodeAllocatableCpu);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeAllocatableCpu(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeAllocatableCpu,
                                                    descrMetricK8sNodeAllocatableCpu,
                                                    unitMetricK8sNodeAllocatableCpu);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeAllocatableCpu(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeAllocatableCpu,
                                                     descrMetricK8sNodeAllocatableCpu,
                                                     unitMetricK8sNodeAllocatableCpu);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2735,33 +2948,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sNodeAllocatab
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sNodeAllocatableEphemeralStorage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sNodeAllocatableEphemeralStorage,
                                          descrMetricK8sNodeAllocatableEphemeralStorage,
                                          unitMetricK8sNodeAllocatableEphemeralStorage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sNodeAllocatableEphemeralStorage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sNodeAllocatableEphemeralStorage,
                                           descrMetricK8sNodeAllocatableEphemeralStorage,
                                           unitMetricK8sNodeAllocatableEphemeralStorage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeAllocatableEphemeralStorage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeAllocatableEphemeralStorage,
                                                    descrMetricK8sNodeAllocatableEphemeralStorage,
                                                    unitMetricK8sNodeAllocatableEphemeralStorage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeAllocatableEphemeralStorage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeAllocatableEphemeralStorage,
                                                     descrMetricK8sNodeAllocatableEphemeralStorage,
                                                     unitMetricK8sNodeAllocatableEphemeralStorage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2780,33 +3001,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sNodeAllocatab
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sNodeAllocatableMemory(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sNodeAllocatableMemory,
                                          descrMetricK8sNodeAllocatableMemory,
                                          unitMetricK8sNodeAllocatableMemory);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sNodeAllocatableMemory(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sNodeAllocatableMemory,
                                           descrMetricK8sNodeAllocatableMemory,
                                           unitMetricK8sNodeAllocatableMemory);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeAllocatableMemory(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeAllocatableMemory,
                                                    descrMetricK8sNodeAllocatableMemory,
                                                    unitMetricK8sNodeAllocatableMemory);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeAllocatableMemory(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeAllocatableMemory,
                                                     descrMetricK8sNodeAllocatableMemory,
                                                     unitMetricK8sNodeAllocatableMemory);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2825,33 +3054,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sNodeAllocatab
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sNodeAllocatablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sNodeAllocatablePods,
                                          descrMetricK8sNodeAllocatablePods,
                                          unitMetricK8sNodeAllocatablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sNodeAllocatablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sNodeAllocatablePods,
                                           descrMetricK8sNodeAllocatablePods,
                                           unitMetricK8sNodeAllocatablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeAllocatablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeAllocatablePods,
                                                    descrMetricK8sNodeAllocatablePods,
                                                    unitMetricK8sNodeAllocatablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeAllocatablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeAllocatablePods,
                                                     descrMetricK8sNodeAllocatablePods,
                                                     unitMetricK8sNodeAllocatablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -2899,13 +3136,13 @@ CreateAsyncDoubleMetricK8sNodeConditionStatus(metrics::Meter *meter)
 }
 
 /**
-  Amount of cpu allocatable on the node.
+  Amount of CPU allocatable on the node.
   <p>
   updowncounter
  */
 static constexpr const char *kMetricK8sNodeCpuAllocatable = "k8s.node.cpu.allocatable";
 static constexpr const char *descrMetricK8sNodeCpuAllocatable =
-    "Amount of cpu allocatable on the node.";
+    "Amount of CPU allocatable on the node.";
 static constexpr const char *unitMetricK8sNodeCpuAllocatable = "{cpu}";
 
 static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
@@ -2980,15 +3217,15 @@ CreateAsyncDoubleMetricK8sNodeCpuTime(metrics::Meter *meter)
 }
 
 /**
-  Node's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.
+  Node's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.
   <p>
-  CPU usage of the specific Node on all available CPU cores, averaged over the sample window
-  <p>
-  gauge
+  CPU usage of the specific Node on all available CPU cores. It is calculated as the change in
+  cumulative CPU time (k8s.node.cpu.time) over a measurement interval, divided by the elapsed time:
+  usageCores = (cpuTimeEnd - cpuTimeStart) / elapsedSeconds <p> gauge
  */
 static constexpr const char *kMetricK8sNodeCpuUsage = "k8s.node.cpu.usage";
 static constexpr const char *descrMetricK8sNodeCpuUsage =
-    "Node's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.";
+    "Node's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.";
 static constexpr const char *unitMetricK8sNodeCpuUsage = "{cpu}";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -3163,6 +3400,104 @@ CreateAsyncDoubleMetricK8sNodeFilesystemCapacity(metrics::Meter *meter)
 }
 
 /**
+  The total inodes in the node's root filesystem.
+  <p>
+  This metric is derived from the
+  <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#FsStats">FsStats.Inodes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Fs</a>
+  of the Kubelet's stats API.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricK8sNodeFilesystemInodeCount = "k8s.node.filesystem.inode.count";
+static constexpr const char *descrMetricK8sNodeFilesystemInodeCount =
+    "The total inodes in the node's root filesystem.";
+static constexpr const char *unitMetricK8sNodeFilesystemInodeCount = "{inode}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                         descrMetricK8sNodeFilesystemInodeCount,
+                                         unitMetricK8sNodeFilesystemInodeCount);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                          descrMetricK8sNodeFilesystemInodeCount,
+                                          unitMetricK8sNodeFilesystemInodeCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                                   descrMetricK8sNodeFilesystemInodeCount,
+                                                   unitMetricK8sNodeFilesystemInodeCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                                    descrMetricK8sNodeFilesystemInodeCount,
+                                                    unitMetricK8sNodeFilesystemInodeCount);
+}
+
+/**
+  The free inodes in the node's root filesystem.
+  <p>
+  This metric is derived from the
+  <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#FsStats">FsStats.InodesFree</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Fs</a>
+  of the Kubelet's stats API.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricK8sNodeFilesystemInodeFree = "k8s.node.filesystem.inode.free";
+static constexpr const char *descrMetricK8sNodeFilesystemInodeFree =
+    "The free inodes in the node's root filesystem.";
+static constexpr const char *unitMetricK8sNodeFilesystemInodeFree = "{inode}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                         descrMetricK8sNodeFilesystemInodeFree,
+                                         unitMetricK8sNodeFilesystemInodeFree);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                          descrMetricK8sNodeFilesystemInodeFree,
+                                          unitMetricK8sNodeFilesystemInodeFree);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                                   descrMetricK8sNodeFilesystemInodeFree,
+                                                   unitMetricK8sNodeFilesystemInodeFree);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                                    descrMetricK8sNodeFilesystemInodeFree,
+                                                    unitMetricK8sNodeFilesystemInodeFree);
+}
+
+/**
   Node filesystem usage.
   <p>
   This may not equal capacity - available.
@@ -3301,10 +3636,12 @@ CreateAsyncDoubleMetricK8sNodeMemoryAvailable(metrics::Meter *meter)
 }
 
 /**
-  Node memory paging faults.
-  <p>
-  Cumulative number of major/minor page faults.
-  This metric is derived from the <a
+  Deprecated, use @code k8s.node.paging.faults @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code k8s.node.paging.faults @endcode.", "reason": "renamed", "renamed_to":
+  "k8s.node.paging.faults"} <p> Cumulative number of major/minor page faults. This metric is derived
+  from the <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
   and <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
@@ -3312,40 +3649,51 @@ CreateAsyncDoubleMetricK8sNodeMemoryAvailable(metrics::Meter *meter)
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Memory</a>
   of the Kubelet's stats API. <p> counter
  */
-static constexpr const char *kMetricK8sNodeMemoryPagingFaults     = "k8s.node.memory.paging.faults";
-static constexpr const char *descrMetricK8sNodeMemoryPagingFaults = "Node memory paging faults.";
-static constexpr const char *unitMetricK8sNodeMemoryPagingFaults  = "{fault}";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sNodeMemoryPagingFaults =
+    "k8s.node.memory.paging.faults";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricK8sNodeMemoryPagingFaults =
+    "Deprecated, use `k8s.node.paging.faults` instead.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sNodeMemoryPagingFaults =
+    "{fault}";
 
-static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricK8sNodeMemoryPagingFaults,
                                     descrMetricK8sNodeMemoryPagingFaults,
                                     unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::unique_ptr<metrics::Counter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricK8sNodeMemoryPagingFaults,
                                     descrMetricK8sNodeMemoryPagingFaults,
                                     unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricK8sNodeMemoryPagingFaults,
                                              descrMetricK8sNodeMemoryPagingFaults,
                                              unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricK8sNodeMemoryPagingFaults,
                                               descrMetricK8sNodeMemoryPagingFaults,
                                               unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -3393,42 +3741,42 @@ CreateAsyncDoubleMetricK8sNodeMemoryRss(metrics::Meter *meter)
 /**
   Memory usage of the Node.
   <p>
-  Total memory usage of the Node
-  <p>
-  gauge
+  Total memory in use. This includes all memory regardless of when it was accessed.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.UsageBytes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Memory</a>
+  of the Kubelet's stats API. <p> updowncounter
  */
 static constexpr const char *kMetricK8sNodeMemoryUsage     = "k8s.node.memory.usage";
 static constexpr const char *descrMetricK8sNodeMemoryUsage = "Memory usage of the Node.";
 static constexpr const char *unitMetricK8sNodeMemoryUsage  = "By";
 
-#if OPENTELEMETRY_ABI_VERSION_NO >= 2
-
-static inline nostd::unique_ptr<metrics::Gauge<int64_t>> CreateSyncInt64MetricK8sNodeMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64Gauge(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
-                                 unitMetricK8sNodeMemoryUsage);
+  return meter->CreateInt64UpDownCounter(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
+                                         unitMetricK8sNodeMemoryUsage);
 }
 
-static inline nostd::unique_ptr<metrics::Gauge<double>> CreateSyncDoubleMetricK8sNodeMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleGauge(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
-                                  unitMetricK8sNodeMemoryUsage);
+  return meter->CreateDoubleUpDownCounter(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
+                                          unitMetricK8sNodeMemoryUsage);
 }
-#endif /* OPENTELEMETRY_ABI_VERSION_NO */
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64ObservableGauge(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
-                                           unitMetricK8sNodeMemoryUsage);
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage, unitMetricK8sNodeMemoryUsage);
 }
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleObservableGauge(
+  return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage, unitMetricK8sNodeMemoryUsage);
 }
 
@@ -3553,6 +3901,50 @@ CreateAsyncDoubleMetricK8sNodeNetworkIo(metrics::Meter *meter)
 }
 
 /**
+  Node memory paging faults.
+  <p>
+  Cumulative number of major/minor page faults.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
+  and <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
+  fields of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Memory</a>
+  of the Kubelet's stats API. <p> counter
+ */
+static constexpr const char *kMetricK8sNodePagingFaults     = "k8s.node.paging.faults";
+static constexpr const char *descrMetricK8sNodePagingFaults = "Node memory paging faults.";
+static constexpr const char *unitMetricK8sNodePagingFaults  = "{fault}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricK8sNodePagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults,
+                                    unitMetricK8sNodePagingFaults);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricK8sNodePagingFaults(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults,
+                                    unitMetricK8sNodePagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sNodePagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults, unitMetricK8sNodePagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sNodePagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults, unitMetricK8sNodePagingFaults);
+}
+
+/**
   Amount of pods allocatable on the node.
   <p>
   updowncounter
@@ -3644,20 +4036,16 @@ CreateAsyncDoubleMetricK8sNodeSystemContainerCpuTime(metrics::Meter *meter)
 }
 
 /**
-  Node's system container CPU usage, measured in cpus.
+  Node's system container CPU usage, measured in CPUs.
   <p>
-  This metric is derived from the <a
-  href="https://github.com/kubernetes/kubelet/blob/v0.35.2/pkg/apis/stats/v1alpha1/types.go#L233">CPUStats.UsageNanoCores</a>
-  field of the <a
-  href="https://github.com/kubernetes/kubelet/blob/v0.35.2/pkg/apis/stats/v1alpha1/types.go#L157C6-L157C20">ContainerStats</a>
-  of <a
-  href="https://github.com/kubernetes/kubelet/blob/v0.35.2/pkg/apis/stats/v1alpha1/types.go#L40">Node.SystemContainers</a>
-  of the Kubelet's stats API. <p> gauge
+  CPU usage of the specific System Container on all available CPU cores. It is calculated as the
+  change in cumulative CPU time (k8s.node.system_container.cpu.time) over a measurement interval,
+  divided by the elapsed time: usageCores = (cpuTimeEnd - cpuTimeStart) / elapsedSeconds <p> gauge
  */
 static constexpr const char *kMetricK8sNodeSystemContainerCpuUsage =
     "k8s.node.system_container.cpu.usage";
 static constexpr const char *descrMetricK8sNodeSystemContainerCpuUsage =
-    "Node's system container CPU usage, measured in cpus.";
+    "Node's system container CPU usage, measured in CPUs.";
 static constexpr const char *unitMetricK8sNodeSystemContainerCpuUsage = "{cpu}";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -4112,15 +4500,15 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
 }
 
 /**
-  Pod's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.
+  Pod's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.
   <p>
-  CPU usage of the specific Pod on all available CPU cores, averaged over the sample window
-  <p>
-  gauge
+  CPU usage of the specific Pod on all available CPU cores. It is calculated as the change in
+  cumulative CPU time (k8s.pod.cpu.time) over a measurement interval, divided by the elapsed time:
+  usageCores = (cpuTimeEnd - cpuTimeStart) / elapsedSeconds <p> gauge
  */
 static constexpr const char *kMetricK8sPodCpuUsage = "k8s.pod.cpu.usage";
 static constexpr const char *descrMetricK8sPodCpuUsage =
-    "Pod's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.";
+    "Pod's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.";
 static constexpr const char *unitMetricK8sPodCpuUsage = "{cpu}";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -4348,10 +4736,12 @@ CreateAsyncDoubleMetricK8sPodMemoryAvailable(metrics::Meter *meter)
 }
 
 /**
-  Pod memory paging faults.
-  <p>
-  Cumulative number of major/minor page faults.
-  This metric is derived from the <a
+  Deprecated, use @code k8s.pod.paging.faults @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code k8s.pod.paging.faults @endcode.", "reason": "renamed", "renamed_to":
+  "k8s.pod.paging.faults"} <p> Cumulative number of major/minor page faults. This metric is derived
+  from the <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
   and <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
@@ -4359,40 +4749,51 @@ CreateAsyncDoubleMetricK8sPodMemoryAvailable(metrics::Meter *meter)
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
   of the Kubelet's stats API. <p> counter
  */
-static constexpr const char *kMetricK8sPodMemoryPagingFaults     = "k8s.pod.memory.paging.faults";
-static constexpr const char *descrMetricK8sPodMemoryPagingFaults = "Pod memory paging faults.";
-static constexpr const char *unitMetricK8sPodMemoryPagingFaults  = "{fault}";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sPodMemoryPagingFaults =
+    "k8s.pod.memory.paging.faults";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricK8sPodMemoryPagingFaults =
+    "Deprecated, use `k8s.pod.paging.faults` instead.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sPodMemoryPagingFaults =
+    "{fault}";
 
-static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricK8sPodMemoryPagingFaults,
                                     descrMetricK8sPodMemoryPagingFaults,
                                     unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::unique_ptr<metrics::Counter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricK8sPodMemoryPagingFaults,
                                     descrMetricK8sPodMemoryPagingFaults,
                                     unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricK8sPodMemoryPagingFaults,
                                              descrMetricK8sPodMemoryPagingFaults,
                                              unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricK8sPodMemoryPagingFaults,
                                               descrMetricK8sPodMemoryPagingFaults,
                                               unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -4440,43 +4841,43 @@ CreateAsyncDoubleMetricK8sPodMemoryRss(metrics::Meter *meter)
 /**
   Memory usage of the Pod.
   <p>
-  Total memory usage of the Pod
-  <p>
-  gauge
+  Total memory in use. This includes all memory regardless of when it was accessed.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.UsageBytes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> updowncounter
  */
 static constexpr const char *kMetricK8sPodMemoryUsage     = "k8s.pod.memory.usage";
 static constexpr const char *descrMetricK8sPodMemoryUsage = "Memory usage of the Pod.";
 static constexpr const char *unitMetricK8sPodMemoryUsage  = "By";
 
-#if OPENTELEMETRY_ABI_VERSION_NO >= 2
-
-static inline nostd::unique_ptr<metrics::Gauge<int64_t>> CreateSyncInt64MetricK8sPodMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64Gauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                 unitMetricK8sPodMemoryUsage);
+  return meter->CreateInt64UpDownCounter(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
+                                         unitMetricK8sPodMemoryUsage);
 }
 
-static inline nostd::unique_ptr<metrics::Gauge<double>> CreateSyncDoubleMetricK8sPodMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleGauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                  unitMetricK8sPodMemoryUsage);
+  return meter->CreateDoubleUpDownCounter(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
+                                          unitMetricK8sPodMemoryUsage);
 }
-#endif /* OPENTELEMETRY_ABI_VERSION_NO */
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64ObservableGauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                           unitMetricK8sPodMemoryUsage);
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage, unitMetricK8sPodMemoryUsage);
 }
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleObservableGauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                            unitMetricK8sPodMemoryUsage);
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage, unitMetricK8sPodMemoryUsage);
 }
 
 /**
@@ -4597,6 +4998,50 @@ CreateAsyncDoubleMetricK8sPodNetworkIo(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableCounter(kMetricK8sPodNetworkIo, descrMetricK8sPodNetworkIo,
                                               unitMetricK8sPodNetworkIo);
+}
+
+/**
+  Pod memory paging faults.
+  <p>
+  Cumulative number of major/minor page faults.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
+  and <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> counter
+ */
+static constexpr const char *kMetricK8sPodPagingFaults     = "k8s.pod.paging.faults";
+static constexpr const char *descrMetricK8sPodPagingFaults = "Pod memory paging faults.";
+static constexpr const char *unitMetricK8sPodPagingFaults  = "{fault}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricK8sPodPagingFaults(
+    metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults,
+                                    unitMetricK8sPodPagingFaults);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricK8sPodPagingFaults(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults,
+                                    unitMetricK8sPodPagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sPodPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults, unitMetricK8sPodPagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sPodPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults, unitMetricK8sPodPagingFaults);
 }
 
 /**
@@ -5005,7 +5450,7 @@ CreateAsyncDoubleMetricK8sPodVolumeUsage(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.replicaset.pod.available @endcode.", "reason": "renamed",
   "renamed_to": "k8s.replicaset.pod.available"} <p> This metric aligns with the @code
   availableReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#replicasetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#replicasetstatus-v1-apps">K8s
   ReplicaSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sReplicasetAvailablePods =
@@ -5018,33 +5463,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sReplicasetAva
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sReplicasetAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sReplicasetAvailablePods,
                                          descrMetricK8sReplicasetAvailablePods,
                                          unitMetricK8sReplicasetAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sReplicasetAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sReplicasetAvailablePods,
                                           descrMetricK8sReplicasetAvailablePods,
                                           unitMetricK8sReplicasetAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sReplicasetAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sReplicasetAvailablePods,
                                                    descrMetricK8sReplicasetAvailablePods,
                                                    unitMetricK8sReplicasetAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sReplicasetAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sReplicasetAvailablePods,
                                                     descrMetricK8sReplicasetAvailablePods,
                                                     unitMetricK8sReplicasetAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -5054,7 +5507,7 @@ CreateAsyncDoubleMetricK8sReplicasetAvailablePods(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.replicaset.pod.desired @endcode.", "reason": "renamed",
   "renamed_to": "k8s.replicaset.pod.desired"} <p> This metric aligns with the @code replicas
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#replicasetspec-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#replicasetspec-v1-apps">K8s
   ReplicaSetSpec</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sReplicasetDesiredPods =
@@ -5066,39 +5519,47 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sReplicasetDes
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sReplicasetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sReplicasetDesiredPods,
                                          descrMetricK8sReplicasetDesiredPods,
                                          unitMetricK8sReplicasetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sReplicasetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sReplicasetDesiredPods,
                                           descrMetricK8sReplicasetDesiredPods,
                                           unitMetricK8sReplicasetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sReplicasetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sReplicasetDesiredPods,
                                                    descrMetricK8sReplicasetDesiredPods,
                                                    unitMetricK8sReplicasetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sReplicasetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sReplicasetDesiredPods,
                                                     descrMetricK8sReplicasetDesiredPods,
                                                     unitMetricK8sReplicasetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
   Total number of available replica pods (ready for at least minReadySeconds) targeted by this
   replicaset. <p> This metric aligns with the @code availableReplicas @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#replicasetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#replicasetstatus-v1-apps">K8s
   ReplicaSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sReplicasetPodAvailable = "k8s.replicaset.pod.available";
@@ -5144,7 +5605,7 @@ CreateAsyncDoubleMetricK8sReplicasetPodAvailable(metrics::Meter *meter)
   <p>
   This metric aligns with the @code replicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#replicasetspec-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#replicasetspec-v1-apps">K8s
   ReplicaSetSpec</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sReplicasetPodDesired = "k8s.replicaset.pod.desired";
@@ -5202,34 +5663,42 @@ OPENTELEMETRY_DEPRECATED static constexpr const char
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sReplicationControllerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sReplicationControllerAvailablePods,
                                          descrMetricK8sReplicationControllerAvailablePods,
                                          unitMetricK8sReplicationControllerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sReplicationControllerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sReplicationControllerAvailablePods,
                                           descrMetricK8sReplicationControllerAvailablePods,
                                           unitMetricK8sReplicationControllerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sReplicationControllerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sReplicationControllerAvailablePods,
                                                    descrMetricK8sReplicationControllerAvailablePods,
                                                    unitMetricK8sReplicationControllerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sReplicationControllerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sReplicationControllerAvailablePods,
       descrMetricK8sReplicationControllerAvailablePods,
       unitMetricK8sReplicationControllerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -5250,33 +5719,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sReplicationControllerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sReplicationControllerDesiredPods,
                                          descrMetricK8sReplicationControllerDesiredPods,
                                          unitMetricK8sReplicationControllerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sReplicationControllerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sReplicationControllerDesiredPods,
                                           descrMetricK8sReplicationControllerDesiredPods,
                                           unitMetricK8sReplicationControllerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sReplicationControllerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sReplicationControllerDesiredPods,
                                                    descrMetricK8sReplicationControllerDesiredPods,
                                                    unitMetricK8sReplicationControllerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sReplicationControllerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sReplicationControllerDesiredPods,
                                                     descrMetricK8sReplicationControllerDesiredPods,
                                                     unitMetricK8sReplicationControllerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -5297,34 +5774,42 @@ OPENTELEMETRY_DEPRECATED static constexpr const char
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sReplicationcontrollerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sReplicationcontrollerAvailablePods,
                                          descrMetricK8sReplicationcontrollerAvailablePods,
                                          unitMetricK8sReplicationcontrollerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sReplicationcontrollerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sReplicationcontrollerAvailablePods,
                                           descrMetricK8sReplicationcontrollerAvailablePods,
                                           unitMetricK8sReplicationcontrollerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sReplicationcontrollerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sReplicationcontrollerAvailablePods,
                                                    descrMetricK8sReplicationcontrollerAvailablePods,
                                                    unitMetricK8sReplicationcontrollerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sReplicationcontrollerAvailablePods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sReplicationcontrollerAvailablePods,
       descrMetricK8sReplicationcontrollerAvailablePods,
       unitMetricK8sReplicationcontrollerAvailablePods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -5345,40 +5830,48 @@ OPENTELEMETRY_DEPRECATED static constexpr const char
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sReplicationcontrollerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sReplicationcontrollerDesiredPods,
                                          descrMetricK8sReplicationcontrollerDesiredPods,
                                          unitMetricK8sReplicationcontrollerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sReplicationcontrollerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sReplicationcontrollerDesiredPods,
                                           descrMetricK8sReplicationcontrollerDesiredPods,
                                           unitMetricK8sReplicationcontrollerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sReplicationcontrollerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sReplicationcontrollerDesiredPods,
                                                    descrMetricK8sReplicationcontrollerDesiredPods,
                                                    unitMetricK8sReplicationcontrollerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sReplicationcontrollerDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sReplicationcontrollerDesiredPods,
                                                     descrMetricK8sReplicationcontrollerDesiredPods,
                                                     unitMetricK8sReplicationcontrollerDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
   Total number of available replica pods (ready for at least minReadySeconds) targeted by this
   replication controller. <p> This metric aligns with the @code availableReplicas @endcode field of
   the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#replicationcontrollerstatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#replicationcontrollerstatus-v1-core">K8s
   ReplicationControllerStatus</a> <p> updowncounter
  */
 static constexpr const char *kMetricK8sReplicationcontrollerPodAvailable =
@@ -5425,7 +5918,7 @@ CreateAsyncDoubleMetricK8sReplicationcontrollerPodAvailable(metrics::Meter *mete
   <p>
   This metric aligns with the @code replicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#replicationcontrollerspec-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#replicationcontrollerspec-v1-core">K8s
   ReplicationControllerSpec</a> <p> updowncounter
  */
 static constexpr const char *kMetricK8sReplicationcontrollerPodDesired =
@@ -5472,7 +5965,7 @@ CreateAsyncDoubleMetricK8sReplicationcontrollerPodDesired(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaCpuLimitHard =
@@ -5520,7 +6013,7 @@ CreateAsyncDoubleMetricK8sResourcequotaCpuLimitHard(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaCpuLimitUsed =
@@ -5568,7 +6061,7 @@ CreateAsyncDoubleMetricK8sResourcequotaCpuLimitUsed(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaCpuRequestHard =
@@ -5616,7 +6109,7 @@ CreateAsyncDoubleMetricK8sResourcequotaCpuRequestHard(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaCpuRequestUsed =
@@ -5664,7 +6157,7 @@ CreateAsyncDoubleMetricK8sResourcequotaCpuRequestUsed(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaEphemeralStorageLimitHard =
@@ -5714,7 +6207,7 @@ CreateAsyncDoubleMetricK8sResourcequotaEphemeralStorageLimitHard(metrics::Meter 
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaEphemeralStorageLimitUsed =
@@ -5764,7 +6257,7 @@ CreateAsyncDoubleMetricK8sResourcequotaEphemeralStorageLimitUsed(metrics::Meter 
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaEphemeralStorageRequestHard =
@@ -5814,7 +6307,7 @@ CreateAsyncDoubleMetricK8sResourcequotaEphemeralStorageRequestHard(metrics::Mete
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaEphemeralStorageRequestUsed =
@@ -5864,7 +6357,7 @@ CreateAsyncDoubleMetricK8sResourcequotaEphemeralStorageRequestUsed(metrics::Mete
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaHugepageCountRequestHard =
@@ -5914,7 +6407,7 @@ CreateAsyncDoubleMetricK8sResourcequotaHugepageCountRequestHard(metrics::Meter *
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaHugepageCountRequestUsed =
@@ -5964,7 +6457,7 @@ CreateAsyncDoubleMetricK8sResourcequotaHugepageCountRequestUsed(metrics::Meter *
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaMemoryLimitHard =
@@ -6012,7 +6505,7 @@ CreateAsyncDoubleMetricK8sResourcequotaMemoryLimitHard(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaMemoryLimitUsed =
@@ -6060,7 +6553,7 @@ CreateAsyncDoubleMetricK8sResourcequotaMemoryLimitUsed(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaMemoryRequestHard =
@@ -6108,7 +6601,7 @@ CreateAsyncDoubleMetricK8sResourcequotaMemoryRequestHard(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaMemoryRequestUsed =
@@ -6156,7 +6649,7 @@ CreateAsyncDoubleMetricK8sResourcequotaMemoryRequestUsed(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaObjectCountHard =
@@ -6204,7 +6697,7 @@ CreateAsyncDoubleMetricK8sResourcequotaObjectCountHard(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sResourcequotaObjectCountUsed =
@@ -6252,7 +6745,7 @@ CreateAsyncDoubleMetricK8sResourcequotaObjectCountUsed(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> The @code k8s.storageclass.name @endcode should be required when a
   resource quota is defined for a specific storage class. <p> updowncounter
  */
@@ -6304,7 +6797,7 @@ CreateAsyncDoubleMetricK8sResourcequotaPersistentvolumeclaimCountHard(metrics::M
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> The @code k8s.storageclass.name @endcode should be required when a
   resource quota is defined for a specific storage class. <p> updowncounter
  */
@@ -6356,7 +6849,7 @@ CreateAsyncDoubleMetricK8sResourcequotaPersistentvolumeclaimCountUsed(metrics::M
   <p>
   This metric is retrieved from the @code hard @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> The @code k8s.storageclass.name @endcode should be required when a
   resource quota is defined for a specific storage class. <p> updowncounter
  */
@@ -6405,7 +6898,7 @@ CreateAsyncDoubleMetricK8sResourcequotaStorageRequestHard(metrics::Meter *meter)
   <p>
   This metric is retrieved from the @code used @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.32/#resourcequotastatus-v1-core">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#resourcequotastatus-v1-core">K8s
   ResourceQuotaStatus</a>. <p> The @code k8s.storageclass.name @endcode should be required when a
   resource quota is defined for a specific storage class. <p> updowncounter
  */
@@ -6577,7 +7070,7 @@ CreateAsyncDoubleMetricK8sServiceLoadBalancerIngressCount(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.statefulset.pod.current @endcode.", "reason": "renamed",
   "renamed_to": "k8s.statefulset.pod.current"} <p> This metric aligns with the @code currentReplicas
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetstatus-v1-apps">K8s
   StatefulSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sStatefulsetCurrentPods =
@@ -6589,33 +7082,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sStatefulsetCu
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sStatefulsetCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sStatefulsetCurrentPods,
                                          descrMetricK8sStatefulsetCurrentPods,
                                          unitMetricK8sStatefulsetCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sStatefulsetCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sStatefulsetCurrentPods,
                                           descrMetricK8sStatefulsetCurrentPods,
                                           unitMetricK8sStatefulsetCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sStatefulsetCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sStatefulsetCurrentPods,
                                                    descrMetricK8sStatefulsetCurrentPods,
                                                    unitMetricK8sStatefulsetCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sStatefulsetCurrentPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sStatefulsetCurrentPods,
                                                     descrMetricK8sStatefulsetCurrentPods,
                                                     unitMetricK8sStatefulsetCurrentPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -6625,7 +7126,7 @@ CreateAsyncDoubleMetricK8sStatefulsetCurrentPods(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.statefulset.pod.desired @endcode.", "reason": "renamed",
   "renamed_to": "k8s.statefulset.pod.desired"} <p> This metric aligns with the @code replicas
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetspec-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetspec-v1-apps">K8s
   StatefulSetSpec</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sStatefulsetDesiredPods =
@@ -6637,40 +7138,48 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sStatefulsetDe
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sStatefulsetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sStatefulsetDesiredPods,
                                          descrMetricK8sStatefulsetDesiredPods,
                                          unitMetricK8sStatefulsetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sStatefulsetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sStatefulsetDesiredPods,
                                           descrMetricK8sStatefulsetDesiredPods,
                                           unitMetricK8sStatefulsetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sStatefulsetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sStatefulsetDesiredPods,
                                                    descrMetricK8sStatefulsetDesiredPods,
                                                    unitMetricK8sStatefulsetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sStatefulsetDesiredPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sStatefulsetDesiredPods,
                                                     descrMetricK8sStatefulsetDesiredPods,
                                                     unitMetricK8sStatefulsetDesiredPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
   The number of replica pods created by the statefulset controller from the statefulset version
   indicated by currentRevision. <p> This metric aligns with the @code currentReplicas @endcode field
   of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetstatus-v1-apps">K8s
   StatefulSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sStatefulsetPodCurrent = "k8s.statefulset.pod.current";
@@ -6716,7 +7225,7 @@ CreateAsyncDoubleMetricK8sStatefulsetPodCurrent(metrics::Meter *meter)
   <p>
   This metric aligns with the @code replicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetspec-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetspec-v1-apps">K8s
   StatefulSetSpec</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sStatefulsetPodDesired = "k8s.statefulset.pod.desired";
@@ -6761,7 +7270,7 @@ CreateAsyncDoubleMetricK8sStatefulsetPodDesired(metrics::Meter *meter)
   <p>
   This metric aligns with the @code readyReplicas @endcode field of the
   <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetstatus-v1-apps">K8s
   StatefulSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sStatefulsetPodReady = "k8s.statefulset.pod.ready";
@@ -6805,7 +7314,7 @@ CreateAsyncDoubleMetricK8sStatefulsetPodReady(metrics::Meter *meter)
   Number of replica pods created by the statefulset controller from the statefulset version
   indicated by updateRevision. <p> This metric aligns with the @code updatedReplicas @endcode field
   of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetstatus-v1-apps">K8s
   StatefulSetStatus</a>. <p> updowncounter
  */
 static constexpr const char *kMetricK8sStatefulsetPodUpdated = "k8s.statefulset.pod.updated";
@@ -6853,7 +7362,7 @@ CreateAsyncDoubleMetricK8sStatefulsetPodUpdated(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.statefulset.pod.ready @endcode.", "reason": "renamed",
   "renamed_to": "k8s.statefulset.pod.ready"} <p> This metric aligns with the @code readyReplicas
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetstatus-v1-apps">K8s
   StatefulSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sStatefulsetReadyPods =
@@ -6865,33 +7374,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sStatefulsetRe
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sStatefulsetReadyPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sStatefulsetReadyPods,
                                          descrMetricK8sStatefulsetReadyPods,
                                          unitMetricK8sStatefulsetReadyPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sStatefulsetReadyPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sStatefulsetReadyPods,
                                           descrMetricK8sStatefulsetReadyPods,
                                           unitMetricK8sStatefulsetReadyPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sStatefulsetReadyPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sStatefulsetReadyPods,
                                                    descrMetricK8sStatefulsetReadyPods,
                                                    unitMetricK8sStatefulsetReadyPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sStatefulsetReadyPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sStatefulsetReadyPods,
                                                     descrMetricK8sStatefulsetReadyPods,
                                                     unitMetricK8sStatefulsetReadyPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -6901,7 +7418,7 @@ CreateAsyncDoubleMetricK8sStatefulsetReadyPods(metrics::Meter *meter)
   {"note": "Replaced by @code k8s.statefulset.pod.updated @endcode.", "reason": "renamed",
   "renamed_to": "k8s.statefulset.pod.updated"} <p> This metric aligns with the @code updatedReplicas
   @endcode field of the <a
-  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.30/#statefulsetstatus-v1-apps">K8s
+  href="https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.34/#statefulsetstatus-v1-apps">K8s
   StatefulSetStatus</a>. <p> updowncounter
  */
 OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sStatefulsetUpdatedPods =
@@ -6913,33 +7430,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sStatefulsetUp
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricK8sStatefulsetUpdatedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricK8sStatefulsetUpdatedPods,
                                          descrMetricK8sStatefulsetUpdatedPods,
                                          unitMetricK8sStatefulsetUpdatedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricK8sStatefulsetUpdatedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricK8sStatefulsetUpdatedPods,
                                           descrMetricK8sStatefulsetUpdatedPods,
                                           unitMetricK8sStatefulsetUpdatedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sStatefulsetUpdatedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricK8sStatefulsetUpdatedPods,
                                                    descrMetricK8sStatefulsetUpdatedPods,
                                                    unitMetricK8sStatefulsetUpdatedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sStatefulsetUpdatedPods(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricK8sStatefulsetUpdatedPods,
                                                     descrMetricK8sStatefulsetUpdatedPods,
                                                     unitMetricK8sStatefulsetUpdatedPods);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 }  // namespace k8s

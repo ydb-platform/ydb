@@ -15,7 +15,7 @@ MARKOV_MODEL_FILENAME = "markov_dict.tsv.gz"
 
 
 class YdbFulltextWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, rows=10000, targets=1000, threads=10):
+    def __init__(self, endpoint, database, duration, rows=10000, targets=1000, threads=10, index_type=None):
         super().__init__(None, '', 'fulltext_workload', None)
         self.endpoint = endpoint
         self.database = database
@@ -23,6 +23,7 @@ class YdbFulltextWorkload(WorkloadBase):
         self.rows = str(rows)
         self.targets = str(targets)
         self.threads = str(threads)
+        self.index_type = index_type
         self.tempdir = None
         self._unpack_resource('ydb_cli')
         self._download_model()
@@ -76,13 +77,14 @@ class YdbFulltextWorkload(WorkloadBase):
             self.get_command_prefix(subcmds=['init', '--clear'])
         )
         # import generator
-        self.cmd_run(
-            self.get_command_prefix(subcmds=[
-                'import', 'generator',
-                '--model', self.model_path,
-                '--rows', self.rows,
-            ])
-        )
+        import_subcmds = [
+            'import', 'generator',
+            '--model', self.model_path,
+            '--rows', self.rows,
+        ]
+        if self.index_type is not None:
+            import_subcmds += ['--index-type', self.index_type]
+        self.cmd_run(self.get_command_prefix(subcmds=import_subcmds))
         # run select
         self.cmd_run(
             self.get_command_prefix(subcmds=[

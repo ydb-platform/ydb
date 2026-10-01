@@ -10,8 +10,9 @@ import socket
 import sys
 import warnings
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterator
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Callable, Iterator, List, Optional, Type, cast
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, cast, overload
 from unittest import IsolatedAsyncioTestCase, mock
 
 from aiosignal import Signal
@@ -20,6 +21,7 @@ from yarl import URL
 
 import aiohttp
 from aiohttp.client import (
+    _BaseRequestContextManager,
     _RequestContextManager,
     _RequestOptions,
     _WSRequestContextManager,
@@ -36,6 +38,7 @@ from .typedefs import StrOrURL
 from .web import (
     Application,
     AppRunner,
+    BaseRequest,
     BaseRunner,
     Request,
     Server,
@@ -48,10 +51,18 @@ from .web_protocol import _RequestHandler
 if TYPE_CHECKING:
     from ssl import SSLContext
 else:
-    SSLContext = None
+    SSLContext = Any
 
 if sys.version_info >= (3, 11) and TYPE_CHECKING:
     from typing import Unpack
+
+if sys.version_info >= (3, 11):
+    from typing import Self
+else:
+    Self = Any
+
+_ApplicationNone = TypeVar("_ApplicationNone", Application, None)
+_Request = TypeVar("_Request", bound=BaseRequest)
 
 REUSE_ADDRESS = os.name == "posix" and sys.platform != "cygwin"
 
@@ -89,9 +100,9 @@ class BaseTestServer(ABC):
         self,
         *,
         scheme: str = "",
-        loop: Optional[asyncio.AbstractEventLoop] = None,
+        loop: asyncio.AbstractEventLoop | None = None,
         host: str = "127.0.0.1",
-        port: Optional[int] = None,
+        port: int | None = None,
         skip_url_asserts: bool = False,
         socket_factory: Callable[
             [str, int, socket.AddressFamily], socket.socket
@@ -99,8 +110,8 @@ class BaseTestServer(ABC):
         **kwargs: Any,
     ) -> None:
         self._loop = loop
-        self.runner: Optional[BaseRunner] = None
-        self._root: Optional[URL] = None
+        self.runner: BaseRunner | None = None
+        self._root: URL | None = None
         self.host = host
         self.port = port
         self._closed = False
@@ -109,7 +120,7 @@ class BaseTestServer(ABC):
         self.socket_factory = socket_factory
 
     async def start_server(
-        self, loop: Optional[asyncio.AbstractEventLoop] = None, **kwargs: Any
+        self, loop: asyncio.AbstractEventLoop | None = None, **kwargs: Any
     ) -> None:
         if self.runner:
             return
@@ -194,9 +205,9 @@ class BaseTestServer(ABC):
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         # __exit__ should exist in pair with __enter__ but never executed
         pass  # pragma: no cover
@@ -207,9 +218,9 @@ class BaseTestServer(ABC):
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
     ) -> None:
         await self.close()
 
@@ -221,7 +232,7 @@ class TestServer(BaseTestServer):
         *,
         scheme: str = "",
         host: str = "127.0.0.1",
-        port: Optional[int] = None,
+        port: int | None = None,
         **kwargs: Any,
     ):
         self.app = app
@@ -238,7 +249,7 @@ class RawTestServer(BaseTestServer):
         *,
         scheme: str = "",
         host: str = "127.0.0.1",
-        port: Optional[int] = None,
+        port: int | None = None,
         **kwargs: Any,
     ) -> None:
         self._handler = handler
@@ -249,7 +260,7 @@ class RawTestServer(BaseTestServer):
         return ServerRunner(srv, debug=debug, **kwargs)
 
 
-class TestClient:
+class TestClient(Generic[_Request, _ApplicationNone]):
     """
     A test client implementation.
 
@@ -259,26 +270,43 @@ class TestClient:
 
     __test__ = False
 
+    @overload
+    def __init__(
+        self: "TestClient[Request, Application]",
+        server: TestServer,
+        *,
+        cookie_jar: AbstractCookieJar | None = None,
+        **kwargs: Any,
+    ) -> None: ...
+    @overload
+    def __init__(
+        self: "TestClient[_Request, None]",
+        server: BaseTestServer,
+        *,
+        cookie_jar: AbstractCookieJar | None = None,
+        **kwargs: Any,
+    ) -> None: ...
     def __init__(
         self,
         server: BaseTestServer,
         *,
-        cookie_jar: Optional[AbstractCookieJar] = None,
-        loop: Optional[asyncio.AbstractEventLoop] = None,
+        cookie_jar: AbstractCookieJar | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
         **kwargs: Any,
     ) -> None:
         if not isinstance(server, BaseTestServer):
             raise TypeError(
-                "server must be TestServer " "instance, found type: %r" % type(server)
+                "server must be TestServer instance, found type: %r" % type(server)
             )
         self._server = server
         self._loop = loop
         if cookie_jar is None:
             cookie_jar = aiohttp.CookieJar(unsafe=True, loop=loop)
         self._session = ClientSession(loop=loop, cookie_jar=cookie_jar, **kwargs)
+        self._session._retry_connection = False
         self._closed = False
-        self._responses: List[ClientResponse] = []
-        self._websockets: List[ClientWebSocketResponse] = []
+        self._responses: list[ClientResponse] = []
+        self._websockets: list[ClientWebSocketResponse[bool]] = []
 
     async def start_server(self) -> None:
         await self._server.start_server(loop=self._loop)
@@ -288,7 +316,7 @@ class TestClient:
         return self._server.host
 
     @property
-    def port(self) -> Optional[int]:
+    def port(self) -> int | None:
         return self._server.port
 
     @property
@@ -296,8 +324,8 @@ class TestClient:
         return self._server
 
     @property
-    def app(self) -> Optional[Application]:
-        return cast(Optional[Application], getattr(self._server, "app", None))
+    def app(self) -> _ApplicationNone:
+        return getattr(self._server, "app", None)  # type: ignore[return-value]
 
     @property
     def session(self) -> ClientSession:
@@ -417,18 +445,54 @@ class TestClient:
                 self._request(hdrs.METH_DELETE, path, **kwargs)
             )
 
-    def ws_connect(self, path: StrOrURL, **kwargs: Any) -> _WSRequestContextManager:
+    @overload
+    def ws_connect(
+        self, path: StrOrURL, *, decode_text: Literal[True] = ..., **kwargs: Any
+    ) -> "_BaseRequestContextManager[ClientWebSocketResponse[Literal[True]]]": ...
+
+    @overload
+    def ws_connect(
+        self, path: StrOrURL, *, decode_text: Literal[False], **kwargs: Any
+    ) -> "_BaseRequestContextManager[ClientWebSocketResponse[Literal[False]]]": ...
+
+    @overload
+    def ws_connect(
+        self, path: StrOrURL, *, decode_text: bool = ..., **kwargs: Any
+    ) -> "_BaseRequestContextManager[ClientWebSocketResponse[bool]]": ...
+
+    def ws_connect(
+        self, path: StrOrURL, *, decode_text: bool = True, **kwargs: Any
+    ) -> "_BaseRequestContextManager[ClientWebSocketResponse[bool]]":
         """Initiate websocket connection.
 
         The api corresponds to aiohttp.ClientSession.ws_connect.
 
         """
-        return _WSRequestContextManager(self._ws_connect(path, **kwargs))
+        return _WSRequestContextManager(
+            self._ws_connect(path, decode_text=decode_text, **kwargs)
+        )
+
+    @overload
+    async def _ws_connect(
+        self, path: StrOrURL, *, decode_text: Literal[True] = ..., **kwargs: Any
+    ) -> "ClientWebSocketResponse[Literal[True]]": ...
+
+    @overload
+    async def _ws_connect(
+        self, path: StrOrURL, *, decode_text: Literal[False], **kwargs: Any
+    ) -> "ClientWebSocketResponse[Literal[False]]": ...
+
+    @overload
+    async def _ws_connect(
+        self, path: StrOrURL, *, decode_text: bool = ..., **kwargs: Any
+    ) -> "ClientWebSocketResponse[bool]": ...
 
     async def _ws_connect(
-        self, path: StrOrURL, **kwargs: Any
-    ) -> ClientWebSocketResponse:
-        ws = await self._session.ws_connect(self.make_url(path), **kwargs)
+        self, path: StrOrURL, *, decode_text: bool = True, **kwargs: Any
+    ) -> "ClientWebSocketResponse[bool]":
+        ws = await self._session.ws_connect(
+            self.make_url(path), decode_text=decode_text, **kwargs
+        )
         self._websockets.append(ws)
         return ws
 
@@ -458,22 +522,22 @@ class TestClient:
 
     def __exit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc: Optional[BaseException],
-        tb: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
     ) -> None:
         # __exit__ should exist in pair with __enter__ but never executed
         pass  # pragma: no cover
 
-    async def __aenter__(self) -> "TestClient":
+    async def __aenter__(self) -> Self:
         await self.start_server()
         return self
 
     async def __aexit__(
         self,
-        exc_type: Optional[Type[BaseException]],
-        exc: Optional[BaseException],
-        tb: Optional[TracebackType],
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
     ) -> None:
         await self.close()
 
@@ -530,7 +594,7 @@ class AioHTTPTestCase(IsolatedAsyncioTestCase):
         """Return a TestServer instance."""
         return TestServer(app, loop=self.loop)
 
-    async def get_client(self, server: TestServer) -> TestClient:
+    async def get_client(self, server: TestServer) -> TestClient[Request, Application]:
         """Return a TestClient instance."""
         return TestClient(server, loop=self.loop)
 
@@ -610,14 +674,13 @@ def _create_app_mock() -> mock.MagicMock:
     return app
 
 
-def _create_transport(sslcontext: Optional[SSLContext] = None) -> mock.Mock:
+def _create_transport(sslcontext: SSLContext | None = None) -> mock.Mock:
     transport = mock.Mock()
 
-    def get_extra_info(key: str) -> Optional[SSLContext]:
+    def get_extra_info(key: str) -> SSLContext | tuple[str, int] | None:
         if key == "sslcontext":
             return sslcontext
-        else:
-            return None
+        return ("127.0.0.1", 80) if key == "sockname" else None
 
     transport.get_extra_info.side_effect = get_extra_info
     return transport
@@ -636,7 +699,7 @@ def make_mocked_request(
     protocol: Any = sentinel,
     transport: Any = sentinel,
     payload: StreamReader = EMPTY_PAYLOAD,
-    sslcontext: Optional[SSLContext] = None,
+    sslcontext: SSLContext | None = None,
     client_max_size: int = 1024**2,
     loop: Any = ...,
 ) -> Request:
@@ -670,16 +733,19 @@ def make_mocked_request(
         raw_hdrs = ()
 
     chunked = "chunked" in headers.get(hdrs.TRANSFER_ENCODING, "").lower()
+    upgrade = headers.get(hdrs.CONNECTION, "").lower() == "upgrade" and bool(
+        headers.get(hdrs.UPGRADE)
+    )
 
     message = RawRequestMessage(
-        method,
+        method.upper(),
         path,
         version,
         headers,
         raw_hdrs,
         closing,
         None,
-        False,
+        upgrade,
         chunked,
         URL(path),
     )
@@ -691,7 +757,17 @@ def make_mocked_request(
 
     if protocol is sentinel:
         protocol = mock.Mock()
+        protocol.max_field_size = 8190
+        protocol.max_line_length = 8190
+        protocol.max_headers = 128
         protocol.transport = transport
+        type(protocol).peername = mock.PropertyMock(
+            return_value=transport.get_extra_info("peername")
+        )
+        type(protocol).sockname = mock.PropertyMock(
+            return_value=transport.get_extra_info("sockname")
+        )
+        type(protocol).ssl_context = mock.PropertyMock(return_value=sslcontext)
 
     if writer is sentinel:
         writer = mock.Mock()

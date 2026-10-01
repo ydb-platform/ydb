@@ -25,6 +25,10 @@ namespace NKikimr::NBlobDepot {
             ui64 ConnectionInstanceOnStart;
             ui32 S3SlowDownRetries = 0;
 
+            NWilson::TSpan PrepareWriteS3Span;
+            NWilson::TSpan WriteS3Span;
+            NWilson::TSpan CommitBlobSeqSpan;
+
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -34,11 +38,14 @@ namespace NKikimr::NBlobDepot {
                 if (!IsInFlight && !LocatorInFlight) {
                     return;
                 }
+                // Latch this before RemoveBlobSeqFromInFlight(), which clears IsInFlight. An id the tablet has
+                // already reclaimed must not be handed back -- it no longer holds a point for it.
+                const bool returnBlobSeqId = IsInFlight && !Agent.IsBlobSeqIdExpired(BlobSeqId);
                 if (IsInFlight) {
                     RemoveBlobSeqFromInFlight();
                 }
                 NKikimrBlobDepot::TEvDiscardSpoiledBlobSeq msg;
-                if (IsInFlight) {
+                if (returnBlobSeqId) {
                     BlobSeqId.ToProto(msg.AddItems());
                 }
                 if (LocatorInFlight) {
@@ -187,6 +194,7 @@ namespace NKikimr::NBlobDepot {
                         .HandleClass = Request.HandleClass,
                         .Tactic = Request.Tactic,
                         .WriteSource = Request.WriteSource,
+                        .DataKind = Request.DataKind,
                     });
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
@@ -199,7 +207,7 @@ namespace NKikimr::NBlobDepot {
                         {"blobSeqId", BlobSeqId},
                         {"groupId", groupId},
                         {"blobId", id});
-                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr);
+                    Agent.SendToProxy(groupId, std::move(ev), this, nullptr, Span.GetTraceId());
                     Agent.BytesWritten += id.BlobSize();
                     ++PutsInFlight;
                 };
@@ -241,7 +249,10 @@ namespace NKikimr::NBlobDepot {
                     {"uncertainWrite", uncertainWrite},
                     {"msg", CommitBlobSeq});
 
-                Agent.Issue(CommitBlobSeq, this, nullptr);
+                CommitBlobSeqSpan = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.CommitBlobSeq", NWilson::EFlags::AUTO_END);
+
+                Agent.Issue(CommitBlobSeq, this, nullptr, CommitBlobSeqSpan.GetTraceId());
 
                 Y_ABORT_UNLESS(!WaitingForCommitBlobSeq);
                 WaitingForCommitBlobSeq = true;
@@ -264,7 +275,8 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& kind = it->second;
                 const size_t numErased = kind.WritesInFlight.erase(BlobSeqId);
-                Y_ABORT_UNLESS(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration);
+                Y_ABORT_UNLESS(numErased || BlobSeqId.Generation < Agent.BlobDepotGeneration ||
+                    Agent.IsBlobSeqIdExpired(BlobSeqId));
             }
 
             void OnUpdateBlock() override {
@@ -325,12 +337,20 @@ namespace NKikimr::NBlobDepot {
                     EndWithError(msg.Status, std::move(msg.ErrorReason));
                 } else if (PutsInFlight) {
                     // wait for all puts to complete
+                } else if (!Agent.IsConnected) {
+                    // Registration may invalidate this id. Do not queue a commit on the reconnecting pipe before
+                    // RegisterAgentResult has supplied the current generation and expired steps.
+                    EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected during write");
                 } else if (BlobSeqId.Generation != Agent.BlobDepotGeneration) {
                     // FIXME: although this is error now, we can handle this in the future, when BlobDepot picks records
                     // on restarts; it may have scanned written record and already updated it in its local database;
                     // however, if it did not, we can't try to commit this records as it may be already scheduled for
                     // garbage collection by the tablet
                     EndWithError(NKikimrProto::ERROR, "BlobDepot tablet was restarting during write");
+                } else if (Agent.IsBlobSeqIdExpired(BlobSeqId)) {
+                    // we were disconnected long enough for the tablet to reclaim this id and it may already have
+                    // collected the blob we have just written, so this put cannot be committed
+                    EndWithError(NKikimrProto::ERROR, "BlobSeqId was reclaimed by BlobDepot while agent was disconnected");
                 } else if (!IssueUncertainWrites) { // proceed to second phase
                     IssueCommitBlobSeq(false);
                     RemoveBlobSeqFromInFlight();
@@ -352,8 +372,16 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 auto& item = msg.GetItems(0);
                 if (const auto status = item.GetStatus(); status != NKikimrProto::OK && status != NKikimrProto::RACE) {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndError(item.GetErrorReason());
+                    }
+
                     EndWithError(item.GetStatus(), item.GetErrorReason());
                 } else {
+                    if (CommitBlobSeqSpan) {
+                        CommitBlobSeqSpan.EndOk();
+                    }
+
                     // it's okay to treat RACE as OK here since values are immutable in Virtual Group mode
                     CheckIfFinished();
                 }
@@ -420,7 +448,14 @@ namespace NKikimr::NBlobDepot {
                     p->SetGeneration(generation);
                 }
                 item->SetLen(Request.Id.BlobSize());
-                Agent.Issue(query, this, nullptr);
+
+                PrepareWriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.PrepareWriteS3", NWilson::EFlags::AUTO_END);
+                if (PrepareWriteS3Span && S3SlowDownRetries) {
+                    PrepareWriteS3Span.Attribute("slow_down_retry", S3SlowDownRetries);
+                }
+
+                Agent.Issue(query, this, nullptr, PrepareWriteS3Span.GetTraceId());
             }
 
             void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
@@ -428,7 +463,14 @@ namespace NKikimr::NBlobDepot {
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 const auto& item = msg.GetItems(0);
                 if (item.GetStatus() != NKikimrProto::OK) {
+                    if (PrepareWriteS3Span) {
+                        PrepareWriteS3Span.EndError(item.GetErrorReason());
+                    }
+
                     return EndWithError(item.GetStatus(), item.GetErrorReason());
+                }
+                if (PrepareWriteS3Span) {
+                    PrepareWriteS3Span.EndOk();
                 }
 
                 auto *commitItem = CommitBlobSeq.MutableItems(0);
@@ -445,6 +487,12 @@ namespace NKikimr::NBlobDepot {
                     {"agentId", Agent.LogId},
                     {"queryId", GetQueryId()},
                     {"key", key});
+
+                WriteS3Span = NWilson::TSpan(TWilsonBlobDepot::AgentInternals, Span.GetTraceId(),
+                    "BlobDepotAgent.WriteS3", NWilson::EFlags::AUTO_END);
+                if (WriteS3Span) {
+                    WriteS3Span.Attribute("size", static_cast<i64>(Request.Buffer.size()));
+                }
 
                 // Pass a copy so Request.Buffer remains intact for potential SlowDown-driven retries.
                 WriterActorId = IssueWriteS3(std::move(key), TRope(Request.Buffer), Request.Id, temp);
@@ -465,6 +513,18 @@ namespace NKikimr::NBlobDepot {
                     {"slowDown", slowDown});
 
                 WriterActorId = {};
+
+                if (WriteS3Span) {
+                    if (error) {
+                        if (slowDown) {
+                            WriteS3Span.Attribute("slow_down", true);
+                        }
+
+                        WriteS3Span.EndError(*error);
+                    } else {
+                        WriteS3Span.EndOk();
+                    }
+                }
 
                 if (ConnectionInstanceOnStart != Agent.ConnectionInstance) {
                     error = "BlobDepot tablet disconnected";

@@ -10,7 +10,7 @@ td = np.timedelta64(0, "D")
 AR_b: npt.NDArray[np.bool]
 AR_u: npt.NDArray[np.uint32]
 AR_i: npt.NDArray[np.int64]
-AR_f: npt.NDArray[np.float64]
+AR_f: npt.NDArray[np.longdouble]
 AR_c: npt.NDArray[np.complex128]
 AR_m: npt.NDArray[np.timedelta64]
 AR_M: npt.NDArray[np.datetime64]
@@ -71,6 +71,11 @@ AR_u // AR_LIKE_m  # E: Unsupported operand types
 AR_i // AR_LIKE_m  # E: Unsupported operand types
 AR_f // AR_LIKE_m  # E: Unsupported operand types
 AR_c // AR_LIKE_m  # E: Unsupported operand types
+
+# regression tests for https://github.com/numpy/numpy/issues/28957
+AR_c // 2  # type: ignore[operator]
+AR_c // AR_i  # type: ignore[operator]
+AR_c // AR_c  # type: ignore[operator]
 
 # Array multiplication
 

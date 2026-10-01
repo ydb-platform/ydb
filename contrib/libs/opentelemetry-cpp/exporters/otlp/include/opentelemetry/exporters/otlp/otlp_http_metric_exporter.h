@@ -9,6 +9,7 @@
 #include "opentelemetry/exporters/otlp/otlp_http_client.h"
 #include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h"
 #include "opentelemetry/exporters/otlp/otlp_http_metric_exporter_runtime_options.h"
+#include "opentelemetry/ext/http/client/http_client_factory.h"
 #include "opentelemetry/sdk/common/exporter_utils.h"
 #include "opentelemetry/sdk/metrics/export/metric_producer.h"
 #include "opentelemetry/sdk/metrics/instruments.h"
@@ -44,6 +45,43 @@ public:
    */
   OtlpHttpMetricExporter(const OtlpHttpMetricExporterOptions &options,
                          const OtlpHttpMetricExporterRuntimeOptions &runtime_options);
+
+  /**
+   * Create an OtlpHttpMetricExporter with user specified options and HTTP client factory.
+   * @param options An object containing the user's configuration options.
+   * @param factory the HTTP client factory used to create the underlying HTTP client
+   */
+  OtlpHttpMetricExporter(const OtlpHttpMetricExporterOptions &options,
+                         const std::shared_ptr<ext::http::client::HttpClientFactory> &factory);
+
+  /**
+   * Create an OtlpHttpMetricExporter with user specified options, runtime options, and HTTP client
+   * factory.
+   * @param options An object containing the user's configuration options.
+   * @param runtime_options An object containing the user's runtime options.
+   * @param factory the HTTP client factory used to create the underlying HTTP client
+   */
+  OtlpHttpMetricExporter(const OtlpHttpMetricExporterOptions &options,
+                         const OtlpHttpMetricExporterRuntimeOptions &runtime_options,
+                         const std::shared_ptr<ext::http::client::HttpClientFactory> &factory);
+
+  /**
+   * Create an OtlpHttpMetricExporter with user specified options and HTTP client.
+   * @param options An object containing the user's configuration options.
+   * @param http_client the HTTP client to be used for exporting
+   */
+  OtlpHttpMetricExporter(const OtlpHttpMetricExporterOptions &options,
+                         std::shared_ptr<ext::http::client::HttpClient> http_client);
+
+  /**
+   * Create an OtlpHttpMetricExporter with user specified options, runtime options, and HTTP client.
+   * @param options An object containing the user's configuration options.
+   * @param runtime_options An object containing the user's runtime options.
+   * @param http_client the HTTP client to be used for exporting
+   */
+  OtlpHttpMetricExporter(const OtlpHttpMetricExporterOptions &options,
+                         const OtlpHttpMetricExporterRuntimeOptions &runtime_options,
+                         std::shared_ptr<ext::http::client::HttpClient> http_client);
 
   /**
    * Get the AggregationTemporality for exporter

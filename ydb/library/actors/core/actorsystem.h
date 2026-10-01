@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include "config.h"
+#include "async_frame_cache.h"
 #include "event.h"
 #include "executor_pool.h"
 #include "log_settings.h"
@@ -107,6 +108,9 @@ namespace NActors {
     struct TActorSystemSetup {
         ui32 NodeId = 0;
 
+        // Idle coroutine allocation bytes per worker; zero disables retention.
+        size_t AsyncFrameCacheSizeBytes = TAsyncFrameCache::DefaultSizeBytes;
+
         // Either Executors or CpuManager must be initialized
         ui32 ExecutorsCount = 0;
         TArrayHolder<TAutoPtr<IExecutorPool>> Executors;
@@ -166,7 +170,12 @@ namespace NActors {
     public:
         const ui32 NodeId;
 
+        size_t GetAsyncFrameCacheSizeBytes() const noexcept {
+            return AsyncFrameCacheSizeBytes;
+        }
+
     private:
+        const size_t AsyncFrameCacheSizeBytes;
         THolder<TCpuManager> CpuManager;
         const ui32 ExecutorPoolCount;
 
@@ -334,11 +343,17 @@ namespace NActors {
 
         float GetPoolMaxThreadsCount(ui32 poolId) const;
 
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void DeferPreStop(std::function<void()> fn) {
             DeferredPreStop.push_back(std::move(fn));
         }
 
         TVector<IExecutorPool*> GetBasicExecutorPools() const;
+
+        // Idle coroutine frames retained by this actor system's worker threads.
+        // Safe from any thread; approximate while workers allocate or release.
+        TAsyncFrameCache::TProcessStats GetAsyncFrameCacheStats() const;
 
         template<class T>
         void RegisterSubSystem(std::unique_ptr<T>&& subsystem) {

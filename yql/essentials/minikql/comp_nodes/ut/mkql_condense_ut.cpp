@@ -5,8 +5,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest) {
 Y_UNIT_TEST_LLVM(TestSqueeze) {
@@ -231,5 +230,4 @@ Y_UNIT_TEST_LLVM(TestCondense1ListeralListInMap) {
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLCondenseNodeTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

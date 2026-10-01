@@ -290,6 +290,10 @@ namespace WAVM { namespace Runtime {
 		{
 			Runtime::Function* function;
 			Uptr instructionIndex;
+			//! Source path from wasm DWARF when available (empty / "unknown" / synthetic otherwise).
+			std::string fileName;
+			//! C++ (or other) source line from wasm DWARF; 0 if unavailable.
+			Uptr sourceLine;
 		} wasm;
 
 		InstructionSource() : type(Type::unknown) {}
@@ -447,6 +451,13 @@ namespace WAVM { namespace Runtime {
 	// returned by getObjectCode for the previously compiled module.
 	WAVM_API ModuleRef loadPrecompiledModule(const IR::Module& irModule,
 											 const std::vector<U8>& objectCode);
+
+	// Like loadPrecompiledModule, but attaches WebAssembly DWARF from the original .wasm bytes
+	// when a `.debug_info` custom section is present (for trap stack file:line).
+	WAVM_API ModuleRef loadPrecompiledModule(const IR::Module& irModule,
+											 const std::vector<U8>& objectCode,
+											 const U8* wasmBytes,
+											 Uptr numWasmBytes);
 
 	// Accesses the IR for a compiled module.
 	WAVM_API const IR::Module& getModuleIR(ModuleConstRefParam module);

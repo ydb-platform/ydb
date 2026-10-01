@@ -55,6 +55,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"RotateJoinTree", &TContext::RotateJoinTree},
     {"DqEngineEnable", &TContext::DqEngineEnable},
     {"DqEngineForce", &TContext::DqEngineForce},
+    {"EvaluateExprCache", &TContext::EvaluateExprCache},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
     {"OrderedColumns", &TContext::OrderedColumns},
     {"DeriveColumnOrder", &TContext::DeriveColumnOrder},
@@ -79,10 +80,12 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverKeys", &TContext::DistinctOverKeys},
     {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
     {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
+    {"RespectWarnPolicyForUnusedSqlHints", &TContext::RespectWarnPolicyForUnusedSqlHints},
     {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike},
     {"DebugPositions", &TContext::DebugPositions},
     {"ExceptIntersectBefore202503", &TContext::ExceptIntersectBefore202503},
     {"WindowNewPipeline", &TContext::WindowNewPipeline},
+    {"RuntimeUserAttrs", &TContext::RuntimeUserAttrs},
 };
 
 using TPragmaMaybeField = TMaybe<bool> TContext::*;
@@ -94,6 +97,32 @@ THashMap<TStringBuf, TPragmaMaybeField> CTX_PRAGMA_MAYBE_FIELDS = {
     {"CompactGroupBy", &TContext::CompactGroupBy},
     {"DirectRowDependsOn", &TContext::DirectRowDependsOn},
 };
+
+// Simple translation flags consumed outside of CTX_PRAGMA_FIELDS /
+// CTX_PRAGMA_MAYBE_FIELDS (e.g. in node.cpp / sql.cpp / sql_query.cpp) but
+// still valid as `TTranslationSettings::Flags` entries. Used to recognize
+// known flags when strict config validation is enabled.
+const THashSet<TStringBuf> KNOWN_SIMPLE_FLAGS = {
+    "AutoYqlSelect",
+    "ForceYqlSelect",
+    "AnsiOrderByLimitInUnionAll",
+};
+
+bool IsKnownSimpleFlag(TStringBuf flag) {
+    if (CTX_PRAGMA_FIELDS.contains(flag) || CTX_PRAGMA_MAYBE_FIELDS.contains(flag)) {
+        return true;
+    }
+    if (KNOWN_SIMPLE_FLAGS.contains(flag)) {
+        return true;
+    }
+    TStringBuf stripped = flag;
+    if (stripped.SkipPrefix("Disable")) {
+        if (CTX_PRAGMA_FIELDS.contains(stripped) || CTX_PRAGMA_MAYBE_FIELDS.contains(stripped)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 } // namespace
 
@@ -119,15 +148,15 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
-    if (settings.LangVer >= NYql::NFeature::GroupByExprAfterWhere.MinLangVer) {
+    if (IsAvailable(NYql::NFeature::GroupByExprAfterWhere)) {
         GroupByExprAfterWhere = true;
     }
 
-    if (settings.LangVer >= NYql::NFeature::PersistableFlattenAndAggrExprs.MinLangVer) {
+    if (IsAvailable(NYql::NFeature::PersistableFlattenAndAggrExprs)) {
         FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Auto;
     }
 
-    if (settings.LangVer > NYql::NFeature::LegacyNotNull.MaxLangVer) {
+    if (!IsAvailable(NYql::NFeature::LegacyNotNull)) {
         DisableLegacyNotNull = true;
     }
 
@@ -162,6 +191,8 @@ TContext::TContext(TLexers lexers, TParsers parsers,
             this->*(*ptr) = value;
         } else if (ptrMaybe) {
             this->*(*ptrMaybe) = value;
+        } else if (settings.StrictConfigValidation && !IsKnownSimpleFlag(flag)) {
+            Error() << "Unknown SQL flag: " << flag;
         }
     }
     DiscoveryMode = (NSQLTranslation::ESqlMode::DISCOVERY == Settings.Mode);

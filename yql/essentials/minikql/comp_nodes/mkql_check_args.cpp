@@ -1,8 +1,7 @@
 #include "mkql_check_args.h"
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(
     TType* left, TType* right,
@@ -32,5 +31,4 @@ TBinaryFunctionArgsDesc CheckBinaryFunctionArgs(
     return desc;
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

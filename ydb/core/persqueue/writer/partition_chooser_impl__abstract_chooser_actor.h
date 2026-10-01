@@ -4,22 +4,12 @@
 #include "partition_chooser_impl__partition_helper.h"
 #include "partition_chooser_impl__table_helper.h"
 
+#include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NPQ::NPartitionChooser {
-
-#if defined(LOG_PREFIX)
-#error "Already defined LOG_PREFIX"
-#endif
-
-
-#define LOG_PREFIX TStringBuilder() << "TPartitionChooser " << SelfId()                  \
-                    << " (SourceId=" << SourceId                     \
-                    << ", PreferedPartition=" << PreferedPartition   \
-                    << ") "
 
 using TPartitionInfo = typename IPartitionChooser::TPartitionInfo;
 
@@ -28,8 +18,10 @@ using namespace NSourceIdEncoding;
 using namespace Ydb::PersQueue::ErrorCode;
 
 template<typename TDerived, typename TPipeCreator>
-class TAbstractPartitionChooserActor: public TActorBootstrapped<TDerived> {
+class TAbstractPartitionChooserActor: public TBaseActor<TDerived>
+                                    , public TConstantLogPrefix {
 public:
+    using TBase = TBaseActor<TDerived>;
     using TThis = TAbstractPartitionChooserActor<TDerived, TPipeCreator>;
     using TThisActor = TActor<TThis>;
 
@@ -39,19 +31,33 @@ public:
                                    NPersQueue::TTopicConverterPtr& fullConverter,
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition,
-                                   NWilson::TTraceId traceId)
-        : Parent(parentId)
+                                   NWilson::TTraceId traceId,
+                                   const NKikimrPQ::TPQTabletConfig::TTopicId* topicId = nullptr)
+        : TBase(NKikimrServices::PQ_PARTITION_CHOOSER)
+        , Parent(parentId)
         , SourceId(sourceId)
         , PreferedPartition(preferedPartition)
         , Chooser(chooser)
         , Span(TWilsonTopic::TopicDetailed, std::move(traceId), "Topic.ChoosePartition")
-        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash())
+        , TableHelper(fullConverter, topicId)
         , PartitionHelper(Span.GetTraceId())
     {
     }
 
     TActorIdentity SelfId() const {
         return TActor<TDerived>::SelfId();
+    }
+
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"sourceId", SourceId},
+            {"preferredPartition", PreferedPartition});
+    }
+
+    void OnException(const std::exception& exc) override {
+        // Do not Die here: TBaseActor::OnUnhandledException will PassAway.
+        ReplyError(ErrorCode::ERROR, TStringBuilder() << "Unhandled exception: " << exc.what(),
+            this->ActorContext(), /*die=*/false);
     }
 
     [[nodiscard]] bool Initialize(const NActors::TActorContext& ctx) {
@@ -63,11 +69,11 @@ public:
         return false;
     }
 
-    void PassAway() {
+    void PassAway() override {
         auto ctx = TActivationContext::ActorContextFor(SelfId());
         TableHelper.CloseKqpSession(ctx);
         PartitionHelper.Close(ctx);
-        TActorBootstrapped<TDerived>::PassAway();
+        TBase::PassAway();
     }
 
     bool NeedTable(const NActors::TActorContext& ctx) {
@@ -79,11 +85,12 @@ protected:
     void InitTable(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateInitTable);
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "InitTable",
-            {"logPrefix", LOG_PREFIX},
+        LOG_T(
+            "InitTable",
             {"sourceId", SourceId},
             {"topicsAreFirstClassCitizen", pqConfig.GetTopicsAreFirstClassCitizen()},
-            {"useSrcIdMetaMappingInFirstClass", pqConfig.GetUseSrcIdMetaMappingInFirstClass()});
+            {"useSrcIdMetaMappingInFirstClass", pqConfig.GetUseSrcIdMetaMappingInFirstClass()}
+        );
         if (SourceId && pqConfig.GetTopicsAreFirstClassCitizen() && pqConfig.GetUseSrcIdMetaMappingInFirstClass()) {
             TableHelper.SendInitTableRequest(ctx);
         } else {
@@ -106,8 +113,9 @@ protected:
 protected:
     void StartKqpSession(const NActors::TActorContext& ctx) {
         if (NeedTable(ctx)) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "StartKqpSession",
-                {"logPrefix", LOG_PREFIX});
+            LOG_D(
+                "StartKqpSession"
+            );
             TThis::Become(&TThis::StateCreateKqpSession);
             TableHelper.SendCreateSessionRequest(ctx);
         } else {
@@ -138,8 +146,9 @@ protected:
 protected:
     void SendSelectRequest(const NActors::TActorContext& ctx) {
         TThis::Become(&TThis::StateSelect);
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Select from the table",
-            {"logPrefix", LOG_PREFIX});
+        LOG_D(
+            "Select from the table"
+        );
         TableHelper.SendSelectRequest(ctx);
     }
 
@@ -148,10 +157,21 @@ protected:
             return ReplyError(ErrorCode::INITIALIZING, TStringBuilder() << "kqp error Marker# PQ50 : " <<  ev->Get()->Record.DebugString(), ctx);
         }
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Selected from table",
-            {"logPrefix", LOG_PREFIX},
+        if (TableHelper.NeedLegacyKeySelect()) {
+            // No row for the id key: within the transition window look up the legacy
+            // name-based key, continuing the same transaction. Stay in StateSelect.
+            LOG_D(
+                "Select from the table by legacy topic name"
+            );
+            TableHelper.SendLegacyKeySelectRequest(ctx);
+            return;
+        }
+
+        LOG_T(
+            "Selected from table",
             {"partitionId", TableHelper.PartitionId()},
-            {"seqNo", TableHelper.SeqNo()});
+            {"seqNo", TableHelper.SeqNo()}
+        );
         if (TableHelper.PartitionId()) {
             Partition = Chooser->GetPartition(TableHelper.PartitionId().value());
         }
@@ -174,8 +194,9 @@ protected:
     void SendUpdateRequests(const TActorContext& ctx) {
         if (NeedTable(ctx)) {
             TThis::Become(&TThis::StateUpdate);
-            YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Update the table",
-                {"logPrefix", LOG_PREFIX});
+            LOG_D(
+                "Update the table"
+            );
             TableHelper.SendUpdateRequest(Partition->PartitionId, SeqNo, ctx);
         } else {
             ReplyResult(ctx);
@@ -184,10 +205,11 @@ protected:
 
     void HandleUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "HandleUpdate",
-            {"logPrefix", LOG_PREFIX},
+        LOG_D(
+            "HandleUpdate",
             {"partitionPersisted", PartitionPersisted},
-            {"status", record.GetYdbStatus()});
+            {"status", record.GetYdbStatus()}
+        );
 
         if (record.GetYdbStatus() == Ydb::StatusIds::ABORTED) {
             if (!PartitionPersisted) {
@@ -272,8 +294,9 @@ protected:
 protected:
     void StartIdle() {
         TThis::Become(&TThis::StateIdle);
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Start idle",
-            {"logPrefix", LOG_PREFIX});
+        LOG_D(
+            "Start idle"
+        );
     }
 
     void HandleIdle(TEvPartitionChooser::TEvRefreshRequest::TPtr&, const TActorContext& ctx) {
@@ -310,23 +333,28 @@ protected:
             return;
         }
         ResultWasSent = true;
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "ReplyResult",
-            {"logPrefix", LOG_PREFIX},
+        LOG_D(
+            "ReplyResult",
             {"partition", Partition->PartitionId},
-            {"seqNo", SeqNo});
+                    {"seqNo",
+            SeqNo}
+        );
         Span.EndOk();
         Span = {};
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseResult(Partition->PartitionId, Partition->TabletId, SeqNo));
     }
 
-    void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
-        YDB_LOG_INFO_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Reply error",
-            {"logPrefix", LOG_PREFIX},
-            {"replyError", errorMessage});
+    void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx, bool die = true) {
+        LOG_I(
+            "Reply error",
+            {"replyError", errorMessage}
+        );
         Span.EndError(errorMessage);
         ctx.Send(Parent, new TEvPartitionChooser::TEvChooseError(code, std::move(errorMessage)));
 
-        TThis::Die(ctx);
+        if (die) {
+            TThis::Die(ctx);
+        }
     }
 
 
@@ -347,7 +375,5 @@ protected:
 
     std::optional<ui64> SeqNo = 0;
 };
-
-#undef LOG_PREFIX
 
 } // namespace NKikimr::NPQ::NPartitionChooser

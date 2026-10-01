@@ -9,6 +9,8 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -176,7 +178,7 @@ NProto::TError GetRandomError()
 
     std::uniform_int_distribution<ui64> dist(0, 2);
     auto code = dist(eng);
-    return MakeError(code == 0 ? S_OK : (code == 1 ? E_CANCELLED : E_FAIL));
+    return MakeError(code == 0 ? S_OK : (code == 1 ? E_CANCELLED : E_IO));
 }
 
 }   // namespace
@@ -214,6 +216,8 @@ Y_UNIT_TEST_SUITE(TServerStressTest)
 
         auto server = CreateServer(
             CreateLoggingService("console"),
+            CreateWallClockTimer(),
+            CreateScheduler(),
             vhostStats,
             queueFactory,
             CreateDefaultDeviceHandlerFactory(),

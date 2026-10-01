@@ -20,7 +20,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
-
+#include <util/system/mutex.h>
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -82,6 +82,7 @@ public:
     bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
+    std::shared_ptr<TMutex> LogStreamMutex;
     TVector<TString> StoragePoolTypes;
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
@@ -369,7 +370,7 @@ void AssertTableStats(const Ydb::TableStats::QueryStats& stats, TStringBuf table
 void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
-void AssertTableStats(const NYdb::NTable::TDataQueryResult& result, TStringBuf table,
+void AssertTableStats(const NYdb::NQuery::TExecuteQueryResult& result, TStringBuf table,
     const TExpectedTableStats& expectedStats);
 
 inline void AssertTableReads(const NYdb::NTable::TDataQueryResult& result, TStringBuf table, ui64 expectedReads) {

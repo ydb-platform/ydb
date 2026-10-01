@@ -62,7 +62,6 @@ public:
 
     using TRequestHandler = std::function<TReply(const TRequest& request)>;
 
-public:
     explicit TTestHttpServer(int port);
     ~TTestHttpServer();
     void Start();

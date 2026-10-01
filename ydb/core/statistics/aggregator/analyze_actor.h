@@ -10,15 +10,28 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorid.h>
 
+#include <optional>
 #include <queue>
 
 namespace NKikimr::NStat {
 
+TVector<ui64> SelectAnalyzeSample(TVector<ui64> tablets, double rate, ui64 seed);
+
 class TAnalyzeActor : public NActors::TActorBootstrapped<TAnalyzeActor> {
 public:
+    static constexpr ui64 MaxStatisticSize = 8ull << 20;
+    static constexpr ui32 MaxHistogramOversampleFactor = 256;
+
     struct TConfig {
         ui64 MaxTotalScanActorsInFlight = 100;
         i64 MaxPerNodeScanActorsInFlight = 1;
+        ui64 ColumnTableWholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
+        ui64 RowTableWholeTableScanMaxBytes = 10ULL << 30; // 10 GiB
+        std::optional<ui64> TableBytesSize;
+        bool CollectPrimaryKeyHistogram = false;
+        ui32 HistogramOversampleFactor = 8;
+        ui64 HistogramMaxStateBytes = 4u << 20;
+        double SampleRate = 1.0;
     };
 
 private:
@@ -94,9 +107,22 @@ private:
 
     TString TableName;
     bool IsColumnTable = false;
+
+    enum class EScanMode : ui8 {
+        WholeTable,
+        PerShard,
+        PerRange,
+    };
+    EScanMode ScanMode = EScanMode::WholeTable;
+
+    bool IsPartitionedScan() const {
+        return ScanMode != EScanMode::WholeTable;
+    }
+
     TVector<TColumnDesc> Columns;
     TVector<TMultiColumnStatDesc> MultiColumnStatDescs;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<TString> KeyColumnNames;
     ui64 HiveId = 0;
 
     ui32 ScansCompletedTotal = 0;
@@ -106,6 +132,12 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev);
 
+    bool ResolvingDatabase = false;
+    THashMap<ui32, TSysTables::TTableColumnInfo> NavigateColumns;
+    TVector<NKikimrSchemeOp::TMultiColumnStatisticsDescription> NavigateMultiColumnStatistics;
+    void HandleNavigateResult();
+    void HandleResolveDatabase(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
+
     // StateLocateTablets
 
     // In this stage tablet -> node correspondence is resolved. Currently this is only needed
@@ -113,6 +145,21 @@ private:
 
     THashSet<ui64> TabletIdsToLocate;
     THashMap<ui64, ui32> TabletId2NodeId;
+
+    struct TScanWorkItem {
+        ui64 TabletId = 0;
+        TSerializedTableRange Range;
+    };
+    TVector<TScanWorkItem> RangeWorkItems;
+
+    bool SamplingRequested() const { return Config.SampleRate < 1.0; }
+    ui64 EligibleUnits = 0;
+
+    ui32 PartitionedScanCount() const {
+        return ScanMode == EScanMode::PerRange
+            ? static_cast<ui32>(RangeWorkItems.size())
+            : static_cast<ui32>(TabletId2NodeId.size());
+    }
 
     size_t HiveRetryCount = 0;
     static constexpr size_t MaxHiveRetryCount = 3;
@@ -160,7 +207,7 @@ private:
     struct TNodeState {
         ui32 Id = 0;
         i64 TabletsInFlight = 0;
-        TVector<ui64> PendingTablets;
+        TVector<TScanWorkItem> PendingScans;
 
         explicit TNodeState(ui32 id) : Id(id) {}
     };
@@ -176,7 +223,7 @@ private:
     class TScanActor;
 
     void StartColumnStatEvalTasks();
-    void DispatchSomeScanActors();
+    bool DispatchSomeScanActors();
 
     void HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev);

@@ -750,6 +750,14 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     }
 }
 
+void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId) {
+    // TODO: implement ColumnShard truncate preparation.
+}
+
+void TTablesManager::TruncateTableProgress(NIceDb::TNiceDb&, const NOlap::TSnapshot&, const TSchemeShardLocalPathId) {
+    // TODO: implement ColumnShard truncate at the planned snapshot.
+}
+
 std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {
     const ui64 lastSchemaVersion = PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion();
     std::set<TSchemaAddress> toRemove;
@@ -804,9 +812,9 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
     return chains;
 }
 
-TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
-    const TString& tablePath, const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId) {
-    if (!HasTable(internalPathId)) {
+TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(const TString& tablePath,
+    const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) {
+    if (!HasTable(internalPathId, /*withDeleted=*/false, readSnapshot)) {
         return std::make_shared<NOlap::TAbsentTableAccessor>(
             tablePath, NColumnShard::TUnifiedPathId::BuildValid(internalPathId, externalPathId));
     }
@@ -814,7 +822,7 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 }
 
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
-    const TString& tablePath, const TSchemeShardLocalPathId externalPathId) {
+    const TString& tablePath, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) {
     const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
     auto path = TFsPath(tablePath).Fix();
     auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(
@@ -824,7 +832,7 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
     } else if (!internalPathId) {
         return TConclusionStatus::Fail("incorrect table name and table id for scan start: " + tablePath + "::" + externalPathId.DebugString());
     } else {
-        if (!HasTable(*internalPathId)) {
+        if (!HasTable(*internalPathId, /*withDeleted=*/false, readSnapshot)) {
             return std::make_shared<NOlap::TAbsentTableAccessor>(
                 tablePath, NColumnShard::TUnifiedPathId::BuildValid(*internalPathId, externalPathId));
         } else {

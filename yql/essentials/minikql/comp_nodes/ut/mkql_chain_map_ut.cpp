@@ -7,8 +7,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -74,7 +73,7 @@ TComputationNodeFactory GetChain1MapThrottleFactory() {
 TRuntimeNode ThrottleNarrowStream(TProgramBuilder& pb, TRuntimeNode stream) {
     TCallableBuilder callableBuilder(pb.GetTypeEnvironment(), "StreamThrottler", stream.GetStaticType());
     callableBuilder.Add(stream);
-    return TRuntimeNode(callableBuilder.Build(), false);
+    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
 }
 
 } // namespace
@@ -342,5 +341,4 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLChain1MapThrottleTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

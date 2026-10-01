@@ -5,7 +5,7 @@ from ymake import macro, Unit
 
 
 @macro
-def CMAKE_EXPORTED_TARGET_NAME_FROM_PATH(unit: Unit, *args: tuple[str, ...]):
+def CMAKE_EXPORTED_TARGET_NAME_FROM_PATH(unit: Unit, *args: str):
     """
     @usage: CMAKE_EXPORTED_TARGET_NAME_FROM_PATH(ProjectRoot)
 

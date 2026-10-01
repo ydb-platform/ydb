@@ -36,6 +36,17 @@ message AnyValue {
     ArrayValue array_value = 5;
     KeyValueList kvlist_value = 6;
     bytes bytes_value = 7;
+    // Reference to the string value in ProfilesDictionary.string_table.
+    //
+    // Note: This is currently used exclusively in the Profiling signal.
+    // Implementers of OTLP receivers for signals other than Profiling should
+    // treat the presence of this value as a non-fatal issue.
+    // Log an error or warning indicating an unexpected field intended for the
+    // Profiling signal and process the data as if this value were absent or
+    // empty, ignoring its semantic content for the non-Profiling signal.
+    //
+    // Status: [Alpha]
+    int32 string_value_strindex = 8;
   }
 }
 
@@ -65,10 +76,24 @@ message KeyValueList {
 // attributes, etc.
 message KeyValue {
   // The key name of the pair.
+  // key_strindex MUST NOT be set if key is used.
   string key = 1;
 
   // The value of the pair.
   AnyValue value = 2;
+
+  // Reference to the string key in ProfilesDictionary.string_table.
+  // key MUST NOT be set if key_strindex is used.
+  //
+  // Note: This is currently used exclusively in the Profiling signal.
+  // Implementers of OTLP receivers for signals other than Profiling should
+  // treat the presence of this key as a non-fatal issue.
+  // Log an error or warning indicating an unexpected field intended for the
+  // Profiling signal and process the data as if this value were absent or
+  // empty, ignoring its semantic content for the non-Profiling signal.
+  //
+  // Status: [Alpha]
+  int32 key_strindex = 3;
 }
 
 // InstrumentationScope is a message representing the instrumentation scope information

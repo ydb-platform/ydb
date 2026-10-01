@@ -31,10 +31,8 @@
 #include "hwy/contrib/sort/traits-inl.h"
 #include "hwy/contrib/sort/traits128-inl.h"
 #include "hwy/tests/test_util-inl.h"
-#include "hwy/timer-inl.h"
 #include "hwy/nanobenchmark.h"
 #include "hwy/timer.h"
-#include "hwy/per_target.h"
 // clang-format on
 
 #if HWY_OS_LINUX
@@ -80,8 +78,7 @@ HWY_NOINLINE void BenchAllColdSort() {
 
   char cpu100[100];
   if (!platform::HaveTimerStop(cpu100)) {
-    fprintf(stderr, "CPU '%s' does not support RDTSCP, skipping benchmark.\n",
-            cpu100);
+    HWY_WARN("CPU '%s' does not support RDTSCP, skipping benchmark.\n", cpu100);
     return;
   }
 
@@ -476,5 +473,7 @@ HWY_EXPORT_AND_TEST_P(BenchSort, BenchAllSort);
 #endif
 HWY_AFTER_TEST();
 }  // namespace hwy
+
+HWY_TEST_MAIN();
 
 #endif  // HWY_ONCE

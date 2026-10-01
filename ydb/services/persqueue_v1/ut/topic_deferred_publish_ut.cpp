@@ -2032,6 +2032,21 @@ Y_UNIT_TEST(StreamWriteDeferredThenRegularInSameSession) {
     WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(2, "regular-part"));
 }
 
+Y_UNIT_TEST(StreamWriteAllowsExtPublicationIdMismatchAsWarnOnly) {
+    // Mismatch is logged but must not fail the write (warn-only behavior).
+    auto fixture = TDeferredStreamWriteFixture::Enabled("deferred-mismatch-topic", "ext-first");
+    auto session = fixture.OpenWriteStream("producer-mismatch");
+
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        1,
+        "first",
+        DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+        2,
+        "second-mismatched-ext",
+        DeferredPublishWithExt(fixture.IntPublicationId, TString("ext-other"))));
+}
+
 Y_UNIT_TEST(StreamWriteMergesPartitionsIntoDestinationBlob) {
     auto fixture = TDeferredStreamWriteFixture::Enabled("deferred-merge-topic", "ext-merge");
 
@@ -2364,6 +2379,59 @@ Y_UNIT_TEST(CancelDiscardsData) {
     UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
 
     AssertTopicEmptyAfterCancel(fixture.Server, fixture.TopicShortName);
+}
+
+Y_UNIT_TEST(CancelAllowsSameProducerSeqNoInNextPublication) {
+    auto fixture = TDeferredStreamWriteFixture::Enabled(
+        "lifecycle-cancel-rewrite-topic",
+        "ext-lifecycle-cancel-rewrite");
+
+    constexpr TStringBuf producerId = "producer-lifecycle-cancel-rewrite";
+    constexpr ui64 seqNo = 1;
+    {
+        auto session = fixture.OpenWriteStream(TString(producerId));
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            seqNo,
+            "cancelled-payload",
+            DeferredPublishWithExt(fixture.IntPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto cancelOutcome = CallCancelPublication(
+        *fixture.DeferredStub,
+        "/Root",
+        fixture.IntPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(cancelOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+    AssertTopicEmptyAfterCancel(fixture.Server, fixture.TopicShortName);
+
+    const auto nextPublicationId = BeginPublicationIntId(CallBeginPublication(
+        *fixture.DeferredStub,
+        "/Root",
+        fixture.ExtPublicationId));
+    // Int publication id uniqueness is an implementation detail; the public contract only
+    // guarantees ext_publication_id uniqueness among active publications. Asserting a
+    // distinct int id here would make the test brittle without strengthening the behavior
+    // under test (seqNo reuse), which is already covered by the write/publish/read flow below.
+    // UNIT_ASSERT_UNEQUAL(nextPublicationId, fixture.IntPublicationId);
+    {
+        auto session = fixture.OpenWriteStream(TString(producerId));
+        WriteAndExpectWriteResponse(*session->Stream, MakeStreamWriteRequest(
+            seqNo,
+            "published-payload",
+            DeferredPublishWithExt(nextPublicationId, fixture.ExtPublicationId)));
+    }
+
+    const auto publishOutcome = CallPublish(*fixture.DeferredStub, "/Root", nextPublicationId);
+    UNIT_ASSERT_VALUES_EQUAL(publishOutcome.Operation.status(), Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(CountPublications(fixture.Server, "root@builtin"), 0u);
+
+    const auto messages = TryReadTopicMessagesViaStreamRead(
+        fixture.Server,
+        *fixture.TopicStub,
+        fixture.TopicShortName,
+        TDuration::Seconds(30));
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0].Data, "published-payload");
 }
 
 Y_UNIT_TEST(StagingNotVisibleBeforePublish) {

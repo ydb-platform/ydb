@@ -21,6 +21,7 @@
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/yql_gc_transformer.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
@@ -37,6 +38,27 @@ using namespace NYql::NNodes;
 using namespace NThreading;
 
 namespace {
+
+class TRboGcTransformer final : public TSyncTransformerBase {
+public:
+    TRboGcTransformer()
+        : Inner(CreateGcNodeTransformer())
+    {
+    }
+
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        return Inner->Transform(input, output, ctx);
+    }
+
+    void Rewind() override {
+        // RBO rewinds annotation for each lambda in the same expression context.
+        // Keep the GC allocation watermark across those calls. PrepareQueryInternal
+        // creates a new pipeline (and GC transformer) for each query.
+    }
+
+private:
+    TAutoPtr<IGraphTransformer> Inner;
+};
 
 TAutoPtr<IGraphTransformer> Log(const TStringBuf& transformerName, NYql::NLog::ELevel level = NYql::NLog::ELevel::TRACE) {
     return TLogExprTransformer::Sync(TStringBuilder() << transformerName << "Transformer",
@@ -427,7 +449,7 @@ private:
                 Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 
             auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
-                .AddServiceTransformers()
+                .Add(TAutoPtr<IGraphTransformer>(new TRboGcTransformer()), "GC")
                 .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
                 .AddTypeAnnotationTransformer()
                 .Build(false);

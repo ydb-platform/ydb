@@ -56,7 +56,7 @@ TStringBuf ToStringBuf(const grpc_slice& slice)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStringBuf TGrpcMetadataArray::Find(const char* key) const
+std::optional<TStringBuf> TGrpcMetadataArray::Find(const char* key) const
 {
     for (size_t index = 0; index < Native_.count; ++index) {
         const auto& metadata = Native_.metadata[index];
@@ -65,7 +65,7 @@ TStringBuf TGrpcMetadataArray::Find(const char* key) const
         }
     }
 
-    return TStringBuf();
+    return std::nullopt;
 }
 
 THashMap<std::string, std::string> TGrpcMetadataArray::ToMap() const

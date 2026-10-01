@@ -17,6 +17,7 @@ class DispatchCommand:
     action: str
     target: ChaosTarget
     payload: dict[str, Any]
+    lease_id: str | None = None  # failure-model lease when known (boundary reserve)
 
     @property
     def host(self) -> str:
@@ -32,6 +33,7 @@ def dispatch(
     *,
     scenario_id: str | None = None,
     target: ChaosTarget | None = None,
+    lease_id: str | None = None,
 ) -> DispatchCommand:
     """Build a dispatch command.
 
@@ -51,6 +53,7 @@ def dispatch(
         action=action,
         target=chaos_target,
         payload=payload,
+        lease_id=lease_id,
     )
 
 
@@ -59,10 +62,12 @@ def fanout(
     hosts_or_targets: list[str] | list[ChaosTarget],
     action: str,
     payload: dict[str, Any],
+    *,
+    lease_id: str | None = None,
 ) -> list[DispatchCommand]:
     sid = str(uuid.uuid4())
     return [
-        dispatch(nemesis_type, item, action, payload, scenario_id=sid)
+        dispatch(nemesis_type, item, action, payload, scenario_id=sid, lease_id=lease_id)
         for item in hosts_or_targets
     ]
 

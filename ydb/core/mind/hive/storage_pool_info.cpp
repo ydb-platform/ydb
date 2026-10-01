@@ -30,7 +30,7 @@ bool TStoragePoolInfo::ReleaseAllocationUnit(const TLeaderTabletInfo* tablet, ui
     return GetStorageGroup(groupId).ReleaseAllocationUnit(tablet->GetChannel(channel));
 }
 
-void TStoragePoolInfo::UpdateStorageGroup(TStorageGroupId groupId, const TEvControllerSelectGroupsResult::TGroupParameters& groupParameters) {
+void TStoragePoolInfo::UpdateStorageGroup(TStorageGroupId groupId, const TGroupMetrics::TGroupParameters& groupParameters) {
     GetStorageGroup(groupId).UpdateStorageGroup(groupParameters);
 }
 
@@ -108,7 +108,7 @@ size_t TStoragePoolInfo::SelectGroup<NKikimrConfig::THiveConfig::HIVE_STORAGE_SE
     return *itGroup;
 }
 
-const TEvControllerSelectGroupsResult::TGroupParameters* TStoragePoolInfo::FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
+const TGroupMetrics::TGroupParameters* TStoragePoolInfo::FindFreeAllocationUnit(std::function<bool(const TStorageGroupInfo&)> filter,
                                                                                                   std::function<double(const TStorageGroupInfo*)> calculateUsage) {
     if (Groups.empty()) {
         return nullptr;

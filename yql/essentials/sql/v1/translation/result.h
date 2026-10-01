@@ -44,6 +44,8 @@ using TSQLResult = std::expected<T, ESQLError>;
 
 using TSQLStatus = TSQLResult<std::monostate>;
 
+TSQLStatus operator|(TSQLStatus lhs, TSQLStatus rhs);
+
 template <class T>
 bool IsUnwrappable(const TSQLResult<T>& result) {
     return result || result.error() == ESQLError::Basic;

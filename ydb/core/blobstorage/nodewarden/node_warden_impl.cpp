@@ -32,10 +32,21 @@
 using namespace NKikimr;
 using namespace NStorage;
 
+TNodeWardenConfig::TNodeWardenConfig()
+    : BlobStorageConfig(std::make_unique<NKikimrConfig::TBlobStorageConfig>())
+    , NameserviceConfig(std::make_unique<NKikimrConfig::TStaticNameserviceConfig>())
+    , AllVDiskKinds(new TAllVDiskKinds)
+    , AllDriveModels(new NPDisk::TDriveModelDb)
+    , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())
+{}
+
+TNodeWardenConfig::~TNodeWardenConfig()
+{}
+
 TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     : Cfg(cfg)
-    , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
-    , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
+    , EnablePutBatching(Cfg->FeatureFlags->GetEnablePutBatchingForBlobStorage(), false, true)
+    , EnableVPatch(Cfg->FeatureFlags->GetEnableVPatch(), false, true)
     , EnableLocalSyncLogDataCutting(1, 0, 1)
     , EnableSyncLogChunkCompressionHDD(1, 0, 1)
     , EnableSyncLogChunkCompressionSSD(0, 0, 1)
@@ -49,6 +60,9 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , FreshCompMaxInFlightWrites(10, 1, 1000)
     , FreshCompMaxInFlightReads(10, 1, 1000)
     , HullCompFreeSpaceThresholdPerMille(2000, 0, 100'000)
+    , HullCompEmergencyMaxSsts(8, 0, 64)
+    , HullCompEmergencyChunkReserve(1, 0, 64)
+    , HullCompEmergencyEnableAtColor(15, 0, 60)
     , HullCompMaxInFlightWrites(10, 1, 1000)
     , HullCompMaxInFlightReads(20, 1, 1000)
     , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
@@ -75,7 +89,10 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , EnablePersistentPhantomFlagStorage(0, 0, 1)
     , PhantomFlagStorageLimitPerVDiskBytes(10'000'000, 0, 100'000'000'000)
     , VolatilePhantomFlagStorageBlobSizeLimitBytes(1'000'000, 1, 10'000'000)
+    , EnableChecksumReadValidationOnVDisk(0, 0, 1)
+    , EnableChecksumWriteValidationOnVDisk(0, 0, 1)
     , EnableChunkKeeper(0, 0, 1)
+    , SpaceReportPeriodSeconds(0, 0, 86400)
     , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
     , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
@@ -99,14 +116,16 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
     , MaxPutTimeoutSeconds(DefaultMaxPutTimeout.Seconds(), 1, 1'000'000)
+    , DormantTimeoutMinutes(DefaultDormantTimeout.Minutes(), 0, 1'000'000)
+    , EnableChecksumCalcAndValidationOnDsProxy(0, 0, 1)
     , EnableDeepScrubbing(false, false, true)
     , EnableFreshSyncDataThrottling(0, 0, 1)
     , EnableStorageRetroTraceGeneration(DefaultEnableStorageRetroTraceGeneration, false, true)
     , EnableStorageRetroTraceCollectionSlowRequests(DefaultEnableStorageRetroTraceCollectionSlowRequests, false, true)
 {
-    Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
+    Y_ABORT_UNLESS(Cfg->BlobStorageConfig->GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
-    for (const auto& domain : Cfg->BlobStorageConfig.GetServiceSet().GetAvailabilityDomains()) {
+    for (const auto& domain : Cfg->BlobStorageConfig->GetServiceSet().GetAvailabilityDomains()) {
         AvailDomainId = domain;
     }
     if (Cfg->DomainsConfig) {
@@ -167,6 +186,7 @@ STATEFN(TNodeWarden::StateOnline) {
         hFunc(TEvPrivate::TEvUpdateNodeDrives, Handle);
         hFunc(TEvPrivate::TEvRetrySaveConfig, Handle);
         hFunc(TEvPrivate::TEvRetrySlay, Handle);
+        hFunc(TEvPrivate::TEvRestartDrainReminder, Handle);
 
         hFunc(NMon::TEvHttpInfo, Handle);
         cFunc(NActors::TEvents::TSystem::Poison, PassAway);
@@ -366,7 +386,8 @@ void TNodeWarden::StartInvalidGroupProxy() {
         {"marker", "NW11"},
         {"groupId", groupId});
     TActivationContext::ActorSystem()->RegisterLocalService(MakeBlobStorageProxyID(groupId), Register(
-        CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon), TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
+        CreateBlobStorageGroupEjectedProxy(groupId, DsProxyNodeMon, DormantTimeoutMinutes),
+        TMailboxType::ReadAsFilled, AppData()->SystemPoolId));
 }
 
 void TNodeWarden::StopInvalidGroupProxy() {
@@ -457,6 +478,9 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
         TControlBoard::RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, icb->VDiskControls.GarbageThresholdToRunFullCompactionPerMille);
         TControlBoard::RegisterSharedControl(HullCompFreeSpaceThresholdPerMille, icb->VDiskControls.HullCompFreeSpaceThresholdPerMille);
+        TControlBoard::RegisterSharedControl(HullCompEmergencyMaxSsts, icb->VDiskControls.HullCompEmergencyMaxSsts);
+        TControlBoard::RegisterSharedControl(HullCompEmergencyChunkReserve, icb->VDiskControls.HullCompEmergencyChunkReserve);
+        TControlBoard::RegisterSharedControl(HullCompEmergencyEnableAtColor, icb->VDiskControls.HullCompEmergencyEnableAtColor);
         TControlBoard::RegisterSharedControl(DefragThrottlerBytesRate, icb->VDiskControls.DefragThrottlerBytesRate);
 
         TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);
@@ -477,7 +501,10 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(PhantomFlagStorageLimitPerVDiskBytes, icb->VDiskControls.PhantomFlagStorageLimitPerVDiskBytes);
         TControlBoard::RegisterSharedControl(VolatilePhantomFlagStorageBlobSizeLimitBytes,
                 icb->VDiskControls.VolatilePhantomFlagStorageBlobSizeLimitBytes);
+        TControlBoard::RegisterSharedControl(EnableChecksumReadValidationOnVDisk, icb->VDiskControls.EnableChecksumReadValidationOnVDisk);
+        TControlBoard::RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, icb->VDiskControls.EnableChecksumWriteValidationOnVDisk);
         TControlBoard::RegisterSharedControl(EnableChunkKeeper, icb->VDiskControls.EnableChunkKeeper);
+        TControlBoard::RegisterSharedControl(SpaceReportPeriodSeconds, icb->VDiskControls.SpaceReportPeriodSeconds);
 
         TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncCount, icb->VDiskControls.MaxInProgressStartupDataSyncCount);
         TControlBoard::RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, icb->VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount);
@@ -521,6 +548,8 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(ReportingControllerLeakDurationMs, icb->DSProxyControls.RequestReportingSettings.LeakDurationMs);
         TControlBoard::RegisterSharedControl(ReportingControllerLeakRate, icb->DSProxyControls.RequestReportingSettings.LeakRate);
         TControlBoard::RegisterSharedControl(MaxPutTimeoutSeconds, icb->DSProxyControls.MaxPutTimeoutSeconds);
+        TControlBoard::RegisterSharedControl(DormantTimeoutMinutes, icb->DSProxyControls.DormantTimeoutMinutes);
+        TControlBoard::RegisterSharedControl(EnableChecksumCalcAndValidationOnDsProxy, icb->DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy);
 
         TControlBoard::RegisterSharedControl(EnableFreshSyncDataThrottling, icb->VDiskControls.EnableFreshSyncDataThrottling);
         TControlBoard::RegisterSharedControl(EnableStorageRetroTraceGeneration,
@@ -530,7 +559,7 @@ void TNodeWarden::Bootstrap() {
     }
 
     // start replication broker
-    const auto& replBrokerConfig = Cfg->BlobStorageConfig.GetServiceSet().GetReplBrokerConfig();
+    const auto& replBrokerConfig = Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig();
 
     ui64 requestBytesPerSecond = 500000000; // 500 MB/s by default
     if (replBrokerConfig.HasTotalRequestBytesPerSecond()) {
@@ -559,19 +588,19 @@ void TNodeWarden::Bootstrap() {
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
     // create bridge syncer rate quoter
-    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
+    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond());
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
         CreateCompBrokerActor(MaxActiveCompactionsPerPDisk, AppData()->Counters)));
 
     // determine if we are running in 'mock' mode
-    EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
+    EnableProxyMock = Cfg->BlobStorageConfig->GetServiceSet().GetEnableProxyMock();
 
     // fill in a base storage config (from the file)
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
-    appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
+    appConfig.MutableBlobStorageConfig()->CopyFrom(*Cfg->BlobStorageConfig);
+    appConfig.MutableNameserviceConfig()->CopyFrom(*Cfg->NameserviceConfig);
     if (Cfg->DomainsConfig) {
         appConfig.MutableDomainsConfig()->CopyFrom(*Cfg->DomainsConfig);
     }
@@ -591,16 +620,16 @@ void TNodeWarden::Bootstrap() {
 
     YamlConfig = std::move(Cfg->YamlConfig);
 
-    InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig.GetInferPDiskSlotCountSettings());
+    InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig->GetInferPDiskSlotCountSettings());
     ui32 blobStorageConfigItem = NKikimrConsole::TConfigItem::BlobStorageConfigItem;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(blobStorageConfigItem));
 
     // Start a statically configured set
-    if (Cfg->BlobStorageConfig.HasServiceSet()) {
-        const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();
+    if (Cfg->BlobStorageConfig->HasServiceSet()) {
+        const auto& serviceSet = Cfg->BlobStorageConfig->GetServiceSet();
         if (serviceSet.GroupsSize()) {
-            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false, "initial");
+            ApplyServiceSet(Cfg->BlobStorageConfig->GetServiceSet(), true, false, false, "initial");
         } else {
             Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
         }

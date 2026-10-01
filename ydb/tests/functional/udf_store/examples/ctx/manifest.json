@@ -1,0 +1,47 @@
+{
+  "module_type": "module",
+  "module_kind": "wasm",
+  "module_name": "Ctx",
+  "module_extension": "wasm",
+  "required_libraries": [
+    "sdk"
+  ],
+  "objects": [
+    {
+      "name": "Ctx",
+      "create_export": "ctx_create",
+      "destroy_export": "ctx_destroy",
+      "methods": [
+        {
+          "name": "Snapshot",
+          "export": "ctx_snapshot",
+          "yql_binding": "plain",
+          "argument_types": [
+            "Optional<Uint64>"
+          ],
+          "result_type": "Optional<String>"
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "CountRow",
+      "export": "count_row",
+      "argument_types": [
+        "Optional<Uint64>",
+        "Optional<Int64>"
+      ],
+      "result_type": "Optional<Int64>"
+    },
+    {
+      "name": "CountPositive",
+      "export": "count_positive",
+      "argument_types": [
+        "Optional<Uint64>",
+        "Optional<Int64>"
+      ],
+      "result_type": "Optional<Int64>"
+    }
+  ]
+}

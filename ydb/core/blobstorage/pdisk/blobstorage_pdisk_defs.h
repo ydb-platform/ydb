@@ -1,6 +1,8 @@
 #pragma once
 #include "defs.h"
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/blobstorage_tablet_types.h>
+#include <ydb/core/blobstorage/base/blobstorage_vdiskid.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 
@@ -72,6 +74,13 @@ namespace NKikimr {
                 , OwnerRound(ownerRound)
             {}
         };
+
+        inline bool IsStaticGroupVDisk(const TVDiskID &vdiskId) {
+            if (vdiskId == TVDiskID::InvalidId) {
+                return false;
+            }
+            return TGroupID(vdiskId.GroupID).ConfigurationType() == EGroupConfigurationType::Static;
+        }
 
         // using TLogPosition = std::pair<TChunkIdx, ui32>;
         struct TLogPosition {

@@ -2148,6 +2148,28 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_isfinite)
 }
 
 
+#line 271
+NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_floor)
+(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    UNARY_LOOP_FAST(npy_bool, npy_bool, *out = in);
+}
+
+#line 271
+NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_ceil)
+(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    UNARY_LOOP_FAST(npy_bool, npy_bool, *out = in);
+}
+
+#line 271
+NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_trunc)
+(char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
+{
+    UNARY_LOOP_FAST(npy_bool, npy_bool, *out = in);
+}
+
+
 /*
  *****************************************************************************
  **                          HALF-FLOAT LOOPS                               **
@@ -2166,14 +2188,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(HALF_absolute)
  *****************************************************************************
  */
 
-#line 289
+#line 300
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DATETIME_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {
     NPY_CPU_DISPATCH_CURFX(ULONGLONG_isinf)(args, dimensions, steps, func);
 }
 
-#line 289
+#line 300
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(TIMEDELTA_isinf)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *func)
 {

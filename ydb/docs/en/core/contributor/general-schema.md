@@ -2,7 +2,7 @@
 
 An approximate general {{ ydb-short-name }} schema is shown below.
 
-![General schema](_assets/BS_overview.svg)
+![General schema](_assets/BS_overview.svg){inline=false}
 
 ## Nodes {#nodes}
 
@@ -58,7 +58,7 @@ As mentioned previously, each group has a constant amount of data that fits into
 
 This mechanism works as follows:
 
-![Channel history](_assets/Slide_blob.svg)
+![Channel history](_assets/Slide_blob.svg){inline=false}
 
 For each channel, the `TTabletStorageInfo` structure contains the `TTabletChannelInfo` substructure with generation ranges and the group number corresponding to each range. The ranges are strictly adjacent to each other, with the last range being open. Group numbers may overlap in different ranges and even across different channels, which is legal and quite common.
 

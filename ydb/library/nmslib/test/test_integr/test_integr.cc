@@ -28,7 +28,7 @@
 #include "init.h"
 #include "global.h"
 #include "utils.h"
-#include "memory.h"
+#include <ydb/library/nmslib/include/memory.h>
 #include "ztimer.h"
 #include "experiments.h"
 #include "experimentconf.h"

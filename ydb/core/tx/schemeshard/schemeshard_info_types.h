@@ -11,6 +11,7 @@
 
 #include <util/generic/yexception.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_coordination.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
@@ -48,6 +49,7 @@
 #include <ydb/core/util/counted_leaky_bucket.h>
 #include <ydb/core/util/pb.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/services/lib/sharding/sharding.h>
@@ -61,6 +63,8 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -1462,7 +1466,8 @@ public:
     bool IsUsingSequence(const TString& name) {
         for (const auto& pr : Columns) {
             if (pr.second.DefaultKind == ETableColumnDefaultKind::FromSequence &&
-                pr.second.DefaultValue == name)
+                pr.second.DefaultValue == name &&
+                !pr.second.IsDropped())
             {
                 // A column scheduled to be dropped by the pending alter no longer keeps the
                 // sequence alive. This lets a single ALTER drop a serial column and cascade
@@ -1537,8 +1542,9 @@ struct TTopicTabletInfo : TSimpleRefCount<TTopicTabletInfo> {
                 value <= NKikimrPQ::ETopicPartitionStatus::Deleted) {
                 Status = static_cast<NKikimrPQ::ETopicPartitionStatus>(value);
             } else {
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "Read unknown topic partition status value " << value);
+                YDB_LOG_ERROR_CTX(ctx, "Read unknown topic partition status value",
+                    {"topicPartitionStatus", value},
+                );
                 Status = NKikimrPQ::ETopicPartitionStatus::Active;
             }
         }
@@ -2172,6 +2178,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return TTabletId(ProcessingParams.GetGraphShard());
     }
 
+    TTabletId GetTenantWasmCompileControllerID() const {
+        if (!ProcessingParams.HasWasmCompileController()) {
+            return InvalidTabletId;
+        }
+        return TTabletId(ProcessingParams.GetWasmCompileController());
+    }
+
     ui64 GetPathsInside() const {
         return PathsInsideCount;
     }
@@ -2565,6 +2578,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         if (graphs.size()) {
             ProcessingParams.SetGraphShard(ui64(graphs.front()));
         }
+
+        ProcessingParams.ClearWasmCompileController();
+        TVector<TTabletId> wasmCompileControllers = FilterPrivateTablets(ETabletType::WasmCompileController, allShards);
+        Y_ENSURE(wasmCompileControllers.size() <= 1, "size was: " << wasmCompileControllers.size());
+        if (wasmCompileControllers.size()) {
+            ProcessingParams.SetWasmCompileController(ui64(wasmCompileControllers.front()));
+        }
     }
 
     void InitializeAsGlobal(NKikimrSubDomains::TProcessingParams&& processingParams) {
@@ -2754,6 +2774,14 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
     }
 
+    ETablesMetricsLevel GetTablesMetricsLevel() const {
+        return TablesMetricsLevel;
+    }
+
+    void SetTablesMetricsLevel(ETablesMetricsLevel level) {
+        TablesMetricsLevel = level;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2799,6 +2827,8 @@ private:
     ui64 SecurityStateVersion = 0;
 
     TMaybeAuditSettings AuditSettings;
+
+    ETablesMetricsLevel TablesMetricsLevel = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
 
     TVector<TTabletId> FilterPrivateTablets(TTabletTypes::EType type, const THashMap<TShardIdx, TShardInfo>& allShards) const {
         TVector<TTabletId> tablets;
@@ -3526,7 +3556,7 @@ struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {
 };
 
 struct TPublicationInfo {
-    TSet<std::pair<TPathId, ui64>> Paths;
+    TMap<std::pair<TPathId, ui64>, TPathDbRef> Paths;
     THashSet<TActorId> Subscribers;
 };
 
@@ -4506,6 +4536,7 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
+    TActorId OperationOwnerActorId;
 };
 
 struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {
@@ -4615,3 +4646,5 @@ bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item);
 Y_DECLARE_OUT_SPEC(inline, NKikimrIndexBuilder::TMeteringStats, stream, value) {
     stream << value.ShortDebugString();
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

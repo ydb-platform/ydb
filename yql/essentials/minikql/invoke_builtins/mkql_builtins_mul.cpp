@@ -4,8 +4,7 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -198,5 +197,4 @@ void RegisterMul(TKernelFamilyMap& kernelFamilyMap) {
     kernelFamilyMap["Mul"] = std::move(family);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

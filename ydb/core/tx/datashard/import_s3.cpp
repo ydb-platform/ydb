@@ -437,21 +437,33 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
                 THolder<IReadController> deserializedDataController,
                 ui64 readBatchSize)
             : Deserializer(std::move(key), std::move(expectedIV))
+            , ConfirmedDeserializerState(Deserializer.GetState())
             , DataController(std::move(deserializedDataController))
             , ReadBatchSize(readBatchSize)
         {
         }
 
         void Feed(TString&& portion, bool last) override {
+            if (FeedError) {
+                return;
+            }
             if (!portion.empty() || last) {
                 NewData = true;
             }
             Last = last;
-            FeedUnprocessedBytes += portion.size();
-            Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
+            try {
+                Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
+                FeedUnprocessedBytes += portion.size();
+            } catch (const std::exception& ex) {
+                FeedError = ex.what();
+            }
         }
 
         IReadController::EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+            if (FeedError) {
+                error = *FeedError;
+                return IReadController::ERROR;
+            }
             if (BytesFedToChild) {
                 auto status = TryGetDataFromChildController(data, error);
                 if (status != IReadController::NOT_ENOUGH_DATA || !NewData) {
@@ -506,11 +518,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         }
 
         void Confirm(NKikimrBackup::TS3DownloadState& state) override {
-            state.SetEncryptedDeserializerState(Deserializer.GetState());
             if (ui64 readyBytes = ReadyBytes()) {
+                ConfirmedDeserializerState = Deserializer.GetState();
                 FeedUnprocessedBytes -= readyBytes;
                 ReadyInputBytes = 0;
             }
+            state.SetEncryptedDeserializerState(ConfirmedDeserializerState);
             DataController->Confirm(state);
         }
 
@@ -535,8 +548,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             if (const TString& deserializerState = state.GetEncryptedDeserializerState()) {
                 try {
                     Deserializer = NBackup::TEncryptedFileDeserializer::RestoreFromState(deserializerState);
+                    ConfirmedDeserializerState = deserializerState;
                     FeedUnprocessedBytes = 0;
                     ReadyInputBytes = 0;
+                    BytesFedToChild = 0;
+                    NewData = false;
+                    Last = false;
+                    FeedError.Clear();
                 } catch (const std::exception& ex) {
                     error = ex.what();
                     return false;
@@ -551,7 +569,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         ui64 ReadyInputBytes = 0;
         bool NewData = false;
         ui64 BytesFedToChild = 0;
+        TMaybe<TString> FeedError;
         NBackup::TEncryptedFileDeserializer Deserializer;
+        TString ConfirmedDeserializerState;
         THolder<IReadController> DataController;
         const ui64 ReadBatchSize;
     };
@@ -737,6 +757,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
+            const auto dataKey = Settings.GetDataKey(DataFormat, CompressionCodec);
             switch (result.GetError().GetErrorType()) {
             case S3Errors::RESOURCE_NOT_FOUND:
             case S3Errors::NO_SUCH_KEY:
@@ -744,8 +765,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             default:
                 YDB_LOG_ERROR("[Import] HeadObject request failed",
                     {"logPrefix", LogPrefix()},
+                    {"key", dataKey},
                     {"error", result});
-                return RetryOrFinish(result.GetError());
+                return RetryOrFinish(result.GetError(), dataKey);
             }
 
             CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
@@ -877,7 +899,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         const auto& result = msg.Result;
         const TStringBuf marker = "GetObject";
 
-        if (!CheckResult(result, marker)) {
+        if (!CheckResult(result, marker, Settings.GetDataKey(DataFormat, CompressionCodec))) {
             return;
         }
 
@@ -906,12 +928,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         const auto& result = ev->Get()->Result;
 
-        if (!CheckResult(result, "HeadObject")) {
+        const auto checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
+        if (!CheckResult(result, "HeadObject", checksumKey)) {
             return;
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
-        const auto checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
         GetObject(checksumKey, std::make_pair(0, contentLength - 1));
     }
 
@@ -923,7 +945,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        if (!CheckResult(result, "GetObject")) {
+        if (!CheckResult(result, "GetObject", ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None)))) {
             return;
         }
 
@@ -1157,6 +1179,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev) {
         if (!DirectImport) {
+            YDB_LOG_ERROR("[Import] Unexpected EvPutResult without DirectImport",
+                {"logPrefix", LogPrefix()},
+                {"ev", ev->Get()->Print(/*isFull=*/true)});
             return;
         }
 
@@ -1221,7 +1246,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
     }
 
     template <typename TResult>
-    bool CheckResult(const TResult& result, const TStringBuf marker) {
+    bool CheckResult(const TResult& result, const TStringBuf marker, const TString& key) {
         if (result.IsSuccess()) {
             return true;
         }
@@ -1229,8 +1254,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         YDB_LOG_ERROR("[Import]",
             {"logPrefix", LogPrefix()},
             {"marker", marker},
+            {"key", key},
             {"error", result});
-        RetryOrFinish(result.GetError());
+        RetryOrFinish(result.GetError(), key);
 
         return false;
     }
@@ -1346,14 +1372,19 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
     template <typename T>
     void RetryOrFinish(const T& error) {
+        RetryOrFinish(error, Settings.GetDataKey(DataFormat, CompressionCodec));
+    }
+
+    template <typename T>
+    void RetryOrFinish(const T& error, const TString& key) {
         if (CanRetry(error)) {
             Retry();
         } else {
             if constexpr (std::is_same_v<T, Aws::S3::S3Error>) {
-                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                Finish(false, TStringBuilder() << key
                     << ": " << PartLogPrefix() << " error: " << error);
             } else {
-                Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
+                Finish(false, TStringBuilder() << key
                     << ": " << error);
             }
         }
@@ -1579,3 +1610,6 @@ IActor* CreateS3Downloader(const TActorId& dataShard, ui64 txId, const NKikimrSc
 } // NKikimr
 
 #endif // KIKIMR_DISABLE_S3_OPS
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

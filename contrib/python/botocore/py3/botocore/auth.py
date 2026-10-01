@@ -26,9 +26,11 @@ from operator import itemgetter
 
 from botocore.compat import (
     HAS_CRT,
+    MD5_AVAILABLE,  # noqa: F401
     HTTPHeaders,
     encodebytes,
     ensure_unicode,
+    get_current_datetime,
     parse_qs,
     quote,
     unquote,
@@ -46,10 +48,6 @@ from botocore.utils import (
     normalize_url_path,
     percent_encode_sequence,
 )
-
-# Imports for backwards compatibility
-from botocore.compat import MD5_AVAILABLE  # noqa
-
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +86,7 @@ def _host_from_url(url):
     }
     if url_parts.port is not None:
         if url_parts.port != default_ports.get(url_parts.scheme):
-            host = '%s:%d' % (host, url_parts.port)
+            host = f'{host}:{url_parts.port}'
     return host
 
 
@@ -422,7 +420,7 @@ class SigV4Auth(BaseSigner):
     def add_auth(self, request):
         if self.credentials is None:
             raise NoCredentialsError()
-        datetime_now = datetime.datetime.now(datetime.UTC)
+        datetime_now = get_current_datetime()
         request.context['timestamp'] = datetime_now.strftime(SIGV4_TIMESTAMP)
         # This could be a retry.  Make sure the previous
         # authorization header is removed first.
@@ -560,7 +558,7 @@ class S3ExpressPostAuth(S3ExpressAuth):
     REQUIRES_IDENTITY_CACHE = True
 
     def add_auth(self, request):
-        datetime_now = datetime.datetime.utcnow()
+        datetime_now = get_current_datetime()
         request.context['timestamp'] = datetime_now.strftime(SIGV4_TIMESTAMP)
 
         fields = {}
@@ -819,7 +817,7 @@ class S3SigV4PostAuth(SigV4Auth):
     """
 
     def add_auth(self, request):
-        datetime_now = datetime.datetime.utcnow()
+        datetime_now = get_current_datetime()
         request.context['timestamp'] = datetime_now.strftime(SIGV4_TIMESTAMP)
 
         fields = {}
@@ -996,7 +994,7 @@ class HmacV1Auth(BaseSigner):
         string_to_sign = self.canonical_string(
             method, split, headers, auth_path=auth_path
         )
-        logger.debug(f'StringToSign:\n{string_to_sign}')
+        logger.debug('StringToSign:\n%s', string_to_sign)
         return self.sign_string(string_to_sign)
 
     def add_auth(self, request):
@@ -1004,7 +1002,7 @@ class HmacV1Auth(BaseSigner):
             raise NoCredentialsError
         logger.debug("Calculating signature using hmacv1 auth.")
         split = urlsplit(request.url)
-        logger.debug(f'HTTP request method: {request.method}')
+        logger.debug("HTTP request method: %s", request.method)
         signature = self.get_signature(
             request.method, split, request.headers, auth_path=request.auth_path
         )
@@ -1151,6 +1149,38 @@ def resolve_auth_type(auth_trait):
     raise UnsupportedSignatureVersionError(signature_version=auth_trait)
 
 
+def resolve_auth_scheme_preference(preference_list, auth_options):
+    service_supported = [scheme.split('#')[-1] for scheme in auth_options]
+
+    unsupported = [
+        scheme
+        for scheme in preference_list
+        if scheme not in AUTH_PREF_TO_SIGNATURE_VERSION
+    ]
+    if unsupported:
+        logger.debug(
+            "Unsupported auth schemes in preference list: %r", unsupported
+        )
+
+    combined = preference_list + service_supported
+    prioritized_schemes = [
+        scheme
+        for scheme in dict.fromkeys(combined)
+        if scheme in service_supported
+    ]
+
+    for scheme in prioritized_schemes:
+        if scheme == 'noAuth':
+            return AUTH_PREF_TO_SIGNATURE_VERSION[scheme]
+        sig_version = AUTH_PREF_TO_SIGNATURE_VERSION.get(scheme)
+        if sig_version in AUTH_TYPE_MAPS:
+            return sig_version
+
+    raise UnsupportedSignatureVersionError(
+        signature_version=', '.join(sorted(service_supported))
+    )
+
+
 AUTH_TYPE_MAPS = {
     'v2': SigV2Auth,
     'v3': SigV3Auth,
@@ -1185,4 +1215,13 @@ AUTH_TYPE_TO_SIGNATURE_VERSION = {
     'aws.auth#sigv4a': 'v4a',
     'smithy.api#httpBearerAuth': 'bearer',
     'smithy.api#noAuth': 'none',
+}
+
+# Mapping used specifically for resolving user-configured auth scheme preferences.
+# This is similar to AUTH_TYPE_TO_SIGNATURE_VERSION, but uses simplified keys by
+# stripping the auth trait prefixes ('smithy.api#httpBearerAuth' → 'httpBearerAuth').
+# These simplified keys match what customers are expected to provide in configuration.
+AUTH_PREF_TO_SIGNATURE_VERSION = {
+    auth_scheme.split('#')[-1]: sig_version
+    for auth_scheme, sig_version in AUTH_TYPE_TO_SIGNATURE_VERSION.items()
 }

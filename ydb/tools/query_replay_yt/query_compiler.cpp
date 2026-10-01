@@ -556,11 +556,6 @@ private:
             Config->_KqpTablePathPrefix = ReplayDetails["query_database"].GetStringSafe();
         }
 
-        ui32 syntax = (ReplayDetails["query_syntax"].GetStringSafe() == "1") ? 1 : 0;
-        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
-            syntax = 1;
-        }
-	    Config->SetSqlVersion(syntax);
         Config->FreezeDefaults();
 
         MetadataLoader = make_shared<TStaticTableMetadataLoader>(TlsActivationContext->ActorSystem(), TableMetadata);

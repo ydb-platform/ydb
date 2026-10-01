@@ -14,6 +14,7 @@
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <atomic>
+#include <utility>
 
 namespace NYT {
 
@@ -280,6 +281,8 @@ protected:
         NProfiling::TCounter MissedCounter;
         NProfiling::TCounter RejectedOversizedCounter;
         NProfiling::TCounter RejectedOversizedWeightCounter;
+        NProfiling::TCounter EvictedCounter;
+        NProfiling::TCounter EvictedWeightCounter;
     };
 
     //! For testing purposes only.
@@ -470,8 +473,10 @@ private:
     template <class THeterogenousKey>
     TShard* GetShardByKey(const THeterogenousKey& key) const;
 
+    //! Returns the value future and indicates whether the value was found in ValueMap
+    //! and needs to be resurrected in ghost caches.
     template <class THeterogenousKey>
-    TValueFuture DoLookup(TShard* shard, const THeterogenousKey& key, bool resurrectGhostCachesOnRejectedValue);
+    std::pair<TValueFuture, bool> DoLookup(TShard* shard, const THeterogenousKey& key);
 
     void DoTryRemove(const TKey& key, const TValuePtr& value, bool forbidResurrection);
 

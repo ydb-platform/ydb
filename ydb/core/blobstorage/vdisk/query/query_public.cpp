@@ -180,8 +180,7 @@ namespace NKikimr {
                 return new TDumpActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
             }
             case NKikimrBlobStorage::StatDb: {
-                using TStatActor = TLevelIndexStatActor<TKey, TMemRec>;
-                return new TStatActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
+                return CreateLevelIndexStatActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
             }
             default: {
                 DbStatError(hullCtx->VCtx, ctx, ev, std::move(result));
@@ -199,9 +198,7 @@ namespace NKikimr {
             TEvGetLogoBlobIndexStatRequest::TPtr &ev,
             std::unique_ptr<TEvGetLogoBlobIndexStatResponse> result)
     {
-        using TStatActorEx = TLevelIndexStatActor<TKey, TMemRec,
-                TEvGetLogoBlobIndexStatRequest, TEvGetLogoBlobIndexStatResponse>;
-        return new TStatActorEx(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
+        return CreateLevelIndexStatActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
     }
 
     ////////////////////////////////////////////////////////////////////////////

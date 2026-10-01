@@ -362,7 +362,12 @@ public:
                         auto timestamp_type = std::static_pointer_cast<arrow::TimestampType>(arg.descr().type);
                         arrow::TimeUnit::type unit = timestamp_type->unit();
                         if (unit == arrow::TimeUnit::MICRO) {
-                            arrow::util::get<std::shared_ptr<arrow::ArrayData>>(arg.value)->type = arrow::uint64();
+                            // ArrayData is shared with the source accessor (TableBatchReader hands out unsliced
+                            // chunks as-is). Retyping it in place would turn the column into uint64 for every
+                            // later consumer (PK comparisons in SYNC_LIMIT, merge, result), so retype a shallow copy.
+                            auto retyped = arg.array()->Copy();
+                            retyped->type = arrow::uint64();
+                            arg = arrow::Datum(std::move(retyped));
                         }
                     }
                 }

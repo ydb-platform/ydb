@@ -1201,38 +1201,50 @@ dynamic_bitset< Block, AllocatorOrContainer >::operator[]( size_type pos ) const
 // conversions
 
 template< typename Block, typename AllocatorOrContainer >
-BOOST_DYNAMIC_BITSET_CONSTEXPR20 unsigned long
+template< typename T >
+BOOST_DYNAMIC_BITSET_CONSTEXPR20 T
 dynamic_bitset< Block, AllocatorOrContainer >::
-    to_ulong() const
+    to_number() const
 {
+    // Reuse allowed_block_type to check that T is an unsigned integer type other than bool.
+    static_assert( detail::dynamic_bitset_impl::allowed_block_type< T >::value, "T must be an unsigned integer type other than bool" );
+
     if ( m_num_bits == 0 ) {
         return 0; // convention
     }
 
+    constexpr int t_width = std::numeric_limits< T >::digits;
+
     // Check for overflows. This may be a performance burden on very large
     // bitsets but is required by the specification, sorry.
-    if ( find_first( ulong_width ) != npos ) {
-        BOOST_THROW_EXCEPTION( std::overflow_error( "boost::dynamic_bitset::to_ulong overflow" ) );
+    if ( find_first( t_width ) != npos ) {
+        BOOST_THROW_EXCEPTION( std::overflow_error( "boost::dynamic_bitset::to_number overflow" ) );
     }
 
     // Ok, from now on we can be sure there's no "on" bit beyond the
     // "allowed" positions.
-    typedef unsigned long result_type;
-
-    const size_type       maximum_size =
-        (std::min)( m_num_bits, static_cast< size_type >( ulong_width ) );
+    const size_type maximum_size =
+        (std::min)( m_num_bits, static_cast< size_type >( t_width ) );
 
     const size_type last_block = block_index( maximum_size - 1 );
 
-    BOOST_ASSERT( ( last_block * bits_per_block ) < static_cast< size_type >( ulong_width ) );
+    BOOST_ASSERT( ( last_block * bits_per_block ) < static_cast< size_type >( t_width ) );
 
-    result_type result = 0;
+    T result = 0;
     for ( size_type i = 0; i <= last_block; ++i ) {
         const size_type offset = i * bits_per_block;
-        result |= ( static_cast< result_type >( m_bits[ i ] ) << offset );
+        result |= ( static_cast< T >( m_bits[ i ] ) << offset );
     }
 
     return result;
+}
+
+template< typename Block, typename AllocatorOrContainer >
+BOOST_DYNAMIC_BITSET_CONSTEXPR20 unsigned long
+dynamic_bitset< Block, AllocatorOrContainer >::
+    to_ulong() const
+{
+    return to_number< unsigned long >();
 }
 
 template< typename Block, typename AllocatorOrContainer, typename StringT >
@@ -1480,10 +1492,10 @@ template< typename Block, typename AllocatorOrContainer >
 BOOST_DYNAMIC_BITSET_CONSTEXPR20 bool
 operator<( const dynamic_bitset< Block, AllocatorOrContainer > & a, const dynamic_bitset< Block, AllocatorOrContainer > & b )
 {
-    typedef BOOST_DEDUCED_TYPENAME dynamic_bitset< Block, AllocatorOrContainer >::size_type size_type;
+    typedef typename dynamic_bitset< Block, AllocatorOrContainer >::size_type size_type;
 
-    size_type                                                                               asize( a.size() );
-    size_type                                                                               bsize( b.size() );
+    size_type                                                                 asize( a.size() );
+    size_type                                                                 bsize( b.size() );
 
     if ( ! bsize ) {
         return false;
@@ -2130,7 +2142,7 @@ dynamic_bitset< Block, AllocatorOrContainer >::init_from_unsigned_long(
     }
 
     typename buffer_type::iterator it = m_bits.begin();
-    for ( ; value; shifter::left_shift( value ), ++it ) {
+    for ( ; value; shifter::right_shift( value ), ++it ) {
         *it = static_cast< block_type >( value );
     }
 }

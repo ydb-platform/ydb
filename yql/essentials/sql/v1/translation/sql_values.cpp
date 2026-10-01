@@ -2,6 +2,7 @@
 #include "sql_group_by.h"
 #include "sql_query.h"
 #include "sql_select.h"
+#include "sql_select_yql.h"
 #include "sql_expression.h"
 #include "source.h"
 
@@ -87,8 +88,8 @@ bool TSqlValues::BuildRow(const TRule_values_source_row& inRow, TVector<TNodePtr
     return Unwrap(ExprList(sqlExpr, outRow, inRow.GetRule_expr_list2()));
 }
 
-TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVector<TString>& columnsHint,
-                                    const TString& operationName)
+TSourceResult TSqlValues::ValuesSource(const TRule_values_source& node, const TVector<TString>& columnsHint,
+                                       const TString& operationName)
 {
     Ctx_.IncrementMonCounter("sql_features", "ValuesSource");
     TPosition pos(Ctx_.Pos());
@@ -97,49 +98,52 @@ TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVect
             TVector<TVector<TNodePtr>> rows{{}};
             const auto& rowList = node.GetAlt_values_source1().GetRule_values_stmt1().GetRule_values_source_row_list2();
             if (!BuildRows(rowList, rows)) {
-                return nullptr;
+                return std::unexpected(ESQLError::Basic);
             }
-            return BuildWriteValues(pos, operationName, columnsHint, rows);
+
+            return Wrap(BuildWriteValues(pos, operationName, columnsHint, rows));
         }
         case TRule_values_source::kAltValuesSource2: {
             TSqlSelect select(*this);
             TPosition selectPos;
             auto source = select.Build(node.GetAlt_values_source2().GetRule_select_stmt1(), selectPos);
             if (!source) {
-                return nullptr;
+                return std::unexpected(ESQLError::Basic);
             }
-            return BuildWriteValues(pos, "UPDATE", columnsHint, std::move(source));
+
+            return Wrap(BuildWriteValues(pos, "UPDATE", columnsHint, std::move(source)));
         }
         case NSQLv1Generated::TRule_values_source::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }
 }
 
-TSourcePtr TSqlIntoValues::Build(const TRule_into_values_source& node, const TString& operationName) {
+TSourceResult TSqlIntoValues::Build(const TRule_into_values_source& node, const TString& operationName) {
     switch (node.Alt_case()) {
         case TRule_into_values_source::kAltIntoValuesSource1: {
-            auto alt = node.GetAlt_into_values_source1();
+            const auto& alt = node.GetAlt_into_values_source1();
             TVector<TString> columnsHint;
             if (alt.HasBlock1()) {
                 PureColumnListStr(alt.GetBlock1().GetRule_pure_column_list1(), *this, columnsHint);
             }
+
             return ValuesSource(alt.GetRule_values_source2(), columnsHint, operationName);
         }
         case NSQLv1Generated::TRule_into_values_source::kAltIntoValuesSource2:
             Ctx_.IncrementMonCounter("sql_errors", "DefaultValuesOrOther");
             AltNotImplemented("into_values_source", node);
-            return nullptr;
+            return std::unexpected(ESQLError::Basic);
         case NSQLv1Generated::TRule_into_values_source::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
     }
 }
 
-TSourcePtr TSqlAsValues::Build(const TRule_values_source& node, const TString& operationName) {
+TSourceResult TSqlAsValues::Build(const TRule_values_source& node, const TString& operationName) {
     switch (node.Alt_case()) {
         case TRule_values_source::kAltValuesSource1: {
             Ctx_.IncrementMonCounter("sql_errors", "UnknownValuesSource");
             Error() << "AS VALUES statement is not supported for " << operationName << ".";
-            return nullptr;
+            return std::unexpected(ESQLError::Basic);
         }
         case TRule_values_source::kAltValuesSource2: {
             return ValuesSource(node, {}, operationName);

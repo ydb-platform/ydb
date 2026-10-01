@@ -16,6 +16,9 @@
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <ydb/library/actors/util/cpumask.h>
+
+#include <optional>
 
 namespace NKikimr {
 
@@ -113,6 +116,10 @@ struct TPDiskConfig : public TThrRefBase {
     bool EnableFormatAndMetadataEncryption = true;
 
     ui32 ChunkSize = 128 << 20;
+    // Physical chunk size to format the disk with, instead of deriving it from the user-accessible
+    // ChunkSize. Zero means derive from ChunkSize. Only used when the disk is formatted. Setting it
+    // along with ChunkSize is a misconfiguration: NodeWarden warns and keeps ChunkSize.
+    ui32 PhysicalChunkSize = 0;
     ui32 SectorSize = 4 << 10;
 
     ui64 StatisticsUpdateIntervalMs = 1000;
@@ -149,6 +156,7 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxSlots = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
+    // EnableTightPDiskSpaceColors uses 30 (3%) plus per-color MinChunks floors; this default stays 130.
     ui32 ChunkBaseLimit = 130;
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
@@ -191,6 +199,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     // used for tests only
     std::optional<ui64> NonceRandNum;
+
+    std::optional<TCpuMask> BlobStorageExecutorPoolAffinity;
 
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
@@ -316,6 +326,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " EnableSectorEncryption # " << FeatureFlags.GetEnablePDiskDataEncryption() << x;
 
         str << " ChunkSize# " << ChunkSize << x;
+        str << " PhysicalChunkSize# " << PhysicalChunkSize << x;
         str << " SectorSize# " << SectorSize << x;
 
         str << " StatisticsUpdateIntervalMs# " << StatisticsUpdateIntervalMs << x;
@@ -360,6 +371,10 @@ struct TPDiskConfig : public TThrRefBase {
         str << " UseBytesFlightControl# " << (UseBytesFlightControl ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
+        if (BlobStorageExecutorPoolAffinity) {
+            str << " BlobStorageExecutorPoolAffinityCpuCount# "
+                << BlobStorageExecutorPoolAffinity->CpuCount() << x;
+        }
         str << "}";
         return str.Str();
     }
@@ -371,6 +386,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasChunkSize()) {
             ChunkSize = cfg->GetChunkSize();
+        }
+        if (cfg->HasPhysicalChunkSize()) {
+            PhysicalChunkSize = cfg->GetPhysicalChunkSize();
         }
         if (cfg->HasSectorSize()) {
             SectorSize = cfg->GetSectorSize();

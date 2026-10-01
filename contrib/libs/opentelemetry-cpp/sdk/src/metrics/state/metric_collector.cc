@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 #include <ostream>
 #include <utility>
@@ -42,17 +43,12 @@ AggregationTemporality MetricCollector::GetAggregationTemporality(
     InstrumentType instrument_type) noexcept
 {
   auto aggregation_temporality = metric_reader_->GetAggregationTemporality(instrument_type);
-  if (aggregation_temporality == AggregationTemporality::kDelta &&
-      instrument_type == InstrumentType::kGauge)
-  {
-    OTEL_INTERNAL_LOG_ERROR(
-        "[MetricCollector::GetAggregationTemporality] - Error getting aggregation temporality."
-        << "Delta temporality for Synchronous Gauge is currently not supported, using cumulative "
-           "temporality");
-
-    return AggregationTemporality::kCumulative;
-  }
   return aggregation_temporality;
+}
+
+std::size_t MetricCollector::GetCardinalityLimit(InstrumentType instrument_type) const noexcept
+{
+  return metric_reader_->GetCardinalityLimit(instrument_type);
 }
 
 MetricProducer::Result MetricCollector::Produce() noexcept

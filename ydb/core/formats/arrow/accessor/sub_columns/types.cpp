@@ -53,8 +53,9 @@ EValueType ValueTypeForItem(const NBinaryJson::TBinaryJson& blob) {
 std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType) {
     switch (valueType) {
         case EValueType::BinaryJson:
-        case EValueType::String:
             return arrow::binary();
+        case EValueType::String:
+            return arrow::utf8();
         case EValueType::Double:
             return arrow::float64();
         case EValueType::Bool:
@@ -69,8 +70,8 @@ bool CanBeDictionaryEncoded(EValueType valueType) {
 TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType) {
     switch (valueType) {
         case EValueType::String: {
-            AFL_VERIFY(array.type_id() == arrow::Type::BINARY)("actual", (ui32)array.type_id());
-            const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
+            AFL_VERIFY(array.type_id() == arrow::Type::STRING)("actual", (ui32)array.type_id());
+            const auto view = static_cast<const arrow::StringArray&>(array).GetView(index);
             return TJsonValueView::OfString(TStringBuf(view.data(), view.size()));
         }
         case EValueType::Double:
@@ -94,8 +95,9 @@ NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, con
 ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType) {
     switch (valueType) {
         case EValueType::BinaryJson:
-        case EValueType::String:
             return static_cast<const arrow::BinaryArray&>(array).GetView(index).size();
+        case EValueType::String:
+            return static_cast<const arrow::StringArray&>(array).GetView(index).size();
         case EValueType::Double:
             return sizeof(double);
         case EValueType::Bool:
@@ -117,7 +119,7 @@ void AppendValueFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::
             return;
         case EValueType::String: {
             const auto scalar = ExtractStringScalar(blob);
-            AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(scalar.data(), scalar.size())));
+            AFL_VERIFY(NArrow::Append<arrow::StringType>(builder, arrow::util::string_view(scalar.data(), scalar.size())));
             return;
         }
         case EValueType::Double:

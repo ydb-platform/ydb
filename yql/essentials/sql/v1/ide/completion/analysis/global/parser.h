@@ -11,9 +11,9 @@ public:
     using TPtr = THolder<IParser>;
 
     virtual ~IParser() = default;
-    virtual TParsedInput Parse(TCompletionInput input Y_LIFETIME_BOUND) Y_LIFETIME_BOUND = 0;
+    virtual TParsedInput Parse(TCompletionInput input Y_LIFETIME_BOUND) const Y_LIFETIME_BOUND = 0;
 };
 
-IParser::TPtr MakeParser(bool isAnsiLexer);
+IParser::TPtr MakeParser();
 
 } // namespace NSQLComplete

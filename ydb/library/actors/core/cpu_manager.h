@@ -4,6 +4,7 @@
 #include "executor_pool.h"
 #include <ydb/library/actors/core/harmonizer/harmonizer.h>
 #include <memory>
+#include <optional>
 
 namespace NActors {
     struct TActorSystemSetup;
@@ -40,6 +41,8 @@ namespace NActors {
             return Executors[poolId].Get();
         }
 
+        std::optional<TCpuMask> GetExecutorPoolAffinity(ui32 poolId) const;
+
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const {
             if (poolId < ExecutorPoolCount) {
                 Executors[poolId]->GetCurrentStats(poolStats, statsCopy);
@@ -47,6 +50,9 @@ namespace NActors {
         }
 
         void GetPoolStats(ui32 poolId, TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy, TVector<TExecutorThreadStats>& sharedStatsCopy) const;
+        // Idle coroutine frames retained by every worker thread of this actor
+        // system: basic and IO pools plus the shared pool, each counted once.
+        TAsyncFrameCache::TProcessStats GetAsyncFrameCacheStats() const;
         void GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const;
         void GetExecutorPoolStates(std::vector<TExecutorPoolState> &states) const;
 

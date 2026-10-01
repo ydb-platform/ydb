@@ -472,6 +472,10 @@ TMaybeNode<TExprBase> BuildKqpStreamIndexLookupJoin(
     return builtJoin;
 }
 
+bool IsEmptyRanges(const TKqlReadTableRanges& readTableRanges) {
+    return !!readTableRanges.Ranges().Maybe<TCoVoid>();
+}
+
 TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!join.RightLabel().Maybe<TCoAtom>()) {
         // Lookup only in tables
@@ -501,8 +505,10 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
     auto rightRead = rightReadMatch->Read;
     if (kqpCtx.Config->IsAutoIndexSelectionForIndexLookupJoinEnabled()) {
-        if (auto maybeRanges = rightRead.Maybe<TKqlReadTableRanges>()) {
-            const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, maybeRanges.Cast().Table().Path());
+        // We cannot change the right side, if predicate was pushed.
+        if (auto maybeReadTableRanges = rightRead.Maybe<TKqlReadTableRanges>(); maybeReadTableRanges && IsEmptyRanges(maybeReadTableRanges.Cast())) {
+            const auto readTableRanges = maybeReadTableRanges.Cast();
+            const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readTableRanges.Table().Path());
             if (mainTableDesc.Metadata->Kind != NYql::EKikimrTableKind::Olap) {
                 THashSet<TString> rightJoinKeys;
                 for (ui32 i = 0; i < join.JoinKeys().Size(); ++i) {

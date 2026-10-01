@@ -13,7 +13,7 @@
 
 #if defined(XSS_USE_OPENMP) && defined(_OPENMP)
 #define XSS_COMPILE_OPENMP
-#error include <omp.h>
+#error #include <omp.h>
 #endif
 
 /*

@@ -124,14 +124,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CFLOAT_absolute)
 {
 #if NPY_SIMD_F32
     npy_intp len = dimensions[0];
-    npy_intp ssrc = steps[0] / sizeof(npy_float);
-    npy_intp sdst = steps[1] / sizeof(npy_float);
 
     if (!is_mem_overlap(args[0], steps[0], args[1], steps[1], len) &&
-        npyv_loadable_stride_f32(ssrc) && npyv_storable_stride_f32(sdst)
-        && steps[0] % sizeof(npy_float) == 0
-        && steps[1] % sizeof(npy_float) == 0
+        npyv_loadable_stride_f32(steps[0]) &&
+        npyv_storable_stride_f32(steps[1])
     ) {
+        npy_intp ssrc = steps[0] / sizeof(npy_float);
+        npy_intp sdst = steps[1] / sizeof(npy_float);
+
         const npy_float *src = (npy_float*)args[0];
               npy_float *dst = (npy_float*)args[1];
 
@@ -179,14 +179,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(CDOUBLE_absolute)
 {
 #if NPY_SIMD_F64
     npy_intp len = dimensions[0];
-    npy_intp ssrc = steps[0] / sizeof(npy_double);
-    npy_intp sdst = steps[1] / sizeof(npy_double);
 
     if (!is_mem_overlap(args[0], steps[0], args[1], steps[1], len) &&
-        npyv_loadable_stride_f64(ssrc) && npyv_storable_stride_f64(sdst)
-        && steps[0] % sizeof(npy_double) == 0
-        && steps[1] % sizeof(npy_double) == 0
+        npyv_loadable_stride_f64(steps[0]) &&
+        npyv_storable_stride_f64(steps[1])
     ) {
+        npy_intp ssrc = steps[0] / sizeof(npy_double);
+        npy_intp sdst = steps[1] / sizeof(npy_double);
+
         const npy_double *src = (npy_double*)args[0];
               npy_double *dst = (npy_double*)args[1];
 

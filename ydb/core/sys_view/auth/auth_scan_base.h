@@ -76,8 +76,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::NAuth::TAuthScanBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::NAuth::TAuthScanBase: unexpected event",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -90,14 +90,12 @@ protected:
         bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
         bool isAdmin = isClusterAdmin || isDatabaseAdmin;
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "ProceedToScan,"
-            << " tenant name: " << TBase::TenantName
-            << " tenant owner: " << TBase::DatabaseOwner
-            << " subject sid: " << (UserToken ? UserToken->GetUserSID() : "empty")
-            << " require admin access: " << RequireUserAdministratorAccess
-            << " is admin: " << isAdmin
-        );
+        YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::ProceedToScan: starting auth scan",
+            {"tenantName", TBase::TenantName},
+            {"databaseOwner", TBase::DatabaseOwner},
+            {"userSid", (UserToken ? UserToken->GetUserSID() : "empty")},
+            {"requireAdministratorAccess", RequireUserAdministratorAccess},
+            {"isAdmin", isAdmin});
 
         if (RequireUserAdministratorAccess && !isAdmin) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, TStringBuilder() << "Administrator access is required");
@@ -166,14 +164,20 @@ protected:
         Y_ABORT_UNLESS(request->ResultSet.size() == 1);
         auto& entry = request->ResultSet.back();
 
+        if (entry.Status == TNavigate::EStatus::PathErrorUnknown && !DeepFirstSearchStack.empty()) {
+            // A child may disappear after its parent was listed. Its index is already advanced.
+            ContinueScan();
+            return;
+        }
+
         if (entry.Status != TNavigate::EStatus::Ok) {
             TBase::ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() <<
                 "Failed to navigate " << CanonizePath(entry.Path) << ": " << entry.Status);
             return;
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got navigate: " << request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::HandleNavigateResult: received navigate result",
+            {"navigateResult", request->ToString(*AppData()->TypeRegistry)});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 
@@ -213,8 +217,8 @@ protected:
         entry.Operation = TSchemeCacheNavigate::OpList;
         entry.RedirectRequired = false;
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Navigate " << request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_TRACE_COMP(NKikimrServices::SYSTEM_VIEWS, "TAuthScanBase::Navigate: sending navigate request",
+            {"navigateRequest", request->ToString(*AppData()->TypeRegistry)});
 
         TBase::Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }

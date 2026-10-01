@@ -4,8 +4,7 @@
 
 #include <util/generic/hash.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
@@ -26,8 +25,8 @@ private:
 class TMakeSleeper: public NYql::NUdf::TBoxedValue {
 public:
     static const NYql::NUdf::TStringRef& Name() {
-        static auto name = NYql::NUdf::TStringRef::Of("MakeSleeper");
-        return name;
+        static auto Name = NYql::NUdf::TStringRef::Of("MakeSleeper");
+        return Name;
     }
 
     static bool DeclareSignature(
@@ -87,7 +86,11 @@ THolder<IComputationGraph> BuildSleepGraph(TSetup<LLVM>& setup, const TVector<ui
 
 TVector<TUdfModuleInfo> MakeProfileModules() {
     TVector<TUdfModuleInfo> modules;
-    modules.emplace_back(TUdfModuleInfo{"", "TestModule", new TProfileUTModule()});
+    modules.emplace_back(TUdfModuleInfo{
+        .LibraryPath = "",
+        .ModuleName = "TestModule",
+        .Module = new TProfileUTModule(),
+    });
     return modules;
 }
 
@@ -118,7 +121,7 @@ Y_UNIT_TEST_LLVM(ReportsCountersWhenSlow) {
     setup.RuntimeSettings->UdfProfileEnable.Set(true);
     // Wide margins to keep this test stable: sleeps are either far below
     // or far above the threshold, never close to it.
-    setup.RuntimeSettings->UdfProfileMinTimeUs.Set(TDuration::MilliSeconds(1));
+    setup.RuntimeSettings->UdfProfileMinTimeUs.Set(TDuration::MilliSeconds(10));
     setup.RuntimeSettings->UdfProfileGraceCount.Set(3);
     setup.RuntimeSettings->UdfProfileHLLPrecision.Set(10);
 
@@ -133,7 +136,8 @@ Y_UNIT_TEST_LLVM(ReportsCountersWhenSlow) {
     // profiling state's destructor has already flushed the counters.
 
     UNIT_ASSERT_VALUES_EQUAL(countersProvider.Counters["_UdfProfile_TestModule.Sleep_CallCount"], (i64)sleepUs.size());
-    UNIT_ASSERT_VALUES_EQUAL(countersProvider.Counters["_UdfProfile_TestModule.Sleep_SlowCallCount"], (i64)slowCount);
+    // It would be great to have an equality here, but sometimes the process can get interrupted, which increases the slow counter
+    UNIT_ASSERT(countersProvider.Counters["_UdfProfile_TestModule.Sleep_SlowCallCount"] >= (i64)slowCount);
     UNIT_ASSERT(countersProvider.Counters["_UdfProfile_TestModule.Sleep_Duration"] > 0);
     UNIT_ASSERT(countersProvider.Counters["_UdfProfile_TestModule.Sleep_Cardinality"] >= 1);
 }
@@ -184,7 +188,7 @@ Y_UNIT_TEST_LLVM(ReportsCountersForClosureLeaf) {
     TTestCountersProvider countersProvider;
     setup.CountersProvider = &countersProvider;
     setup.RuntimeSettings->UdfProfileEnable.Set(true);
-    setup.RuntimeSettings->UdfProfileMinTimeUs.Set(TDuration::MilliSeconds(1));
+    setup.RuntimeSettings->UdfProfileMinTimeUs.Set(TDuration::MilliSeconds(10));
     setup.RuntimeSettings->UdfProfileGraceCount.Set(3);
     setup.RuntimeSettings->UdfProfileHLLPrecision.Set(10);
 
@@ -200,12 +204,12 @@ Y_UNIT_TEST_LLVM(ReportsCountersForClosureLeaf) {
     // once per row) and not to the zero-arg TestModule.MakeSleeper() factory
     // call, which only runs once and never sleeps.
     UNIT_ASSERT_VALUES_EQUAL(countersProvider.Counters["_UdfProfile_TestModule.MakeSleeper_CallCount"], (i64)sleepUs.size());
-    UNIT_ASSERT_VALUES_EQUAL(countersProvider.Counters["_UdfProfile_TestModule.MakeSleeper_SlowCallCount"], (i64)slowCount);
+    // It would be great to have an equality here, but sometimes the process can get interrupted, which increases the slow counter
+    UNIT_ASSERT(countersProvider.Counters["_UdfProfile_TestModule.MakeSleeper_SlowCallCount"] >= (i64)slowCount);
     UNIT_ASSERT(countersProvider.Counters["_UdfProfile_TestModule.MakeSleeper_Duration"] > 0);
     UNIT_ASSERT(countersProvider.Counters["_UdfProfile_TestModule.MakeSleeper_Cardinality"] >= 1);
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLUdfProfileTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

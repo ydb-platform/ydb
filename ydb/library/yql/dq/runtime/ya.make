@@ -4,7 +4,6 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/actors/core
     ydb/library/actors/util
-    ydb/library/formats/arrow
     ydb/library/formats/arrow/hash
     ydb/library/mkql_proto
     ydb/library/yql/dq/actors/compute/events
@@ -35,6 +34,7 @@ SRCS(
     dq_compute.cpp
     dq_input_channel.cpp
     dq_input_producer.cpp
+    dq_input_ready.cpp
     dq_output_channel.cpp
     dq_output_consumer.cpp
     dq_tasks_counters.cpp

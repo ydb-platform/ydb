@@ -1,5 +1,6 @@
 #include <ydb/core/mind/local.h>
 #include "tablet_metrics.h"
+#include <ydb/core/protos/tablet.pb.h>
 
 namespace NKikimr {
 namespace NMetrics {

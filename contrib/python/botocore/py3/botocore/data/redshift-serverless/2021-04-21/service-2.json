@@ -26,12 +26,12 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"TooManyTagsException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Converts a recovery point to a snapshot. For more information about recovery points and snapshots, see <a href=\"https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-snapshots-recovery.html\">Working with snapshots and recovery points</a>.</p>"
+      "documentation":"<p>Converts a recovery point to a snapshot. For more information about recovery points and snapshots, see <a href=\"https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-snapshots-recovery-points.html\">Working with snapshots and recovery points</a>.</p>"
     },
     "CreateCustomDomainAssociation":{
       "name":"CreateCustomDomainAssociation",
@@ -44,8 +44,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
@@ -80,11 +80,31 @@
       "output":{"shape":"CreateNamespaceResponse"},
       "errors":[
         {"shape":"InternalServerException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"TooManyTagsException"}
       ],
       "documentation":"<p>Creates a namespace in Amazon Redshift Serverless.</p>",
+      "idempotent":true
+    },
+    "CreateReservation":{
+      "name":"CreateReservation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"CreateReservationRequest"},
+      "output":{"shape":"CreateReservationResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
+        {"shape":"TooManyTagsException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Creates an Amazon Redshift Serverless reservation, which gives you the option to commit to a specified number of Redshift Processing Units (RPUs) for a year at a discount from Serverless on-demand (OD) rates.</p>",
       "idempotent":true
     },
     "CreateScheduledAction":{
@@ -98,8 +118,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Creates a scheduled action. A scheduled action contains a schedule and an Amazon Redshift API action. For example, you can create a schedule of when to run the <code>CreateSnapshot</code> API operation.</p>",
       "idempotent":true
@@ -115,12 +135,12 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"TooManyTagsException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
-      "documentation":"<p>Creates a snapshot of all databases in a namespace. For more information about snapshots, see <a href=\"https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-snapshots-recovery.html\"> Working with snapshots and recovery points</a>.</p>",
+      "documentation":"<p>Creates a snapshot of all databases in a namespace. For more information about snapshots, see <a href=\"https://docs.aws.amazon.com/redshift/latest/mgmt/serverless-snapshots-recovery-points.html\"> Working with snapshots and recovery points</a>.</p>",
       "idempotent":true
     },
     "CreateSnapshotCopyConfiguration":{
@@ -153,8 +173,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Creates a usage limit for a specified Amazon Redshift Serverless usage type. The usage limit is identified by the returned usage limit identifier. </p>",
@@ -172,8 +192,8 @@
         {"shape":"InternalServerException"},
         {"shape":"InsufficientCapacityException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"TooManyTagsException"},
         {"shape":"Ipv6CidrBlockNotFoundException"}
       ],
@@ -191,8 +211,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
@@ -226,8 +246,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Deletes a namespace from Amazon Redshift Serverless. Before you delete the namespace, you can create a final snapshot that has all of the data within the namespace.</p>",
       "idempotent":true
@@ -274,8 +294,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Deletes a snapshot from Amazon Redshift Serverless.</p>",
       "idempotent":true
@@ -309,8 +329,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Deletes a usage limit from Amazon Redshift Serverless.</p>",
       "idempotent":true
@@ -326,8 +346,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Deletes a workgroup.</p>",
       "idempotent":true
@@ -358,8 +378,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
@@ -407,10 +427,42 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Returns information about a recovery point.</p>"
+    },
+    "GetReservation":{
+      "name":"GetReservation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetReservationRequest"},
+      "output":{"shape":"GetReservationResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Gets an Amazon Redshift Serverless reservation. A reservation gives you the option to commit to a specified number of Redshift Processing Units (RPUs) for a year at a discount from Serverless on-demand (OD) rates.</p>"
+    },
+    "GetReservationOffering":{
+      "name":"GetReservationOffering",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetReservationOfferingRequest"},
+      "output":{"shape":"GetReservationOfferingResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Returns the reservation offering. The offering determines the payment schedule for the reservation.</p>"
     },
     "GetResourcePolicy":{
       "name":"GetResourcePolicy",
@@ -482,8 +534,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
@@ -500,8 +552,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Returns information about a usage limit.</p>"
     },
@@ -595,6 +647,36 @@
       ],
       "documentation":"<p>Returns an array of recovery points.</p>"
     },
+    "ListReservationOfferings":{
+      "name":"ListReservationOfferings",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListReservationOfferingsRequest"},
+      "output":{"shape":"ListReservationOfferingsResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Returns the current reservation offerings in your account.</p>"
+    },
+    "ListReservations":{
+      "name":"ListReservations",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"ListReservationsRequest"},
+      "output":{"shape":"ListReservationsResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"ThrottlingException"}
+      ],
+      "documentation":"<p>Returns a list of Reservation objects.</p>"
+    },
     "ListScheduledActions":{
       "name":"ListScheduledActions",
       "http":{
@@ -605,8 +687,8 @@
       "output":{"shape":"ListScheduledActionsResponse"},
       "errors":[
         {"shape":"InternalServerException"},
-        {"shape":"InvalidPaginationException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"InvalidPaginationException"},
         {"shape":"ValidationException"}
       ],
       "documentation":"<p>Returns a list of scheduled actions. You can use the flags to filter the list of returned scheduled actions.</p>"
@@ -621,10 +703,10 @@
       "output":{"shape":"ListSnapshotCopyConfigurationsResponse"},
       "errors":[
         {"shape":"InternalServerException"},
-        {"shape":"InvalidPaginationException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"InvalidPaginationException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Returns a list of snapshot copy configurations.</p>"
     },
@@ -652,8 +734,8 @@
       "input":{"shape":"ListTableRestoreStatusRequest"},
       "output":{"shape":"ListTableRestoreStatusResponse"},
       "errors":[
-        {"shape":"InvalidPaginationException"},
         {"shape":"ResourceNotFoundException"},
+        {"shape":"InvalidPaginationException"},
         {"shape":"ValidationException"}
       ],
       "documentation":"<p>Returns information about an array of <code>TableRestoreStatus</code> objects.</p>"
@@ -701,10 +783,10 @@
       "output":{"shape":"ListUsageLimitsResponse"},
       "errors":[
         {"shape":"InternalServerException"},
-        {"shape":"InvalidPaginationException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"InvalidPaginationException"},
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Lists all usage limits within Amazon Redshift Serverless.</p>"
     },
@@ -733,8 +815,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Creates or updates a resource policy. Currently, you can use policies to share snapshots across Amazon Web Services accounts.</p>"
@@ -750,8 +832,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Restore the data from a recovery point.</p>"
     },
@@ -766,8 +848,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Restores a namespace from a snapshot.</p>",
@@ -784,8 +866,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Restores a table from a recovery point to your Amazon Redshift Serverless instance. You can't use this operation to restore tables with interleaved sort keys.</p>"
     },
@@ -800,8 +882,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Restores a table from a snapshot to your Amazon Redshift Serverless instance. You can't use this operation to restore tables with <a href=\"https://docs.aws.amazon.com/redshift/latest/dg/t_Sorting_data.html#t_Sorting_data-interleaved\">interleaved sort keys</a>.</p>"
     },
@@ -849,8 +931,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"AccessDeniedException"},
         {"shape":"ThrottlingException"}
       ],
@@ -873,6 +955,23 @@
       ],
       "documentation":"<p>Updates an Amazon Redshift Serverless managed endpoint.</p>"
     },
+    "UpdateLakehouseConfiguration":{
+      "name":"UpdateLakehouseConfiguration",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateLakehouseConfigurationRequest"},
+      "output":{"shape":"UpdateLakehouseConfigurationResponse"},
+      "errors":[
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ConflictException"},
+        {"shape":"ValidationException"},
+        {"shape":"DryRunException"}
+      ],
+      "documentation":"<p>Modifies the lakehouse configuration for a namespace. This operation allows you to manage Amazon Redshift federated permissions and Amazon Web Services IAM Identity Center trusted identity propagation.</p>"
+    },
     "UpdateNamespace":{
       "name":"UpdateNamespace",
       "http":{
@@ -884,8 +983,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Updates a namespace with the specified settings. Unless required, you can't update multiple parameters in one request. For example, you must specify both <code>adminUsername</code> and <code>adminUserPassword</code> to update either field, but you can't update both <code>kmsKeyId</code> and <code>logExports</code> in a single request.</p>"
     },
@@ -900,8 +999,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Updates a scheduled action.</p>",
       "idempotent":true
@@ -917,8 +1016,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Updates a snapshot.</p>"
     },
@@ -950,8 +1049,8 @@
       "errors":[
         {"shape":"InternalServerException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
-        {"shape":"ValidationException"}
+        {"shape":"ValidationException"},
+        {"shape":"ConflictException"}
       ],
       "documentation":"<p>Update a usage limit in Amazon Redshift Serverless. You can't update the usage type or period of a usage limit.</p>"
     },
@@ -967,8 +1066,8 @@
         {"shape":"InternalServerException"},
         {"shape":"InsufficientCapacityException"},
         {"shape":"ResourceNotFoundException"},
-        {"shape":"ConflictException"},
         {"shape":"ValidationException"},
+        {"shape":"ConflictException"},
         {"shape":"Ipv6CidrBlockNotFoundException"}
       ],
       "documentation":"<p>Updates a workgroup with the specified configuration settings. You can't update multiple parameters in one request. For example, you can update <code>baseCapacity</code> or <code>port</code> in a single request, but you can't update both in the same request.</p> <p>VPC Block Public Access (BPA) enables you to block resources in VPCs and subnets that you own in a Region from reaching or being reached from the internet through internet gateways and egress-only internet gateways. If a workgroup is in an account with VPC BPA turned on, the following capabilities are blocked: </p> <ul> <li> <p>Creating a public access workgroup</p> </li> <li> <p>Modifying a private workgroup to public</p> </li> <li> <p>Adding a subnet with VPC BPA turned on to the workgroup when the workgroup is public</p> </li> </ul> <p>For more information about VPC BPA, see <a href=\"https://docs.aws.amazon.com/vpc/latest/userguide/security-vpc-bpa.html\">Block public access to VPCs and subnets</a> in the <i>Amazon VPC User Guide</i>.</p>"
@@ -1023,6 +1122,14 @@
       "type":"boolean",
       "box":true
     },
+    "Capacity":{"type":"integer"},
+    "CatalogNameString":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"^[a-z0-9_-]*[a-z]+[a-z0-9_-]*$"
+    },
+    "Charge":{"type":"double"},
     "ConfigParameter":{
       "type":"structure",
       "members":{
@@ -1226,6 +1333,42 @@
         "namespace":{
           "shape":"Namespace",
           "documentation":"<p>The created namespace object.</p>"
+        }
+      }
+    },
+    "CreateReservationRequest":{
+      "type":"structure",
+      "required":[
+        "capacity",
+        "offeringId"
+      ],
+      "members":{
+        "capacity":{
+          "shape":"Capacity",
+          "documentation":"<p>The number of Redshift Processing Units (RPUs) to reserve.</p>"
+        },
+        "clientToken":{
+          "shape":"String",
+          "documentation":"<p>A unique, case-sensitive identifier that you provide to ensure the idempotency of the request. If not provided, the Amazon Web Services SDK populates this field. This token must be a valid UUIDv4 value. For more information about idempotency, see <a href=\"https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/\"> Making retries safe with idempotent APIs </a>.</p>",
+          "idempotencyToken":true
+        },
+        "offeringId":{
+          "shape":"CreateReservationRequestOfferingIdString",
+          "documentation":"<p>The ID of the offering associated with the reservation. The offering determines the payment schedule for the reservation.</p>"
+        }
+      }
+    },
+    "CreateReservationRequestOfferingIdString":{
+      "type":"string",
+      "max":64,
+      "min":1
+    },
+    "CreateReservationResponse":{
+      "type":"structure",
+      "members":{
+        "reservation":{
+          "shape":"Reservation",
+          "documentation":"<p>The reservation object that the <code>CreateReservation</code> action created.</p>"
         }
       }
     },
@@ -1491,6 +1634,7 @@
         }
       }
     },
+    "CurrencyCode":{"type":"string"},
     "CustomDomainCertificateArnString":{
       "type":"string",
       "max":2048,
@@ -1531,8 +1675,7 @@
     },
     "DeleteCustomDomainAssociationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteEndpointAccessRequest":{
       "type":"structure",
@@ -1593,8 +1736,7 @@
     },
     "DeleteResourcePolicyResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteScheduledActionRequest":{
       "type":"structure",
@@ -1697,6 +1839,16 @@
       "type":"double",
       "box":true
     },
+    "DryRunException":{
+      "type":"structure",
+      "required":["message"],
+      "members":{
+        "message":{"shape":"String"}
+      },
+      "documentation":"<p>This exception is thrown when the request was successful, but dry run was enabled so no action was taken.</p>",
+      "exception":true
+    },
+    "Duration":{"type":"integer"},
     "Endpoint":{
       "type":"structure",
       "members":{
@@ -1903,6 +2055,56 @@
         }
       }
     },
+    "GetReservationOfferingRequest":{
+      "type":"structure",
+      "required":["offeringId"],
+      "members":{
+        "offeringId":{
+          "shape":"GetReservationOfferingRequestOfferingIdString",
+          "documentation":"<p>The identifier for the offering..</p>"
+        }
+      }
+    },
+    "GetReservationOfferingRequestOfferingIdString":{
+      "type":"string",
+      "max":64,
+      "min":1
+    },
+    "GetReservationOfferingResponse":{
+      "type":"structure",
+      "required":["reservationOffering"],
+      "members":{
+        "reservationOffering":{
+          "shape":"ReservationOffering",
+          "documentation":"<p>The returned reservation offering. The offering determines the payment schedule for the reservation.</p>"
+        }
+      }
+    },
+    "GetReservationRequest":{
+      "type":"structure",
+      "required":["reservationId"],
+      "members":{
+        "reservationId":{
+          "shape":"GetReservationRequestReservationIdString",
+          "documentation":"<p>The ID of the reservation to retrieve.</p>"
+        }
+      }
+    },
+    "GetReservationRequestReservationIdString":{
+      "type":"string",
+      "max":64,
+      "min":1
+    },
+    "GetReservationResponse":{
+      "type":"structure",
+      "required":["reservation"],
+      "members":{
+        "reservation":{
+          "shape":"Reservation",
+          "documentation":"<p>The returned reservation object.</p>"
+        }
+      }
+    },
     "GetResourcePolicyRequest":{
       "type":"structure",
       "required":["resourceArn"],
@@ -2097,6 +2299,20 @@
       "exception":true
     },
     "KmsKeyId":{"type":"string"},
+    "LakehouseIdcRegistration":{
+      "type":"string",
+      "enum":[
+        "Associate",
+        "Disassociate"
+      ]
+    },
+    "LakehouseRegistration":{
+      "type":"string",
+      "enum":[
+        "Register",
+        "Deregister"
+      ]
+    },
     "ListCustomDomainAssociationsRequest":{
       "type":"structure",
       "members":{
@@ -2195,7 +2411,7 @@
         },
         "sourceArn":{
           "shape":"SourceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) for the managed workgroup in the AWS Glue Data Catalog.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) for the managed workgroup in the Glue Data Catalog.</p>"
         }
       }
     },
@@ -2296,6 +2512,72 @@
         "recoveryPoints":{
           "shape":"RecoveryPointList",
           "documentation":"<p>The returned recovery point objects.</p>"
+        }
+      }
+    },
+    "ListReservationOfferingsRequest":{
+      "type":"structure",
+      "members":{
+        "maxResults":{
+          "shape":"ListReservationOfferingsRequestMaxResultsInteger",
+          "documentation":"<p>The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results.</p>"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token for the next set of items to return. (You received this token from a previous call.)</p>"
+        }
+      }
+    },
+    "ListReservationOfferingsRequestMaxResultsInteger":{
+      "type":"integer",
+      "box":true,
+      "max":100,
+      "min":1
+    },
+    "ListReservationOfferingsResponse":{
+      "type":"structure",
+      "required":["reservationOfferingsList"],
+      "members":{
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token to use when requesting the next set of items.</p>"
+        },
+        "reservationOfferingsList":{
+          "shape":"ReservationOfferingsList",
+          "documentation":"<p>The returned list of reservation offerings.</p>"
+        }
+      }
+    },
+    "ListReservationsRequest":{
+      "type":"structure",
+      "members":{
+        "maxResults":{
+          "shape":"ListReservationsRequestMaxResultsInteger",
+          "documentation":"<p>The maximum number of items to return for this call. The call also returns a token that you can specify in a subsequent call to get the next set of results.</p>"
+        },
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token for the next set of items to return. (You received this token from a previous call.)</p>"
+        }
+      }
+    },
+    "ListReservationsRequestMaxResultsInteger":{
+      "type":"integer",
+      "box":true,
+      "max":100,
+      "min":1
+    },
+    "ListReservationsResponse":{
+      "type":"structure",
+      "required":["reservationsList"],
+      "members":{
+        "nextToken":{
+          "shape":"PaginationToken",
+          "documentation":"<p>The token to use when requesting the next set of items.</p>"
+        },
+        "reservationsList":{
+          "shape":"ReservationsList",
+          "documentation":"<p>The serverless reservations returned by the request.</p>"
         }
       }
     },
@@ -2627,14 +2909,14 @@
         },
         "sourceArn":{
           "shape":"SourceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) for the managed workgroup in the AWS Glue Data Catalog.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) for the managed workgroup in the Glue Data Catalog.</p>"
         },
         "status":{
           "shape":"ManagedWorkgroupStatus",
           "documentation":"<p>The status of the managed workgroup.</p>"
         }
       },
-      "documentation":"<p>A collection of Amazon Redshift compute resources managed by AWS Glue.</p>"
+      "documentation":"<p>A collection of Amazon Redshift compute resources managed by Glue.</p>"
     },
     "ManagedWorkgroupName":{
       "type":"string",
@@ -2671,6 +2953,10 @@
           "shape":"DbUser",
           "documentation":"<p>The username of the administrator for the first database created in the namespace.</p>"
         },
+        "catalogArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Glue Data Catalog associated with the namespace enabled with Amazon Redshift federated permissions.</p>"
+        },
         "creationDate":{
           "shape":"SyntheticTimestamp_date_time",
           "documentation":"<p>The date of when the namespace was created.</p>"
@@ -2690,6 +2976,10 @@
         "kmsKeyId":{
           "shape":"String",
           "documentation":"<p>The ID of the Amazon Web Services Key Management Service key used to encrypt your data.</p>"
+        },
+        "lakehouseRegistrationStatus":{
+          "shape":"String",
+          "documentation":"<p>The status of the lakehouse registration for the namespace. Indicates whether the namespace is successfully registered with Amazon Redshift federated permissions.</p>"
         },
         "logExports":{
           "shape":"LogExportList",
@@ -2765,6 +3055,18 @@
     "NextInvocationsList":{
       "type":"list",
       "member":{"shape":"Timestamp"}
+    },
+    "OfferingId":{
+      "type":"string",
+      "max":64,
+      "min":1
+    },
+    "OfferingType":{
+      "type":"string",
+      "enum":[
+        "ALL_UPFRONT",
+        "NO_UPFRONT"
+      ]
     },
     "OwnerAccount":{
       "type":"string",
@@ -2871,6 +3173,88 @@
       "max":1024,
       "min":1
     },
+    "Reservation":{
+      "type":"structure",
+      "members":{
+        "capacity":{
+          "shape":"Capacity",
+          "documentation":"<p>The number of Redshift Processing Units (RPUs) to reserve.</p>"
+        },
+        "endDate":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The end date for the serverless reservation. This date is one year after the start date that you specify.</p>"
+        },
+        "offering":{
+          "shape":"ReservationOffering",
+          "documentation":"<p>The type of offering for the reservation. The offering class determines the payment schedule for the reservation.</p>"
+        },
+        "reservationArn":{
+          "shape":"ReservationArn",
+          "documentation":"<p>The Amazon Resource Name (ARN) that uniquely identifies the serverless reservation.</p>"
+        },
+        "reservationId":{
+          "shape":"ReservationId",
+          "documentation":"<p>The identifier that uniquely identifies the serverless reservation.</p>"
+        },
+        "startDate":{
+          "shape":"SyntheticTimestamp_date_time",
+          "documentation":"<p>The start date for the serverless reservation. This is the date you created the reservation.</p>"
+        },
+        "status":{
+          "shape":"Status",
+          "documentation":"<p>The status of the reservation. Possible values include the following:</p> <ul> <li> <p> <code>payment-pending</code> </p> </li> <li> <p> <code>active</code> </p> </li> <li> <p> <code>payment-failed</code> </p> </li> <li> <p> <code>retired</code> </p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>Represents an Amazon Redshift Serverless reservation, which gives you the option to commit to a specified number of Redshift Processing Units (RPUs) for a year at a discount from Serverless on-demand (OD) rates.</p>"
+    },
+    "ReservationArn":{
+      "type":"string",
+      "max":128,
+      "min":1
+    },
+    "ReservationId":{
+      "type":"string",
+      "max":64,
+      "min":1
+    },
+    "ReservationOffering":{
+      "type":"structure",
+      "members":{
+        "currencyCode":{
+          "shape":"CurrencyCode",
+          "documentation":"<p>The currency code for the offering.</p>"
+        },
+        "duration":{
+          "shape":"Duration",
+          "documentation":"<p>The duration, in seconds, for which the reservation reserves the RPUs.</p>"
+        },
+        "hourlyCharge":{
+          "shape":"Charge",
+          "documentation":"<p>The rate you are charged for each hour the reservation is active.</p>"
+        },
+        "offeringId":{
+          "shape":"OfferingId",
+          "documentation":"<p>The offering identifier.</p>"
+        },
+        "offeringType":{
+          "shape":"OfferingType",
+          "documentation":"<p>Determines the payment schedule for the reservation.</p>"
+        },
+        "upfrontCharge":{
+          "shape":"Charge",
+          "documentation":"<p>The up-front price you are charged for the reservation.</p>"
+        }
+      },
+      "documentation":"<p>The class of offering for the reservation. The offering class determines the payment schedule for the reservation.</p>"
+    },
+    "ReservationOfferingsList":{
+      "type":"list",
+      "member":{"shape":"ReservationOffering"}
+    },
+    "ReservationsList":{
+      "type":"list",
+      "member":{"shape":"Reservation"}
+    },
     "ResourceNotFoundException":{
       "type":"structure",
       "required":["message"],
@@ -2958,7 +3342,7 @@
         },
         "snapshotArn":{
           "shape":"String",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the snapshot to restore from. Required if restoring from Amazon Redshift Serverless to a provisioned cluster. Must not be specified at the same time as <code>snapshotName</code>.</p> <p>The format of the ARN is arn:aws:redshift:&lt;region&gt;:&lt;account_id&gt;:snapshot:&lt;cluster_identifier&gt;/&lt;snapshot_identifier&gt;.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the snapshot to restore from. Required if restoring from a provisioned cluster to Amazon Redshift Serverless. Must not be specified at the same time as <code>snapshotName</code>.</p> <p>The format of the ARN is arn:aws:redshift:&lt;region&gt;:&lt;account_id&gt;:snapshot:&lt;cluster_identifier&gt;/&lt;snapshot_identifier&gt;.</p>"
         },
         "snapshotName":{
           "shape":"String",
@@ -3384,6 +3768,11 @@
         "DISABLED"
       ]
     },
+    "Status":{
+      "type":"string",
+      "max":16,
+      "min":1
+    },
     "String":{"type":"string"},
     "SubnetId":{"type":"string"},
     "SubnetIdList":{
@@ -3522,8 +3911,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -3590,8 +3978,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateCustomDomainAssociationRequest":{
       "type":"structure",
@@ -3656,6 +4043,57 @@
         "endpoint":{
           "shape":"EndpointAccess",
           "documentation":"<p>The updated VPC endpoint.</p>"
+        }
+      }
+    },
+    "UpdateLakehouseConfigurationRequest":{
+      "type":"structure",
+      "required":["namespaceName"],
+      "members":{
+        "catalogName":{
+          "shape":"CatalogNameString",
+          "documentation":"<p>The name of the Glue Data Catalog that will be associated with the namespace enabled with Amazon Redshift federated permissions.</p> <p>Pattern: <code>^[a-z0-9_-]*[a-z]+[a-z0-9_-]*$</code> </p>"
+        },
+        "dryRun":{
+          "shape":"Boolean",
+          "documentation":"<p>A boolean value that, if <code>true</code>, validates the request without actually updating the lakehouse configuration. Use this to check for errors before making changes.</p>"
+        },
+        "lakehouseIdcApplicationArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Identity Center application used for enabling Amazon Web Services IAM Identity Center trusted identity propagation on a namespace enabled with Amazon Redshift federated permissions.</p>"
+        },
+        "lakehouseIdcRegistration":{
+          "shape":"LakehouseIdcRegistration",
+          "documentation":"<p>Modifies the Amazon Web Services IAM Identity Center trusted identity propagation on a namespace enabled with Amazon Redshift federated permissions. Valid values are <code>Associate</code> or <code>Disassociate</code>.</p>"
+        },
+        "lakehouseRegistration":{
+          "shape":"LakehouseRegistration",
+          "documentation":"<p>Specifies whether to register or deregister the namespace with Amazon Redshift federated permissions. Valid values are <code>Register</code> or <code>Deregister</code>.</p>"
+        },
+        "namespaceName":{
+          "shape":"NamespaceName",
+          "documentation":"<p>The name of the namespace whose lakehouse configuration you want to modify.</p>"
+        }
+      }
+    },
+    "UpdateLakehouseConfigurationResponse":{
+      "type":"structure",
+      "members":{
+        "catalogArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the Glue Data Catalog associated with the lakehouse configuration.</p>"
+        },
+        "lakehouseIdcApplicationArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the IAM Identity Center application used for enabling Amazon Web Services IAM Identity Center trusted identity propagation.</p>"
+        },
+        "lakehouseRegistrationStatus":{
+          "shape":"String",
+          "documentation":"<p>The current status of the lakehouse registration. Indicates whether the namespace is successfully registered with Amazon Redshift federated permissions.</p>"
+        },
+        "namespaceName":{
+          "shape":"NamespaceName",
+          "documentation":"<p>The name of the namespace.</p>"
         }
       }
     },
@@ -3980,7 +4418,7 @@
       "members":{
         "message":{"shape":"String"}
       },
-      "documentation":"<p>The input failed to satisfy the constraints specified by an AWS service.</p>",
+      "documentation":"<p>The input failed to satisfy the constraints specified by an Amazon Web Services service.</p>",
       "exception":true
     },
     "VpcEndpoint":{

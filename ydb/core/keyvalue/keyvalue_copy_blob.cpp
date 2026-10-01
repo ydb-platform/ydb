@@ -11,6 +11,10 @@ class TKeyValueCopyBlobActor : public TActorBootstrapped<TKeyValueCopyBlobActor>
     TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     TLogoBlobID BlobId;
     TLogoBlobID NewBlobId;
+    ui64 RequestUid = 0;
+
+    TVector<ui32> YellowMoveChannels;
+    TVector<ui32> YellowStopChannels;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -21,11 +25,13 @@ public:
             const TActorId& keyValueActorId,
             TTabletStorageInfo* tabletInfo,
             const TLogoBlobID& blobId,
-            const TLogoBlobID& newBlobId)
+            const TLogoBlobID& newBlobId,
+            ui64 requestUid)
         : KeyValueActorId(keyValueActorId)
         , TabletInfo(tabletInfo)
         , BlobId(blobId)
         , NewBlobId(newBlobId)
+        , RequestUid(requestUid)
     {}
 
     void Bootstrap() {
@@ -37,18 +43,14 @@ public:
             {"groupId", groupId},
             {"blobId", BlobId.ToString()});
 
-        auto deadline = TActivationContext::Now() + TDuration::Seconds(60);
-
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(
-            BlobId, 0, BlobId.BlobSize(), deadline, NKikimrBlobStorage::EGetHandleClass::LowRead);
+            BlobId, 0, BlobId.BlobSize(), TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::LowRead);
         SendToBSProxy(TActivationContext::AsActorContext(), groupId, ev.release(), 0, NWilson::TTraceId());
 
         Become(&TThis::StateGet);
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev) {
-        // TODO: handle situation when blob was deleted before we started copying it
-
         auto groupId = TabletInfo->GroupFor(BlobId.Channel(), BlobId.Generation());
 
         if (ev->Get()->GroupId != groupId) {
@@ -78,6 +80,17 @@ public:
         Y_ABORT_UNLESS(ev->Get()->ResponseSz == 1);
         auto& response = ev->Get()->Responses[0];
 
+        if (response.Status == NKikimrProto::NODATA) {
+            YDB_LOG_ERROR_COMP(NKikimrServices::KEYVALUE, "KeyValueCopyBlobActor: EvGet result: response status is NODATA, possibly blob was deleted before we started copying it",
+                {"marker", "KVCB09"},
+                {"keyValue", TabletInfo->TabletID},
+                {"groupId", groupId},
+                {"blobId", BlobId.ToString()},
+                {"status", NKikimrProto::EReplyStatus_Name(response.Status)});
+            ReplyNodata();
+            return;
+        }
+
         if (response.Status != NKikimrProto::OK) {
             YDB_LOG_ERROR_COMP(NKikimrServices::KEYVALUE, "KeyValueCopyBlobActor: unexpected EvGet result: response status is not OK",
                 {"marker", "KVCB04"},
@@ -104,12 +117,10 @@ public:
 
         // TODO: more error handing
 
-        auto deadline = TActivationContext::Now() + TDuration::Seconds(60);
-
         THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
             .BlobId = NewBlobId,
             .Buffer = std::move(buffer),
-            .Deadline = deadline,
+            .Deadline = TInstant::Max(),
             .HandleClass = NKikimrBlobStorage::AsyncBlob,
             .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
             .WriteSource = TWriteSource::KeyValueMoveData,
@@ -126,6 +137,35 @@ public:
         SendPutToGroup(TActivationContext::AsActorContext(), newGroupId, TabletInfo.Get(), std::move(put));
 
         Become(&TThis::StatePut);
+    }
+
+    void CheckYellow(const TStorageStatusFlags &statusFlags, ui32 currentGroup) {
+        if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
+            for (ui32 channel : xrange(TabletInfo->Channels.size())) {
+                const ui32 group = TabletInfo->ChannelInfo(channel)->LatestEntry()->GroupID;
+                if (currentGroup == group) {
+                    YellowMoveChannels.push_back(channel);
+                }
+            }
+            SortUnique(YellowMoveChannels);
+            YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "KeyValueCopyBlobActor: yellow move channels",
+                {"marker", "KVCB10"},
+                {"keyValue", TabletInfo->TabletID},
+                {"yellowMoveChannels", YellowMoveChannels});
+        }
+        if (statusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
+            for (ui32 channel : xrange(TabletInfo->Channels.size())) {
+                const ui32 group = TabletInfo->ChannelInfo(channel)->LatestEntry()->GroupID;
+                if (currentGroup == group) {
+                    YellowStopChannels.push_back(channel);
+                }
+            }
+            SortUnique(YellowStopChannels);
+            YDB_LOG_NOTICE_COMP(NKikimrServices::KEYVALUE, "KeyValueCopyBlobActor: yellow stop channels",
+                {"marker", "KVCB11"},
+                {"keyValue", TabletInfo->TabletID},
+                {"yellowStopChannels", YellowStopChannels});
+        }
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr& ev) {
@@ -155,13 +195,34 @@ public:
             return;
         }
 
-        // TODO: more error handing
+        CheckYellow(ev->Get()->StatusFlags, newGroupId);
 
-        FinishAndDie();
+        if (!YellowStopChannels.empty()) {
+            ReplyYellowStop();
+            return;
+        }
+
+        ReplySuccess();
     }
 
-    void FinishAndDie() {
-        Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(BlobId, NewBlobId));
+    void ReplySuccess() {
+        Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
+            TEvKeyValue::TEvBlobCopied::EResult::OK, BlobId, NewBlobId, RequestUid,
+            std::move(YellowMoveChannels), std::move(YellowStopChannels)));
+        PassAway();
+    }
+
+    void ReplyNodata() {
+        Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
+            TEvKeyValue::TEvBlobCopied::EResult::NODATA, BlobId, NewBlobId, RequestUid,
+            std::move(YellowMoveChannels), std::move(YellowStopChannels)));
+        PassAway();
+    }
+
+    void ReplyYellowStop() {
+        Send(KeyValueActorId, new TEvKeyValue::TEvBlobCopied(
+            TEvKeyValue::TEvBlobCopied::EResult::YELLOW_STOP, BlobId, NewBlobId, RequestUid,
+            std::move(YellowMoveChannels), std::move(YellowStopChannels)));
         PassAway();
     }
 
@@ -178,6 +239,7 @@ public:
     STFUNC(StateGet) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 break;
         }
@@ -186,6 +248,7 @@ public:
     STFUNC(StatePut) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
+            cFunc(TEvents::TSystem::Poison, PassAway);
             default:
                 break;
         }
@@ -196,8 +259,9 @@ IActor* CreateKeyValueCopyBlobActor(
         const TActorId& keyValueActorId,
         TTabletStorageInfo* tabletInfo,
         const TLogoBlobID& blobId,
-        const TLogoBlobID& newBlobId) {
-    return new TKeyValueCopyBlobActor(keyValueActorId, tabletInfo, blobId, newBlobId);
+        const TLogoBlobID& newBlobId,
+        ui64 requestUid) {
+    return new TKeyValueCopyBlobActor(keyValueActorId, tabletInfo, blobId, newBlobId, requestUid);
 }
 
 } // NKeyValue

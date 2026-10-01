@@ -15,6 +15,7 @@
 #include <ydb/public/lib/fq/scope.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -65,6 +66,9 @@ public:
         Client = CreateNewTableClient(ConnectionConfig,
                                       YqSharedResources,
                                       CredentialsProviderFactory);
+        SchemeClient = CreateNewSchemeClient(ConnectionConfig,
+                                             YqSharedResources,
+                                             CredentialsProviderFactory);
         Become(&TSynchronizeScopeActor::StateFetchConnectionsFunc);
 
         const auto& controlPlane = ComputeConfig.GetProto().GetYdb().GetControlPlane();
@@ -303,6 +307,33 @@ public:
         hFunc(TEvControlPlaneStorage::TEvModifyDatabaseResponse, Handle);
     )
 
+    STRICT_STFUNC(StateUpdateAclFunc,
+        hFunc(TEvYdbCompute::TEvUpdateAclResponse, Handle);
+        hFunc(TEvControlPlaneStorage::TEvModifyDatabaseResponse, Handle);
+    )
+
+    void Handle(const TEvYdbCompute::TEvUpdateAclResponse::TPtr& ev) {
+        const auto& status = ev.Get()->Get()->Status;
+        if (!status.IsSuccess()) {
+            YDB_LOG_ERROR("[ydb] [SynchronizationService]: UpdateAcl response for .sys directory, issues",
+                {"scope", Scope},
+                {"issues", status.GetIssues().ToOneLineString()});
+            ReplyErrorAndPassAway(NYdb::NAdapters::ToYqlIssues(status.GetIssues()),
+                 "Error updating ACL for .sys directory at the synchronization stage");
+            return;
+        }
+        YDB_LOG_INFO("[ydb] [SynchronizationService]: ACL inheritance removed for .sys directory for the scope",
+            {"scope", Scope});
+        if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
+            Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
+            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope after UpdateAcl",
+                {"scope", Scope});
+            CreateResourcePools();
+            return;
+        }
+        SendFinalModifyDatabase();
+    }
+
     void Handle(const TEvYdbCompute::TEvCreateResourcePoolResponse::TPtr& ev) {
         const auto& status = ev.Get()->Get()->Status;
         if (IsPathExistsIssue(status)) {
@@ -328,6 +359,30 @@ private:
                                                                      const TYqSharedResources::TPtr& yqSharedResources,
                                                                      const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
         return ::NFq::CreateNewTableClient(Scope, ComputeConfig, connection, yqSharedResources, credentialsProviderFactory);
+    }
+
+    std::shared_ptr<NYdb::NScheme::TSchemeClient> CreateNewSchemeClient(const NFq::NConfig::TYdbStorageConfig& connection,
+                                                                        const TYqSharedResources::TPtr& yqSharedResources,
+                                                                        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory) {
+        NFq::NConfig::TYdbStorageConfig computeConnection = ComputeConfig.GetSchemeConnection(Scope);
+        computeConnection.set_endpoint(connection.endpoint());
+        computeConnection.set_database(connection.database());
+        computeConnection.set_usessl(connection.usessl());
+        auto schemeSettings = GetClientSettings<NYdb::TCommonClientSettings>(computeConnection, credentialsProviderFactory);
+        return std::make_shared<NYdb::NScheme::TSchemeClient>(yqSharedResources->UserSpaceYdbDriver, schemeSettings);
+    }
+
+    void UpdateAcl() {
+        const TString sysPath = ConnectionConfig.database() + "/.sys";
+        auto settings = NYdb::NScheme::TModifyPermissionsSettings()
+            .AddInterruptInheritance(true)
+            .AddGrantPermissions(NYdb::NScheme::TPermissions("ydb.clusters.manage@as", {"ydb.generic.full"}));
+
+        SchemeClient
+            ->ModifyPermissions(sysPath, settings)
+            .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const NYdb::TAsyncStatus& future) {
+                actorSystem->Send(self, new TEvYdbCompute::TEvUpdateAclResponse(ExtractStatus(future)));
+            });
     }
 
     NYql::TIssues ValidateSources() {
@@ -625,14 +680,10 @@ private:
     }
 
     void FinishExternalSourcesSynchronization() {
-        if (WorkloadManagerConfig.GetEnable() && !ComputeDatabase.workload_manager_synchronized()) {
-            Become(&TSynchronizeScopeActor::StateCreateResourcePoolsFunc);
-            YDB_LOG_INFO("[ydb] [SynchronizationService]: Start creating resource pools for the scope (cms or ydbcp) after external sources synchronization",
-                {"scope", Scope});
-            CreateResourcePools();
-            return;
-        }
-        SendFinalModifyDatabase();
+        Become(&TSynchronizeScopeActor::StateUpdateAclFunc);
+        YDB_LOG_INFO("[ydb] [SynchronizationService]: Start updating ACL for .sys directory for the scope after external sources synchronization",
+            {"scope", Scope});
+        UpdateAcl();
     }
 
     void SendFinalModifyDatabase() {
@@ -786,6 +837,7 @@ private:
     TMap<TString, FederatedQuery::Binding> Bindings;
     NFq::NPrivate::TCounters Counters;
     std::shared_ptr<NYdb::NTable::TTableClient> Client;
+    std::shared_ptr<NYdb::NScheme::TSchemeClient> SchemeClient;
     NYql::TIssues Issues;
 };
 

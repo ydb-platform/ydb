@@ -27,6 +27,7 @@
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
 #include <ydb/core/protos/set_column_constraint.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/stream/output.h>
 
@@ -80,6 +81,10 @@ Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDriveStatus, stream, value) {
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::EDecommitStatus, stream, value) {
     stream << NKikimrBlobStorage::EDecommitStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TMaintenanceStatus::E, stream, value) {
+    stream << NKikimrBlobStorage::TMaintenanceStatus::E_Name(value);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimrBlobStorage::TGroupStatus::E, stream, value) {
@@ -234,10 +239,6 @@ Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvAnalyzeStatusResponse_EStatus, stream, valu
     stream << NKikimrStat::TEvAnalyzeStatusResponse_EStatus_Name(value);
 }
 
-Y_DECLARE_OUT_SPEC(, NKikimrStat::TEvStatisticsResponse::EStatus, stream, value) {
-    stream << NKikimrStat::TEvStatisticsResponse::EStatus_Name(value);
-}
-
 Y_DECLARE_OUT_SPEC(, NKikimrIndexBuilder::EBuildStatus, stream, value) {
     stream << NKikimrIndexBuilder::EBuildStatus_Name(value);
 }
@@ -248,4 +249,8 @@ Y_DECLARE_OUT_SPEC(, NKikimrTxDataShard::EKMeansState, stream, value) {
 
 Y_DECLARE_OUT_SPEC(, NKikimrSetColumnConstraint::EValidateStatus, stream, value) {
     stream << NKikimrSetColumnConstraint::EValidateStatus_Name(value);
+}
+
+Y_DECLARE_OUT_SPEC(, NKikimrReplication::TEvAlterReplicationResult::EStatus, stream, value) {
+    stream << NKikimrReplication::TEvAlterReplicationResult::EStatus_Name(value);
 }

@@ -35,7 +35,7 @@ PEERDIR(
     ydb/library/yql/providers/common/pushdown
     ydb/library/yql/providers/dq/common
     ydb/library/yql/providers/dq/expr_nodes
-    ydb/library/yql/providers/dq/provider/exec
+    ydb/library/yql/providers/dq/mkql
     ydb/library/yql/providers/generic/provider
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/pq/common

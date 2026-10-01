@@ -987,7 +987,7 @@ private:
                 error = TError(NYT::EErrorCode::Canceled, "Operation aborted");
             } else {
                 error = TError(NYT::EErrorCode::Timeout, "Operation timed out")
-                    << TErrorAttribute("timeout", Timeout_);
+                    .With("timeout", Timeout_);
             }
             promise.Set(error);
         }

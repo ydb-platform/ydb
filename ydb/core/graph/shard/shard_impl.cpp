@@ -3,6 +3,7 @@
 #include <ydb/core/graph/api/events.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/protos/config.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
 

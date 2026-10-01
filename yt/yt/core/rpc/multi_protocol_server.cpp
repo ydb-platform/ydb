@@ -57,8 +57,8 @@ public:
         }
         THROW_ERROR_EXCEPTION(NRpc::EErrorCode::NoSuchService,
             "Service is not registered")
-            << TErrorAttribute("service", serviceId.ServiceName)
-            << TErrorAttribute("realm_id", serviceId.RealmId);
+            .With("service", serviceId.ServiceName)
+            .With("realm_id", serviceId.RealmId);
     }
 
     void Configure(const TServerConfigPtr& config) final

@@ -33,8 +33,8 @@ public:
                 !operationId && !command->OperationAlias.has_value())
             {
                 THROW_ERROR_EXCEPTION("Exactly one of \"operation_id\" and \"operation_alias\" should be set")
-                    << TErrorAttribute("operation_id", command->OperationId)
-                    << TErrorAttribute("operation_alias", command->OperationAlias);
+                    .With("operation_id", command->OperationId)
+                    .With("operation_alias", command->OperationAlias);
             }
 
             if (command->OperationId) {
@@ -373,10 +373,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStartOperationCommand
+struct TStartOperationCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TStartOperationCommand);
 
     static void Register(TRegistrar registrar);
@@ -384,10 +383,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMapCommand
+struct TMapCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TMapCommand);
 
     static void Register(TRegistrar registrar);
@@ -395,10 +393,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMergeCommand
+struct TMergeCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TMergeCommand);
 
     static void Register(TRegistrar registrar);
@@ -406,10 +403,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSortCommand
+struct TSortCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TSortCommand);
 
     static void Register(TRegistrar registrar);
@@ -417,10 +413,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEraseCommand
+struct TEraseCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TEraseCommand);
 
     static void Register(TRegistrar registrar);
@@ -428,10 +423,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReduceCommand
+struct TReduceCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TReduceCommand);
 
     static void Register(TRegistrar registrar);
@@ -439,10 +433,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJoinReduceCommand
+struct TJoinReduceCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TJoinReduceCommand);
 
     static void Register(TRegistrar registrar);
@@ -450,10 +443,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMapReduceCommand
+struct TMapReduceCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TMapReduceCommand);
 
     static void Register(TRegistrar registrar);
@@ -461,10 +453,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TRemoteCopyCommand
+struct TRemoteCopyCommand
     : public TStartOperationCommandBase
 {
-public:
     REGISTER_YSON_STRUCT_LITE(TRemoteCopyCommand);
 
     static void Register(TRegistrar registrar);

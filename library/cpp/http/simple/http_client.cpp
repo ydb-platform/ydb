@@ -3,6 +3,7 @@
 #include <library/cpp/string_utils/url/url.h>
 
 #include <util/stream/output.h>
+#include <util/string/ascii.h>
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
@@ -18,13 +19,15 @@ TKeepAliveHttpClient::TKeepAliveHttpClient(const TString& host,
                                            TDuration socketTimeout,
                                            TDuration connectTimeout,
                                            bool useKeepAlive,
-                                           bool useConnectionPool)
+                                           bool useConnectionPool,
+                                           bool strictContentLength)
     : Host(CutHttpPrefix(host))
     , Port(port)
     , SocketTimeout(socketTimeout)
     , ConnectTimeout(connectTimeout)
     , UseKeepAlive(useKeepAlive)
     , UseConnectionPool(useConnectionPool)
+    , StrictContentLength(strictContentLength)
     , IsHttps(host.StartsWith("https"))
     , IsClosingRequired(false)
     , HttpsVerification(TVerifyCert{Host})
@@ -69,14 +72,22 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequest(const TStringBuf
                                                                 THttpHeaders* outHeaders,
                                                                 NThreading::TCancellationToken cancellation) {
     const TString contentLength = IntToString<10, size_t>(body.size());
-    return DoRequestReliable(FormRequest(method, relativeUrl, body, inHeaders, contentLength), output, outHeaders, std::move(cancellation));
+    return DoRequestReliable(FormRequest(method, relativeUrl, body, inHeaders, contentLength),
+                             output,
+                             outHeaders,
+                             std::move(cancellation),
+                             ResponseBodyExpected(method));
 }
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::DoRequestRaw(const TStringBuf raw,
                                                                    IOutputStream* output,
                                                                    THttpHeaders* outHeaders,
                                                                    NThreading::TCancellationToken cancellation) {
-    return DoRequestReliable(raw, output, outHeaders, std::move(cancellation));
+    return DoRequestReliable(raw, output, outHeaders, std::move(cancellation), ResponseBodyExpected(raw.Before(' ')));
+}
+
+bool TKeepAliveHttpClient::ResponseBodyExpected(TStringBuf method) {
+    return !AsciiEqualsIgnoreCase(method, TStringBuf("HEAD"));
 }
 
 void TKeepAliveHttpClient::DisableVerificationForHttps() {
@@ -129,7 +140,8 @@ TVector<IOutputStream::TPart> TKeepAliveHttpClient::FormRequest(TStringBuf metho
 
 TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::ReadAndTransferHttp(THttpInput& input,
                                                                           IOutputStream* output,
-                                                                          THttpHeaders* outHeaders) const {
+                                                                          THttpHeaders* outHeaders,
+                                                                          bool responseBodyExpected) const {
     TKeepAliveHttpClient::THttpCode statusCode;
     try {
         statusCode = ParseHttpRetCode(input.FirstLine());
@@ -140,8 +152,8 @@ TKeepAliveHttpClient::THttpCode TKeepAliveHttpClient::ReadAndTransferHttp(THttpI
                                        << rest;
     }
 
-    auto canContainBody = [](auto statusCode) {
-        return statusCode != HTTP_NOT_MODIFIED && statusCode != HTTP_NO_CONTENT;
+    auto canContainBody = [responseBodyExpected](auto statusCode) {
+        return responseBodyExpected && statusCode != HTTP_NOT_MODIFIED && statusCode != HTTP_NO_CONTENT;
     };
 
     if (output && canContainBody(statusCode) && IfResponseRequired(input)) {
@@ -170,7 +182,8 @@ bool TKeepAliveHttpClient::CreateNewConnectionIfNeeded() {
                                                            IsHttps,
                                                            ClientCertificate,
                                                            HttpsVerification,
-                                                           UseKeepAlive);
+                                                           UseKeepAlive,
+                                                           StrictContentLength);
         IsClosingRequired = false;
         return true;
     }
@@ -208,6 +221,7 @@ TSimpleHttpClient::TSimpleHttpClient(const TOptions& options)
     , ConnectTimeout(options.ConnectTimeout())
     , UseKeepAlive(options.UseKeepAlive())
     , UseConnectionPool(options.UseConnectionPool())
+    , StrictContentLength(options.StrictContentLength())
 {
 }
 
@@ -258,8 +272,10 @@ namespace NPrivate {
                                      bool isHttps,
                                      const TMaybe<TOpenSslClientIO::TOptions::TClientCert>& clientCert,
                                      const TMaybe<TOpenSslClientIO::TOptions::TVerifyCert>& verifyCert,
-                                     bool keepAlive)
-        : Addr(Resolve(host, port))
+                                     bool keepAlive,
+                                     bool strictContentLength)
+        : StrictContentLength(strictContentLength)
+        , Addr(Resolve(host, port))
         , Socket(Connect(Addr, sockTimeout, connTimeout, host, port))
         , SocketIn(Socket)
         , SocketOut(Socket)
@@ -312,7 +328,7 @@ namespace NPrivate {
 
 void TSimpleHttpClient::ProcessResponse(const TStringBuf relativeUrl, THttpInput& input, IOutputStream*, const unsigned statusCode) const {
     if (!(statusCode >= 200 && statusCode < 300)) {
-        TString rest = input.ReadAll();
+        TString rest = ReadDiagnosticBody(input, statusCode);
         ythrow THttpRequestException(statusCode) << "Got " << statusCode << " at " << Host << relativeUrl << "\nFull http response:\n"
                                                  << rest;
     }
@@ -322,7 +338,7 @@ TSimpleHttpClient::~TSimpleHttpClient() {
 }
 
 TKeepAliveHttpClient TSimpleHttpClient::CreateClient() const {
-    TKeepAliveHttpClient cl(Host, Port, SocketTimeout, ConnectTimeout, UseKeepAlive, UseConnectionPool);
+    TKeepAliveHttpClient cl(Host, Port, SocketTimeout, ConnectTimeout, UseKeepAlive, UseConnectionPool, StrictContentLength);
 
     if (!HttpsVerification) {
         cl.DisableVerificationForHttps();
@@ -334,6 +350,13 @@ TKeepAliveHttpClient TSimpleHttpClient::CreateClient() const {
 }
 
 void TSimpleHttpClient::PrepareClient(TKeepAliveHttpClient&) const {
+}
+
+TString TSimpleHttpClient::ReadDiagnosticBody(THttpInput& input, unsigned statusCode) {
+    if (statusCode == HTTP_NOT_MODIFIED || statusCode == HTTP_NO_CONTENT) {
+        return {}; // no body to read, and Content-Length may still be set
+    }
+    return input.ReadAll();
 }
 
 TRedirectableHttpClient::TRedirectableHttpClient(const TOptions& options)
@@ -390,7 +413,7 @@ void TRedirectableHttpClient::ProcessResponse(const TStringBuf relativeUrl, THtt
         }
     }
     if (!(statusCode >= 200 && statusCode < 300)) {
-        TString rest = input.ReadAll();
+        TString rest = ReadDiagnosticBody(input, statusCode);
         ythrow THttpRequestException(statusCode) << "Got " << statusCode << " at " << Host << relativeUrl << "\nFull http response:\n"
                                                  << rest;
     }

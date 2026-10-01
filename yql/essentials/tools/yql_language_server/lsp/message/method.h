@@ -13,6 +13,8 @@ constexpr struct {
         TStringBuf DidChange = "textDocument/didChange";
         TStringBuf DidClose = "textDocument/didClose";
         TStringBuf Completion = "textDocument/completion";
+        TStringBuf Diagnostic = "textDocument/diagnostic";
+        TStringBuf Formatting = "textDocument/formatting";
     } TextDocument;
 } Method;
 

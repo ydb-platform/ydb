@@ -1,5 +1,7 @@
 #include "controller_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TController::TTxDropReplication: public TTxBase {
@@ -7,6 +9,7 @@ class TController::TTxDropReplication: public TTxBase {
     TEvPrivate::TEvDropReplication::TPtr PrivEv;
     THolder<IEventHandle> Result; // TEvController::TEvDropReplicationResult
     TReplication::TPtr Replication;
+    TVector<std::pair<ui64, ui64>> AlterersToStop;
 
 public:
     explicit TTxDropReplication(TController* self, TEvController::TEvDropReplication::TPtr& ev)
@@ -26,6 +29,7 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
         if (PubEv) {
             return ExecutePub(txc, ctx);
         } else if (PrivEv) {
@@ -36,7 +40,8 @@ public:
     }
 
     bool ExecutePub(TTransactionContext& txc, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PubEv->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
         const auto pathId = TPathId::FromProto(record.GetPathId());
@@ -44,8 +49,8 @@ public:
         Replication = Self->Find(pathId);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot drop unknown replication"
-                << ": pathId# " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
+                {"pathId", pathId});
 
             auto ev = MakeHolder<TEvController::TEvDropReplicationResult>();
             ev->Record.MutableOperationId()->CopyFrom(record.GetOperationId());
@@ -63,9 +68,35 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        Self->DeferredAlters.erase(Replication->GetId());
+        for (auto it = Self->SchemaBarriers.begin(); it != Self->SchemaBarriers.end();) {
+            if (it->first.first != Replication->GetId()) {
+                ++it;
+                continue;
+            }
+            const auto key = it->first;
+            for (const auto& workerId : it->second.ExpectedWorkers) {
+                db.Table<Schema::SchemaBarrierWorkers>()
+                    .Key(workerId.ReplicationId(), workerId.TargetId(), workerId.WorkerId()).Delete();
+            }
+            Self->StopSchemaChangeTargetFlush(key);
+            if (Self->SchemaChangeDstAlterers.contains(key)) {
+                AlterersToStop.push_back(key);
+            }
+            if (Replication->FindTarget(key.second)) {
+                db.Table<Schema::Targets>().Key(key.first, key.second).Update(
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierPhase>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierChange>(TString()),
+                    NIceDb::TUpdate<Schema::Targets::DstAlterTxId>(0),
+                    NIceDb::TUpdate<Schema::Targets::SchemaBarrierFlushTxIds>(TString()));
+            }
+            it = Self->SchemaBarriers.erase(it);
+        }
+
         Replication->SetState(TReplication::EState::Removing);
         db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
-            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState())
+            NIceDb::TUpdate<Schema::Replications::State>(Replication->GetState()),
+            NIceDb::TUpdate<Schema::Replications::DeferredAlter>(false)
         );
 
         for (ui64 tid = 0; tid < Replication->GetNextTargetId(); ++tid) {
@@ -73,6 +104,10 @@ public:
             if (!target) {
                 continue;
             }
+
+            Self->CompleteWorkerSets.erase({Replication->GetId(), tid});
+            db.Table<Schema::Targets>().Key(Replication->GetId(), tid).Update(
+                NIceDb::TUpdate<Schema::Targets::WorkerSetComplete>(false));
 
             target->Shutdown(ctx);
 
@@ -89,30 +124,31 @@ public:
             }
         }
 
-        CLOG_N(ctx, "Drop replication"
-            << ": rid# " << Replication->GetId()
-            << ", pathId# " << pathId);
+        YDB_LOG_NOTICE_CTX(ctx, "Drop replication",
+            {"rid", Replication->GetId()},
+            {"pathId", pathId});
 
         Replication->SetDropOp(PubEv->Sender, std::make_pair(opId.GetTxId(), opId.GetPartId()));
         return true;
     }
 
     bool ExecutePriv(TTransactionContext& txc, const TActorContext& ctx) {
-        CLOG_D(ctx, "Execute: " << PrivEv->Get()->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
         Replication = Self->Find(rid);
 
         if (!Replication) {
-            CLOG_W(ctx, "Cannot drop unknown replication"
-                << ": rid# " << rid);
+            YDB_LOG_WARN_CTX(ctx, "Cannot drop unknown replication",
+                {"rid", rid});
             return true;
         }
 
         if (Replication->GetState() != TReplication::EState::Removing) {
-            CLOG_W(ctx, "Replication state mismatch"
-                << ": rid# " << rid
-                << ", state# " << Replication->GetState());
+            YDB_LOG_WARN_CTX(ctx, "Replication state mismatch",
+                {"rid", rid},
+                {"state", Replication->GetState()});
             return true;
         }
 
@@ -135,7 +171,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        CLOG_D(ctx, "Complete");
+        YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
+        YDB_LOG_DEBUG_CTX(ctx, "Complete");
+
+        for (const auto& key : AlterersToStop) {
+            Self->StopSchemaChangeDstAlter(key, ctx);
+        }
 
         if (Result) {
             ctx.Send(Result.Release());

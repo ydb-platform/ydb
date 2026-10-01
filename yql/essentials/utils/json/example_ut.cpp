@@ -238,4 +238,24 @@ Y_UNIT_TEST(MissingRequiredField) {
     UNIT_ASSERT_STRING_CONTAINS(result.error(), "required");
 }
 
+Y_UNIT_TEST(TypeMismatchObjectInsteadOfList) {
+    auto result = FromJsonString<NExample::TDocument>(R"json({
+        "document_id": 10203040506070810,
+        "title": "Weekly Team Notes",
+        "priority": "Low",
+        "tags": { "a": 1 }
+    })json");
+
+    UNIT_ASSERT(!result);
+    UNIT_ASSERT_STRING_CONTAINS(result.error(), "\"tags\" must be an array");
+}
+
+Y_UNIT_TEST(TypeMismatchListInsteadOfObject) {
+    auto result = FromJsonString<NExample::TDocument>(R"json([
+    ])json");
+
+    UNIT_ASSERT(!result);
+    UNIT_ASSERT_STRING_CONTAINS(result.error(), "expected an object with key \"document_id\", but got Array");
+}
+
 } // Y_UNIT_TEST_SUITE(JsonExample)

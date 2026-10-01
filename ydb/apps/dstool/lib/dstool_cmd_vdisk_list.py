@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.blobstorage_disk_color_pb2 as kikimr_disk_color
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
@@ -109,8 +109,8 @@ def do(args):
             row['FQDN'] = node_fqdn_map[vslot_data.NodeId]
             row['NodeId'] = vslot_data.NodeId
             row['PDiskId'] = vslot_data.PDiskId
-            row['PDiskDriveStatus'] = kikimr_bsconfig.EDriveStatus.Name(pdisk.DriveStatus)
-            row['PDiskDecommitStatus'] = kikimr_bsconfig.EDecommitStatus.Name(pdisk.DecommitStatus)
+            row['PDiskDriveStatus'] = kikimr_bs3.EDriveStatus.Name(pdisk.DriveStatus)
+            row['PDiskDecommitStatus'] = kikimr_bs3.EDecommitStatus.Name(pdisk.DecommitStatus)
             row['PDiskPath'] = pdisk.Path
             row['VSlotId'] = vslot_data.VSlotId
             row['VSlotStatus'] = vslot.Status

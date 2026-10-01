@@ -104,7 +104,7 @@ class map
    typedef Key                                                                            key_type;
    typedef T                                                                              mapped_type;
    typedef typename base_t::allocator_type                                                allocator_type;
-   typedef ::boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
+   typedef boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
    typedef typename boost::container::allocator_traits<allocator_type>::value_type        value_type;
    typedef typename boost::container::allocator_traits<allocator_type>::pointer           pointer;
    typedef typename boost::container::allocator_traits<allocator_type>::const_pointer     const_pointer;
@@ -371,7 +371,7 @@ class map
    //! <b>Effects</b>: Copy constructs a map using the specified allocator.
    //!
    //! <b>Complexity</b>: Linear in x.size().
-   inline map(const map& x, const allocator_type &a)
+   inline map(const map& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(static_cast<const base_t&>(x), a)
    {}
 
@@ -381,7 +381,7 @@ class map
    //! <b>Complexity</b>: Constant if x == x.get_allocator(), linear otherwise.
    //!
    //! <b>Postcondition</b>: x is emptied.
-   inline map(BOOST_RV_REF(map) x, const allocator_type &a)
+   inline map(BOOST_RV_REF(map) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(BOOST_MOVE_BASE(base_t, x), a)
    {}
 
@@ -1494,11 +1494,18 @@ inline typename map<K, M, C, A, O>::size_type erase_if(map<K, M, C, A, O>& c, Pr
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `map` to be constructed from the iterator range
+//! <code>[first, last)</code>, deducing the key and mapped types from the pair value
+//! type of `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 map(InputIterator, InputIterator) ->
    map< it_based_non_const_first_type_t<InputIterator>
            , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `map` to be constructed from the iterator range
+//! <code>[first, last)</code>, deducing the key and mapped types from `InputIterator`.
+//! The trailing argument is used as the allocator if it is an allocator type,
+//! otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
     map(InputIterator, InputIterator, AllocatorOrCompare const&) ->
     map< it_based_non_const_first_type_t<InputIterator>
@@ -1515,6 +1522,9 @@ template < typename InputIterator, typename AllocatorOrCompare>
                 >::type
             >;
 
+//! <b>Deduction guide</b>: allows a `map` to be constructed from the iterator range
+//! <code>[first, last)</code>, deducing the key and mapped types from `InputIterator`
+//! and taking the comparator and allocator types from the supplied arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -1524,11 +1534,18 @@ map(InputIterator, InputIterator, Compare const&, Allocator const&) ->
            , Compare
            , Allocator>;
 
+//! <b>Deduction guide</b>: allows a `map` to be constructed from an already ordered,
+//! unique iterator range <code>[first, last)</code>, deducing the key and mapped types
+//! from `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 map(ordered_unique_range_t, InputIterator, InputIterator) ->
    map< it_based_non_const_first_type_t<InputIterator>
            , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `map` to be constructed from an already ordered,
+//! unique iterator range <code>[first, last)</code>, deducing the key and mapped types
+//! from `InputIterator`. The trailing argument is used as the allocator if it is an
+//! allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 map(ordered_unique_range_t, InputIterator, InputIterator, AllocatorOrCompare const&) ->
    map< it_based_non_const_first_type_t<InputIterator>
@@ -1545,6 +1562,10 @@ map(ordered_unique_range_t, InputIterator, InputIterator, AllocatorOrCompare con
                >::type
            >;
 
+//! <b>Deduction guide</b>: allows a `map` to be constructed from an already ordered,
+//! unique iterator range <code>[first, last)</code>, deducing the key and mapped types
+//! from `InputIterator` and taking the comparator and allocator types from the supplied
+//! arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -1626,7 +1647,7 @@ class multimap
    typedef Key                                                                            key_type;
    typedef T                                                                              mapped_type;
    typedef typename base_t::allocator_type                                                allocator_type;
-   typedef ::boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
+   typedef boost::container::allocator_traits<allocator_type>                           allocator_traits_type;
    typedef typename boost::container::allocator_traits<allocator_type>::value_type        value_type;
    typedef typename boost::container::allocator_traits<allocator_type>::pointer           pointer;
    typedef typename boost::container::allocator_traits<allocator_type>::const_pointer     const_pointer;
@@ -1885,7 +1906,7 @@ class multimap
    //! <b>Effects</b>: Copy constructs a multimap.
    //!
    //! <b>Complexity</b>: Linear in x.size().
-   inline multimap(const multimap& x, const allocator_type &a)
+   inline multimap(const multimap& x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(static_cast<const base_t&>(x), a)
    {}
 
@@ -1894,7 +1915,7 @@ class multimap
    //! <b>Complexity</b>: Constant if a == x.get_allocator(), linear otherwise.
    //!
    //! <b>Postcondition</b>: x is emptied.
-   inline multimap(BOOST_RV_REF(multimap) x, const allocator_type &a)
+   inline multimap(BOOST_RV_REF(multimap) x, const BOOST_CONTAINER_DOC1ST(allocator_type, typename dtl::type_identity<allocator_type>::type) &a)
       : base_t(BOOST_MOVE_BASE(base_t, x), a)
    {}
 
@@ -2447,11 +2468,18 @@ inline typename multimap<K, M, C, A, O>::size_type erase_if(multimap<K, M, C, A,
 
 #ifndef BOOST_CONTAINER_NO_CXX17_CTAD
 
+//! <b>Deduction guide</b>: allows a `multimap` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key and mapped types from the pair
+//! value type of `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 multimap(InputIterator, InputIterator) ->
    multimap< it_based_non_const_first_type_t<InputIterator>
            , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `multimap` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key and mapped types from
+//! `InputIterator`. The trailing argument is used as the allocator if it is an
+//! allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 multimap(InputIterator, InputIterator, AllocatorOrCompare const&) ->
    multimap< it_based_non_const_first_type_t<InputIterator>
@@ -2468,6 +2496,10 @@ multimap(InputIterator, InputIterator, AllocatorOrCompare const&) ->
                     >::type
                 >;
 
+//! <b>Deduction guide</b>: allows a `multimap` to be constructed from the iterator
+//! range <code>[first, last)</code>, deducing the key and mapped types from
+//! `InputIterator` and taking the comparator and allocator types from the supplied
+//! arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>
@@ -2477,11 +2509,18 @@ multimap(InputIterator, InputIterator, Compare const&, Allocator const&) ->
            , Compare
            , Allocator>;
 
+//! <b>Deduction guide</b>: allows a `multimap` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key and mapped
+//! types from `InputIterator` and using the default comparator and allocator.
 template <typename InputIterator>
 multimap(ordered_range_t, InputIterator, InputIterator) ->
    multimap< it_based_non_const_first_type_t<InputIterator>
            , it_based_second_type_t<InputIterator>>;
 
+//! <b>Deduction guide</b>: allows a `multimap` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key and mapped
+//! types from `InputIterator`. The trailing argument is used as the allocator if it
+//! is an allocator type, otherwise it is used as the comparator.
 template < typename InputIterator, typename AllocatorOrCompare>
 multimap(ordered_range_t, InputIterator, InputIterator, AllocatorOrCompare const&) ->
    multimap< it_based_non_const_first_type_t<InputIterator>
@@ -2498,6 +2537,10 @@ multimap(ordered_range_t, InputIterator, InputIterator, AllocatorOrCompare const
                     >::type
                 >;
 
+//! <b>Deduction guide</b>: allows a `multimap` to be constructed from an already
+//! ordered iterator range <code>[first, last)</code>, deducing the key and mapped
+//! types from `InputIterator` and taking the comparator and allocator types from the
+//! supplied arguments.
 template < typename InputIterator, typename Compare, typename Allocator
          , typename = dtl::require_nonallocator_t<Compare>
          , typename = dtl::require_allocator_t<Allocator>>

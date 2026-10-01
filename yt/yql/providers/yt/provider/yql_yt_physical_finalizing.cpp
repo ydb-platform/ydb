@@ -2133,8 +2133,21 @@ private:
         return TStatus::Ok;
     }
 
-    static TExprNode::TPtr SuppressUnusedOuts(const TExprNode& node, const TDynBitMap& usedOuts, TExprContext& ctx) {
+    TExprNode::TPtr SuppressUnusedOuts(const TExprNode& node, const TDynBitMap& usedOuts, TExprContext& ctx) const {
         auto op = TYtOutputOpBase(&node);
+        if (State_->Configuration->_ReplaceEmptyOpWithTouch.Get().GetOrElse(false) && op.Maybe<TYtTouch>()) {
+            TVector<TYtOutTable> usedTables;
+            for (size_t index = 0; index < op.Output().Size(); ++index) {
+                if (usedOuts.Test(index)) {
+                    usedTables.push_back(op.Output().Item(index));
+                }
+            }
+
+            YQL_CLOG(INFO, ProviderYt) << "PhysicalFinalizing-SuppressOuts";
+            return ctx.ChangeChild(node, TYtOutputOpBase::idx_Output,
+                Build<TYtOutSection>(ctx, op.Pos()).Add(usedTables).Done().Ptr());
+        }
+
         size_t lambdaNdx = 0;
         bool withArg = true;
         bool ordered = false;
@@ -2970,7 +2983,7 @@ private:
             bool diffGroups = false;
             if (auto table = path.Table().Maybe<TYtTable>()) {
                 if (auto tableDesc = State_->TablesData->FindTable(copy.Cast().DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
-                    bool diffGroups = outGroup.empty() != tableDesc->ColumnGroupSpecAlts.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
+                    diffGroups = outGroup.empty() != tableDesc->ColumnGroupSpecAlts.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
                     if (diffGroups && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
                         TString expanded;
                         if (ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*copy.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), expanded)) {
@@ -3311,4 +3324,3 @@ THolder<IGraphTransformer> CreateYtPhysicalFinalizingTransformer(TYtState::TPtr 
 }
 
 } // NYql
-

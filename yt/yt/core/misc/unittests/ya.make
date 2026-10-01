@@ -53,13 +53,13 @@ SRCS(
     mpsc_stack_ut.cpp
     pattern_formatter_ut.cpp
     persistent_queue_ut.cpp
+    object_pool_ut.cpp
     pool_allocator_ut.cpp
     proc_ut.cpp
     random_ut.cpp
     ref_counted_tracker_ut.cpp
     relaxed_mpsc_queue_ut.cpp
     serialize_ut.cpp
-    skip_list_ut.cpp
     slab_allocator_ut.cpp
     sliding_window_ut.cpp
     spsc_queue_ut.cpp

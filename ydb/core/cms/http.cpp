@@ -10,6 +10,7 @@
 #include "json_proxy_operations.h"
 #include "json_proxy_proto.h"
 #include "json_proxy_sentinel.h"
+#include "json_proxy_ddisk.h"
 #include "json_proxy_toggle_config_validator.h"
 #include "walle.h"
 
@@ -96,6 +97,9 @@ public:
             ApiHandlers["/api/json/configupdates"] = new TApiMethodHandler<TJsonProxyConfigUpdates>;
             ApiHandlers["/api/json/proto"] = new TApiMethodHandler<TJsonProxyProto>;
             ApiHandlers["/api/json/sentinel"] = new TApiMethodHandler<TJsonProxySentinel>;
+            ApiHandlers["/api/json/ddisk/tablets"] = new TApiMethodHandler<TJsonProxyDDisk>;
+            ApiHandlers["/api/json/ddisk/tablet"] = new TApiMethodHandler<TJsonProxyDDisk>;
+            ApiHandlers["/api/json/ddisk/disks"] = new TApiMethodHandler<TJsonProxyDDisk>;
 
             ApiHandlers["/api/datashard/json/getinfo"]
                 = new TApiMethodHandler<TJsonProxyDataShard<TEvDataShard::TEvGetInfoRequest,

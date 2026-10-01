@@ -134,6 +134,16 @@ public:
         OffloadMerge = FromStringWithDefault<bool>(Params.Get("offload_merge"), OffloadMerge);
         MetadataCache = FromStringWithDefault<bool>(Params.Get("metadata_cache"), MetadataCache);
         ShowAllDatabases = FromStringWithDefault<bool>(Params.Get("show_all_databases"), ShowAllDatabases);
+        if (ShowAllDatabases && IsStrictDatabaseOnlyRequest()) {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: `show_all_databases` is not allowed for database-scoped access",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database});
+            ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain", "`show_all_databases` is not allowed for database-scoped access"),
+                "Access denied");
+            return;
+        }
 
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
@@ -701,6 +711,7 @@ public:
     struct TDatabaseStorageStats {
         ui64 Size = 0;
         ui64 Limit = 0;
+        ui64 Groups = 0;
     };
 
     void ReplyAndPassAway() override {
@@ -944,6 +955,7 @@ public:
                                 auto& databaseStats = databaseStorageByType[poolType];
                                 databaseStats.Size += poolStats.Size;
                                 databaseStats.Limit += poolStats.Limit;
+                                databaseStats.Groups += poolStats.Groups;
                                 storageGroups += poolStats.Groups;
                                 storageSize += poolStats.Size;
                                 storageLimit += poolStats.Limit;
@@ -959,6 +971,7 @@ public:
                             databaseStorage.SetType(type);
                             databaseStorage.SetSize(ds.Size);
                             databaseStorage.SetLimit(ds.Limit);
+                            databaseStorage.SetGroups(ds.Groups);
                         }
 
                         THashMap<NKikimrViewer::TStorageUsage::EType, ui64> tablesStorageByType;

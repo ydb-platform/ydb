@@ -1,3 +1,4 @@
+<!-- markdownlint-disable MD009 -->
 # Enabling logging
 
 Below are code examples of enabling logging in different {{ ydb-short-name }} SDKs.
@@ -104,8 +105,6 @@ Below are code examples of enabling logging in different {{ ydb-short-name }} SD
     ```
 
     {% endcut %}
-
-    {% include [overlay](_includes/debug-logs-go-appendix.md) %}
 
     {% cut "Connect custom implementation logger `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 
@@ -266,8 +265,6 @@ Below are code examples of enabling logging in different {{ ydb-short-name }} SD
     ```
 
     {% endcut %}
-
-    {% include [overlay](_includes/debug-logs-go-sql-appendix.md) %}
 
     {% cut "Connect custom implementation logger `github.com/ydb-platform/ydb-go-sdk/v3/log.Logger`" %}
 

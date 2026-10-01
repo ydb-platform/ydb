@@ -22,7 +22,6 @@ def bytes_to_human_iec(num):
 def main():
 
     yellow_treshold = int(os.environ.get("yellow_treshold"))
-    red_treshold = int(os.environ.get("red_treshold"))
 
     github_srv = os.environ.get("GITHUB_SERVER_URL")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
@@ -69,10 +68,7 @@ def main():
         human_readable_stripped_size_diff = bytes_to_human_iec(stripped_bytes_diff)
         if bytes_diff > 0:
             sign = "+"
-            if bytes_diff >= red_treshold:
-                color = "red"
-                summary_core = f" >= {bytes_to_human_iec(red_treshold)} vs {branch}: **Alert**"
-            elif bytes_diff >= yellow_treshold:
+            if bytes_diff >= yellow_treshold:
                 color = "yellow"
                 summary_core = f" >= {bytes_to_human_iec(yellow_treshold)} vs {branch}: **Warning**"
             else:

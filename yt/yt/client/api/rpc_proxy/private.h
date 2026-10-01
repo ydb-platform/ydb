@@ -22,7 +22,7 @@ DECLARE_REFCOUNTED_CLASS(TClientBase)
 DECLARE_REFCOUNTED_CLASS(TClient)
 DECLARE_REFCOUNTED_CLASS(TTransaction)
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, RpcProxyClientLogger, "RpcProxyClient");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, RpcProxyClientLogger, "RpcProxyClient");
 
 ////////////////////////////////////////////////////////////////////////////////
 

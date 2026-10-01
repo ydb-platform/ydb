@@ -79,9 +79,6 @@ public:
             } else {
                 db.Table<Schema::TabletFollowerTablet>().Key(TabletId.first, TabletId.second).Update<Schema::TabletFollowerTablet::Statistics>(tablet->Statistics);
             }
-            // reset usage impact estimate on each tablet restart
-            tablet->UsageImpact = 0;
-            db.Table<Schema::Metrics>().Key(tablet->GetFullTabletId()).Update<Schema::Metrics::UsageImpact>(0.);
             if (tablet->IsLeader()) {
                 TLeaderTabletInfo& leader = tablet->AsLeader();
                 if (leader.IsStartingOnNode(Local.NodeId()) || BootingSuppressed && External) {
@@ -168,7 +165,7 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
         bool legitExternalBoot = External && BootingSuppressed;
         if (Success && !legitExternalBoot) {
             Self->UpdateCounterTabletsStarting(+1);

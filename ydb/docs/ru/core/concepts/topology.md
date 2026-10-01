@@ -103,11 +103,11 @@
 
 ## Дополнительная информация
 
-* [Документация для DevOps-инженеров](../devops/index.md)
+* [Документация по администрированию кластеров](../devops/index.md)
 * [{#T}](../reference/configuration/domains_config.md#domains-blob)
 * [Примеры конфигурационных файлов кластера](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)
 {% if audience != "corp" %}
 * [{#T}](../contributor/distributed-storage.md)
 {% endif %}
 
-[*recommended-node-count]: Использование меньшего количества узлов приведёт к ограничению способности кластера к [автоматическому восстановлению](../maintenance/manual/selfheal.md).
+[*recommended-node-count]: Использование меньшего количества узлов приведёт к ограничению способности кластера к [автоматическому восстановлению](../devops/concepts/selfheal-storage.md).

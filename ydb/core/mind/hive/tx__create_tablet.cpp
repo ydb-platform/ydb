@@ -128,7 +128,9 @@ public:
 
         if (newChannels.any()) {
             tablet.ChannelProfileNewGroup |= newChannels;
-            tablet.State = ETabletState::GroupAssignment;
+            if (tablet.IsReadyToReassignTablet()) {
+                tablet.State = ETabletState::GroupAssignment;
+            }
             tablet.ChannelProfileReassignReason = NKikimrHive::TEvReassignTablet::HIVE_REASSIGN_REASON_NO;
             tablet.BoundChannels = BoundChannels;
             for (auto& bind : tablet.BoundChannels) {
@@ -432,7 +434,8 @@ public:
                                                         NIceDb::TUpdate<Schema::Tablet::Statistics>(tablet.Statistics),
                                                         NIceDb::TUpdate<Schema::Tablet::BalancerPolicy>(tablet.BalancerPolicy),
                                                         NIceDb::TUpdate<Schema::Tablet::StoppedByTenant>(tablet.StoppedByTenant),
-                                                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup));
+                                                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup),
+                                                        NIceDb::TUpdate<Schema::Tablet::ConfirmedStorageVersion>(tablet.ConfirmedStorageVersion));
 
         Self->PendingCreateTablets.erase({OwnerId, OwnerIdx});
 
@@ -533,7 +536,7 @@ public:
             {"ownerIdx", ownerIdx},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});
-        SideEffects.Complete(ctx);
+        SideEffects.Complete(ctx, Self->Requests);
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
         Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());
     }

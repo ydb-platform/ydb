@@ -248,6 +248,26 @@ void FromProto(
     const TProtobufString& protoCookie);
 
 void ToProto(
+    TProtobufString* protoCookie,
+    const TFilePartitionCookiePtr& cookie);
+
+void FromProto(
+    TFilePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie);
+
+void ToProto(
+    NProto::TFilePartition* protoFilePartition,
+    const NApi::TFilePartition& filePartition);
+
+void FromProto(
+    NApi::TFilePartition* filePartition,
+    const NProto::TFilePartition& protoFilePartition);
+
+void FromProto(
+    NApi::TFilePartitions* filePartitions,
+    const NProto::TRspPartitionFile& protoRspPartitionFile);
+
+void ToProto(
     NProto::TRowBatchReadOptions* proto,
     const NQueueClient::TQueueRowBatchReadOptions& result);
 
@@ -517,6 +537,9 @@ std::vector<TSharedRef> SerializeRowset(
     const NTableClient::TTableSchema& schema,
     TRange<TRow> rows,
     NProto::TRowsetDescriptor* descriptor);
+
+NTableClient::TTableSchemaPtr DeserializeRowsetSchema(
+    const NProto::TRowsetDescriptor& descriptor);
 
 template <class TRow>
 TIntrusivePtr<NApi::IRowset<TRow>> DeserializeRowset(

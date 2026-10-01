@@ -518,7 +518,7 @@ using static_vector_options_t = typename boost::container::static_vector_options
 //
 ////////////////////////////////////////////////////////////////
 
-//!Thse options specify the relocation strategy of devector.
+//!These options specify the relocation strategy of devector.
 //!
 //!Predefined relocation limits that can be passed as arguments to this option are:
 //!\c boost::container::relocate_on_66
@@ -532,10 +532,9 @@ using static_vector_options_t = typename boost::container::static_vector_options
 //!Note: Repeated insertions at only one end (only back insertions or only front insertions) usually will
 //!lead to a single relocation when `relocate_on_66` is used and two relocations when `relocate_on_90`
 //!is used.
+BOOST_INTRUSIVE_OPTION_CONSTANT(relocate_on, std::size_t, Fraction, free_fraction)
 
 #if !defined(BOOST_CONTAINER_DOXYGEN_INVOKED)
-
-BOOST_INTRUSIVE_OPTION_CONSTANT(relocate_on, std::size_t, Fraction, free_fraction)
 
 struct relocate_on_66 : public relocate_on<3U>{};
 
@@ -561,32 +560,32 @@ typedef devector_opt<void, void, 0u> devector_null_opt;
 //!This relocation condition option specifies that the container will never relocate
 //!elements when there is no space at the side the insertion should
 //!take place
-struct relocate_never;
+struct relocate_never{};
 
 //!This relocation condition option specifies that the container will relocate
 //!all elements when there is no space at the side the insertion should
 //!take place and memory usage is below 66% (2/3)
-struct relocate_on_66;
+struct relocate_on_66{};
 
 //!This relocation condition option specifies that the container will relocate
 //!all elements when there is no space at the side the insertion should
 //!take place and memory usage is below 75% (3/4)
-struct relocate_on_75;
+struct relocate_on_75{};
 
 //!This relocation condition option specifies that the container will relocate
 //!all elements when there is no space at the side the insertion should
 //!take place and memory usage is below 80% (4/5)
-struct relocate_on_80;
+struct relocate_on_80{};
 
 //!This relocation condition option specifies that the container will relocate
 //!all elements when there is no space at the side the insertion should
 //!take place and memory usage is below 85% (6/7)
-struct relocate_on_85;
+struct relocate_on_85{};
 
 //!This relocation condition option specifies that the container will relocate
 //!all elements when there is no space at the side the insertion should
 //!take place and memory usage is below 90% (9/10)
-struct relocate_on_90;
+struct relocate_on_90{};
 
 #endif
 

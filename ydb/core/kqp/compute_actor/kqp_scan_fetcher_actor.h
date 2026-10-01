@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/kqp/tracing/kqp_scan_rendering.h>
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include "kqp_compute_actor.h"
 #include "kqp_compute_events.h"
 #include "kqp_compute_state.h"
@@ -57,6 +59,7 @@ private:
     const ui32 LockNodeId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;
     const TCPULimits CPULimits;
+    const bool UseBatchPool;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -67,7 +70,8 @@ public:
         std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
         const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const TString& database,
         const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TShardsScanningPolicy& shardsScanningPolicy,
-        TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits);
+        TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId, const TCPULimits& cpuLimits,
+        bool useBatchPool = false);
 
     static TVector<TSerializedTableRange> BuildSerializedTableRanges(
         const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::TReadOpMeta& readData);
@@ -116,12 +120,12 @@ private:
 
     std::vector<NActors::TActorId> ComputeActorIds;
 
-    void StopOnError(const TString& errorMessage) const;
+    void StopOnError(const TString& errorMessage);
     bool SendGlobalFail(
-        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message) const;
+        const NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssuesIds::EIssueCode issueCode, const TString& message);
 
     bool SendGlobalFail(
-        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues) const;
+        const NYql::NDqProto::EComputeState state, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& issues);
 
     bool SendScanFinished();
 
@@ -173,6 +177,7 @@ private:
 
 private:
     void PassAway() override {
+        EndQueryTraceSpan(ScanSpan, Ydb::StatusIds::STATUS_CODE_UNSPECIFIED);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
     }
@@ -191,6 +196,7 @@ private:
     static inline TAtomicCounter ScanIdCounter = 0;
     const ui64 ScanId = ScanIdCounter.Inc();
 
+    NWilson::TSpan ScanSpan;
     TInFlightShards InFlightShards;
     TInFlightComputes InFlightComputes;
     const NKqp::ETableKind TableKind = NKqp::ETableKind::Unknown;

@@ -9,6 +9,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/replication/common/family_settings.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
@@ -19,10 +20,62 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 using namespace NConsole;
 using namespace NSchemeShard;
+
+namespace {
+
+bool CheckColumnFamilySettings(
+        const NKikimrSchemeOp::TFamilyDescription& expected,
+        const NKikimrSchemeOp::TFamilyDescription& actual,
+        TString& error)
+{
+    const auto name = GetFamilyName(expected);
+
+    const auto expectedCodec = GetColumnCodec(expected);
+    const auto actualCodec = GetColumnCodec(actual);
+    if (expectedCodec != actualCodec) {
+        error = TStringBuilder() << "Column family codec mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCodec)
+            << ", got: " << static_cast<ui32>(actualCodec);
+        return false;
+    }
+
+    const auto expectedCacheMode = expected.GetColumnCacheMode();
+    const auto actualCacheMode = actual.GetColumnCacheMode();
+    if (expectedCacheMode != actualCacheMode) {
+        error = TStringBuilder() << "Column family cache mode mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCacheMode)
+            << ", got: " << static_cast<ui32>(actualCacheMode);
+        return false;
+    }
+
+    const auto& expectedData = expected.GetStorageConfig().GetData();
+    const auto& expectedMedia = expectedData.GetPreferredPoolKind();
+    if (!expectedMedia || expectedData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    const auto& actualData = actual.GetStorageConfig().GetData();
+    const auto& actualMedia = actualData.GetPreferredPoolKind();
+    if (expectedMedia == actualMedia && !actualData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    error = TStringBuilder() << "Column family media mismatch"
+        << ": name: " << name
+        << ", expected: " << expectedMedia
+        << ", got: " << actualMedia;
+    return false;
+}
+
+} // anonymous namespace
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Resolve(const TPathId& pathId) {
@@ -40,6 +93,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateResolveDatabase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateResolveDatabase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
@@ -53,22 +108,23 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Y_ABORT_UNLESS(response->ResultSet.size() == 1);
         const auto& entry = response->ResultSet.front();
 
-        LOG_T("Handle " << ev->Get()->ToString()
-            << ": entry# " << entry.ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()},
+            {"entry", entry});
 
         switch (entry.Status) {
         case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
             break;
         default:
-            LOG_W("Unexpected status"
-                << ": entry# " << entry.ToString());
+            YDB_LOG_WARN("Unexpected status",
+                {"entry", entry});
             return Error(NKikimrScheme::StatusSchemeError, "Cannot resolve domain info");
         }
 
         if (!DomainKey) {
             if (!entry.DomainInfo) {
-                LOG_E("Empty domain info"
-                    << ": entry# " << entry.ToString());
+                YDB_LOG_ERROR("Empty domain info",
+                    {"entry", entry});
                 return Error(NKikimrScheme::StatusSchemeError, "Empty domain info");
             }
 
@@ -89,7 +145,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void GetTableProfiles() {
-        LOG_T("Get table profiles");
+        YDB_LOG_TRACE("Get table profiles");
 
         using namespace NKikimrConsole;
         auto ev = MakeHolder<TEvConfigsDispatcher::TEvGetConfigRequest>((ui32)TConfigItem::TableProfilesConfigItem);
@@ -99,6 +155,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateGetTableProfiles) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateGetTableProfiles"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
             sFunc(TEvents::TEvUndelivered, DescribeSrcPath);
@@ -108,7 +166,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         TableProfiles.Load(ev->Get()->Config->GetTableProfilesConfig());
         DescribeSrcPath();
     }
@@ -132,6 +191,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateDescribeSrcPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateDescribeSrcPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvDescribeTableResponse, Handle);
             sFunc(TEvents::TEvWakeup, DescribeSrcPath);
@@ -160,7 +221,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(Kind == TReplication::ETargetKind::Table);
         const auto& result = ev->Get()->Result;
@@ -185,6 +247,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             case Ydb::Table::TableIndex::kGlobalIndex:
             case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 ++it;
+                continue;
+            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                if (AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
+                    ++it;
+                } else {
+                    it = indexes.erase(it);
+                }
                 continue;
             default:
                 it = indexes.erase(it);
@@ -212,7 +281,7 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             TxBody.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
             TxBody.SetInternal(true);
             desc = TxBody.MutableCreateIndexedTable()->MutableTableDescription();
-            if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, status, error)) {
+            if (!FillIndexDescription(*TxBody.MutableCreateIndexedTable(), scheme, AppData()->FeatureFlags.GetEnableCompactFulltextIndex(), status, error)) {
                 return Error(NKikimrScheme::StatusSchemeError, error);
             }
         } else {
@@ -226,7 +295,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
-                FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                // Async indexes are maintained by the destination's own change exchange.
+                // Only synchronous index tables have independent replication targets.
+                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                    FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                }
             }
         }
 
@@ -243,6 +316,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateAllocateTxId) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateAllocateTxId"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
         default:
@@ -251,7 +326,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         TxId = ev->Get()->TxId;
         PipeCache = ev->Get()->Services.LeaderPipeCache;
@@ -271,6 +347,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateCreateDst) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateCreateDst"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
             hFunc(TEvSchemeShard::TEvNotifyTxCompletionResult, Handle);
@@ -281,7 +359,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->Record;
 
         switch (record.GetStatus()) {
@@ -307,13 +386,14 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void SubscribeTx(ui64 txId) {
-        LOG_D("Subscribe tx"
-            << ": txId# " << txId);
+        YDB_LOG_DEBUG("Subscribe tx",
+            {"txId", txId});
         Send(PipeCache, new TEvPipeCache::TEvForward(new TEvSchemeShard::TEvNotifyTxCompletion(txId), SchemeShardId));
     }
 
     void Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (NeedToCheck) {
             DescribeDstPath();
@@ -328,6 +408,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateDescribeDstPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateDescribeDstPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(TEvents::TEvWakeup, DescribeDstPath);
@@ -337,7 +419,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         const auto& record = ev->Get()->GetRecord();
 
         switch (record.GetStatus()) {
@@ -415,9 +498,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         // check columns
-        THashMap<TStringBuf, TStringBuf> columns;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TColumnDescription*> columns;
         for (const auto& column : got.GetColumns()) {
-            columns.emplace(column.GetName(), column.GetType());
+            columns.emplace(column.GetName(), &column);
         }
 
         if (tableDesc->ColumnsSize() != columns.size()) {
@@ -425,6 +508,21 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 << ": expected: " << tableDesc->ColumnsSize()
                 << ", got: " << columns.size();
             return false;
+        }
+
+        // Compare family names instead of IDs: each cluster assigns its own IDs.
+        THashMap<ui32, TStringBuf> gotFamilyNames;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TFamilyDescription*> families;
+        gotFamilyNames.emplace(0, DefaultFamilyName);
+        for (const auto& family : got.GetPartitionConfig().GetColumnFamilies()) {
+            const auto name = GetFamilyName(family);
+            if (name.empty()) {
+                error = TStringBuilder() << "Unnamed non-default destination column family"
+                    << ": id: " << family.GetId();
+                return false;
+            }
+            gotFamilyNames[family.GetId()] = name;
+            families.emplace(name, &family);
         }
 
         for (const auto& column : tableDesc->GetColumns()) {
@@ -435,11 +533,46 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
-            if (column.GetType() != it->second) {
+            if (column.GetType() != it->second->GetType()) {
                 error = TStringBuilder() << "Column type mismatch"
                     << ": name: " << column.GetName()
                     << ", expected: " << column.GetType()
-                    << ", got: " << it->second;
+                    << ", got: " << it->second->GetType();
+                return false;
+            }
+
+            const auto expectedFamily = GetColumnFamilyName(column);
+            const auto name = gotFamilyNames.find(it->second->GetFamily());
+            const TStringBuf actualFamily = name == gotFamilyNames.end() ? TStringBuf("<unknown>") : name->second;
+            if (name == gotFamilyNames.end() || actualFamily != expectedFamily) {
+                error = TStringBuilder() << "Column family mismatch"
+                    << ": column: " << column.GetName()
+                    << ", expected: " << expectedFamily
+                    << ", got: " << actualFamily;
+                return false;
+            }
+        }
+
+        for (const auto& expected : tableDesc->GetPartitionConfig().GetColumnFamilies()) {
+            const auto name = GetFamilyName(expected);
+            auto it = families.find(name);
+            if (it == families.end()) {
+                error = TStringBuilder() << "Cannot find column family"
+                    << ": name: " << name;
+                return false;
+            }
+
+            if (!CheckColumnFamilySettings(expected, *it->second, error)) {
+                return false;
+            }
+
+            families.erase(it);
+        }
+
+        for (const auto& item : families) {
+            if (item.first != DefaultFamilyName) {
+                error = TStringBuilder() << "Unexpected column family"
+                    << ": name: " << item.first;
                 return false;
             }
         }
@@ -532,6 +665,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     STATEFN(StateSubscribeDstPath) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateSubscribeDstPath"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TSchemeBoardEvents::TEvNotifyDelete, Handle);
             hFunc(TSchemeBoardEvents::TEvNotifyUpdate, Handle);
@@ -541,7 +676,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         switch (Kind) {
         case TReplication::ETargetKind::Table:
@@ -554,7 +690,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& desc = ev->Get()->DescribeSchemeResult;
         if (desc.GetStatus() != NKikimrScheme::StatusSuccess) {
@@ -571,7 +708,8 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         if (SchemeShardId != ev->Get()->TabletId) {
             return;
@@ -581,30 +719,31 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
         Retry();
     }
 
     void Success() {
         Y_ABORT_UNLESS(DstPathId);
-        LOG_I("Success"
-            << ": dstPathId# " << DstPathId);
+        YDB_LOG_INFO("Success",
+            {"dstPathId", DstPathId});
 
         Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, DstPathId));
         PassAway();
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
-        LOG_E("Error"
-            << ": status# " << status
-            << ", reason# " << error);
+        YDB_LOG_ERROR("Error",
+            {"status", status},
+            {"reason", error});
 
         Send(Parent, new TEvPrivate::TEvCreateDstResult(ReplicationId, TargetId, status, error));
         PassAway();
     }
 
     void Retry() {
-        LOG_D("Retry");
+        YDB_LOG_DEBUG("Retry");
         Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup);
     }
 
@@ -643,12 +782,13 @@ public:
         , DstPath(dstPath)
         , Mode(mode)
         , Consistency(consistency)
-        , LogPrefix("DstCreator", ReplicationId, TargetId)
+        , LogPrefix(CreateActorLogPrefix("DstCreator", ReplicationId, TargetId))
         , Database(database)
     {
     }
 
     void Bootstrap() {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix);
         switch (Kind) {
         case TReplication::ETargetKind::Table:
             return Resolve(PathId);
@@ -661,6 +801,8 @@ public:
     }
 
     STATEFN(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
@@ -680,7 +822,7 @@ private:
     const TString DstPath;
     const EReplicationMode Mode;
     const EConsistencyLevel Consistency;
-    const TActorLogPrefix LogPrefix;
+    const NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     TPathId DomainKey;
     TString Database;

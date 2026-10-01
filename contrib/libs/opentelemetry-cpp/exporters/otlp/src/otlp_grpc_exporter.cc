@@ -5,8 +5,8 @@
 #include <grpcpp/support/status.h>
 #include <atomic>
 #include <chrono>
+#include <functional>
 #include <memory>
-#include <new>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -21,7 +21,6 @@
 #include "opentelemetry/nostd/span.h"
 #include "opentelemetry/sdk/common/exporter_utils.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
-#include "opentelemetry/sdk/trace/recordable.h"
 #include "opentelemetry/version.h"
 
 // clang-format off
@@ -31,10 +30,6 @@
 #include "opentelemetry/proto/collector/trace/v1/trace_service.pb.h"
 #include "opentelemetry/exporters/otlp/protobuf_include_suffix.h" // IWYU pragma: keep
 // clang-format on
-
-#ifdef ENABLE_ASYNC_EXPORT
-#  include <functional>
-#endif
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace exporter
@@ -97,9 +92,9 @@ OtlpGrpcExporter::~OtlpGrpcExporter()
 
 std::unique_ptr<sdk::trace::Recordable> OtlpGrpcExporter::MakeRecordable() noexcept
 {
-  return std::unique_ptr<sdk::trace::Recordable>(
-      new OtlpRecordable(options_.max_attributes, options_.max_events, options_.max_links,
-                         options_.max_attributes_per_event, options_.max_attributes_per_link));
+  return std::make_unique<OtlpRecordable>(options_.max_attributes, options_.max_events,
+                                          options_.max_links, options_.max_attributes_per_event,
+                                          options_.max_attributes_per_link);
 }
 
 sdk::common::ExportResult OtlpGrpcExporter::Export(
@@ -131,7 +126,8 @@ sdk::common::ExportResult OtlpGrpcExporter::Export(
   // When in batch mode, it's easy to export a large number of spans at once, we can alloc a larger
   // block to reduce memory fragments.
   arena_options.max_block_size = 65536;
-  std::unique_ptr<google::protobuf::Arena> arena{new google::protobuf::Arena{arena_options}};
+  std::unique_ptr<google::protobuf::Arena> arena =
+      std::make_unique<google::protobuf::Arena>(arena_options);
 
   proto::collector::trace::v1::ExportTraceServiceRequest *request =
       google::protobuf::Arena::Create<proto::collector::trace::v1::ExportTraceServiceRequest>(
@@ -151,13 +147,22 @@ sdk::common::ExportResult OtlpGrpcExporter::Export(
             opentelemetry::sdk::common::ExportResult result,
             std::unique_ptr<google::protobuf::Arena> &&arena,
             const proto::collector::trace::v1::ExportTraceServiceRequest &request,
-            proto::collector::trace::v1::ExportTraceServiceResponse *) {
+            proto::collector::trace::v1::ExportTraceServiceResponse *response) {
           auto trace_arena = std::move(arena);
           if (result != opentelemetry::sdk::common::ExportResult::kSuccess)
           {
             OTEL_INTERNAL_LOG_ERROR("[OTLP TRACE GRPC Exporter] ERROR: Export "
                                     << request.resource_spans_size()
                                     << " trace span(s) error: " << static_cast<int>(result));
+          }
+          else if (response->has_partial_success() &&
+                   (response->partial_success().rejected_spans() != 0 ||
+                    !response->partial_success().error_message().empty()))
+          {
+            const auto &partial = response->partial_success();
+            OTEL_INTERNAL_LOG_ERROR("[OTLP TRACE GRPC Exporter] Export partial success: "
+                                    << partial.rejected_spans() << " span(s) rejected: \""
+                                    << partial.error_message() << "\"");
           }
           else
           {
@@ -175,18 +180,31 @@ sdk::common::ExportResult OtlpGrpcExporter::Export(
         google::protobuf::Arena::Create<proto::collector::trace::v1::ExportTraceServiceResponse>(
             arena.get());
     grpc::Status status = OtlpGrpcClient::DelegateExport(
-        trace_service_stub_.get(), std::move(context), std::move(arena), request, response);
+        trace_service_stub_.get(), std::move(context), std::move(arena), request, response,
+        [resource_spans_size](std::unique_ptr<google::protobuf::Arena> &&arena,
+                              proto::collector::trace::v1::ExportTraceServiceResponse *response) {
+          auto trace_arena = std::move(arena);
+          if (response->has_partial_success() &&
+              (response->partial_success().rejected_spans() != 0 ||
+               !response->partial_success().error_message().empty()))
+          {
+            const auto &partial = response->partial_success();
+            OTEL_INTERNAL_LOG_ERROR("[OTLP TRACE GRPC Exporter] Export partial success: "
+                                    << partial.rejected_spans() << " span(s) rejected: \""
+                                    << partial.error_message() << "\"");
+          }
+          else
+          {
+            OTEL_INTERNAL_LOG_DEBUG("[OTLP TRACE GRPC Exporter] Export "
+                                    << resource_spans_size << " trace span(s) success");
+          }
+        });
     if (!status.ok())
     {
       OTEL_INTERNAL_LOG_ERROR("[OTLP TRACE GRPC Exporter] Export() failed with status_code: \""
                               << grpc_utils::grpc_status_code_to_string(status.error_code())
                               << "\" error_message: \"" << status.error_message() << "\"");
       return sdk::common::ExportResult::kFailure;
-    }
-    else
-    {
-      OTEL_INTERNAL_LOG_DEBUG("[OTLP TRACE GRPC Exporter] Export " << resource_spans_size
-                                                                   << " trace span(s) success");
     }
 #ifdef ENABLE_ASYNC_EXPORT
   }

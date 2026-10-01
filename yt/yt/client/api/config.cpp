@@ -32,6 +32,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("replication_card_cache", &TThis::ReplicationCardCache)
         .Optional();
+    registrar.Parameter("chaos_lease_cache", &TThis::ChaosLeaseCache)
+        .Optional();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -133,13 +135,13 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
     registrar.Postprocessor([] (TThis* config) {
         if (config->MaxBatchRowCount > config->MaxFlushRowCount) {
             THROW_ERROR_EXCEPTION("\"max_batch_row_count\" cannot be greater than \"max_flush_row_count\"")
-                << TErrorAttribute("max_batch_row_count", config->MaxBatchRowCount)
-                << TErrorAttribute("max_flush_row_count", config->MaxFlushRowCount);
+                .With("max_batch_row_count", config->MaxBatchRowCount)
+                .With("max_flush_row_count", config->MaxFlushRowCount);
         }
         if (config->MaxBatchDataSize > config->MaxFlushDataSize) {
             THROW_ERROR_EXCEPTION("\"max_batch_data_size\" cannot be greater than \"max_flush_data_size\"")
-                << TErrorAttribute("max_batch_data_size", config->MaxBatchDataSize)
-                << TErrorAttribute("max_flush_data_size", config->MaxFlushDataSize);
+                .With("max_batch_data_size", config->MaxBatchDataSize)
+                .With("max_flush_data_size", config->MaxFlushDataSize);
         }
     });
 }
@@ -149,6 +151,18 @@ void TJournalChunkWriterConfig::Register(TRegistrar registrar)
 void TDynamicJournalWriterConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
+        .Optional();
+    registrar.Parameter("max_batch_row_count", &TThis::MaxBatchRowCount)
+        .Optional();
+    registrar.Parameter("max_batch_data_size", &TThis::MaxBatchDataSize)
+        .Optional();
+    registrar.Parameter("max_flush_row_count", &TThis::MaxFlushRowCount)
+        .Optional();
+    registrar.Parameter("max_flush_data_size", &TThis::MaxFlushDataSize)
+        .Optional();
+    registrar.Parameter("prefer_local_host", &TThis::PreferLocalHost)
+        .Optional();
+    registrar.Parameter("try_disjoint_preallocated_session_nodes", &TThis::TryDisjointPreallocatedSessionNodes)
         .Optional();
 }
 
@@ -166,6 +180,12 @@ TJournalWriterConfigPtr TJournalWriterConfig::ApplyDynamic(
 void TJournalWriterConfig::ApplyDynamicInplace(const TDynamicJournalWriterConfigPtr& dynamicConfig)
 {
     UpdateYsonStructField(ValidateErasureCoding, dynamicConfig->ValidateErasureCoding);
+    UpdateYsonStructField(MaxBatchRowCount, dynamicConfig->MaxBatchRowCount);
+    UpdateYsonStructField(MaxBatchDataSize, dynamicConfig->MaxBatchDataSize);
+    UpdateYsonStructField(MaxFlushRowCount, dynamicConfig->MaxFlushRowCount);
+    UpdateYsonStructField(MaxFlushDataSize, dynamicConfig->MaxFlushDataSize);
+    UpdateYsonStructField(PreferLocalHost, dynamicConfig->PreferLocalHost);
+    UpdateYsonStructField(TryDisjointPreallocatedSessionNodes, dynamicConfig->TryDisjointPreallocatedSessionNodes);
 }
 
 void TJournalWriterConfig::Register(TRegistrar registrar)
@@ -197,6 +217,8 @@ void TJournalWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("dont_seal", &TThis::DontSeal)
         .Default(false);
     registrar.Parameter("dont_preallocate", &TThis::DontPreallocate)
+        .Default(false);
+    registrar.Parameter("try_disjoint_preallocated_session_nodes", &TThis::TryDisjointPreallocatedSessionNodes)
         .Default(false);
     registrar.Parameter("open_delay", &TThis::OpenDelay)
         .Default();

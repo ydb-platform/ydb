@@ -162,7 +162,23 @@ bool ColumnsOrder(const TVector<ui32>& tags) override {
         ErrorString = TStringBuilder() << "Failed to make arrow schema: " << schemaRes.status().message();
         return false;
     }
+
     Schema.swap(schemaRes.ValueOrDie());
+
+    {
+        arrow::FieldVector fields = Schema->fields();
+        bool remapped = false;
+        for (size_t i = 0; i < ydbColumns.size(); ++i) {
+            if (ydbColumns[i].second.GetTypeId() == NScheme::NTypeIds::Interval) {
+                fields[i] = fields[i]->WithType(arrow::int64());
+                remapped = true;
+            }
+        }
+
+        if (remapped) {
+            Schema = std::make_shared<arrow::Schema>(std::move(fields));
+        }
+    }
 
     arrow::Status status;
     BatchBuilder = std::make_unique<NArrow::TArrowBatchBuilder>();

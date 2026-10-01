@@ -11,8 +11,17 @@ PY_SRCS(
     aggregate/graph.py
     aggregate/run.py
 
+    analysis/__init__.py
+    analysis/cost.py
+    analysis/unity.py
+    analysis/fanout.py
+
     bench/__init__.py
     bench/run.py
+
+    buildbench/__init__.py
+    buildbench/parse.py
+    buildbench/run.py
 
     analyze/__init__.py
     analyze/cache.py

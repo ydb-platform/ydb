@@ -19,11 +19,13 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/mind/address_classification
     ydb/core/persqueue/events
+    ydb/core/persqueue/public/cluster_tracker
     ydb/core/persqueue/public/counters
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/library/aclib
     ydb/library/persqueue/topic_parser
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/persqueue_v1

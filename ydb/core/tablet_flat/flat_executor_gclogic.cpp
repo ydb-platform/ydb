@@ -1,5 +1,7 @@
 #include "flat_executor_gclogic.h"
 #include "flat_bio_eggs.h"
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet.h>
 #include <unordered_set>
@@ -13,8 +15,9 @@ namespace {
     constexpr ui64 GcMaxErrors = 25;  // ~1.13 min in total
 }
 
-TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
+TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, const TFeatureFlags& flags)
     : HistoryCutter(info)
+    , CutHistoryEnabled(flags.GetEnableCutHistory())
     , TabletStorageInfo(std::move(info))
     , Cookies(cookies)
     , Generation(Cookies->Gen)
@@ -197,28 +200,19 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
 }
 
 void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
-    if (!AppData()->FeatureFlags.GetEnableCutHistory()) {
+    // CutHistoryEnabled was latched at boot, the live flag is still honored so that turning
+    // EnableCutHistory off works as an immediate kill switch.
+    if (!CutHistoryEnabled || !AppData()->FeatureFlags.GetEnableCutHistory()) {
         return;
     }
     for (auto channelId : ChannelsToCutHistory) {
         auto& channel = ChannelInfo[channelId];
-        auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
-        std::unordered_set<ui32> seenGroups;
-        auto& channelHistory = TabletStorageInfo->Channels[channelId].History;
-        auto allHistoryIt = channelHistory.begin();
-        for (const auto* historyEntry : historyToCut) {
-            while (allHistoryIt != channelHistory.end() && allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
-                seenGroups.insert(allHistoryIt->GroupID);
-                ++allHistoryIt;
-            }
-            if (!seenGroups.contains(historyEntry->GroupID)) {
-                // we can cut this entry AND entries before it do not use same group
-                // we can put a hard barrier on it
-                channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, historyEntry->GroupID, Generation, true, TGCTime{(historyEntry + 1)->FromGeneration - 1, Max<ui32>()});
-            }
-            channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
-            ++allHistoryIt;
+        auto hardBarriers = HistoryCutter.GetHardBarriers(channelId);
+
+        for (const auto& [groupId, generation] : hardBarriers) {
+            channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, groupId, Generation, true, TGCTime{generation, Max<ui32>()});
         }
+        channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
     }
     ChannelsToCutHistory.clear();
 }
@@ -229,11 +223,15 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
         TGCTime gcTime(blobId.Generation(), blobId.Step());
         Y_ENSURE(channel.KnownGcBarrier < gcTime);
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
+        HistoryCutter.SeenBlob(blobId);
     }
 
     for (const TLogoBlobID &blobId : delta.Deleted) {
         auto &channel = ChannelInfo[blobId.Channel()];
         channel.CommittedDelta[time].Deleted.push_back(blobId);
+        // A DoNotKeep mark still pins its entry: the flag is delivered to the group the
+        // blob's generation resolves to, and cutting the entry makes that unresolvable.
+        HistoryCutter.SeenBlob(blobId);
     }
 }
 
@@ -266,7 +264,7 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     const TGCTime minTime = std::min(uncommittedTime, std::min(uncommitedSnap, minBarrier));
 
     for (auto it = ChannelInfo.begin(); it != ChannelInfo.end(); ++it) {
-        it->second.SendCollectGarbage(minTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
+        SentinelDroppedMarks += it->second.SendCollectGarbage(minTime, TabletStorageInfo.Get(), it->first, Generation, ctx);
     }
 }
 
@@ -437,9 +435,10 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
     ++GcWaitFor;
 }
 
-void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
+ui64 TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
     if (GcWaitFor > 0)
-        return;
+        return 0;
+    ui64 droppedMarks = 0;
 
     MinUncollectedTime = uncommittedTime;
     PendingRetry = false;
@@ -498,6 +497,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                     affectedGroups[xit->GroupID];
             }
 
+            // GroupForGeneration returns Max<ui32>() below the first surviving history entry.
+            // Dropping such a mark is safe: those blobs have already been deleted with the cut entry.
             ui32 activeGen = Max<ui32>();
             ui32 activeGroup = Max<ui32>();
             TVector<TLogoBlobID> *vec = nullptr;
@@ -506,10 +507,14 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].first;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].first;
                 }
 
-                vec->push_back(blobId);
+                if (vec) {
+                    vec->push_back(blobId);
+                } else {
+                    ++droppedMarks;
+                }
             }
 
             activeGen = Max<ui32>();
@@ -520,10 +525,14 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
-                    vec = &affectedGroups[activeGroup].second;
+                    vec = activeGroup == Max<ui32>() ? nullptr : &affectedGroups[activeGroup].second;
                 }
 
-                vec->push_back(blobId);
+                if (vec) {
+                    vec->push_back(blobId);
+                } else {
+                    ++droppedMarks;
+                }
             }
 
             for (auto &xpair : affectedGroups) {
@@ -531,6 +540,14 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             }
         }
     }
+    if (droppedMarks) {
+        LOG_WARN_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+            "GC marks dropped by sentinel guard (blob generation below first surviving history entry)"
+            << " tablet " << tabletStorageInfo->TabletID
+            << " channel " << channel
+            << " dropped " << droppedMarks);
+    }
+    return droppedMarks;
 }
 
 bool TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {

@@ -4,7 +4,7 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
-#include "ut_helpers.h"
+#include <ydb/core/formats/arrow/accessor/sub_columns/ut_common/ut_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <yql/essentials/types/binary_json/read.h>

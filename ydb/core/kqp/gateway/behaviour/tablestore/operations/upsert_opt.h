@@ -14,6 +14,8 @@ private:
 private:
     bool SchemeNeedActualization = false;
     std::optional<TString> ScanReaderPolicyName;
+    std::optional<bool> DeduplicationEnabled;
+    std::optional<bool> CacheBlobsAfterWrite;
     std::optional<bool> InsertOptionsBuildIndexesEnabled;
     std::optional<ui64> InsertOptionsBuildIndexesMinBlobBytes;
     NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer CompactionPlannerConstructor;

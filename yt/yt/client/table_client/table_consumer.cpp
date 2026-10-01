@@ -242,7 +242,7 @@ TTableConsumer::TTableConsumer(const TYsonConverterConfig& config, IValueConsume
 
 TError TTableConsumer::AttachLocationAttributes(TError error) const
 {
-    return error << TErrorAttribute("row_index", RowIndex_);
+    return error.With("row_index", RowIndex_);
 }
 
 void TTableConsumer::OnControlInt64Scalar(i64 value)
@@ -513,7 +513,7 @@ void TTableConsumer::OnKeyedItem(TStringBuf name)
                 columnIndex = CurrentNameTableWriter_->GetIdOrRegisterName(name);
             } catch (const std::exception& ex) {
                 THROW_ERROR AttachLocationAttributes(TError("Failed to add column to name table for table writer")
-                    << ex);
+                    .With(ex));
             }
         } else {
             auto id = CurrentNameTableWriter_->FindId(name);

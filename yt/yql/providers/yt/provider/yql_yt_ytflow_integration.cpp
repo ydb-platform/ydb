@@ -1,7 +1,9 @@
 #include "yql_yt_ytflow_integration.h"
+#include "yql_yt_op_settings.h"
 #include "yql_yt_provider.h"
 #include "yql_yt_table.h"
 
+#include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -25,6 +27,12 @@ public:
     TYtYtflowIntegration(TYtState::TWeakPtr state)
         : State_(state)
     {
+    }
+
+    IYtTokenResolver::TPtr GetYtTokenResolver() const override {
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
+        return ytState->Gateway->GetYtTokenResolver();
     }
 
     TMaybe<bool> CanRead(const TExprNode& node, TExprContext& ctx) override {
@@ -91,9 +99,11 @@ public:
             return Nothing();
         }
 
-        auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
-        auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
-        auto commitEpoch = TEpochInfo::Parse(maybeWriteTable.Cast().Table().CommitEpoch().Ref());
+        auto writeTable = maybeWriteTable.Cast();
+
+        auto cluster = TString(writeTable.DataSink().Cluster().Value());
+        auto tableName = TString(TYtTableInfo::GetTableLabel(writeTable.Table()));
+        auto commitEpoch = TEpochInfo::Parse(writeTable.Table().CommitEpoch().Ref());
 
         auto ytState = State_.lock();
         YQL_ENSURE(ytState);
@@ -110,6 +120,124 @@ public:
         ) {
             AddIssue(ctx, TIssue("write to static table"));
             return false;
+        }
+
+        auto mode = EYtWriteMode::Renew;
+        if (auto modeSetting = NYql::GetSetting(writeTable.Settings().Ref(), EYtSettingType::Mode)) {
+            mode = FromString<EYtWriteMode>(modeSetting->Child(1)->Content());
+        }
+
+        const bool tableExists = tableDesc.Meta->DoesExist;
+        const bool isSortedTable = tableDesc.RowSpec && tableDesc.RowSpec->IsSorted();
+
+        if (isSortedTable && mode != EYtWriteMode::Replace) {
+            AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "Writing into sorted table is supported "
+                << "only by REPLACE INTO statement"));
+
+            return false;
+        }
+
+        if (tableExists && !isSortedTable && mode == EYtWriteMode::Replace) {
+            AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "REPLACE INTO statement is supported only for sorted tables"));
+
+            return false;
+        }
+
+        if (HasSort(writeTable.Content().Ptr())) {
+            AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "ORDER BY statement is not supported; "
+                << "use WITH primary_key = \"[...]\" for writing into sorted output tables"));
+
+            return false;
+        }
+
+        auto primaryKeySetting = NYql::GetSetting(
+            writeTable.Settings().Ref(),
+            EYtSettingType::PrimaryKey);
+
+        if (mode == EYtWriteMode::Replace && !primaryKeySetting) {
+            AddIssue(ctx, TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
+                << "REPLACE INTO statement requires "
+                << ToString(EYtSettingType::PrimaryKey).Quote() << " setting"));
+
+            return false;
+        }
+
+        if (primaryKeySetting) {
+            if (mode != EYtWriteMode::Replace) {
+                AddIssue(ctx, TIssue(
+                    ctx.GetPosition(primaryKeySetting->Pos()),
+                    TStringBuilder()
+                        << "Setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                        << " is supported only by REPLACE INTO statement"));
+
+                return false;
+            }
+
+            TVector<TString> keyColumns;
+            if (!ParseWritePrimaryKey(*primaryKeySetting, keyColumns, ctx)) {
+                return false;
+            }
+
+            const auto* itemType = writeTable.Content().Ref().GetTypeAnn()
+                ->Cast<TListExprType>()->GetItemType()
+                ->Cast<TStructExprType>();
+
+            TVector<TString> unknownKeyColumns;
+
+            for (const auto& keyColumn : keyColumns) {
+                if (!itemType->FindItem(keyColumn)) {
+                    unknownKeyColumns.push_back(keyColumn);
+                }
+            }
+
+            if (!unknownKeyColumns.empty()) {
+                AddIssue(ctx, TIssue(
+                    ctx.GetPosition(primaryKeySetting->Pos()),
+                    TStringBuilder()
+                        << "Found key columns not present in written row type: "
+                        << JoinSeq(", ", unknownKeyColumns)));
+
+                return false;
+            }
+
+            if (tableExists) {
+                TVector<TString> tableKeyColumns;
+                bool hasOnlyAscendingSortOrder = true;
+
+                const auto& foreignSort = tableDesc.RowSpec->GetForeignSort();
+
+                for (const auto& [keyColumn, ascendingSortOrder] : foreignSort) {
+                    if (!tableDesc.RowSpec->ExpressionColumns.contains(keyColumn)) {
+                        tableKeyColumns.push_back(keyColumn);
+                        hasOnlyAscendingSortOrder &= ascendingSortOrder;
+                    }
+                }
+
+                if (!hasOnlyAscendingSortOrder) {
+                    AddIssue(ctx, TIssue(
+                        ctx.GetPosition(primaryKeySetting->Pos()),
+                        TStringBuilder()
+                            << "Descending sort order of existing table is not "
+                            << " supported by REPLACE INTO statement"));
+
+                    return false;
+                }
+
+                if (keyColumns != tableKeyColumns) {
+                    AddIssue(ctx, TIssue(
+                        ctx.GetPosition(primaryKeySetting->Pos()),
+                        TStringBuilder()
+                            << "Key columns from setting " << ToString(EYtSettingType::PrimaryKey).Quote()
+                            << " don't match existing table's key columns: "
+                            << JoinSeq(", ", keyColumns) << " (setting) != "
+                            << JoinSeq(", ", tableKeyColumns) << " (table)"));
+
+                    return false;
+                }
+            }
         }
 
         return true;
@@ -254,7 +382,7 @@ public:
 
         auto* rowType = TYqlRowSpecInfo(table.RowSpec()).GetType();
 
-        NYtflow::NProto::TQYTSourceMessage sourceSettings;
+        NYtflow::NProto::TYtQueueSourceMessage sourceSettings;
         sourceSettings.SetCluster(table.Cluster().StringValue());
         sourceSettings.SetPath(table.Name().StringValue());
         sourceSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
@@ -263,49 +391,68 @@ public:
     }
 
     void FillSinkSettings(
-        const TExprNode& sink, ::google::protobuf::Any& settings, TExprContext& /*ctx*/
+        const TExprNode& sink, ::google::protobuf::Any& settings, TExprContext& ctx
     ) override {
         auto maybeWriteTable = TMaybeNode<TYtWriteTable>(&sink);
         YQL_ENSURE(maybeWriteTable);
 
-        NYtflow::NProto::TQYTSinkMessage sinkSettings;
+        bool doesExist = false;
+        bool truncate = false;
+
+        TVector<TString> keyColumns;
 
         {
-            auto table = maybeWriteTable.Cast().Table().Cast<TYtTable>();
-
-            sinkSettings.SetCluster(table.Cluster().StringValue());
-            sinkSettings.SetPath(table.Name().StringValue());
-
-            auto* rowType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn()
-                ->Cast<TListExprType>()->GetItemType();
-
-            sinkSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
-        }
-
-        {
-            auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
-            auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
-
             auto ytState = State_.lock();
             YQL_ENSURE(ytState);
 
+            TYtTableInfo tableInfo(maybeWriteTable.Cast().Table());
             auto tableDesc = ytState->TablesData->GetTable(
-                cluster, tableName, 0);
+                tableInfo.Cluster, tableInfo.Name, 0);
 
-            sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
-            sinkSettings.SetTruncate(tableDesc.Intents & TYtTableIntent::Override);
+            doesExist = tableDesc.Meta->DoesExist;
+            truncate = tableDesc.Intents & TYtTableIntent::Override;
 
-            const auto& rowSpec = tableDesc.RowSpec;
-            if (rowSpec) {
-                for (const auto& [column, _] : rowSpec->GetForeignSort()) {
-                    if (!rowSpec->ExpressionColumns.contains(column)) {
-                        sinkSettings.AddKeyColumns(column);
-                    }
-                }
+            if (auto primaryKeySetting = NYql::GetSetting(
+                maybeWriteTable.Cast().Settings().Ref(),
+                EYtSettingType::PrimaryKey
+            )) {
+                YQL_ENSURE(ParseWritePrimaryKey(*primaryKeySetting, keyColumns, ctx));
             }
         }
 
-        settings.PackFrom(sinkSettings);
+        auto table = maybeWriteTable.Cast().Table().Cast<TYtTable>();
+        auto* rowType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn()
+            ->Cast<TListExprType>()->GetItemType();
+
+        auto cluster = table.Cluster().StringValue();
+        auto path = table.Name().StringValue();
+        auto rowTypeYson = NCommon::WriteTypeToYson(rowType);
+
+        if (!keyColumns.empty()) {
+            NYtflow::NProto::TYtSortedTableSinkMessage sortedSettings;
+
+            sortedSettings.SetCluster(cluster);
+            sortedSettings.SetPath(path);
+            sortedSettings.SetDoesExist(doesExist);
+            sortedSettings.SetTruncate(truncate);
+            sortedSettings.SetRowType(rowTypeYson);
+
+            for (const auto& keyColumn : keyColumns) {
+                sortedSettings.AddKeyColumns(keyColumn);
+            }
+
+            settings.PackFrom(sortedSettings);
+        } else {
+            NYtflow::NProto::TYtQueueSinkMessage queueSettings;
+
+            queueSettings.SetCluster(cluster);
+            queueSettings.SetPath(path);
+            queueSettings.SetDoesExist(doesExist);
+            queueSettings.SetTruncate(truncate);
+            queueSettings.SetRowType(rowTypeYson);
+
+            settings.PackFrom(queueSettings);
+        }
     }
 
     NKikimr::NMiniKQL::TRuntimeNode BuildLookupSourceArgs(
@@ -362,6 +509,25 @@ private:
         }
 
         ctx.IssueManager.RaiseIssue(issue);
+    }
+
+    bool HasSort(const TExprNode::TPtr& node) {
+        bool hasSort = false;
+
+        VisitExpr(node, [&hasSort](const TExprNode::TPtr& node) {
+            if (hasSort || node->IsLambda()) {
+                return false;
+            }
+
+            if (TMaybeNode<TCoSort>(node)) {
+                hasSort = true;
+                return false;
+            }
+
+            return true;
+        });
+
+        return hasSort;
     }
 
 private:

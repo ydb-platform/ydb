@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLBuckets {
 class TOptimizerPlannerConstructor: public IOptimizerPlannerConstructor {
 public:
     static TString GetClassNameStatic() {
-        return "l-buckets";
+        return "DEPRICATED";
     }
 
 private:

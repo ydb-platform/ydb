@@ -314,6 +314,7 @@ namespace NKikimr {
         TTrackableVector<TDiskPart> LoadedOutbound;
         TIdxDiskPlaceHolder::TInfo Info;
         TVector<ui32> AllChunks;    // all chunk ids that store index and data for this segment
+        TDiskPart HeapStripe; // non-empty if this SST lives in the stripe heap
         std::vector<TDiskPart> IndexParts; // index part locations; the first one is 'placeholder', stored as LastPartAddr
         NHullComp::TSstRatioThreadSafeHolder StorageRatio;
         // Every Sst has unique id
@@ -348,7 +349,16 @@ namespace NKikimr {
             , Info()
             , AllChunks()
             , StorageRatio()
-        {}
+        {
+            // HeapStripe is not stored: it is derived from chunk ownership by ResolveHeapStripe() once the huge
+            // keeper has been recovered
+        }
+
+        // A stripe-backed SST is written as a single index part filling its whole stripe, so the stripe extent is
+        // just the SST address. Ownership of the chunk is what tells the two kinds of SST apart.
+        void ResolveHeapStripe(const THashSet<TChunkIdx>& stripeChunks) {
+            HeapStripe = stripeChunks.contains(LastPartAddr.ChunkIdx) ? LastPartAddr : TDiskPart();
+        }
 
         const TDiskPart &GetEntryPoint() const {
             return LastPartAddr;
@@ -374,14 +384,10 @@ namespace NKikimr {
             LastPartAddr.SerializeToProto(pb);
         }
 
-        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
-            // here we handle SST itself (index part) + any referenced data chunks
-            for (TChunkIdx chunkIdx : AllChunks) {
-                const bool inserted = chunks.insert(chunkIdx).second;
-                Y_ABORT_UNLESS(inserted);
-            }
-
-            // iterate through referenced huge blobs and add their chunks to map
+        // Every huge blob this SST references. Chunk ownership and stripe extents are both derived from this one
+        // traversal, so the set of chunks the hull claims can never disagree with the extents it keeps alive.
+        template<typename TCallback>
+        void ForEachHugeBlob(TCallback&& callback) const {
             TDiskDataExtractor extr;
             TMemIterator it(this);
             it.SeekToFirst();
@@ -394,7 +400,7 @@ namespace NKikimr {
                         for (const TDiskPart *part = extr.Begin; part != extr.End; ++part) {
                             if (part->Size) {
                                 Y_ABORT_UNLESS(part->ChunkIdx);
-                                chunks.insert(part->ChunkIdx);
+                                callback(*part);
                             }
                         }
                         extr.Clear();
@@ -408,6 +414,31 @@ namespace NKikimr {
             }
         }
 
+        void GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
+            // here we handle SST itself (index part) + any referenced data chunks
+            for (TChunkIdx chunkIdx : AllChunks) {
+                const bool inserted = chunks.insert(chunkIdx).second;
+                // Heap-backed SSTs share the chunk with the stripe heap.
+                Y_ABORT_UNLESS(inserted || !HeapStripe.Empty());
+            }
+
+            ForEachHugeBlob([&chunks](const TDiskPart& part) { chunks.insert(part.ChunkIdx); });
+        }
+
+        // Every extent of this SST that lives in the stripe heap: the huge blobs it points at, plus the stripe the
+        // SST itself occupies. Must run after ResolveHeapStripe, which is what fills HeapStripe in.
+        template<typename TCallback>
+        void ForEachStripeExtent(const THashSet<TChunkIdx>& stripeChunks, TCallback&& callback) const {
+            if (!HeapStripe.Empty()) {
+                callback(HeapStripe);
+            }
+            ForEachHugeBlob([&](const TDiskPart& part) {
+                if (stripeChunks.contains(part.ChunkIdx)) {
+                    callback(part);
+                }
+            });
+        }
+
         class TMemIterator;
 
         ui64 GetFirstLsn() const { return Info.FirstLsn; }
@@ -417,6 +448,9 @@ namespace NKikimr {
 
         // append cur seg chunk ids (index and data) to the vector
         void FillInChunkIds(TVector<ui32> &vec) const {
+            if (!HeapStripe.Empty()) {
+                return;
+            }
             // copy chunks ids
             for (auto idx : AllChunks)
                 vec.push_back(idx);

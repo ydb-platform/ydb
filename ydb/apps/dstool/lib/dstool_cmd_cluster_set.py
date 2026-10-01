@@ -1,4 +1,4 @@
-import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_base3_pb2 as kikimr_bs3
 import ydb.core.protos.blobstorage_disk_color_pb2 as disk_color
 import ydb.apps.dstool.lib.common as common
 import sys
@@ -22,7 +22,7 @@ def add_options(p):
     g.add_argument('--max-scrubbed-disks-at-once', type=int, metavar='N', help='Maximum number of simultaneously scrubbed PDisks')
     choices = disk_color.TPDiskSpaceColor.E.keys()
     g.add_argument('--pdisk-space-color-border', choices=choices, help='PDisk space color border')
-    choices = kikimr_bsconfig.TSerialManagementStage.E.keys()
+    choices = kikimr_bs3.TSerialManagementStage.E.keys()
     g.add_argument('--disk-management-mode', type=str, choices=choices, help='Disk management mode')
     g.add_argument('--enable-self-heal-local-policy', action='store_const', const=True, dest='self_heal_local_policy', help='Enable SelfHeal local policy for cluster')
     g.add_argument('--disable-self-heal-local-policy', action='store_const', const=False, dest='self_heal_local_policy', help='Disable SelfHeal local policy for cluster')
@@ -38,7 +38,7 @@ def create_request(args):
 
     if args.disk_management_mode is not None:
         cmd = request.Command.add().MigrateToSerial
-        cmd.Stage = kikimr_bsconfig.TSerialManagementStage.E.Value(args.disk_management_mode)
+        cmd.Stage = kikimr_bs3.TSerialManagementStage.E.Value(args.disk_management_mode)
         return request
 
     cmd = request.Command.add().UpdateSettings

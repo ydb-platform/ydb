@@ -10,6 +10,7 @@ INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 TEST_SRCS(
     test_iam_generic.py
+    test_join.py
 )
 
 PY_SRCS(
@@ -45,7 +46,6 @@ PEERDIR(
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/tests/tools/pq_read
 )
 
 END()

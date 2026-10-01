@@ -5,20 +5,20 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <library/cpp/containers/stack_array/stack_array.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 
-namespace NKikimr {
-namespace NMiniKQL {
+#include <utility>
+
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 class TApplyWrapper: public TMutableCodegeneratorPtrNode<TApplyWrapper> {
-    typedef TMutableCodegeneratorPtrNode<TApplyWrapper> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorPtrNode<TApplyWrapper>;
 
 public:
     struct TKernelState: public arrow::compute::KernelState {
-        TKernelState(ui32 argsCount)
+        explicit TKernelState(ui32 argsCount)
             : Alloc(__LOCATION__)
             , MemInfo("Apply")
             , HolderFactory(Alloc.Ref(), MemInfo)
@@ -29,8 +29,7 @@ public:
             Alloc.Release();
         }
 
-        ~TKernelState()
-        {
+        ~TKernelState() override {
             Alloc.Acquire();
         }
 
@@ -43,9 +42,9 @@ public:
 
     class TArrowNode: public IArrowKernelComputationNode {
     public:
-        TArrowNode(const TApplyWrapper* parent, const NUdf::TUnboxedValue& callable, TType* returnType, const TVector<TType*>& argsTypes)
+        TArrowNode(const TApplyWrapper* parent, NUdf::TUnboxedValue callable, TType* returnType, const TVector<TType*>& argsTypes)
             : Parent_(parent)
-            , Callable_(callable)
+            , Callable_(std::move(callable))
             , ArgsValuesDescr_(ToValueDescr(argsTypes))
             , Kernel_(ConvertToInputTypes(argsTypes), ConvertToOutputType(returnType), [this](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
                 auto& state = dynamic_cast<TKernelState&>(*ctx->state());
@@ -72,16 +71,16 @@ public:
             return "Apply";
         }
 
-        const arrow::compute::ScalarKernel& GetArrowKernel() const {
+        const arrow::compute::ScalarKernel& GetArrowKernel() const override {
             return Kernel_;
         }
 
-        const std::vector<arrow::ValueDescr>& GetArgsDesc() const {
+        const std::vector<arrow::ValueDescr>& GetArgsDesc() const override {
             return ArgsValuesDescr_;
         }
 
-        const IComputationNode* GetArgument(ui32 index) const {
-            return Parent_->ArgNodes[index];
+        const IComputationNode* GetArgument(ui32 index) const override {
+            return Parent_->ArgNodes_[index];
         }
 
     private:
@@ -95,68 +94,68 @@ public:
     TApplyWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* callableNode,
                   TComputationNodePtrVector&& argNodes, ui32 usedArgs, const NUdf::TSourcePosition& pos, TCallableType* callableType)
         : TBaseComputation(mutables, kind)
-        , CallableNode(callableNode)
-        , ArgNodes(std::move(argNodes))
-        , UsedArgs(usedArgs)
-        , Position(pos)
-        , CallableType(callableType)
+        , CallableNode_(callableNode)
+        , ArgNodes_(std::move(argNodes))
+        , UsedArgs_(usedArgs)
+        , Position_(pos)
+        , CallableType_(callableType)
     {
         Stateless_ = false;
     }
 
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final {
-        if (UsedArgs != CallableType->GetArgumentsCount()) {
+        if (UsedArgs_ != CallableType_->GetArgumentsCount()) {
             return {};
         }
 
         std::shared_ptr<arrow::DataType> t;
-        if (!CallableType->GetReturnType()->IsBlock() ||
-            !ConvertArrowType(AS_TYPE(TBlockType, CallableType->GetReturnType())->GetItemType(), t)) {
+        if (!CallableType_->GetReturnType()->IsBlock() ||
+            !ConvertArrowType(AS_TYPE(TBlockType, CallableType_->GetReturnType())->GetItemType(), t)) {
             return {};
         }
 
         TVector<TType*> argsTypes;
-        for (ui32 i = 0; i < CallableType->GetArgumentsCount(); ++i) {
-            argsTypes.push_back(CallableType->GetArgumentType(i));
-            if (!CallableType->GetArgumentType(i)->IsBlock() ||
-                !ConvertArrowType(AS_TYPE(TBlockType, CallableType->GetArgumentType(i))->GetItemType(), t)) {
+        for (ui32 i = 0; i < CallableType_->GetArgumentsCount(); ++i) {
+            argsTypes.push_back(CallableType_->GetArgumentType(i));
+            if (!CallableType_->GetArgumentType(i)->IsBlock() ||
+                !ConvertArrowType(AS_TYPE(TBlockType, CallableType_->GetArgumentType(i))->GetItemType(), t)) {
                 return {};
             }
         }
 
-        const auto callable = CallableNode->GetValue(ctx);
-        return std::make_unique<TArrowNode>(this, callable, CallableType->GetReturnType(), argsTypes);
+        const auto callable = CallableNode_->GetValue(ctx);
+        return std::make_unique<TArrowNode>(this, callable, CallableType_->GetReturnType(), argsTypes);
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        NStackArray::TStackArray<NUdf::TUnboxedValue> values(ALLOC_ON_STACK(NUdf::TUnboxedValue, UsedArgs));
-        for (size_t i = 0; i < UsedArgs; ++i) {
-            if (const auto valueNode = ArgNodes[i]) {
+        NStackArray::TStackArray<NUdf::TUnboxedValue> values(ALLOC_ON_STACK(NUdf::TUnboxedValue, UsedArgs_));
+        for (size_t i = 0; i < UsedArgs_; ++i) {
+            if (const auto valueNode = ArgNodes_[i]) {
                 values[i] = valueNode->GetValue(ctx);
             }
         }
 
-        const auto callable = CallableNode->GetValue(ctx);
+        const auto callable = CallableNode_->GetValue(ctx);
         const auto prev = ctx.CalleePosition;
-        ctx.CalleePosition = &Position;
+        ctx.CalleePosition = &Position_;
         const auto ret = callable.Run(ctx.Builder, values.data());
         ctx.CalleePosition = prev;
         return ret;
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
+    void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto idxType = Type::getInt32Ty(context);
         const auto valType = Type::getInt128Ty(context);
-        const auto arrayType = ArrayType::get(valType, ArgNodes.size());
+        const auto arrayType = ArrayType::get(valType, ArgNodes_.size());
         const auto args = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(arrayType, 0U, "args", &ctx.Func->getEntryBlock().back()) : new AllocaInst(arrayType, 0U, "args", block);
 
         ui32 i = 0;
         std::vector<std::pair<Value*, EValueRepresentation>> argsv;
-        argsv.reserve(ArgNodes.size());
-        for (const auto node : ArgNodes) {
+        argsv.reserve(ArgNodes_.size());
+        for (const auto node : ArgNodes_) {
             const auto argPtr = GetElementPtrInst::CreateInBounds(arrayType, args, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, i++)}, "arg_ptr", block);
             if (node) {
                 GetNodeValue(argPtr, node, ctx, block);
@@ -166,25 +165,25 @@ public:
             }
         }
 
-        if (const auto codegen = dynamic_cast<ICodegeneratorRunNode*>(CallableNode)) {
+        if (const auto codegen = dynamic_cast<ICodegeneratorRunNode*>(CallableNode_)) {
             codegen->CreateRun(ctx, block, pointer, args);
         } else {
-            const auto callable = GetNodeValue(CallableNode, ctx, block);
+            const auto callable = GetNodeValue(CallableNode_, ctx, block);
             // XXX: Since <GetNodeValue> method releases the
             // UnboxedValue, obtained via <GetValue>, the only
             // reference to this UnboxedValue remains in mutables.
             // However, it might be invalidated within its <Run>
             // method, so anchor the callable value to prevent its
             // destruction while running its <Run> method.
-            ValueAddRef(CallableNode->GetRepresentation(), callable, ctx, block);
+            ValueAddRef(CallableNode_->GetRepresentation(), callable, ctx, block);
             const auto calleePtr = GetElementPtrInst::CreateInBounds(GetCompContextType(context), ctx.Ctx, {ConstantInt::get(idxType, 0), ConstantInt::get(idxType, 6)}, "callee_ptr", block);
             const auto previous = new LoadInst(PointerType::getUnqual(GetSourcePosType(context)), calleePtr, "previous", block);
-            const auto callee = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), ui64(&Position)), previous->getType(), "callee", block);
+            const auto callee = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), ui64(&Position_)), previous->getType(), "callee", block);
             new StoreInst(callee, calleePtr, block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, callable, ctx.Codegen, block, ctx.GetBuilder(), args);
             new StoreInst(previous, calleePtr, block);
             // XXX: Release the anchor to the callable, taken above.
-            ValueUnRef(CallableNode->GetRepresentation(), callable, ctx, block);
+            ValueUnRef(CallableNode_->GetRepresentation(), callable, ctx, block);
         }
         for (const auto& arg : argsv) {
             ValueUnRef(arg.second, arg.first, ctx, block);
@@ -193,19 +192,19 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        DependsOn(CallableNode);
-        for (const auto node : ArgNodes) {
+        DependsOn(CallableNode_);
+        for (const auto node : ArgNodes_) {
             if (node) {
                 DependsOn(node);
             }
         }
     }
 
-    IComputationNode* const CallableNode;
-    const TComputationNodePtrVector ArgNodes;
-    const ui32 UsedArgs;
-    const NUdf::TSourcePosition Position;
-    TCallableType* CallableType;
+    IComputationNode* const CallableNode_;
+    const TComputationNodePtrVector ArgNodes_;
+    const ui32 UsedArgs_;
+    const NUdf::TSourcePosition Position_;
+    TCallableType* CallableType_;
 };
 
 } // namespace
@@ -251,5 +250,4 @@ IComputationNode* WrapApply(TCallable& callable, const TComputationNodeFactoryCo
                              callableType->GetArgumentsCount(), NUdf::TSourcePosition(row, column, file), callableType);
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

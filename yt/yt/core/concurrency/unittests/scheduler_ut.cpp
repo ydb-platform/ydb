@@ -53,7 +53,7 @@ using ::testing::ContainsRegex;
 
 constexpr auto SleepQuantum = TDuration::MilliSeconds(100);
 
-YT_DEFINE_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
+YT_DEFINE_LEAKY_GLOBAL(const NLogging::TLogger, Logger, "SchedulerTest");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1298,8 +1298,10 @@ TEST_P(TFairShareSchedulerTest, TwoLevelFairness)
                             }
                         }
 
-                        YT_LOG_DEBUG("Pools time: %v", pools);
-                        YT_LOG_DEBUG("Progresses time: %v", progresses);
+                        YT_TLOG_DEBUG("Measured pools time")
+                            .With("Pools", pools);
+                        YT_TLOG_DEBUG("Measured progresses time")
+                            .With("Progresses", progresses);
 
                         EXPECT_TRUE(ApproximatelyEqual(pools[poolId], minPool));
 
@@ -1397,7 +1399,8 @@ TEST_P(TFairShareSchedulerTest, Fairness)
                     auto guard = Guard(lock);
 
                     if (numThreads == 1) {
-                        YT_LOG_DEBUG("Progresses time: %v", progresses);
+                        YT_TLOG_DEBUG("Measured progresses time")
+                            .With("Progresses", progresses);
 
                         auto minProgress = TDuration::Max();
                         for (size_t id = 0; id < numWorkers; ++id) {

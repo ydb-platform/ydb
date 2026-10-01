@@ -172,6 +172,15 @@ static constexpr const char *kGcpCloudRunJobTaskIndex = "gcp.cloud_run.job.task_
 static constexpr const char *kGcpGceInstanceHostname = "gcp.gce.instance.hostname";
 
 /**
+  GCE instance labels, @code <key> @endcode being the label name and the value being the label
+  value. <p> For example, a GCE instance label @code team @endcode with value @code observability
+  @endcode SHOULD be recorded as the @code gcp.gce.instance.labels.team @endcode attribute with
+  value @code "observability" @endcode. The @code <key> @endcode MUST be the exact GCE instance
+  label key.
+ */
+static constexpr const char *kGcpGceInstanceLabels = "gcp.gce.instance.labels";
+
+/**
   The instance name of a GCE instance. This is the value provided by @code host.name @endcode, the
   visible name of the instance in the Cloud Console UI, and the prefix for the default hostname of
   the instance as defined by the <a

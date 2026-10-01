@@ -391,6 +391,8 @@ Arguments:
 Type returned:
 `U` for `ListFold`, `U?` for `ListFold1`.
 
+`ListFold` allows [linear types](../types/linear.md) `Linear<T>` in the state type `U`. If the state contains linear values, `updateLambda` must consume every linear value passed to it exactly once on each iteration and return the resulting state of the same type.
+
 ```yql
 $l = [1, 4, 7, 2];
 $y = ($x, $y) -> { RETURN $x + $y; };
@@ -401,6 +403,21 @@ SELECT
     ListFold([], 3, $y) AS fold_empty,                 -- 3
     ListFold1($l, $z, $y) AS fold1,                    -- 17
     ListFold1([], $z, $y) AS fold1_empty;              -- Null
+```
+
+With a linear state, `ListFold` can modify a mutable dictionary without copying it on every iteration:
+
+```yql
+SELECT Block(($arg) -> {
+    $dict = ListFold(
+        [1, 2, 3, 2, 1],
+        ToMutDict({0: 0}, $arg),
+        ($item, $state) -> {
+            RETURN MutDictInsert($state, $item, 1);
+        }
+    );
+    RETURN ListSort(DictKeys(FromMutDict($dict)));
+}); -- [0, 1, 2, 3]
 ```
 
 ## ListFoldMap, ListFold1Map {#listfoldmap}
@@ -431,7 +448,7 @@ SELECT
 
 ## ListFromRange {#listfromrange}
 
-Generate a sequence of numbers with the specified step. It's similar to `xrange` in Python 2, but additionally supports floats.
+Generate a sequence of numbers or dates with the specified step. It's similar to `xrange` in Python 2, but additionally supports floating-point numbers, `Decimal`, and dates.
 
 Arguments:
 
@@ -443,6 +460,7 @@ Specifics:
 
 * The end is not included, i.e. `ListFromRange(1,3) == AsList(1,2)`.
 * The type for the resulting elements is selected as the broadest from the argument types. For example, `ListFromRange(1, 2, 0.5)` results in a `Double` list.
+* `Decimal` ranges are supported starting from language version [2026.02](../changelog/2026.02.md).
 * If the start and the end is one of the date representing type, the step has to be `Interval`.
 * The list is "lazy", but if it's used incorrectly, it can still consume a lot of RAM.
 * If the step is positive and the end is less than or equal to the start, the result list is empty.
@@ -450,14 +468,15 @@ Specifics:
 * If the step is neither positive nor negative (0 or NaN), the result list is empty.
 * If any of the parameters is optional, the result list is optional.
 * If any of the parameters is `NULL`, the result is `NULL`.
-* If any of the parameters is `double/float("inf")`, the result list is empty.
+* If any `Float`, `Double`, or `Decimal` parameter is NaN or infinity, the result list is empty.
 
 #### Examples
 
 ```yql
 SELECT
     ListFromRange(-2, 2), -- [-2, -1, 0, 1]
-    ListFromRange(2, 1, -0.5); -- [2.0, 1.5]
+    ListFromRange(2, 1, -0.5), -- [2.0, 1.5]
+    ListFromRange(Decimal("1.00", 5, 2), Decimal("2.00", 5, 2), Decimal("0.25", 5, 2)); -- [1.00, 1.25, 1.50, 1.75]
 ```
 
 #### Signature

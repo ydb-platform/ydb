@@ -67,7 +67,7 @@ For instance, to set `C.a=[0,1,2]`, you may type this:
 """.strip()  # trim newlines of front and back
 
 # sys.argv can be missing, for example when python is embedded. See the docs
-# for details: http://docs.python.org/2/c-api/intro.html#embedding-python
+# for details: https://docs.python.org/3/c-api/intro.html#embedding-python
 if not hasattr(sys, "argv"):
     sys.argv = [""]
 
@@ -89,8 +89,7 @@ elif _envvar.lower() in {"0", "false", ""}:
     TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR = False
 else:
     raise ValueError(
-        "Unsupported value for environment variable: 'TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR' is set to '%s' which is none of  {'0', '1', 'false', 'true', ''}."
-        % _envvar
+        f"Unsupported value for environment variable: 'TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR' is set to '{_envvar}' which is none of  {{'0', '1', 'false', 'true', ''}}."
     )
 
 
@@ -98,9 +97,9 @@ IS_PYTHONW = sys.executable and sys.executable.endswith("pythonw.exe")
 
 T = t.TypeVar("T", bound=t.Callable[..., t.Any])
 AnyLogger = t.Union[logging.Logger, "logging.LoggerAdapter[t.Any]"]
-StrDict = t.Dict[str, t.Any]
-ArgvType = t.Optional[t.List[str]]
-ClassesType = t.List[t.Type[Configurable]]
+StrDict = dict[str, t.Any]
+ArgvType = list[str] | None
+ClassesType = list[type[Configurable]]
 
 
 def catch_config_error(method: T) -> T:
@@ -243,15 +242,14 @@ class Application(SingletonConfigurable):
                 "console": {
                     "class": "logging.StreamHandler",
                     "formatter": "console",
-                    "level": logging.getLevelName(self.log_level),  # type:ignore[arg-type]
+                    "level": logging.getLevelName(self.log_level),  # type:ignore[call-overload]
                     "stream": "ext://sys.stderr",
                 },
             },
             "formatters": {
                 "console": {
                     "class": (
-                        f"{self._log_formatter_cls.__module__}"
-                        f".{self._log_formatter_cls.__name__}"
+                        f"{self._log_formatter_cls.__module__}.{self._log_formatter_cls.__name__}"
                     ),
                     "format": self.log_format,
                     "datefmt": self.log_datefmt,
@@ -520,7 +518,7 @@ class Application(SingletonConfigurable):
         for cls in self.classes:
             # include all parents (up to, but excluding Configurable) in available names
             for c in cls.mro()[:-3]:
-                classdict[c.__name__] = t.cast(t.Type[Configurable], c)
+                classdict[c.__name__] = t.cast(type[Configurable], c)
 
         fhelp: str | None
         for alias, longname in self.aliases.items():
@@ -544,7 +542,7 @@ class Application(SingletonConfigurable):
                 # reformat first line
                 fhelp_lines[0] = fhelp_lines[0].replace("--" + longname, alias)
                 yield from fhelp_lines
-                yield indent("Equivalent to: [--%s]" % longname)
+                yield indent(f"Equivalent to: [--{longname}]")
             except Exception as ex:
                 self.log.error("Failed collecting help-message for alias %r, due to: %s", alias, ex)
                 raise
@@ -571,7 +569,7 @@ class Application(SingletonConfigurable):
                     for clname, props_dict in cfg.items()
                     for prop, val in props_dict.items()
                 )
-                cfg_txt = "Equivalent to: [%s]" % cfg_list
+                cfg_txt = f"Equivalent to: [{cfg_list}]"
                 yield indent(dedent(cfg_txt))
             except Exception as ex:
                 self.log.error("Failed collecting help-message for flag %r, due to: %s", flags, ex)
@@ -716,7 +714,7 @@ class Application(SingletonConfigurable):
             # or ask factory to create it...
             self.subapp = subapp(self)
         else:
-            raise AssertionError("Invalid mappings for subcommand '%s'!" % subc)
+            raise AssertionError(f"Invalid mappings for subcommand '{subc}'!")
 
         # ... and finally initialize subapp.
         self.subapp.initialize(argv)
@@ -749,14 +747,14 @@ class Application(SingletonConfigurable):
             if isinstance(longname, tuple):
                 longname, _ = longname
             cls, trait = longname.split(".", 1)
-            children = mro_tree[cls]  # type:ignore[index]
+            children = mro_tree[cls]
             if len(children) == 1:
                 # exactly one descendent, promote alias
                 cls = children[0]  # type:ignore[assignment]
-            if not isinstance(aliases, tuple):  # type:ignore[unreachable]
+            if not isinstance(alias, tuple):  # type:ignore[unreachable]
                 alias = (alias,)  # type:ignore[assignment]
             for al in alias:
-                aliases[al] = ".".join([cls, trait])  # type:ignore[list-item]
+                aliases[al] = ".".join([cls, trait])
 
         # flatten flags, which are of the form:
         # { 'key' : ({'Cls' : {'trait' : value}}, 'help')}
@@ -764,7 +762,7 @@ class Application(SingletonConfigurable):
         for key, (flagdict, help) in self.flags.items():
             newflag: dict[t.Any, t.Any] = {}
             for cls, subdict in flagdict.items():
-                children = mro_tree[cls]  # type:ignore[index]
+                children = mro_tree[cls]
                 # exactly one descendent, promote flag section
                 if len(children) == 1:
                     cls = children[0]  # type:ignore[assignment]
@@ -847,7 +845,7 @@ class Application(SingletonConfigurable):
 
         if argv and argv[0] == "help":
             # turn `ipython help notebook` into `ipython notebook -h`
-            argv = argv[1:] + ["-h"]
+            argv = [*argv[1:], "-h"]
 
         if self.subcommands and len(argv) > 0:
             # we have subcommands, and one may have been specified
@@ -931,16 +929,16 @@ class Application(SingletonConfigurable):
                     if log:
                         log.debug("Loaded config file: %s", loader.full_filename)
                 if config:
-                    for filename, earlier_config in zip(filenames, loaded):
+                    for filename, earlier_config in zip(filenames, loaded, strict=True):
                         collisions = earlier_config.collisions(config)
                         if collisions and log:
                             log.warning(
-                                "Collisions detected in {0} and {1} config files."  # noqa: G001
-                                " {1} has higher priority: {2}".format(
-                                    filename,
-                                    loader.full_filename,
-                                    json.dumps(collisions, indent=2),
-                                )
+                                "Collisions detected in %s and %s config files."
+                                " %s has higher priority: %s",
+                                filename,
+                                loader.full_filename,
+                                loader.full_filename,
+                                json.dumps(collisions, indent=2),
                             )
                     yield (config, loader.full_filename)
                     loaded.append(config)
@@ -956,7 +954,7 @@ class Application(SingletonConfigurable):
         self, filename: str, path: str | t.Sequence[str | None] | None = None
     ) -> None:
         """Load config files by filename and path."""
-        filename, ext = os.path.splitext(filename)
+        filename, _ext = os.path.splitext(filename)
         new_config = Config()
         for config, fname in self._load_config_files(
             filename,
@@ -1039,7 +1037,7 @@ class Application(SingletonConfigurable):
 
     def generate_config_file(self, classes: ClassesType | None = None) -> str:
         """generate default config file from Configurables"""
-        lines = ["# Configuration file for %s." % self.name]
+        lines = [f"# Configuration file for {self.name}."]
         lines.append("")
         lines.append("c = get_config()  #" + "noqa")
         lines.append("")
@@ -1111,8 +1109,8 @@ def boolean_flag(name: str, configurable: str, set_help: str = "", unset_help: s
         the trait, respectively.
     """
     # default helpstrings
-    set_help = set_help or "set %s=True" % configurable
-    unset_help = unset_help or "set %s=False" % configurable
+    set_help = set_help or f"set {configurable}=True"
+    unset_help = unset_help or f"set {configurable}=False"
 
     cls, trait = configurable.split(".")
 

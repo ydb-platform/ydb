@@ -416,11 +416,9 @@ std::optional<TYsonString> TruncateYsonValue(TYsonStringBuf originalYson, i64 si
         writer.Finish();
     }
 
-    YT_LOG_ALERT_IF(
-        std::ssize(truncatedYson) > size,
-        "Composite YSON truncation increased the value's binary size (OriginalValue: %v, TruncatedValue: %v)",
-        originalYson.AsStringBuf(),
-        truncatedYson);
+    YT_TLOG_ALERT_IF(std::ssize(truncatedYson) > size, "Composite YSON truncation increased the value's binary size")
+        .With("OriginalValue", originalYson.AsStringBuf())
+        .With("TruncatedValue", truncatedYson);
 
     return TYsonString(std::move(truncatedYson));
 }

@@ -38,9 +38,6 @@ ISnapshotSchema::TPtr MakeSchemaWithBlobBloom() {
     *proto.MutableColumns()->Add() = columns[1].CreateColumn(ValueColumnId);
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(1);
-    proto.MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName("l-buckets");
-    *proto.MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() =
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer();
 
     NIndexes::TRequestSettings bloomRequest;
     bloomRequest.FalsePositiveProbability = NIndexes::NDefaults::FalsePositiveProbability;
@@ -74,8 +71,9 @@ std::shared_ptr<NChunks::TChunkPreparation> BuildColumnChunkFromArray(
     const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
     auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
     UNIT_ASSERT(arrToWrite.IsSuccess());
+    auto blobAndMeta = accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext);
     return std::make_shared<NChunks::TChunkPreparation>(
-        accessorConstructor->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures);
+        std::move(blobAndMeta.Blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures, std::move(blobAndMeta.Meta));
 }
 
 }   // namespace
@@ -89,6 +87,29 @@ Y_UNIT_TEST_SUITE(TPortionBlobValidation) {
         UNIT_ASSERT_VALUES_UNEQUAL(hash11, hash20);
         UNIT_ASSERT_VALUES_EQUAL(hash11, (((ui64)1) << 16) + 1);
         UNIT_ASSERT_VALUES_EQUAL(hash20, (((ui64)2) << 16) + 0);
+    }
+
+    Y_UNIT_TEST(BlobBuilderSurvivesBlobsReallocation) {
+        const auto schema = MakeSchemaWithBlobBloom();
+        auto storages = TTestStoragesManager::GetInstance();
+        auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs({}, {}, TInternalPathId::FromRawValue(1), schema->GetVersion(),
+            schema->GetSnapshot(), storages, EPortionType::Written, schema->GetIndexInfo());
+        auto storage = storages->GetOperatorVerified(IStoragesManager::DefaultStorageId);
+        auto& blobs = constructor.GetBlobs();
+        blobs.emplace_back(storage);
+        TWritePortionInfoWithBlobsConstructor::TBlobInfo::TBuilder builder(constructor, 0);
+
+        const auto capacity = blobs.capacity();
+        while (blobs.capacity() == capacity) {
+            blobs.emplace_back(storage);
+        }
+
+        const auto batch = MakeBatch();
+        const auto chunk = BuildColumnChunkFromArray(*schema, PkColumnId, batch->column(0));
+        chunk->SetChunkIdx(0);
+        builder.AddChunk(chunk);
+        UNIT_ASSERT_VALUES_EQUAL(blobs.front().GetSize(), chunk->GetData().size());
+        UNIT_ASSERT(blobs.front().GetChunks().contains(chunk->GetChunkAddressVerified()));
     }
 
     // Smoke test for the mixed column+index blob path that failed in #47860:

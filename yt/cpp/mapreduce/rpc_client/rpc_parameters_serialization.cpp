@@ -121,6 +121,8 @@ NYTree::EPermission ToApiPermission(EPermission permission)
             return NYTree::EPermission::Mount;
         case EPermission::Manage:
             return NYTree::EPermission::Manage;
+        case EPermission::FullRead:
+            return NYTree::EPermission::FullRead;
     }
     YT_ABORT();
 }

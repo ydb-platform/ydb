@@ -28,6 +28,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/dq/actors/events.h>
@@ -775,7 +776,7 @@ private:
             const TString consumerNamePrefix = graphIndex == 1 ? Params.QueryId : TStringBuilder() << Params.QueryId << '-' << graphIndex; // Simple name in simple case
             for (NYql::NDqProto::TDqTask& task : *graphParams.MutableTasks()) {
                 for (NYql::NDqProto::TTaskInput& taskInput : *task.MutableInputs()) {
-                    if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == "PqSource") {
+                    if (taskInput.GetTypeCase() == NYql::NDqProto::TTaskInput::kSource && taskInput.GetSource().GetType() == NYql::PqSource) {
                         google::protobuf::Any& settingsAny = *taskInput.MutableSource()->MutableSettings();
                         YQL_ENSURE(settingsAny.Is<NYql::NPq::NProto::TDqPqTopicSource>());
                         NYql::NPq::NProto::TDqPqTopicSource srcDesc;
@@ -2175,7 +2176,6 @@ private:
         sqlSettings.ClusterMapping = clusters;
         sqlSettings.SyntaxVersion = 1;
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
-        sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });
         // PQ topic metadata is exposed as __ydb_-prefixed system columns (e.g. __ydb_offset,
         // __ydb_write_time). They must stay readable when named explicitly but must not leak into

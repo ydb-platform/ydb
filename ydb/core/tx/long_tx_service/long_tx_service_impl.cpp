@@ -38,6 +38,8 @@ void TLongTxServiceActor::Bootstrap() {
             "long_tx_service", "Long Tx Service");
         mon->RegisterActorPage(longTxMonPage, "locks", "Locks",
             false, TActivationContext::ActorSystem(), SelfId());
+        mon->RegisterActorPage(longTxMonPage, "snapshots", "Snapshots",
+            false, TActivationContext::ActorSystem(), SelfId());
     }
 
     YDB_LOG_NOTICE("Started,",
@@ -1836,6 +1838,7 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
         LocalSnapshotsStorage->Clear();
         RemoteSnapshotsStorage->Clear();
         AppData()->SnapshotRegistryHolder->Set(nullptr);
+        LastRegistryBuildTime = {};
         if (SnapshotsExchangeActorId) {
             Send(SnapshotsExchangeActorId, new TEvents::TEvPoison());
             SnapshotsExchangeActorId = {};
@@ -1870,10 +1873,15 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
     registryBuilder->SetOldestCollectionTime(RemoteSnapshotsStorage->GetOldestCollectionTime());
 
     size_t localSnapshotsCount = 0;
+    ui64 now = AppData()->TimeProvider->Now().MilliSeconds();
+    ui64 oldestSnapshotStep = now;
+    ui64 oldestLocalSnapshotStep = now;
     for (const auto& snapshotInfo : LocalSnapshotsStorage->View()) {
         registryBuilder->AddSnapshot(snapshotInfo.TableIds, snapshotInfo.Snapshot);
         ++localSnapshotsCount;
+        oldestLocalSnapshotStep = std::min(oldestLocalSnapshotStep, snapshotInfo.Snapshot.Step);
     }
+    oldestSnapshotStep = oldestLocalSnapshotStep;
 
     size_t remoteSnapshotsCount = 0;
     for (const auto& remoteSnapshotInfo : RemoteSnapshotsStorage->View()) {
@@ -1881,13 +1889,17 @@ void TLongTxServiceActor::UpdateImmutableSnapshotsRegistry() {
             remoteSnapshotInfo.TableIds,
             remoteSnapshotInfo.Snapshot);
         ++remoteSnapshotsCount;
+        oldestSnapshotStep = std::min(oldestSnapshotStep, remoteSnapshotInfo.Snapshot.Step);
     }
 
     if (Settings.Counters) {
         Settings.Counters->RemoteSnapshotsInRegistry->Set(remoteSnapshotsCount);
+        Settings.Counters->OldestSnapshotInRegistryAgeSeconds->Set((now - oldestSnapshotStep) / 1000);
+        Settings.Counters->OldestLocalSnapshotInRegistryAgeSeconds->Set((now - oldestLocalSnapshotStep) / 1000);
     }
 
     AppData()->SnapshotRegistryHolder->Set(std::move(*registryBuilder).Build());
+    LastRegistryBuildTime = TInstant::MilliSeconds(now);
     YDB_LOG_DEBUG("Updated immutable snapshots registry",
         {"logPrefix", LogPrefix},
         {"localCount", localSnapshotsCount},
@@ -1905,6 +1917,8 @@ void TLongTxServiceActor::Handle(NMon::TEvHttpInfo::TPtr& ev) {
     TString res;
     if (page == "locks") {
         res = RenderLocksMonPage();
+    } else if (page == "snapshots") {
+        res = RenderSnapshotsMonPage();
     } else {
         res = "Unknown page: " + page;
     }
@@ -1980,6 +1994,18 @@ TString TLongTxServiceActor::RenderLocksMonPage() {
         }
     }
     return str.Str();
+}
+
+TString TLongTxServiceActor::RenderSnapshotsMonPage() {
+    const auto localPromotionTime = TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds());
+    const auto& currentRegistry = AppData()->SnapshotRegistryHolder->Get();
+    return NLongTxService::RenderSnapshotsMonPage(
+        *LocalSnapshotsStorage,
+        localPromotionTime,
+        *RemoteSnapshotsStorage,
+        AppData()->TimeProvider->Now(),
+        LastRegistryBuildTime,
+        currentRegistry.get());
 }
 
 } // namespace NLongTxService

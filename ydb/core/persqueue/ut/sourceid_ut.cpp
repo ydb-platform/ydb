@@ -547,6 +547,143 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
 
     }
 
+    inline static TSchemaChangeInfo MakeSchemaChange(ui64 step, const TString& data = "schema") {
+        return TSchemaChangeInfo{
+            .Version = TRowVersion(step, 0),
+            .Data = data,
+        };
+    }
+
+    inline static TSourceIdInfo MakeExplicitSourceIdInfoWithSchemaChange(ui64 offset, const TSchemaChangeInfo& schemaChange) {
+        auto info = TSourceIdInfo(0, offset, TInstant::Now());
+        info.Explicit = true;
+        info.LastSchemaChange = schemaChange;
+        return info;
+    }
+
+    Y_UNIT_TEST(SchemaChangeEmitter) {
+        TSourceIdStorage storage;
+        ui64 offset = 0;
+
+        for (ui64 i = 1; i <= 2; ++i) {
+            storage.RegisterSourceId(TestSourceId(i), MakeExplicitSourceIdInfo(++offset));
+        }
+        {
+            TSchemaChangeEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeSchemaChange(1, "v1"));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(2), MakeSchemaChange(1, "v1"));
+            {
+                const auto schemaChange = emitter.CanEmit();
+                UNIT_ASSERT(schemaChange.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Version, MakeSchemaChange(1).Version);
+                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Data, "v1");
+            }
+        }
+
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfoWithSchemaChange(++offset, MakeSchemaChange(1, "v1")));
+        {
+            TSchemaChangeEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+            UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), TRowVersion::Min());
+
+            emitter.Process(TestSourceId(2), MakeSchemaChange(1, "v1"));
+            {
+                const auto schemaChange = emitter.CanEmit();
+                UNIT_ASSERT(schemaChange.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Version, MakeSchemaChange(1).Version);
+            }
+        }
+
+        storage.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfoWithSchemaChange(++offset, MakeSchemaChange(1, "v1")));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), MakeSchemaChange(1).Version);
+        {
+            TSchemaChangeEmitter emitter(storage);
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+
+            emitter.Process(TestSourceId(1), MakeSchemaChange(1, "v1"));
+            emitter.Process(TestSourceId(2), MakeSchemaChange(1, "v1"));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+        }
+
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfoWithSchemaChange(++offset, MakeSchemaChange(3, "v3")));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), MakeSchemaChange(1).Version);
+        storage.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfoWithSchemaChange(++offset, MakeSchemaChange(2, "v2")));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), MakeSchemaChange(2).Version);
+
+        {
+            TSchemaChangeEmitter emitter(storage);
+            emitter.Process(TestSourceId(1), MakeSchemaChange(4, "v4"));
+            UNIT_ASSERT(!emitter.CanEmit().Defined());
+            emitter.Process(TestSourceId(2), MakeSchemaChange(4, "v4"));
+            {
+                const auto schemaChange = emitter.CanEmit();
+                UNIT_ASSERT(schemaChange.Defined());
+                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Version, MakeSchemaChange(4).Version);
+                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Data, "v4");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SchemaChangeProtoRoundtrip) {
+        const auto sourceId = TestSourceId();
+        auto sourceIdInfo = MakeExplicitSourceIdInfoWithSchemaChange(10, MakeSchemaChange(7, "payload"));
+
+        TKeyPrefix ikey(TKeyPrefix::TypeInfo, TPartitionId(TestPartition), TKeyPrefix::MarkProtoSourceId);
+        TBuffer idata;
+        TSourceIdWriter::FillKeyAndData(ESourceIdFormat::Proto, sourceId, sourceIdInfo, ikey, idata);
+
+        TString key;
+        ikey.AsString(key);
+        TString data;
+        idata.AsString(data);
+
+        TSourceIdStorage storage;
+        storage.LoadSourceIdInfo(key, data, TInstant());
+
+        auto it = storage.GetInMemorySourceIds().find(sourceId);
+        UNIT_ASSERT_UNEQUAL(it, storage.GetInMemorySourceIds().end());
+        UNIT_ASSERT(it->second.LastSchemaChange.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(it->second.LastSchemaChange->Version, TRowVersion(7, 0));
+        UNIT_ASSERT_VALUES_EQUAL(it->second.LastSchemaChange->Data, "payload");
+    }
+
+    Y_UNIT_TEST(SchemaChangeDeferredAckInvariants) {
+        // Release eligibility mirrors AnswerCurrentWrites deferred-ACK gating.
+        const auto v1 = MakeSchemaChange(1).Version;
+        const auto v2 = MakeSchemaChange(2).Version;
+        UNIT_ASSERT(!IsSchemaChangeVersionReleased(v2, TRowVersion::Min(), v1));
+        UNIT_ASSERT(IsSchemaChangeVersionReleased(v1, TRowVersion::Min(), v1));
+        UNIT_ASSERT(IsSchemaChangeVersionReleased(v1, v2, TRowVersion::Min())); // LastEmitted wins
+        UNIT_ASSERT(IsSchemaChangeVersionReleased(v2, v2, v1));
+
+        // Prefer newer persisted LastSchemaChange when ACK-registering a deferred write.
+        const auto kept = SelectSchemaChangeForAck(MakeSchemaChange(1, "old"), MakeSchemaChange(3, "new"));
+        UNIT_ASSERT_VALUES_EQUAL(kept.Version, MakeSchemaChange(3).Version);
+        UNIT_ASSERT_VALUES_EQUAL(kept.Data, "new");
+        const auto proposed = SelectSchemaChangeForAck(MakeSchemaChange(4, "newer"), MakeSchemaChange(3, "old"));
+        UNIT_ASSERT_VALUES_EQUAL(proposed.Version, MakeSchemaChange(4).Version);
+        UNIT_ASSERT_VALUES_EQUAL(proposed.Data, "newer");
+
+        // SeqNo bump on ACK must not move GetCommittedSchemaChangeVersion (same SC version).
+        TSourceIdStorage storage;
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfoWithSchemaChange(10, MakeSchemaChange(5, "v5")));
+        storage.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfoWithSchemaChange(20, MakeSchemaChange(5, "v5")));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), MakeSchemaChange(5).Version);
+
+        auto it = storage.GetInMemorySourceIds().find(TestSourceId(1));
+        UNIT_ASSERT_UNEQUAL(it, storage.GetInMemorySourceIds().end());
+        storage.RegisterSourceId(TestSourceId(1), it->second.Updated(
+            /*seqNo=*/42, /*offset=*/10, TInstant::Now(), MakeSchemaChange(5, "v5")));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), MakeSchemaChange(5).Version);
+        it = storage.GetInMemorySourceIds().find(TestSourceId(1));
+        UNIT_ASSERT_VALUES_EQUAL(it->second.SeqNo, 42);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.Offset, 10);
+    }
+
 } // TSourceIdTests
 
 } // namespace NKikimr::NPQ

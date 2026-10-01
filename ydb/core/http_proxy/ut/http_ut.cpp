@@ -1,11 +1,18 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
 #include <ydb/core/http_proxy/http_req.h>
+#include <ydb/core/http_proxy/http_service.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 
 #include <library/cpp/http/misc/httpcodes.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/network/address.h>
+#include <util/network/sock.h>
+
+#include <netinet/in.h>
 
 using namespace NKikimr::NHttpProxy;
 using namespace NKikimr::Tests;
@@ -260,3 +267,36 @@ Y_UNIT_TEST_SUITE(TestMalformedRequest) {
     }
 
 } // Y_UNIT_TEST_SUITE(TestMalformedRequest)
+
+namespace {
+    std::pair<TString, ui16> BoundHostAndPort(const TIntrusivePtr<NHttp::TSocketDescriptor>& socket) {
+        sockaddr_storage ss{};
+        socklen_t slen = sizeof(ss);
+        Y_ABORT_UNLESS(getsockname(socket->GetDescriptor(), reinterpret_cast<sockaddr*>(&ss), &slen) == 0);
+        if (ss.ss_family == AF_INET6) {
+            return {"::1", ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port)};
+        }
+        return {"127.0.0.1", ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)};
+    }
+
+    void AssertCanConnect(const TString& host, ui16 port) {
+        TNetworkAddress addr(host, port);
+        TSocket sock(addr);
+        UNIT_ASSERT(static_cast<SOCKET>(sock) != INVALID_SOCKET);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TestHttpProxyListen) {
+    Y_UNIT_TEST(HttpProxyActorBindsInConstructor) {
+        auto probe = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(probe);
+        const auto [host, port] = BoundHostAndPort(probe);
+        probe.Reset();
+
+        THttpProxyConfig cfg;
+        cfg.Config.MutableHttpConfig()->SetPort(port);
+        THolder<IActor> actor(CreateHttpProxy(cfg));
+        UNIT_ASSERT(actor);
+        AssertCanConnect(host, port);
+    }
+}

@@ -111,7 +111,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     const TResolvedValue *TBlobDepotAgent::TBlobMappingCache::ResolveKey(TString key, TQuery *query,
-            TRequestContext::TPtr context, bool mustRestoreFirst) {
+            TRequestContext::TPtr context, bool mustRestoreFirst, NKikimrBlobStorage::TDataKind::E dataKind) {
         // obtain entry in the cache
         const TStringBuf keyBuf = key;
         const auto [it, inserted] = Cache.try_emplace(std::move(key), keyBuf);
@@ -151,6 +151,10 @@ namespace NKikimr::NBlobDepot {
             if (mustRestoreFirst != item->GetMustRestoreFirst()) {
                 item->SetMustRestoreFirst(mustRestoreFirst);
             }
+            // A pending resolve is shared with the queries that arrive while it is in flight, but a
+            // cache entry is a blob id and thus belongs to a single tablet, so every query sharing
+            // it carries the same data kind.
+            msg.SetDataKind(dataKind);
 
             Agent.Issue(std::move(msg), this, std::make_unique<TResolveContext>(TString(keyBuf), mustRestoreFirst));
             ++(mustRestoreFirst ? entry.MustRestoreFirstResolvePending : entry.OrdinaryResolvePending);

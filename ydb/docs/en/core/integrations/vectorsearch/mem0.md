@@ -12,7 +12,7 @@ In addition to the vector store, Mem0 uses a language model (LLM) to extract fac
 
 ## Installation {#setup}
 
-To use this integration, install a local {{ ydb-short-name }}. For more information, see [{#T}](../../quickstart.md#install).
+To use this integration, install a local {{ ydb-short-name }}. For more information, see [Install and start {{ ydb-short-name }}](../../quickstart.md#install).
 
 Install Mem0 and the {{ ydb-short-name }} integration package with LangChain:
 

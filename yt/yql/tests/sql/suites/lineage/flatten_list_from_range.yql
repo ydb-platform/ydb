@@ -1,0 +1,14 @@
+USE plato;
+
+$start = SELECT MIN(CAST(key AS Int32)) FROM Input;
+$end = SELECT MAX(CAST(key AS Int32)) FROM Input;
+
+$range =
+    SELECT dt
+    FROM (
+        SELECT ListFromRange($start, $end) AS dt
+    )
+    FLATTEN LIST BY dt;
+
+INSERT INTO Output
+SELECT CAST(dt AS String) AS dt FROM $range;

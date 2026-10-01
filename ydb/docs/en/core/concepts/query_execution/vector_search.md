@@ -46,5 +46,4 @@ Main advantage:
 
 Disadvantages:
 
-* index build can take considerable time;
-* the current version does not support data modification operations: insert, update, delete.
+* index build can take considerable time.

@@ -157,7 +157,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),
@@ -181,7 +181,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN", "SERVICE_ACCOUNT", "IAM"}, {"use_tls", "grpc_location", "project", "cluster"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::Iceberg),
@@ -205,7 +205,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::YdbTopics),
-            CreateExternalDataSource(TString{NYql::PqProviderName}, {"NONE", "BASIC", "TOKEN", "IAM"}, {"database_name", "use_tls", "shared_reading"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::PqProviderName}, {"NONE", "BASIC", "TOKEN", "IAM"}, {"database_name", "use_tls", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
         }
     },
     allExternalDataSourcesAreAvailable,

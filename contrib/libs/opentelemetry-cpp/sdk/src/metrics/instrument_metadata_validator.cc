@@ -1,16 +1,15 @@
 // Copyright The OpenTelemetry Authors
 // SPDX-License-Identifier: Apache-2.0
 
-#include <string>
-
-#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/metrics/instrument_metadata_validator.h"
+#include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/version.h"
 
 #if OPENTELEMETRY_HAVE_WORKING_REGEX
 #  include <regex>
 #else
 #  include <algorithm>
+#  include <cctype>
 #endif
 
 OPENTELEMETRY_BEGIN_NAMESPACE
@@ -20,9 +19,9 @@ namespace metrics
 {
 #if OPENTELEMETRY_HAVE_WORKING_REGEX
 // instrument-name = ALPHA 0*254 ("_" / "." / "-" / "/" / ALPHA / DIGIT)
-const std::string kInstrumentNamePattern = "[a-zA-Z][-_./a-zA-Z0-9]{0,254}";
+constexpr const char *kInstrumentNamePattern = "[a-zA-Z][-_./a-zA-Z0-9]{0,254}";
 //
-const std::string kInstrumentUnitPattern = "[\x01-\x7F]{0,63}";
+constexpr const char *kInstrumentUnitPattern = "[\x01-\x7F]{0,63}";
 // instrument-unit = It can have a maximum length of 63 ASCII chars
 #endif
 
@@ -48,14 +47,14 @@ bool InstrumentMetaDataValidator::ValidateName(nostd::string_view name) const
     return false;
   }
   // first char should be alpha
-  if (!isalpha(name[0]))
+  if (!std::isalpha(name[0]))
   {
     return false;
   }
   // subsequent chars should be either of alphabets, digits, underscore,
   // minus, dot, slash
   return !std::any_of(std::next(name.begin()), name.end(), [](char c) {
-    return !isalnum(c) && (c != '-') && (c != '_') && (c != '.') && (c != '/');
+    return !std::isalnum(c) && (c != '-') && (c != '_') && (c != '.') && (c != '/');
   });
 #endif
 }

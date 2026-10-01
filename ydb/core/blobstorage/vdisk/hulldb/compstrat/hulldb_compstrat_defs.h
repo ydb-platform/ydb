@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/blobstorage/vdisk/common/vdisk_compaction_priority.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_sstslice.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_leveledssts.h>
 
@@ -36,6 +37,7 @@ namespace NKikimr {
             Explicit,
             BalanceLevel,
             BalanceFull,
+            Emergency,
             FreeSpace,
             Squeeze,
         };
@@ -91,6 +93,7 @@ namespace NKikimr {
                 // huge blobs to delete
                 TDiskPartVec HugeBlobsToDelete;
                 TDiskPartVec HugeBlobsAllocated;
+                TDiskPartVec HugeBlobsAllocatedStripe;
                 // is data finalized
                 bool Finalized = false;
 
@@ -100,6 +103,8 @@ namespace NKikimr {
                     TablesToDelete.Clear();
                     TablesToAdd.Clear();
                     HugeBlobsToDelete.Clear();
+                    HugeBlobsAllocated.Clear();
+                    HugeBlobsAllocatedStripe.Clear();
                     Finalized = false;
                 }
 
@@ -121,6 +126,11 @@ namespace NKikimr {
                 const TDiskPartVec &GetHugeBlobsAllocated() const {
                     Y_ABORT_UNLESS(Finalized);
                     return HugeBlobsAllocated;
+                }
+
+                const TDiskPartVec &GetHugeBlobsAllocatedStripe() const {
+                    Y_ABORT_UNLESS(Finalized);
+                    return HugeBlobsAllocatedStripe;
                 }
 
                 TDiskPartVec ExtractHugeBlobsToDelete() {
@@ -225,6 +235,7 @@ namespace NKikimr {
                 using TBase::TablesToAdd;
                 using TBase::HugeBlobsToDelete;
                 using TBase::HugeBlobsAllocated;
+                using TBase::HugeBlobsAllocatedStripe;
 
                 ui32 TargetLevel = (ui32)(-1);
                 TKey LastCompactedKey = TKey::First();
@@ -266,7 +277,8 @@ namespace NKikimr {
                         TOrderedLevelSegmentsPtr &&segVec,
                         TDiskPartVec&& hugeBlobsToDelete,
                         TDiskPartVec&& hugeBlobsAllocated,
-                        bool aborted)
+                        bool aborted,
+                        TDiskPartVec&& hugeBlobsAllocatedStripe = {})
                 {
                     if (aborted) {
                         // no change at all
@@ -274,10 +286,12 @@ namespace NKikimr {
                         TablesToAdd.Clear();
                         HugeBlobsToDelete.Clear();
                         HugeBlobsAllocated.Clear();
+                        HugeBlobsAllocatedStripe.Clear();
                     } else {
                         Y_ABORT_UNLESS(!TablesToDelete.Empty());
                         HugeBlobsToDelete = std::move(hugeBlobsToDelete);
                         HugeBlobsAllocated = std::move(hugeBlobsAllocated);
+                        HugeBlobsAllocatedStripe = std::move(hugeBlobsAllocatedStripe);
                         if (segVec) {
                             TLeveledSsts tmp(TargetLevel, *segVec);
                             TablesToAdd.Swap(tmp);
@@ -308,17 +322,63 @@ namespace NKikimr {
 
             ////////////////////////////////////////////////////////////////////////
 
+            // What this job is expected to cost and to give back. The compaction broker
+            // needs a number to hand out before the job starts: exclusive chunks are what
+            // several VDisks on one PDisk are competing for, and the chunks a job releases
+            // are what makes it worth admitting at all.
+            //
+            // An SST in the stripe heap does not own its chunk. It occupies an extent of
+            // append blocks inside a chunk shared with other extents, and a new Blocks or
+            // Barriers SST is written the same way when the heap allocator is on. Those
+            // extents are StripeBlocksAllocated / StripeBlocksReleased. They are not
+            // chunks: NetChunks() stays the exclusive-chunk balance, and a stripe chunk
+            // returns to PDisk only once the heap finds it empty, which this forecast
+            // does not try to predict.
+            struct TSpaceForecast {
+                bool Valid = false;
+                ui32 OutputChunks = 0;             // exclusive chunks this job will allocate
+                ui32 InputChunks = 0;              // exclusive index chunks it releases once it commits
+                ui32 StripeBlocksAllocated = 0;    // append blocks new stripe SSTs will occupy
+                ui32 StripeBlocksReleased = 0;     // append blocks freed with deleted stripe SSTs
+                ui64 HugeGarbageBytes = 0;         // huge-blob garbage it makes collectable
+
+                void Clear() {
+                    *this = {};
+                }
+
+                // Worth running even though it costs space, as opposed to merely tidy.
+                // Stripe blocks are a different pool and are not part of this balance.
+                i64 NetChunks() const {
+                    return i64(InputChunks) - i64(OutputChunks);
+                }
+
+                TString ToString() const {
+                    if (!Valid) {
+                        return "{unknown}";
+                    }
+                    TStringStream str;
+                    str << "{OutputChunks# " << OutputChunks
+                        << " InputChunks# " << InputChunks
+                        << " StripeBlocksAllocated# " << StripeBlocksAllocated
+                        << " StripeBlocksReleased# " << StripeBlocksReleased
+                        << " HugeGarbageBytes# " << HugeGarbageBytes << "}";
+                    return str.Str();
+                }
+            };
+
             EAction Action;
             TDeleteSsts DeleteSsts;
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
             bool IsFullCompaction = false;
             ESelectStrategy SelectStrategy = ESelectStrategy::None;
+            TSpaceForecast Forecast;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
             std::pair<std::optional<TFullCompactionAttrs>, bool> FullCompactionInfo;
-            double MaxRatio = 0.0;
+            // Current LSM pressure and emergency mode used as the compaction broker priority.
+            TCompactionPriority Priority;
 
             TTask() {
                 Clear();
@@ -331,6 +391,8 @@ namespace NKikimr {
                 CompactSsts.Clear();
                 IsFullCompaction = false;
                 SelectStrategy = ESelectStrategy::None;
+                Forecast.Clear();
+                Priority = {};
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }
@@ -357,6 +419,10 @@ namespace NKikimr {
                 return GetPtr()->GetHugeBlobsAllocated();
             }
 
+            const TDiskPartVec &GetHugeBlobsAllocatedStripe() const {
+                return GetPtr()->GetHugeBlobsAllocatedStripe();
+            }
+
             TDiskPartVec ExtractHugeBlobsToDelete() {
                 return const_cast<TBase*>(GetPtr())->ExtractHugeBlobsToDelete();
             }
@@ -370,6 +436,9 @@ namespace NKikimr {
                 str << "{" << ActionToStr(Action);
                 if (auto *ptr = GetPtr()) {
                     ptr->Output(str);
+                }
+                if (Forecast.Valid) {
+                    str << " Forecast# " << Forecast.ToString();
                 }
                 str << "}";
                 return str.Str();
@@ -425,6 +494,17 @@ namespace NKikimr {
             TInstant SqueezeBefore;
             // Full compact LevelIndex before this lsn
             std::optional<TFullCompactionAttrs> FullCompactionAttrs;
+            // Max index chunks the compaction job may allocate before commit (peak extra space).
+            // Max<ui32>() means no limit (budget unknown / plenty of space).
+            ui32 FreeChunksBudget = Max<ui32>();
+            // When true, skip unconstrained Balance and prefer Emergency packing/merges.
+            bool EmergencyMode = false;
+            // PDisk append block. Stripe extents are multiples of this; 0 if unknown.
+            ui32 AppendBlockSize = 0;
+            // Blocks/Barriers SSTs are written into the stripe heap, in extents of at most
+            // this many bytes, when the heap allocator is on. 0 means output SSTs take
+            // exclusive chunks (LogoBlobs, or the allocator is off).
+            ui32 StripeSstBytes = 0;
         };
 
     } // NHullComp

@@ -2,204 +2,132 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_block_test_helper.h>
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
-#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
-#include <util/random/random.h>
-
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
-template <bool UseRandom, bool DoFilter, bool LLVM>
-void DoNestedTuplesCompressTest() {
-    TSetup<LLVM> setup;
-    TProgramBuilder& pb = *setup.PgmBuilder;
+TRuntimeNode CompressByBitmap(TSetup<false>& setup, TRuntimeNode fuzzedWideStream, ui32 bitmapIndex) {
+    return setup.PgmBuilder->BlockCompress(fuzzedWideStream, bitmapIndex);
+}
 
-    const auto resultTupleType = NTest::ConvertToMinikqlType<
-        std::tuple<ui64, std::tuple<ui64, std::tuple<ui64, bool, NTest::TUtf8>, NTest::TUtf8>>>(pb);
-
-    TRuntimeNode::TList items;
-    static_assert(MaxBlockSizeInBytes % 4 == 0);
-    constexpr size_t fixedStrSize = MaxBlockSizeInBytes / 4;
-
-    if constexpr (UseRandom) {
-        SetRandomSeed(0);
-    }
-
-    for (size_t i = 0; i < 95; ++i) {
-        std::string str;
-        bool filterValue;
-        if constexpr (UseRandom) {
-            size_t len = RandomNumber<size_t>(2 * MaxBlockSizeInBytes);
-            str.reserve(len);
-            for (size_t i = 0; i < len; ++i) {
-                str.push_back((char)RandomNumber<ui8>(128));
-            }
-            if constexpr (DoFilter) {
-                filterValue = RandomNumber<ui8>() & 1;
-            } else {
-                filterValue = true;
-            }
-        } else {
-            str = std::string(fixedStrSize, ' ' + i);
-            if constexpr (DoFilter) {
-                filterValue = (i % 4) < 2;
-            } else {
-                filterValue = true;
-            }
-        }
-
-        const auto finalTuple = NTest::ConvertValueToLiteralNode(pb,
-                                                                 std::tuple<ui64, std::tuple<ui64, std::tuple<ui64, bool, NTest::TUtf8>, NTest::TUtf8>, bool>{
-                                                                     i,
-                                                                     {i, {i, bool(i % 2), NTest::TUtf8{TString((i % 2) ? str : std::string())}},
-                                                                      NTest::TUtf8{TString((i % 2) ? std::string() : str)}},
-                                                                     filterValue});
-        items.push_back(finalTuple);
-    }
-
-    const auto list = pb.NewList(items.front().GetStaticType(), std::move(items));
-
-    auto node = pb.ToFlow(list, {});
-    node = pb.ExpandMap(node, [&](TRuntimeNode item) -> TRuntimeNode::TList {
-        return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
+template <typename... TExpected, typename... TInputs>
+void RunCompressTest(const std::tuple<TVector<TExpected>...>& expected,
+                     const std::tuple<TInputs...>& input, ui32 bitmapIndex) {
+    TBlockHelper helper;
+    helper.WithScopedFuzzers([&] {
+        helper.RunWideStreamNode(
+            expected,
+            [bitmapIndex](TSetup<false>& setup, TRuntimeNode fuzzedWideStream) {
+                return CompressByBitmap(setup, fuzzedWideStream, bitmapIndex);
+            },
+            /*unordered=*/false,
+            input);
     });
-    node = pb.WideToBlocks(pb.FromFlow(node));
-
-    node = pb.BlockExpandChunked(node);
-    node = pb.WideSkipBlocks(node, NTest::ConvertValueToLiteralNode(pb, ui64(19)));
-    node = pb.BlockCompress(node, 2);
-    node = pb.ToFlow(pb.WideFromBlocks(node), {});
-
-    node = pb.NarrowMap(node, [&](TRuntimeNode::TList items) -> TRuntimeNode {
-        return pb.NewTuple(resultTupleType, {items[0], items[1]});
-    });
-
-    const auto pgmReturn = pb.Collect(node);
-    const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    if constexpr (UseRandom) {
-        SetRandomSeed(0);
-    }
-
-    for (size_t i = 0; i < 95; ++i) {
-        std::string str;
-        bool filterValue;
-        if constexpr (UseRandom) {
-            size_t len = RandomNumber<size_t>(2 * MaxBlockSizeInBytes);
-            str.reserve(len);
-            for (size_t i = 0; i < len; ++i) {
-                str.push_back((char)RandomNumber<ui8>(128));
-            }
-            if constexpr (DoFilter) {
-                filterValue = RandomNumber<ui8>() & 1;
-            } else {
-                filterValue = true;
-            }
-        } else {
-            str = std::string(fixedStrSize, ' ' + i);
-            if constexpr (DoFilter) {
-                filterValue = (i % 4) < 2;
-            } else {
-                filterValue = true;
-            }
-        }
-
-        if (i < 19 || !filterValue) {
-            continue;
-        }
-
-        NUdf::TUnboxedValue item;
-        UNIT_ASSERT(iterator.Next(item));
-        ui64 topNum = item.GetElement(0).Get<ui64>();
-        const auto& outer = item.GetElement(1);
-
-        ui64 num = outer.GetElement(0).Get<ui64>();
-        const auto& inner = outer.GetElement(1);
-
-        auto outerStrVal = outer.GetElement(2);
-        TStringBuf outerStr = outerStrVal.AsStringRef();
-
-        ui64 innerNum = inner.GetElement(0).Get<ui64>();
-        bool innerBool = inner.GetElement(1).Get<bool>();
-        auto innerStrVal = inner.GetElement(2);
-
-        TStringBuf innerStr = innerStrVal.AsStringRef();
-
-        UNIT_ASSERT_VALUES_EQUAL(num, i);
-        UNIT_ASSERT_VALUES_EQUAL(topNum, i);
-        UNIT_ASSERT_VALUES_EQUAL(innerNum, i);
-        UNIT_ASSERT_VALUES_EQUAL(innerBool, i % 2);
-
-        std::string expectedInner = (i % 2) ? str : std::string();
-        std::string expectedOuter = (i % 2) ? std::string() : str;
-
-        UNIT_ASSERT(innerStr == expectedInner);
-        UNIT_ASSERT(outerStr == expectedOuter);
-    }
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
 }
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockCompressTest) {
-Y_UNIT_TEST_LLVM(CompressBasic) {
-    TSetup<LLVM> setup;
-    TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto list = NTest::ConvertValueToLiteralNode(pb,
-                                                       TVector<std::tuple<bool, ui64, bool>>{
-                                                           {false, ui64(1), true},
-                                                           {true, ui64(2), false},
-                                                           {false, ui64(3), true},
-                                                           {false, ui64(4), true},
-                                                           {true, ui64(5), false},
-                                                           {true, ui64(6), true},
-                                                           {false, ui64(7), true}});
-    const auto flow = pb.ToFlow(list, {});
+Y_UNIT_TEST(CompressBasic) {
+    TVector<bool> bitmap = {false, true, false, false, true, true, false};
+    TVector<ui64> value = {1, 2, 3, 4, 5, 6, 7};
+    TVector<bool> tag = {true, false, true, true, false, true, true};
 
-    const auto wideFlow = pb.ExpandMap(flow, [&](TRuntimeNode item) -> TRuntimeNode::TList {
-        return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)};
-    });
-    const auto uncompressedBlocks = pb.WideToBlocks(pb.FromFlow(wideFlow));
-    const auto compressedBlocks = pb.BlockCompress(uncompressedBlocks, 0);
-    const auto compressedFlow = pb.ToFlow(pb.WideFromBlocks(compressedBlocks), {});
-    const auto narrowFlow = pb.NarrowMap(compressedFlow, [&](TRuntimeNode::TList items) -> TRuntimeNode {
-        return pb.NewTuple({items[0], items[1]});
-    });
+    TVector<ui64> expectedValue = {2, 5, 6};
+    TVector<bool> expectedTag = {false, false, true};
 
-    const auto pgmReturn = pb.Collect(narrowFlow);
-
-    const auto graph = setup.BuildGraph(pgmReturn);
-    const auto res = graph->GetValue();
-
-    AssertUnboxedValueElementEqual(res,
-                                   TVector<std::tuple<ui64, bool>>{{ui64(2), false}, {ui64(5), false}, {ui64(6), true}});
+    RunCompressTest(std::make_tuple(expectedValue, expectedTag), std::make_tuple(bitmap, value, tag), 0);
 }
 
-Y_UNIT_TEST_LLVM(CompressNestedTuples) {
-    DoNestedTuplesCompressTest<false, false, LLVM>();
+Y_UNIT_TEST(CompressAllScalars) {
+    bool bitmap = true;
+    ui32 value = 42U;
+    TString tag = "solo";
+
+    RunCompressTest(std::make_tuple(TVector<ui32>{value}, TVector<TString>{tag}),
+                    std::make_tuple(bitmap, value, tag), 0);
 }
 
-Y_UNIT_TEST_LLVM(CompressNestedTuplesWithFilter) {
-    DoNestedTuplesCompressTest<false, true, LLVM>();
+Y_UNIT_TEST(CompressScalarBitmapPassAll) {
+    TVector<TMaybe<ui32>> value = {5U, TMaybe<ui32>{}, 7U};
+    TVector<TString> tag = {"x", "y", "z"};
+
+    RunCompressTest(std::make_tuple(value, tag), std::make_tuple(value, true, tag), 1);
 }
 
-Y_UNIT_TEST_LLVM(CompressNestedTuplesWithRandom) {
-    DoNestedTuplesCompressTest<true, false, LLVM>();
+Y_UNIT_TEST(CompressAllScalarsWithArrayBitmap) {
+    ui64 value = 42;
+    TVector<bool> bitmap = {true, false, true};
+    TString tag = "hello";
+
+    TVector<ui64> expectedValue = {42, 42};
+    TVector<TString> expectedTag = {"hello", "hello"};
+
+    RunCompressTest(std::make_tuple(expectedValue, expectedTag), std::make_tuple(value, bitmap, tag), 1);
 }
 
-Y_UNIT_TEST_LLVM(CompressNestedTuplesWithRandomWithFilter) {
-    DoNestedTuplesCompressTest<true, true, LLVM>();
+Y_UNIT_TEST(CompressMixedShapes) {
+    TVector<TMaybe<ui32>> value = {1U, TMaybe<ui32>{}, 3U, 4U};
+    TVector<bool> bitmap = {false, true, true, false};
+    TString tag = "const";
+
+    TVector<TMaybe<ui32>> expectedValue = {TMaybe<ui32>{}, 3U};
+    TVector<TString> expectedTag = {"const", "const"};
+
+    RunCompressTest(std::make_tuple(expectedValue, expectedTag), std::make_tuple(value, bitmap, tag), 1);
+}
+
+Y_UNIT_TEST(CompressNullableArrays) {
+    TVector<TMaybe<TString>> value = {TMaybe<TString>{}, TMaybe<TString>("a"), TMaybe<TString>("b"), TMaybe<TString>{}};
+    TVector<bool> bitmap = {true, true, false, true};
+    TVector<TMaybe<ui64>> num = {TMaybe<ui64>{}, 2U, 3U, TMaybe<ui64>{}};
+
+    TVector<TMaybe<TString>> expectedValue = {TMaybe<TString>{}, TMaybe<TString>("a"), TMaybe<TString>{}};
+    TVector<TMaybe<ui64>> expectedNum = {TMaybe<ui64>{}, 2U, TMaybe<ui64>{}};
+
+    RunCompressTest(std::make_tuple(expectedValue, expectedNum), std::make_tuple(value, bitmap, num), 1);
+}
+
+Y_UNIT_TEST(CompressNestedTupleColumn) {
+    TVector<std::tuple<ui64, bool>> value = {{1, true}, {2, false}, {3, true}, {4, true}, {5, false}};
+    TVector<bool> bitmap = {true, false, true, true, false};
+
+    TVector<std::tuple<ui64, bool>> expectedValue = {{1, true}, {3, true}, {4, true}};
+
+    RunCompressTest(std::make_tuple(expectedValue), std::make_tuple(value, bitmap), 1);
+}
+
+Y_UNIT_TEST(CompressDoubleOptionalValue) {
+    TVector<TMaybe<TMaybe<ui64>>> value = {
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(1U)),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>()),
+        TMaybe<TMaybe<ui64>>(),
+        TMaybe<TMaybe<ui64>>(TMaybe<ui64>(4U)),
+    };
+    TVector<bool> bitmap = {true, false, true, true};
+
+    TVector<TMaybe<TMaybe<ui64>>> expectedValue = {value[0], value[2], value[3]};
+
+    RunCompressTest(std::make_tuple(expectedValue), std::make_tuple(value, bitmap), 1);
+}
+
+Y_UNIT_TEST(CompressVoidValue) {
+    TVector<TMaybe<NTest::TSingularVoid>> value = {
+        TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
+        TMaybe<NTest::TSingularVoid>(),
+        TMaybe<NTest::TSingularVoid>(NTest::TSingularVoid()),
+    };
+    TVector<bool> bitmap = {false, true, true};
+
+    TVector<TMaybe<NTest::TSingularVoid>> expectedValue = {value[1], value[2]};
+
+    RunCompressTest(std::make_tuple(expectedValue), std::make_tuple(value, bitmap), 1);
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLBlockCompressTest)
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

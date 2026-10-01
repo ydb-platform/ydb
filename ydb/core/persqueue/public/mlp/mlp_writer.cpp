@@ -30,8 +30,7 @@ void TWriterActor::PassAway() {
 }
 
 void TWriterActor::DoDescribe() {
-    YDB_LOG_DEBUG("Start describe",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start describe");
     Become(&TWriterActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -42,8 +41,7 @@ void TWriterActor::DoDescribe() {
 }
 
 void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
 
     ChildActorId = {};
 
@@ -53,7 +51,7 @@ void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     auto& topic = topics.begin()->second;
     DescribeStatus = topic.Status;
     switch(topic.Status) {
-        case NDescriber::EStatus::SUCCESS: {
+        case NDescriber::EStatus::Success: {
             TopicInfo = topic.Info;
             return DoWrite();
         }
@@ -123,8 +121,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 }
 
 void TWriterActor::DoWrite() {
-    YDB_LOG_DEBUG("Start write",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Start write");
     Become(&TWriterActor::WriteState);
 
     struct TInfo {
@@ -183,8 +180,7 @@ void TWriterActor::DoWrite() {
 }
 
 void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPersQueue::TEvResponse");
 
     bool alreadyReceived = false;
     auto& record = ev->Get()->Record;
@@ -217,8 +213,7 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TWriterActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-        {"logPrefix", NPQ_LOG_PREFIX});
+    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
 
     const auto tabletId = ev->Get()->TabletId;
 
@@ -250,11 +245,12 @@ void TWriterActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 bool TWriterActor::OnUnhandledException(const std::exception& exc) {
-    YDB_LOG_CRIT("Unhandled exception",
-        {"logPrefix", NPQ_LOG_PREFIX},
+    LOG_C(
+        "Unhandled exception",
         {"exceptionType", TypeName(exc)},
         {"exceptionMessage", exc.what()},
-        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()}
+    );
 
     PendingRequests = 0;
     ReplyIfPossible();
@@ -264,15 +260,17 @@ bool TWriterActor::OnUnhandledException(const std::exception& exc) {
 
 bool TWriterActor::IsSuccess(const NKikimrClient::TResponse& record) {
     if (record.HasErrorCode() && record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-        YDB_LOG_WARN("Write",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"error", record.ShortDebugString()});
+        LOG_W(
+            "Write",
+            {"error", record.ShortDebugString()}
+        );
         return false;
     }
     if (!record.HasPartitionResponse()) {
-        YDB_LOG_WARN("Missing partition",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"response", record.ShortDebugString()});
+        LOG_W(
+            "Missing partition",
+            {"response", record.ShortDebugString()}
+        );
         return false;
     }
 

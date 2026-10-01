@@ -3,7 +3,9 @@
 #include "diff.h"
 #include "table_merger.h"
 
+#include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_CONTROLLER_AUDIT
 
@@ -336,8 +338,7 @@ namespace NKikimr::NBsController {
             }
         };
 
-        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, bool suppressFailModelChecking,
-                bool suppressDegradedGroupsChecking, bool suppressDisintegratedGroupsChecking,
+        bool TBlobStorageController::ValidateConfigUpdates(TConfigState& state, TValidateConfigUpdatesParameters parameters,
                 TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
 
             // when bridged non-proxy groups get updated, we update parent group too
@@ -405,7 +406,8 @@ namespace NKikimr::NBsController {
             std::vector<TGroupId> disintegrated;
             std::vector<TGroupId> degraded;
 
-            if (!suppressDisintegratedGroupsChecking) {
+            // Check Disintegrated by ExpectedStatus
+            if (!parameters.SuppressDisintegratedGroupsChecking) {
                 for (auto&& [base, overlay] : state.Groups.Diff()) {
                     if (base && overlay->second) {
                         const TGroupInfo::TGroupStatus& prev = base->second->Status;
@@ -420,7 +422,7 @@ namespace NKikimr::NBsController {
             }
 
             // check that group modification would not degrade failure model
-            if (!suppressFailModelChecking) {
+            if (!parameters.SuppressFailModelChecking) {
                 THashSet<TGroupId> groupsToCheck;
                 for (auto&& [base, overlay] : state.VSlots.Diff()) {
                     if (base && base->second->Group) {
@@ -444,19 +446,22 @@ namespace NKikimr::NBsController {
                     }
                     if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->VDisksInGroup) {
                         // process only groups with changed content; create topology for group
-                        auto& topology = *group->Topology;
+                        TBlobStorageGroupInfo::TTopology& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
                         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
-                        bool alreadySeenReplicatingWithPhantomsOnly = false;
+
+                        // A single non-Ready VDisk that is REPLICATING with only phantoms remaining may be ignored by
+                        // the degraded check when AllowDegradedWithSinglePhantomsOnly is set. The full failure set must
+                        // still pass the disintegrated check.
+                        TBlobStorageGroupInfo::TGroupVDisks allowedNonReady(&topology);
                         for (const TVSlotInfo *slot : group->VDisksInGroup) {
-                            bool replicatingWithPhantomsOnly = slot->IsReplicatingWithPhantomsOnly();
-                            // Allow exactly one VDisk that is REPLICATING with only phantoms remaining to be treated as nearly ready
-                            bool allowedOneReplicatingWithPhantomsOnly = replicatingWithPhantomsOnly && !alreadySeenReplicatingWithPhantomsOnly;
-                            if (!slot->IsReady && !allowedOneReplicatingWithPhantomsOnly) {
+                            if (!slot->IsReady) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
-                            }
-                            if (replicatingWithPhantomsOnly) {
-                                alreadySeenReplicatingWithPhantomsOnly = true;
+
+                                if (parameters.AllowDegradedWithSinglePhantomsOnly &&
+                                        slot->IsReplicatingWithPhantomsOnly() && !allowedNonReady) {
+                                    allowedNonReady |= {&topology, slot->GetShortVDiskId()};
+                                }
                             }
                         }
                         // check the failure model
@@ -464,9 +469,12 @@ namespace NKikimr::NBsController {
                         if (!checker.CheckFailModelForGroup(failed)) {
                             disintegrated.push_back(groupId);
                             errors = true;
-                        } else if (!suppressDegradedGroupsChecking && checker.IsDegraded(failed)) {
-                            degraded.push_back(groupId);
-                            errors = true;
+                        } else {
+                            TBlobStorageGroupInfo::TGroupVDisks failedWithSkip = failed - allowedNonReady;
+                            if (!parameters.SuppressDegradedGroupsChecking && checker.IsDegraded(failedWithSkip)) {
+                                degraded.push_back(groupId);
+                                errors = true;
+                            }
                         }
                     } else {
                         Y_ABORT_UNLESS(group); // group must exist
@@ -509,7 +517,7 @@ namespace NKikimr::NBsController {
             for (const TPDiskId& pdiskId : state.PDisksToRemove) {
                 TPDiskInfo *pdiskInfo = state.PDisks.FindForUpdate(pdiskId);
                 Y_ABORT_UNLESS(pdiskInfo);
-                if (pdiskInfo->NumActiveSlots) {
+                if (pdiskInfo->NumActiveDynamicSlots) {
                     *errorDescription = TStringBuilder() << "failed to remove PDisk# " << pdiskId << " as it has active VSlots";
                     return false;
                 }
@@ -531,12 +539,13 @@ namespace NKikimr::NBsController {
             }
 
             TString error;
-            const bool suppressFailModelChecking = flags.SuppressFailModelChecking;
-            const bool suppressDegradedGroupsChecking = flags.SuppressDegradedGroupsChecking;
-            const bool suppressDisintegratedGroupsChecking = flags.SuppressDisintegratedGroupsChecking;
+            const TValidateConfigUpdatesParameters parameters{
+                .SuppressFailModelChecking = flags.SuppressFailModelChecking,
+                .SuppressDegradedGroupsChecking = flags.SuppressDegradedGroupsChecking,
+                .SuppressDisintegratedGroupsChecking = flags.SuppressDisintegratedGroupsChecking,
+            };
 
-            if (!ValidateConfigUpdates(*state, suppressFailModelChecking, suppressDegradedGroupsChecking,
-                    suppressDisintegratedGroupsChecking, &error, response)) {
+            if (!ValidateConfigUpdates(*state, parameters, &error, response)) {
                 RollbackConfigUpdate(state);
                 return error;
             }
@@ -654,14 +663,14 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT_UNLESS(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
                 }
 
-                // Keep node->group subscription in commit path: dynamic groups may appear
-                // after initial RegisterNode, and cleanup for the same index is done below.
+                // Keep subscriptions for placements added after RegisterNode on the current connection.
+                // Disconnected nodes will subscribe to their live placements when they register again.
                 if (overlay->second && !overlay->second->IsBeingDeleted()) {
                     const TGroupId groupId = overlay->second->GroupId;
                     if (NKikimr::IsDynamicGroup(groupId)) {
                         const TNodeId nodeId = overlay->second->VSlotId.NodeId;
                         auto& node = GetNode(nodeId);
-                        if (node.GroupsRequested.insert(groupId).second) {
+                        if (node.ConnectedServerId && node.GroupsRequested.insert(groupId).second) {
                             GroupToNode.emplace(groupId, nodeId);
                         }
                     }
@@ -915,7 +924,7 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(pdisk);
             const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
             Y_ABORT_UNLESS(group);
-            pdisk->NumActiveSlots -= pdisk->GetOwnerWeight(group->GroupSizeInUnits);
+            pdisk->NumActiveDynamicSlots -= pdisk->GetOwnerWeight(group->GroupSizeInUnits);
 
             if (UncommittedVSlots.erase(vslotId)) {
                 const ui32 erased = pdisk->VSlotsOnPDisk.erase(vslotId.VSlotId);
@@ -941,7 +950,7 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::TConfigState::CheckConsistency() const {
 #ifndef NDEBUG
             PDisks.ForEach([&](const auto& pdiskId, const auto& pdisk) {
-                ui32 numActiveSlots = 0;
+                ui32 numActiveDynamicSlots = 0;
                 for (const auto& [vslotId, vslot] : pdisk.VSlotsOnPDisk) {
                     const TVSlotInfo *vslotInTable = VSlots.Find(TVSlotId(pdiskId, vslotId));
                     Y_ABORT_UNLESS(vslot == vslotInTable);
@@ -949,10 +958,10 @@ namespace NKikimr::NBsController {
                     if (!vslot->IsBeingDeleted()) {
                         const TGroupInfo *group = Groups.Find(vslot->GroupId);
                         Y_ABORT_UNLESS(group);
-                        numActiveSlots += pdisk.GetOwnerWeight(group->GroupSizeInUnits);
+                        numActiveDynamicSlots += pdisk.GetOwnerWeight(group->GroupSizeInUnits);
                     }
                 }
-                Y_ABORT_UNLESS(pdisk.NumActiveSlots == numActiveSlots);
+                Y_ABORT_UNLESS(pdisk.NumActiveDynamicSlots == numActiveDynamicSlots);
             });
             VSlots.ForEach([&](const auto& vslotId, const auto& vslot) {
                 Y_ABORT_UNLESS(vslot.VSlotId == vslotId);
@@ -1167,7 +1176,7 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(pdisk.BoxId);
             pb->SetNumStaticSlots(pdisk.StaticSlotUsage);
             pb->SetDriveStatus(pdisk.Status);
-            pb->SetExpectedSlotCount(pdisk.GetEffectiveExpectedSlotCount());
+            pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
             pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
             pb->SetDriveStatusChangeTimestamp(pdisk.StatusTimestamp.GetValue());
             pb->SetDecommitStatus(pdisk.DecommitStatus);

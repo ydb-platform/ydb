@@ -9,12 +9,6 @@ package NKikimrPQ;
 option java_package = "ru.yandex.persqueue.events.global.proto";
 
 
-message TUpdateConfig {
-    optional uint64 TxId = 1;
-    optional TPQTabletConfig TabletConfig = 2;
-    optional TBootstrapConfig BootstrapConfig = 3; // passed only upon creation
-}
-
 message TUpdateBalancerConfig { //for schemeshard use only
     optional uint64 TxId = 1;
     optional uint64 PathId = 2;

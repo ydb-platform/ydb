@@ -58,13 +58,9 @@ def _truthy(raw):
     return str(raw).lower() in ('1', 'true', 'yes', 'on')
 
 
-def _parse_feature_flags(raw):
-    return [f for f in raw.split(',') if f]
-
-
 def _coerce_config_value(v):
-    # Coerce a string to bool/int/float so numeric table_service_config values
-    # (e.g. channel_buffer_size=1048576) serialize as numbers, not strings.
+    # Coerce a string to bool/int/float so numeric config values serialize as
+    # numbers, not strings.
     if v.lower() == 'true':
         return True
     if v.lower() == 'false':
@@ -79,13 +75,66 @@ def _coerce_config_value(v):
         return v
 
 
-def _parse_table_service_config(raw):
-    tsc = {}
+def _parse_config(raw):
+    # Keys may be dotted paths into nested config sections, e.g.
+    # `data_shard_config.stats_report_interval_seconds=1`, which is expanded
+    # into {'data_shard_config': {'stats_report_interval_seconds': 1}}.
+    config = {}
     for item in raw.split(','):
         if '=' in item:
             k, v = item.split('=', 1)
-            tsc[k] = _coerce_config_value(v)
-    return tsc
+            *parents, leaf = k.split('.')
+            node = config
+            for p in parents:
+                node = node.setdefault(p, {})
+            node[leaf] = _coerce_config_value(v)
+    return config
+
+
+def _parse_table_service_config(raw):
+    # Keep the existing input format, whose paths are relative to
+    # table_service_config, for backwards compatibility.
+    return _parse_config(raw)
+
+
+def _deep_update(dst, src):
+    # Recursive dict merge: unlike dict.update(), setting a single key of a
+    # nested submessage keeps the sibling defaults of that submessage
+    # (e.g. table_service_config.resource_manager.channel_buffer_size).
+    for k, v in src.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            _deep_update(dst[k], v)
+        else:
+            dst[k] = v
+    return dst
+
+
+def test_parse_and_merge_generic_config():
+    overrides = _parse_config(
+        'data_shard_config.stats_report_interval_seconds=1,'
+        'table_service_config.resource_manager.enabled=true,'
+        'feature_flags.enable_vector_index=true,'
+        'column_shard_config.disabled=false,'
+        'memory_controller_config.hard_limit_bytes=1.5')
+
+    config = {
+        'data_shard_config': {'keep_snapshot_timeout': 300000},
+        'table_service_config': {'resource_manager': {'sibling_default': 42}},
+    }
+    _deep_update(config, overrides)
+
+    assert config == {
+        'data_shard_config': {
+            'keep_snapshot_timeout': 300000,
+            'stats_report_interval_seconds': 1,
+        },
+        'table_service_config': {
+            'resource_manager': {'sibling_default': 42, 'enabled': True},
+        },
+        'feature_flags': {'enable_vector_index': True},
+        'column_shard_config': {'disabled': False},
+        'memory_controller_config': {'hard_limit_bytes': 1.5},
+    }
 
 
 # --- Statistics helpers ---
@@ -205,6 +254,7 @@ class TestCompareIndexPerformance:
         self.rows = yatest.common.get_param('compare_rows', default='10000')
         self.threads = yatest.common.get_param('compare_threads', default='10')
         self.targets = yatest.common.get_param('compare_targets', default='1000')
+        self.index_type = yatest.common.get_param('compare_index_type', default='')
         # Vector index structure params; None → server auto-detects
         _clusters = yatest.common.get_param('compare_vector_clusters', default='')
         _levels = yatest.common.get_param('compare_vector_levels', default='')
@@ -212,14 +262,14 @@ class TestCompareIndexPerformance:
         self.vector_levels = _levels if _levels else None
 
         # Per-cluster config
-        self.baseline_flags = _parse_feature_flags(
-            yatest.common.get_param('compare_baseline_feature_flags', default=''))
-        self.current_flags = _parse_feature_flags(
-            yatest.common.get_param('compare_current_feature_flags', default=''))
         self.baseline_tsc = _parse_table_service_config(
             yatest.common.get_param('compare_baseline_table_service_config', default=''))
         self.current_tsc = _parse_table_service_config(
             yatest.common.get_param('compare_current_table_service_config', default=''))
+        self.main_config = _parse_config(
+            yatest.common.get_param('compare_main_config', default=''))
+        self.current_config = _parse_config(
+            yatest.common.get_param('compare_current_config', default=''))
 
         self.workload = yatest.common.get_param('compare_workload', default='vector')
         if self.workload not in ('vector', 'fulltext'):
@@ -292,13 +342,24 @@ class TestCompareIndexPerformance:
         return f"current({self.current_ref})" if self.current_ref else "current"
 
     # --- cluster lifecycle + single workload run ---
-    def _run_one(self, label, ydbd_path, flags, tsc, run_workload, log_name, svg_name):
+    def _run_one(self, label, ydbd_path, tsc, config_overrides,
+                 run_workload, log_name, svg_name, required_feature_flags=()):
         config = KikimrConfigGenerator(
             binary_paths=[ydbd_path],
             erasure=Erasure.from_string(yatest.common.get_param('stress_default_erasure', default='NONE')),
-            extra_feature_flags=flags,
-            table_service_config=tsc or None,
+            extra_feature_flags=required_feature_flags,
         )
+        # Merged here rather than via the KikimrConfigGenerator(table_service_config=...)
+        # argument: that one does a shallow dict.update(), which would drop the
+        # default siblings of any submessage we touch. The config is only
+        # serialized on cluster.start(), so mutating it now is in time.
+        if tsc:
+            _deep_update(config.yaml_config.setdefault("table_service_config", {}), tsc)
+        # Generic overrides use paths rooted at the top-level YAML config, so
+        # every mapping section can be changed (for example data_shard_config).
+        # Apply them last so they take precedence over compatibility inputs.
+        if config_overrides:
+            _deep_update(config.yaml_config, config_overrides)
         cluster = KiKiMR(config)
         cluster.start()
         # A stray SIGINT keeps aborting the flamegraph run during teardown even
@@ -648,6 +709,8 @@ class TestCompareIndexPerformance:
         current_values = []
 
         vector_index_args = []
+        if self.index_type:
+            vector_index_args += ["--index-type", self.index_type]
         if self.vector_clusters is not None:
             vector_index_args += ["--clusters", self.vector_clusters]
         if self.vector_levels is not None:
@@ -684,10 +747,10 @@ class TestCompareIndexPerformance:
                     ] + vector_index_args + s3_args)
 
                 collect_value(main_values, self._run_one(
-                    self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,
+                    self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
                     s3_baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
                 collect_value(current_values, self._run_one(
-                    "current", current_ydbd, self.current_flags, self.current_tsc,
+                    "current", current_ydbd, self.current_tsc, self.current_config,
                     s3_current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
                 if self.flamegraph:
                     self._flamegraph_diff("vector", i)
@@ -716,10 +779,10 @@ class TestCompareIndexPerformance:
                     ] + vector_index_args)
 
                 collect_value(main_values, self._run_one(
-                    self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,
+                    self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
                     baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
                 collect_value(current_values, self._run_one(
-                    "current", current_ydbd, self.current_flags, self.current_tsc,
+                    "current", current_ydbd, self.current_tsc, self.current_config,
                     current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
                 if self.flamegraph:
                     self._flamegraph_diff("vector", i)
@@ -733,27 +796,29 @@ class TestCompareIndexPerformance:
         baseline_ydbd = self._baseline_ydbd()
         current_ydbd = self._current_ydbd()
 
-        # Fulltext requires the feature flag enabled on both clusters.
-        baseline_flags = self.baseline_flags + ["enable_fulltext_index"]
-        current_flags = self.current_flags + ["enable_fulltext_index"]
-
         main_values = []
         current_values = []
         for i in range(1, self.iterations + 1):
             print(f"=== Fulltext iteration {i}/{self.iterations} ===")
 
             def fulltext_workload(endpoint, out, err):
-                self._exec_workload("YDB_FULLTEXT_WORKLOAD_PATH", endpoint, out, err, [
+                workload_args = [
                     "--rows", self.rows, "--targets", self.targets,
                     "--threads", self.threads,
-                ])
+                ]
+                if self.index_type:
+                    workload_args += ["--index-type", self.index_type]
+                self._exec_workload(
+                    "YDB_FULLTEXT_WORKLOAD_PATH", endpoint, out, err, workload_args)
 
             collect_value(main_values, self._run_one(
-                self.ref, baseline_ydbd, baseline_flags, self.baseline_tsc,
-                fulltext_workload, f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg"))
+                self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
+                fulltext_workload, f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg",
+                required_feature_flags=("enable_fulltext_index",)))
             collect_value(current_values, self._run_one(
-                "current", current_ydbd, current_flags, self.current_tsc,
-                fulltext_workload, f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg"))
+                "current", current_ydbd, self.current_tsc, self.current_config,
+                fulltext_workload, f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg",
+                required_feature_flags=("enable_fulltext_index",)))
             if self.flamegraph:
                 self._flamegraph_diff("fulltext", i)
 

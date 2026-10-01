@@ -541,7 +541,6 @@ private:
 public:
     using TCustomListValue::TCustomListValue;
 
-public:
     void SetValue(NKikimr::NUdf::TUnboxedValue&& value) {
         Value_ = std::move(value);
         HasValue_ = true;
@@ -649,7 +648,7 @@ void TPushStreamWorker::OnFinish() {
 
 void TPushStreamWorker::Release() {
     with_lock (GetScopedAlloc()) {
-        Consumer_.Destroy();
+        Consumer_.reset();
         if (SelfNode_) {
             SelfNode_->SetValue(Graph_.ComputationGraph->GetContext(), NKikimr::NUdf::TUnboxedValue::Invalid());
         }

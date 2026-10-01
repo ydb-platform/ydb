@@ -38,8 +38,9 @@ using namespace NActors;
 
 namespace {
 
-// Min interval between stats send from scan/compute actor to executor
-constexpr TDuration MinStatInterval = TDuration::MilliSeconds(20);
+// Min interval between stats send from scan/compute actor to executor. A report walks all the channels of the task,
+// and a busy compute actor with hundreds of channels paid for it on every 20 ms
+constexpr TDuration MinStatInterval = TDuration::MilliSeconds(200);
 // Max interval in case of no activity
 constexpr TDuration MaxStatInterval = TDuration::Seconds(1);
 
@@ -65,6 +66,7 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
     {
         CaFactory_->AccountDefaultPoolInScheduler.store(config.GetComputeSchedulerSettings().GetAccountDefaultPool());
+        EnableSmallComputeMemoryAllocations = config.GetEnableSmallComputeMemoryAllocations();
         EnableChannelMemoryTracking = config.GetEnableChannelMemoryTracking();
         if (config.HasIteratorReadsRetrySettings()) {
             SetIteratorReadsRetrySettings(config.GetIteratorReadsRetrySettings());
@@ -145,12 +147,13 @@ private:
     }
 
     void HandleWork(TEvKqpNode::TEvStartKqpTasksRequest::TPtr ev) {
-        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "KqpNode.SendTasks", NWilson::EFlags::AUTO_END);
+        NWilson::TSpan sendTasksSpan(TWilsonKqp::KqpNodeSendTasks, NWilson::TTraceId(ev->TraceId), "Dispatch tasks", NWilson::EFlags::AUTO_END);
+        sendTasksSpan.Attribute("ydb.actor.type", TString("TKqpNodeService"));
 
         const auto executerId = ev->Sender;
 
         if (!CachedQueryManagerId) {
-            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_, EnableChannelMemoryTracking));
+            CachedQueryManagerId = Register(CreateKqpQueryManager(Counters, State_, ResourceManager_, CaFactory_, EnableSmallComputeMemoryAllocations, EnableChannelMemoryTracking));
         }
 
         TActorId queryManagerId;
@@ -301,6 +304,7 @@ private:
                 {"config", Config.DebugString()});
         }
 
+        EnableSmallComputeMemoryAllocations = event.GetConfig().GetTableServiceConfig().GetEnableSmallComputeMemoryAllocations();
         EnableChannelMemoryTracking = event.GetConfig().GetTableServiceConfig().GetEnableChannelMemoryTracking();
 
         if (event.GetConfig().GetTableServiceConfig().HasIteratorReadsRetrySettings()) {
@@ -349,6 +353,17 @@ private:
         auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
+
+        ui64 configuredMaxOperationBytes = settings.GetColumnShardMaxOperationBytes();
+        if (configuredMaxOperationBytes < 1_MB || configuredMaxOperationBytes > 1_GB) {
+            auto defaultValue = NKikimrConfig::TTableServiceConfig::TWriteActorSettings::default_instance().GetColumnShardMaxOperationBytes();
+            YDB_LOG_ERROR("ColumnShardMaxOperationBytes is outside the allowed range [1 MB, 1 GB]; using the default",
+                {"marker", "KQPNS"},
+                {"configuredBytes", configuredMaxOperationBytes},
+                {"defaultBytes", defaultValue});
+            configuredMaxOperationBytes = defaultValue;
+        }
+        ptr->ColumnShardMaxOperationBytes = configuredMaxOperationBytes;
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());
@@ -491,6 +506,7 @@ private:
     std::shared_ptr<TNodeState> State_;
     TIntrusivePtr<TKqpShutdownState> ShutdownState_;
     TActorId CachedQueryManagerId;
+    bool EnableSmallComputeMemoryAllocations = false;
     bool EnableChannelMemoryTracking = false;
 };
 

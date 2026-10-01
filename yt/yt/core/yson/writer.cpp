@@ -382,7 +382,7 @@ Y_FORCE_INLINE void TBufferedBinaryYsonWriter::BeginCollection()
     ++Depth_;
     if (Depth_ > NestingLevelLimit_) {
         THROW_ERROR_EXCEPTION(EErrorCode::DepthLimitExceeded, "Depth limit exceeded while writing YSON")
-            << TErrorAttribute("limit", NestingLevelLimit_);
+            .With("limit", NestingLevelLimit_);
     }
 }
 

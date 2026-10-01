@@ -1,0 +1,1 @@
+SELECT SearchPhrase FROM `/Root/hits` WHERE SearchPhrase <> '' ORDER BY SearchPhrase LIMIT 10;

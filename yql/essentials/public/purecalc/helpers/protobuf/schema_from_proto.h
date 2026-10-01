@@ -30,10 +30,8 @@ public:
     bool EnableRecursiveRenaming;
     THashMap<TString, TString> FieldRenames;
 
-public:
     TProtoSchemaOptions();
 
-public:
     TProtoSchemaOptions& SetEnumPolicy(EEnumPolicy);
 
     TProtoSchemaOptions& SetListIsOptional(bool);

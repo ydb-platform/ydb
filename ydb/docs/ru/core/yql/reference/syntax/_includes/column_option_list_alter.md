@@ -1,5 +1,11 @@
 ### FAMILY <family_name> (настройка колонки)
 
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
 Указание принадлежности данной колонки к указанной группе колонок. Подробнее в разделе [{#T}](../create_table/family.md).
 
 ### DEFAULT <default_value>
@@ -17,14 +23,16 @@
 
 ### NOT NULL
 
-Существуют две операции:
+Доступны следующие операции:
 
+{% if feature_alter_column_not_null == true %}
 * `SET NOT NULL` — устанавливает ограничение `NOT NULL` для колонки.
+{% endif %}
 * `DROP NOT NULL` — снимает ограничение `NOT NULL` с колонки, снова разрешая значения `NULL`.
 
-Подробнее о работе этих операций можно прочитать [здесь](../alter_table/not_null.md).
+Подробнее см. в разделе [«Изменение ограничения `NOT NULL`»](../alter_table/not_null.md).
 
-### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
+### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]]) {#compression}
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -40,7 +48,7 @@
 
 Если `COMPRESSION()` указан без параметров, для колонки используется сжатие по умолчанию. Сейчас это `lz4`; в будущих версиях появится возможность настраивать сжатие по умолчанию на уровне кластера или таблицы.
 
-### ENCODING([OFF|DICT])
+### ENCODING([OFF|DICT]) {#encoding}
 
 {% if oss == true and backend_name == "YDB" %}
 

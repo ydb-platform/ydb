@@ -30,8 +30,11 @@ using THistogramVector = TVector<THolder<THistogramCounter>>;
 ** class TAggregatedSimpleCounters
  */
 
-TAggregatedSimpleCounters::TAggregatedSimpleCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
+TAggregatedSimpleCounters::TAggregatedSimpleCounters(
+    ::NMonitoring::TDynamicCounterPtr counterGroup,
+    ::NMonitoring::TCountableBase::EVisibility visibility)
     : CounterGroup(counterGroup)
+    , Visibility(visibility)
 {}
 
 void TAggregatedSimpleCounters::Reserve(size_t hint) {
@@ -50,7 +53,7 @@ void TAggregatedSimpleCounters::AddSimpleCounter(
     TString sumName = Sprintf("SUM(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = CounterGroup->GetCounter(name, false);
+        auto counter = CounterGroup->GetCounter(name, false, Visibility);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxSimpleCounters);
@@ -164,36 +167,37 @@ void TAggregatedSimpleCounters::RecalcAll() {
     }
 }
 
-TVector<TTabletCounterValue> TAggregatedSimpleCounters::Find(const TString& name) const {
-    TVector<TTabletCounterValue> result;
-
+bool TAggregatedSimpleCounters::Find(const TString& name, TVector<TTabletCounterValue>& results) const {
     for (ui32 i = 0; i < CounterNames.size(); ++i) {
         if (!CounterNames[i].contains(name)) {
             continue;
         }
 
-        result.reserve(CountersByTabletId.size());
+        results.reserve(results.size() + CountersByTabletId.size());
         for (const auto& [tabletId, values] : CountersByTabletId) {
             Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
-            result.push_back({
+            results.push_back({
                 .Name = CounterNames[i],
                 .TabletId = tabletId,
                 .Value = values[i],
             });
         }
 
-        break;
+        return true;
     }
 
-    return result;
+    return false;
 }
 
 /*
 ** class TAggregatedCumulativeCounters
  */
 
-TAggregatedCumulativeCounters::TAggregatedCumulativeCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
+TAggregatedCumulativeCounters::TAggregatedCumulativeCounters(
+    ::NMonitoring::TDynamicCounterPtr counterGroup,
+    ::NMonitoring::TCountableBase::EVisibility visibility)
     : CounterGroup(counterGroup)
+    , Visibility(visibility)
 {}
 
 void TAggregatedCumulativeCounters::Reserve(size_t hint) {
@@ -210,7 +214,7 @@ void TAggregatedCumulativeCounters::AddCumulativeCounter(
     TString maxName = Sprintf("MAX(%s)", name);
 
     auto fnAddCounter = [this](const char* name, TCountersVector& container) {
-        auto counter = CounterGroup->GetCounter(name, false);
+        auto counter = CounterGroup->GetCounter(name, false, Visibility);
         container.push_back(counter);
     };
     fnAddCounter(maxName.data(), MaxCumulativeCounters);
@@ -307,36 +311,37 @@ void TAggregatedCumulativeCounters::RecalcAll() {
     }
 }
 
-TVector<TTabletCounterValue> TAggregatedCumulativeCounters::Find(const TString& name) const {
-    TVector<TTabletCounterValue> result;
-
+bool TAggregatedCumulativeCounters::Find(const TString& name, TVector<TTabletCounterValue>& results) const {
     for (ui32 i = 0; i < CounterNames.size(); ++i) {
         if (!CounterNames[i].contains(name)) {
             continue;
         }
 
-        result.reserve(CountersByTabletId.size());
+        results.reserve(results.size() + CountersByTabletId.size());
         for (const auto& [tabletId, values] : CountersByTabletId) {
             Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
-            result.push_back({
+            results.push_back({
                 .Name = CounterNames[i],
                 .TabletId = tabletId,
                 .Value = values[i],
             });
         }
 
-        break;
+        return true;
     }
 
-    return result;
+    return false;
 }
 
 /*
 ** class TAggregatedHistogramCounters
  */
 
-TAggregatedHistogramCounters::TAggregatedHistogramCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
+TAggregatedHistogramCounters::TAggregatedHistogramCounters(
+    ::NMonitoring::TDynamicCounterPtr counterGroup,
+    ::NMonitoring::TCountableBase::EVisibility visibility)
     : CounterGroup(counterGroup)
+    , Visibility(visibility)
 {}
 
 void TAggregatedHistogramCounters::Reserve(size_t hint) {
@@ -369,7 +374,7 @@ void TAggregatedHistogramCounters::AddCounter(
     }
 
     auto histogram = CounterGroup->GetHistogram(
-        name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative);
+        name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative, Visibility);
 
     if (histogramAggregate) {
         // either simple or cumulative aggregate will handle this histogram,

@@ -79,18 +79,18 @@ private:
         const auto executionEntryExists = ev->Get()->ExecutionEntryExists;
         const auto currentDeadline = ev->Get()->CurrentDeadline;
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Lease update failed execution entry",
+            YDB_LOG_ERROR_CTX(TActivationContext::AsActorContext(), "Lease update failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"status", status},
                 {"issues", issues.ToOneLineString()},
-                {"exists", executionEntryExists});
+                {"executionEntryExists", executionEntryExists});
         } else {
-            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Lease updated by current execution entry",
+            YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Lease updated",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
                 {"deadline", currentDeadline},
-                {"exists", executionEntryExists});
+                {"executionEntryExists", executionEntryExists});
         }
 
         if (!executionEntryExists) {
@@ -149,13 +149,19 @@ private:
         FinishInfo.Update(status, std::move(issues));
 
         if (!LeaseUpdateStartTime) {
+            YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Exit, send response",
+                {"logPrefix", LogPrefix()},
+                {"finishStatus", *FinishInfo.Status},
+                {"issues", FinishInfo.Issues.ToOneLineString()},
+                {"transientIssues", FinishInfo.TransientIssues.ToOneLineString()});
+
             Send(Owner, new TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished(*FinishInfo.Status, std::move(FinishInfo.Issues)));
             PassAway();
         }
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Owner: " << Owner << ". Ctx: " << *Ctx->UserRequestContext << ". LeaseGeneration: " << Ctx->LeaseGeneration << ". ";
+        return TStringBuilder() << "[" << ActorName << "] " << SelfId() << ". Owner: " << Owner << ". Ctx: " << *Ctx->UserRequestContext << ". ";
     }
 
     const TScriptExecutionContext::TPtr Ctx;

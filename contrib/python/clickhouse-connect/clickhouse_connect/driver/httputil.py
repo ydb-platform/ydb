@@ -13,11 +13,11 @@ from typing import Any
 import certifi
 import lz4.frame
 import urllib3
-import zstandard
 from urllib3.poolmanager import PoolManager, ProxyManager
 from urllib3.response import HTTPResponse
 
 from clickhouse_connect import common
+from clickhouse_connect.driver.compression import _zstd_decompress, _zstd_decompressor, _ZstdError
 from clickhouse_connect.driver.exceptions import OperationalError, ProgrammingError
 
 logger = logging.getLogger(__name__)
@@ -154,9 +154,8 @@ def get_response_data(response: HTTPResponse) -> bytes:
     encoding = response.headers.get("content-encoding", None)
     if encoding == "zstd":
         try:
-            zstd_decom = zstandard.ZstdDecompressor()
-            return zstd_decom.stream_reader(response.data).read()
-        except zstandard.ZstdError:
+            return _zstd_decompress(response.data)
+        except _ZstdError:
             pass
     if encoding == "lz4":
         lz4_decom = lz4.frame.LZ4FrameDecompressor()
@@ -207,7 +206,7 @@ class ResponseSource:
         compression = response.headers.get("content-encoding")
         decompress: Callable | None = None
         if compression == "zstd":
-            zstd_decom = zstandard.ZstdDecompressor().decompressobj()
+            zstd_decom = _zstd_decompressor()
 
             def zstd_decompress(c: deque) -> tuple[bytes, int]:
                 chunk = c.popleft()

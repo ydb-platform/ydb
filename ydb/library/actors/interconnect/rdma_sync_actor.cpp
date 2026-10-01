@@ -10,6 +10,8 @@
 
 #include <variant>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::INTERCONNECT
+
 namespace NActors {
 
     TInterconnectSessionRdma* TRdmaHandshakeResult::ReleasePreinitedSession() noexcept {
@@ -191,6 +193,8 @@ namespace {
        : public NActors::TActorCoroImpl
        , public NActors::TInterconnectLoggingBase
     {
+        struct TExPoison {};
+
         NActors::TInterconnectProxyCommon::TPtr Common;
         const TActorId SelfVirtualId;
         const TActorId PeerVirtualId;
@@ -265,16 +269,26 @@ namespace {
         void Run() override {
             SetPrefix(Sprintf("RdmaSync %s [node %" PRIu32 " %s]",
                 SelfActorId.ToString().data(), PeerNodeId, Incoming ? "incoming" : "outgoing"));
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_DEBUG,
-                "starting rdma sync actor");
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "Starting rdma sync actor",
+                {"marker", "ICRDMA"});
 
+            try {
+                RunImpl();
+            } catch (const TExPoison&) {
+                PollerToken.Reset();
+            }
+        }
+
+    private:
+        void RunImpl() {
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId),
                 new TSessionCreatorDelegate(SelfActorId, Qp, Cq, PeerNodeId));
-            auto ev = TActorCoroImpl::WaitForEvent();
+            auto ev = WaitForEvent();
             auto* result = static_cast<TSessionCreatorDelegate*>(ev->GetBase());
             if (const TString* error = result->GetError()) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "unable to create rdma sync session: %s", error->data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to create rdma sync",
+                    {"marker", "ICRDMA"},
+                    {"session", error->data()});
                 Finish(*error);
                 return;
             }
@@ -285,8 +299,9 @@ namespace {
             ui64 localStartSyncChecksum = 0;
             ui64 peerStartSyncChecksum = 0;
             if (!DoStart(peerStartSync, localStartSyncChecksum, peerStartSyncChecksum, error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "RDMA StartSync failed: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA StartSync",
+                    {"marker", "ICRDMA"},
+                    {"failed", error.data()});
                 Finish(std::move(error));
                 return;
             }
@@ -295,8 +310,9 @@ namespace {
             ui64 localDataSyncChecksum = 0;
             const TMonotonic rdmaStart = TActivationContext::Monotonic();
             if (!DoData(peerStartSync, peerStartSyncChecksum, localDataSync, localDataSyncChecksum, error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "RDMA DataSync failed: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA DataSync",
+                    {"marker", "ICRDMA"},
+                    {"failed", error.data()});
                 Finish(std::move(error));
                 return;
             }
@@ -304,8 +320,9 @@ namespace {
             NActorsInterconnect::TRdmaDataSync peerDataSync;
             ui64 peerDataSyncChecksum = 0;
             if (!DoReceiveData(localStartSyncChecksum, peerDataSync, peerDataSyncChecksum, error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "RDMA receive DataSync failed: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive DataSync",
+                    {"marker", "ICRDMA"},
+                    {"failed", error.data()});
                 Finish(std::move(error));
                 return;
             }
@@ -313,8 +330,9 @@ namespace {
             NActorsInterconnect::TRdmaAckSync localAckSync;
             ui64 localAckSyncChecksum = 0;
             if (!DoAck(peerDataSyncChecksum, localAckSync, localAckSyncChecksum, error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "RDMA AckSync failed: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA AckSync",
+                    {"marker", "ICRDMA"},
+                    {"failed", error.data()});
                 Finish(std::move(error));
                 return;
             }
@@ -323,39 +341,52 @@ namespace {
             ui64 peerAckSyncChecksum = 0;
             TMonotonic peerAckReceivedAt;
             if (!DoReceiveAck(localDataSyncChecksum, peerAckSync, peerAckSyncChecksum, peerAckReceivedAt, error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "RDMA receive AckSync failed: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive AckSync",
+                    {"marker", "ICRDMA"},
+                    {"failed", error.data()});
                 Finish(std::move(error));
                 return;
             }
             const ui64 rdmaRtt = (peerAckReceivedAt - rdmaStart).NanoSeconds();
 
             if (!DoSwitchToTransitionMode(session.get(), error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "unable to switch RDMA session to data mode: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "Unable to switch RDMA session to data",
+                    {"marker", "ICRDMA"},
+                    {"mode", error.data()});
                 Finish(std::move(error));
                 return;
             }
 
             if (!DoFin(peerAckSyncChecksum, rdmaRtt, error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "RDMA FinSync failed: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA FinSync",
+                    {"marker", "ICRDMA"},
+                    {"failed", error.data()});
                 Finish(std::move(error));
                 return;
             }
 
             if (!DoReceiveFin(localAckSyncChecksum, error)) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_ERROR,
-                    "RDMA receive FinSync failed: %s", error.data());
+                YDB_LOG_ERROR_CTX(this->GetActorContext(), "RDMA receive FinSync",
+                    {"marker", "ICRDMA"},
+                    {"failed", error.data()});
                 Finish(std::move(error));
                 return;
             }
 
+            PollerToken.Reset(); // unregister the socket before the handshake actor registers it again
             Send(Creator, new TEvRdmaSyncResult(std::move(session)));
         }
 
-    private:
+        THolder<IEventHandle> WaitForEvent() {
+            auto ev = TActorCoroImpl::WaitForEvent();
+            if (ev && ev->GetTypeRewrite() == TEvents::TSystem::Poison) {
+                throw TExPoison();
+            }
+            return ev;
+        }
+
         void Finish(TString error) {
+            PollerToken.Reset();
             Send(Creator, new TEvRdmaSyncResult(std::move(error)));
         }
 
@@ -369,7 +400,7 @@ namespace {
                 return false;
             }
 
-            auto ev = TActorCoroImpl::WaitForEvent();
+            auto ev = WaitForEvent();
             if (!ev || ev->GetTypeRewrite() != TEvPollerRegisterResult::EventType) {
                 error = Sprintf("unexpected event while waiting for TEvPollerRegisterResult: 0x%08" PRIx32,
                     ev ? ev->GetTypeRewrite() : 0);
@@ -385,12 +416,28 @@ namespace {
             return true;
         }
 
-        bool WaitPoller(bool read, bool write, const char* state, TString& error) {
+        bool Y_NO_INLINE WaitPoller(bool read, bool write, const char* state, TString& error) {
             if (!PollerToken->RequestNotificationAfterWouldBlock(read, write)) {
-                auto ev = TActorCoroImpl::WaitForEvent();
-                if (!ev || ev->GetTypeRewrite() != TEvPollerReady::EventType) {
+                for (;;) {
+                    auto ev = WaitForEvent();
+                    if (!ev) {
+                        error = Sprintf("unable to wait for TEvPollerReady in %s", state);
+                        return false;
+                    }
+                    if (ev->GetTypeRewrite() == TEvPollerReady::EventType) {
+                        break;
+                    }
+                    if (ev->GetTypeRewrite() == TEvRdmaIoReceiveDone::EventType) {
+                        if (!HandleRdmaReceiveEvent(
+                                THolder<TEvRdmaIoReceiveDone::THandle>(
+                                    static_cast<TEvRdmaIoReceiveDone::THandle*>(ev.Release())),
+                                error)) {
+                            return false;
+                        }
+                        continue;
+                    }
                     error = Sprintf("unexpected event while waiting for TEvPollerReady in %s: 0x%08" PRIx32,
-                        state, ev ? ev->GetTypeRewrite() : 0);
+                        state, ev->GetTypeRewrite());
                     return false;
                 }
             }
@@ -618,7 +665,7 @@ namespace {
                     return true;
                 }
 
-                if (!HandleEvent(TActorCoroImpl::WaitForEvent(), error)) {
+                if (!HandleEvent(WaitForEvent(), error)) {
                     return false;
                 }
             }
@@ -786,7 +833,7 @@ namespace {
             return false;
         }
 
-        bool HandleRdmaReceiveEvent(THolder<TEvRdmaIoReceiveDone::THandle> ev, TString& error) {
+        bool Y_NO_INLINE HandleRdmaReceiveEvent(THolder<TEvRdmaIoReceiveDone::THandle> ev, TString& error) {
             if (!ev->Get()->IsSuccess()) {
                 error = TStringBuilder()
                     << "RDMA sync RECEIVE failed, err source: " << ev->Get()->GetErrSource()
@@ -919,7 +966,10 @@ namespace {
             };
 
             auto builder = CreateIbVerbsBuilder(1);
-            builder->AddSendVerb(*sendBuf, std::move(cb));
+            if (!builder->AddSendVerb(*sendBuf, std::move(cb))) {
+                error = TString("unable to build send WR");
+                return ReportRdmaSendError(error);
+            }
 
             if (Cq->DoWrBatchAsync(Qp, std::move(builder))) {
                 error = Sprintf("unable to post RDMA %s SEND work request", what);
@@ -974,8 +1024,9 @@ namespace {
                 return false;
             }
 
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_DEBUG,
-                "RDMA StartSync exchanged, FeatureMask# %" PRIu64, peerStartSync.GetFeatureMask());
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA StartSync exchanged",
+                {"marker", "ICRDMA"},
+                {"featureMask", peerStartSync.GetFeatureMask()});
 
             return true;
         }
@@ -1017,8 +1068,9 @@ namespace {
                 return ReportRdmaReceiveError(NActorsInterconnect::SYNC_ERR_UNEXPECTED_SESSION, error);
             }
 
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_DEBUG,
-                "RDMA DataSync received, PayloadSize# %zu", dataSync.GetPayload().size());
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA DataSync received",
+                {"marker", "ICRDMA"},
+                {"payloadSize", dataSync.GetPayload().size()});
 
             return true;
         }
@@ -1055,8 +1107,8 @@ namespace {
                 return ReportRdmaReceiveError(NActorsInterconnect::SYNC_ERR_HASH_CHAIN_MISMATCH, error);
             }
 
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_DEBUG,
-                "RDMA AckSync received");
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA AckSync received",
+                {"marker", "ICRDMA"});
 
             return true;
         }
@@ -1065,7 +1117,7 @@ namespace {
             Send(GetActorSystem()->InterconnectProxy(PeerNodeId), new TSwitchToTransitionModeDelegate(session));
 
             for (;;) {
-                auto ev = TActorCoroImpl::WaitForEvent();
+                auto ev = WaitForEvent();
                 if (!ev) {
                     error = "unable to wait switch to transition mode result";
                     return false;
@@ -1107,8 +1159,9 @@ namespace {
                 return false;
             }
 
-            LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICRDMA", NActors::NLog::PRI_DEBUG,
-                "RDMA FinSync received, RdmaRtt# %" PRIu64, finSync.GetRdmaRtt());
+            YDB_LOG_DEBUG_CTX(this->GetActorContext(), "RDMA FinSync received",
+                {"marker", "ICRDMA"},
+                {"rdmaRtt", finSync.GetRdmaRtt()});
 
             return true;
         }

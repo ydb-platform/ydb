@@ -23,3 +23,16 @@ message TGetLoadActorAdapterActorIdResponse
     // Load actor adapter id
     string ActorId = 2;
 }
+
+////////////////////////////////////////////////////////////////////////////////
+// Delete partition request/response.
+
+message TDeletePartitionRequest
+{
+}
+
+message TDeletePartitionResponse
+{
+    // Optional error, set only if error happened.
+    NYdb.NBS.NProto.TError Error = 1;
+}

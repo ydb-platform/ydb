@@ -28,9 +28,9 @@ sed -i '1s/ /_/g' accessories.csv
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
-  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
 
   ```sql
   CREATE TABLE `accessories` (
@@ -111,7 +111,7 @@ ydb import file csv --header --path accessories accessories.csv
 
 {% list tabs %}
 
-- Embedded UI
+- {{ ydb-ui-name }}
 
   ```sql
   SELECT

@@ -168,7 +168,10 @@ private:
             rec.SetError(error);
         }
 
-        Self->SendIncrementalRestoreShardProgress(ctx, SchemeShardId, std::move(progressEv));
+        // DataShard must own the shared pipe and receive its disconnect notifications
+        // after this temporary actor exits. Both actors run in the same mailbox.
+        Self->SendIncrementalRestoreShardProgress(
+            ctx.MakeFor(Self->SelfId()), SchemeShardId, std::move(progressEv));
 
         PassAway();
     }
@@ -218,3 +221,7 @@ void TDataShard::Handle(TEvDataShard::TEvIncrementalRestoreSrcCreateRequest::TPt
 }
 
 } // namespace NKikimr::NDataShard
+
+
+#undef YDB_LOG_THIS_FILE_COMPONENT
+

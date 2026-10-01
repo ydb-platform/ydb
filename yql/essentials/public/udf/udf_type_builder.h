@@ -114,7 +114,6 @@ class IOptionalTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<IOptionalTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline IOptionalTypeBuilder& Item() {
         return Item(TDataType<T>::Id);
@@ -134,7 +133,6 @@ class IListTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<IListTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline IListTypeBuilder& Item() {
         return Item(TDataType<T>::Id);
@@ -154,7 +152,6 @@ class IVariantTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<IVariantTypeBuilder>;
 
-public:
     // type must be either tuple or struct
     virtual IVariantTypeBuilder& Over(const TType* type) = 0;
     virtual IVariantTypeBuilder& Over(const ITypeBuilder& type) = 0;
@@ -169,7 +166,6 @@ class IStreamTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<IStreamTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline IStreamTypeBuilder& Item() {
         return Item(TDataType<T>::Id);
@@ -189,7 +185,6 @@ class IDictTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<IDictTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline IDictTypeBuilder& Key() {
         return Key(TDataType<T>::Id);
@@ -218,7 +213,6 @@ class ISetTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<ISetTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline ISetTypeBuilder& Key() {
         return Key(TDataType<T>::Id);
@@ -238,7 +232,6 @@ class IStructTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<IStructTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline IStructTypeBuilder& AddField(
         const TStringRef& name, ui32* index)
@@ -267,7 +260,6 @@ class IEnumTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<IEnumTypeBuilder>;
 
-public:
     virtual IEnumTypeBuilder& AddField(
         const TStringRef& name, ui32* index) = 0;
 };
@@ -281,7 +273,6 @@ class ITupleTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<ITupleTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     ITupleTypeBuilder& Add() {
         return Add(TDataType<T>::Id);
@@ -301,7 +292,6 @@ class ICallableTypeBuilder: public ITypeBuilder {
 public:
     using TPtr = TUniquePtr<ICallableTypeBuilder>;
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     ICallableTypeBuilder& Returns() {
         return Returns(TDataType<T>::Id);
@@ -342,7 +332,6 @@ class IFunctionArgTypesBuilder {
 public:
     using TPtr = TUniquePtr<IFunctionArgTypesBuilder>;
 
-public:
     explicit IFunctionArgTypesBuilder(IFunctionTypeInfoBuilder& parent)
         : Parent_(parent)
     {
@@ -425,7 +414,6 @@ public:
     {
     }
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline IBlockTypeBuilder& Item() {
         return Item(TDataType<T>::Id);
@@ -453,7 +441,6 @@ public:
     {
     }
 
-public:
     template <typename T, typename = std::enable_if_t<TKnownDataType<T>::Result>>
     inline ILinearTypeBuilder& Item() {
         return Item(TDataType<T>::Id);

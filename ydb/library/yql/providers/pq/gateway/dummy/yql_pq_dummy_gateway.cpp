@@ -120,6 +120,11 @@ IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const TDriv
     });
 }
 
+IDeferredPublishClient::TPtr TDummyPqGateway::GetDeferredPublishClient(const NYdb::TDriver& driver, const NYdb::TCommonClientSettings& settings) {
+    Y_UNUSED(driver, settings);
+    Y_ENSURE(false, "Not implemented");
+}
+
 TTopicClientSettings TDummyPqGateway::GetTopicClientSettings() const {
     return {};
 }

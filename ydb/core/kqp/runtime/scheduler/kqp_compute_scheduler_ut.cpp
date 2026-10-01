@@ -1706,6 +1706,55 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_VALUES_EQUAL(querySnapshot->GetParent()->FairShare, 6);
     }
 
+    Y_UNIT_TEST(NewQueryGetsFairShareOfItsPool) {
+        /*
+            Scenario:
+            - 2 pools: the first one has 1 query with 4 tasks, the second one has nothing
+            - A new query gets the fair-share of its pool from the latest snapshot right away - before its own one
+            - The pool without the fair-share gives the minimal one, like the query had without a snapshot
+            - A query of the pool, which is not in the snapshot yet, has no snapshot
+        */
+        constexpr ui64 kCpuLimit = 10;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {});
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {});
+
+        auto query1 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 1, {});
+        UNIT_ASSERT(!query1->GetSnapshot());
+        auto tasks = CreateDemandTasks(query1, 4);
+
+        scheduler.UpdateFairShare();
+        UNIT_ASSERT_VALUES_EQUAL(query1->GetSnapshot()->FairShare, 4);
+
+        auto query2 = scheduler.AddOrUpdateQuery(databaseId, "pool1", 2, {});
+        auto query2Snapshot = query2->GetSnapshot();
+        UNIT_ASSERT(query2Snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(query2Snapshot->FairShare, 4);
+        UNIT_ASSERT(!query2Snapshot->GetParent());
+
+        auto query3 = scheduler.AddOrUpdateQuery(databaseId, "pool2", 3, {});
+        UNIT_ASSERT(query3->GetSnapshot());
+        UNIT_ASSERT_VALUES_EQUAL(query3->GetSnapshot()->FairShare, 1);
+
+        scheduler.AddOrUpdatePool(databaseId, "pool3", {});
+        auto query4 = scheduler.AddOrUpdateQuery(databaseId, "pool3", 4, {});
+        UNIT_ASSERT(!query4->GetSnapshot());
+
+        // The next snapshot replaces the initial one
+        scheduler.UpdateFairShare();
+        UNIT_ASSERT(query2->GetSnapshot()->GetParent());
+        UNIT_ASSERT(query4->GetSnapshot());
+    }
+
     Y_UNIT_TEST(ThrottleTimeIsNotLostOnStop) {
         /*
             Scenario:

@@ -56,6 +56,10 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
 
         NSnapshot::TQuery* TakeSnapshot() override;
 
+        // Gives the new query the fair-share of its pool right away - not to wait for its first snapshot.
+        // The initial snapshot is not attached to the snapshot tree, so it has no parent.
+        void InitSnapshot(const NSnapshot::TPool& pool);
+
         TFullPoolId GetFullPoolId() const;
 
         TSchedulableTaskList::iterator AddTask(const TSchedulableTaskPtr& task);

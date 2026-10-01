@@ -1159,7 +1159,11 @@ def build_trace(
         elif requirements_cache and suite in requirements_cache:
             req = requirements_cache[suite]
             dur_sec = r["dur_us"] / 1_000_000.0
-            cpu = float(req.get("cpu_cores", 0) or 0) * dur_sec
+            try:
+                # cpu_cores may be the "all" sentinel (REQUIREMENTS(cpu:all)); no numeric estimate then.
+                cpu = float(req.get("cpu_cores", 0) or 0) * dur_sec
+            except (TypeError, ValueError):
+                cpu = 0.0
             ram = float((req.get("ram_gb", 0) or 0) * 1024 * 1024)
             status = "UNKNOWN"
             error_type = ""

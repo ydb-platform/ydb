@@ -63,7 +63,11 @@ def parse_requirements_body(body: str) -> dict[str, Any]:
         attrs["ram_gb"] = int(m_ram.group(1))
     if m_cpu:
         cpu_val = m_cpu.group(1).strip().lower()
-        if cpu_val != "all":
+        if cpu_val == "all":
+            # cpu:all = take the whole host; keep the sentinel so consumers
+            # don't treat the suite as "no CPU requirement declared".
+            attrs["cpu_cores"] = "all"
+        else:
             try:
                 attrs["cpu_cores"] = int(cpu_val)
             except ValueError:
@@ -86,6 +90,8 @@ def eval_ya_make_condition(cond: str, sanitizer: Optional[str] = None) -> bool:
     expr = re.sub(r"\bOS_WINDOWS\b", "False", expr)
     expr = re.sub(r"\bOS_LINUX\b", "True", expr)
     expr = re.sub(r"\bOS_DARWIN\b", "False", expr)
+    # GitHub CI always builds the opensource tree (build/internal/ya.conf sets OPENSOURCE=yes).
+    expr = re.sub(r"\bOPENSOURCE\b", "True", expr)
     expr = re.sub(r"\bOR\b", "or", expr)
     expr = re.sub(r"\bAND\b", "and", expr)
     expr = re.sub(r"\bNOT\b", "not", expr)
@@ -143,7 +149,7 @@ def _parse_active_attrs(text: str, sanitizer: Optional[str]) -> dict[str, Any]:
                 if test_srcs_active:
                     test_srcs_count += count_this_test_srcs
                 count_this_test_srcs = 0
-            elif line and not line.startswith(")"):
+            elif line and not line.startswith(")") and not line.startswith("#"):
                 if test_srcs_active:
                     count_this_test_srcs += 1
             i += 1

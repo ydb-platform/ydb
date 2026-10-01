@@ -143,23 +143,70 @@ END()
     }
 
 
+def test_cpu_all_sentinel_is_preserved():
+    content = """UNITTEST()
+REQUIREMENTS(cpu:all ram:32)
+SIZE(LARGE)
+END()
+"""
+    assert _parse_active_attrs(content, sanitizer=None) == {
+        "cpu_cores": "all",
+        "ram_gb": 32,
+        "size": "LARGE",
+    }
+
+
+def test_opensource_condition_is_active():
+    content = """UNITTEST()
+IF (OPENSOURCE)
+    SIZE(MEDIUM)
+    REQUIREMENTS(cpu:4)
+ELSE()
+    SIZE(LARGE)
+    REQUIREMENTS(cpu:16)
+ENDIF()
+END()
+"""
+    assert _parse_active_attrs(content, sanitizer=None) == {"cpu_cores": 4, "size": "MEDIUM"}
+
+
+def test_commented_out_test_srcs_are_not_counted():
+    content = """PY3TEST()
+FORK_TEST_FILES()
+SPLIT_FACTOR(5)
+TEST_SRCS(
+    test_a.py
+    # test_disabled.py
+    test_b.py
+    #test_also_disabled.py
+)
+END()
+"""
+    attrs = _parse_active_attrs(content, sanitizer=None)
+    assert attrs["test_srcs_count"] == 2
+    assert attrs["effective_split_factor"] == 10
+
+
+_ALL_TESTS = (
+    test_sanitizer_conditional_requirements,
+    test_fork_test_files_effective_split_counts_active_test_srcs_only,
+    test_multiline_requirements_block,
+    test_elseif_sanitizer_branch,
+    test_get_requirements_normalizes_partitioned_suite_path,
+    test_cpu_all_sentinel_is_preserved,
+    test_opensource_condition_is_active,
+    test_commented_out_test_srcs_are_not_counted,
+)
+
+
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    for fn in (
-        test_sanitizer_conditional_requirements,
-        test_fork_test_files_effective_split_counts_active_test_srcs_only,
-        test_multiline_requirements_block,
-        test_elseif_sanitizer_branch,
-        test_get_requirements_normalizes_partitioned_suite_path,
-    ):
+    for fn in _ALL_TESTS:
         suite.addTest(unittest.FunctionTestCase(fn))
     return suite
 
 
 if __name__ == "__main__":
-    test_sanitizer_conditional_requirements()
-    test_fork_test_files_effective_split_counts_active_test_srcs_only()
-    test_multiline_requirements_block()
-    test_elseif_sanitizer_branch()
-    test_get_requirements_normalizes_partitioned_suite_path()
+    for fn in _ALL_TESTS:
+        fn()
     print("OK")

@@ -581,7 +581,10 @@ def build_cpu_recommendations(
         # runner, which worsens timeouts/OOM.
         split_pressure = overloaded_chunks > 0 or recommended_split_action == "raise"
         cpu_lower_suppressed = False
-        if recommended_req == "all":
+        if ya_cpu == "all":
+            # Suite already takes the whole host; nothing above that to recommend.
+            cpu_action = "ok"
+        elif recommended_req == "all":
             cpu_action = "set" if ya_cpu is None else "raise"
         else:
             recommended_num = int(recommended_req)

@@ -120,6 +120,8 @@ std::shared_ptr<arrow::RecordBatch> Reorder(
 
 // Deep-copies all internal arrow::buffers - and makes sure that new buffers don't have any parents.
 std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool = arrow::default_memory_pool());
+// DeepCopy() that returns the allocation failures of the pool, e.g. a refused memory quota, instead of aborting
+arrow::Result<std::shared_ptr<arrow::Table>> TryDeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool);
 
 // When PROFILE_MEMORY_ALLOCATIONS is enabled, performs a deep copy of the table
 // so that all Arrow buffers are re-allocated through the given memory pool,

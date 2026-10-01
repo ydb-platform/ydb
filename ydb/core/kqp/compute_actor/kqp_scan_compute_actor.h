@@ -5,6 +5,7 @@
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
+#include <ydb/library/yql/dq/actors/compute/dq_arrow_memory_pool.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/services/udf_store/wasm/query_compartment_scope.h>
@@ -90,6 +91,7 @@ public:
         if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
             wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
         }
+        NYql::NDq::TArrowMemoryQuotaScope arrowQuotaScope(MemoryLimits.ArrowQuotaManager);
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvScanExchange::TEvSendData, Handle);

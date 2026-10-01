@@ -10,6 +10,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    dq_arrow_memory_pool_ut.cpp
     dq_compute_actor_async_input_helper_ut.cpp
     dq_compute_actor_channels_ut.cpp
     dq_compute_actor_checkpoints_ut.cpp

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/library/yql/dq/actors/compute/dq_arrow_memory_pool.h>
+
 #include <util/generic/singleton.h>
 
 #include <arrow/memory_pool.h>
@@ -38,7 +40,12 @@ private:
     std::atomic<int64_t> MaxMemory_{0};
 };
 
+// With the arrow memory quota on, the buffers are charged to the arrow quota manager bound to the thread, see
+// NYql::NDq::TDqArrowMemoryPool: the callers must check the statuses, a refused charge is Status::OutOfMemory
 static inline arrow::MemoryPool* GetArrowMemoryPool() {
+    if (NYql::NDq::IsArrowMemoryQuotaEnabled()) {
+        return NYql::NDq::GetDqArrowMemoryPool();
+    }
     return Singleton<TArrowMemoryPool>();
 }
 

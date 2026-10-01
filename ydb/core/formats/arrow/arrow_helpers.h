@@ -76,6 +76,10 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
 [[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
 [[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(
     const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+// ReallocateBatch() that returns the allocation failures of the pool, e.g. a refused memory quota, instead of
+// aborting. The intermediate serialized copy is not allocated in the pool
+[[nodiscard]] arrow::Result<std::shared_ptr<arrow::Table>> TryReallocateBatch(
+    const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool);
 [[nodiscard]] std::shared_ptr<arrow::ChunkedArray> ReallocateArray(
     const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
 [[nodiscard]] std::shared_ptr<arrow::Array> ReallocateArray(const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool = arrow::default_memory_pool());

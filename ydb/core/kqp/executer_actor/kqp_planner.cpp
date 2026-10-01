@@ -12,6 +12,7 @@
 
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
 #include <ydb/core/kqp/node_service/kqp_query_control_plane.h>
+#include <ydb/library/yql/dq/actors/compute/dq_arrow_memory_pool.h>
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 
@@ -561,6 +562,9 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
             ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
             CaFactory_->GetVerboseMemoryLimitException()));
+        if (NYql::NDq::IsArrowMemoryQuotaEnabled()) {
+            ArrowQuotaManager = CreateArrowQuotaManager(QueryQuotaManager);
+        }
     }
 
     if (ArrayBufferMinFillPercentage) {
@@ -592,6 +596,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .TxInfo = QueryQuotaManager->GetTx(),
         .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
+        .ArrowQuotaManager = ArrowQuotaManager,
         .ReportStatsSettings = Nothing(),
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),

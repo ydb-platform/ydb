@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dq_arrow_memory_pool.cpp
     dq_async_compute_actor.cpp
     dq_checkpoints_states.cpp
     dq_compute_actor_async_io_factory.cpp

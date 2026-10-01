@@ -37,9 +37,10 @@ namespace NKikimr::NGRpcService {
             rule->SetDst(dst);
         }
 
-        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false) {
+        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false, bool enableRelativePaths = true) {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
+            config.MutableFeatureFlags()->SetEnableRelativePaths(enableRelativePaths);
             if (!enablePathAliasing) {
                 return config;
             }
@@ -106,8 +107,8 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false)
-                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false, bool enableRelativePaths = true)
+                : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent, enableRelativePaths), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.StoragePoolTypes.clear();
                     settings.AddStoragePool("hdd");
                     settings.StoragePoolTypes.at("hdd").SetStoragePoolId(0);
@@ -262,7 +263,7 @@ namespace NKikimr::NGRpcService {
 
         Y_UNIT_TEST(UnmatchedInputsPreserveDisabledIngressBehavior) {
             auto observe = [](bool enablePathAliasing) {
-                TFixture fixture(false, enablePathAliasing);
+                TFixture fixture(false, enablePathAliasing, true, /*nestedAliasParent=*/false, /*enableRelativePaths=*/false);
                 auto discovery = Ydb::Discovery::V1::DiscoveryService::NewStub(fixture.Channel);
                 auto keyValue = Ydb::KeyValue::V1::KeyValueService::NewStub(fixture.Channel);
 

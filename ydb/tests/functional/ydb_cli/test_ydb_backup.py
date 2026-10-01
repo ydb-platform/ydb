@@ -1490,7 +1490,8 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
             extra_feature_flags=[
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
-                "enable_database_admin"
+                "enable_database_admin",
+                "enable_relative_paths"
             ],
             domain_login_only=False,
             enforce_user_token_requirement=True,
@@ -1568,10 +1569,10 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
         )
 
     @classmethod
-    def create_database_backup(cls, expected_files, output="backup_files_dir", additional_args=[]):
+    def create_database_backup(cls, expected_files, output="backup_files_dir", additional_args=[], database=None):
         cls.create_backup(
             [
-                "--database", cls.database,
+                "--database", cls.database if database is None else database,
                 "--user", "dbadmin1", "--no-password",
                 "admin", "database", "dump",
             ],
@@ -1629,7 +1630,7 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
     def test_database_backup(self):
         self.setup_sample_data()
 
-        self.create_database_backup(expected_files=[
+        self.create_database_backup(database=os.path.relpath(self.database, self.root_dir), expected_files=[
             # database metadata
             "database.pb",
             "permissions.pb",

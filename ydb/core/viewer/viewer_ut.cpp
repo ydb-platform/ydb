@@ -1,5 +1,6 @@
 #include "ut/ut_utils.h"
 #include <ydb/core/mon/ut_utils/ut_utils.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -260,6 +261,58 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         auto handler = std::make_unique<TStorageGroups>(nullptr, ev);
         UNIT_ASSERT(handler);
+    }
+
+    Y_UNIT_TEST_TWIN(QueryDatabaseResolvedBeforeLookup, enableRelativePaths) {
+        TPortManager tp;
+        auto settings = TServerSettings(tp.GetPort())
+                .SetNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root")
+                .SetUseSectorMap(true)
+                .InitKikimrRunConfig();
+        settings.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
+        TServer server(settings);
+        auto& runtime = *server.GetRuntime();
+
+        const std::pair<TString, TString> databases[] = {
+            {"viewer_relative_database", "Root/viewer_relative_database"},
+            {"folder/viewer_relative_database", "Root/folder/viewer_relative_database"},
+            {"Root/viewer_relative_database", "Root/Root/viewer_relative_database"},
+            {"/Root/viewer_relative_database", "Root/viewer_relative_database"},
+        };
+        for (const auto& [database, resolved] : databases) {
+            for (bool jsonBody : {false, true}) {
+                TVector<TString> navigatedPaths;
+                auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySet>([&](auto& ev) {
+                    for (const auto& entry : ev->Get()->Request->ResultSet) {
+                        if (!entry.Path.empty() && entry.Path.back() == "viewer_relative_database") {
+                            navigatedPaths.push_back(JoinPath(entry.Path));
+                        }
+                    }
+                });
+                NJson::TJsonValue body;
+                body["query"] = "SELECT 1;";
+                TString url = "/viewer/query?direct=1";
+                if (jsonBody) {
+                    body["database"] = database;
+                } else {
+                    url += "&database=" + database;
+                }
+                const TString serializedBody = NJson::WriteJson(body, false);
+                auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+                NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
+                    TStringBuilder() << "POST " << url << " HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: "
+                        << serializedBody.size() << "\r\n\r\n" << serializedBody,
+                    endpoint, {});
+                auto sender = runtime.AllocateEdgeActor();
+                runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request)));
+                TAutoPtr<IEventHandle> handle;
+                UNIT_ASSERT(runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle, TDuration::Seconds(30)));
+                UNIT_ASSERT_VALUES_EQUAL(navigatedPaths.size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(navigatedPaths.front(), enableRelativePaths ? resolved : JoinPath(SplitPath(database)));
+            }
+        }
     }
 
     Y_UNIT_TEST(TraceVerbosityLimitControl) {

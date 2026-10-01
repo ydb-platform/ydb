@@ -3,6 +3,8 @@
 
 #include <ydb/library/signals/object_counter.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 class TProcessMemoryScope;
@@ -42,14 +44,15 @@ public:
 
     template <typename TPred>
     std::shared_ptr<TAllocationInfo> TakeOne(TPred&& pred) {
-        for (auto it = Allocations.begin(); it != Allocations.end(); ++it) {
-            if (pred(*it->second)) {
-                auto result = std::move(it->second);
-                Allocations.erase(it);
-                return result;
-            }
+        auto it = FindIf(Allocations, [&pred](const auto& item) {
+            return pred(*item.second);
+        });
+        if (it == Allocations.end()) {
+            return nullptr;
         }
-        return nullptr;
+        auto result = std::move(it->second);
+        Allocations.erase(it);
+        return result;
     }
 
     TString DebugString() const;
@@ -113,12 +116,9 @@ public:
         if (groupIt == Groups.end()) {
             return false;
         }
-        for (const auto& [_, allocation] : groupIt->second.GetAllocations()) {
-            if (pred(*allocation)) {
-                return true;
-            }
-        }
-        return false;
+        return FindIfPtr(groupIt->second.GetAllocations(), [&pred](const auto& item) {
+            return pred(*item.second);
+        }) != nullptr;
     }
 
     template <typename TPred>

@@ -5384,12 +5384,40 @@ bool TSqlTranslation::StoreSecretValue(
     return true;
 }
 
+bool TSqlTranslation::StoreSecretStringLiteral(
+    const TRule_secret_setting_value& value,
+    const TString& key,
+    TMaybe<TDeferredAtom>& target) {
+    if (target) {
+        Error() << "Duplicate parameter: " << key;
+        return false;
+    }
+
+    TSqlExpression sqlExpr(*this);
+    TNodePtr exprNode = Unwrap(sqlExpr.Build(value.GetRule_expr1()));
+    if (!exprNode) {
+        return false;
+    }
+    if (!exprNode->IsLiteral() || exprNode->GetLiteralType() != "String") {
+        Ctx_.Error(Ctx_.Pos()) << "Unsupported value for parameter: " << key << ". String literal was expected";
+        return false;
+    }
+    target = TDeferredAtom(Ctx_.Pos(), exprNode->GetLiteralValue());
+    return true;
+}
+
 bool TSqlTranslation::StoreSecretSettingEntry(const TIdentifier& id, const TRule_secret_setting_value& value, TSecretParameters& secretParams) {
     const TString key = to_upper(id.Name);
     if (key == "INHERIT_PERMISSIONS") {
         return StoreSecretInheritPermissions(value, key, secretParams);
     } else if (key == "VALUE") {
         return StoreSecretValue(value, key, secretParams);
+    } else if (key == "SOURCE") {
+        return StoreSecretStringLiteral(value, key, secretParams.Source);
+    } else if (key == "SERVICE_ACCOUNT_ID") {
+        return StoreSecretStringLiteral(value, key, secretParams.ServiceAccountId);
+    } else if (key == "RESOURCE") {
+        return StoreSecretStringLiteral(value, key, secretParams.CloudId);
     }
 
     Error() << "Unknown parameter: " << key;
@@ -5404,7 +5432,7 @@ bool TSqlTranslation::ParseSecretSettings(
     // with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* RPAREN;
     auto tryStoreEntry = [&](const auto& entry) -> bool {
         return StoreSecretSettingEntry(
-            IdEx(entry.GetRule_an_id1(), *this),
+            IdEx(entry.GetRule_an_id_or_type1(), *this),
             entry.GetRule_secret_setting_value3(),
             secretParams);
     };

@@ -7,6 +7,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/interconnect_channels.h>
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/statestorage.h>
@@ -16,6 +17,8 @@
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/kqp_current_query_stats.h>
+#include <ydb/services/workload_manager/events.h>
 #include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -339,6 +342,7 @@ public:
             limits.CleanupPeriod = TDuration::MilliSeconds(config.GetCleanupPeriodMs());
             limits.IdlePingPeriod = TDuration::MilliSeconds(config.GetIdlePingPeriodMs());
             limits.IdleDestroyPeriod = TDuration::MilliSeconds(config.GetIdleDestroyPeriodMs());
+            limits.EnableChannelNotifications = config.GetEnableChannelNotifications();
         } else { // deprecated
             limits.LocalChannelInflightBytes  = TableServiceConfig.GetLocalChannelInflightBytes();
             limits.RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes();
@@ -353,6 +357,9 @@ public:
         //         channelPoolId = it->second;
         //     }
         // }
+
+        static_assert(NYql::NDq::DqIcChannelData == TInterconnectChannels::IC_DQ_DATA);
+        static_assert(NYql::NDq::DqIcChannelControl == TInterconnectChannels::IC_DQ_CONTROL);
 
         auto channelServiceActorId = TActivationContext::Register(
             NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(),
@@ -747,10 +754,6 @@ public:
             return;
         }
 
-        // TODO: not the best place for adding database.
-        auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
-        Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), addDatabaseEvent.Release());
-
         const TString& database = ev->Get()->GetDatabase();
         const TString& traceId = ev->Get()->GetTraceId();
         const auto queryType = ev->Get()->GetType();
@@ -842,7 +845,14 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
-            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId);
+            if (sessionInfo->State != TKqpSessionInfo::EXECUTING) {
+                // A concurrent request must not replace the active query's stats.
+                // The session actor still decides whether to accept the request.
+                LocalSessions->BeginQuery(sessionInfo, ev->Get()->GetQuery(), traceId, requestId);
+            }
+            if (FeatureFlags.GetEnableKqpRuntimeStats()) {
+                ev->Get()->GetUserRequestContext()->CurrentQueryStatsInterval = CurrentQueryStatsReportInterval;
+            }
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
@@ -1046,7 +1056,7 @@ public:
             }
         }
 
-        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId);
+        Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
         YDB_LOG_DEBUG("Sent request to target",
             {"requestId", requestId},
             {"targetId", targetId},
@@ -1066,7 +1076,8 @@ public:
         }
 
         const TKqpSessionInfo* info = LocalSessions->FindPtr(proxyRequest->SessionId);
-        if (info && !info->AttachedRpcId) {
+        if (info && !info->AttachedRpcId
+            && (info->State != TKqpSessionInfo::EXECUTING || info->QueryRequestId == requestId)) {
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
@@ -1076,8 +1087,8 @@ public:
         }
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
 
-        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
-            LocalSessions->DetachQueryText(info);
+        if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest && info->QueryRequestId == requestId) {
+            LocalSessions->EndQuery(info);
         }
 
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
@@ -1485,6 +1496,18 @@ public:
         }
     }
 
+    void Handle(TEvKqp::TEvCurrentQueryStats::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        auto* info = LocalSessions->FindPtr(msg.SessionId);
+        if (!info || info->WorkerId != ev->Sender || info->State != TKqpSessionInfo::EXECUTING
+            || info->QueryRequestId != msg.RequestId || info->CurrentQueryStatsSequenceNo >= msg.SequenceNo) {
+            return;
+        }
+        auto* mutableInfo = const_cast<TKqpSessionInfo*>(info);
+        mutableInfo->CurrentQueryStats = msg.Stats;
+        mutableInfo->CurrentQueryStatsSequenceNo = msg.SequenceNo;
+    }
+
     void SendWhiteboardStats() {
         TActorId whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
         Send(whiteboardId, NNodeWhiteboard::TEvWhiteboard::CreateTotalSessionsUpdateRequest(LocalSessions->size()));
@@ -1505,6 +1528,7 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
+            hFunc(TEvKqp::TEvCurrentQueryStats, Handle);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
@@ -1862,8 +1886,6 @@ private:
             return false;
         }
 
-        // TODO: add database to scheduler
-
         switch (ScriptExecutionsCreationStatus) {
             case EScriptExecutionsCreationStatus::NotStarted:
                 StartScriptExecutionsTablesCreation();
@@ -2058,9 +2080,9 @@ private:
     void Handle(TEvKqp::TEvUpdateDatabaseInfo::TPtr& ev) {
         if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
             ResourcePoolsCache.UpdateDatabaseInfo(ev->Get()->DatabaseId, ev->Get()->Serverless);
+            Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), new NScheduler::TEvAddDatabase(ev->Get()->DatabaseId));
         }
         DatabasesCache.UpdateDatabaseInfo(ev, ActorContext());
-        // TODO: update info for compute scheduler too
     }
 
     void Handle(TEvKqp::TEvDelayedRequestError::TPtr& ev) {

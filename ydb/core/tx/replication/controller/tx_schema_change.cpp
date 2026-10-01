@@ -1,6 +1,7 @@
 #include "controller_impl.h"
 #include "dst_schema_changer.h"
 
+#include <ydb/core/tx/replication/common/family_settings.h>
 #include <ydb/core/tx/replication/controller/protos/schema_barrier.pb.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
@@ -18,9 +19,34 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
         return false;
     }
 
+    THashSet<TString> families;
+    if (schema.FamiliesSize()) {
+        for (const auto& family : schema.GetFamilies()) {
+            if (!family.GetName() || !families.insert(family.GetName()).second
+                || !IsValidCompression(family.GetCompression())
+                || !IsValidCacheMode(family.GetCacheMode())
+                || (family.HasMedia() && family.GetMedia().empty()))
+            {
+                return false;
+            }
+        }
+
+        if (!families.contains("default")) {
+            return false;
+        }
+    }
+
     THashSet<TString> columns;
     for (const auto& column : schema.GetColumns()) {
         if (!column.GetName() || !column.GetType() || !columns.insert(column.GetName()).second) {
+            return false;
+        }
+
+        if (schema.FamiliesSize() && !families.contains(column.GetFamily())) {
+            return false;
+        }
+
+        if (!schema.FamiliesSize() && column.HasFamily()) {
             return false;
         }
     }

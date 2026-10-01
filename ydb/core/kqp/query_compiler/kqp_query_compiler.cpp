@@ -1317,8 +1317,10 @@ private:
             if (tableMeta->Kind == NYql::EKikimrTableKind::External) {
                 FillExternalSource(*tableMeta, *txProto.AddTables());
 
-                if (const auto sourceMeta = tableMeta->ExternalSource.UnderlyingExternalSourceMetadata) {
-                    FillExternalSource(*sourceMeta, *txProto.AddTables());
+                if (tableMeta->IsExternalTable()) {
+                    FillExternalSource(
+                        *tableMeta->ExternalTable().GetUnderlyingDataSourceMetadata(),
+                        *txProto.AddTables());
                 }
             }
         }

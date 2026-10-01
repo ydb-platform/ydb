@@ -19,6 +19,7 @@ enum class InstrumentType : std::uint8_t
 {
   none, /* Represents a null entry */
   counter,
+  gauge,
   histogram,
   observable_counter,
   observable_gauge,

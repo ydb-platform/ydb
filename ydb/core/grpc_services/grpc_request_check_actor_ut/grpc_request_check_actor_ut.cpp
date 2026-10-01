@@ -189,8 +189,8 @@ Y_UNIT_TEST(CanSetAllPermissions) {
     });
     const TString userToken = "Bearer " + setup.UserSid;
     const TString requestId = "request-id-12345";
-    // Use TEvRequestAuthAndCheck to check permissions for gizmo resource
-    std::unique_ptr<NGRpcService::TEvRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
+    // Use TEvHttpRequestAuthAndCheck to check permissions for gizmo resource
+    std::unique_ptr<NGRpcService::TEvHttpRequestAuthAndCheck> ev = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
         setup.DbPath,
         TMaybe<TString>(userToken),
         setup.FakeMonActor,
@@ -454,7 +454,7 @@ THttpAuthCheckResponse RunHttpAuthCheck(
     runtime->GetAppData().FeatureFlags.SetCheckDatabaseAccessPermission(false);
 
     const TString userToken = "Bearer " + setup.UserSid;
-    auto ev = std::make_unique<NGRpcService::TEvRequestAuthAndCheck>(
+    auto ev = std::make_unique<NGRpcService::TEvHttpRequestAuthAndCheck>(
         requestDatabase,
         TMaybe<TString>(userToken),
         setup.FakeMonActor,
@@ -468,11 +468,11 @@ THttpAuthCheckResponse RunHttpAuthCheck(
         ev.release(),
         IEventHandle::FlagTrackDelivery);
 
-    TAutoPtr<TEventHandle<NGRpcService::TEvRequestAuthAndCheck>> request =
-        reinterpret_cast<TEventHandle<NGRpcService::TEvRequestAuthAndCheck>*>(ieh.release());
+    TAutoPtr<TEventHandle<NGRpcService::TEvHttpRequestAuthAndCheck>> request =
+        reinterpret_cast<TEventHandle<NGRpcService::TEvHttpRequestAuthAndCheck>*>(ieh.release());
 
     TActorId fakeGrpcRequestProxy = runtime->AllocateEdgeActor();
-    runtime->Register(CreateGrpcRequestCheckActor<NGRpcService::TEvRequestAuthAndCheck>(
+    runtime->Register(CreateGrpcRequestCheckActor<NGRpcService::TEvHttpRequestAuthAndCheck>(
         fakeGrpcRequestProxy,
         describeSchemeResult,
         std::move(securityObject),

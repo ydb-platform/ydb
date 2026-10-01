@@ -214,6 +214,11 @@ public:
     {}
 
     void Bootstrap() override {
+        if (Event->Get()->Request.GetMethod() == HTTP_METHOD_GET
+            && (PostData.Has("AddAccess") || PostData.Has("RemoveAccess") || PostData.Has("ChangeOwnership")))
+        {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "ACL changes are not allowed in GET requests; use POST"));
+        }
         if (NeedToRedirect()) {
             return;
         }

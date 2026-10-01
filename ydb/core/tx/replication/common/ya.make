@@ -7,6 +7,8 @@ PEERDIR(
 )
 
 SRCS(
+    family_settings.cpp
+    family_settings.h
     sensitive_event_pb.h
     worker_id.cpp
 )

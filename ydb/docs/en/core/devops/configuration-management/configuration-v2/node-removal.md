@@ -23,10 +23,10 @@ Before starting the procedure, use the [Embedded UI](../../../reference/ydb-ui/y
 
 The remaining nodes must have enough free [PDisk](../../../concepts/glossary.md#pdisk) space and slots for all VDisks from the node being removed. VDisk placement across [failure domains](../../../concepts/glossary.md#fail-domain) and [failure realms](../../../concepts/glossary.md#fail-realm) must comply with the configured [erasure coding scheme](../../../concepts/glossary.md#erasure-coding) to preserve group fault tolerance after node removal. For details on calculating the required capacity margin, see [{#T}](../../concepts/capacity-planning.md#hardware-estimation).
 
-[SelfHeal](../../../maintenance/manual/selfheal.md) is enabled for dynamic groups by default. Before removing the node, make sure it is also enabled for any resources hosted on this node:
+[SelfHeal](../../concepts/selfheal-storage.md) is enabled for dynamic groups by default. Before removing the node, make sure it is also enabled for any resources hosted on this node:
 
 * If the node contains a static group VDisk, [enable static group SelfHeal](static-group-self-heal.md#on-off). Alternatively, you can move the static group VDisk off the node manually, see [{#T}](static-group-move.md).
-* If the node contains State Storage, Board, or SchemeBoard replicas, enable [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md#on-off). Alternatively, you can move these replicas off the node manually, see [{#T}](state-storage-reconfiguration.md).
+* If the node contains State Storage, Board, or SchemeBoard replicas, enable [Metadata Distribution SelfHeal](../../concepts/selfheal-metadata-distribution.md#on-off). Alternatively, you can move these replicas off the node manually, see [{#T}](state-storage-reconfiguration.md).
 
 To remove a static node:
 
@@ -52,7 +52,7 @@ To remove a static node:
 
     The command runs in the foreground. Wait for it to complete successfully, then verify that data relocation is complete in the next step. For details, see [Move VDisks from a broken/missing block store volume](../../../maintenance/manual/moving_vdisks.md#removal_from_a_broken_device).
 
-1. In the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page), check that no VDisks remain on the node and that the affected storage groups are healthy (all VDisks are in the `Ok` state). If State Storage, Board, or SchemeBoard replicas were moved from the node, [check that the relocation is complete](../../../maintenance/manual/selfheal_statestorage.md#verify-result).
+1. In the [Embedded UI](../../../reference/ydb-ui/ydb-monitoring.md#node_storage_page), check that no VDisks remain on the node and that the affected storage groups are healthy (all VDisks are in the `Ok` state). If State Storage, Board, or SchemeBoard replicas were moved from the node, [check that the relocation is complete](../../concepts/selfheal-metadata-distribution.md#verify-result).
 1. Fetch the current cluster configuration using the [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md) command:
 
     ```bash

@@ -433,5 +433,5 @@ message TFeatureFlags {
     optional bool EnableDatabaseAccessCheckForHttpMonitoring = 352 [default = false];
     optional bool EnableLocalDBBtreeIndexV2 = 353 [default = false];
     // Selects the native external YDB provider when compiling new query plans.
-    optional bool EnableNativeYdbProvider = 353 [default = false];
+    optional bool EnableNativeYdbProvider = 354 [default = false];
 }

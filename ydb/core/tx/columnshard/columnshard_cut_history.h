@@ -14,12 +14,14 @@
 
 namespace NKikimr::NColumnShard {
 
+inline constexpr ui64 CutHistoryRequestLimit = 64;
+
 struct TCutHistoryInterval {
     ui32 Channel = 0;
     ui32 From = 0;
     ui32 To = 0;
     ui32 Group = 0;
-    ui64 BlobReferences = 0;
+    bool HasBlobs = false;
     bool Attempted = false;
 };
 

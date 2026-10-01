@@ -16,6 +16,49 @@
 namespace NKikimr::NColumnShard {
 namespace {
 
+void ScheduleCutHistoryContinuation(const NKikimrConfig::TColumnShardConfig& shardConfig, const TActorContext& ctx) {
+    const auto& config = shardConfig.GetCutHistory();
+    const ui64 jitter = config.GetContinuationJitterMs();
+    const ui64 delay = Max<ui32>(1, config.GetContinuationDelayMs()) + (jitter ? RandomNumber<ui64>(jitter + 1) : 0);
+    ctx.Schedule(TDuration::MilliSeconds(delay), new TEvPrivate::TEvContinueCutHistory());
+}
+
+TCutHistoryInterval* FindCutHistoryInterval(std::vector<TCutHistoryInterval>& intervals, const TLogoBlobID& id) {
+    const auto next =
+        UpperBoundBy(intervals.begin(), intervals.end(), std::pair<ui32, ui32>{ id.Channel(), id.Generation() }, [](const auto& interval) {
+            return std::make_pair(interval.Channel, interval.From);
+        });
+    if (next != intervals.begin()) {
+        auto& interval = *std::prev(next);
+        if (id.Channel() == interval.Channel && id.Generation() < interval.To) {
+            return &interval;
+        }
+    }
+    return nullptr;
+}
+
+bool CanCutHistoryInterval(
+    const TColumnShard& owner, const TCutHistoryInterval& interval, const NOlap::TPendingGCBlobGenerations& pendingGenerations) {
+    if (interval.HasBlobs || interval.Channel >= owner.Info()->Channels.size() || !owner.LauncherID()) {
+        return false;
+    }
+    const auto& history = owner.Info()->Channels[interval.Channel].History;
+    const auto entry = FindIf(history, [&](const auto& item) {
+        return item.FromGeneration == interval.From;
+    });
+    if (entry == history.end() || entry->GroupID != interval.Group) {
+        return false;
+    }
+    const auto next = std::next(entry);
+    if (next == history.end() || next->FromGeneration != interval.To) {
+        return false;
+    }
+    const auto storage =
+        std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(owner.GetStoragesManager()->GetDefaultOperator());
+    AFL_VERIFY(storage);
+    return storage->CanCutHistory(pendingGenerations, interval.Channel, interval.From, interval.To);
+}
+
 class TCutHistoryPreparationActor: public NActors::TActorBootstrapped<TCutHistoryPreparationActor> {
     const TActorId Owner;
     std::vector<std::pair<TInternalPathId, ui64>> Portions;
@@ -50,7 +93,7 @@ public:
 };
 }   // namespace
 
-class TColumnShard::TTxPrepareCutHistory: public TTransactionBase<TColumnShard> {
+class TTxPrepareCutHistory: public TTransactionBase<TColumnShard> {
     struct TPortions: Schema::IndexPortions {
         using Precharge = NIceDb::Schema::NoAutoPrecharge;
     };
@@ -148,12 +191,12 @@ public:
         scan.PreparationPending = Finished;
         ctx.Send(PreparationActor, new TEvPrivate::TEvCutHistoryPortionsBatch(std::move(Portions), Finished));
         if (!Finished) {
-            Self->ScheduleCutHistoryContinuation(ctx);
+            ScheduleCutHistoryContinuation(*Self->ColumnShardConfig, ctx);
         }
     }
 };
 
-class TColumnShard::TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
+class TTxSaveCutHistoryRequests: public TTransactionBase<TColumnShard> {
     const std::vector<NKikimrTxColumnShard::TCutHistoryRequest> ReadyToSendRequests;
 
 public:
@@ -202,7 +245,7 @@ public:
                 return interval.Channel == request.GetChannel() && interval.From == request.GetFromGeneration() &&
                        interval.To == request.GetToGeneration() && interval.Group == request.GetGroupID();
             });
-            if (it == scan.Intervals.end() || !Self->CanCutHistoryInterval(*it, pendingGenerations)) {
+            if (it == scan.Intervals.end() || !CanCutHistoryInterval(*Self, *it, pendingGenerations)) {
                 continue;
             }
             auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
@@ -216,7 +259,7 @@ public:
     }
 };
 
-class TColumnShard::TCutHistoryResultProcessor: public NOlap::IMetadataAccessorResultProcessor {
+class TCutHistoryResultProcessor: public NOlap::IMetadataAccessorResultProcessor {
     TColumnShard* const Owner;
 
     void DoApplyResult(
@@ -230,13 +273,6 @@ public:
     {
     }
 };
-
-void TColumnShard::ScheduleCutHistoryContinuation(const TActorContext& ctx) {
-    const auto& config = ColumnShardConfig->GetCutHistory();
-    const ui64 jitter = config.GetContinuationJitterMs();
-    const ui64 delay = Max<ui32>(1, config.GetContinuationDelayMs()) + (jitter ? RandomNumber<ui64>(jitter + 1) : 0);
-    ctx.Schedule(TDuration::MilliSeconds(delay), new TEvPrivate::TEvContinueCutHistory());
-}
 
 void TColumnShard::InitCutHistoryScan() {
     if (!AppData()->FeatureFlags.GetEnableCutHistory() || !AppData()->FeatureFlags.GetEnableColumnshardCutHistory()) {
@@ -289,7 +325,7 @@ void TColumnShard::StartCutHistoryScan(const TActorContext& ctx) {
         scan.PreparationActor = ctx.Register(new TCutHistoryPreparationActor(SelfId()), TMailboxType::HTSwap, AppDataVerified().BatchPoolId);
         ActorsToStop.push_back(scan.PreparationActor);
     }
-    ScheduleCutHistoryContinuation(ctx);
+    ScheduleCutHistoryContinuation(*ColumnShardConfig, ctx);
 }
 
 void TColumnShard::AbortCutHistoryScan() {
@@ -311,7 +347,7 @@ void TColumnShard::Handle(TEvPrivate::TEvCutHistoryPortionsReady::TPtr& ev, cons
     CutHistoryScan->PreparationActor = {};
     CutHistoryScan->PreparationPending = false;
     CutHistoryScan->Portions = std::move(ev->Get()->Portions);
-    ScheduleCutHistoryContinuation(ctx);
+    ScheduleCutHistoryContinuation(*ColumnShardConfig, ctx);
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvContinueCutHistory::TPtr&, const TActorContext& ctx) {
@@ -353,7 +389,7 @@ void TColumnShard::Handle(TEvPrivate::TEvContinueCutHistory::TPtr&, const TActor
         }
     }
     if (request->IsEmpty()) {
-        ScheduleCutHistoryContinuation(ctx);
+        ScheduleCutHistoryContinuation(*ColumnShardConfig, ctx);
         return;
     }
     scan.Pending = request->GetSize();
@@ -377,46 +413,12 @@ void TColumnShard::FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& resu
                 continue;
             }
             if (auto* interval = FindCutHistoryInterval(scan.Intervals, id); interval && blob.GetDsGroup() == interval->Group) {
-                ++interval->BlobReferences;
+                interval->HasBlobs = true;
             }
         }
     }
     scan.Pending = 0;
-    ScheduleCutHistoryContinuation(TActivationContext::AsActorContext());
-}
-
-TCutHistoryInterval* TColumnShard::FindCutHistoryInterval(std::vector<TCutHistoryInterval>& intervals, const TLogoBlobID& id) {
-    const auto next =
-        UpperBoundBy(intervals.begin(), intervals.end(), std::pair<ui32, ui32>{ id.Channel(), id.Generation() }, [](const auto& interval) {
-            return std::make_pair(interval.Channel, interval.From);
-        });
-    if (next != intervals.begin()) {
-        auto& interval = *std::prev(next);
-        if (id.Channel() == interval.Channel && id.Generation() < interval.To) {
-            return &interval;
-        }
-    }
-    return nullptr;
-}
-
-bool TColumnShard::CanCutHistoryInterval(const TCutHistoryInterval& interval, const NOlap::TPendingGCBlobGenerations& pendingGenerations) const {
-    if (interval.BlobReferences || interval.Channel >= Info()->Channels.size() || !LauncherID()) {
-        return false;
-    }
-    const auto& history = Info()->Channels[interval.Channel].History;
-    const auto entry = FindIf(history, [&](const auto& item) {
-        return item.FromGeneration == interval.From;
-    });
-    if (entry == history.end() || entry->GroupID != interval.Group) {
-        return false;
-    }
-    const auto next = std::next(entry);
-    if (next == history.end() || next->FromGeneration != interval.To) {
-        return false;
-    }
-    const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
-    AFL_VERIFY(storage);
-    return storage->CanCutHistory(pendingGenerations, interval.Channel, interval.From, interval.To);
+    ScheduleCutHistoryContinuation(*ColumnShardConfig, TActivationContext::AsActorContext());
 }
 
 void TColumnShard::TryCutHistory(const TActorContext& ctx) {
@@ -431,7 +433,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     AFL_VERIFY(storage);
     NOlap::TPendingGCBlobGenerations pendingGenerations;
     if (!storage->HasGCInFlight() && AnyOf(CutHistoryScan->Intervals, [](const auto& interval) {
-            return !interval.Attempted && !interval.BlobReferences;
+            return !interval.Attempted && !interval.HasBlobs;
         })) {
         pendingGenerations = storage->GetPendingGCBlobGenerations();
     }
@@ -441,7 +443,7 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
             continue;
         }
         interval.Attempted = true;
-        if (!CanCutHistoryInterval(interval, pendingGenerations)) {
+        if (!CanCutHistoryInterval(*this, interval, pendingGenerations)) {
             continue;
         }
         auto& request = requests.emplace_back();

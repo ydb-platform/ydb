@@ -216,6 +216,9 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     friend class TTxReadBlobRanges;
     friend class TTxApplyNormalizer;
     friend class TTxMonitoring;
+    friend class TTxPrepareCutHistory;
+    friend class TTxSaveCutHistoryRequests;
+    friend class TCutHistoryResultProcessor;
     friend class TTxRemoveSharedBlobs;
     friend class TTxFinishAsyncTransaction;
     friend class TWaitOnProposeTxSubscriberBase;
@@ -600,14 +603,6 @@ private:
         const std::shared_ptr<NPrioritiesQueue::TAllocationGuard>& guard);
 
     std::optional<TCutHistoryScan> CutHistoryScan;
-    static constexpr ui64 CutHistoryRequestLimit = 64;
-
-    class TTxPrepareCutHistory;
-    class TTxSaveCutHistoryRequests;
-    class TCutHistoryResultProcessor;
-    void ScheduleCutHistoryContinuation(const TActorContext& ctx);
-    static TCutHistoryInterval* FindCutHistoryInterval(std::vector<TCutHistoryInterval>& intervals, const TLogoBlobID& id);
-    bool CanCutHistoryInterval(const TCutHistoryInterval& interval, const NOlap::TPendingGCBlobGenerations& pendingGenerations) const;
     void InitCutHistoryScan();
     void StartCutHistoryScan(const TActorContext& ctx);
     void AbortCutHistoryScan();

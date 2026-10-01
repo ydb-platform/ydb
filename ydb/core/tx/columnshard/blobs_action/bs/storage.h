@@ -39,7 +39,7 @@ public:
     }
 
     bool CanCutHistory(const TPendingGCBlobGenerations& generations, const ui32 channel, const ui32 from, const ui32 to) const {
-        // Cleanup during the scan can move uncounted blobs from pending lists into in-flight GC.
+        // BuildGCTask moves blobs out of BlobsToKeep/BlobsToDelete before GC completes, so empty queues alone do not permit cutting history.
         return !GetStopped() && !HasGCInFlight() && !HasPendingGCBlobsInRange(generations, channel, from, to) &&
                !GetSharedBlobs()->HasBlobsInRange(channel, from, to);
     }

@@ -845,8 +845,7 @@ TString TTxMonitoring::RenderCutHistoryPage() {
     html << "<a href=\"app?TabletID=" << TEscapeHtml(cgi.Get("TabletID")) << "\">ColumnShard</a>";
     HTML(html) {
         H3_CLASS("") {
-            html << "Persisted CutHistory request intents (latest " << TColumnShard::CutHistoryRequestLimit
-                 << "; Hive confirmation is not tracked)";
+            html << "Persisted CutHistory request intents (latest " << CutHistoryRequestLimit << "; Hive confirmation is not tracked)";
         }
         PRE() {
             html << TEscapeHtml(CutHistoryReport);

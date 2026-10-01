@@ -873,8 +873,6 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
                     case EDataFormat::JsonBase64:
                         return UpsertJson(input, dbPath, fileSizeHint, progressCallback, confirmProgressCallback);
                     case EDataFormat::Parquet:
-                        // For Parquet, progress is row-based internally, so we pass the same
-                        // callback for both buffered and confirmed (they stay in sync)
                         return UpsertParquet(filePath, dbPath, progressCallback, confirmProgressCallback);
                     default:
                         break;
@@ -1625,6 +1623,12 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
     }
     std::shared_ptr<arrow::io::ReadableFile> readableFile = *fileResult;
 
+    auto fileSizeResult = readableFile->GetSize();
+    if (!fileSizeResult.ok()) {
+        return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Unable to get parquet file size: " << fileSizeResult.status().ToString());
+    }
+    const ui64 fileSize = *fileSizeResult;
+
     std::unique_ptr<parquet::arrow::FileReader> fileReader;
 
     arrow::Status st;
@@ -1649,21 +1653,31 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
         return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Error while getting RecordBatchReader: " << st.ToString());
     }
 
-    std::atomic<ui64> uploadedRows = 0;
-    std::atomic<ui64> confirmedRows = 0;
-    auto uploadedRowsCallback = [&](ui64 rows) {
-        ui64 uploadedRowsValue = uploadedRows.fetch_add(rows);
-
-        if (progressCallback) {
-            progressCallback(uploadedRowsValue + rows, numRows);
+    // The progress bar uses source file bytes, including Parquet compression.
+    // Estimate the processed bytes by the fraction of rows, rounding cumulative
+    // progress rather than individual batches so that no bytes are lost.
+    auto rowsToBytes = [&](ui64 rows) -> ui64 {
+        if (numRows == 0 || rows == static_cast<ui64>(numRows)) {
+            return fileSize;
         }
+        return static_cast<ui64>(static_cast<long double>(fileSize) * rows / numRows);
     };
+
+    ui64 readRows = 0;
+    ui64 confirmedRows = 0;
+    ui64 confirmedBytes = 0;
+    std::mutex confirmedProgressLock;
     auto confirmedRowsCallback = [&](ui64 rows) {
-        ui64 confirmedRowsValue = confirmedRows.fetch_add(rows);
+        // Batches can finish concurrently and out of order. Serialize the
+        // cumulative counter and report only the newly confirmed bytes.
+        std::lock_guard<std::mutex> lock(confirmedProgressLock);
+        confirmedRows += rows;
+        const ui64 currentBytes = rowsToBytes(confirmedRows);
 
         if (confirmProgressCallback) {
-            confirmProgressCallback(confirmedRowsValue + rows);
+            confirmProgressCallback(currentBytes - confirmedBytes);
         }
+        confirmedBytes = currentBytes;
     };
 
     std::vector<TAsyncStatus> inFlightRequests;
@@ -1679,6 +1693,13 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
         // The read function will return null at the end of data stream.
         if (!batch) {
             break;
+        }
+
+        // Only the reader thread updates buffered progress. In particular, the
+        // callback's per-file lastReportedBytes is not accessed by batch workers.
+        readRows += batch->num_rows();
+        if (progressCallback) {
+            progressCallback(rowsToBytes(readRows), fileSize);
         }
 
         auto upsertParquetBatch = [&, batch = std::move(batch)]() {
@@ -1715,7 +1736,6 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
                             return status;
 
                         auto numRowsUploaded = rowsBatch->num_rows();
-                        uploadedRowsCallback(numRowsUploaded);
                         confirmedRowsCallback(numRowsUploaded);
                     } else {
                         // Split current slice.
@@ -1737,7 +1757,20 @@ TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& 
         }
     }
 
-    return WaitForQueue(0, inFlightRequests);
+    auto status = WaitForQueue(0, inFlightRequests);
+    if (status.IsSuccess()) {
+        // An empty Parquet file still contains metadata bytes.
+        if (numRows == 0) {
+            if (progressCallback) {
+                progressCallback(fileSize, fileSize);
+            }
+            if (confirmProgressCallback) {
+                confirmProgressCallback(fileSize);
+            }
+        }
+        TotalBytesRead += fileSize;
+    }
+    return status;
 #endif
 }
 

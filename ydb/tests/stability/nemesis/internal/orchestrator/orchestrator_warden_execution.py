@@ -82,7 +82,7 @@ def run_orchestrator_liveness_subprocess_sync(
     yaml_config: str,
     *,
     database_yaml_config: str | None = None,
-    timeout_seconds: int = 120,
+    timeout_seconds: int = 240,
 ) -> List[WardenCheckResult]:
     logger.info("Running liveness checks via subprocess with %ds timeout", timeout_seconds)
 

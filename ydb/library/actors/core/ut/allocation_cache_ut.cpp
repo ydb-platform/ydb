@@ -107,25 +107,21 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         TActorSystem system(setup);
         system.Start();
         auto* core = system.GetSubSystem<TAllocationCacheSubSystem>();
-        auto first = core->CreateWorker();
-        auto second = core->CreateWorker();
-        first->Get<TSmallTag>()->Release(first->Get<TSmallTag>()->Allocate(1), 1);
-        second->Get<TSmallTag>()->Release(second->Get<TSmallTag>()->Allocate(1), 1);
+        TWorkerResult result;
+        system.Register(new TFamilyActor(&result));
+        UNIT_ASSERT(result.Ready.WaitT(TDuration::Seconds(10)));
         std::vector<TAllocationCacheFamilyStats> stats;
         core->GetFamilyStats(&stats);
         UNIT_ASSERT_VALUES_EQUAL(stats.size(), 3);
         for (const auto& family : stats) {
-            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedFrames, family.Name == "Small" ? 2 : 0);
-            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedBytes, family.Name == "Small" ? 128 : 0);
-        }
-        first.reset();
-        second.reset();
-        core->GetFamilyStats(&stats);
-        for (const auto& family : stats) {
-            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedBytes, 0);
+            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedFrames, family.Name == "Small" ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedBytes, family.Name == "Small" ? 64 : 0);
         }
         system.Stop();
         system.Cleanup();
+        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 64);
+        core->GetFamilyStats(&stats);
+        UNIT_ASSERT_VALUES_EQUAL(stats.size(), 3);
     }
 
     Y_UNIT_TEST(RealWorkersWithoutMetricsAndRepeatedWorkerIds) {
@@ -191,8 +187,8 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         TSmallFamily::Free(small, 65);
         TSmallFamily::Free(overflow, 1);
         TOtherFamily::Free(other, 257);
-        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 128);
-        UNIT_ASSERT_VALUES_EQUAL(core->GetCachedStats(TOtherFamily::FamilyId()).CachedBytes, 512);
+        UNIT_ASSERT_VALUES_EQUAL(worker->Get<TSmallTag>()->GetCachedStats().CachedBytes, 128);
+        UNIT_ASSERT_VALUES_EQUAL(worker->Get<TOtherTag>()->GetCachedStats().CachedBytes, 512);
         UNIT_ASSERT_VALUES_EQUAL(TSmallFamily::Allocate(65), small);
         TSmallFamily::Free(small, 65);
         UNIT_ASSERT_VALUES_EQUAL(system.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TAsyncFrameCache::FamilyId()).CachedBytes, 0);
@@ -269,7 +265,7 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
             TSmallFamily::Free(block, 65);
         });
         freeing.join();
-        UNIT_ASSERT_VALUES_EQUAL(second.GetSubSystem<TAllocationCacheSubSystem>()->GetCachedStats(TSmallFamily::FamilyId()).CachedBytes, 128);
+        UNIT_ASSERT_VALUES_EQUAL(destination->Get<TSmallTag>()->GetCachedStats().CachedBytes, 128);
     }
 
     Y_UNIT_TEST(LateFreeAfterWorkerAndSubsystemDestruction) {
@@ -296,7 +292,7 @@ Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
         TSmallFamily::Free(block, 65);
     }
 
-    Y_UNIT_TEST(StatisticsDuringWorkerMutationAndDestruction) {
+    Y_UNIT_TEST(StandaloneWorkersDoNotMutatePublishedStatistics) {
         auto setup = MakeSetup();
         TActorSystem system(setup);
         system.Start();

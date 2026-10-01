@@ -6,23 +6,17 @@
 #include <util/generic/string.h>
 
 #include <functional>
-#include <mutex>
+#include <unordered_map>
 
 namespace NActors {
 
-// Families register each tag's size classes, budget and cache factory during
-// dependency resolution. OnBeforeStart freezes this configuration. Executor
-// thread hooks create one cache per family and publish their pointers in the
-// thread context;
-// Allocate/Free select a concrete cache directly, without virtual calls or locks.
-// Workers own caches with embedded atomic counters. The subsystem stores borrowed
-// counter views. Workers unregister these views before destroying their caches;
-// the subsystem outlives workers.
-// Statistics readers hold WorkersMutex while sampling records, so concurrent
-// worker removal cannot invalidate them. Values are approximate during activity.
-// Family budgets limit retained block capacity, excluding metadata. Missing
-// caches use heap allocation with the same size rounding, allowing same-tag
-// blocks to be freed on another worker or actor system.
+// Families register cache factories during dependency resolution. Configuration
+// is frozen before pool preparation. Preparation creates all executor caches;
+// thread start/stop only bind/unbind them. The worker registry stays immutable
+// while threads run and after they stop, until subsystem destruction.
+// Statistics sample embedded atomic counters without locks. Readers must finish
+// before subsystem destruction; snapshots are approximate during activity.
+// Allocate/Free use concrete caches directly, without virtual calls or locks.
 
 // Different template specializations share an ownership container through void*.
 // The factory supplies the matching typed deleter; hot-path calls use CachePointers.
@@ -41,18 +35,18 @@ struct TAllocationCacheFamilyStats {
 
 class TAllocationCacheSubSystem;
 struct TAllocationCacheWorkerCounters {
-    // Read-only views; registration protects their lifetime during sampling.
+    // Read-only views of embedded counters, owned together with the caches.
     std::vector<TAllocationCacheCounters> Families;
 };
 
 template<class TTag> class TAllocationCacheFamily;
 
 // One instance per physical executor, independent of pool and worker ids.
-// Owned by the cache subsystem for the executor thread lifetime.
+// Executor caches remain owned by the subsystem until its destruction.
 class TAllocationCacheWorker {
 public:
     TAllocationCacheWorker() = default;
-    ~TAllocationCacheWorker();
+    ~TAllocationCacheWorker() = default;
     static TAllocationCacheWorker* GetCurrent() noexcept;
     static void SetCurrent(TAllocationCacheWorker* worker) noexcept;
 
@@ -75,15 +69,14 @@ public:
 
     void GetCachedStats(size_t family, TAllocationCacheProcessStats* stats) const noexcept {
         *stats = {};
-        if (Counters && family < Counters->Families.size()) {
-            *stats = Counters->Families[family].GetCachedStats();
+        if (family < Counters.Families.size()) {
+            *stats = Counters.Families[family].GetCachedStats();
         }
     }
 
 private:
     friend class TAllocationCacheSubSystem;
-    TAllocationCacheSubSystem* Owner = nullptr;
-    TAllocationCacheWorkerCounters* Counters = nullptr;
+    TAllocationCacheWorkerCounters Counters;
     std::vector<TLocalAllocationCache> Caches;
     std::vector<void*> CachePointers;
 };
@@ -91,19 +84,18 @@ private:
 class TAllocationCacheSubSystem final : public ISubSystem {
 public:
     using TFactory = std::function<TLocalAllocationCache(TAllocationCacheCounters*)>;
-    ~TAllocationCacheSubSystem() override;
+    void OnExecutorThreadPrepare(TThreadContext* context) override;
     void RegisterFamily(size_t family, size_t budget, const TString& name, TFactory factory);
     void OnBeforeStart(TActorSystem&) override;
     void OnExecutorThreadStart(TThreadContext* context) override;
     void OnExecutorThreadStop(TThreadContext* context) override;
+    // Standalone workers are not added to actor-system statistics.
     std::unique_ptr<TAllocationCacheWorker> CreateWorker();
     TAllocationCacheProcessStats GetCachedStats(size_t family) const;
     void GetFamilyStats(std::vector<TAllocationCacheFamilyStats>* stats) const;
     size_t GetWorkerBudget() const noexcept { return WorkerBudget; }
 
 private:
-    friend class TAllocationCacheWorker;
-    void UnregisterWorker(TAllocationCacheWorkerCounters* counters);
     struct TFamily {
         TString Name;
         TFactory Factory;
@@ -111,11 +103,8 @@ private:
     std::vector<TFamily> Families;
     size_t WorkerBudget = 0;
     bool Frozen = false;
-    // Protects worker lists and counter-record lifetime during statistics reads.
-    // Never acquired by Allocate/Free.
-    mutable std::mutex WorkersMutex;
-    std::vector<std::unique_ptr<TAllocationCacheWorkerCounters>> Workers;
-    std::vector<std::unique_ptr<TAllocationCacheWorker>> ExecutorWorkers;
+    // Built before threads start; immutable until subsystem destruction.
+    std::unordered_map<TThreadContext*, std::unique_ptr<TAllocationCacheWorker>> Workers;
 };
 
 // Register this family as a subsystem. Its dependency callback registers the

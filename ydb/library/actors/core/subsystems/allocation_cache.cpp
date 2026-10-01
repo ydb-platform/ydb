@@ -26,17 +26,6 @@ void TAllocationCacheWorker::SetCurrent(TAllocationCacheWorker* worker) noexcept
     }
 }
 
-TAllocationCacheSubSystem::~TAllocationCacheSubSystem() {
-    Y_ABORT_UNLESS(Workers.empty(), "allocation-cache workers must stop before their subsystem");
-}
-
-TAllocationCacheWorker::~TAllocationCacheWorker() {
-    if (Owner) {
-        Owner->UnregisterWorker(Counters);
-    }
-    Caches.clear();
-}
-
 void TAllocationCacheSubSystem::RegisterFamily(size_t family, size_t budget, const TString& name, TFactory factory) {
     Y_ABORT_UNLESS(!Frozen, "allocation cache families are frozen");
     if (Families.size() <= family) {
@@ -56,64 +45,42 @@ void TAllocationCacheSubSystem::OnBeforeStart(TActorSystem&) {
     Frozen = true;
 }
 
-void TAllocationCacheSubSystem::OnExecutorThreadStart(TThreadContext*) {
+void TAllocationCacheSubSystem::OnExecutorThreadPrepare(TThreadContext* context) {
+    Y_ABORT_UNLESS(Workers.emplace(context, CreateWorker()).second);
+}
+
+void TAllocationCacheSubSystem::OnExecutorThreadStart(TThreadContext* context) {
     Y_ABORT_UNLESS(!TAllocationCacheWorker::GetCurrent());
-    auto worker = CreateWorker();
-    auto* current = worker.get();
-    {
-        std::lock_guard guard(WorkersMutex);
-        ExecutorWorkers.push_back(std::move(worker));
-    }
-    TAllocationCacheWorker::SetCurrent(current);
+    const auto it = Workers.find(context);
+    Y_ABORT_UNLESS(it != Workers.end());
+    TAllocationCacheWorker::SetCurrent(it->second.get());
 }
 
 void TAllocationCacheSubSystem::OnExecutorThreadStop(TThreadContext*) {
-    auto* current = TAllocationCacheWorker::GetCurrent();
-    std::unique_ptr<TAllocationCacheWorker> worker;
-    {
-        std::lock_guard guard(WorkersMutex);
-        auto it = std::find_if(ExecutorWorkers.begin(), ExecutorWorkers.end(),
-            [current](const auto& entry) { return entry.get() == current; });
-        Y_ABORT_UNLESS(it != ExecutorWorkers.end());
-        worker = std::move(*it);
-        ExecutorWorkers.erase(it);
-    }
     TAllocationCacheWorker::SetCurrent(nullptr);
-    // Destruction unregisters counters under WorkersMutex.
 }
 
 std::unique_ptr<TAllocationCacheWorker> TAllocationCacheSubSystem::CreateWorker() {
     Y_ABORT_UNLESS(Frozen);
-    auto counters = std::make_unique<TAllocationCacheWorkerCounters>();
-    counters->Families.resize(Families.size());
     auto worker = std::make_unique<TAllocationCacheWorker>();
+    worker->Counters.Families.resize(Families.size());
     worker->Caches.reserve(Families.size());
     worker->CachePointers.resize(Families.size());
     for (size_t family = 0; family < Families.size(); ++family) {
         const auto& config = Families[family];
         if (config.Factory) {
-            worker->Caches.push_back(config.Factory(&counters->Families[family]));
+            worker->Caches.push_back(config.Factory(&worker->Counters.Families[family]));
             worker->CachePointers[family] = worker->Caches.back().get();
         }
     }
-    std::lock_guard guard(WorkersMutex);
-    worker->Counters = counters.get();
-    Workers.push_back(std::move(counters));
-    worker->Owner = this;
     return worker;
-}
-
-void TAllocationCacheSubSystem::UnregisterWorker(TAllocationCacheWorkerCounters* counters) {
-    std::lock_guard guard(WorkersMutex);
-    std::erase_if(Workers, [counters](const auto& entry) { return entry.get() == counters; });
 }
 
 TAllocationCacheProcessStats TAllocationCacheSubSystem::GetCachedStats(size_t family) const {
     TAllocationCacheProcessStats stats;
-    std::lock_guard guard(WorkersMutex);
     for (const auto& entry : Workers) {
-        if (family < entry->Families.size()) {
-            stats.Add(entry->Families[family].GetCachedStats());
+        if (family < entry.second->Counters.Families.size()) {
+            stats.Add(entry.second->Counters.Families[family].GetCachedStats());
         }
     }
     return stats;
@@ -122,7 +89,6 @@ TAllocationCacheProcessStats TAllocationCacheSubSystem::GetCachedStats(size_t fa
 void TAllocationCacheSubSystem::GetFamilyStats(std::vector<TAllocationCacheFamilyStats>* stats) const {
     stats->clear();
     stats->reserve(Families.size());
-    std::lock_guard guard(WorkersMutex);
     for (size_t family = 0; family < Families.size(); ++family) {
         if (!Families[family].Factory) {
             continue;
@@ -130,7 +96,7 @@ void TAllocationCacheSubSystem::GetFamilyStats(std::vector<TAllocationCacheFamil
         auto& snapshot = stats->emplace_back();
         snapshot.Name = Families[family].Name;
         for (const auto& worker : Workers) {
-            snapshot.Stats.Add(worker->Families[family].GetCachedStats());
+            snapshot.Stats.Add(worker.second->Counters.Families[family].GetCachedStats());
         }
     }
 }

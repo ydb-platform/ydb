@@ -565,6 +565,7 @@ namespace NActors {
         }
 
         Scheduler->PrepareStart();
+        ExecutorThreadsPrepared = true;
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
@@ -623,6 +624,13 @@ namespace NActors {
 
     TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
         return CpuManager->GetBasicExecutorPools();
+    }
+
+    void TActorSystem::PrepareExecutorThread(TThreadContext* context) {
+        Y_ABORT_UNLESS(!ExecutorThreadsPrepared, "executor contexts must be prepared before threads start");
+        ForEachSubSystem(SubSystems, SubSystemOrder, [context](ISubSystem& subsystem) {
+            subsystem.OnExecutorThreadPrepare(context);
+        });
     }
 
     void TActorSystem::InitializeExecutorThread(TThreadContext* context) {

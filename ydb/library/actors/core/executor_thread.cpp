@@ -89,6 +89,12 @@ namespace NActors {
         CurrentStats.store(&Stats[executorPool->PoolId], std::memory_order_relaxed);
     }
 
+    void TExecutorThread::Prepare() {
+        if (ActorSystem) {
+            ActorSystem->PrepareExecutorThread(&ThreadCtx);
+        }
+    }
+
     void TExecutorThread::SwitchPool(TExecutorPoolBaseMailboxed* pool) {
         Y_ABORT_UNLESS(ThreadCtx.IsShared());
         ExecutionStats.Switch(&Stats[pool->PoolId]);

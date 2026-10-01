@@ -1708,7 +1708,7 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
                     // advance the generation under a live peer, which then fails the unfinished channels
                     // bound to the previous one.
                     if (ev->Sender != InputNodeActorId) {
-                        LOG_W(LogPrefix << "UNDELIVERED/STALE, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
+                        LOG_D(LogPrefix << "UNDELIVERED/STALE, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
                     } else {
                         LOG_W(LogPrefix << "UNDELIVERED/UNKNOWN, InputNodeActorId " << InputNodeActorId << ", Sender=" << ev->Sender);
                         StartReconciliation(true, 'U');

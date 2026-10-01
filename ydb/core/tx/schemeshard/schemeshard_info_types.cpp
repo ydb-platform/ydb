@@ -273,6 +273,16 @@ bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
     return ApplyQuotaExceededStatus(combinedStatus, SmallBlobsQuotaExceeded, COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, counters);
 }
 
+bool TSubDomainInfo::ApplyStorageSpaceExhausted(bool value, IQuotaCounters* counters) {
+    if (StorageSpaceExhausted == value) {
+        return false;
+    }
+    StorageSpaceExhausted = value;
+    counters->ChangeSimpleCounter(COUNTER_STORAGE_SPACE_EXHAUSTED, value ? +1 : -1);
+    ++DomainStateVersion;
+    return true;
+}
+
 bool TSubDomainInfo::CheckQuotas(IQuotaCounters* counters) {
     const ui64 versionBefore = DomainStateVersion;
     const bool diskQuotaChanged = CheckDiskSpaceQuotas(counters);

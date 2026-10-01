@@ -112,6 +112,20 @@ namespace NKikimr::NBsController {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings: {
                         const auto& settings = cmd.GetUpdateSettings();
                         using T = Schema::State;
+
+                        // validate database space thresholds before applying anything
+                        auto databaseSpaceBlockColor = Self->DatabaseSpace.GetBlockColor();
+                        auto databaseSpaceUnblockColor = Self->DatabaseSpace.GetUnblockColor();
+                        for (auto value : settings.GetDatabaseSpaceBlockColor()) {
+                            databaseSpaceBlockColor = static_cast<T::DatabaseSpaceBlockColor::Type>(value);
+                        }
+                        for (auto value : settings.GetDatabaseSpaceUnblockColor()) {
+                            databaseSpaceUnblockColor = static_cast<T::DatabaseSpaceUnblockColor::Type>(value);
+                        }
+                        if (!TDatabaseSpaceTracker::IsValidThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor)) {
+                            throw TExError() << "DatabaseSpaceUnblockColor must not be worse than DatabaseSpaceBlockColor";
+                        }
+
                         for (ui32 value : settings.GetDefaultMaxSlots()) {
                             Self->DefaultMaxSlots = value;
                             db.Table<T>().Key(true).Update<T::DefaultMaxSlots>(Self->DefaultMaxSlots);
@@ -154,6 +168,12 @@ namespace NKikimr::NBsController {
                         for (auto value : settings.GetPDiskSpaceColorBorder()) {
                             Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
                             db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
+                        }
+                        if (settings.DatabaseSpaceBlockColorSize() || settings.DatabaseSpaceUnblockColorSize()) {
+                            db.Table<T>().Key(true).Update<T::DatabaseSpaceBlockColor, T::DatabaseSpaceUnblockColor>(
+                                databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->DatabaseSpace.SetThresholds(databaseSpaceBlockColor, databaseSpaceUnblockColor);
+                            Self->CommitDatabaseSpaceChanges(db);
                         }
                         for (bool value : settings.GetEnableGroupLayoutSanitizer()) {
                             Self->GroupLayoutSanitizerEnabled = value;

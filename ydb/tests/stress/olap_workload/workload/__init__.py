@@ -12,7 +12,7 @@ from ydb.tests.stress.olap_workload.workload.type.move_data import WorkloadMoveD
 
 
 class WorkloadRunner:
-    def __init__(self, client, path, duration, allow_nullables_in_pk, endpoint=None):
+    def __init__(self, client, path, duration, allow_nullables_in_pk, endpoint):
         self.client = client
         self.endpoint = endpoint
         self.name = path
@@ -52,10 +52,8 @@ class WorkloadRunner:
             WorkloadTransactions(self.client, self.name, stop),
             WorkloadRenameTables(self.client, self.name, stop, 10),
             WorkloadEncodings(self.client, self.name, stop),
+            WorkloadMoveData(self.client, self.name, stop, self.endpoint),
         ]
-        # Pool shrink/grow needs the console endpoint, so it is enabled only when supplied.
-        if self.endpoint:
-            workloads.append(WorkloadMoveData(self.client, self.name, stop, self.endpoint))
         for w in workloads:
             w.start()
         started_at = started_at = time.time()

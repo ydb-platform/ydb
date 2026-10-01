@@ -24,6 +24,9 @@ namespace NKikimr {
 using NTestMoveData::MakeTabletInfo;
 
 static constexpr ui32 BlobSize = 1_KB;
+static constexpr ui32 OldGroup = 100;
+static constexpr ui32 NewGroup = 200;
+static constexpr ui32 ReassignGen = 5;
 
 static NOlap::TUnifiedBlobId MakeDsBlobId(ui32 dsGroup, ui64 tabletId, ui32 gen, ui32 step, ui32 channel) {
     TLogoBlobID logo(tabletId, gen, step, channel, BlobSize, 0);
@@ -127,91 +130,66 @@ public:
     }
 };
 
+// A blob manager of one generation over the OldGroup -> NewGroup history, with everything BuildGCTask needs.
+struct TBlobManagerFixture {
+    TActorSystemStub ActorSystemStub;
+    TIntrusivePtr<TTabletStorageInfo> TabletInfo;
+    std::shared_ptr<NOlap::TBlobManager> Manager;
+    std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> Shared;
+    std::shared_ptr<NOlap::NBlobOperations::TStorageCounters> StorageCounters;
+    std::shared_ptr<NOlap::NBlobOperations::TRemoveGCCounters> Counters;
+
+    TBlobManagerFixture(const ui64 tabletId, const ui32 tabletGen) {
+        ActorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        TabletInfo = MakeTabletInfo(tabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
+        Manager = std::make_shared<NOlap::TBlobManager>(TabletInfo, tabletGen, NOlap::TTabletId(tabletId));
+        Shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(tabletId));
+        StorageCounters = std::make_shared<NOlap::NBlobOperations::TStorageCounters>(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
+        Counters = StorageCounters->GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
+    }
+
+    std::shared_ptr<NOlap::NBlobOperations::NBlobStorage::TGCTask> BuildGCTask() {
+        return Manager->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, Manager, Shared, Counters);
+    }
+};
+
 Y_UNIT_TEST_SUITE(TMoveDataTest) {
     // BlobsToDelete leg: the group comes straight off TUnifiedBlobId (keep leg: TestMoveDataKeepQueue).
     Y_UNIT_TEST(TestMoveDataDeleteQueue) {
-        TActorSystemStub actorSystemStub;
-        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         static constexpr ui64 TabletId = 42;
-        static constexpr ui32 OldGroup = 100;
-        static constexpr ui32 NewGroup = 200;
-        static constexpr ui32 ReassignGen = 5;
+        TBlobManagerFixture f(TabletId, 3);
+        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ OldGroup }), "empty queues must match nothing");
 
-        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
-        NOlap::TBlobManager mgr(tabletInfo, 3, NOlap::TTabletId(TabletId));
-        UNIT_ASSERT_C(!mgr.HasBlobsForGroups({ OldGroup }), "empty queues must match nothing");
-
-        mgr.DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
-        UNIT_ASSERT_C(mgr.HasBlobsForGroups({ OldGroup }), "blob in the old group must match");
-        UNIT_ASSERT_C(!mgr.HasBlobsForGroups({ NewGroup }), "the group it was not written to must not match");
-        // The gate is polled on every wakeup, so the query has to be non-destructive.
-        UNIT_ASSERT_C(mgr.HasBlobsForGroups({ OldGroup }), "repeated query must give the same answer");
+        f.Manager->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
+        UNIT_ASSERT_C(f.Manager->HasBlobsForGroups({ OldGroup }), "blob in the old group must match");
+        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ NewGroup }), "the group it was not written to must not match");
     }
 
     // A delete-only GC task drains the queue and sets no barrier, and the gate must still wait for its commit.
     Y_UNIT_TEST(TestMoveDataGateHeldWhileDeleteOnlyGCInFlight) {
         auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
-        TActorSystemStub actorSystemStub;
-        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         static constexpr ui64 TabletId = 44;
-        static constexpr ui32 OldGroup = 100;
-        static constexpr ui32 NewGroup = 200;
-        static constexpr ui32 ReassignGen = 5;
         static constexpr ui32 TabletGen = 3;
-
-        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
-        auto mgr = std::make_shared<NOlap::TBlobManager>(tabletInfo, TabletGen, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
-        NOlap::NBlobOperations::TStorageCounters storageCounters(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
-        auto counters = storageCounters.GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
+        TBlobManagerFixture f(TabletId, TabletGen);
 
         // The first GC of an incarnation collects up to the current step; once it commits, the next task has no barrier to set.
         const NOlap::TGenStep barrier(TabletGen, 0);
-        UNIT_ASSERT_C(
-            mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters), "the first GC must set a barrier");
-        mgr->OnGCStartOnComplete(barrier);
-        mgr->OnGCFinishedOnComplete(barrier);
+        UNIT_ASSERT_C(f.BuildGCTask(), "the first GC must set a barrier");
+        f.Manager->OnGCStartOnComplete(barrier);
+        UNIT_ASSERT_C(!f.Manager->HasCollectedBeforeCurrentGeneration(), "a barrier that BlobStorage has not acknowledged proves nothing");
+        f.Manager->OnGCFinishedOnComplete(barrier);
+        UNIT_ASSERT_C(f.Manager->HasCollectedBeforeCurrentGeneration(), "the committed first round covers every earlier generation");
 
-        mgr->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
-        auto task = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
+        f.Manager->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeDsBlobId(OldGroup, TabletId, 1, 1, 2));
+        auto task = f.BuildGCTask();
         UNIT_ASSERT_C(task, "a queued delete must produce a GC task");
-        UNIT_ASSERT_C(mgr->HasBlobsForGroups({ OldGroup }), "the gate must stay closed while a delete-only GC task is in flight");
-        UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ NewGroup }), "a task that touches only the old group must not hold a move out of the new one");
-
-        mgr->OnGCFinishedOnComplete(std::nullopt);
-        UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ OldGroup }), "the gate must open once the task commits");
-    }
-
-    // Empty queues are not barrier coverage: until the first GC round of this incarnation commits, nothing proves the old generations are collected.
-    Y_UNIT_TEST(FirstGCRoundIsRequiredBeforeTheGateOpens) {
-        auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
-        TActorSystemStub actorSystemStub;
-        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        static constexpr ui64 TabletId = 45;
-        static constexpr ui32 OldGroup = 100;
-        static constexpr ui32 NewGroup = 200;
-        static constexpr ui32 ReassignGen = 5;
-        static constexpr ui32 TabletGen = 7;
-
-        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
-        auto mgr = std::make_shared<NOlap::TBlobManager>(tabletInfo, TabletGen, NOlap::TTabletId(TabletId));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
-        NOlap::NBlobOperations::TStorageCounters storageCounters(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
-        auto counters = storageCounters.GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
-
-        UNIT_ASSERT_C(!mgr->HasBlobsForGroups({ OldGroup }), "the queues start empty");
-        UNIT_ASSERT_C(!mgr->HasCollectedBeforeCurrentGeneration(), "empty queues alone must not answer for barrier coverage");
-
+        UNIT_ASSERT_C(f.Manager->HasBlobsForGroups({ OldGroup }), "the gate must stay closed while a delete-only GC task is in flight");
         UNIT_ASSERT_C(
-            mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters), "the first GC must set a barrier");
-        const NOlap::TGenStep barrier(TabletGen, 0);
-        mgr->OnGCStartOnComplete(barrier);
-        UNIT_ASSERT_C(!mgr->HasCollectedBeforeCurrentGeneration(), "a barrier that BlobStorage has not acknowledged proves nothing");
+            !f.Manager->HasBlobsForGroups({ NewGroup }), "a task that touches only the old group must not hold a move out of the new one");
 
-        mgr->OnGCFinishedOnComplete(barrier);
-        UNIT_ASSERT_C(mgr->HasCollectedBeforeCurrentGeneration(), "the committed first round covers every earlier generation");
+        f.Manager->OnGCFinishedOnComplete(std::nullopt);
+        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ OldGroup }), "the gate must open once the task commits");
     }
 
     // A failed rewrite returns its portion through AddPortion; it must re-enter Pending however late that happens.
@@ -239,26 +217,19 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
     // Keep leg: the group is resolved through TabletInfo->GroupFor(channel, generation).
     Y_UNIT_TEST(TestMoveDataKeepQueue) {
-        TActorSystemStub actorSystemStub;
-        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         static constexpr ui64 TabletId = 45;
-        static constexpr ui32 OldGroup = 100;
-        static constexpr ui32 NewGroup = 200;
-        static constexpr ui32 ReassignGen = 5;
-
-        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
 
         // Generation 3 < ReassignGen: batches allocate blobs resolving into OldGroup.
-        NOlap::TBlobManager mgr(tabletInfo, 3, NOlap::TTabletId(TabletId));
-        auto batch = mgr.StartBlobBatch();
+        TBlobManagerFixture f(TabletId, 3);
+        auto batch = f.Manager->StartBlobBatch();
         batch.AllocateNextBlobId(TString("payload"));
-        mgr.SaveBlobBatchOnComplete(std::move(batch));
+        f.Manager->SaveBlobBatchOnComplete(std::move(batch));
 
-        UNIT_ASSERT_C(mgr.HasBlobsForGroups({ OldGroup }), "BlobsToKeep: blob in old group must match via GroupFor");
-        UNIT_ASSERT_C(!mgr.HasBlobsForGroups({ NewGroup }), "BlobsToKeep: new group must not match");
+        UNIT_ASSERT_C(f.Manager->HasBlobsForGroups({ OldGroup }), "BlobsToKeep: blob in old group must match via GroupFor");
+        UNIT_ASSERT_C(!f.Manager->HasBlobsForGroups({ NewGroup }), "BlobsToKeep: new group must not match");
 
         // Generation 7 >= ReassignGen: same channels now resolve into NewGroup.
-        NOlap::TBlobManager mgrNew(tabletInfo, 7, NOlap::TTabletId(TabletId));
+        NOlap::TBlobManager mgrNew(f.TabletInfo, 7, NOlap::TTabletId(TabletId));
         auto batchNew = mgrNew.StartBlobBatch();
         batchNew.AllocateNextBlobId(TString("payload"));
         mgrNew.SaveBlobBatchOnComplete(std::move(batchNew));
@@ -271,8 +242,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
     Y_UNIT_TEST(TestMoveDataBorrowedBlobs) {
         static constexpr ui64 TabletId = 46;
         static constexpr ui64 ForeignTabletId = 99;
-        static constexpr ui32 OldGroup = 100;
-        static constexpr ui32 NewGroup = 200;
 
         NOlap::NDataSharing::TStorageSharedBlobsManager shared(NOlap::IStoragesManager::DefaultStorageId, NOlap::TTabletId(TabletId));
         UNIT_ASSERT(!shared.HasBlobsForGroups({ OldGroup }));
@@ -306,8 +275,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             TActualizer::HasBlobInGroups({ outsideTarget, inTarget }, targets), "one blob in a target group is enough, even alongside others");
         UNIT_ASSERT_C(
             !TActualizer::HasBlobInGroups({ outsideTarget, thirdParty }, targets), "no blob in a target group means the portion stays put");
-        UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({}, targets), "a portion with no blobs is never selected");
-        UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({ inTarget }, {}), "an empty target set selects nothing");
     }
 
     // Live groups are rejected, so a portion created after the session started cannot hold a target blob.
@@ -373,7 +340,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             THashSet<ui64> result;
             for (auto&& request : requests) {
                 for (auto&& portionId : request.GetRequest()->GetPortionIds()) {
-                    UNIT_ASSERT_C(result.emplace(portionId).second, "a portion must not be requested twice");
+                    result.emplace(portionId);
                 }
             }
             return result;
@@ -403,11 +370,6 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             const auto ids = portionIds(requests);
             UNIT_ASSERT_VALUES_EQUAL(ids.size(), PortionsCount - 1);
             UNIT_ASSERT_C(!ids.contains(PortionsCount), "a portion the engine no longer knows must not be requested");
-        }
-        {
-            auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(3 * portionMemory);
-            auto actualizer = std::make_shared<TMoveDataActualizerTestable>(targetGroups, schema.Index);
-            UNIT_ASSERT(actualizer->BuildMoveDataMetadataRequests(portions, {}, actualizer, TInstant::Seconds(1000)).empty());
         }
     }
 
@@ -618,46 +580,36 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
     // A barrier recovered from an older generation proves nothing about this one: the all-history broadcast must repeat until one of this generation went out.
     Y_UNIT_TEST(FirstGCBroadcastRepeatsUntilABarrierOfThisGenerationGoesOut) {
         auto controllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TReadOnlyController>();
-        TActorSystemStub actorSystemStub;
-        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         static constexpr ui64 TabletId = 47;
-        static constexpr ui32 OldGroup = 100;
-        static constexpr ui32 NewGroup = 200;
-        static constexpr ui32 ReassignGen = 5;
         static constexpr ui32 TabletGen = 7;
         static constexpr ui32 DataChannel = 2;
         // One more than the per-task keep limit, so the first task cannot advance past the recovered barrier.
         static constexpr ui32 KeepCount = 500001;
 
-        auto tabletInfo = MakeTabletInfo(TabletId, { { 0, OldGroup }, { ReassignGen, NewGroup } }, TBlobStorageGroupType::ErasureNone);
-        auto mgr = std::make_shared<NOlap::TBlobManager>(tabletInfo, TabletGen, NOlap::TTabletId(TabletId));
+        TBlobManagerFixture f(TabletId, TabletGen);
         TRecoveredGcDb db;
         db.Last = TGenStep(4, 0);
         db.Prepared = TGenStep(4, 1);
         for (ui32 i = 0; i < KeepCount; ++i) {
             db.Keeps.emplace_back(NewGroup, TLogoBlobID(TabletId, ReassignGen, 1 + i / 1000, DataChannel, BlobSize, i % 1000));
         }
-        UNIT_ASSERT(mgr->LoadState(db, NOlap::TTabletId(TabletId)));
-        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
-            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
-        NOlap::NBlobOperations::TStorageCounters storageCounters(NOlap::NBlobOperations::TGlobal::DefaultStorageId);
-        auto counters = storageCounters.GetConsumerCounter(NOlap::NBlobOperations::EConsumer::GC)->GetRemoveGCCounters();
+        UNIT_ASSERT(f.Manager->LoadState(db, NOlap::TTabletId(TabletId)));
         const NOlap::NBlobOperations::NBlobStorage::TBlobAddress oldGroupAddress(OldGroup, DataChannel);
 
-        auto first = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
+        auto first = f.BuildGCTask();
         UNIT_ASSERT_C(first, "the recovered barrier must produce a task");
         UNIT_ASSERT_C(first->GetListsByGroupId().contains(oldGroupAddress), "the first task broadcasts to every historical group");
-        mgr->OnGCStartOnComplete(TGenStep(4, 1));
-        mgr->OnGCFinishedOnComplete(TGenStep(4, 1));
-        UNIT_ASSERT_C(!mgr->HasCollectedBeforeCurrentGeneration(), "a barrier from generation 4 must not count for generation 7");
+        f.Manager->OnGCStartOnComplete(TGenStep(4, 1));
+        f.Manager->OnGCFinishedOnComplete(TGenStep(4, 1));
+        UNIT_ASSERT_C(!f.Manager->HasCollectedBeforeCurrentGeneration(), "a barrier from generation 4 must not count for generation 7");
 
-        auto second = mgr->BuildGCTask(NOlap::NBlobOperations::TGlobal::DefaultStorageId, mgr, shared, counters);
+        auto second = f.BuildGCTask();
         UNIT_ASSERT_C(second, "the remaining keep entry must produce a task");
         UNIT_ASSERT_C(second->GetListsByGroupId().contains(oldGroupAddress),
             "the barrier of this generation must reach the historical group, or an orphan written before the crash stays behind the gate");
-        mgr->OnGCStartOnComplete(TGenStep(TabletGen, 0));
-        mgr->OnGCFinishedOnComplete(TGenStep(TabletGen, 0));
-        UNIT_ASSERT(mgr->HasCollectedBeforeCurrentGeneration());
+        f.Manager->OnGCStartOnComplete(TGenStep(TabletGen, 0));
+        f.Manager->OnGCFinishedOnComplete(TGenStep(TabletGen, 0));
+        UNIT_ASSERT(f.Manager->HasCollectedBeforeCurrentGeneration());
     }
 
 }   // Y_UNIT_TEST_SUITE

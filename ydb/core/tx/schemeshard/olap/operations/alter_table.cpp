@@ -340,7 +340,6 @@ public:
                     return result;
                 }
             }
-            context.DbChanges.PersistColumnTableAlter(path.Base()->PathId);
             context.DbChanges.PersistTxState(OperationId);
 
             context.OnComplete.ActivateTx(OperationId);

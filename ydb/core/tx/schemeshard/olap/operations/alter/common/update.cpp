@@ -13,6 +13,9 @@ TConclusionStatus TColumnTableUpdate::DoStart(const TUpdateStartContext& context
     ssContext->MemChanges.GrabColumnTable(ssContext->SS, pathId);
     auto tableInfo = ssContext->SS->ColumnTables.TakeVerified(pathId);
     tableInfo->AlterData = GetTargetTableInfoVerified();
+    if (IsAlterPersistent()) {
+        ssContext->DbChanges.PersistColumnTableAlter(pathId);
+    }
 
     {
         THashSet<TString> oldDataSources = tableInfo->GetUsedTiers();
@@ -49,10 +52,14 @@ TConclusionStatus TColumnTableUpdate::DoFinish(const TUpdateFinishContext& conte
 
     const auto pathId = context.GetObjectPath()->Base()->PathId;
     auto* ssContext = context.GetSSOperationContext();
-    auto tableInfo = ssContext->SS->ColumnTables.TakeAlterVerified(pathId);
-    ssContext->DbChanges.PersistColumnTableAlterRemove(pathId);
+    {
+        // RAII guard: swaps the table in ColumnTables with its AlterData on scope exit.
+        [[maybe_unused]] auto applyAlterGuard = ssContext->SS->ColumnTables.TakeAlterVerified(pathId);
+    }
+    if (IsAlterPersistent()) {
+        ssContext->DbChanges.PersistColumnTableAlterRemove(pathId);
+    }
     ssContext->DbChanges.PersistColumnTable(pathId);
-    Y_UNUSED(tableInfo);
     return TConclusionStatus::Success();
 }
 

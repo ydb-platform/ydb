@@ -2621,15 +2621,57 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
 
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$[*] ? (@ == $values)' PASSING $p AS values))",
                 {NJsonIndex::TToken{"", "$p"}}, params, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, 'exists($[*] ? (@ == $values))' PASSING $p AS values RETURNING Bool))",
+                {NJsonIndex::TToken{"", "$p"}}, params, "or");
+
+            ValidateTokens(db, R"(JSON_EXISTS(Text, '$.k1 ? (@ == $values)' PASSING $p AS values))",
+                {NJsonIndex::TToken{"\3k1", "$p"}}, params, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$.k1 == $values' PASSING $p AS values RETURNING Bool))",
+                {NJsonIndex::TToken{"\3k1", "$p"}}, params, "or");
+            ValidateTokens(db, R"(JSON_VALUE(Text, '$values == $.k1' PASSING $p AS values RETURNING Bool))",
+                {NJsonIndex::TToken{"\3k1", "$p"}}, params, "or");
 
             ValidateTokens(db, R"(JSON_EXISTS(Text, '$ ? (@.k1 == $values && @.k2 == 1)' PASSING $p AS values))",
                 {NJsonIndex::TToken{"\3k1", "$p"}, NJsonIndex::TToken{"\3k2" + numSuffix(1), ""}},
                 params, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, 'exists($ ? (@.k1 == $values && @.k2 == 1))' PASSING $p AS values RETURNING Bool))",
+                {NJsonIndex::TToken{"\3k1", "$p"}, NJsonIndex::TToken{"\3k2" + numSuffix(1), ""}},
+                params, "or");
+
+            const auto twoParams = TParamsBuilder()
+                .AddParam("$p1").Json(R"([1, true])").Build()
+                .AddParam("$p2").Json(R"({"nested": "v"})").Build()
+                .Build();
+
+            ValidateTokens(db,
+                R"(JSON_EXISTS(Text, '$ ? (@.k1 == $v1 && @.k2 == $v2)' PASSING $p1 AS v1, $p2 AS v2))",
+                {NJsonIndex::TToken{"\3k1", "$p1"}, NJsonIndex::TToken{"\3k2", "$p2"}},
+                twoParams, "or");
+            ValidateTokens(db,
+                R"(JSON_VALUE(Text, 'exists($ ? (@.k1 == $v1 || @.k2 == $v2))' PASSING $p1 AS v1, $p2 AS v2 RETURNING Bool))",
+                {NJsonIndex::TToken{"\3k1", "$p1"}, NJsonIndex::TToken{"\3k2", "$p2"}},
+                twoParams, "or");
 
             ValidateError(db, R"(JSON_EXISTS(Text, '$[*] ? (@ == $values)' PASSING $p AS values))",
                 TParamsBuilder()
                     .AddParam("$p").OptionalJson(R"(["v"])").Build()
                     .Build());
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1 == $values' PASSING $p AS values RETURNING Bool))",
+                TParamsBuilder()
+                    .AddParam("$p").OptionalJson(R"(["v"])").Build()
+                    .Build());
+
+            ValidateError(db, R"(JSON_EXISTS(Text, '$[*] ? (@ == $values)' PASSING $p AS values))",
+                TParamsBuilder()
+                    .AddParam("$p").JsonDocument(R"(["v"])").Build()
+                    .Build(),
+                "You can pass only values of Utf8, Bool, Json, date and numeric types");
+            ValidateError(db, R"(JSON_VALUE(Text, '$.k1 == $values' PASSING $p AS values RETURNING Bool))",
+                TParamsBuilder()
+                    .AddParam("$p").JsonDocument(R"(["v"])").Build()
+                    .Build(),
+                "You can pass only values of Utf8, Bool, Json, date and numeric types");
         });
     }
 

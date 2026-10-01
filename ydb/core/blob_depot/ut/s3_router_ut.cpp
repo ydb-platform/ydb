@@ -3,6 +3,7 @@
 #include "../s3_router.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -316,7 +317,8 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         TAutoPtr<IEventHandle> handle;
         runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
 
-        auto* balancer = new TFakeBalancer({}, "endpoint-A.example.com");
+        const TString hostname = "endpoint-A.example.com";
+        auto* balancer = new TFakeBalancer({}, hostname);
         TActorId balancerId = runtime.Register(balancer);
         runtime.Send(new IEventHandle(proxyId, balancerId,
             new NHttp::TEvHttpProxy::TEvRegisterHandler("/", balancerId)), 0, true);
@@ -331,10 +333,43 @@ Y_UNIT_TEST_SUITE(BlobDepotS3Router) {
         TActorId routerId = runtime.Register(CreateBlobDepotS3Router(std::move(settings), 12345));
         Y_UNUSED(routerId);
 
-        // Give the router a chance to issue its first balancer GET and process the reply.
-        // We don't have a direct hook to observe the endpoint switch, so we just verify
-        // that the runtime survives the round-trip without crashes/aborts.
-        runtime.SimulateSleep(TDuration::Seconds(5));
+        WaitReal(runtime, [&] { return balancer->GetReplies() > 0; });
+
+        auto subsystem = GetServiceCounters(runtime.GetAppData(0).Counters, "tablets")->FindSubgroup("subsystem", "blob_depot");
+        UNIT_ASSERT(subsystem);
+        auto module = subsystem->FindSubgroup("module_id", "s3_router");
+        UNIT_ASSERT(module);
+        auto hostBuckets = module->FindSubgroup("component", "BalancerResolveByHostBucket");
+        UNIT_ASSERT(hostBuckets);
+
+        static constexpr size_t hostBucketCount = 16;
+        auto countSelections = [&] {
+            ui64 selections = 0;
+            for (size_t i = 0; i < hostBucketCount; ++i) {
+                auto bucket = hostBuckets->FindSubgroup("host_bucket", ::ToString(i));
+                UNIT_ASSERT(bucket);
+                auto counter = bucket->FindCounter("Selections");
+                UNIT_ASSERT(counter);
+                selections += *counter;
+            }
+
+            return selections;
+        };
+
+        WaitReal(runtime, [&] { return countSelections() > 0; });
+
+        ui64 latencySamples = 0;
+        for (size_t i = 0; i < hostBucketCount; ++i) {
+            auto bucket = hostBuckets->FindSubgroup("host_bucket", ::ToString(i));
+            auto latency = bucket->FindHistogram("LatencyMs");
+            UNIT_ASSERT(latency);
+            const auto snapshot = latency->Snapshot();
+            for (ui32 j = 0; j < snapshot->Count(); ++j) {
+                latencySamples += snapshot->Value(j);
+            }
+        }
+
+        UNIT_ASSERT(latencySamples > 0);
     }
 
     Y_UNIT_TEST(FiveXxTriggersRefresh) {

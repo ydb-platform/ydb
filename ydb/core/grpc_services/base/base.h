@@ -301,7 +301,7 @@ struct TRpcServices {
         EvGrpcRuntimeRequest,
         EvNodeCheckRequest,
         EvStreamWriteRefreshToken,    // internal call, pair to EvRefreshToken
-        EvRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
+        EvHttpRequestAuthAndCheck, // performs authorization and runs GrpcRequestCheckActor
         EvRequestAuthAndCheckResult,
         // !!! DO NOT ADD NEW REQUEST !!!
     };
@@ -886,10 +886,52 @@ struct TYdbGrpcMethodAccessorTraits {
     }
 };
 
+class TEvProxyRuntimeEvent
+    : public IRequestProxyCtx
+    , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
+{
+public:
+    const TMaybe<TString> GetSdkBuildInfo() const {
+        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    }
+
+    const TMaybe<TString> GetGrpcUserAgent() const {
+        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
+    }
+
+    virtual NRuntimeEvents::EType GetRuntimeEventType() {
+        return NRuntimeEvents::EType::COMMON;
+    }
+};
+
+template <NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
+public:
+    NRuntimeEvents::EType GetRuntimeEventType() override {
+        return RuntimeEventType;
+    }
+};
+
+template <ui32 TRpcId, typename TDerived>
+class TEvProxyLegacyEvent
+    : public IRequestProxyCtx
+    , public TEventLocal<TDerived, TRpcId>
+{
+public:
+    const TMaybe<TString> GetSdkBuildInfo() const {
+        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
+    }
+
+    const TMaybe<TString> GetGrpcUserAgent() const {
+        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
+    }
+};
+
 template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
-    : public IRequestProxyCtx
-    , public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>, TRpcId>
+    : public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
+        TEvProxyRuntimeEvent,
+        TEvProxyLegacyEvent<TRpcId, TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>>>
 {
 private:
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
@@ -940,7 +982,7 @@ public:
     NJaegerTracing::TRequestDiscriminator GetRequestDiscriminator() const override {
         return {
             .RequestType = AuxSettings.RequestType,
-            .Database = GetDatabaseName(),
+            .Database = this->GetDatabaseName(),
         };
     }
 
@@ -1228,47 +1270,6 @@ public:
 private:
     TDerived* Derived() noexcept {
         return static_cast<TDerived*>(this);
-    }
-};
-
-class TEvProxyRuntimeEvent
-    : public IRequestProxyCtx
-    , public TEventLocal<TEvProxyRuntimeEvent, TRpcServices::EvGrpcRuntimeRequest>
-{
-public:
-    const TMaybe<TString> GetSdkBuildInfo() const {
-        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-    }
-
-    const TMaybe<TString> GetGrpcUserAgent() const {
-        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
-    }
-
-    virtual NRuntimeEvents::EType GetRuntimeEventType() {
-        return NRuntimeEvents::EType::COMMON;
-    }
-};
-
-template <NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
-class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
-public:
-    NRuntimeEvents::EType GetRuntimeEventType() override {
-        return RuntimeEventType;
-    }
-};
-
-template <ui32 TRpcId, typename TDerived>
-class TEvProxyLegacyEvent
-    : public IRequestProxyCtx
-    , public TEventLocal<TDerived, TRpcId>
-{
-public:
-    const TMaybe<TString> GetSdkBuildInfo() const {
-        return GetPeerMetaValues(NYdb::YDB_SDK_BUILD_INFO_HEADER);
-    }
-
-    const TMaybe<TString> GetGrpcUserAgent() const {
-        return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
     }
 };
 
@@ -1931,11 +1932,11 @@ public:
     EHttpDatabaseAccessVerdict DatabaseAccessVerdict = EHttpDatabaseAccessVerdict::Ok;
 };
 
-class TEvRequestAuthAndCheck
+class TEvHttpRequestAuthAndCheck
     : public IRequestProxyCtx
-    , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
+    , public TEventLocal<TEvHttpRequestAuthAndCheck, TRpcServices::EvHttpRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(
+    TEvHttpRequestAuthAndCheck(
         const TString& database,
         const TMaybe<TString>& ydbToken,
         NActors::TActorId sender,

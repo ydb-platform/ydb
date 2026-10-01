@@ -6,18 +6,41 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/replication/common/family_settings.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
 #include <util/generic/hash.h>
+#include <util/stream/output.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
 namespace NKikimr::NReplication::NController {
 
 using namespace NSchemeShard;
+
+namespace {
+
+using TFamily = NKikimrReplication::TSchemaChange::TFamily;
+
+bool HasSupportedFamilySettings(const NKikimrSchemeOp::TFamilyDescription& family) {
+    if (family.HasColumnCodec()) {
+        const auto codec = family.GetColumnCodec();
+        if (codec != NKikimrSchemeOp::ColumnCodecPlain && codec != NKikimrSchemeOp::ColumnCodecLZ4) {
+            return false;
+        }
+    } else if (family.GetCodec() > 1) {
+        return false;
+    }
+
+    const auto cacheMode = family.GetColumnCacheMode();
+    return cacheMode == NKikimrSchemeOp::ColumnCacheModeRegular
+        || cacheMode == NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory;
+}
+
+} // anonymous namespace
 
 // Executes the data-plane schema change after the controller has parked every
 // worker at the same CDC barrier. It always describes before proposing and
@@ -91,6 +114,133 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         }
     }
 
+    bool CheckColumnFamily(
+            const NKikimrSchemeOp::TColumnDescription& column,
+            const NKikimrReplication::TSchemaChange::TColumn& desired,
+            const THashMap<ui32, TStringBuf>& familyNames,
+            TString& error)
+    {
+        // Family IDs are local to the destination cluster.
+        const auto family = familyNames.find(column.GetFamily());
+        if (family == familyNames.end() || family->second.empty()) {
+            error = TStringBuilder() << "destination column '" << column.GetName()
+                << "' refers to unknown family id " << column.GetFamily();
+            return false;
+        }
+
+        if (family->second == desired.GetFamily()) {
+            return true;
+        }
+
+        auto* changed = Alter.MutableAlterTable()->AddColumns();
+        changed->SetName(column.GetName());
+        changed->SetFamilyName(desired.GetFamily());
+        error = TStringBuilder() << "column '" << column.GetName() << "' family"
+            << ": expected " << desired.GetFamily()
+            << ", actual " << family->second;
+
+        return true;
+    }
+
+    bool CheckAndBuildFamily(
+            const NKikimrReplication::TSchemaChange::TFamily& desired,
+            const NKikimrSchemeOp::TFamilyDescription* actual,
+            TString& error)
+    {
+        if (actual && !HasSupportedFamilySettings(*actual)) {
+            error = TStringBuilder() << "destination column family '" << desired.GetName()
+                << "' has unsupported compression or cache mode";
+            return false;
+        }
+
+        const TFamilySettings expectedSettings{
+            .Media = desired.GetMedia(),
+            .Compression = desired.GetCompression(),
+            .CacheMode = desired.GetCacheMode(),
+        };
+        const auto actualSettings = TFamilySettings::FromProto(actual);
+        if (actual && expectedSettings == actualSettings) {
+            return true;
+        }
+
+        if (actual && actualSettings.Media && !expectedSettings.Media) {
+            error = TStringBuilder() << "column family '" << desired.GetName()
+                << "' has explicit destination media '" << actualSettings.Media << "' but source media is unspecified";
+            return false;
+        }
+
+        auto* changed = Alter.MutableAlterTable()->MutablePartitionConfig()->AddColumnFamilies();
+        changed->SetName(desired.GetName());
+        if (expectedSettings.Media && actualSettings.Media != expectedSettings.Media) {
+            auto* data = changed->MutableStorageConfig()->MutableData();
+            data->SetPreferredPoolKind(desired.GetMedia());
+            data->SetAllowOtherKinds(false);
+        }
+
+        if (!actual || actualSettings.Compression != expectedSettings.Compression) {
+            changed->SetColumnCodec(desired.GetCompression() == TFamily::COMPRESSION_LZ4
+                ? NKikimrSchemeOp::ColumnCodecLZ4 : NKikimrSchemeOp::ColumnCodecPlain);
+        }
+
+        if (!actual || actualSettings.CacheMode != expectedSettings.CacheMode) {
+            changed->SetColumnCacheMode(desired.GetCacheMode() == TFamily::CACHE_MODE_IN_MEMORY
+                ? NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory
+                : NKikimrSchemeOp::ColumnCacheModeRegular);
+        }
+
+        if (!actual && desired.GetName() != DefaultFamilyName) {
+            error = TStringBuilder() << "missing column family '" << desired.GetName() << "'";
+        } else {
+            error = TStringBuilder() << "column family '" << desired.GetName() << "' differs"
+                << ": expected " << expectedSettings
+                << ", actual " << actualSettings;
+        }
+
+        return true;
+    }
+
+    bool CheckAndBuildFamilies(const NKikimrSchemeOp::TTableDescription& current, TString& error) {
+        THashSet<TString> desiredFamilies;
+        for (const auto& family : DesiredSchema.GetFamilies()) {
+            if (!family.GetName() || !desiredFamilies.insert(family.GetName()).second) {
+                error = "schema change contains an invalid or duplicate column family";
+                return false;
+            }
+        }
+
+        for (const auto& column : DesiredSchema.GetColumns()) {
+            if (!desiredFamilies.contains(column.GetFamily())) {
+                error = TStringBuilder() << "column '" << column.GetName() << "' names unknown family '"
+                    << column.GetFamily() << "'";
+                return false;
+            }
+        }
+
+        THashMap<TString, const NKikimrSchemeOp::TFamilyDescription*> currentFamilies;
+        for (const auto& family : current.GetPartitionConfig().GetColumnFamilies()) {
+            const TString name(GetFamilyName(family));
+            if (name.empty() || !currentFamilies.emplace(name, &family).second) {
+                error = "destination table has an invalid or duplicate column family";
+                return false;
+            }
+
+            if (!desiredFamilies.contains(name)) {
+                error = TStringBuilder() << "destination table has unexpected column family '" << name << "'";
+                return false;
+            }
+        }
+
+        for (const auto& desired : DesiredSchema.GetFamilies()) {
+            const auto it = currentFamilies.find(desired.GetName());
+            const auto* actual = it == currentFamilies.end() ? nullptr : it->second;
+            if (!CheckAndBuildFamily(desired, actual, error)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     bool CheckAndBuildAlter(const NKikimrSchemeOp::TTableDescription& current, TString& error) {
         if (current.KeyColumnNamesSize() != DesiredSchema.PrimaryKeyColumnNamesSize()) {
             error = "primary-key column count differs from the source schema";
@@ -126,6 +276,15 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         Alter.SetInternal(true);
         DstPathId.ToProto(Alter.MutableAlterTable()->MutablePathId());
 
+        const bool hasFamilies = DesiredSchema.FamiliesSize();
+        THashMap<ui32, TStringBuf> familyNames;
+        if (hasFamilies) {
+            familyNames.emplace(0, DefaultFamilyName);
+            for (const auto& family : current.GetPartitionConfig().GetColumnFamilies()) {
+                familyNames.emplace(family.GetId(), GetFamilyName(family));
+            }
+        }
+
         for (const auto& column : current.GetColumns()) {
             if (!currentColumns.insert(column.GetName()).second) {
                 error = "destination table has duplicate column names";
@@ -138,20 +297,37 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
                     return false;
                 }
                 Alter.MutableAlterTable()->AddDropColumns()->SetName(column.GetName());
-            } else if (desired->second->GetType() != column.GetType()) {
+                error = TStringBuilder() << "unexpected destination column '" << column.GetName() << "'";
+                continue;
+            }
+            if (desired->second->GetType() != column.GetType()) {
                 error = TStringBuilder() << "column type differs from source schema: " << column.GetName()
                     << ", source: " << desired->second->GetType()
                     << ", destination: " << column.GetType();
                 return false;
             }
+            if (hasFamilies && !CheckColumnFamily(column, *desired->second, familyNames, error)) {
+                return false;
+            }
         }
 
         for (const auto& desired : DesiredSchema.GetColumns()) {
-            if (!currentColumns.contains(desired.GetName())) {
-                auto* added = Alter.MutableAlterTable()->AddColumns();
-                added->SetName(desired.GetName());
-                added->SetType(desired.GetType());
+            if (currentColumns.contains(desired.GetName())) {
+                continue;
             }
+
+            auto* added = Alter.MutableAlterTable()->AddColumns();
+            added->SetName(desired.GetName());
+            added->SetType(desired.GetType());
+            if (hasFamilies) {
+                added->SetFamilyName(desired.GetFamily());
+            }
+
+            error = TStringBuilder() << "missing destination column '" << desired.GetName() << "'";
+        }
+
+        if (hasFamilies && !CheckAndBuildFamilies(current, error)) {
+            return false;
         }
 
         return true;
@@ -177,7 +353,11 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             return Error(NKikimrScheme::StatusPreconditionFailed, error);
         }
 
-        if (Alter.GetAlterTable().ColumnsSize() == 0 && Alter.GetAlterTable().DropColumnsSize() == 0) {
+        const auto& alter = Alter.GetAlterTable();
+        const bool hasChanges = alter.ColumnsSize()
+            || alter.DropColumnsSize()
+            || alter.GetPartitionConfig().ColumnFamiliesSize();
+        if (!hasChanges) {
             // SchemeShard publishes the new description at planning time,
             // before all destination shards finish ProposedWaitParts. The
             // persisted TxId may still own an in-flight DDL after recovery.
@@ -190,7 +370,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
 
         if (AlterCompletionConfirmed) {
             return Error(NKikimrScheme::StatusPreconditionFailed,
-                "destination schema changed after the DDL transaction completed");
+                TStringBuilder() << "destination schema differs after the DDL transaction completed: " << error);
         }
 
         ProposeAlter();
@@ -232,6 +412,17 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             // only if the destination exactly matches DesiredSchema.
             return DescribeDst();
         default:
+            if (record.GetReason().find("unable determine pool") != TString::npos) {
+                TStringBuilder reason;
+                reason << record.GetReason();
+                for (const auto& family : DesiredSchema.GetFamilies()) {
+                    if (family.HasMedia()) {
+                        reason << "; family '" << family.GetName() << "' requires pool kind '"
+                            << family.GetMedia() << "'";
+                    }
+                }
+                return Error(record.GetStatus(), reason);
+            }
             return Error(record.GetStatus(), record.GetReason());
         }
     }
@@ -279,10 +470,12 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
     }
 
     void Error(NKikimrScheme::EStatus status, const TString& error) {
+        const TString reason = TStringBuilder() << "destination table " << DstPathId.ToString()
+            << ", source schema version " << DesiredSchema.GetSourceSchemaVersion() << ": " << error;
         YDB_LOG_ERROR("Schema change destination alter failed",
             {"status", status},
-            {"reason", error});
-        Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterResult(ReplicationId, TargetId, TxId, status, error));
+            {"reason", reason});
+        Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterResult(ReplicationId, TargetId, TxId, status, reason));
         PassAway();
     }
 

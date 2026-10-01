@@ -1,5 +1,6 @@
 #include <ydb/library/actors/core/events.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
+#include <util/generic/algorithm.h>
 #include <cctype>
 #include "http_proxy.h"
 
@@ -436,46 +437,65 @@ void TrimEnd(TString& target, char delim) {
     }
 }
 
-TString GetObfuscatedData(TString data, const THeaders& headers) {
-    TStringBuf authorization(headers["Authorization"]);
-    TStringBuf cookie(headers["Cookie"]);
-    TStringBuf set_cookie(headers["Set-Cookie"]);
-    TStringBuf x_ydb_auth_ticket(headers["x-ydb-auth-ticket"]);
-    TStringBuf x_yacloud_subjecttoken(headers["x-yacloud-subjecttoken"]);
-    if (!authorization.empty()) {
-        auto pos = data.find(authorization);
-        if (pos != TString::npos) {
-            data.replace(pos, authorization.size(), TString("<obfuscated>"));
+TString GetObfuscatedData(TStringBuf data) {
+    static constexpr TStringBuf SensitiveHeaders[] = {
+        "Authorization",
+        "Cookie",
+        "Set-Cookie",
+        "X-Ydb-Auth-Ticket",
+        "X-Ydb-Iam-Token",
+        "X-YaCloud-SubjectToken",
+    };
+
+    TString result;
+    result.reserve(data.size());
+    while (!data.empty()) {
+        const size_t lineEnd = data.find('\n');
+        TStringBuf line = data.substr(0, lineEnd);
+        if (lineEnd != TStringBuf::npos) {
+            // Match the parser's handling of LF and CRLF line endings.
+            line = TrimEnd(line, '\r');
         }
-    }
-    if (!cookie.empty()) {
-        auto pos = data.find(cookie);
-        if (pos != TString::npos) {
-            data.replace(pos, cookie.size(), TString("<obfuscated>"));
+        if (line.empty()) {
+            // The rest is the body and must not be interpreted as headers.
+            result += data;
+            break;
         }
-    }
-    if (!set_cookie.empty()) {
-        auto pos = data.find(set_cookie);
-        if (pos != TString::npos) {
-            data.replace(pos, set_cookie.size(), TString("<obfuscated>"));
+
+        const size_t colon = line.find(':');
+        const TStringBuf headerName = line.substr(0, colon);
+        const auto isSensitiveHeader = [headerName](TStringBuf sensitiveHeader) {
+            return TEqNoCase()(headerName, sensitiveHeader);
+        };
+
+        if (colon != TStringBuf::npos && AnyOf(SensitiveHeaders, isSensitiveHeader)) {
+            size_t valueBegin = colon + 1;
+            while (valueBegin < line.size() && (line[valueBegin] == ' ' || line[valueBegin] == '\t')) {
+                ++valueBegin;
+            }
+
+            result += line.substr(0, valueBegin);
+
+            if (valueBegin < line.size()) {
+                result += "<obfuscated>";
+            }
+        } else {
+            result += line;
         }
-    }
-    if (!x_ydb_auth_ticket.empty()) {
-        auto pos = data.find(x_ydb_auth_ticket);
-        if (pos != TString::npos) {
-            data.replace(pos, x_ydb_auth_ticket.size(), TString("<obfuscated>"));
+
+        if (lineEnd == TStringBuf::npos) {
+            break;
         }
+
+        result += data.substr(line.size(), lineEnd + 1 - line.size());
+        data.Skip(lineEnd + 1);
     }
-    if (!x_yacloud_subjecttoken.empty()) {
-        auto pos = data.find(x_yacloud_subjecttoken);
-        if (pos != TString::npos) {
-            data.replace(pos, x_yacloud_subjecttoken.size(), TString("<obfuscated>"));
-        }
+
+    if (result.size() > 2000) {
+        return result.substr(0, 1000) + " --- <truncated> --- " + result.substr(result.size() - 1000);
     }
-    if (data.size() > 2000) {
-        return data.substr(0, 1000) + " --- <truncated> --- " + data.substr(data.size() - 1000);
-    }
-    return data;
+
+    return result;
 }
 
 TString ToHex(size_t value) {

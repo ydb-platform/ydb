@@ -1207,6 +1207,10 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
             UNIT_ASSERT_VALUES_EQUAL(record.GetDDiskSlotId(), 1);
             UNIT_ASSERT(record.HasPersistentBufferOccupancy());
             UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferOccupancy(), 0);
+            UNIT_ASSERT(record.HasAllocatedSize());
+            UNIT_ASSERT(record.HasAvailableSize());
+            UNIT_ASSERT(record.HasTotalSize());
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPersistentBufferId(), disk.PBServiceId.ToString());
             break;
         }
         SendToDDisk(ctx, disk.PBServiceId,
@@ -1647,15 +1651,18 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         }
     }
 
-    Y_UNIT_TEST(IdleSpinUsIsPassedToPDiskForSharedUringRouter) {
+    Y_UNIT_TEST(UringConfigurationIsPassedToPDisk) {
         TTestContext ctx;
         NDDisk::TDDiskConfig config;
         config.IdleSpinUs = 73;
+        config.DevNullMode = true;
         const TDiskHandle disk = ctx.RegisterDDisk(96, 1, std::nullopt, config);
 
         auto init = ctx.WaitPDiskRequest<NPDisk::TEvYardInit>(disk);
         UNIT_ASSERT(init->Get()->GetUringRouterClient);
         UNIT_ASSERT_VALUES_EQUAL(init->Get()->UringIdleSpinUs, config.IdleSpinUs);
+        UNIT_ASSERT(init->Get()->UringDevNullMode);
+        UNIT_ASSERT(init->Get()->ToString().find("UringDevNullMode# 1") != TString::npos);
     }
 
 #if defined(__linux__)

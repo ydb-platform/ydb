@@ -13,15 +13,18 @@ struct TLookupKeysResult {
     NYql::TExprNode::TPtr InputType;
 };
 
-TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, NYql::TExprNode::TPtr inputStage, NYql::TExprContext& ctx);
+TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, NYql::TExprNode::TPtr inputStage, NYql::TExprContext& ctx,
+    const TPhysicalNames& names);
 
 } // namespace NKikimr::NKqp::NLookupJoinBuilder
 
 class TPhysicalIndexLookupJoinBuilder: public TPhysicalUnaryOpBuilder {
 public:
-    TPhysicalIndexLookupJoinBuilder(TIntrusivePtr<TOpIndexLookupJoin> lookupJoin, TExprContext& ctx, TPositionHandle pos)
-        : TPhysicalUnaryOpBuilder(ctx, pos)
-        , LookupJoin(lookupJoin) {
+    TPhysicalIndexLookupJoinBuilder(TOpIndexLookupJoin& lookupJoin, TExprContext& ctx, TPositionHandle pos,
+        const TPhysicalNames& names, const TInfoUnitRegistry& registry)
+        : TPhysicalUnaryOpBuilder(ctx, pos, names)
+        , LookupJoin(lookupJoin)
+        , Registry(registry) {
     }
 
     TExprNode::TPtr BuildPhysicalOp(TExprNode::TPtr input) override;
@@ -30,5 +33,6 @@ private:
     TExprNode::TPtr ProcessFetchedRows(TExprNode::TPtr input, const TOpTableLookup& lookup) const;
     TExprNode::TPtr BuildRenamedRow(const TExprBase& fetchedRow, const TOpTableLookup& lookup, bool& needsRename) const;
 
-    TIntrusivePtr<TOpIndexLookupJoin> LookupJoin;
+    TOpIndexLookupJoin& LookupJoin;
+    const TInfoUnitRegistry& Registry;
 };

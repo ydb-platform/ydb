@@ -304,6 +304,12 @@ void TColumnShard::RunSchemaTx(
             RunCopyTable(body.GetCopyTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            NIceDb::TNiceDb db(txc.DB);
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(body.GetTruncateTable());
+            TablesManager.TruncateTableProgress(db, version, schemeShardLocalPathId);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::TXBODY_NOT_SET: {
             break;
         }

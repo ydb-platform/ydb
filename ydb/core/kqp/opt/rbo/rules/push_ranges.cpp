@@ -108,13 +108,13 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
     return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
 }
 
-bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input, const NYql::EStorageType applicableTableType) {
+bool IsSuitableToExtractAndPushRanges(IOperator* input, const NYql::EStorageType applicableTableType) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
-    const auto maybeRead = filter->GetInput();
+    const auto maybeRead = filter->GetInput().Get();
     if (maybeRead->Kind != EOperator::Source) {
         return false;
     }
@@ -143,61 +143,46 @@ TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx
     return settings;
 }
 
-// Map a physical table column name to the name the read actually exposes. Projection elimination
-// can rename read outputs (most commonly by stripping the alias), so Columns[i] (physical) is
-// aligned with OutputIUs[i] (exposed). Columns not selected by the read are absent from the map.
-THashMap<TString, TString> BuildPhysicalToExposedName(const TOpRead& read) {
+// The extractor needs the complete table schema, including keys absent from the Read.
+// Selected columns use their ID atoms. Other schema entries are extractor-only labels,
+// not plan bindings; a nonnumeric prefix keeps them disjoint from every ID.
+THashMap<TString, TString> BuildExtractorNames(const TOpRead& read, const TStructExprType& schema,
+                                             const TInfoUnitRegistry& registry, TExprContext& ctx) {
     THashMap<TString, TString> result;
-    const size_t count = std::min(read.Columns.size(), read.OutputIUs.size());
-    for (size_t i = 0; i < count; ++i) {
-        result[read.Columns[i]] = read.OutputIUs[i].GetFullName();
+    for (const auto* item : schema.GetItems()) {
+        result[TString(item->GetName())] = TStringBuilder() << "column:" << item->GetName();
+    }
+    for (const auto id : read.GetColumns()) {
+        result[registry.Get(id).GetColumnName()] = ctx.GetIndexAsString(id);
     }
     return result;
 }
 
-// Resolve the name a physical column should carry so it stays consistent with the read's exposed
-// outputs and the lambda the predicate extractor is typed against.
-TString ResolveExposedName(const TString& physicalName, const TOpRead& read,
-                           const THashMap<TString, TString>& physicalToExposed, bool exposesQualified) {
-    if (const auto it = physicalToExposed.find(physicalName); it != physicalToExposed.end()) {
-        return it->second;
-    }
-    if (exposesQualified && !read.Alias.empty()) {
-        return read.Alias + "." + physicalName;
-    }
-    return physicalName;
-}
-
-bool ExposesQualifiedNames(const TOpRead& read) {
-    return std::any_of(read.OutputIUs.begin(), read.OutputIUs.end(), [](const TInfoUnit& iu) { return !iu.GetAlias().empty(); });
-}
-
-TVector<TString> ResolveExposedKeyColumns(const TOpRead& read, const TVector<TString>& physicalKeyColumns) {
-    const auto physicalToExposed = BuildPhysicalToExposedName(read);
-    const bool exposesQualified = ExposesQualifiedNames(read);
-
+TVector<TString> ResolveExposedKeyColumns(const THashMap<TString, TString>& names, const TVector<TString>& physicalKeyColumns) {
     TVector<TString> keyColumns;
     keyColumns.reserve(physicalKeyColumns.size());
     for (const auto& key : physicalKeyColumns) {
-        keyColumns.emplace_back(ResolveExposedName(key, read, physicalToExposed, exposesQualified));
+        keyColumns.push_back(names.at(key));
     }
     return keyColumns;
 }
 
-const TStructExprType* PrepareSchemeType(const TOpRead& read, const TStructExprType* schemeType, TExprContext& ctx) {
-    const auto physicalToExposed = BuildPhysicalToExposedName(read);
-    const bool exposesQualified = ExposesQualifiedNames(read);
-
+const TStructExprType* PrepareSchemeType(const THashMap<TString, TString>& names, const TStructExprType* schemeType,
+                                       const TOpRead& read, const TInfoUnitRegistry& registry, TExprContext& ctx) {
     TVector<const TItemExprType*> newItemTypes;
-    bool changed = false;
     for (const auto itemType : schemeType->GetItems()) {
-        const TString physicalName(itemType->GetName());
-        const auto newName = ResolveExposedName(physicalName, read, physicalToExposed, exposesQualified);
-        changed |= newName != physicalName;
-        newItemTypes.push_back(ctx.MakeType<TItemExprType>(newName, itemType->GetItemType()));
+        newItemTypes.push_back(ctx.MakeType<TItemExprType>(names.at(TString(itemType->GetName())), itemType->GetItemType()));
     }
-
-    return changed ? ctx.MakeType<TStructExprType>(newItemTypes) : schemeType;
+    // Several Read IDs may fetch the same storage field. Key matching chooses
+    // one, but every ID referenced by the predicate must still have a type.
+    for (const auto id : read.GetColumns()) {
+        const auto physical = registry.Get(id).GetColumnName();
+        const auto name = ctx.GetIndexAsString(id);
+        if (name != names.at(physical)) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(name, schemeType->FindItemType(physical)));
+        }
+    }
+    return ctx.MakeType<TStructExprType>(newItemTypes);
 }
 
 struct TPointPrefix {
@@ -324,9 +309,9 @@ bool IsBetterCandidate(const TIndexScore& score, bool covering, const TString& n
     return name < bestName;
 }
 
-TVector<TString> FindConsumingTopSortColumns(const TIntrusivePtr<IOperator>& op) {
-    THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renames;
-    const IOperator* current = op.Get();
+TVector<TString> FindConsumingTopSortColumns(const IOperator* op, TExprContext& ctx) {
+    TSubstitutions copies;
+    const IOperator* current = op;
 
     while (current && current->Parents.size() == 1) {
         IOperator* parent = current->Parents.front().first;
@@ -335,8 +320,11 @@ TVector<TString> FindConsumingTopSortColumns(const TIntrusivePtr<IOperator>& op)
         }
 
         if (parent->Kind == EOperator::Map) {
-            for (const auto& [exposed, source] : CastOperator<TOpMap>(TIntrusivePtr<IOperator>(parent))->GetRenames()) {
-                renames[exposed] = source;
+            const auto& elements = CastOperator<TOpMap>(*parent).GetMapElements();
+            for (const auto& [output, element] : elements.Items()) {
+                if (element.IsColumnAccess()) {
+                    copies.Add(output, Substitute(element.GetColumnAccess(), copies));
+                }
             }
             current = parent;
             continue;
@@ -346,22 +334,21 @@ TVector<TString> FindConsumingTopSortColumns(const TIntrusivePtr<IOperator>& op)
             return {};
         }
 
-        const auto sort = CastOperator<TOpSort>(TIntrusivePtr<IOperator>(parent));
+        const auto sort = CastOperator<TOpSort>(parent);
         if (!sort->LimitCond.has_value()) {
             return {};
         }
 
         TVector<TString> sortColumns;
-        const auto& sortElements = sort->SortElements;
+        const auto& sortElements = sort->GetSortElements().Items();
         sortColumns.reserve(sortElements.size());
 
-        const bool ascending = sortElements.empty() ? true : sortElements.front().Ascending;
-        for (const auto& sortElement : sortElements) {
-            if (sortElement.Ascending != ascending || sortElement.NullsFirst != ascending) {
+        const bool ascending = sortElements.empty() ? true : sortElements.front().second.Ascending;
+        for (const auto& [id, order] : sortElements) {
+            if (order.Ascending != ascending || order.NullsFirst != ascending) {
                 return {};
             }
-            const auto it = renames.find(sortElement.SortColumn);
-            sortColumns.push_back((it != renames.end() ? it->second : sortElement.SortColumn).GetFullName());
+            sortColumns.push_back(TString(ctx.GetIndexAsString(Substitute(id, copies))));
         }
         return sortColumns;
     }
@@ -379,9 +366,9 @@ bool IsSelectableIndex(const TIndexDescription& index) {
         && index.State == TIndexDescription::EIndexState::Ready;
 }
 
-bool IsCovering(const TOpRead& read, const TKikimrTableMetadata& indexMeta) {
-    for (const auto& column : read.Columns) {
-        if (!indexMeta.Columns.contains(column)) {
+bool IsCovering(const TOpRead& read, const TKikimrTableMetadata& indexMeta, const TInfoUnitRegistry& registry) {
+    for (const auto id : read.GetColumns()) {
+        if (!indexMeta.Columns.contains(registry.Get(id).GetColumnName())) {
             return false;
         }
     }
@@ -416,17 +403,11 @@ NYql::EStorageType GetStorageType(const TKikimrTableMetadata& meta) {
 }
 
 TVector<TString> FilterPhysicalColumns(const TOpFilter& filter, const TOpRead& read, TPlanProps& props) {
-    THashMap<TString, TString> exposedToPhysical;
-    const size_t count = std::min(read.Columns.size(), read.OutputIUs.size());
-    for (size_t i = 0; i < count; ++i) {
-        exposedToPhysical[read.OutputIUs[i].GetFullName()] = read.Columns[i];
-    }
-
     TVector<TString> result;
     THashSet<TString> seen;
     for (const auto& iu : filter.GetFilterIUs(props)) {
-        const auto it = exposedToPhysical.find(iu.GetFullName());
-        const TString physical = it != exposedToPhysical.end() ? it->second : iu.GetColumnName();
+        Y_ENSURE(read.GetColumns().Contains(iu));
+        const auto physical = props.InfoUnitRegistry.Get(iu).GetColumnName();
         if (seen.insert(physical).second) {
             result.push_back(physical);
         }
@@ -465,11 +446,10 @@ TExprNode::TPtr BuildTableCallable(const TKikimrTableMetadata& meta, TPositionHa
 
 bool TPushRangesRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Filter &&
-        input->Children.front()->Kind == EOperator::Source;
+        input->GetChildren().front()->Kind == EOperator::Source;
 }
 
 TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
-    Y_UNUSED(props);
     auto& kqpCtx = rboCtx.KqpCtx;
     auto& ctx = rboCtx.ExprCtx;
     auto& typeCtx = rboCtx.TypeCtx;
@@ -479,12 +459,12 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    if (!IsSuitableToExtractAndPushRanges(input, ApplicableTableType)) {
+    if (!IsSuitableToExtractAndPushRanges(input.get(), ApplicableTableType)) {
         return input;
     }
 
     const auto filter = CastOperator<TOpFilter>(input);
-    const auto read = CastOperator<TOpRead>(filter->GetInput());
+    const auto read = CastOperator<TOpRead>(filter->GetInput().Get());
     const auto tablePath = TExprBase(read->GetTable()).Cast<TKqpTable>().Path().StringValue();
 
     // Check for table.
@@ -507,15 +487,16 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     THashSet<TString> possibleKeys;
     auto settings = PrepareExtractorSettings(kqpCtx);
     auto extractor = MakePredicateRangeExtractor(settings);
-    const auto schemeType = PrepareSchemeType(*read, tableDesc->SchemeNode, ctx);
+    const auto extractorNames = BuildExtractorNames(*read, *tableDesc->SchemeNode, props.InfoUnitRegistry, ctx);
+    const auto schemeType = PrepareSchemeType(extractorNames, tableDesc->SchemeNode, *read, props.InfoUnitRegistry, ctx);
     const bool prepareSuccess = extractor->Prepare(lambda.Ptr(), *schemeType, possibleKeys, ctx, typeCtx);
     YQL_ENSURE(prepareSuccess);
 
     const auto& mainMeta = *tableDesc->Metadata;
-    const auto mainKeyColumns = ResolveExposedKeyColumns(*read, mainMeta.KeyColumnNames);
+    const auto mainKeyColumns = ResolveExposedKeyColumns(extractorNames, mainMeta.KeyColumnNames);
     const auto mainResult = extractor->BuildComputeNode(mainKeyColumns, ctx, typeCtx);
     const auto sortColumns =
-        read->StorageType == NYql::EStorageType::RowStorage ? FindConsumingTopSortColumns(input) : TVector<TString>();
+        read->GetTableStorageType() == NYql::EStorageType::RowStorage ? FindConsumingTopSortColumns(input.get(), ctx) : TVector<TString>();
 
     TIntrusivePtr<TKikimrTableMetadata> chosenIndexMeta;
     IPredicateRangeExtractor::TBuildResult winnerResult;
@@ -523,7 +504,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     TIntrusivePtr<TKikimrTableMetadata> lookupIndexMeta;
     IPredicateRangeExtractor::TBuildResult lookupResult;
-    TVector<TString> lookupKeyColumns;
     TVector<TString> lookupReadColumns;
 
     auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size(), sortColumns, mainKeyColumns, true);
@@ -546,7 +526,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 continue;
             }
 
-            const bool covering = IsCovering(*read, *indexMeta);
+            const bool covering = IsCovering(*read, *indexMeta, props.InfoUnitRegistry);
             if (!covering) {
                 if (read->Limit) {
                     continue;
@@ -558,7 +538,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 }
             }
 
-            auto indexKeyColumns = ResolveExposedKeyColumns(*read, indexMeta->KeyColumnNames);
+            auto indexKeyColumns = ResolveExposedKeyColumns(extractorNames, indexMeta->KeyColumnNames);
             auto indexResult = extractor->BuildComputeNode(indexKeyColumns, ctx, typeCtx);
             if (!indexResult.ComputeNode) {
                 continue;
@@ -580,7 +560,6 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             } else {
                 lookupIndexMeta = indexMeta;
                 lookupResult = std::move(indexResult);
-                lookupKeyColumns = std::move(indexKeyColumns);
                 lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
                 chosenIndexMeta.Reset();
             }
@@ -593,38 +572,37 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
         TOpRead::TRangeInfo rangeInfo{
             .ComputeNode = lookupResult.ComputeNode,
-            .KeyColumns = lookupKeyColumns,
+            .KeyColumns = lookupIndexMeta->KeyColumnNames,
             .UsedPrefixLen = lookupResult.UsedPrefixLen,
             .PointPrefixLen = lookupResult.PointPrefixLen,
             .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges) : TMaybe<size_t>(),
         };
 
-        TVector<TInfoUnit> indexOutputIUs;
-        indexOutputIUs.reserve(lookupReadColumns.size());
+        TUnorderedIUs indexColumns;
+        THashMap<TString, TInfoUnitId> indexIds;
         for (const auto& col : lookupReadColumns) {
-            indexOutputIUs.emplace_back(TString(), col);
+            const auto id = props.InfoUnitRegistry.Add(TInfoUnit(read->Alias, col));
+            indexColumns.Add(id);
+            indexIds.emplace(col, id);
         }
 
-        auto indexRead = MakeIntrusive<TOpRead>(read->Alias, lookupReadColumns, indexOutputIUs, GetStorageType(*lookupIndexMeta),
+        auto indexRead = MakeIntrusive<TOpRead>(read->Alias, std::move(indexColumns), GetStorageType(*lookupIndexMeta),
                                                 BuildTableCallable(*lookupIndexMeta, read->Pos, ctx), nullptr, nullptr,
                                                 std::move(rangeInfo), std::nullopt, ESortDir::None, read->Props, read->Pos);
 
-        auto indexFilter = MakeIntrusive<TOpFilter>(indexRead, filter->Pos, filter->Props,
-                                                    TExpression(lookupResult.PrunedLambda, &ctx, &props), true);
-        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
-        const size_t renameCount = std::min(read->Columns.size(), read->OutputIUs.size());
-        for (size_t i = 0; i < renameCount; ++i) {
-            renameMap[read->OutputIUs[i]] = TInfoUnit(TString(), read->Columns[i]);
+        TSubstitutions substitutions;
+        for (const auto id : filter->GetFilterIUs(props)) {
+            substitutions.Add(id, indexIds.at(props.InfoUnitRegistry.Get(id).GetColumnName()));
         }
-        indexFilter->RenameUsedIUs(renameMap, ctx);
+        auto indexPredicate = TExpression(lookupResult.PrunedLambda, &ctx, &props).ApplyRenames(substitutions);
+        auto indexFilter = MakeIntrusive<TOpFilter>(std::move(indexRead), filter->Pos, filter->Props, std::move(indexPredicate), true);
 
-        TVector<TInfoUnit> lookupKeys;
+        TOpTableLookup::TLookupKeys lookupKeys;
         for (const auto& pk : mainMeta.KeyColumnNames) {
-            lookupKeys.emplace_back(TString(), pk);
+            lookupKeys.Append(indexIds.at(pk), pk);
         }
 
-        return MakeIntrusive<TOpTableLookup>(indexFilter, read->Pos, read->TableCallable, read->Columns,
-                                             read->GetOutputIUs(), lookupKeys);
+        return MakeIntrusive<TOpTableLookup>(std::move(indexFilter), read->Pos, read->GetTable(), read->GetColumns(), std::move(lookupKeys));
     }
 
     const auto& chosen = chosenIndexMeta ? winnerResult : mainResult;
@@ -641,12 +619,12 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     TOpRead::TRangeInfo rangeInfo{
         .ComputeNode = chosen.ComputeNode,
-        .KeyColumns = chosenKeyColumns,
+        .KeyColumns = chosenIndexMeta ? chosenIndexMeta->KeyColumnNames : mainMeta.KeyColumnNames,
         .UsedPrefixLen = chosen.UsedPrefixLen,
         .PointPrefixLen = chosen.PointPrefixLen,
         .ExpectedMaxRanges = chosen.ExpectedMaxRanges ? TMaybe<size_t>(*chosen.ExpectedMaxRanges) : TMaybe<size_t>(),
     };
-    const auto storageType = chosenIndexMeta ? GetStorageType(*chosenIndexMeta) : read->StorageType;
+    const auto storageType = chosenIndexMeta ? GetStorageType(*chosenIndexMeta) : read->GetTableStorageType();
 
     // Point lookup is only applicable to row storage tables.
     if (storageType == NYql::EStorageType::RowStorage && chosen.PointPrefixLen > 0) {
@@ -663,7 +641,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
 
     const auto tableCallable = chosenIndexMeta ? BuildTableCallable(*chosenIndexMeta, read->Pos, ctx) : read->TableCallable;
     const auto sortDir = chosenIndexMeta ? ESortDir::None : read->SortDir;
-    auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), storageType, tableCallable, read->OlapFilterLambda,
+    auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), storageType, tableCallable, read->OlapFilterLambda,
                                           read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), sortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(chosen.PrunedLambda, &ctx, &props), true);
 }

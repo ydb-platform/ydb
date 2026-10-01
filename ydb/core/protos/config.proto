@@ -147,6 +147,9 @@ message TActorSystemConfig {
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
+    // Maximum idle coroutine allocation bytes per actor-system worker. Zero disables caching.
+    optional uint64 AsyncFrameCacheSizeBytes = 26 [default = 4194304];
+
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
 
@@ -1743,10 +1746,10 @@ message TImmediateControlsConfig {
             MaxValue: 137438953472,
             DefaultValue: 536870912 }];
         optional uint64 PageCacheReleaseRate = 5 [(ControlOptions) = {
-            Description: "Page Cache Release Rate.",
+            Description: "Page Cache Release Rate. A smaller request is served by the huge page cache alone.",
             MinValue: 0,
-            MaxValue: 134217728,
-            DefaultValue: 8388608 }];
+            MaxValue: 1073741824,
+            DefaultValue: 134217728 }];
         optional uint64 UseDwarfBacktracePrinting = 6 [(ControlOptions) = {
             Description: "Use DWARF symbolization for TCMalloc heap/profile dump backtraces.",
             MinValue: 0,
@@ -2288,6 +2291,12 @@ message TImmediateControlsConfig {
                          "Effective when SystemReserveChunks is nonzero; only actual chunk releases replenish headroom",
             MinValue: 0,
             MaxValue: 1000000,
+            DefaultValue: 0 }];
+        optional uint64 IdleDeviceProbeIntervalSeconds = 13 [(ControlOptions) = {
+            Description: "Issue a one-sector PDisk health read after this many seconds without successful physical I/O. "
+                         "Successful DDisk/PersistentBuffer direct I/O also resets the idle interval. 0 disables probes",
+            MinValue: 0,
+            MaxValue: 86400,
             DefaultValue: 0 }];
     }
 

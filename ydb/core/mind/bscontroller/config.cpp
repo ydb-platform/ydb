@@ -663,14 +663,14 @@ namespace NKikimr::NBsController {
                     Y_DEBUG_ABORT_UNLESS(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
                 }
 
-                // Keep node->group subscription in commit path: dynamic groups may appear
-                // after initial RegisterNode, and cleanup for the same index is done below.
+                // Keep subscriptions for placements added after RegisterNode on the current connection.
+                // Disconnected nodes will subscribe to their live placements when they register again.
                 if (overlay->second && !overlay->second->IsBeingDeleted()) {
                     const TGroupId groupId = overlay->second->GroupId;
                     if (NKikimr::IsDynamicGroup(groupId)) {
                         const TNodeId nodeId = overlay->second->VSlotId.NodeId;
                         auto& node = GetNode(nodeId);
-                        if (node.GroupsRequested.insert(groupId).second) {
+                        if (node.ConnectedServerId && node.GroupsRequested.insert(groupId).second) {
                             GroupToNode.emplace(groupId, nodeId);
                         }
                     }

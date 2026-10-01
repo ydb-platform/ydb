@@ -2,8 +2,6 @@
 #include "traces/kqp_rbo_rule_trace.h"
 #include "kqp_plan_conversion_utils.h"
 
-#include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
-
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {
@@ -62,13 +60,10 @@ bool ISimplifiedRule::MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext
         return false;
     }
 
-    auto output = SimpleMatchAndApply(input, ctx, props);
-    if (input != output) {
-        input = output;
-        return true;
-    } else {
-        return false;
-    }
+    const auto* previous = input.get();
+    input = SimpleMatchAndApply(input, ctx, props);
+    Y_ENSURE(input, "Rule returned a null plan");
+    return input.get() != previous;
 }
 
 TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IRule>>&& rules)
@@ -112,15 +107,6 @@ void EnsureRequiredProps(TOpRoot& root, ui32 props, ui32& computedProps, TRBOCon
         computedProps |= ERuleProperties::RequireLiveness;
     }
 
-    if (HasProperty(props, ERuleProperties::RequireNameConstraints) && !HasProperty(computedProps, ERuleProperties::RequireNameConstraints)) {
-        ComputePlanNameConstraints(root);
-        computedProps |= ERuleProperties::RequireNameConstraints;
-    }
-
-    if (HasProperty(props, ERuleProperties::RequireAliases) && !HasProperty(computedProps, ERuleProperties::RequireAliases)) {
-        ComputePlanAliases(root);
-        computedProps |= ERuleProperties::RequireAliases;
-    }
 }
 
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName) {
@@ -147,16 +133,29 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
         fired = false;
 
         for (const auto& iter : root) {
+            // Replicate ports are binding boundaries, not removable unary
+            // pass-through operators. Producer rewrites use their shared slot.
+            if (iter.Current->Kind == EOperator::Replicate) {
+                continue;
+            }
             for (const auto& rule : Rules) {
-                auto op = iter.Current;
-                if (!rule->QuickMatch(op, root.PlanProps)) {
+                if (!rule->QuickMatch(TIntrusivePtr<IOperator>(iter.Current), root.PlanProps)) {
                     continue;
                 }
 
                 EnsureRequiredProps(root, rule->Props, computedProps, ctx, StageName);
 
                 TRuleTraceAttempt traceAttempt(ctx, rule->RuleName);
+                // Borrowed traversal entries must not be dereferenced after a
+                // destructive rewrite. Edit the owning slot, not a copied owner.
+                auto* parent = iter.Parent;
+                const auto childIndex = iter.ChildIndex;
+                const auto subplanIU = iter.SubplanIU;
+                auto& op = parent ? parent->MutableChild(childIndex)
+                    : subplanIU ? root.PlanProps.Subplans.MutablePlan(*subplanIU)
+                    : root.MutableChild(0);
                 const bool ruleApplied = rule->MatchAndApply(op, ctx, root.PlanProps);
+                Y_ENSURE(op, "Rule left a null plan edge");
                 traceAttempt.CloseRule();
 
                 if (!ruleApplied) {
@@ -168,26 +167,6 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                     fired = true;
 
                     YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
-
-                    if (op != iter.Current) {
-                        Y_ENSURE(HasProperty(computedProps, ERuleProperties::RequireParents),
-                            TStringBuilder() << "Rule " << rule->RuleName << " replaced an operator without requiring parents");
-
-                        // If the original operator had parents, update all parents
-                        if (iter.Current->Parents.size()) {
-                            for (auto & [parent, parentIdx] : iter.Current->Parents) {
-                                parent->Children[parentIdx] = op;
-                            }
-                        }
-                        // Otherwise, if its not a subplan, it was root, so update root
-                        else if (!iter.SubplanIU) {
-                            root.SetInput(op);
-                        }
-                        // Finally, it's a subplan, so update the subplan
-                        else {
-                            root.PlanProps.Subplans.ReplacePlan(*iter.SubplanIU, op);
-                        }
-                    }
 
                     if (needToLog && rule->LogRule) {
                         YQL_CLOG(TRACE, CoreDq) << "Plan after applying rule:\n" << root.PlanToString(ctx.ExprCtx);
@@ -216,7 +195,7 @@ void TRuleBasedStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     Y_ENSURE(numMatches < maxNumOfMatches);
 }
 
-TExprNode::TPtr TRuleBasedOptimizer::Optimize(TVector<TIntrusivePtr<TOpRoot>> roots, TRBOContext& rboCtx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(const TVector<TIntrusivePtr<TOpRoot>>& roots, TRBOContext& rboCtx) {
     bool needToLog = NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE);
     auto& ctx = rboCtx.ExprCtx;
     int stageCounter = 0;
@@ -250,6 +229,11 @@ TExprNode::TPtr TRuleBasedOptimizer::Optimize(TVector<TIntrusivePtr<TOpRoot>> ro
         auto convertProps = ERuleProperties::RequireParents | ERuleProperties::RequireStatistics
             | ERuleProperties::RequireLiveness;
         ComputeRequiredProps(root, convertProps, rboCtx, "Physical plan generaion");
+        TUnorderedIUs live;
+        for (const auto& item : root) {
+            live.UnionWith(GetLiveOut(item.Current));
+        }
+        root.PlanProps.InfoUnitRegistry.FinalizeDisplayNames(live);
         if (needToLog) {
             YQL_CLOG(TRACE, CoreDq) << "Final plan before generation:\n" << root.PlanToString(ctx, EPrintPlanOptions::PrintFullMetadata | EPrintPlanOptions::PrintBasicStatistics);
         }

@@ -128,6 +128,11 @@ struct TOptimizerStatistics {
         THashMap<TString, TMultiColumnStatistics> MultiData;
         TColumnStatMap() {}
         explicit TColumnStatMap(THashMap<TString, TColumnStatistics> data) : Data(std::move(data)) {}
+        TColumnStatMap(THashMap<TString, TColumnStatistics> data,
+                       THashMap<TString, TMultiColumnStatistics> multiData)
+            : Data(std::move(data))
+            , MultiData(std::move(multiData))
+        {}
     };
 
     struct TShuffledByColumns : public TSimpleRefCount<TShuffledByColumns> {

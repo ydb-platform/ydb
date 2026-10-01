@@ -265,6 +265,19 @@ namespace NActors {
         }
     }
 
+    TAsyncFrameCache::TProcessStats TCpuManager::GetAsyncFrameCacheStats() const {
+        // Shared is owned separately from Executors, and its worker threads are
+        // distinct TExecutorThread objects from the basic pools' own threads.
+        TAsyncFrameCache::TProcessStats stats;
+        for (ui32 poolId = 0; poolId < ExecutorPoolCount; ++poolId) {
+            Executors[poolId]->CollectAsyncFrameCacheStats(stats);
+        }
+        if (Shared) {
+            Shared->CollectAsyncFrameCacheStats(stats);
+        }
+        return stats;
+    }
+
     void TCpuManager::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {
         if (static_cast<ui32>(poolId) < ExecutorPoolCount) {
             Executors[poolId]->GetExecutorPoolState(state);

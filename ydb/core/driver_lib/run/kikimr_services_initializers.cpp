@@ -628,6 +628,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     setup->NodeId = NodeId;
     setup->CpuManager = CreateCpuManagerConfig(systemConfig, appData);
     setup->MonitorStuckActors = systemConfig.GetMonitorStuckActors();
+    setup->AsyncFrameCacheSizeBytes = systemConfig.GetAsyncFrameCacheSizeBytes();
 
     auto schedulerConfig = NActorSystemConfigHelpers::CreateSchedulerConfig(systemConfig.GetScheduler());
     schedulerConfig.MonCounters = GetServiceCounters(counters, "utils");
@@ -1276,6 +1277,12 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
             }
             nodeWardenConfig->DDiskConfig->SetIntegrityChecksumCacheBytes(
                 storageConfig.GetIntegrityChecksumCacheBytes());
+        }
+        if (storageConfig.HasDevNullMode()) {
+            if (!nodeWardenConfig->DDiskConfig) {
+                nodeWardenConfig->DDiskConfig.emplace();
+            }
+            nodeWardenConfig->DDiskConfig->SetDevNullMode(storageConfig.GetDevNullMode());
         }
         if (storageConfig.HasGlobalPBufferConfig()) {
             nodeWardenConfig->PBufferConfig = storageConfig.GetGlobalPBufferConfig();

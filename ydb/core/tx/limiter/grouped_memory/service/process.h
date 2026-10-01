@@ -13,7 +13,7 @@ namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 LWTRACE_USING(YDB_GROUPED_MEMORY_PROVIDER);
 
-enum class EUnconstrainedScheduleResult {
+enum class EUnrestrictedScheduleResult {
     Allocated,
     Failed,
     Idle
@@ -27,18 +27,20 @@ private:
     THashMap<ui64, std::shared_ptr<TAllocationInfo>> AllocationInfo;
     TExternalIdsControl GroupIds;
     std::set<ui64> AdmittedGroupIds;
+    THashMap<ui64, ui64> AccountedBytesByAdmittedGroup;
+    ui64 AdmittedAllocatedBytes = 0;
     ui32 Links = 1;
     const NActors::TActorId OwnerActorId;
-    const bool UnconstrainedEnabled = false;
+    const bool UnrestrictedEnabled = false;
     const ui32 MaxUnrestrictedGroups = 1;
 
-    static bool FitsUnconstrained(const TAllocationInfo& info) {
-        return info.IsAllocatableUnconstrained(0);
+    static bool FitsUnrestricted(const TAllocationInfo& info) {
+        return info.IsAllocatableUnrestricted(0);
     }
 
     bool AdmittedGroupHasFittingAllocation() const {
         for (const ui64 groupId : AdmittedGroupIds) {
-            if (WaitAllocations.ContainsIf(groupId, FitsUnconstrained)) {
+            if (WaitAllocations.ContainsIf(groupId, FitsUnrestricted)) {
                 return true;
             }
         }
@@ -46,14 +48,82 @@ private:
     }
 
     bool CanAdmitMinWaitingGroup() const {
-        if (!UnconstrainedEnabled || AdmittedGroupIds.size() >= MaxUnrestrictedGroups) {
+        if (!UnrestrictedEnabled || AdmittedGroupIds.size() >= MaxUnrestrictedGroups) {
             return false;
         }
+        return MinWaitingGroupFits();
+    }
+
+    bool MinWaitingGroupFits() const {
         const auto minGroupId = WaitAllocations.GetMinExternalGroupId();
         if (!minGroupId || AdmittedGroupIds.contains(*minGroupId)) {
             return false;
         }
-        return WaitAllocations.ContainsIf(*minGroupId, FitsUnconstrained);
+        return WaitAllocations.ContainsIf(*minGroupId, FitsUnrestricted);
+    }
+
+    bool HasStuckAdmission() const {
+        for (const ui64 groupId : AdmittedGroupIds) {
+            if (WaitAllocations.HasWaiting(groupId) && !WaitAllocations.ContainsIf(groupId, FitsUnrestricted)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool CanReleaseStuckAdmission() const {
+        return HasStuckAdmission() && MinWaitingGroupFits();
+    }
+
+    ui64 AllocatedBytesOfGroup(const ui64 groupId) const {
+        ui64 bytes = 0;
+        for (const auto& [_, info] : AllocationInfo) {
+            if (info->GetAllocationExternalGroupId() == groupId && info->GetAllocationStatus() == EAllocationStatus::Allocated) {
+                bytes += info->GetAllocatedVolume();
+            }
+        }
+        return bytes;
+    }
+
+    void ReaccountAdmittedGroup(const ui64 groupId) {
+        if (!AdmittedGroupIds.contains(groupId)) {
+            return;
+        }
+        const ui64 fresh = AllocatedBytesOfGroup(groupId);
+        ui64& accounted = AccountedBytesByAdmittedGroup[groupId];
+        if (fresh >= accounted) {
+            AdmittedAllocatedBytes += fresh - accounted;
+        } else {
+            AFL_VERIFY(AdmittedAllocatedBytes >= accounted - fresh);
+            AdmittedAllocatedBytes -= accounted - fresh;
+        }
+        if (fresh == 0) {
+            AccountedBytesByAdmittedGroup.erase(groupId);
+        } else {
+            accounted = fresh;
+        }
+    }
+
+    void RevokeAdmission(const ui64 groupId) {
+        auto it = AccountedBytesByAdmittedGroup.find(groupId);
+        if (it != AccountedBytesByAdmittedGroup.end()) {
+            AFL_VERIFY(AdmittedAllocatedBytes >= it->second);
+            AdmittedAllocatedBytes -= it->second;
+            AccountedBytesByAdmittedGroup.erase(it);
+        }
+        AdmittedGroupIds.erase(groupId);
+    }
+
+    void ReleaseStuckAdmissions() {
+        std::vector<ui64> stuck;
+        for (const ui64 groupId : AdmittedGroupIds) {
+            if (WaitAllocations.HasWaiting(groupId) && !WaitAllocations.ContainsIf(groupId, FitsUnrestricted)) {
+                stuck.push_back(groupId);
+            }
+        }
+        for (const ui64 groupId : stuck) {
+            RevokeAdmission(groupId);
+        }
     }
 
     bool GroupHasAllocated(const ui64 groupId) const {
@@ -67,18 +137,19 @@ private:
 
     void DropAdmissionIfIdle(const ui64 groupId) {
         if (!GroupHasAllocated(groupId)) {
-            AdmittedGroupIds.erase(groupId);
+            RevokeAdmission(groupId);
         }
     }
 
-    EUnconstrainedScheduleResult AllocateTaken(const std::shared_ptr<TAllocationInfo>& allocation, const ui64 groupId) {
+    EUnrestrictedScheduleResult AllocateTaken(const std::shared_ptr<TAllocationInfo>& allocation, const ui64 groupId) {
         const bool success = allocation->Allocate(OwnerActorId);
         if (!success) {
             UnregisterAllocation(allocation->GetIdentifier());
             DropAdmissionIfIdle(groupId);
-            return EUnconstrainedScheduleResult::Failed;
+            return EUnrestrictedScheduleResult::Failed;
         }
-        return EUnconstrainedScheduleResult::Allocated;
+        ReaccountAdmittedGroup(groupId);
+        return EUnrestrictedScheduleResult::Allocated;
     }
 
     TAllocationInfo& GetAllocationInfoVerified(const ui64 allocationId) const {
@@ -112,43 +183,49 @@ private:
 
 public:
     TProcessMemoryScope(const ui64 externalProcessId, const ui64 externalScopeId, const NActors::TActorId& ownerActorId,
-        const bool unconstrainedEnabled = false, const ui32 maxUnrestrictedGroups = 1)
+        const bool unrestrictedEnabled = false, const ui32 maxUnrestrictedGroups = 1)
         : ExternalProcessId(externalProcessId)
         , ExternalScopeId(externalScopeId)
         , OwnerActorId(ownerActorId)
-        , UnconstrainedEnabled(unconstrainedEnabled)
+        , UnrestrictedEnabled(unrestrictedEnabled)
         , MaxUnrestrictedGroups(maxUnrestrictedGroups) {
     }
 
-    bool IsUnconstrainedEnabled() const {
-        return UnconstrainedEnabled;
+    bool IsUnrestrictedEnabled() const {
+        return UnrestrictedEnabled;
     }
 
     bool HasAdmission() const {
         return !AdmittedGroupIds.empty();
     }
 
-    bool CanScheduleUnconstrained() const {
-        return UnconstrainedEnabled && (AdmittedGroupHasFittingAllocation() || CanAdmitMinWaitingGroup());
+    bool CanScheduleUnrestricted() const {
+        return UnrestrictedEnabled && (AdmittedGroupHasFittingAllocation() || CanAdmitMinWaitingGroup() || CanReleaseStuckAdmission());
     }
 
-    EUnconstrainedScheduleResult ScheduleOneUnconstrained() {
-        if (!UnconstrainedEnabled) {
-            return EUnconstrainedScheduleResult::Idle;
+    EUnrestrictedScheduleResult ScheduleOneUnrestricted() {
+        if (!UnrestrictedEnabled) {
+            return EUnrestrictedScheduleResult::Idle;
         }
         const std::vector<ui64> admitted(AdmittedGroupIds.begin(), AdmittedGroupIds.end());
         for (const ui64 groupId : admitted) {
-            if (auto allocation = WaitAllocations.TakeOne(groupId, FitsUnconstrained)) {
+            if (auto allocation = WaitAllocations.TakeOne(groupId, FitsUnrestricted)) {
                 return AllocateTaken(allocation, groupId);
             }
         }
+        // The admitted group holds the slot and waits on a request that does not fit the band.
+        // A smaller group is waiting on a request that does fit, and it keeps its bytes until that
+        // request is granted. Release the stuck slot so the smaller group can run.
+        if (CanReleaseStuckAdmission()) {
+            ReleaseStuckAdmissions();
+        }
         if (!CanAdmitMinWaitingGroup()) {
-            return EUnconstrainedScheduleResult::Idle;
+            return EUnrestrictedScheduleResult::Idle;
         }
         const ui64 groupId = *WaitAllocations.GetMinExternalGroupId();
-        auto allocation = WaitAllocations.TakeOne(groupId, FitsUnconstrained);
+        auto allocation = WaitAllocations.TakeOne(groupId, FitsUnrestricted);
         if (!allocation) {
-            return EUnconstrainedScheduleResult::Idle;
+            return EUnrestrictedScheduleResult::Idle;
         }
         AdmittedGroupIds.insert(groupId);
         return AllocateTaken(allocation, groupId);
@@ -156,11 +233,7 @@ public:
 
     void CollectAdmitted(ui64& groups, ui64& bytes) const {
         groups += AdmittedGroupIds.size();
-        for (const auto& [_, info] : AllocationInfo) {
-            if (info->GetAllocationStatus() == EAllocationStatus::Allocated && AdmittedGroupIds.contains(info->GetAllocationExternalGroupId())) {
-                bytes += info->GetAllocatedVolume();
-            }
-        }
+        bytes += AdmittedAllocatedBytes;
     }
 
     void Register() {
@@ -176,6 +249,8 @@ public:
         }
         GroupIds.Clear();
         AdmittedGroupIds.clear();
+        AccountedBytesByAdmittedGroup.clear();
+        AdmittedAllocatedBytes = 0;
         AllocationInfo.clear();
         YDB_LOG_INFO_COMP(NKikimrServices::GROUPED_MEMORY_LIMITER, "",
             {"event", "scope_cleaned"},
@@ -197,8 +272,8 @@ public:
             auto allocationInfo = RegisterAllocationImpl(externalGroupId, allocation, stage);
 
             const bool softOk = allocationInfo->IsAllocatable(0);
-            const bool bandOk = UnconstrainedEnabled && AdmittedGroupIds.contains(externalGroupId) && allocationInfo->IsAllocatableUnconstrained(0);
-            const bool force = !UnconstrainedEnabled && isPriorityProcess && externalGroupId <= GroupIds.GetMinExternalIdVerified();
+            const bool bandOk = UnrestrictedEnabled && AdmittedGroupIds.contains(externalGroupId) && allocationInfo->IsAllocatableUnrestricted(0);
+            const bool force = !UnrestrictedEnabled && isPriorityProcess && externalGroupId <= GroupIds.GetMinExternalIdVerified();
             if (allocationInfo->GetAllocationStatus() != EAllocationStatus::Waiting) {
             } else if (WaitAllocations.GetMinExternalGroupId().value_or(externalGroupId) < externalGroupId) {
                 WaitAllocations.AddAllocationExt(externalGroupId, allocationInfo);
@@ -207,6 +282,8 @@ public:
                 auto success = allocationInfo->Allocate(OwnerActorId);
                 if (!success) {
                     UnregisterAllocation(allocationInfo->GetIdentifier());
+                } else if (AdmittedGroupIds.contains(externalGroupId)) {
+                    ReaccountAdmittedGroup(externalGroupId);
                 }
                 LWPROBE(Allocated, "on_register", allocationInfo->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocationInfo->GetAllocationTime(), false, success);
             } else {
@@ -237,6 +314,7 @@ public:
         }
         bool waitFlag = false;
         const ui64 externalGroupId = it->second->GetAllocationExternalGroupId();
+        const bool reaccount = AdmittedGroupIds.contains(externalGroupId) && it->second->GetAllocationStatus() == EAllocationStatus::Allocated;
         switch (it->second->GetAllocationStatus()) {
             case EAllocationStatus::Allocated:
             case EAllocationStatus::Failed:
@@ -255,6 +333,9 @@ public:
             {"allocationStatus", it->second->GetAllocationStatus()});
         memoryAllocated = it->second->GetAllocatedVolume();
         AllocationInfo.erase(it);
+        if (reaccount) {
+            ReaccountAdmittedGroup(externalGroupId);
+        }
         return !!memoryAllocated;
     }
 
@@ -265,8 +346,8 @@ public:
                 {"event", "remove_group"},
                 {"externalGroupId", externalGroupId},
                 {"minGroup", GroupIds.GetMinExternalIdOptional()});
-            AdmittedGroupIds.erase(externalGroupId);
-            if (isPriorityProcess && !UnconstrainedEnabled && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
+            RevokeAdmission(externalGroupId);
+            if (isPriorityProcess && !UnrestrictedEnabled && (externalGroupId < GroupIds.GetMinExternalIdDef(externalGroupId))) {
                 Y_UNUSED(TryAllocateWaiting(isPriorityProcess, 0));
             }
         } else {
@@ -319,7 +400,7 @@ private:
 
     const NActors::TActorId OwnerActorId;
     bool PriorityProcessFlag = false;
-    const bool UnconstrainedEnabled = false;
+    const bool UnrestrictedEnabled = false;
     const ui32 MaxUnrestrictedGroupsPerScope = 1;
     ui64 MemoryUsage = 0;
 
@@ -425,7 +506,7 @@ public:
     void RegisterScope(const ui64 externalScopeId) {
         auto it = AllocationScopes.find(externalScopeId);
         if (it == AllocationScopes.end()) {
-            AFL_VERIFY(AllocationScopes.emplace(externalScopeId, std::make_shared<TProcessMemoryScope>(ExternalProcessId, externalScopeId, OwnerActorId, UnconstrainedEnabled, MaxUnrestrictedGroupsPerScope)).second);
+            AFL_VERIFY(AllocationScopes.emplace(externalScopeId, std::make_shared<TProcessMemoryScope>(ExternalProcessId, externalScopeId, OwnerActorId, UnrestrictedEnabled, MaxUnrestrictedGroupsPerScope)).second);
         } else {
             it->second->Register();
         }
@@ -438,12 +519,12 @@ public:
 
     TProcessMemory(const ui64 externalProcessId, const ui64 internalProcessId, const NActors::TActorId& ownerActorId, const bool isPriority,
         const std::vector<std::shared_ptr<TStageFeatures>>& stages, const std::shared_ptr<TStageFeatures>& defaultStage,
-        const bool unconstrainedEnabled = false, const ui32 maxUnrestrictedGroupsPerScope = 1)
+        const bool unrestrictedEnabled = false, const ui32 maxUnrestrictedGroupsPerScope = 1)
         : ExternalProcessId(externalProcessId)
         , InternalProcessId(internalProcessId)
         , OwnerActorId(ownerActorId)
         , PriorityProcessFlag(isPriority)
-        , UnconstrainedEnabled(unconstrainedEnabled)
+        , UnrestrictedEnabled(unrestrictedEnabled)
         , MaxUnrestrictedGroupsPerScope(maxUnrestrictedGroupsPerScope)
         , Stages(stages)
         , DefaultStage(defaultStage) {
@@ -467,10 +548,10 @@ public:
         }
     }
 
-    EUnconstrainedScheduleResult ScheduleOneUnconstrained(const ui64 externalScopeId) {
+    EUnrestrictedScheduleResult ScheduleOneUnrestricted(const ui64 externalScopeId) {
         auto& scope = GetAllocationScopeVerified(externalScopeId);
-        const auto result = scope.ScheduleOneUnconstrained();
-        if (result != EUnconstrainedScheduleResult::Idle) {
+        const auto result = scope.ScheduleOneUnrestricted();
+        if (result != EUnrestrictedScheduleResult::Idle) {
             RefreshMemoryUsage();
         }
         UpdateWaitingScopes(&scope);

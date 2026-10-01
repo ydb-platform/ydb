@@ -58,7 +58,7 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
         for (auto it = Groups.begin(); it != Groups.end();) {
             const ui64 externalGroupId = it->first;
             TGrouppedAllocations& groupedAllocations = it->second;
-            const bool forced = !scope.IsUnconstrainedEnabled() && isPriorityProcess && externalGroupId == scope.GroupIds.GetMinExternalIdVerified();
+            const bool forced = !scope.IsUnrestrictedEnabled() && isPriorityProcess && externalGroupId == scope.GroupIds.GetMinExternalIdVerified();
             std::vector<std::shared_ptr<TAllocationInfo>> allocated;
             if (forced) {
                 allocated = groupedAllocations.ExtractAllocationsToVector();

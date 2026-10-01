@@ -22,7 +22,7 @@ void TMemoryLimiterActor::Bootstrap() {
     for (ui64 i = 0; i < Config.GetCountBuckets(); i++) {
         LoadQueue.Add(i);
         Counters.push_back(std::make_shared<TCounters>(Signals, Name + "_" + ToString(i)));
-        DefaultStages.push_back(std::make_shared<TStageFeatures>("GLOBAL", Config.GetMemoryLimit(), Config.GetHardMemoryLimit(), nullptr, Counters.back()->BuildStageCounters("general"), Config.MakeUnconstrainedSoftBytes(Config.GetHardMemoryLimit())));
+        DefaultStages.push_back(std::make_shared<TStageFeatures>("GLOBAL", Config.GetMemoryLimit(), Config.GetHardMemoryLimit(), nullptr, Counters.back()->BuildStageCounters("general"), Config.MakeUnrestrictedSoftBytes(Config.GetHardMemoryLimit())));
         Managers.push_back(std::make_shared<TManager>(SelfId(), Config, Name, Counters.back(), DefaultStages.back()));
     }
 
@@ -126,9 +126,9 @@ void TMemoryLimiterActor::Handle(NMemory::TEvConsumerLimit::TPtr& ev) {
     const ui64 countBuckets = Config.GetCountBuckets() ? Config.GetCountBuckets() : 1;
     const ui64 hardLimitBytes = ev->Get()->LimitBytes * HardLimitMultiplier / countBuckets;
     const ui64 limitBytes = hardLimitBytes * NKikimr::NOlap::TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient;
-    const auto unconstrainedSoft = Config.MakeUnconstrainedSoftBytes(hardLimitBytes);
+    const auto unrestrictedSoft = Config.MakeUnrestrictedSoftBytes(hardLimitBytes);
     for (auto& manager: Managers) {
-        manager->UpdateMemoryLimits(limitBytes, hardLimitBytes, unconstrainedSoft);
+        manager->UpdateMemoryLimits(limitBytes, hardLimitBytes, unrestrictedSoft);
     }
 }
 

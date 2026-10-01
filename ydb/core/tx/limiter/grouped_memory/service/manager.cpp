@@ -38,7 +38,7 @@ void TManager::UnregisterGroup(const ui64 externalProcessId, const ui64 external
         auto g = BuildProcessOrderGuard(*process);
         process->UnregisterGroup(externalScopeId, externalGroupId);
     }
-    if (Config.IsUnconstrainedEnabled()) {
+    if (Config.IsUnrestrictedEnabled()) {
         TryAllocateWaiting();
     }
     RefreshSignals();
@@ -71,7 +71,7 @@ void TManager::RelinkProcess(TProcessMemory& process, const TProcessMemoryUsage&
     }
 }
 
-bool TManager::ScheduleOneUnconstrained() {
+bool TManager::ScheduleOneUnrestricted() {
     struct TCandidate {
         bool HasAdmission = false;
         ui64 InternalId = 0;
@@ -93,7 +93,7 @@ bool TManager::ScheduleOneUnconstrained() {
     for (auto& [internalId, process] : Processes) {
         for (const ui64 scopeId : process.GetWaitingScopeIds()) {
             TProcessMemoryScope& scope = process.MutableScope(scopeId);
-            if (!scope.CanScheduleUnconstrained()) {
+            if (!scope.CanScheduleUnrestricted()) {
                 continue;
             }
             TCandidate candidate{scope.HasAdmission(), internalId, scopeId, &process};
@@ -107,13 +107,13 @@ bool TManager::ScheduleOneUnconstrained() {
     }
 
     const auto oldAddress = best->Process->BuildUsageAddress();
-    const auto step = best->Process->ScheduleOneUnconstrained(best->ScopeId);
+    const auto step = best->Process->ScheduleOneUnrestricted(best->ScopeId);
     RelinkProcess(*best->Process, oldAddress);
-    return step != EUnconstrainedScheduleResult::Idle;
+    return step != EUnrestrictedScheduleResult::Idle;
 }
 
 void TManager::TryAllocateWaiting() {
-    if (!Config.IsUnconstrainedEnabled() && Processes.size()) {
+    if (!Config.IsUnrestrictedEnabled() && Processes.size()) {
         auto it = Processes.find(ProcessIds.GetMinInternalIdVerified());
         AFL_VERIFY(it != Processes.end());
         TProcessMemory& process = it->second;
@@ -151,8 +151,8 @@ void TManager::TryAllocateWaiting() {
         }
     }
 
-    if (Config.IsUnconstrainedEnabled()) {
-        while (ScheduleOneUnconstrained()) {
+    if (Config.IsUnrestrictedEnabled()) {
+        while (ScheduleOneUnrestricted()) {
         }
     }
 
@@ -181,7 +181,7 @@ void TManager::RegisterAllocation(const ui64 externalProcessId, const ui64 exter
     if (auto* process = GetProcessMemoryByExternalIdOptional(externalProcessId)) {
         process->RegisterAllocation(externalScopeId, externalGroupId, allocation, stageIdx);
         UpdateWaitingProcesses(process);
-        if (Config.IsUnconstrainedEnabled()) {
+        if (Config.IsUnrestrictedEnabled()) {
             TryAllocateWaiting();
         }
     } else {
@@ -199,7 +199,7 @@ void TManager::RegisterProcess(const ui64 externalProcessId, const std::vector<s
         const ui64 internalProcessId = ProcessIds.RegisterExternalIdOrGet(externalProcessId);
         auto info = Processes.emplace(
             internalProcessId, TProcessMemory(externalProcessId, internalProcessId, OwnerActorId, Processes.empty(), stages, DefaultStage,
-                Config.IsUnconstrainedEnabled(), Config.GetMaxUnrestrictedGroupsPerScope()));
+                Config.IsUnrestrictedEnabled(), Config.GetMaxUnrestrictedGroupsPerScope()));
         AFL_VERIFY(info.second);
         ProcessesOrdered.emplace(info.first->second.BuildUsageAddress(), &info.first->second);
         UpdateWaitingProcesses(&info.first->second);
@@ -254,10 +254,10 @@ void TManager::SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func
     DefaultStage->SetMemoryConsumptionUpdateFunction(std::move(func));
 }
 
-void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, const std::optional<ui64>& unconstrainedSoft) {
+void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, const std::optional<ui64>& unrestrictedSoft) {
     AFL_ENSURE(DefaultStage);
     bool isLimitIncreased = false;
-    DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased, unconstrainedSoft);
+    DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased, unrestrictedSoft);
     if (isLimitIncreased) {
         TryAllocateWaiting();
     }

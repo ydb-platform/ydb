@@ -102,6 +102,11 @@ public:
         Groups[externalGroupId].AddAllocation(allocation);
     }
 
+    bool HasWaiting(const ui64 externalGroupId) const {
+        auto groupIt = Groups.find(externalGroupId);
+        return groupIt != Groups.end() && !groupIt->second.IsEmpty();
+    }
+
     template <typename TPred>
     bool ContainsIf(const ui64 externalGroupId, TPred&& pred) const {
         auto groupIt = Groups.find(externalGroupId);

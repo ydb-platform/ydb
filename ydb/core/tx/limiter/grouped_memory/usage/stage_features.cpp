@@ -21,11 +21,11 @@ TString TStageFeatures::DebugString() const {
 }
 
 TStageFeatures::TStageFeatures(const TString& name, const std::optional<ui64>& limit, const std::optional<ui64>& hardLimit,
-    const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters, const std::optional<ui64>& unconstrainedSoft)
+    const std::shared_ptr<TStageFeatures>& owner, const std::shared_ptr<TStageCounters>& counters, const std::optional<ui64>& unrestrictedSoft)
     : Name(name)
     , Limit(limit.value_or(DEFAULT_LIMIT))
     , HardLimit(hardLimit)
-    , UnconstrainedSoft(unconstrainedSoft)
+    , UnrestrictedSoft(unrestrictedSoft)
     , Owner(owner)
     , Counters(counters)
     , UseLimitFromConfig(limit.has_value()) {
@@ -34,7 +34,7 @@ TStageFeatures::TStageFeatures(const TString& name, const std::optional<ui64>& l
         if (HardLimit) {
             Counters->ValueHardLimit->Set(*HardLimit);
         }
-        Counters->ValueUnconstrainedSoftLimit->Set(UnconstrainedSoft.value_or(0));
+        Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
     }
 }
 
@@ -147,13 +147,13 @@ bool TStageFeatures::IsAllocatable(const ui64 volume, const ui64 additional) con
     return true;
 }
 
-bool TStageFeatures::IsAllocatableUnconstrained(const ui64 volume, const ui64 additional) const {
-    const ui64 limit = UnconstrainedSoft.value_or(Limit);
+bool TStageFeatures::IsAllocatableUnrestricted(const ui64 volume, const ui64 additional) const {
+    const ui64 limit = UnrestrictedSoft.value_or(Limit);
     if (limit < additional + Usage.Val() + volume) {
         return false;
     }
     if (Owner) {
-        return Owner->IsAllocatableUnconstrained(volume, additional);
+        return Owner->IsAllocatableUnrestricted(volume, additional);
     }
     return true;
 }
@@ -197,14 +197,28 @@ void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& count
         if (HardLimit) {
             Counters->ValueHardLimit->Set(*HardLimit);
         }
-        Counters->ValueUnconstrainedSoftLimit->Set(UnconstrainedSoft.value_or(0));
+        Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
     }
 }
 
 void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased,
-    const std::optional<ui64>& unconstrainedSoft) {
-    if (UseLimitFromConfig) {
+    const std::optional<ui64>& unrestrictedSoft) {
+    if (UseLimitFromConfig && !unrestrictedSoft) {
         isLimitIncreased = false;
+        return;
+    }
+    if (UseLimitFromConfig) {
+        const ui64 oldBand = UnrestrictedSoft.value_or(0);
+        const ui64 oldHard = HardLimit.value_or(0);
+        HardLimit = hardLimit;
+        UnrestrictedSoft = unrestrictedSoft;
+        isLimitIncreased = *unrestrictedSoft > oldBand || hardLimit.value_or(0) > oldHard;
+        if (Counters) {
+            if (HardLimit) {
+                Counters->ValueHardLimit->Set(*HardLimit);
+            }
+            Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
+        }
         return;
     }
 
@@ -212,14 +226,14 @@ void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui
 
     Limit = limit;
     HardLimit = hardLimit;
-    UnconstrainedSoft = unconstrainedSoft;
+    UnrestrictedSoft = unrestrictedSoft;
 
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
         if (HardLimit) {
             Counters->ValueHardLimit->Set(*HardLimit);
         }
-        Counters->ValueUnconstrainedSoftLimit->Set(UnconstrainedSoft.value_or(0));
+        Counters->ValueUnrestrictedSoftLimit->Set(UnrestrictedSoft.value_or(0));
     }
 }
 

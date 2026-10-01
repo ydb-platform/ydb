@@ -13,7 +13,7 @@ private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY(ui64, Limit, 0);
     YDB_READONLY_DEF(std::optional<ui64>, HardLimit);
-    YDB_READONLY_DEF(std::optional<ui64>, UnconstrainedSoft);
+    YDB_READONLY_DEF(std::optional<ui64>, UnrestrictedSoft);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Usage);
     YDB_ACCESSOR_DEF(TPositiveControlInteger, Waiting);
     std::shared_ptr<TStageFeatures> Owner;
@@ -32,14 +32,14 @@ public:
     }
 
     TStageFeatures(const TString& name, const std::optional<ui64>& limit, const std::optional<ui64>& hardLimit, const std::shared_ptr<TStageFeatures>& owner,
-        const std::shared_ptr<TStageCounters>& counters, const std::optional<ui64>& unconstrainedSoft = std::nullopt);
+        const std::shared_ptr<TStageCounters>& counters, const std::optional<ui64>& unrestrictedSoft = std::nullopt);
 
     [[nodiscard]] TConclusionStatus Allocate(const ui64 volume);
 
     void Free(const ui64 volume, const bool allocated);
     void UpdateVolume(const ui64 from, const ui64 to, const bool allocated);
     bool IsAllocatable(const ui64 volume, const ui64 additional) const;
-    bool IsAllocatableUnconstrained(const ui64 volume, const ui64 additional) const;
+    bool IsAllocatableUnrestricted(const ui64 volume, const ui64 additional) const;
     void Add(const ui64 volume, const bool allocated);
 
     void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);
@@ -48,7 +48,7 @@ public:
     void AttachCounters(const std::shared_ptr<TStageCounters>& counters);
 
     void UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased,
-        const std::optional<ui64>& unconstrainedSoft = std::nullopt);
+        const std::optional<ui64>& unrestrictedSoft = std::nullopt);
 };
 
 }   // namespace NKikimr::NOlap::NGroupedMemoryManager

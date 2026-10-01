@@ -19,22 +19,22 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TGroupedMemoryLimiterCon
 
     Enabled = config.GetEnabled();
     MaxUnrestrictedGroupsPerScope = config.GetMaxUnrestrictedGroupsPerScope();
-    if (config.HasUnconstrainedSoftLimitCoefficient()) {
-        const double coefficient = config.GetUnconstrainedSoftLimitCoefficient();
-        if (coefficient < TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient || coefficient > 1.0) {
+    if (config.HasUnrestrictedSoftLimitCoefficient()) {
+        const double coefficient = config.GetUnrestrictedSoftLimitCoefficient();
+        if (!(coefficient >= TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient && coefficient <= 1.0)) {
             return false;
         }
-        UnconstrainedSoftLimitCoefficient = coefficient;
+        UnrestrictedSoftLimitCoefficient = coefficient;
     }
 
     return true;
 }
 
-std::optional<ui64> TConfig::MakeUnconstrainedSoftBytes(const std::optional<ui64>& hardBytes) const {
-    if (!UnconstrainedSoftLimitCoefficient || !hardBytes) {
+std::optional<ui64> TConfig::MakeUnrestrictedSoftBytes(const std::optional<ui64>& hardBytes) const {
+    if (!UnrestrictedSoftLimitCoefficient || !hardBytes) {
         return std::nullopt;
     }
-    return static_cast<ui64>(static_cast<double>(*hardBytes) * *UnconstrainedSoftLimitCoefficient);
+    return static_cast<ui64>(static_cast<double>(*hardBytes) * *UnrestrictedSoftLimitCoefficient);
 }
 
 TString TConfig::DebugString() const {
@@ -43,7 +43,7 @@ TString TConfig::DebugString() const {
        << ";HardMemoryLimit=" << HardMemoryLimit.value_or(0)
        << ";Enabled=" << Enabled
        << ";CountBuckets=" << CountBuckets
-       << ";UnconstrainedSoftLimitCoefficient=" << UnconstrainedSoftLimitCoefficient.value_or(0)
+       << ";UnrestrictedSoftLimitCoefficient=" << UnrestrictedSoftLimitCoefficient.value_or(0)
        << ";MaxUnrestrictedGroupsPerScope=" << MaxUnrestrictedGroupsPerScope
        << ";";
     return sb;

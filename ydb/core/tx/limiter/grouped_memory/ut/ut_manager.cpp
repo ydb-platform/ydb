@@ -11,6 +11,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/object_counter.h>
 
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -337,7 +338,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     };
 
     TBandLimiter MakeBandLimiter(const ui64 soft, const std::optional<ui64> hard, const std::optional<double> coefficient,
-        const std::optional<ui64> unconstrainedOverride = {}, const std::optional<ui64> hardOverride = {}) {
+        const std::optional<ui64> unrestrictedOverride = {}, const std::optional<ui64> hardOverride = {}) {
         NOlap::NGroupedMemoryManager::TConfig config;
         NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
         protoConfig.SetMemoryLimit(soft);
@@ -345,28 +346,31 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
             protoConfig.SetHardMemoryLimit(*hard);
         }
         if (coefficient) {
-            protoConfig.SetUnconstrainedSoftLimitCoefficient(*coefficient);
+            protoConfig.SetUnrestrictedSoftLimitCoefficient(*coefficient);
         }
         UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
-        const std::optional<ui64> unconstrained = unconstrainedOverride ? unconstrainedOverride : config.MakeUnconstrainedSoftBytes(config.GetHardMemoryLimit());
+        const std::optional<ui64> unrestricted = unrestrictedOverride ? unrestrictedOverride : config.MakeUnrestrictedSoftBytes(config.GetHardMemoryLimit());
         const std::optional<ui64> stageHard = hardOverride ? hardOverride : config.GetHardMemoryLimit();
         auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>(
-            "GLOBAL", config.GetMemoryLimit(), stageHard, nullptr, counters->BuildStageCounters("general"), unconstrained);
+            "GLOBAL", config.GetMemoryLimit(), stageHard, nullptr, counters->BuildStageCounters("general"), unrestricted);
         auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
         return {stage, manager, counters};
     }
 
-    Y_UNIT_TEST(UnconstrainedCoefficientRejectsOutOfRange) {
+    Y_UNIT_TEST(UnrestrictedCoefficientRejectsOutOfRange) {
         NOlap::NGroupedMemoryManager::TConfig config;
         NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
-        protoConfig.SetUnconstrainedSoftLimitCoefficient(0.1);
+        protoConfig.SetUnrestrictedSoftLimitCoefficient(0.1);
         UNIT_ASSERT(!config.DeserializeFromProto(protoConfig));
-        protoConfig.SetUnconstrainedSoftLimitCoefficient(1.5);
+        protoConfig.SetUnrestrictedSoftLimitCoefficient(1.5);
         UNIT_ASSERT(!config.DeserializeFromProto(protoConfig));
-        protoConfig.SetUnconstrainedSoftLimitCoefficient(0.5);
+        protoConfig.SetUnrestrictedSoftLimitCoefficient(std::numeric_limits<double>::quiet_NaN());
+        UNIT_ASSERT(!config.DeserializeFromProto(protoConfig));
+        UNIT_ASSERT(!config.IsUnrestrictedEnabled());
+        protoConfig.SetUnrestrictedSoftLimitCoefficient(0.5);
         UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
-        UNIT_ASSERT(config.IsUnconstrainedEnabled());
+        UNIT_ASSERT(config.IsUnrestrictedEnabled());
         UNIT_ASSERT_VALUES_EQUAL(config.GetMaxUnrestrictedGroupsPerScope(), 1u);
     }
 
@@ -414,9 +418,9 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT(limiter.Manager->IsEmpty());
     }
 
-    Y_UNIT_TEST(AdmittedHeadsOfTwoScopesShareUnconstrainedSoft) {
+    Y_UNIT_TEST(AdmittedHeadsOfTwoScopesShareUnrestrictedSoft) {
         auto limiter = MakeBandLimiter(100, 1000, 0.5);
-        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnconstrainedSoft().value_or(0), 500u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnrestrictedSoft().value_or(0), 500u);
 
         limiter.Manager->RegisterProcess(0, {});
         limiter.Manager->RegisterProcessScope(0, 0);
@@ -441,7 +445,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         auto secondTail = std::make_shared<TAllocation>(80);
         limiter.Manager->RegisterAllocation(1, 0, 2, secondTail, {});
         UNIT_ASSERT(!secondTail->IsAllocated());
-        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedGroupsCount->Val(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 2u);
 
         firstHead->Guard.reset();
         limiter.Manager->UnregisterAllocation(0, 0, firstHead->GetIdentifier());
@@ -471,7 +475,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 
-    Y_UNIT_TEST(RequestAboveUnconstrainedSoftWaits) {
+    Y_UNIT_TEST(RequestAboveUnrestrictedSoftWaits) {
         auto limiter = MakeBandLimiter(100, 1000, 0.5);
         limiter.Manager->RegisterProcess(0, {});
         limiter.Manager->RegisterProcessScope(0, 0);
@@ -489,7 +493,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT(limiter.Manager->IsEmpty());
     }
 
-    Y_UNIT_TEST(RequestInsideUnconstrainedSoftAboveHardFails) {
+    Y_UNIT_TEST(RequestInsideUnrestrictedSoftAboveHardFails) {
         auto limiter = MakeBandLimiter(100, 1000, 0.5, 200, 150);
         limiter.Manager->RegisterProcess(0, {});
         limiter.Manager->RegisterProcessScope(0, 0);
@@ -508,7 +512,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
 
     Y_UNIT_TEST(ScopeWithoutAdmissionIsServedFirst) {
         auto limiter = MakeBandLimiter(100, 400, 0.5);
-        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnconstrainedSoft().value_or(0), 200u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnrestrictedSoft().value_or(0), 200u);
         std::vector<int> order;
 
         limiter.Manager->RegisterProcess(0, {});
@@ -556,6 +560,101 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         head.reset();
         held.reset();
         fresh.reset();
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(limiter.Manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
+    }
+
+    Y_UNIT_TEST(StaticSoftLimitTakesDynamicUnrestrictedBand) {
+        NOlap::NGroupedMemoryManager::TConfig config;
+        NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
+        protoConfig.SetMemoryLimit(100);
+        protoConfig.SetUnrestrictedSoftLimitCoefficient(0.5);
+        UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
+        auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
+        auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>(
+            "GLOBAL", config.GetMemoryLimit(), config.GetHardMemoryLimit(), nullptr, counters->BuildStageCounters("general"),
+            config.MakeUnrestrictedSoftBytes(config.GetHardMemoryLimit()));
+        auto manager = std::make_shared<NOlap::NGroupedMemoryManager::TManager>(NActors::TActorId(), config, "test", counters, stage);
+        UNIT_ASSERT(!stage->GetUnrestrictedSoft().has_value());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetLimit(), 100u);
+
+        const ui64 hard = 1000;
+        manager->UpdateMemoryLimits(300, hard, config.MakeUnrestrictedSoftBytes(hard));
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetLimit(), 100u);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetHardLimit().value_or(0), hard);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUnrestrictedSoft().value_or(0), 500u);
+
+        manager->RegisterProcess(0, {});
+        manager->RegisterProcessScope(0, 0);
+        manager->RegisterGroup(0, 0, 1);
+        auto alloc = std::make_shared<TAllocation>(120);
+        manager->RegisterAllocation(0, 0, 1, alloc, {});
+        UNIT_ASSERT(alloc->IsAllocated());
+
+        alloc->Guard.reset();
+        manager->UnregisterAllocation(0, 0, alloc->GetIdentifier());
+        manager->UnregisterGroup(0, 0, 1);
+        manager->UnregisterProcessScope(0, 0);
+        manager->UnregisterProcess(0);
+        alloc.reset();
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(manager->IsEmpty());
+    }
+
+    Y_UNIT_TEST(StuckAdmissionYieldsToSmallerGroup) {
+        auto limiter = MakeBandLimiter(100, 1000, 0.5);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnrestrictedSoft().value_or(0), 500u);
+
+        limiter.Manager->RegisterProcess(0, {});
+        limiter.Manager->RegisterProcessScope(0, 0);
+        limiter.Manager->RegisterGroup(0, 0, 1);
+        limiter.Manager->RegisterGroup(0, 0, 2);
+
+        auto g1 = std::make_shared<TAllocation>(80);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1, {});
+        UNIT_ASSERT(g1->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 0u);
+
+        auto g2 = std::make_shared<TAllocation>(40);
+        limiter.Manager->RegisterAllocation(0, 0, 2, g2, {});
+        UNIT_ASSERT(g2->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 120u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 40u);
+
+        auto g1Next = std::make_shared<TAllocation>(30);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1Next, {});
+        UNIT_ASSERT(!g1Next->IsAllocated());
+
+        auto g2Next = std::make_shared<TAllocation>(400);
+        limiter.Manager->RegisterAllocation(0, 0, 2, g2Next, {});
+        UNIT_ASSERT(g1Next->IsAllocated());
+        UNIT_ASSERT(!g2Next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 150u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 110u);
+
+        g1->Guard.reset();
+        g1Next->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, g1->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, g1Next->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 1);
+        UNIT_ASSERT(g2Next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 440u);
+
+        g2->Guard.reset();
+        g2Next->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, g2->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, g2Next->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 2);
+        limiter.Manager->UnregisterProcessScope(0, 0);
+        limiter.Manager->UnregisterProcess(0);
+        g1.reset();
+        g1Next.reset();
+        g2.reset();
+        g2Next.reset();
         UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0);
         UNIT_ASSERT(limiter.Manager->IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);

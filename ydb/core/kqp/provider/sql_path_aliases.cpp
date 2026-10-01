@@ -3,8 +3,6 @@
 #include "yql_kikimr_provider.h"
 #include "yql_kikimr_settings.h"
 
-#include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
-
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 
 #include <util/generic/is_in.h>
@@ -46,7 +44,6 @@ TExprNode::TPtr RewritePathAtom(const TExprNode::TPtr& atom, TExprContext& ctx,
 
 TExprNode::TPtr RewriteKey(const TExprNode::TPtr& key, TExprContext& ctx,
     const std::function<TString(TStringBuf)>& normalizePath) {
-    // Only known schema-object keys with literal paths are rewritten.
     if (!key->IsCallable("Key") || !key->ChildrenSize() || key->Child(0)->ChildrenSize() < 2) {
         return key;
     }
@@ -176,10 +173,8 @@ public:
     {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
-        if (SessionCtx->Config().NormalizePath) {
-            input = RewriteSqlPathAliases(input, ctx, SessionCtx->GetCluster(),
-                SessionCtx->Config().NormalizePath);
-        }
+        input = RewriteSqlPathAliases(input, ctx, SessionCtx->GetCluster(),
+            SessionCtx->Config().NormalizePath);
         return Intents->Transform(input, output, ctx);
     }
 

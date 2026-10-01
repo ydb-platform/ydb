@@ -71,13 +71,13 @@ namespace NKikimr::NGRpcService {
             UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/rewritten");
         }
 
-        Y_UNIT_TEST(EmptyMappingKeepsLiveDatabase) {
+        Y_UNIT_TEST(EmptyMappingKeepsCachedDatabase) {
             TNamedRequest request("Ydb.Query.V1.QueryService/ExecuteQuery");
             request.EnablePathNormalization();
             request.InitializePathNormalization(nullptr);
             UNIT_ASSERT_VALUES_EQUAL(request.NormalizePath("/raw"), "/raw");
             request.UseDatabase("/resolved");
-            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/resolved");
+            UNIT_ASSERT_VALUES_EQUAL(request.GetDatabaseName().GetOrElse(""), "/raw");
         }
 
         Y_UNIT_TEST(LegacyServicesKeepRawDatabaseAndIdentityPaths) {

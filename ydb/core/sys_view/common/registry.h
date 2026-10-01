@@ -829,6 +829,7 @@ struct Schema : NIceDb::Schema {
         struct QueryCpuLimitPercentPerNode    : Column<7, NScheme::NTypeIds::Double> {};
         struct QueryMemoryLimitPercentPerNode : Column<8, NScheme::NTypeIds::Double> {};
         struct TotalMemoryLimitPercentPerNode : Column<9, NScheme::NTypeIds::Double> {};
+        struct TotalCpuGuaranteePercentPerNode : Column<10, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -840,7 +841,8 @@ struct Schema : NIceDb::Schema {
             TotalCpuLimitPercentPerNode,
             QueryCpuLimitPercentPerNode,
             QueryMemoryLimitPercentPerNode,
-            TotalMemoryLimitPercentPerNode>;
+            TotalMemoryLimitPercentPerNode,
+            TotalCpuGuaranteePercentPerNode>;
     };
 
     struct TopPartitionsTli : Table<23> {

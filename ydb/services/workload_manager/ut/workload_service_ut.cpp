@@ -940,6 +940,23 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
             CREATE RESOURCE POOL MyResourcePool WITH (
                 QUEUE_SIZE=1
             );)", EStatus::SCHEME_ERROR, "Invalid resource pool configuration, queue_size unsupported without concurrent_query_limit or database_load_cpu_threshold");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                TOTAL_CPU_LIMIT_PERCENT_PER_NODE=50,
+                TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE=60
+            );)", EStatus::SCHEME_ERROR, "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is 60, that exceeds total_cpu_limit_percent_per_node in 50");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL MyResourcePool WITH (
+                TOTAL_CPU_LIMIT_PERCENT_PER_NODE=50,
+                TOTAL_CPU_GUARANTEE_PERCENT_PER_NODE=30
+            );)");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL MyResourcePool
+                SET (TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 20);
+            )", EStatus::SCHEME_ERROR, "Invalid resource pool configuration, total_cpu_guarantee_percent_per_node is 30, that exceeds total_cpu_limit_percent_per_node in 20");
     }
 
     Y_UNIT_TEST(TestDoubleCreateResourcePool) {

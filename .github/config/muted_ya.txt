@@ -30,6 +30,7 @@ ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
 ydb/core/tx/schemeshard/ut_index_build_reboots FulltextIndexBuildTestReboots.BaseCase[TabletRebootsBucket0]
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumns[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_reboots TConsistentOpsWithReboots.DropIndexedTableAndForceDropSimultaneously[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_reboots unittest.[*/*] chunk

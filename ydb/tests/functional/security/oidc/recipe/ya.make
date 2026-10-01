@@ -7,10 +7,12 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/PyYAML
     contrib/python/cryptography
     contrib/python/grpcio
     contrib/python/requests
     library/python/port_manager
+    library/recipes/docker_compose/lib
     ydb/public/api/grpc
     ydb/public/api/protos
     library/python/testing/recipe

@@ -3,11 +3,13 @@
 import json
 import os
 import sys
+from string import Template
 import time
 from pathlib import Path
 
 import grpc
 import yatest.common
+import yaml
 from ydb.public.api.grpc import ydb_discovery_v1_pb2_grpc
 from ydb.public.api.protos import ydb_discovery_pb2, ydb_status_codes_pb2
 from library.python.port_manager import PortManager
@@ -42,7 +44,7 @@ def wait_for_oidc(endpoint, token):
                 if response.operation.status == ydb_status_codes_pb2.StatusIds.SUCCESS:
                     identity = ydb_discovery_pb2.WhoAmIResult()
                     assert response.operation.result.Unpack(identity)
-                    assert identity.user == keycloak.SERVICE_SID, identity.user
+                    assert identity.user == os.environ['OIDC_CLIENT_SID'], identity.user
                     return
                 last_error = str(response.operation.issues)
             except grpc.RpcError as error:
@@ -54,6 +56,9 @@ def wait_for_oidc(endpoint, token):
 def start(args):
     arguments = cmds.produce_arguments(args)
     recipe = cmds.Recipe(arguments)
+    source = Path(yatest.common.source_path('ydb/tests/functional/security/oidc/recipe'))
+    for name, value in json.loads((source / 'test-env.json').read_text()).items():
+        export(name, value)
     directory = Path(yatest.common.output_path('oidc'))
     directory.mkdir(parents=True, exist_ok=True)
     tls.prepare(directory)
@@ -64,7 +69,6 @@ def start(args):
         environment = keycloak.start(directory, ports.get_port())
         for name, value in environment.items():
             export(name, value)
-        issuer = environment['OIDC_ISSUER']
         cluster = None
         try:
             configuration = KikimrConfigGenerator(
@@ -72,21 +76,12 @@ def start(args):
                 output_path=recipe.generate_data_path(),
                 domain_name='Root',
                 nodes=1,
-                enforce_user_token_requirement=True,
-                default_clusteradmin='root@builtin',
+                default_clusteradmin=os.environ['YDB_CLUSTER_ADMIN'],
             )
-            security = configuration.yaml_config['domains_config']['security_config']
-            security['database_allowed_sids'] = ['root@builtin', keycloak.SERVICE_SID, keycloak.DEVICE_SID]
-            security['default_access'] = ['+F:' + sid for sid in security['database_allowed_sids']]
-            configuration.yaml_config.setdefault('auth_config', {}).update(
-                {
-                    'external_idp_authentication_domain': 'sso',
-                    'external_idp_config': {
-                        'issuer': issuer,
-                        'audience': keycloak.AUDIENCE,
-                        'subject_claim_name': 'preferred_username',
-                    },
-                }
+            settings = yaml.safe_load(Template((source / 'ydb-config.yaml').read_text()).substitute(os.environ))
+            configuration.yaml_config.setdefault('auth_config', {}).update(settings['auth_config'])
+            configuration.yaml_config['domains_config']['security_config'].update(
+                settings['domains_config']['security_config']
             )
             cluster = KiKiMR(configuration)
             cluster.start()
@@ -115,7 +110,7 @@ def start(args):
                 if cluster is not None:
                     cluster.stop(kill=True)
             finally:
-                keycloak.stop(environment['OIDC_CONTAINER_METADATA'])
+                keycloak.stop()
             raise
 
 
@@ -123,7 +118,7 @@ def stop(args):
     try:
         cmds.stop_recipe(args)
     finally:
-        keycloak.stop(os.environ.get('OIDC_CONTAINER_METADATA'))
+        keycloak.stop()
 
 
 if __name__ == '__main__':

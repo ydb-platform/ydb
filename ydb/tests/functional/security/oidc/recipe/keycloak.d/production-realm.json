@@ -1,0 +1,77 @@
+{
+    "realm": "${OIDC_REALM}",
+    "enabled": true,
+    "sslRequired": "all",
+    "accessTokenLifespan": 3600,
+    "oauth2DevicePollingInterval": 1,
+    "eventsEnabled": true,
+    "eventsExpiration": 7200,
+    "enabledEventTypes": [
+        "CLIENT_LOGIN",
+        "OAUTH2_DEVICE_VERIFY_USER_CODE",
+        "OAUTH2_DEVICE_CODE_TO_TOKEN",
+        "REFRESH_TOKEN"
+    ],
+    "clients": [
+        {
+            "clientId": "${OIDC_CLIENT_ID}",
+            "secret": "${OIDC_CLIENT_SECRET}",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": false,
+            "serviceAccountsEnabled": true,
+            "standardFlowEnabled": false,
+            "protocolMappers": [
+                {
+                    "name": "ydb-audience",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-audience-mapper",
+                    "config": {
+                        "included.custom.audience": "ydb",
+                        "access.token.claim": "true",
+                        "id.token.claim": "false"
+                    }
+                }
+            ]
+        },
+        {
+            "clientId": "${OIDC_DEVICE_CLIENT_ID}",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": true,
+            "standardFlowEnabled": false,
+            "attributes": {
+                "oauth2.device.authorization.grant.enabled": "true"
+            },
+            "protocolMappers": [
+                {
+                    "name": "ydb-audience",
+                    "protocol": "openid-connect",
+                    "protocolMapper": "oidc-audience-mapper",
+                    "config": {
+                        "included.custom.audience": "ydb",
+                        "access.token.claim": "true",
+                        "id.token.claim": "false"
+                    }
+                }
+            ]
+        }
+    ],
+    "users": [
+        {
+            "username": "${OIDC_DEVICE_USERNAME}",
+            "enabled": true,
+            "emailVerified": true,
+            "firstName": "OIDC",
+            "lastName": "User",
+            "email": "oidc-user@example.test",
+            "credentials": [
+                {
+                    "type": "password",
+                    "value": "${OIDC_DEVICE_PASSWORD}",
+                    "temporary": false
+                }
+            ]
+        }
+    ]
+}

@@ -46,7 +46,10 @@ def approve_device(url):
             form = next((item for item in forms if 'password' in item['fields']), forms[0])
             fields = form['fields']
             if 'password' in fields:
-                fields.update(username='oidc-user', password='password')
+                fields.update(
+                    username=os.environ['OIDC_DEVICE_USERNAME'],
+                    password=os.environ['OIDC_DEVICE_PASSWORD'],
+                )
             # Consent forms have accept and cancel submit controls. A browser
             # sends only the clicked control, so never submit the cancel button.
             fields.pop('cancel', None)

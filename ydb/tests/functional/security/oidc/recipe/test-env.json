@@ -1,0 +1,12 @@
+{
+    "OIDC_REALM": "production",
+    "OIDC_CLIENT_ID": "ydb-service",
+    "OIDC_DEVICE_CLIENT_ID": "ydb-cli",
+    "OIDC_STATIC_SID": "service-account-ydb-service@sso",
+    "OIDC_CLIENT_SID": "service-account-ydb-service@sso",
+    "OIDC_DEVICE_SID": "oidc-user@sso",
+    "OIDC_DEVICE_USERNAME": "oidc-user",
+    "OIDC_DEVICE_PASSWORD": "password",
+    "OIDC_ADMIN_USERNAME": "admin",
+    "YDB_CLUSTER_ADMIN": "root@builtin"
+}

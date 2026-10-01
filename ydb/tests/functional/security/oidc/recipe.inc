@@ -1,19 +1,25 @@
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 DEPENDS(
+    library/recipes/docker_compose/bin
     ydb/apps/ydbd
     ydb/tests/functional/security/oidc/recipe
+)
+
+DATA(
+    arcadia/ydb/tests/functional/security/oidc/recipe/docker-compose.yml
+    arcadia/ydb/tests/functional/security/oidc/recipe/keycloak.d
+    arcadia/ydb/tests/functional/security/oidc/recipe/test-env.json
+    arcadia/ydb/tests/functional/security/oidc/recipe/ydb-config.yaml
 )
 
 USE_RECIPE(
     ydb/tests/functional/security/oidc/recipe/oidc_recipe
 )
 
-# Use the same Docker-capable CI environment as the shared Compose recipe.
-INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/large.inc)
+SIZE(MEDIUM)
 
 REQUIREMENTS(
-    cpu:all
+    cpu:4
     dns:dns64
-    container:4467981730
 )

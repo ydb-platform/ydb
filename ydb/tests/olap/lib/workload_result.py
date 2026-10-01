@@ -8,6 +8,9 @@ from types import TracebackType
 
 class ErrorPriority(IntEnum):
     WARNING = 1
+    # Максимальный приоритет. Код опирается на это: success и get_error_stats
+    # фильтруют через '>= ERROR', а get_errors/get_integrated_error — через '== ERROR'.
+    # Если появится уровень выше ERROR, эти места нужно синхронизировать.
     ERROR = 2
 
 
@@ -101,7 +104,7 @@ class WorkloadRunResult:
         self.stderr = '\n'.join(filter(not_empty, [r.stderr for r in results]))
         for r in results:
             self._stats.update(r._stats)
-            self.__errors.extend(r._WorkloadRunResult__errors)
+            self.__errors.extend(r.get_errors())
             self.explain = r.explain
             for num, iter in r.iterations.items():
                 while num in self.iterations:

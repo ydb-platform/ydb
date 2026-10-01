@@ -18,6 +18,7 @@ def write_errors_yaml(fn: str, suite: str, query_name: str, errors: list[Workloa
     целиком делается под блокировкой. Нечитаемый или поврежденный существующий
     файл игнорируется - начинаем с пустого содержимого.
     """
+    environment_info = get_environment_info()
     tmp_fn = fn + '_'
     with open(f'{fn}.lock', 'w') as lock_file:
         fcntl.flock(lock_file, fcntl.LOCK_EX)
@@ -39,7 +40,7 @@ def write_errors_yaml(fn: str, suite: str, query_name: str, errors: list[Workloa
                 **get_test_info(suite, query_name, start_time, end_time),
                 'errors': [e.serialize() for e in errors],
             }
-            data['environment'] = get_environment_info()
+            data['environment'] = environment_info
             data['errors_by_tests'] = errors_by_tests
             with open(tmp_fn, 'w') as f:
                 yaml.safe_dump(data, f, allow_unicode=True)

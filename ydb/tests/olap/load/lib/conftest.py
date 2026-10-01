@@ -869,6 +869,10 @@ class LoadSuiteBase:
         """Обрабатывает финальный статус теста: fail, broken, etc."""
         stats = result.get_stats(workload_name)
         node_issues = stats.get("nodes_with_issues", 0) if stats else 0
+        # Инвариант: все ошибки, связанные с нодами (coredump/OOM/VERIFY/SAN),
+        # должны тегироваться ErrorArea.NODE_FAIL (см. check_nodes*). Тогда здесь
+        # остаются только ошибки самого ворклоада - тест помечается broken ниже;
+        # NODE_FAIL-ошибки попадают в ветку pytest.fail (not result.success).
         workload_errors = [
             str(e) for e in result.get_errors(ErrorPriority.ERROR) if e.area != ErrorArea.NODE_FAIL
         ]

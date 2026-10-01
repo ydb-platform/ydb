@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableTopicDeferredPublish(true);
 
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         if constexpr (!LocalTopics) {
@@ -202,8 +202,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
             UNIT_ASSERT(result.GetPublications().empty());
         }
-
-        DropTopic(outputTopicName, LocalTopics);
     }
 
     std::vector<TPublicationSummary> ValidatePublicationsCount(const ui64 count, const TString& queryName, TDeferredPublishClient& client) {
@@ -243,9 +241,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(firstOutputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(secondOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(firstOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(secondOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -314,10 +312,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         ));
 
         EnsureTopicEndOffset(firstOutputTopicName, /* endOffset */ TESTS_COUNT, LocalTopics);
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(firstOutputTopicName, LocalTopics);
-        DropTopic(secondOutputTopicName, LocalTopics);
     }
 
     void ValidateCheckpointAuthReferences(TStreamingTestFixture& fixture, bool localTopics, bool schemaSecrets) {
@@ -360,9 +354,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopic = TStringBuilder() << Name_ << "Input";
         const TString outputTopic1 = TStringBuilder() << Name_ << "Output1";
         const TString outputTopic2 = TStringBuilder() << Name_ << "Output2";
-        CreateTopic(inputTopic, std::nullopt, LocalTopics);
-        CreateTopic(outputTopic1, std::nullopt, LocalTopics);
-        CreateTopic(outputTopic2, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopic, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic1, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic2, std::nullopt, LocalTopics);
         std::shared_ptr<TDeferredPublishClient> client;
         TString source;
         if constexpr (LocalTopics) {
@@ -439,9 +433,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         }
         const auto canceled = client->CancelPublication(unrelated).ExtractValueSync();
         UNIT_ASSERT_C(canceled.IsSuccess(), canceled.GetIssues().ToString());
-        DropTopic(inputTopic, LocalTopics);
-        DropTopic(outputTopic1, LocalTopics);
-        DropTopic(outputTopic2, LocalTopics);
     }
 
     Y_UNIT_TEST_TWIN_F(CheckpointDeletionAfterSecretDeletion, Gc, TStreamingWithSchemaSecretsTestFixture) {
@@ -452,8 +443,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopic = TStringBuilder() << Name_ << "Input";
         const auto outputTopic = TStringBuilder() << Name_ << "Output";
-        CreateTopic(inputTopic, std::nullopt, /* local */ true);
-        CreateTopic(outputTopic);
+        CreateScopedTopicExt(inputTopic, std::nullopt, /* local */ true);
+        CreateScopedTopic(outputTopic);
         CreatePqSourceBasicAuth("pqSource", /* useSchemaSecrets */ true);
         auto client = GetDeferredPublishClient(false, "", NYdb::CreateLoginCredentialsProviderFactory({.User = "root", .Password = "1234"}));
         const auto queryName = TStringBuilder() << Name_ << "Query";
@@ -515,8 +506,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         ValidatePublicationsCount(1, queryName, *client);
         const auto canceled = client->CancelPublication(TDeferredPublication(publications.front().IntPublicationId)).ExtractValueSync();
         UNIT_ASSERT_C(canceled.IsSuccess(), canceled.GetIssues().ToString());
-        DropTopic(inputTopic, /* local */ true);
-        DropTopic(outputTopic);
         if constexpr (Gc) {
             DropTopic(outputTopic, /* local */ true);
         }
@@ -531,8 +520,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
         const auto inputTopic = TStringBuilder() << Name_ << "Input";
         const auto outputTopic = TStringBuilder() << Name_ << "Output";
-        CreateTopic(inputTopic, std::nullopt, LocalTopics);
-        CreateTopic(outputTopic, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopic, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic, std::nullopt, LocalTopics);
+
         std::shared_ptr<TDeferredPublishClient> client;
         TString source;
         if constexpr (LocalTopics) {
@@ -586,8 +576,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         ExecQuery(fmt::format("DROP STREAMING QUERY `{}`;", queryName));
         const auto canceled = client->CancelPublication(retained).ExtractValueSync();
         UNIT_ASSERT_C(canceled.IsSuccess(), canceled.GetIssues().ToString());
-        DropTopic(inputTopic, LocalTopics);
-        DropTopic(outputTopic, LocalTopics);
     }
 
     // Test that a graph without checkpoints commits its exactly-once write on finish.
@@ -601,8 +589,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -649,9 +637,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         Sleep(TDuration::Seconds(1));
         CheckScriptExecutionsCount(1, 0);
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(outputTopicName, LocalTopics);
     }
 
     // If some exactly once egress task has no checkpoint dependencies, it effect should be commited on subgraph finish
@@ -668,9 +653,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
         const auto finiteOutputTopicName = TStringBuilder() << Name_ << "OutputTopicNameFinite";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(finiteOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(finiteOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "streamingQuerySubgraphWithoutCheckpointsInputTable";
         ExecQuery(fmt::format(R"(
@@ -719,10 +704,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         ReadTopicMessages(finiteOutputTopicName, {"finite_message1", "finite_message2"}, disposition, /* sort */ true, LocalTopics);
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 2));
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(outputTopicName, LocalTopics);
-        DropTopic(finiteOutputTopicName, LocalTopics);
     }
 
     // When query has checkpoints, finite results must be published only on final checkpoint
@@ -741,9 +722,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
-        CreateTopic(firstOutputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(secondOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
+        CreateScopedTopicExt(firstOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(secondOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -857,10 +838,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         CheckScriptExecutionsCount(1, 0);
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 4));
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(firstOutputTopicName, LocalTopics);
-        DropTopic(secondOutputTopicName, LocalTopics);
     }
 
     Y_UNIT_TEST_TWIN_F(ExactlyOnceWritingWithMultipleSinks, LocalTopics, TStreamingWithSchemaSecretsTestFixture) {
@@ -877,10 +854,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto outputTopicName1 = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto outputTopicName2 = TStringBuilder() << Name_ << "OutputTopicName2";
         const auto outputTopicName3 = TStringBuilder() << Name_ << "OutputTopicName3";
-        CreateTopic(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
-        CreateTopic(outputTopicName1, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName2, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName3, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
+        CreateScopedTopicExt(outputTopicName1, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName2, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName3, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "exactlyOnceWritingWithMultipleSinkOutputTable";
         ExecQuery(fmt::format(R"(
@@ -971,11 +948,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         });
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 2));
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(outputTopicName1, LocalTopics);
-        DropTopic(outputTopicName2, LocalTopics);
-        DropTopic(outputTopicName3, LocalTopics);
     }
 
     Y_UNIT_TEST_F(ExactlyOnceWritingWithMultipleSinksAndSameTopic, TStreamingWithSchemaSecretsTestFixture) {
@@ -990,8 +962,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2));
-        CreateTopic(outputTopicName);
+        CreateScopedTopicExt(inputTopicName, TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char tableName[] = "exactlyOnceWritingWithMultipleSinksAndSameTopicOutputTable";
         ExecQuery(fmt::format(R"(
@@ -1079,9 +1051,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         });
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 2));
-
-        DropTopic(inputTopicName);
-        DropTopic(outputTopicName);
     }
 
     Y_UNIT_TEST_QUAD_F(RestartStreamingQueryWithExactlyOnceWriting, LocalTopics, ModernChannels, TStreamingWithSchemaSecretsTestFixture) {
@@ -1098,9 +1067,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(firstOutputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(secondOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(firstOutputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(secondOutputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -1249,10 +1218,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
                 "B-2025-08-26T00:00:00.000000Z-1"
             }, dispositionFirst, /* sort */ true, LocalTopics);
         }
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(firstOutputTopicName, LocalTopics);
-        DropTopic(secondOutputTopicName, LocalTopics);
     }
 
     Y_UNIT_TEST_F(RecoveryStreamingQueryWithExactlyOnceWriting, TStreamingWithSchemaSecretsTestFixture) {
@@ -1265,8 +1230,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopic = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
         constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
@@ -1318,9 +1283,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         WaitCheckpointUpdate(checkpointId);
         publicationController.EnsureOpenedPublications(/* count */ 0, queryName);
         writeSession->ExpectMessage("test_message3");
-
-        DropTopic(inputTopic);
-        DropTopic(outputTopic);
     }
 
     Y_UNIT_TEST_TWIN_F(CommitRetryOnStreamingQueryRecovery, CloseReadSession, TStreamingWithSchemaSecretsTestFixture) {
@@ -1333,8 +1295,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         const auto inputTopic = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopic = TStringBuilder() << Name_ << "OutputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
         constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
@@ -1409,9 +1371,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
                 UNIT_ASSERT_STRING_CONTAINS(issues, TStringBuilder() << "Write session to topic \\\"" << outputTopic << "\\\" was closed. Status: UNAVAILABLE");
             }
         }
-
-        DropTopic(inputTopic);
-        DropTopic(outputTopic);
     }
 
     Y_UNIT_TEST_TWIN_F(DeferredPublicationCreationFailure, LocalTopics, TStreamingWithSchemaSecretsTestFixture) {
@@ -1426,8 +1385,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -1505,9 +1464,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_STRING_CONTAINS(issues, "Failed to create deferred publication. Status: ALREADY_EXISTS");
             UNIT_ASSERT_STRING_CONTAINS(issues, "Conflict with existing key.");
         }
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(outputTopicName, LocalTopics);
     }
 
     Y_UNIT_TEST_TWIN_F(DeferredPublicationDoubleCommitIsOk, LocalTopics, TStreamingTestFixture) {
@@ -1522,8 +1478,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(inputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char pqSourceName[] = "pqSourceName";
         std::shared_ptr<TDeferredPublishClient> sdkClient;
@@ -1590,9 +1546,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         // Query should not fail on double publication commit
         UNIT_ASSERT_VALUES_EQUAL(GetStreamingQueryIssues(queryName), "{}");
-
-        DropTopic(inputTopicName, LocalTopics);
-        DropTopic(outputTopicName, LocalTopics);
     }
 
     Y_UNIT_TEST_F(DeferredPublicationCommitFailure, TStreamingWithSchemaSecretsTestFixture) {
@@ -1603,8 +1556,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
@@ -1666,9 +1619,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_STRING_CONTAINS(issues, "Failed to commit deferred publication #1. Status: UNAVAILABLE");
             UNIT_ASSERT_STRING_CONTAINS(issues, "Test commit failure");
         }
-
-        DropTopic(inputTopicName);
-        DropTopic(outputTopicName);
     }
 
     Y_UNIT_TEST_F(MessageWriteFailure, TStreamingWithSchemaSecretsTestFixture) {
@@ -1679,8 +1629,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
@@ -1733,9 +1683,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         writeSession->EnsureEmpty(); // There is no commits on failed publication
 
         UNIT_ASSERT_STRING_CONTAINS(GetStreamingQueryIssues(queryName), "Message with seqNo 0 was discarded");
-
-        DropTopic(inputTopicName);
-        DropTopic(outputTopicName);
     }
 
     Y_UNIT_TEST_F(DeferredPublicationRefreshOnCheckpoint, TStreamingWithSchemaSecretsTestFixture) {
@@ -1746,8 +1693,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
         const auto inputTopicName = TStringBuilder() << Name_ << "InputTopicName";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
@@ -1824,9 +1771,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         publicationController.UnlockCommits();
         publicationController.EnsureOpenedPublications(/* count */ 0, queryName);
         writeSession->ExpectMessages({"message4", "message5"});
-
-        DropTopic(inputTopicName);
-        DropTopic(outputTopicName);
     }
 }
 

@@ -173,7 +173,7 @@ public:
             entries.emplace_back(GetPermissions(), attributes);
         }
 
-        if constexpr (std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>) {
+        if constexpr (IsHttpRequest) {
             TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> authCheckRequestEntries = GetEntriesForAuthAndCheckRequest(Request_, CloudPermissionsSettings);
             entries.insert(entries.end(), authCheckRequestEntries.begin(), authCheckRequestEntries.end());
         }
@@ -277,12 +277,29 @@ public:
             if (IsStrictDatabaseOnlyToken(AppData(), TBase::GetSerializedToken())) {
                 HttpDatabaseAccessVerdict_ = EvaluateHttpDatabaseAccessVerdict();
                 if (HttpDatabaseAccessVerdict_ != EHttpDatabaseAccessVerdict::Ok) {
+                    const bool enforceDatabaseAccess =
+                        AppData()->FeatureFlags.GetEnableDatabaseAccessCheckForHttpMonitoring();
                     LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::GRPC_PROXY_NO_CONNECT_ACCESS,
-                        "HTTP monitoring database access would deny"
+                        (enforceDatabaseAccess
+                            ? "HTTP monitoring database access denied"
+                            : "HTTP monitoring database access would deny")
                         << ", database: " << CheckedDatabaseName_
                         << ", verdict: " << ToString(HttpDatabaseAccessVerdict_)
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
+                    if (enforceDatabaseAccess) {
+                        AuditLogConnectDbAccessDenied(
+                            GrpcRequestBaseCtx_,
+                            CheckedDatabaseName_,
+                            TBase::GetUserSID(),
+                            TBase::GetSanitizedToken(),
+                            TStringBuilder() << "HTTP monitoring database access denied: " << ToString(HttpDatabaseAccessVerdict_));
+                        // Actual HTTP denials never reach LogAuthorizedHttpRequest – count them here
+                        Counters_->IncDatabaseHttpAccessDenyCounter();
+                        Request_->Get()->DatabaseAccessVerdict = HttpDatabaseAccessVerdict_;
+                        ReplyUnauthorizedAndDie(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, "Access denied"));
+                        return;
+                    }
                 }
             }
         }
@@ -295,7 +312,12 @@ public:
         {
             auto [error, issue] = CheckConnectRight();
             if (error) {
-                AuditLogConnectDbAccessDenied(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
+                AuditLogConnectDbAccessDenied(
+                    GrpcRequestBaseCtx_,
+                    CheckedDatabaseName_,
+                    TBase::GetUserSID(),
+                    TBase::GetSanitizedToken(),
+                    issue->GetMessage());
                 ReplyUnauthorizedAndDie(*issue);
                 return;
             }

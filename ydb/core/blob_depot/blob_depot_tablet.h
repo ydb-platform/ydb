@@ -43,7 +43,6 @@ namespace NKikimr::NBlobDepot {
                 EvPutThrottleWakeup,
                 EvMoveDataContinue,
                 EvMoveDataBlobCopied,
-                EvMoveDataCheckTrash,
             };
         };
 
@@ -73,16 +72,6 @@ namespace NKikimr::NBlobDepot {
                 , NewLocator(std::move(newLocator))
                 , YellowMoveChannels(std::move(yellowMoveChannels))
                 , YellowStopChannels(std::move(yellowStopChannels))
-            {}
-        };
-
-        struct TEvMoveDataCheckTrash
-            : TEventLocal<TEvMoveDataCheckTrash, TEvPrivate::EvMoveDataCheckTrash>
-        {
-            const ui64 MoveDataOperationId;
-
-            explicit TEvMoveDataCheckTrash(ui64 moveDataOperationId)
-                : MoveDataOperationId(moveDataOperationId)
             {}
         };
 
@@ -379,7 +368,6 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvTablet::TEvMoveData::TPtr ev);
         void Handle(TEvMoveDataBlobCopied::TPtr ev);
-        void Handle(TEvMoveDataCheckTrash::TPtr ev);
 
         bool ValidateMoveDataGroups(const THashSet<ui32>& moveDataGroups, const TActorId& sender) const;
         bool NeedMoveBlob(const NKikimrBlobDepot::TBlobLocator& locator) const;

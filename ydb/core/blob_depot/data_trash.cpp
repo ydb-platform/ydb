@@ -313,7 +313,7 @@ namespace NKikimr::NBlobDepot {
 
         if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
                 Self->MoveData.Groups.contains(groupId)) {
-            Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
+            Self->CheckTrash();
         }
     }
 
@@ -332,7 +332,7 @@ namespace NKikimr::NBlobDepot {
 
         if (Self->MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
                 Self->MoveData.Groups.contains(groupId)) {
-            Self->Send(Self->SelfId(), new TEvMoveDataCheckTrash(Self->MoveDataOperationId));
+            Self->CheckTrash();
         }
     }
 

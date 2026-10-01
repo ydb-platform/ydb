@@ -584,13 +584,6 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepot::Handle(TEvMoveDataCheckTrash::TPtr ev) {
-        if (MoveData.Phase == TMoveDataState::EPhase::CheckingTrash &&
-                ev->Get()->MoveDataOperationId == MoveDataOperationId) {
-            CheckTrash();
-        }
-    }
-
     bool TBlobDepot::StartMoveDataBlobCopy() {
         Y_ABORT_UNLESS(MoveData.Phase == TMoveDataState::EPhase::CopyingBlob);
 

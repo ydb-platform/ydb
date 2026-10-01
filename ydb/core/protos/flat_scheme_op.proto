@@ -423,6 +423,10 @@ message TTableDescription {
     // Multi-column statistics.
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
     repeated string DropMultiColumnStatistics = 54;
+
+    // Actual number of table partitions (shards), always filled in describe
+    // results, so clients don't need to request the TablePartitions list.
+    optional uint64 PartitionCount = 55;
 }
 
 message TCompressionOptions {

@@ -253,22 +253,25 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
 
     NKikimrPQ::TPQTabletConfig tabletConfig = MakePQTabletConfig(parameters, users, runtime, version);
 
+    // Ассерт в catch не ловит вторую неудачу: тело выполняется только при retriesLeft > 0.
+    bool configApplied = false;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
             runtime.ResetScheduledCount();
             SendPQTabletConfig(runtime, tabletId, edge, tabletConfig, txId, planStep);
-            retriesLeft = 0;
+            configApplied = true;
+            break;
         } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT(retriesLeft >= 1);
             DropPendingPqConfigReplies(runtime, edge);
             txId = nextRetryTxId++;
         }
     }
+    UNIT_ASSERT(configApplied);
     TEvKeyValue::TEvResponse *result;
     THolder<TEvKeyValue::TEvRequest> request;
+    bool configRead = false;
     for (i32 retriesLeft = 2; retriesLeft > 0; --retriesLeft) {
         try {
-
             request.Reset(new TEvKeyValue::TEvRequest);
             auto read = request->Record.AddCmdRead();
             read->SetKey("_config");
@@ -279,11 +282,13 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             UNIT_ASSERT(result);
             UNIT_ASSERT(result->Record.HasStatus());
             UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
-            retriesLeft = 0;
+            configRead = true;
+            break;
         } catch (NActors::TSchedulingLimitReachedException) {
-            UNIT_ASSERT(retriesLeft >= 1);
+            // Повтор со свежим бюджетом. Обе неудачи ловит ассерт после цикла.
         }
     }
+    UNIT_ASSERT(configRead);
 }
 
 void PQTabletPrepare(const TTabletPreparationParameters& parameters,

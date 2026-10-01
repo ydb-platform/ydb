@@ -241,7 +241,9 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
     };
 
     auto runQuery = [this, &runQueryClient, &runTableClient, &queryInfo]() -> NYdb::TStatus {
-        if (QueryExecuterType == "data") {
+        if (QueryExecuterType == "data" || queryInfo.AlterTable) {
+            // AlterTable is only supported by the table client; route it there
+            // regardless of the selected executer.
             return TableClient->RetryOperationSync(runTableClient);
         } else {
             auto result = QueryClient->RetryQuery(runQueryClient).GetValueSync();

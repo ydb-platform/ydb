@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/yql/providers/ydb_remote/common
     contrib/libs/apache/arrow
     library/cpp/regex/pcre
     library/cpp/scheme

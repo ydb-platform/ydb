@@ -1,3 +1,4 @@
+#include <ydb/library/yql/providers/ydb_remote/common/provider_names.h>
 #include "yql_ydb_remote_provider_impl.h"
 
 #include <library/cpp/json/json_value.h>

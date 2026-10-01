@@ -11,6 +11,7 @@ SRCS(
 YQL_LAST_ABI_VERSION()
 
 PEERDIR(
+    ydb/library/yql/providers/ydb_remote/common
     library/cpp/json
     library/cpp/threading/future
     ydb/library/yql/dq/expr_nodes

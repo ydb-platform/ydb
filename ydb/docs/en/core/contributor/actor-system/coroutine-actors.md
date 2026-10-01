@@ -205,12 +205,13 @@ memory. Allocations preserve `__STDCPP_DEFAULT_NEW_ALIGNMENT__`; extended
 coroutine-frame alignment is unsupported. The compiler may elide coroutine
 allocations entirely.
 
-Cache reuse remains enabled in sanitizer builds. Under ASAN, idle blocks are
-poisoned in full, including the list link; the cache temporarily unpoisons that
-link for its own bookkeeping. A live allocation exposes only the requested
-bytes, with the remaining rounded capacity poisoned, including allocations
-made outside workers or with retention disabled. Under MSAN, reused frame
-contents are marked uninitialized again. These annotations detect stale
+Cache reuse remains enabled in sanitizer builds. Under AddressSanitizer (ASAN),
+idle blocks are poisoned in full, including the list link; the cache temporarily
+unpoisons that link for its own bookkeeping. A live allocation exposes only the
+requested bytes, with the remaining rounded capacity poisoned, including
+allocations made outside workers or with retention disabled. Under
+MemorySanitizer (MSAN), reused frame contents are marked uninitialized again.
+These annotations detect stale
 accesses while a frame is idle; they cannot detect a stale pointer after the
 same address has been legitimately reused.
 

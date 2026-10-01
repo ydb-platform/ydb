@@ -8,6 +8,12 @@ feature_flags:
   enable_topic_autopartitioning_for_cdc: true
 ```
 
+{% note warning %}
+
+Change the `feature_flags` settings only if you are sure of the consequences. Incorrect configuration may disrupt the cluster.
+
+{% endnote %}
+
 ## Feature Flags
 
 | Flag          | Feature |

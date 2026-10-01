@@ -59,6 +59,7 @@ struct TUploadStatus {
         return StatusCode == Ydb::StatusIds::UNAVAILABLE
             || StatusCode == Ydb::StatusIds::OVERLOADED
             || StatusCode == Ydb::StatusIds::TIMEOUT
+            || StatusCode == Ydb::StatusIds::UNDETERMINED
             ;
     }
 

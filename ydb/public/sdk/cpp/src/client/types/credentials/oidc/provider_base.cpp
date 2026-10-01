@@ -141,7 +141,7 @@ void TProviderBase::RequestStop() {
     Changed.notify_all();
     Cancellation.Cancel();
     for (const auto& context : GetContexts()) {
-        context->Stop();
+        context->Stop(false);
     }
 }
 

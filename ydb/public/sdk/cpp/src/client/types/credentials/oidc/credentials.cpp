@@ -44,18 +44,33 @@ public:
     std::string GetClientIdentity() const override;
 
 private:
-    TCredentialsProviderPtr CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const;
-
     TOidcConfig Config;
     std::string Identity;
     mutable TMutex Mutex;
     mutable TCredentialsProviderPtr Provider;
-    mutable std::shared_ptr<TProviderBase> State;
+    const std::shared_ptr<TProviderBase> State;
 };
+
+std::shared_ptr<TProviderBase> CreateState(const TOidcConfig& config);
+
+std::shared_ptr<TProviderBase> CreateState(const TOidcConfig& config) {
+    return std::visit(TOverloaded{
+        [&](const TStaticOidcConfig&) -> std::shared_ptr<TProviderBase> {
+            return std::make_shared<TStaticProvider>(config);
+        },
+        [&](const TClientOidcConfig&) -> std::shared_ptr<TProviderBase> {
+            return std::make_shared<TClientProvider>(config);
+        },
+        [&](const TDeviceOidcConfig&) -> std::shared_ptr<TProviderBase> {
+            return std::make_shared<TDeviceProvider>(config);
+        },
+    }, config.FlowConfig);
+}
 
 TFactory::TFactory(TOidcConfig config)
     : Config(std::move(config))
     , Identity(GetOidcClientIdentity(Config))
+    , State(CreateState(Config))
 {
     // The factory is identified before authorization, so a token's sub claim
     // is not available for client/device grants. Keep the credential fingerprint
@@ -72,37 +87,18 @@ TCredentialsProviderPtr TFactory::CreateProvider() const {
         if (Provider == nullptr) {
             auto facility = CreateSimpleCoreFacility();
             Provider = std::make_shared<NCredentials::NDetail::TOwningFacilityCredentialsProvider>(
-                facility, CreateProviderImpl(facility));
+                facility, State->CreateProvider(facility));
         }
         return Provider;
     }
 }
 
 TCredentialsProviderPtr TFactory::CreateProvider(std::weak_ptr<ICoreFacility> facility) const {
-    with_lock (Mutex) {
-        return CreateProviderImpl(std::move(facility));
-    }
+    return State->CreateProvider(std::move(facility));
 }
 
 std::string TFactory::GetClientIdentity() const {
     return Identity;
-}
-
-TCredentialsProviderPtr TFactory::CreateProviderImpl(std::weak_ptr<ICoreFacility> facility) const {
-    if (State == nullptr) {
-        State = std::visit(TOverloaded{
-            [&](const TStaticOidcConfig&) -> std::shared_ptr<TProviderBase> {
-                return std::make_shared<TStaticProvider>(Config);
-            },
-            [&](const TClientOidcConfig&) -> std::shared_ptr<TProviderBase> {
-                return std::make_shared<TClientProvider>(Config);
-            },
-            [&](const TDeviceOidcConfig&) -> std::shared_ptr<TProviderBase> {
-                return std::make_shared<TDeviceProvider>(Config);
-            },
-        }, Config.FlowConfig);
-    }
-    return State->CreateProvider(std::move(facility));
 }
 
 } // namespace

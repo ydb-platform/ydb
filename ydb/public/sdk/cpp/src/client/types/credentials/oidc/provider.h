@@ -33,7 +33,8 @@ public:
     NThreading::TPromise<std::string> TakePending();
     void Complete(NThreading::TPromise<std::string> pending, std::optional<TOAuthToken> token, std::exception_ptr error);
     bool CompleteDiscardedDeliveries();
-    void Stop();
+    // Cancellation detected by the authentication worker must complete asynchronously.
+    void Stop(bool async);
 
 private:
     std::weak_ptr<ICoreFacility> Facility;

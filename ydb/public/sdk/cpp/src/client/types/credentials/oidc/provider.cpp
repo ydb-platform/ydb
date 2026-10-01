@@ -10,6 +10,7 @@
 #include <util/datetime/base.h>
 #include <util/system/compiler.h>
 #include <util/system/guard.h>
+#include <util/thread/pool.h>
 
 #include <exception>
 #include <list>
@@ -22,7 +23,21 @@
 namespace NYdb::inline Dev::NOidc::NPrivate {
 namespace {
 
+IThreadPool& ErrorExecutor();
 void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr error) noexcept;
+void SetExceptionAsync(NThreading::TPromise<std::string> promise, std::exception_ptr error);
+
+IThreadPool& ErrorExecutor() {
+    // A shared executor outlives providers. Error subscribers may release the
+    // last provider and join its authentication worker, so never run them there.
+    // Adaptive threads allow one subscriber to wait for another provider's error.
+    static const auto executor = [] {
+        auto pool = std::make_unique<TAdaptiveThreadPool>(TThreadPoolParams().SetThreadName("OidcErrors"));
+        pool->Start(0, 0);
+        return pool;
+    }();
+    return *executor;
+}
 
 void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr error) noexcept {
     try {
@@ -31,6 +46,12 @@ void SetException(NThreading::TPromise<std::string> promise, std::exception_ptr 
         // A throwing subscriber must not interrupt delivery or cleanup.
         return;
     }
+}
+
+void SetExceptionAsync(NThreading::TPromise<std::string> promise, std::exception_ptr error) {
+    ErrorExecutor().SafeAddFunc([promise = std::move(promise), error = std::move(error)] {
+        SetException(promise, error);
+    });
 }
 
 } // namespace
@@ -47,7 +68,7 @@ TProviderContext::TProviderContext(std::weak_ptr<ICoreFacility> facility)
 }
 
 TProviderContext::~TProviderContext() {
-    Stop();
+    Stop(false);
 }
 
 bool TProviderContext::IsStopped() const {
@@ -88,7 +109,7 @@ void TProviderContext::Complete(NThreading::TPromise<std::string> pending, std::
         }
     }
     if (stopped) {
-        SetException(pending, StoppedError());
+        SetExceptionAsync(pending, StoppedError());
         return;
     }
     auto completion = [pending, token = std::move(token), error, callbackLifetime,
@@ -112,16 +133,16 @@ void TProviderContext::Complete(NThreading::TPromise<std::string> pending, std::
         if (auto facility = Facility.lock(); facility != nullptr) {
             facility->PostToResponseQueue(std::move(completion));
         } else {
-            SetException(pending, StoppedError());
+            SetExceptionAsync(pending, StoppedError());
         }
     } catch (...) {
-        SetException(pending, std::current_exception());
+        SetExceptionAsync(pending, std::current_exception());
     }
 }
 
 bool TProviderContext::CompleteDiscardedDeliveries() {
     if (Facility.expired()) {
-        Stop();
+        Stop(true);
         return false;
     }
     std::vector<NThreading::TPromise<std::string>> discarded;
@@ -140,12 +161,12 @@ bool TProviderContext::CompleteDiscardedDeliveries() {
         pending = !Deliveries.empty();
     }
     for (auto& promise : discarded) {
-        SetException(promise, StoppedError());
+        SetExceptionAsync(promise, StoppedError());
     }
     return pending;
 }
 
-void TProviderContext::Stop() {
+void TProviderContext::Stop(bool async) {
     NThreading::TPromise<std::string> pending;
     std::list<TDelivery> deliveries;
     with_lock (Mutex) {
@@ -157,9 +178,10 @@ void TProviderContext::Stop() {
         pending = Pending;
         deliveries.swap(Deliveries);
     }
-    SetException(pending, StoppedError());
+    const auto complete = async ? SetExceptionAsync : SetException;
+    complete(pending, StoppedError());
     for (auto& delivery : deliveries) {
-        SetException(delivery.Promise, StoppedError());
+        complete(delivery.Promise, StoppedError());
     }
 }
 
@@ -170,7 +192,7 @@ TCredentialsProvider::TCredentialsProvider(std::shared_ptr<TProviderBase> source
 }
 
 TCredentialsProvider::~TCredentialsProvider() {
-    Context->Stop();
+    Context->Stop(false);
 }
 
 std::string TCredentialsProvider::GetAuthInfo() const {

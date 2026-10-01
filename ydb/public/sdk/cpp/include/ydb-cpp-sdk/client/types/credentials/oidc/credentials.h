@@ -97,6 +97,10 @@ struct TOidcConfig {
 // Parameterless CreateProvider() reuses one provider owning a standalone facility.
 // Authentication state lives while the factory or any of its providers is retained.
 // Different factories do not coalesce authorization flows, even with a shared cacher.
+// For every flow, a terminal authentication error or worker-start failure is retained
+// for the lifetime of the factory. Creating another provider does not retry it;
+// create a new factory to start a fresh attempt. Retryable errors are retried by the
+// shared worker, and an unexpired token remains usable until its expiration.
 //
 // GetAuthInfo() blocks until credentials or an error are available; prefer
 // GetAuthInfoAsync() when waiting for interactive sign-in.
@@ -106,8 +110,10 @@ struct TOidcConfig {
 // for socket/connect timeouts (5 s / 30 s).
 // DNS resolution is subject to the system resolver's timeout. Transport timeouts
 // bound individual socket operations, not the total duration of a streaming response.
-// Keep provider/factory owners alive until their hooks and future callbacks return;
-// synchronous destruction from those callbacks is not supported.
+// Keep provider/factory owners alive until their hooks and callbacks on a driver's
+// response queue return; synchronous destruction from those callbacks is not supported.
+// Cancellation and failed delivery detected by the authentication worker use a
+// shared fallback executor; those callbacks may release the last provider/factory owner.
 std::shared_ptr<ICredentialsProviderFactory> CreateOidcProviderFactory(const TOidcConfig& config);
 
 } // namespace NYdb::inline Dev::NOidc

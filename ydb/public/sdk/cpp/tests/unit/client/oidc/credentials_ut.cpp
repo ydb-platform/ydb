@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oidc/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
-#include "test_server.h"
+#include <ydb/public/sdk/cpp/tests/unit/client/oidc/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/private.h>
 #include <ydb/public/sdk/cpp/src/client/types/credentials/oidc/static_provider.h>
 
@@ -933,6 +933,98 @@ Y_UNIT_TEST(ClientRefreshPersistsTokensForNextProvider) {
     UNIT_ASSERT_VALUES_EQUAL(requests[0].Form.Get("refresh_token"), "initial-refresh");
 }
 
+Y_UNIT_TEST(ClientTerminalErrorIsSharedUntilFactoryReplacement) {
+    TOidcTestServer server;
+    server.Enqueue(R"({"error":"invalid_client"})", HTTP_UNAUTHORIZED);
+    server.Enqueue(R"({"access_token":"recovered","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    const auto config = server.ClientConfig();
+    const auto factory = CreateOidcProviderFactory(config);
+    auto facility = CreateSimpleCoreFacility();
+    auto first = factory->CreateProvider(facility);
+    auto pending = first->GetAuthInfoAsync();
+    UNIT_ASSERT(pending.Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT_EXCEPTION_CONTAINS(pending.GetValueSync(), std::exception, "invalid_client");
+    first.reset();
+    facility.reset();
+
+    auto nextFacility = CreateSimpleCoreFacility();
+    const auto next = factory->CreateProvider(nextFacility);
+    const auto cachedError = next->GetAuthInfoAsync();
+    UNIT_ASSERT(cachedError.HasException());
+    UNIT_ASSERT_EXCEPTION_CONTAINS(cachedError.GetValueSync(), std::exception, "invalid_client");
+    UNIT_ASSERT(!next->IsValid());
+    UNIT_ASSERT_EXCEPTION_CONTAINS(factory->CreateProvider()->GetAuthInfo(), std::exception, "invalid_client");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+
+    auto recoveredProvider = CreateOidcProviderFactory(config)->CreateProvider(nextFacility);
+    auto recovered = recoveredProvider->GetAuthInfoAsync();
+    UNIT_ASSERT(recovered.Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT_VALUES_EQUAL(recovered.GetValueSync(), "Bearer recovered");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 2);
+}
+
+Y_UNIT_TEST(DeviceTerminalErrorIsSharedUntilFactoryReplacement) {
+    TOidcTestServer server;
+    const TString deviceReply = TString("{\"device_code\":\"code\",\"user_code\":\"ABCD\",\"verification_uri\":\"") +
+        server.Issuer() + "/verify\",\"expires_in\":60,\"interval\":1}";
+    server.Enqueue(deviceReply, HTTP_OK);
+    server.Enqueue(R"({"error":"access_denied"})", HTTP_BAD_REQUEST);
+    server.Enqueue(deviceReply, HTTP_OK);
+    server.Enqueue(R"({"access_token":"recovered","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    auto config = server.ClientConfig().Acceptor(std::make_shared<TTestAcceptor>());
+    config.FlowConfig = TDeviceOidcConfig{"public-client", {}};
+    auto factory = CreateOidcProviderFactory(config);
+    auto facility = CreateSimpleCoreFacility();
+    auto first = factory->CreateProvider(facility);
+    auto pending = first->GetAuthInfoAsync();
+    UNIT_ASSERT(pending.Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT_EXCEPTION_CONTAINS(pending.GetValueSync(), std::exception, "access_denied");
+    first.reset();
+
+    auto next = factory->CreateProvider(facility);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(next->GetAuthInfo(), std::exception, "access_denied");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 2);
+    auto recoveredProvider = CreateOidcProviderFactory(config)->CreateProvider(facility);
+    auto recovered = recoveredProvider->GetAuthInfoAsync();
+    UNIT_ASSERT(recovered.Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT_VALUES_EQUAL(recovered.GetValueSync(), "Bearer recovered");
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 4);
+}
+
+Y_UNIT_TEST(ConcurrentProviderCreationSharesOneClientGrant) {
+    TOidcTestServer server;
+    server.Enqueue(R"({"access_token":"shared","token_type":"Bearer","expires_in":600})", HTTP_OK);
+    auto gate = NThreading::NewPromise<void>();
+    server.BlockTokenRepliesUntil(gate.GetFuture());
+    const auto factory = CreateOidcProviderFactory(server.ClientConfig());
+    Y_DEFER { gate.TrySetValue(); };
+    auto facility = CreateSimpleCoreFacility();
+    auto start = NThreading::NewPromise<void>();
+    std::vector<std::future<TCredentialsProviderPtr>> creations;
+    for (size_t i = 0; i < 8; ++i) {
+        creations.push_back(std::async(std::launch::async, [factory, facility, start, i] {
+            start.GetFuture().Wait();
+            return i % 2 == 0 ? factory->CreateProvider(facility) : factory->CreateProvider();
+        }));
+    }
+    start.TrySetValue();
+    std::vector<TCredentialsProviderPtr> providers;
+    for (auto& creation : creations) {
+        providers.push_back(creation.get());
+    }
+    for (size_t i = 2; i < providers.size(); i += 2) {
+        UNIT_ASSERT(providers[i] != providers[0]);
+        UNIT_ASSERT(providers[i + 1] == providers[1]);
+    }
+    gate.TrySetValue();
+    for (const auto& provider : providers) {
+        auto result = provider->GetAuthInfoAsync();
+        UNIT_ASSERT(result.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValueSync(), "Bearer shared");
+    }
+    UNIT_ASSERT_VALUES_EQUAL(server.Requests().size(), 1);
+}
+
 Y_UNIT_TEST(StandaloneDestructionWaitsForResponseCallback) {
     TOidcTestServer server;
     server.Enqueue(R"({"access_token":"access","token_type":"Bearer","expires_in":600})", HTTP_OK);
@@ -978,6 +1070,127 @@ Y_UNIT_TEST(DiscardedCompletionAllowsExternalDestruction) {
     facility->DiscardTasks();
     UNIT_ASSERT(finished.GetFuture().Wait(TDuration::Seconds(5)));
     provider.reset();
+    UNIT_ASSERT(pending.HasException());
+}
+
+Y_UNIT_TEST(DiscardedDeliverySubscriberCanReleaseLastOwners) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
+    config.Cacher(cache);
+    auto facility = std::make_shared<TQueuedOidcFacility>();
+    auto factory = CreateOidcProviderFactory(config);
+    auto provider = factory->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
+    auto finished = NThreading::NewPromise<void>();
+    pending.Subscribe([provider = std::move(provider), factory = std::move(factory), finished](const auto&) mutable {
+        factory.reset();
+        provider.reset();
+        finished.TrySetValue();
+    });
+    cache->Release.TrySetValue();
+    UNIT_ASSERT(facility->WaitForTask());
+    facility->DiscardTasks();
+    UNIT_ASSERT(finished.GetFuture().Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT(pending.HasException());
+}
+
+Y_UNIT_TEST(DestroyedResponseQueueSubscriberCanReleaseLastOwners) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
+    config.Cacher(cache);
+    auto facility = std::make_shared<TQueuedOidcFacility>();
+    auto factory = CreateOidcProviderFactory(config);
+    auto provider = factory->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
+    auto finished = NThreading::NewPromise<void>();
+    pending.Subscribe([provider = std::move(provider), factory = std::move(factory), finished](const auto&) mutable {
+        factory.reset();
+        provider.reset();
+        finished.TrySetValue();
+    });
+    cache->Release.TrySetValue();
+    UNIT_ASSERT(facility->WaitForTask());
+    facility.reset();
+    UNIT_ASSERT(finished.GetFuture().Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT(pending.HasException());
+}
+
+Y_UNIT_TEST(DiscardedDeliverySubscriberCanWaitForAnotherProvider) {
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
+    auto firstCache = std::make_shared<TGatedOidcCacher>();
+    auto secondCache = std::make_shared<TGatedOidcCacher>();
+    auto firstFacility = std::make_shared<TQueuedOidcFacility>();
+    auto secondFacility = std::make_shared<TQueuedOidcFacility>();
+    auto first = CreateOidcProviderFactory(config.Cacher(firstCache))->CreateProvider(firstFacility);
+    auto second = CreateOidcProviderFactory(config.Cacher(secondCache))->CreateProvider(secondFacility);
+    const auto secondPending = second->GetAuthInfoAsync();
+    auto entered = NThreading::NewPromise<void>();
+    auto finished = NThreading::NewPromise<bool>();
+    first->GetAuthInfoAsync().Subscribe([secondPending, entered, finished](const auto&) mutable {
+        entered.TrySetValue();
+        finished.TrySetValue(secondPending.Wait(TDuration::Seconds(5)));
+    });
+    firstCache->Release.TrySetValue();
+    UNIT_ASSERT(firstFacility->WaitForTask());
+    firstFacility->DiscardTasks();
+    const bool callbackStarted = entered.GetFuture().Wait(TDuration::Seconds(5));
+    secondCache->Release.TrySetValue();
+    UNIT_ASSERT(callbackStarted);
+    UNIT_ASSERT(secondFacility->WaitForTask());
+    secondFacility->DiscardTasks();
+    UNIT_ASSERT(finished.GetFuture().Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT(finished.GetFuture().GetValue());
+    UNIT_ASSERT(secondPending.HasException());
+}
+
+Y_UNIT_TEST(ExpiredFacilitySubscriberCanReleaseLastOwners) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
+    config.Cacher(cache);
+    auto facility = std::make_shared<TQueuedOidcFacility>();
+    auto factory = CreateOidcProviderFactory(config);
+    auto provider = factory->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
+    auto finished = NThreading::NewPromise<void>();
+    pending.Subscribe([provider = std::move(provider), factory = std::move(factory), finished](const auto&) mutable {
+        factory.reset();
+        provider.reset();
+        finished.TrySetValue();
+    });
+    const bool entered = cache->Entered.GetFuture().Wait(TDuration::Seconds(5));
+    facility.reset();
+    cache->Release.TrySetValue();
+    UNIT_ASSERT(entered);
+    UNIT_ASSERT(finished.GetFuture().Wait(TDuration::Seconds(5)));
+    UNIT_ASSERT(pending.HasException());
+}
+
+Y_UNIT_TEST(RejectedDeliverySubscriberCanReleaseLastOwners) {
+    auto cache = std::make_shared<TGatedOidcCacher>();
+    TOidcConfig config;
+    config.Issuer = "https://issuer.example";
+    config.FlowConfig = TStaticOidcConfig{.AccessToken = "opaque"};
+    config.Cacher(cache);
+    auto facility = std::make_shared<TThrowingOidcFacility>();
+    auto factory = CreateOidcProviderFactory(config);
+    auto provider = factory->CreateProvider(facility);
+    auto pending = provider->GetAuthInfoAsync();
+    auto finished = NThreading::NewPromise<void>();
+    pending.Subscribe([provider = std::move(provider), factory = std::move(factory), finished](const auto&) mutable {
+        factory.reset();
+        provider.reset();
+        finished.TrySetValue();
+    });
+    cache->Release.TrySetValue();
+    UNIT_ASSERT(finished.GetFuture().Wait(TDuration::Seconds(5)));
     UNIT_ASSERT(pending.HasException());
 }
 

@@ -1206,7 +1206,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(TableMetricsLevelCreateTableAs) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableDataShardDetailedMetrics(true);
-        TKikimrRunner kikimr(featureFlags);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        TKikimrRunner kikimr(settings);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 

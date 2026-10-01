@@ -385,7 +385,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache>, private IC
             TryMoveToTryKeepInMemoryCache(collection, std::move(msg->PageCollection), ev->Sender);
             break;
         }
-        Walks.UpdateSeeds(collection, ev->Sender, std::move(msg->BtreeSeeds));
+        Walks.UpdateSeeds(collection, ev->Sender, std::move(msg->BtreeSeeds), msg->ReplayStickyWalk);
     }
 
     void Handle(NSharedCache::TEvSaveCompactedPages::TPtr &ev, const TActorContext& ctx) {

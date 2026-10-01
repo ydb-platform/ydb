@@ -92,7 +92,8 @@ public:
     {
     }
 
-    void UpdateSeeds(TCollection& collection, const TActorId& owner, TVector<TEvAttach::TBtreeSeed> seeds);
+    void UpdateSeeds(TCollection& collection, const TActorId& owner, TVector<TEvAttach::TBtreeSeed> seeds,
+        bool replayStickyWalk = false);
 
     bool HasActiveWalks() const {
         // Include cancelled runs waiting for dispatched I/O.

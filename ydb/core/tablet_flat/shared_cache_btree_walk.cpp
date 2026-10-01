@@ -140,13 +140,13 @@ void TCacheBTreeWalkController::CancelWalkRun(TCollection& collection) {
     FinishWalkRunIfDrained(collection);
 }
 
-void TCacheBTreeWalkController::UpdateSeeds(
-    TCollection& collection, const TActorId& owner, TVector<NSharedCache::TEvAttach::TBtreeSeed> seeds) {
+void TCacheBTreeWalkController::UpdateSeeds(TCollection& collection, const TActorId& owner,
+    TVector<NSharedCache::TEvAttach::TBtreeSeed> seeds, bool replayStickyWalk) {
     auto* current = State(collection.Id).SeedsByOwner.FindPtr(owner);
     // Production seeds are ordered current then historic, with at most two per owner.
     const bool same = current ? *current == seeds : seeds.empty();
     const bool unblock = State(collection.Id).ControllerState == EWalkControllerState::Blocked;
-    if (same && !unblock) {
+    if (same && !unblock && !replayStickyWalk) {
         return;
     }
 

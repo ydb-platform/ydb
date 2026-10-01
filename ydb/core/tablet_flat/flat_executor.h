@@ -562,10 +562,11 @@ class TExecutor
     void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TPageCollection* collectionInfo);
     void ActivateWaitingTransaction(TTransactionWaitPad& transaction);
     void LogWaitingTransaction(const TTransactionWaitPad& transaction);
-    void AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
-        const THashSet<NTable::TTag>& stickyColumns);
-    void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection,
-        TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds = {});
+    void AddPartStorePageCollections(const NTable::TPartView& partView,
+        const THashMap<NTable::TTag, ECacheMode>& cacheModes, const THashSet<NTable::TTag>& stickyColumns,
+        bool replayStickyWalks = false);
+    void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection>& pageCollection,
+        TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds = {}, bool replayStickyWalk = false);
     void DropPartStorePageCollections(const NTable::TPart &part);
     void DropPageCollection(const TLogoBlobID& pageCollectionId);
     void StartNewBackup();

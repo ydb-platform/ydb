@@ -252,8 +252,9 @@ struct TSharedPageCacheMock {
     }
 
     TSharedPageCacheMock& Attach(TActorId sender, TIntrusiveConstPtr<TPageCollectionMock> collection,
-            ECacheMode cacheMode = ECacheMode::Regular, TVector<TEvAttach::TBtreeSeed> btreeSeeds = {}) {
-        auto attach = new TEvAttach(collection, cacheMode, std::move(btreeSeeds));
+        ECacheMode cacheMode = ECacheMode::Regular, TVector<TEvAttach::TBtreeSeed> btreeSeeds = {},
+        bool replayStickyWalk = false) {
+        auto attach = new TEvAttach(collection, cacheMode, std::move(btreeSeeds), replayStickyWalk);
         Send(sender, attach);
 
         TWaitForFirstEvent<TEvAttach> waiter(Runtime);
@@ -1674,6 +1675,39 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { stickySeed });
         sharedCache.Runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(stickyPages.empty());
+    }
+
+    Y_UNIT_TEST(StickyWalkReplaysIdenticalSeedsOnReattach) {
+        TSharedPageCacheMock sharedCache;
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 1u);
+        TBlockEvents<TEvStickyCollectionPages> stickyPages(sharedCache.Runtime);
+
+        TEvAttach::TBtreeSeed seed;
+        seed.IndexCollectionId = sharedCache.Collection1->Label();
+        seed.DataCollectionId = sharedCache.Collection1->Label();
+        seed.Root = _P(0, EPage::DataPage);
+        seed.Sticky = true;
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { seed });
+        sharedCache.Runtime.WaitFor("initial sticky notification", [&] {
+            return !stickyPages.empty();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.size(), 1u);
+
+        // Boot can discard this notification before the owner's private cache is recreated.
+        stickyPages.clear();
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { seed });
+        sharedCache.Runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(stickyPages.empty());
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular, { seed }, true);
+        sharedCache.Runtime.WaitFor("replayed sticky notification", [&] {
+            return !stickyPages.empty();
+        });
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->GetRecipientRewrite(), sharedCache.Sender1);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->Get()->CollectionId, seed.DataCollectionId);
+        UNIT_ASSERT_VALUES_EQUAL(stickyPages.front()->Get()->Locations, TVector<TPageLocation>{ seed.Root });
     }
 
     Y_UNIT_TEST(InMemory_IndexOnlyDropKeepsOtherOwnerWalk) {

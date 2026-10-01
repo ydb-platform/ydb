@@ -1,4 +1,5 @@
 #include <cmath>
+#include <algorithm>
 
 #include "flat_executor.h"
 #include "flat_executor_bootlogic.h"
@@ -270,6 +271,8 @@ void TExecutor::Broken(EBrokenReason reason) {
 
 void TExecutor::RecreatePrivateCache()
 {
+    // Sticky notifications from the old cache may have been discarded during boot.
+    const bool replayStickyWalks = bool(PrivatePageCache);
     PrivatePageCache = MakeHolder<TPrivatePageCache>();
 
     Stats->PacksMetaBytes = 0;
@@ -279,7 +282,7 @@ void TExecutor::RecreatePrivateCache()
         const auto& cacheModes = GetCacheModes(it.first);
         const auto stickyColumns = GetStickyColumns(it.first);
         for (auto &partView : subset->Flatten) {
-            AddPartStorePageCollections(partView, cacheModes, stickyColumns);
+            AddPartStorePageCollections(partView, cacheModes, stickyColumns, replayStickyWalks);
         }
     }
 
@@ -810,7 +813,7 @@ TVector<bool> MakeStickyGroups(const NTable::TPartView& partView, const THashSet
 } // namespace
 
 void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes,
-    const THashSet<NTable::TTag>& stickyColumns)
+    const THashSet<NTable::TTag>& stickyColumns, bool replayStickyWalks)
 {
     auto *partStore = partView.As<NTable::TPartStore>();
     const auto stickyGroups = MakeStickyGroups(partView, stickyColumns);
@@ -833,7 +836,10 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
         auto seeds = groupIndex < partView->GroupsCount
             ? MakeBtreeSeeds(*partStore, groupIndex, stickyGroups)
             : TVector<NSharedCache::TEvAttach::TBtreeSeed>{};
-        AddPageCollection(cache, std::move(seeds));
+        const bool replayStickyWalk = replayStickyWalks && std::any_of(seeds.begin(), seeds.end(), [](const auto& seed) {
+            return seed.Sticky || seed.IndexCollectionSticky;
+        });
+        AddPageCollection(cache, std::move(seeds), replayStickyWalk);
     }
 
     if (const auto &blobs = partStore->Pseudo)
@@ -841,11 +847,11 @@ void TExecutor::AddPartStorePageCollections(const NTable::TPartView &partView, c
 }
 
 void TExecutor::AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection,
-    TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds)
+    TVector<NSharedCache::TEvAttach::TBtreeSeed> btreeSeeds, bool replayStickyWalk)
 {
     auto syncPages = PrivatePageCache->AddPageCollection(pageCollection);
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(pageCollection->PageCollection, pageCollection->GetCacheMode(),
-        std::move(btreeSeeds)));
+        std::move(btreeSeeds), replayStickyWalk));
 
     if (syncPages) {
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvSync(std::move(syncPages)));

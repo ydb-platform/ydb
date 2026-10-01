@@ -92,12 +92,15 @@ namespace NKikimr::NSharedCache {
         ECacheMode CacheMode;
         // Authoritative for the sender: an empty vector withdraws that owner's walks.
         TVector<TBtreeSeed> BtreeSeeds;
+        // Revisit unchanged sticky seeds after the owner's private cache is recreated.
+        bool ReplayStickyWalk = false;
 
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, ECacheMode cacheMode,
-                TVector<TBtreeSeed> btreeSeeds = {})
+            TVector<TBtreeSeed> btreeSeeds = {}, bool replayStickyWalk = false)
             : PageCollection(std::move(pageCollection))
             , CacheMode(cacheMode)
             , BtreeSeeds(std::move(btreeSeeds))
+            , ReplayStickyWalk(replayStickyWalk)
         {
         }
     };

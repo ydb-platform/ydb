@@ -7186,6 +7186,130 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         UNIT_ASSERT(!repeatedIndexPage);
     }
 
+    Y_UNIT_TEST(TestStickyAlt_BTreeIndexV2FollowerPromotion) {
+        TMyEnvBase env;
+        TRowsModel rows;
+        SetupEnvironment(env, false, true);
+
+        TActorId leaderExecutor;
+        auto leaderAttach = env->AddObserver<NSharedCache::TEvAttach>([&](const auto& ev) {
+            leaderExecutor = ev->Sender;
+        });
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy(), true));
+        env.SendSync(new NFake::TEvExecute{ new TTxKeepFamilyInMemory(TRowsModel::AltFamilyId) });
+        env.SendSync(rows.VersionTo(TRowVersion(1, 10)).RowTo(0).MakeRows(70, 950));
+        env.SendSync(rows.VersionTo(TRowVersion(2, 20)).RowTo(0).MakeRows(70, 950));
+        env.SendSync(new NFake::TEvCompact(TRowsModel::TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+        UNIT_ASSERT(leaderExecutor);
+        leaderAttach.Remove();
+
+        TActorId followerSysActor;
+        TActorId followerExecutor;
+        auto followerBoot = env->AddObserver<TEvTablet::TEvFBoot>([&](const auto& ev) {
+            followerSysActor = ev->Sender;
+        });
+        THashMap<TLogoBlobID, TVector<NSharedCache::TEvAttach::TBtreeSeed>> originalSeeds;
+        bool promoted = false;
+        bool identicalSeedsReattached = false;
+        auto followerAttach = env->AddObserver<NSharedCache::TEvAttach>([&](const auto& ev) {
+            if (ev->Sender == leaderExecutor || ev->Get()->BtreeSeeds.empty()) {
+                return;
+            }
+            followerExecutor = ev->Sender;
+            const auto collectionId = ev->Get()->PageCollection->Label();
+            if (!promoted) {
+                originalSeeds[collectionId] = ev->Get()->BtreeSeeds;
+            } else {
+                UNIT_ASSERT(originalSeeds.at(collectionId) == ev->Get()->BtreeSeeds);
+                identicalSeedsReattached = true;
+            }
+        });
+        TBlockEvents<NSharedCache::TEvStickyCollectionPages> blockedSticky(env.Env, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() != leaderExecutor;
+        });
+        env.FireFollower(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 1);
+        env.WaitForWakeUp();
+        env->WaitFor("follower sticky notifications", [&] {
+            return !blockedSticky.empty();
+        }, TDuration::Seconds(5));
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(followerExecutor);
+
+        THashMap<TLogoBlobID, THashSet<NTable::NPage::TPageOffset>> missingPages;
+        bool hasIndexPages = false;
+        bool hasDataPages = false;
+        for (const auto& ev : blockedSticky) {
+            for (const auto& location : ev->Get()->Locations) {
+                missingPages[ev->Get()->CollectionId].insert(location.Offset);
+                hasIndexPages |= location.Type == NTable::NPage::EPage::BTreeIndexV2;
+                hasDataPages |= location.Type == NTable::NPage::EPage::DataPage;
+            }
+        }
+        UNIT_ASSERT(hasIndexPages && hasDataPages);
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        TBlockEvents<TEvBlobStorage::TEvGetResult> blockedBootReads(env.Env, [&](const auto& ev) {
+            return ev->GetRecipientRewrite() == followerExecutor;
+        });
+        promoted = true;
+        NFake::TStarter starter;
+        auto* promote = new TEvTablet::TEvPromoteToLeader(0, starter.MakeTabletInfo(env.Tablet, env.StorageGroupCount));
+        env->Send(new IEventHandle(followerSysActor, followerSysActor, promote), 0, true);
+        env->WaitFor("promotion boot reads", [&] {
+            return !blockedBootReads.empty();
+        }, TDuration::Seconds(5));
+
+        ui32 stickyRequests = 0;
+        auto stickyRequest = env->AddObserver<NSharedCache::TEvRequest>([&](const auto& ev) {
+            if (ev->Sender == followerExecutor && ev->Cookie == ui64(NSharedCache::ERequestTypeCookie::StickyPages)) {
+                ++stickyRequests;
+            }
+        });
+        // Deliver the old notifications while boot is paused: StateBoot discards them.
+        blockedSticky.Stop().Unblock();
+        env->SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(stickyRequests, 0);
+        UNIT_ASSERT(!identicalSeedsReattached);
+
+        auto stickyResult = env->AddObserver<NSharedCache::TEvResult>([&](const auto& ev) {
+            if (ev->GetRecipientRewrite() != followerExecutor ||
+                ev->Cookie != ui64(NSharedCache::ERequestTypeCookie::StickyPages)) {
+                return;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, NKikimrProto::OK);
+            auto it = missingPages.find(ev->Get()->PageCollection->Label());
+            if (it != missingPages.end()) {
+                for (const auto& page : ev->Get()->Pages) {
+                    it->second.erase(page.Offset);
+                }
+                if (it->second.empty()) {
+                    missingPages.erase(it);
+                }
+            }
+        });
+        blockedBootReads.Stop().Unblock();
+        env.WaitForWakeUp();
+        env->WaitFor("replayed sticky index and data pages", [&] {
+            return missingPages.empty();
+        }, TDuration::Seconds(5));
+        UNIT_ASSERT(identicalSeedsReattached);
+
+        // With shared cache capacity removed, only the two non-sticky main data pages may fault.
+        SetSharedCacheSize(env, 0);
+        WakeupSharedCache(env);
+        int failedAttempts = 0;
+        DoFullScan(env, failedAttempts, true);
+        UNIT_ASSERT_VALUES_EQUAL(failedAttempts, 2);
+    }
+
     Y_UNIT_TEST(TestSticky_BTreeIndexV2OnePagePart) {
         TMyEnvBase env;
         TRowsModel rows;

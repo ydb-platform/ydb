@@ -10,6 +10,19 @@
 namespace NKikimr {
 namespace NKqp {
 
+// A Replicate becomes a stage with several outputs, which needs channel spilling.
+// Give each non-primary port its own copy of the producer; the last port then
+// reads the producer itself. The pipeline enables this rule without channel
+// spilling, after decorrelation and before read pushdown.
+class TExpandReplicateRule final: public IRule {
+public:
+    TExpandReplicateRule()
+        : IRule("Expand Replicate", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
+
+    bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
 /**
  * Analyzes filter expressions, finds potential join conditions and if they are in the form of
  * expressions (i.e. not just equalities of columns) - creates expressions to generate new columns,

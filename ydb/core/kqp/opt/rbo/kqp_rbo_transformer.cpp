@@ -664,6 +664,13 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline definitions"));
 
     TVector<std::unique_ptr<IRule>> pushMapRules;
+    // Match the compiler's AllowWithSpilling setting: shared stage outputs need
+    // channel spilling, otherwise every consumer needs its own producer.
+    const bool allowChannelSpilling = KqpCtx.Config->GetEnableQueryServiceSpilling()
+        && (KqpCtx.IsGenericQuery() || KqpCtx.IsScanQuery()) && KqpCtx.Config->SpillingEnabled();
+    if (!allowChannelSpilling) {
+        pushMapRules.emplace_back(std::make_unique<TExpandReplicateRule>());
+    }
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Push map elements", std::move(pushMapRules)));

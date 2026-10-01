@@ -40,7 +40,7 @@ void TColumnShard::SubscribeLockIfNotAlready(const ui64 lockId, const ui32 lockN
 }
 
 void TColumnShard::TransactionToAbort(const ui64 lockId) {
-    if (auto lock = OperationsManager->GetLockOptional(lockId)) {
+    if (auto lock = OperationsManager->GetLockOptional(lockId); lock && !lock->IsTxIdAssigned()) {
         lock->SetNeedsAborting();
         MaybeAbortTransaction(lockId);
     }

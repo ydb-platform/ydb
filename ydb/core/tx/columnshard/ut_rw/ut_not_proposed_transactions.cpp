@@ -200,6 +200,17 @@ Y_UNIT_TEST_SUITE(TColumnShardNotProposedTransactions) {
         shard.WaitTransactionsAborted();
     }
 
+    Y_UNIT_TEST(RepeatedProposeAfterLockDisappears) {
+        TShardFixture shard;
+        const auto lock = shard.WriteUnderLock();
+        UNIT_ASSERT_VALUES_EQUAL(shard.Writer.StartCommitWithLock(TxId, lock), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+
+        shard.NotifyTransactionGone();
+
+        // Current KQP uses attach after PREPARED, so it does not send this repeated proposal.
+        UNIT_ASSERT_VALUES_EQUAL(shard.Writer.StartCommitWithLock(TxId, lock), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+    }
+
     Y_UNIT_TEST(DroppedTableKeptWhileTransactionProposed) {
         TShardFixture shard;
         Y_UNUSED(shard.WriteUnderLock());

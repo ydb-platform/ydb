@@ -48,6 +48,18 @@ From `ydb_main`, no `-j`, no force rebuild:
 ./ya make --build relwithdebinfo -tA ydb/tests/functional/nbs -F *test-filter*
 ```
 
+The `F6_classic_nbs_grpc` target checks Ping, MountVolume, UnmountVolume and
+ReadBlocks/WriteBlocks through the classic wire API against a real partition:
+
+```bash
+set -o pipefail
+./ya test -A ydb/tests/functional/nbs/F6_classic_nbs_grpc 2>&1 | tail -n 100
+```
+
+It uses one frontend-enabled cluster per suite and one disk at a time, with
+explicit sessions and no I/O retries. Other suites explicitly disable the
+single-disk frontend and keep their existing vhost/load-actor paths.
+
 `ya.make` today: `PY3TEST()`, `SIZE(MEDIUM)`, `REQUIREMENTS(cpu:4)` +
 `REQUIREMENTS(ram:16)`, `FORK_SUBTESTS()`, `SPLIT_FACTOR(3)`,
 `DEPENDS(ydb/apps/dstool)`, `PEERDIR(ydb/tests/library)`.

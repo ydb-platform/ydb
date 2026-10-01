@@ -72,6 +72,7 @@ private:
     std::shared_ptr<TWorkersPoolCounters> Counters;
     TAverageCalcer<TDuration> DeliveringDuration;
     ui64 MaxBatchSize = 30;
+    std::vector<NConfig::THeavyLimit> HeavyLimits;
     const TString PoolName;
     const NActors::TActorId DistributorId;
     const ui64 WorkersPoolId;
@@ -81,6 +82,8 @@ private:
     void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
     void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
     void RunTask(std::vector<TWorkerTask>&& tasksBatch);
+    void RunTask(std::vector<TWorkerTask>&& tasksBatch, const ui64 workerIdx);
+    bool DrainOnWorkers(const std::vector<ui64>& workerIdxs);
     TWeightedCategory& FindCategoryLink(const ESpecialTaskCategory category);
 
 public:

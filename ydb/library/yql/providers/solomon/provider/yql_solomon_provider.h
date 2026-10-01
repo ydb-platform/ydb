@@ -16,6 +16,8 @@ struct TSolomonState : public TThrRefBase
     using TPtr = TIntrusivePtr<TSolomonState>;
 
 public:
+    explicit TSolomonState(bool strictConfigValidation = false);
+
     bool IsRtmrMode() const {
        return SupportRtmrMode;
     }
@@ -27,7 +29,7 @@ public:
     ISolomonGateway::TPtr Gateway;
     TTypeAnnotationContext* Types = nullptr;
     IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
-    TSolomonConfiguration::TPtr Configuration = MakeIntrusive<TSolomonConfiguration>();
+    TSolomonConfiguration::TPtr Configuration;
     THolder<IDqIntegration> DqIntegration;
     THolder<IYtflowIntegration> YtflowIntegration;
     THolder<IYtflowOptimization> YtflowOptimization;

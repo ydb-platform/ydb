@@ -318,7 +318,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
                 }
 
                 // A partition leaf: some tablet_id=<id>/follower_id=0 carrying
-                // the same metric name
+                // the metric under its partition-scope name
                 auto tabletGroup = FindAnyTabletIdGroup(tableGroup);
                 if (!tabletGroup) {
                     continue;
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
                 if (!followerGroup) {
                     continue;
                 }
-                auto leafRowCount = followerGroup->FindNamedCounter("name", "table.datashard.row_count");
+                auto leafRowCount = followerGroup->FindNamedCounter("name", "table.datashard.partition.row_count");
                 if (!leafRowCount) {
                     continue;
                 }

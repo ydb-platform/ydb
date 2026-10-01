@@ -172,10 +172,11 @@ namespace {
     }
 
     void AssertCpuHistogram(NMonitoring::TDynamicCounterPtr rawExecutor,
-                            NMonitoring::TDynamicCounterPtr publicGroup, ui64 expectedTotal)
+                            NMonitoring::TDynamicCounterPtr publicGroup, ui64 expectedTotal,
+                            const TString& publicName = "table.datashard.used_core_percents")
     {
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(rawExecutor, "HIST(ConsumedCPU)"), expectedTotal);
-        UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(publicGroup, "table.datashard.used_core_percents", "name"), expectedTotal);
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(publicGroup, publicName, "name"), expectedTotal);
     }
 
     void AssertNoWrappedBuckets(NMonitoring::TDynamicCounterPtr rawExecutor, const TString& histogramName = "HIST(ConsumedCPU)") {
@@ -231,6 +232,16 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         auto tabletGroup1000 = tableGroup->FindSubgroup("tablet_id", "1000");
         UNIT_ASSERT(tabletGroup1000);
         UNIT_ASSERT(!tabletGroup1000->FindNamedCounter("name", "table.datashard.row_count"));
+
+        // Leader leaf (1000,0) has partition-scoped names and LeaderOnly metrics
+        auto leaf1000_0 = FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf1000_0, "table.datashard.partition.row_count"), 10u);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf1000_0, "table.datashard.partition.read.rows"), 6u);
+
+        // Follower leaf (1000,1) has partition-scoped names but no LeaderOnly metrics
+        auto leaf1000_1 = FindPublicLeafGroup(fixture.PublicRoot, 1000, 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf1000_1, "table.datashard.partition.read.rows"), 11u);
+        UNIT_ASSERT(!leaf1000_1->FindNamedCounter("name", "table.datashard.partition.row_count"));
 
         fixture.Processor->ApplyFromNode(2, true, {});
         fixture.Processor->RecalculateAllCounters();
@@ -435,14 +446,22 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(rawSnapshot->Value(1), 1);
 
         // The same tablet moves from the zero-rate bucket to the first positive bucket.
-        for (const auto& group : {FindPublicLeafGroup(fixture.PublicRoot, 1000, 0), FindPublicTableGroup(fixture.PublicRoot)}) {
-            UNIT_ASSERT(group);
-            auto histogram = group->FindNamedHistogram("name", "table.datashard.used_core_percents");
-            UNIT_ASSERT(histogram);
-            auto snapshot = histogram->Snapshot();
-            UNIT_ASSERT_VALUES_EQUAL(snapshot->Value(0), 0);
-            UNIT_ASSERT_VALUES_EQUAL(snapshot->Value(1), 1);
-        }
+        // Leaf uses partition-scoped name, table uses aggregate name.
+        auto leafGroup = FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(leafGroup);
+        UNIT_ASSERT(tableGroup);
+        auto leafHistogram = leafGroup->FindNamedHistogram("name", "table.datashard.partition.used_core_percents");
+        UNIT_ASSERT(leafHistogram);
+        auto leafSnapshot = leafHistogram->Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(leafSnapshot->Value(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(leafSnapshot->Value(1), 1);
+
+        auto tableHistogram = tableGroup->FindNamedHistogram("name", "table.datashard.used_core_percents");
+        UNIT_ASSERT(tableHistogram);
+        auto tableSnapshot = tableHistogram->Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL(tableSnapshot->Value(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tableSnapshot->Value(1), 1);
     }
 
     Y_UNIT_TEST(PartitionMoveTransientDoesNotDoubleAGauge) {
@@ -578,7 +597,8 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
                                    ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
                                    : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
             auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
-            AssertCpuHistogram(rawExecutor, publicBucket, 2);
+            auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
+            AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
 
             // An unchanged report has no histogram deltas, but still owns its live observation.
             fixture.ApplyNode(1, node1);
@@ -586,7 +606,7 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             fixture.Processor->RecalculateAllCounters();
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 20);
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
-            AssertCpuHistogram(rawExecutor, publicBucket, 1);
+            AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
             UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(table, "table.datashard.used_core_percents", "name"), 1);
 
             second.AddCumulative(CONSUMED_CPU, 3)
@@ -594,14 +614,14 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
             fixture.ApplyNode(2, node2);
             fixture.Processor->RecalculateAllCounters();
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 15);
-            AssertCpuHistogram(rawExecutor, publicBucket, 1);
+            AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
             auto rawSnapshot = rawExecutor->FindHistogram("HIST(ConsumedCPU)")->Snapshot();
             UNIT_ASSERT_VALUES_EQUAL(rawSnapshot->Value(0), 0);
             UNIT_ASSERT_VALUES_EQUAL(rawSnapshot->Value(1), 1);
 
             fixture.ApplyNode(2, node2);
             fixture.Processor->RecalculateAllCounters();
-            AssertCpuHistogram(rawExecutor, publicBucket, 1);
+            AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 15);
         }
     }
@@ -653,17 +673,18 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
                                    ? FindRawExecutorCountersGroup(FindRawTableGroup(fixture.RawRoot))
                                    : FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
             auto publicBucket = tableLevel ? table : FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
-            AssertCpuHistogram(rawExecutor, publicBucket, 2);
+            auto histogramName = tableLevel ? "table.datashard.used_core_percents" : "table.datashard.partition.used_core_percents";
+            AssertCpuHistogram(rawExecutor, publicBucket, 2, histogramName);
 
             node1.Leaders->ForgetTablet(first.TabletId, first.FollowerId);
             fixture.ApplyNode(1, node1);
             fixture.Processor->RecalculateAllCounters();
-            AssertCpuHistogram(rawExecutor, publicBucket, 1);
+            AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
 
             fixture.ApplyNode(1, node1);
             fixture.Processor->RecalculateAllCounters();
-            AssertCpuHistogram(rawExecutor, publicBucket, 1);
+            AssertCpuHistogram(rawExecutor, publicBucket, 1, histogramName);
             UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(table, "table.datashard.used_core_percents", "name"), 1);
             UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
         }

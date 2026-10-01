@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/counters/counters.h>
 #include <ydb/core/grpc_services/counters/proxy_counters.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/tablet/detailed_metrics/memory_tags.h>
 #include <ydb/core/tablet/labeled_db_counters.h>
 #include <ydb/core/tablet/labeled_counters_merger.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
@@ -313,6 +314,7 @@ void TSysViewProcessor::AttachDetailedCounters() {
         return;
     }
 
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
     auto group = GetServiceCounters(AppData()->Counters, "ydb_detailed", false)
         ->GetSubgroup("host", "");
     if (MonitoringProjectId) {
@@ -326,6 +328,7 @@ void TSysViewProcessor::DetachDetailedCounters() {
         return;
     }
 
+    NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
     std::vector<std::pair<TString, TString>> chain{{"host", ""}};
     if (MonitoringProjectId) {
         chain.emplace_back("monitoring_project_id", MonitoringProjectId);
@@ -343,6 +346,7 @@ TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() 
     // request handler runs whenever EITHER flag is on, so an ungated aggregator would
     // be built and fed on a plain db counters deployment.
     if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+        NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
         DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(
             DetailedRawGroup,
             DetailedGroup,

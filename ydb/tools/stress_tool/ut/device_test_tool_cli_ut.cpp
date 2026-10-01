@@ -24,6 +24,30 @@ struct TParsed {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TStressToolCli) {
+    Y_UNIT_TEST(DevNullOptionAndFallbackConflict) {
+        TParsed defaults({"tool ddisk"});
+        UNIT_ASSERT(!defaults.Cli.DDiskDevNullMode);
+        ValidateDDiskOptions(defaults.Result);
+        TParsed enabled({"tool ddisk", "--ddisk-devnull"});
+        UNIT_ASSERT(enabled.Cli.DDiskDevNullMode);
+        ValidateDDiskOptions(enabled.Result);
+        UNIT_ASSERT_VALUES_EQUAL(LoadTests(enabled.Result, true).DDiskTestListSize(), 1);
+        for (bool ddisk : {false, true}) {
+            TParsed conflict({"tool", "--ddisk-devnull", "--force-ddisk-pdisk-fallback"}, ddisk);
+            UNIT_ASSERT_EXCEPTION_CONTAINS(ValidateDDiskOptions(conflict.Result), yexception,
+                "--ddisk-devnull cannot be combined with --force-ddisk-pdisk-fallback");
+        }
+    }
+
+    Y_UNIT_TEST(DevNullOptionIsRejectedOnTheClient) {
+        TParsed client({"tool ddisk", "--ddisk-devnull", "--client", "2", "--endpoint", "localhost:1"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(ValidateDDiskOptions(client.Result), yexception,
+            "pass it to the server process");
+        TParsed server({"tool ddisk", "--ddisk-devnull", "--server", "1", "--client", "2", "--ic-port", "1"});
+        ValidateDDiskOptions(server.Result);
+        UNIT_ASSERT(server.Cli.DDiskDevNullMode);
+    }
+
     Y_UNIT_TEST(GeneratedDefaults) {
         TParsed parsed({"tool ddisk"});
         UNIT_ASSERT(!parsed.Result.Has("cfg", true));
@@ -199,6 +223,7 @@ Y_UNIT_TEST_SUITE(TStressToolCli) {
             UNIT_ASSERT(common != TString::npos && common < section && section < checksum);
             UNIT_ASSERT_VALUES_EQUAL(text.Contains("--areas"), ddisk);
             UNIT_ASSERT_VALUES_EQUAL(text.Contains("ddisk <options>"), !ddisk);
+            UNIT_ASSERT(text.Contains("--ddisk-devnull"));
             UNIT_ASSERT(!text.Contains("DelayBeforeMeasurementsSeconds"));
         }
         UNIT_ASSERT_EXCEPTION((TParsed({"tool ddisk", "--delay-before-measurements", "1"})), yexception);

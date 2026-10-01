@@ -48,6 +48,7 @@ SRCS(
     blobstorage_pdisk.cpp
     blobstorage_pdisk_actor.cpp
     blobstorage_pdisk_blockdevice_async.cpp
+    blobstorage_pdisk_compaction_arbiter.cpp
     blobstorage_pdisk_completion_impl.cpp
     blobstorage_pdisk_delayed_cost_loop.cpp
     blobstorage_pdisk_driveestimator.cpp

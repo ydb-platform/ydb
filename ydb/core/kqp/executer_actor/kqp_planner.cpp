@@ -94,6 +94,24 @@ bool LimitCPU(TIntrusivePtr<TUserRequestContext> ctx) {
 
 }
 
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod) {
+    TKqpStatsReportingSettings settings;
+    settings.CollectCurrentQueryStats = context.CurrentQueryStatsInterval != TDuration::Zero();
+    settings.WithProgressStats = progressStatsPeriod != TDuration::Zero();
+
+    if (context.IsStreamingQuery) {
+        settings.RemoteReportStatsSettings = NYql::NDq::TReportStatsSettings{
+            TDuration::Seconds(1), TDuration::Seconds(5)};
+    }
+    if (settings.CollectCurrentQueryStats) {
+        const auto interval = context.CurrentQueryStatsInterval;
+        // Remote tasks already send periodic stats. Only local tasks need an extra timer.
+        const auto minInterval = progressStatsPeriod ? Min(progressStatsPeriod, interval) : interval;
+        settings.LocalReportStatsSettings = NYql::NDq::TReportStatsSettings{minInterval, interval};
+    }
+    return settings;
+}
+
 bool TKqpPlanner::UseMockEmptyPlanner = false;
 
 // Task can allocate extra memory during execution.
@@ -107,7 +125,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , UserToken(args.UserToken)
     , Deadline(args.Deadline)
     , StatsMode(args.StatsMode)
-    , WithProgressStats(args.WithProgressStats)
+    , StatsReportingSettings(args.StatsReportingSettings)
     , RlPath(args.RlPath)
     , ResourcesSnapshot(std::move(args.ResourcesSnapshot))
     , ExecuterSpan(args.ExecuterSpan)
@@ -274,7 +292,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
-    request.MutableRuntimeSettings()->SetWithProgressStats(WithProgressStats);
+    request.MutableRuntimeSettings()->SetWithProgressStats(StatsReportingSettings.WithProgressStats);
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);
@@ -311,9 +329,9 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
         request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
-    if (UserRequestContext->IsStreamingQuery) {
-        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(1000);
-        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(5000);
+    if (StatsReportingSettings.RemoteReportStatsSettings) {
+        request.MutableRuntimeSettings()->SetMinStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MinInterval.MilliSeconds());
+        request.MutableRuntimeSettings()->SetMaxStatsSendIntervalMs(StatsReportingSettings.RemoteReportStatsSettings->MaxInterval.MilliSeconds());
     }
 
     if (UserToken) {
@@ -552,15 +570,15 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
     auto& task = TasksGraph.GetTask(taskId);
     auto* taskDesc = SerializeTaskForExecution(task);
 
-    if (!TxInfo) {
+    if (!QueryQuotaManager) {
         double memoryPoolPercent = 100;
         if (UserRequestContext->PoolConfig.has_value()) {
             memoryPoolPercent = UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode;
         }
 
-        TxInfo = MakeIntrusive<NRm::TTxState>(
+        QueryQuotaManager = CreateQueryQuotaManager(MakeIntrusive<NRm::TTxState>(
             ResourceManager_, TxId, TInstant::Now(), UserRequestContext->PoolId, memoryPoolPercent, Database,
-            CaFactory_->GetVerboseMemoryLimitException());
+            CaFactory_->GetVerboseMemoryLimitException()));
     }
 
     if (ArrayBufferMinFillPercentage) {
@@ -575,8 +593,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
 
     auto initialMemoryLimit = CaFactory_->MkqlLightProgramMemoryLimit.load();
 
-    auto rmResult = ResourceManager_->AllocateResources(
-        *TxInfo, 0, NRm::TKqpResourcesRequest{.ExecutionUnits = 1, .ExternalMemory = initialMemoryLimit});
+    // the task starts with it and returns it when its compute actor terminates
+    auto rmResult = QueryQuotaManager->AllocateTasks(1, initialMemoryLimit);
 
     if (!rmResult) {
         return rmResult.GetFailReason();
@@ -589,10 +607,10 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .LockNodeId = TasksGraph.GetMeta().LockNodeId,
         .LockMode = TasksGraph.GetMeta().LockMode,
         .Task = taskDesc,
-        .TxInfo = TxInfo,
-        .TaskQuotaManager = CreateTaskQuotaManager(ResourceManager_, TxInfo, taskId, initialMemoryLimit),
+        .TxInfo = QueryQuotaManager->GetTx(),
+        .TaskQuotaManager = CreateTaskQuotaManager(QueryQuotaManager, initialMemoryLimit),
         .ChannelQuotaManager = nullptr,
-        .ReportStatsSettings = Nothing(),
+        .ReportStatsSettings = StatsReportingSettings.LocalReportStatsSettings,
         .TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId()),
         .Arena = TasksGraph.GetMeta().GetArenaIntrusivePtr(),
         .SerializedGUCSettings = SerializedGUCSettings,
@@ -600,7 +618,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .OutputChunkMaxSize = OutputChunkMaxSize,
         .WithSpilling = TasksGraph.GetMeta().AllowWithSpilling,
         .StatsMode = GetDqStatsMode(StatsMode),
-        .WithProgressStats = WithProgressStats,
+        .WithProgressStats = StatsReportingSettings.WithProgressStats,
         // Compute actor should not arm a timeout timer: in case of timeout it will receive
         // TEvAbortExecution from the executer (driven by gRPC client deadline / cancel ->
         // session actor -> executer). Matches the remote path in kqp_query_control_plane.cpp.
@@ -608,6 +626,8 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .ShareMailbox = (computeTasksSize <= 1),
         .RlPath = Nothing(),
         .BlockTrackingMode = BlockTrackingMode,
+        .QueryQuotaManager = QueryQuotaManager,
+        .InitialMemoryLimit = initialMemoryLimit,
         .UserToken = UserToken,
         .Database = Database,
         .Query = Query,

@@ -169,7 +169,7 @@ private:
                 RowBatchReadOptions_,
                 PullQueueConsumerOptions_));
         auto rowset = WaitFor(asyncRowset)
-            .ValueOrThrow();
+            .ValueOrThrow().Rowset;
 
         HandleRowset(rowset);
 

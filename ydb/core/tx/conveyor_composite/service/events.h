@@ -9,6 +9,8 @@
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/conclusion/result.h>
 
+#include <functional>
+
 namespace NKikimr::NConveyorComposite {
 
 class TWorkerTaskContext {
@@ -36,13 +38,20 @@ private:
     using TBase = TWorkerTaskContext;
     YDB_READONLY_DEF(TMonotonic, Start);
     YDB_READONLY_DEF(TMonotonic, Finish);
+    std::function<void()> Accounted;
 
-    TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish);
+    TWorkerTaskResult(const TWorkerTaskContext& context, const TMonotonic start, const TMonotonic finish, std::function<void()> accounted);
     friend class TWorkerTask;
 
 public:
     TDuration GetDuration() const {
         return Finish - Start;
+    }
+
+    void NotifyAccounted() const {
+        if (Accounted) {
+            Accounted();
+        }
     }
 };
 
@@ -54,7 +63,7 @@ private:
 
 public:
     TWorkerTaskResult GetResult(const TMonotonic start, const TMonotonic finish) const {
-        return TWorkerTaskResult(*this, start, finish);
+        return TWorkerTaskResult(*this, start, finish, Task->MakeAccountedCallback());
     }
 
     TWorkerTask(const ITask::TPtr& task, const TDuration prediction, const ESpecialTaskCategory category,

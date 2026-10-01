@@ -3312,7 +3312,8 @@ TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
 
         // Special case for scalar aggregation (aka aggregation with empty keys).
         if (scalarAggregation && !aggFieldType->IsOptionalOrNull() &&
-            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1")) {
+            (aggFunction == "min" || aggFunction == "max" || aggFunction == "sum" || aggFunction == "avg" || aggFunction == "variance_1_1" ||
+             aggFunction == "some")) {
             aggFieldType = ctx.MakeType<TOptionalExprType>(aggFieldType);
         }
 
@@ -3366,7 +3367,7 @@ TStatus AnnotateOpGroupingSets(const TExprNode::TPtr& input, TExprContext& ctx) 
         for (const auto& traits : aggregate.AggregationTraitsList()) {
             const auto function = traits.AggregationFunction().StringValue();
             // For empty keys column may become optional.
-            if (function == "min" || function == "max" || function == "sum" || function == "avg" || function == "variance_1_1") {
+            if (function == "min" || function == "max" || function == "sum" || function == "avg" || function == "variance_1_1" || function == "some") {
                 scalarOptionalResults.insert(traits.ResultColName().StringValue());
             }
         }

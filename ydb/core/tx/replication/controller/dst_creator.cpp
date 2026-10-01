@@ -9,6 +9,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/tx/replication/common/family_settings.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/core/tx/scheme_board/subscriber.h>
@@ -25,6 +26,56 @@ namespace NKikimr::NReplication::NController {
 
 using namespace NConsole;
 using namespace NSchemeShard;
+
+namespace {
+
+bool CheckColumnFamilySettings(
+        const NKikimrSchemeOp::TFamilyDescription& expected,
+        const NKikimrSchemeOp::TFamilyDescription& actual,
+        TString& error)
+{
+    const auto name = GetFamilyName(expected);
+
+    const auto expectedCodec = GetColumnCodec(expected);
+    const auto actualCodec = GetColumnCodec(actual);
+    if (expectedCodec != actualCodec) {
+        error = TStringBuilder() << "Column family codec mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCodec)
+            << ", got: " << static_cast<ui32>(actualCodec);
+        return false;
+    }
+
+    const auto expectedCacheMode = expected.GetColumnCacheMode();
+    const auto actualCacheMode = actual.GetColumnCacheMode();
+    if (expectedCacheMode != actualCacheMode) {
+        error = TStringBuilder() << "Column family cache mode mismatch"
+            << ": name: " << name
+            << ", expected: " << static_cast<ui32>(expectedCacheMode)
+            << ", got: " << static_cast<ui32>(actualCacheMode);
+        return false;
+    }
+
+    const auto& expectedData = expected.GetStorageConfig().GetData();
+    const auto& expectedMedia = expectedData.GetPreferredPoolKind();
+    if (!expectedMedia || expectedData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    const auto& actualData = actual.GetStorageConfig().GetData();
+    const auto& actualMedia = actualData.GetPreferredPoolKind();
+    if (expectedMedia == actualMedia && !actualData.GetAllowOtherKinds()) {
+        return true;
+    }
+
+    error = TStringBuilder() << "Column family media mismatch"
+        << ": name: " << name
+        << ", expected: " << expectedMedia
+        << ", got: " << actualMedia;
+    return false;
+}
+
+} // anonymous namespace
 
 class TDstCreator: public TActorBootstrapped<TDstCreator> {
     void Resolve(const TPathId& pathId) {
@@ -197,6 +248,13 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
             case Ydb::Table::TableIndex::kGlobalUniqueIndex:
                 ++it;
                 continue;
+            case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                if (AppData()->FeatureFlags.GetEnableAsyncIndexReplication()) {
+                    ++it;
+                } else {
+                    it = indexes.erase(it);
+                }
+                continue;
             default:
                 it = indexes.erase(it);
                 break;
@@ -237,7 +295,11 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         FillReplicationConfig(*desc->MutableReplicationConfig());
         if (scheme.indexes_size()) {
             for (auto& index : *TxBody.MutableCreateIndexedTable()->MutableIndexDescription()) {
-                FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                // Async indexes are maintained by the destination's own change exchange.
+                // Only synchronous index tables have independent replication targets.
+                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalAsync) {
+                    FillReplicationConfig(*index.MutableIndexImplTableDescriptions(0)->MutableReplicationConfig());
+                }
             }
         }
 
@@ -436,9 +498,9 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         }
 
         // check columns
-        THashMap<TStringBuf, TStringBuf> columns;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TColumnDescription*> columns;
         for (const auto& column : got.GetColumns()) {
-            columns.emplace(column.GetName(), column.GetType());
+            columns.emplace(column.GetName(), &column);
         }
 
         if (tableDesc->ColumnsSize() != columns.size()) {
@@ -446,6 +508,16 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 << ": expected: " << tableDesc->ColumnsSize()
                 << ", got: " << columns.size();
             return false;
+        }
+
+        // Compare family names instead of IDs: each cluster assigns its own IDs.
+        THashMap<ui32, TStringBuf> gotFamilyNames;
+        THashMap<TStringBuf, const NKikimrSchemeOp::TFamilyDescription*> families;
+        gotFamilyNames.emplace(0, DefaultFamilyName);
+        for (const auto& family : got.GetPartitionConfig().GetColumnFamilies()) {
+            const auto name = GetFamilyName(family);
+            gotFamilyNames[family.GetId()] = name;
+            families.emplace(name, &family);
         }
 
         for (const auto& column : tableDesc->GetColumns()) {
@@ -456,11 +528,46 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
                 return false;
             }
 
-            if (column.GetType() != it->second) {
+            if (column.GetType() != it->second->GetType()) {
                 error = TStringBuilder() << "Column type mismatch"
                     << ": name: " << column.GetName()
                     << ", expected: " << column.GetType()
-                    << ", got: " << it->second;
+                    << ", got: " << it->second->GetType();
+                return false;
+            }
+
+            const auto expectedFamily = GetColumnFamilyName(column);
+            const auto name = gotFamilyNames.find(it->second->GetFamily());
+            const TStringBuf actualFamily = name == gotFamilyNames.end() ? TStringBuf("<unknown>") : name->second;
+            if (name == gotFamilyNames.end() || actualFamily != expectedFamily) {
+                error = TStringBuilder() << "Column family mismatch"
+                    << ": column: " << column.GetName()
+                    << ", expected: " << expectedFamily
+                    << ", got: " << actualFamily;
+                return false;
+            }
+        }
+
+        for (const auto& expected : tableDesc->GetPartitionConfig().GetColumnFamilies()) {
+            const auto name = GetFamilyName(expected);
+            auto it = families.find(name);
+            if (it == families.end()) {
+                error = TStringBuilder() << "Cannot find column family"
+                    << ": name: " << name;
+                return false;
+            }
+
+            if (!CheckColumnFamilySettings(expected, *it->second, error)) {
+                return false;
+            }
+
+            families.erase(it);
+        }
+
+        for (const auto& item : families) {
+            if (item.first != DefaultFamilyName) {
+                error = TStringBuilder() << "Unexpected column family"
+                    << ": name: " << item.first;
                 return false;
             }
         }

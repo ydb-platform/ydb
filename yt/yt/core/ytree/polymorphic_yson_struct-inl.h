@@ -227,6 +227,18 @@ const typename TPolymorphicYsonStruct<TMapping>::TBase* TPolymorphicYsonStruct<T
 }
 
 template <CPolymorphicEnumMapping TMapping>
+typename TPolymorphicYsonStruct<TMapping>::TBase* TPolymorphicYsonStruct<TMapping>::GetBase()
+{
+    return Storage_.Get();
+}
+
+template <CPolymorphicEnumMapping TMapping>
+const typename TPolymorphicYsonStruct<TMapping>::TBase* TPolymorphicYsonStruct<TMapping>::GetBase() const
+{
+    return Storage_.Get();
+}
+
+template <CPolymorphicEnumMapping TMapping>
 void TPolymorphicYsonStruct<TMapping>::MergeWith(const TPolymorphicYsonStruct& other)
 {
     if (!Storage_) {
@@ -297,6 +309,24 @@ template <CPolymorphicEnumMapping TMapping, CYsonStructSource TSource>
 void Deserialize(TPolymorphicYsonStruct<TMapping>& value, TSource source)
 {
     value.Load(std::move(source));
+}
+
+template <CPolymorphicEnumMapping TMapping>
+bool operator==(const TPolymorphicYsonStruct<TMapping>& lhs, const TPolymorphicYsonStruct<TMapping>& rhs)
+{
+    if (static_cast<bool>(lhs) != static_cast<bool>(rhs)) {
+        return false;
+    }
+
+    if (!lhs) {
+        return true;
+    }
+
+    if (lhs.GetType() != rhs.GetType()) {
+        return false;
+    }
+
+    return lhs->IsEqual(*rhs.GetBase());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

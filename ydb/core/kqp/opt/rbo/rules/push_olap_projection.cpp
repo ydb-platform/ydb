@@ -1,4 +1,3 @@
-#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_olap_filter.h>
 #include <ydb/core/kqp/opt/physical/predicate_collector.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
@@ -12,13 +11,13 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-bool IsSuitableToPushProjectionToColumnTables(const TIntrusivePtr<IOperator>& input) {
+bool IsSuitableToPushProjectionToColumnTables(IOperator* input) {
     if (input->Kind != EOperator::Map) {
         return false;
     }
 
     const auto filter = CastOperator<TOpMap>(input);
-    const auto maybeRead = filter->GetInput();
+    const auto maybeRead = filter->GetInput().Get();
     return ((maybeRead->Kind == EOperator::Source) && (CastOperator<TOpRead>(maybeRead)->GetTableStorageType() == NYql::EStorageType::ColumnStorage) &&
             filter->GetTypeAnn());
 }
@@ -27,36 +26,48 @@ bool IsSuitableToPushProjectionToColumnTables(const TIntrusivePtr<IOperator>& in
 
 bool TPushOlapProjectionRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Map &&
-        input->Children.front()->Kind == EOperator::Source;
+        input->GetChildren().front()->Kind == EOperator::Source;
 }
 
 TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    Y_UNUSED(props);
     if (!(ctx.KqpCtx.Config->HasOptEnableOlapPushdown() && ctx.KqpCtx.Config->GetEnableOlapPushdownProjections())) {
         return input;
     }
 
-    if (!IsSuitableToPushProjectionToColumnTables(input)) {
+    if (!IsSuitableToPushProjectionToColumnTables(input.get())) {
         return input;
     }
 
     const auto map = CastOperator<TOpMap>(input);
-    const auto read = CastOperator<TOpRead>(map->GetInput());
-    const TPushdownOptions pushdownOptions(false, false, /*StripAliasPrefixForColumnName=*/true);
+    const auto read = CastOperator<TOpRead>(map->GetInput().Get());
+    // Preserve the input's IU-ID atoms and row-schema fields during construction.
+    const TPushdownOptions pushdownOptions(false, false, /*StripAliasPrefixForColumnName=*/false);
 
     TVector<std::pair<TString, TExprNode::TPtr>> olapOperationsForProjections;
     auto memberPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoMember>(node); };
     THashSet<TString> projectionMembers;
     THashSet<TString> predicateMembers;
     THashSet<TString> notSuitableToPushMembers;
+    // OLAP projection overwrites the source field. An implicit pass-through
+    // or an explicit copy still needs its original value and type.
+    auto passthrough = GetLiveOut(map.Get());
+    passthrough.IntersectWith(read->GetOutputIUs());
+    for (const auto id : passthrough) {
+        notSuitableToPushMembers.insert(ToString(id));
+    }
+    for (const auto& [id, element] : map->GetMapElements().Items()) {
+        if (element.IsColumnAccess()) {
+            notSuitableToPushMembers.insert(ToString(element.GetColumnAccess()));
+        }
+    }
     ui32 nextMemberId = 0;
 
     TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>> projectionCandidates;
-    TVector<ui32> inMapIndices;
+    TVector<TInfoUnitId> inMapIds;
     const auto& mapElements = map->GetMapElements();
     // Iterate over map elements and try to find an expression to push down to column shard.
-    for (ui32 mapIndex = 0; mapIndex < mapElements.size(); ++mapIndex) {
-        const auto& mapElement = mapElements[mapIndex];
+    for (const auto output : mapElements.Keys()) {
+        const auto& mapElement = *mapElements.Find(output);
         if (!mapElement.IsColumnAccess()) {
             const auto lambda = TCoLambda(mapElement.GetExpression().Node);
             const auto& arg = lambda.Args().Arg(0).Ref();
@@ -68,7 +79,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
                     notSuitableToPushMembers.insert(TString(TExprBase(member).Cast<TCoMember>().Name()));
                 }
             } else {
-                inMapIndices.push_back(mapIndex);
+                inMapIds.push_back(output);
             }
         }
     }
@@ -78,14 +89,14 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
     }
 
     ui32 projectionIndex = 0;
-    TVector<TMapElement> newMapElements;
-    for (ui32 mapIndex = 0; mapIndex < mapElements.size(); ++mapIndex) {
-        TMapElement mapElement = mapElements[mapIndex];
-        if (inMapIndices[projectionIndex] == mapIndex) {
+    TMapIUs newMapElements;
+    for (const auto output : mapElements.Keys()) {
+        TMapElement mapElement = *mapElements.Find(output);
+        if (projectionIndex < inMapIds.size() && inMapIds[projectionIndex] == output) {
             const auto& [colName, projection, replace, olapOperation] = projectionCandidates[projectionIndex++];
             Y_ENSURE(colName.find(NOpt::KqpOlapProjectionNamePrefix) == TString::npos, "Multiple projections for same column is not supported");
             if (!notSuitableToPushMembers.count(colName)) {
-                olapOperationsForProjections.emplace_back(NOpt::GetOlapColumnName(colName, /*stripAliasPrefix=*/true), olapOperation);
+                olapOperationsForProjections.emplace_back(colName, olapOperation);
                 // Replace old expression with new.
                 auto oldLambda = TCoLambda(mapElement.GetExpression().Node);
                 // clang-format off
@@ -97,10 +108,10 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
                     .Build()
                 .Done().Ptr();
                 // clang-format on
-                mapElement = TMapElement(mapElements[mapIndex].GetElementName(), TExpression(newLambda, &ctx.ExprCtx, &props));
+                mapElement = TMapElement(TExpression(newLambda, &ctx.ExprCtx, &props));
             }
         }
-        newMapElements.push_back(mapElement);
+        newMapElements.Add(output, std::move(mapElement));
     }
 
     if (olapOperationsForProjections.empty()) {
@@ -148,7 +159,7 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
 
     YQL_CLOG(TRACE, ProviderKqp) << "Pushed OLAP projection: " << KqpExprToPrettyString(TExprBase(newLambda), ctx.ExprCtx);
 
-    auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, newLambda, read->Limit,
+    auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->GetColumns(), read->StorageType, read->TableCallable, newLambda, read->Limit,
                                           read->RangeInfo, read->OriginalPredicate, read->SortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpMap>(newRead, map->Pos, newMapElements);
 }

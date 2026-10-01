@@ -2076,7 +2076,7 @@ private:
     void FitPDisksForUserConfig(TConfigState &state);
     void FitGroupsForUserConfig(TConfigState &state, ui32 availabilityDomainId,
         const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
-        NKikimrBlobStorage::TConfigResponse::TStatus& status);
+        NKikimrBlobStorage::TConfigResponse::TStatus& status, bool requireCorrectLayout);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Bridge operation

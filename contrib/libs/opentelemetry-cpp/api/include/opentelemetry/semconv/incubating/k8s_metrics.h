@@ -3136,13 +3136,13 @@ CreateAsyncDoubleMetricK8sNodeConditionStatus(metrics::Meter *meter)
 }
 
 /**
-  Amount of cpu allocatable on the node.
+  Amount of CPU allocatable on the node.
   <p>
   updowncounter
  */
 static constexpr const char *kMetricK8sNodeCpuAllocatable = "k8s.node.cpu.allocatable";
 static constexpr const char *descrMetricK8sNodeCpuAllocatable =
-    "Amount of cpu allocatable on the node.";
+    "Amount of CPU allocatable on the node.";
 static constexpr const char *unitMetricK8sNodeCpuAllocatable = "{cpu}";
 
 static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
@@ -3217,15 +3217,15 @@ CreateAsyncDoubleMetricK8sNodeCpuTime(metrics::Meter *meter)
 }
 
 /**
-  Node's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.
+  Node's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.
   <p>
-  CPU usage of the specific Node on all available CPU cores, averaged over the sample window
-  <p>
-  gauge
+  CPU usage of the specific Node on all available CPU cores. It is calculated as the change in
+  cumulative CPU time (k8s.node.cpu.time) over a measurement interval, divided by the elapsed time:
+  usageCores = (cpuTimeEnd - cpuTimeStart) / elapsedSeconds <p> gauge
  */
 static constexpr const char *kMetricK8sNodeCpuUsage = "k8s.node.cpu.usage";
 static constexpr const char *descrMetricK8sNodeCpuUsage =
-    "Node's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.";
+    "Node's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.";
 static constexpr const char *unitMetricK8sNodeCpuUsage = "{cpu}";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -3400,6 +3400,104 @@ CreateAsyncDoubleMetricK8sNodeFilesystemCapacity(metrics::Meter *meter)
 }
 
 /**
+  The total inodes in the node's root filesystem.
+  <p>
+  This metric is derived from the
+  <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#FsStats">FsStats.Inodes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Fs</a>
+  of the Kubelet's stats API.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricK8sNodeFilesystemInodeCount = "k8s.node.filesystem.inode.count";
+static constexpr const char *descrMetricK8sNodeFilesystemInodeCount =
+    "The total inodes in the node's root filesystem.";
+static constexpr const char *unitMetricK8sNodeFilesystemInodeCount = "{inode}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                         descrMetricK8sNodeFilesystemInodeCount,
+                                         unitMetricK8sNodeFilesystemInodeCount);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                          descrMetricK8sNodeFilesystemInodeCount,
+                                          unitMetricK8sNodeFilesystemInodeCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                                   descrMetricK8sNodeFilesystemInodeCount,
+                                                   unitMetricK8sNodeFilesystemInodeCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sNodeFilesystemInodeCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeFilesystemInodeCount,
+                                                    descrMetricK8sNodeFilesystemInodeCount,
+                                                    unitMetricK8sNodeFilesystemInodeCount);
+}
+
+/**
+  The free inodes in the node's root filesystem.
+  <p>
+  This metric is derived from the
+  <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#FsStats">FsStats.InodesFree</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.33.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Fs</a>
+  of the Kubelet's stats API.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricK8sNodeFilesystemInodeFree = "k8s.node.filesystem.inode.free";
+static constexpr const char *descrMetricK8sNodeFilesystemInodeFree =
+    "The free inodes in the node's root filesystem.";
+static constexpr const char *unitMetricK8sNodeFilesystemInodeFree = "{inode}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                         descrMetricK8sNodeFilesystemInodeFree,
+                                         unitMetricK8sNodeFilesystemInodeFree);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                          descrMetricK8sNodeFilesystemInodeFree,
+                                          unitMetricK8sNodeFilesystemInodeFree);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                                   descrMetricK8sNodeFilesystemInodeFree,
+                                                   unitMetricK8sNodeFilesystemInodeFree);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sNodeFilesystemInodeFree(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricK8sNodeFilesystemInodeFree,
+                                                    descrMetricK8sNodeFilesystemInodeFree,
+                                                    unitMetricK8sNodeFilesystemInodeFree);
+}
+
+/**
   Node filesystem usage.
   <p>
   This may not equal capacity - available.
@@ -3538,10 +3636,12 @@ CreateAsyncDoubleMetricK8sNodeMemoryAvailable(metrics::Meter *meter)
 }
 
 /**
-  Node memory paging faults.
-  <p>
-  Cumulative number of major/minor page faults.
-  This metric is derived from the <a
+  Deprecated, use @code k8s.node.paging.faults @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code k8s.node.paging.faults @endcode.", "reason": "renamed", "renamed_to":
+  "k8s.node.paging.faults"} <p> Cumulative number of major/minor page faults. This metric is derived
+  from the <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
   and <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
@@ -3549,40 +3649,51 @@ CreateAsyncDoubleMetricK8sNodeMemoryAvailable(metrics::Meter *meter)
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Memory</a>
   of the Kubelet's stats API. <p> counter
  */
-static constexpr const char *kMetricK8sNodeMemoryPagingFaults     = "k8s.node.memory.paging.faults";
-static constexpr const char *descrMetricK8sNodeMemoryPagingFaults = "Node memory paging faults.";
-static constexpr const char *unitMetricK8sNodeMemoryPagingFaults  = "{fault}";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sNodeMemoryPagingFaults =
+    "k8s.node.memory.paging.faults";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricK8sNodeMemoryPagingFaults =
+    "Deprecated, use `k8s.node.paging.faults` instead.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sNodeMemoryPagingFaults =
+    "{fault}";
 
-static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricK8sNodeMemoryPagingFaults,
                                     descrMetricK8sNodeMemoryPagingFaults,
                                     unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::unique_ptr<metrics::Counter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricK8sNodeMemoryPagingFaults,
                                     descrMetricK8sNodeMemoryPagingFaults,
                                     unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricK8sNodeMemoryPagingFaults,
                                              descrMetricK8sNodeMemoryPagingFaults,
                                              unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricK8sNodeMemoryPagingFaults,
                                               descrMetricK8sNodeMemoryPagingFaults,
                                               unitMetricK8sNodeMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -3630,42 +3741,42 @@ CreateAsyncDoubleMetricK8sNodeMemoryRss(metrics::Meter *meter)
 /**
   Memory usage of the Node.
   <p>
-  Total memory usage of the Node
-  <p>
-  gauge
+  Total memory in use. This includes all memory regardless of when it was accessed.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.UsageBytes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Memory</a>
+  of the Kubelet's stats API. <p> updowncounter
  */
 static constexpr const char *kMetricK8sNodeMemoryUsage     = "k8s.node.memory.usage";
 static constexpr const char *descrMetricK8sNodeMemoryUsage = "Memory usage of the Node.";
 static constexpr const char *unitMetricK8sNodeMemoryUsage  = "By";
 
-#if OPENTELEMETRY_ABI_VERSION_NO >= 2
-
-static inline nostd::unique_ptr<metrics::Gauge<int64_t>> CreateSyncInt64MetricK8sNodeMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64Gauge(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
-                                 unitMetricK8sNodeMemoryUsage);
+  return meter->CreateInt64UpDownCounter(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
+                                         unitMetricK8sNodeMemoryUsage);
 }
 
-static inline nostd::unique_ptr<metrics::Gauge<double>> CreateSyncDoubleMetricK8sNodeMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleGauge(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
-                                  unitMetricK8sNodeMemoryUsage);
+  return meter->CreateDoubleUpDownCounter(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
+                                          unitMetricK8sNodeMemoryUsage);
 }
-#endif /* OPENTELEMETRY_ABI_VERSION_NO */
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64ObservableGauge(kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage,
-                                           unitMetricK8sNodeMemoryUsage);
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage, unitMetricK8sNodeMemoryUsage);
 }
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sNodeMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleObservableGauge(
+  return meter->CreateDoubleObservableUpDownCounter(
       kMetricK8sNodeMemoryUsage, descrMetricK8sNodeMemoryUsage, unitMetricK8sNodeMemoryUsage);
 }
 
@@ -3790,6 +3901,50 @@ CreateAsyncDoubleMetricK8sNodeNetworkIo(metrics::Meter *meter)
 }
 
 /**
+  Node memory paging faults.
+  <p>
+  Cumulative number of major/minor page faults.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
+  and <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
+  fields of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#NodeStats">NodeStats.Memory</a>
+  of the Kubelet's stats API. <p> counter
+ */
+static constexpr const char *kMetricK8sNodePagingFaults     = "k8s.node.paging.faults";
+static constexpr const char *descrMetricK8sNodePagingFaults = "Node memory paging faults.";
+static constexpr const char *unitMetricK8sNodePagingFaults  = "{fault}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+CreateSyncInt64MetricK8sNodePagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults,
+                                    unitMetricK8sNodePagingFaults);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricK8sNodePagingFaults(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults,
+                                    unitMetricK8sNodePagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sNodePagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults, unitMetricK8sNodePagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sNodePagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricK8sNodePagingFaults, descrMetricK8sNodePagingFaults, unitMetricK8sNodePagingFaults);
+}
+
+/**
   Amount of pods allocatable on the node.
   <p>
   updowncounter
@@ -3881,20 +4036,16 @@ CreateAsyncDoubleMetricK8sNodeSystemContainerCpuTime(metrics::Meter *meter)
 }
 
 /**
-  Node's system container CPU usage, measured in cpus.
+  Node's system container CPU usage, measured in CPUs.
   <p>
-  This metric is derived from the <a
-  href="https://github.com/kubernetes/kubelet/blob/v0.35.2/pkg/apis/stats/v1alpha1/types.go#L233">CPUStats.UsageNanoCores</a>
-  field of the <a
-  href="https://github.com/kubernetes/kubelet/blob/v0.35.2/pkg/apis/stats/v1alpha1/types.go#L157C6-L157C20">ContainerStats</a>
-  of <a
-  href="https://github.com/kubernetes/kubelet/blob/v0.35.2/pkg/apis/stats/v1alpha1/types.go#L40">Node.SystemContainers</a>
-  of the Kubelet's stats API. <p> gauge
+  CPU usage of the specific System Container on all available CPU cores. It is calculated as the
+  change in cumulative CPU time (k8s.node.system_container.cpu.time) over a measurement interval,
+  divided by the elapsed time: usageCores = (cpuTimeEnd - cpuTimeStart) / elapsedSeconds <p> gauge
  */
 static constexpr const char *kMetricK8sNodeSystemContainerCpuUsage =
     "k8s.node.system_container.cpu.usage";
 static constexpr const char *descrMetricK8sNodeSystemContainerCpuUsage =
-    "Node's system container CPU usage, measured in cpus.";
+    "Node's system container CPU usage, measured in CPUs.";
 static constexpr const char *unitMetricK8sNodeSystemContainerCpuUsage = "{cpu}";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -4349,15 +4500,15 @@ static inline nostd::shared_ptr<metrics::ObservableInstrument> CreateAsyncDouble
 }
 
 /**
-  Pod's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.
+  Pod's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.
   <p>
-  CPU usage of the specific Pod on all available CPU cores, averaged over the sample window
-  <p>
-  gauge
+  CPU usage of the specific Pod on all available CPU cores. It is calculated as the change in
+  cumulative CPU time (k8s.pod.cpu.time) over a measurement interval, divided by the elapsed time:
+  usageCores = (cpuTimeEnd - cpuTimeStart) / elapsedSeconds <p> gauge
  */
 static constexpr const char *kMetricK8sPodCpuUsage = "k8s.pod.cpu.usage";
 static constexpr const char *descrMetricK8sPodCpuUsage =
-    "Pod's CPU usage, measured in cpus. Range from 0 to the number of allocatable CPUs.";
+    "Pod's CPU usage, measured in CPUs. Range from 0 to the number of allocatable CPUs.";
 static constexpr const char *unitMetricK8sPodCpuUsage = "{cpu}";
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -4585,10 +4736,12 @@ CreateAsyncDoubleMetricK8sPodMemoryAvailable(metrics::Meter *meter)
 }
 
 /**
-  Pod memory paging faults.
-  <p>
-  Cumulative number of major/minor page faults.
-  This metric is derived from the <a
+  Deprecated, use @code k8s.pod.paging.faults @endcode instead.
+
+  @deprecated
+  {"note": "Replaced by @code k8s.pod.paging.faults @endcode.", "reason": "renamed", "renamed_to":
+  "k8s.pod.paging.faults"} <p> Cumulative number of major/minor page faults. This metric is derived
+  from the <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
   and <a
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
@@ -4596,40 +4749,51 @@ CreateAsyncDoubleMetricK8sPodMemoryAvailable(metrics::Meter *meter)
   href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
   of the Kubelet's stats API. <p> counter
  */
-static constexpr const char *kMetricK8sPodMemoryPagingFaults     = "k8s.pod.memory.paging.faults";
-static constexpr const char *descrMetricK8sPodMemoryPagingFaults = "Pod memory paging faults.";
-static constexpr const char *unitMetricK8sPodMemoryPagingFaults  = "{fault}";
+OPENTELEMETRY_DEPRECATED static constexpr const char *kMetricK8sPodMemoryPagingFaults =
+    "k8s.pod.memory.paging.faults";
+OPENTELEMETRY_DEPRECATED static constexpr const char *descrMetricK8sPodMemoryPagingFaults =
+    "Deprecated, use `k8s.pod.paging.faults` instead.";
+OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricK8sPodMemoryPagingFaults =
+    "{fault}";
 
-static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricK8sPodMemoryPagingFaults,
                                     descrMetricK8sPodMemoryPagingFaults,
                                     unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::unique_ptr<metrics::Counter<double>>
+OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricK8sPodMemoryPagingFaults,
                                     descrMetricK8sPodMemoryPagingFaults,
                                     unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricK8sPodMemoryPagingFaults,
                                              descrMetricK8sPodMemoryPagingFaults,
                                              unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
-static inline nostd::shared_ptr<metrics::ObservableInstrument>
+OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sPodMemoryPagingFaults(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricK8sPodMemoryPagingFaults,
                                               descrMetricK8sPodMemoryPagingFaults,
                                               unitMetricK8sPodMemoryPagingFaults);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -4677,43 +4841,43 @@ CreateAsyncDoubleMetricK8sPodMemoryRss(metrics::Meter *meter)
 /**
   Memory usage of the Pod.
   <p>
-  Total memory usage of the Pod
-  <p>
-  gauge
+  Total memory in use. This includes all memory regardless of when it was accessed.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.UsageBytes</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> updowncounter
  */
 static constexpr const char *kMetricK8sPodMemoryUsage     = "k8s.pod.memory.usage";
 static constexpr const char *descrMetricK8sPodMemoryUsage = "Memory usage of the Pod.";
 static constexpr const char *unitMetricK8sPodMemoryUsage  = "By";
 
-#if OPENTELEMETRY_ABI_VERSION_NO >= 2
-
-static inline nostd::unique_ptr<metrics::Gauge<int64_t>> CreateSyncInt64MetricK8sPodMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64Gauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                 unitMetricK8sPodMemoryUsage);
+  return meter->CreateInt64UpDownCounter(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
+                                         unitMetricK8sPodMemoryUsage);
 }
 
-static inline nostd::unique_ptr<metrics::Gauge<double>> CreateSyncDoubleMetricK8sPodMemoryUsage(
-    metrics::Meter *meter)
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleGauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                  unitMetricK8sPodMemoryUsage);
+  return meter->CreateDoubleUpDownCounter(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
+                                          unitMetricK8sPodMemoryUsage);
 }
-#endif /* OPENTELEMETRY_ABI_VERSION_NO */
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateInt64ObservableGauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                           unitMetricK8sPodMemoryUsage);
+  return meter->CreateInt64ObservableUpDownCounter(
+      kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage, unitMetricK8sPodMemoryUsage);
 }
 
 static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricK8sPodMemoryUsage(metrics::Meter *meter)
 {
-  return meter->CreateDoubleObservableGauge(kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage,
-                                            unitMetricK8sPodMemoryUsage);
+  return meter->CreateDoubleObservableUpDownCounter(
+      kMetricK8sPodMemoryUsage, descrMetricK8sPodMemoryUsage, unitMetricK8sPodMemoryUsage);
 }
 
 /**
@@ -4834,6 +4998,50 @@ CreateAsyncDoubleMetricK8sPodNetworkIo(metrics::Meter *meter)
 {
   return meter->CreateDoubleObservableCounter(kMetricK8sPodNetworkIo, descrMetricK8sPodNetworkIo,
                                               unitMetricK8sPodNetworkIo);
+}
+
+/**
+  Pod memory paging faults.
+  <p>
+  Cumulative number of major/minor page faults.
+  This metric is derived from the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.PageFaults</a>
+  and <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#MemoryStats">MemoryStats.MajorPageFaults</a>
+  field of the <a
+  href="https://pkg.go.dev/k8s.io/kubelet@v0.34.0/pkg/apis/stats/v1alpha1#PodStats">PodStats.Memory</a>
+  of the Kubelet's stats API. <p> counter
+ */
+static constexpr const char *kMetricK8sPodPagingFaults     = "k8s.pod.paging.faults";
+static constexpr const char *descrMetricK8sPodPagingFaults = "Pod memory paging faults.";
+static constexpr const char *unitMetricK8sPodPagingFaults  = "{fault}";
+
+static inline nostd::unique_ptr<metrics::Counter<uint64_t>> CreateSyncInt64MetricK8sPodPagingFaults(
+    metrics::Meter *meter)
+{
+  return meter->CreateUInt64Counter(kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults,
+                                    unitMetricK8sPodPagingFaults);
+}
+
+static inline nostd::unique_ptr<metrics::Counter<double>> CreateSyncDoubleMetricK8sPodPagingFaults(
+    metrics::Meter *meter)
+{
+  return meter->CreateDoubleCounter(kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults,
+                                    unitMetricK8sPodPagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricK8sPodPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableCounter(
+      kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults, unitMetricK8sPodPagingFaults);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricK8sPodPagingFaults(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableCounter(
+      kMetricK8sPodPagingFaults, descrMetricK8sPodPagingFaults, unitMetricK8sPodPagingFaults);
 }
 
 /**

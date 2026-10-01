@@ -3,7 +3,25 @@
 #include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/translation/sql_translation.h>
 
+#include <array>
+
 using namespace NSQLTranslationV1;
+
+namespace {
+
+struct TWithoutSyntaxCase {
+    TStringBuf Query;
+    bool AnsiLexer = false;
+};
+
+constexpr std::array WithoutSyntaxCases = {
+    TWithoutSyntaxCase{.Query = "SELECT * WITHOUT stream FROM plato.Input;"},
+    TWithoutSyntaxCase{.Query = "SELECT * WITHOUT `column with spaces` FROM plato.Input;"},
+    TWithoutSyntaxCase{.Query = "SELECT * WITHOUT \"column with spaces\" FROM plato.Input;", .AnsiLexer = true},
+    TWithoutSyntaxCase{.Query = "FROM plato.Input SELECT * WITHOUT a;"},
+};
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(YqlSelect) {
 
@@ -100,8 +118,8 @@ Y_UNIT_TEST(AutoFallbackPreservesHints) {
             SELECT k, Avg(v) AS v
             FROM plato.x
             GROUP /*+ COMPACT() */ BY k
-        )
-        SELECT * WITHOUT v;
+        ) AS grouped
+        SELECT grouped.*;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -181,6 +199,43 @@ Y_UNIT_TEST(Asterisk) {
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlStar"], 1);
+}
+
+Y_UNIT_TEST(WithoutSyntax) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    for (const auto& testCase : WithoutSyntaxCases) {
+        const NYql::TAstParseResult result = SqlToYqlWithMode(
+            TString(testCase.Query), NSQLTranslation::ESqlMode::QUERY,
+            /*maxErrors=*/10, /*provider=*/{}, EDebugOutput::None,
+            testCase.AnsiLexer, settings);
+        UNIT_ASSERT_C(
+            result.IsOk(),
+            "Query: " << testCase.Query << '\n'
+                      << Err2Str(result));
+    }
+}
+
+Y_UNIT_TEST(WithoutJoinRequiresCorrelationName) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    const NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+
+        SELECT * WITHOUT b, c
+        FROM (VALUES (1, 'left')) AS lhs(key, b)
+        JOIN (VALUES (1, 'right')) AS rhs(key, c)
+        ON lhs.key = rhs.key;
+    )sql", settings);
+
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_VALUES_EQUAL(result.Issues.Size(), 2);
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(result),
+        "Expected correlation name for WITHOUT in JOIN");
 }
 
 Y_UNIT_TEST(AsteriskInvalidLeft) {
@@ -1518,6 +1573,60 @@ Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
     TWordCountHive stat = {"YqlSelect"};
     VerifyProgram(res, stat);
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
+TString VerifyYqlColumnRefs(
+    const TString& query,
+    ui32 expectedColumnRefs,
+    ui32 expectedColumnRefOrTypeRefs)
+{
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(query, settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "YqlColumnRef ", "YqlColumnRefOrType"};
+    TString program = VerifyProgram(res, stat);
+    UNIT_ASSERT_GT_C(stat["YqlSelect"], 0, program);
+    UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlColumnRef "], expectedColumnRefs, program);
+    UNIT_ASSERT_VALUES_EQUAL_C(stat["YqlColumnRefOrType"], expectedColumnRefOrTypeRefs, program);
+    return program;
+}
+
+Y_UNIT_TEST(ColumnRefOrTypeInAutoMode) {
+    VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT EvaluateExpr(FormatType(TypeOf(AsErased(Int64))));
+    )sql", 0, 1);
+}
+
+Y_UNIT_TEST(ColumnRefOrTypePeekErasedTypeArgument) {
+    VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'auto';
+        SELECT PeekErased(AsErased(42), Int64)
+        FROM (VALUES (1)) AS lhs (Int64)
+        CROSS JOIN (VALUES (2)) AS rhs (Int64);
+    )sql", 0, 1);
+}
+
+Y_UNIT_TEST(ColumnRefOrTypePeekErasedWithColumn) {
+    const auto program = VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT PeekErased(AsErased(1), Int64) AS value
+        FROM (VALUES (CAST(42 AS Int64))) AS src (Int64);
+    )sql", 0, 1);
+    UNIT_ASSERT_STRING_CONTAINS(
+        program,
+        R"yql((PeekErased (AsErased (Int32 '"1")) (YqlColumnRefOrType '"Int64")))yql");
+}
+
+Y_UNIT_TEST(ColumnRefOrTypePeekErasedInSubquery) {
+    VerifyYqlColumnRefs(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT (SELECT PeekErased(AsErased(1), Int64)) AS value
+        FROM (VALUES (CAST(42 AS Int64))) AS src (Int64);
+    )sql", 0, 1);
 }
 
 Y_UNIT_TEST(NamedNodeSubqueryReuse) {

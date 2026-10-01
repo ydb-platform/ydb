@@ -224,7 +224,13 @@ A particularly problematic corner case arises when a vector index is created on 
 To prevent degradation:
 
 * Avoid creating a vector index on an empty table.
-* If a large volume of new data has been added, [rebuild the index](#rebuild) to recalculate its clusters.
+* If a large volume of new data has been added, [rebuild the index](#rebuild) when search quality or performance has degraded.
+
+To decide when to rebuild:
+
+1. Choose a representative set of query vectors. Measure search recall by comparing indexed results with exact results from a full scan of the same table. The [vector workload command](../reference/ydb-cli/workload-vector.md#run-select) demonstrates this with `--recall`.
+2. Record search latency for the same queries. Repeat the measurements with the same distance function and search settings, including [`KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#KMeansTreeSearchTopSize).
+3. Rebuild if recall falls or latency rises consistently after the data distribution changes. Row growth alone is a reason to measure, not a fixed rebuild threshold.
 
 ### Update inconsistency during index build {#build-consistency}
 
@@ -234,7 +240,7 @@ This means that if you want a vector index to remain 100% consistent, you have t
 
 Updates are not blocked automatically because vector index search is approximate by nature, and in many cases temporary inconsistency during the build is acceptable.
 
-## Rebuilding a vector index {#rebuild}
+## Rebuilding a Vector Index {#rebuild}
 
 Rebuilding creates a new cluster tree and redistributes the table's vectors across it. Use [`ALTER TABLE ... REBUILD INDEX`](../yql/reference/syntax/alter_table/indexes.md#rebuild-index) when changes in the data distribution reduce search recall or performance:
 
@@ -258,7 +264,13 @@ ALTER TABLE `my_table` REBUILD INDEX `my_index`
 WITH (parallel = 8);
 ```
 
-The replacement is built from a snapshot, so the [consistency limitation during index building](#build-consistency) also applies to rebuilding. Pause writes until rebuilding completes if you need a fully consistent index. Queries remain available, but may require a [retry](../recipes/ydb-sdk/retry.md) when the index is replaced.
+The replacement is built from a snapshot, so the [consistency limitation during index building](#build-consistency) also applies to rebuilding. If you need a fully consistent index:
+
+1. Stop all application writers and ingestion jobs for the table, and wait for in-flight writes to finish. {{ ydb-short-name }} does not pause writes automatically.
+2. Start the rebuild. Find its ID with [`ydb operation list buildindex`](../reference/ydb-cli/operation-list.md), then check it with [`ydb operation get`](../reference/ydb-cli/operation-get.md).
+3. Resume writes when the operation reports `ready: true` and `status: SUCCESS`.
+
+Queries remain available during rebuilding, but may require a [retry](../recipes/ydb-sdk/retry.md) when the index is replaced.
 
 ## Recipes for Working with Vector Indexes {#vector-index-recipes}
 

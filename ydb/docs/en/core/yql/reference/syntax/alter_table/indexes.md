@@ -1,4 +1,4 @@
-# Managing indexes
+# Managing Indexes
 
 ## Adding an index {#add-index}
 
@@ -239,7 +239,7 @@ ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
 ```
 
 
-## Rebuilding a vector index {#rebuild-index}
+## Rebuilding a Vector Index {#rebuild-index}
 
 `REBUILD INDEX` builds a replacement for an existing [vector index](../../../../dev/vector-indexes.md) from the table data and atomically replaces the old index under the same name. Use it to recalculate clusters after the data distribution changes or to change clustering parameters.
 
@@ -264,7 +264,8 @@ The `WITH` clause accepts the following parameters:
 | --- | --- |
 | `clusters` | Number of clusters. An integer from `2` to `2048`. |
 | `levels` | Number of tree levels. An integer from `1` to `16`. |
-| `overlap_clusters` | Number of nearest leaf clusters to which each vector is added. |
+| `overlap_clusters` | Number of nearest leaf clusters to which each vector is added. When specified, an integer from `2` to `2048` and no greater than `clusters`. When omitted, retains the existing setting; if the existing index has no value, the effective default is `1`. |
+| `overlap_ratio` | Non-negative distance ratio threshold for adding a vector to additional clusters; `0` disables the threshold. |
 | `adaptive_clusters` | Whether to select the number of clusters automatically for each filtering-column value in a filtered index. Accepts `true` or `false`. |
 | `parallel` | Maximum number of partition handlers involved in rebuilding. Uses the same limits and default as [`ADD INDEX`](#add-index). |
 
@@ -274,11 +275,11 @@ The index keeps its indexed and covered columns. Its distance or similarity func
 
 The existing index remains available for queries and continues to receive table updates while the replacement is built. After a successful build, {{ ydb-short-name }} atomically switches to the replacement. Queries continue to use the same index name. If rebuilding fails or is cancelled before replacement, the old index remains available. Rebuilding can resume after a restart of the schema management tablet.
 
-Replacing the index can invalidate cached query plans. Queries running around the switch may need to be retried; use the standard [SDK retry mechanism](../../../../recipes/ydb-sdk/retry.md).
+Replacing the index can invalidate cached query plans. A query using the index may return a transient `ABORTED` status during the switch. If this happens while the [rebuild operation](../../../../reference/ydb-cli/operation-list.md) is completing, retry the entire query using the standard [SDK retry mechanism](../../../../recipes/ydb-sdk/retry.md).
 
 {% note warning %}
 
-The replacement is built from a snapshot and inherits the [consistency limitation of vector index builds](../../../../dev/vector-indexes.md#build-consistency). Concurrent table updates may not be reflected in the rebuilt index. If full consistency is required, pause writes for the duration of rebuilding.
+The replacement is built from a snapshot and inherits the [consistency limitation of vector index builds](../../../../dev/vector-indexes.md#build-consistency). Concurrent table updates may not be reflected in the rebuilt index. If full consistency is required, [pause application writes and wait for the rebuild to succeed](../../../../dev/vector-indexes.md#rebuild).
 
 {% endnote %}
 

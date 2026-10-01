@@ -1006,6 +1006,40 @@ Y_UNIT_TEST(UnusedHintErrorWithFlag) {
         "<main>:1:80: Error: Hint merge will not be used, code: 4534\n");
 }
 
+Y_UNIT_TEST(UnknownSimpleFlagRejectedInStrictMode) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.StrictConfigValidation = true;
+    settings.Flags.emplace("UnknownSimpleFlag");
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT 1;", settings);
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Unknown SQL flag: UnknownSimpleFlag");
+}
+
+Y_UNIT_TEST(KnownSimpleFlagAcceptedInStrictMode) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.StrictConfigValidation = true;
+    settings.Flags.emplace("AutoYqlSelect");
+    settings.Flags.emplace("RotateJoinTree");
+    settings.Flags.emplace("DisableRotateJoinTree");
+    settings.Flags.emplace("AnsiOrderByLimitInUnionAll");
+    settings.Flags.emplace("EmitAggApply");
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT 1;", settings);
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(UnknownSimpleFlagIgnoredByDefault) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Flags.emplace("UnknownSimpleFlag");
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings("SELECT 1;", settings);
+
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(JoinConflictingStrategyHint) {
     {
         NYql::TAstParseResult res = SqlToYql("SELECT * FROM plato.Input AS a JOIN /*+ StreamLookup() */ /*+ Merge() */   plato.Input AS b USING(key);");

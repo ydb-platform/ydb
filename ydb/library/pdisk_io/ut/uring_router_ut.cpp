@@ -753,9 +753,13 @@ void DoDeviceSampleSink(TUringRouterConfig config) {
 
     TDeviceIoSample sample;
     std::atomic<bool> sampleSeen{false};
+    std::atomic<ui64> completionCount{0};
     router->SetSampleSink([&](const TDeviceIoSample& value) {
         sample = value;
         sampleSeen.store(true, std::memory_order_release);
+    });
+    router->SetIoCompletionSink([&] {
+        completionCount.fetch_add(1, std::memory_order_relaxed);
     });
     router->Start();
 
@@ -779,6 +783,7 @@ void DoDeviceSampleSink(TUringRouterConfig config) {
     UNIT_ASSERT_VALUES_EQUAL(sample.Offset, offset);
     UNIT_ASSERT_VALUES_EQUAL(sample.Size, size);
     UNIT_ASSERT(sample.IsWrite);
+    UNIT_ASSERT_VALUES_EQUAL(completionCount.load(std::memory_order_relaxed), 1u);
     router.reset();
 }
 
@@ -801,11 +806,15 @@ void DoFixedShortRetrySampling(TUringRouterConfig config) {
 
     TDeviceIoSample samples[2];
     std::atomic<int> sampleCount{0};
+    std::atomic<ui64> completionCount{0};
     router->SetSampleSink([&](const TDeviceIoSample& sample) {
         const int index = sampleCount.fetch_add(1, std::memory_order_relaxed);
         if (index < 2) {
             samples[index] = sample;
         }
+    });
+    router->SetIoCompletionSink([&] {
+        completionCount.fetch_add(1, std::memory_order_relaxed);
     });
     router->Start();
     UNIT_ASSERT_C(router->AreBuffersRegistered(),
@@ -823,6 +832,8 @@ void DoFixedShortRetrySampling(TUringRouterConfig config) {
     UNIT_ASSERT_VALUES_EQUAL(op.Result.load(std::memory_order_relaxed), -EIO);
     UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(sampleCount.load(std::memory_order_relaxed), 2);
+    // The first CQE made progress; the second was EOF and became -EIO.
+    UNIT_ASSERT_VALUES_EQUAL(completionCount.load(std::memory_order_relaxed), 1u);
 
     UNIT_ASSERT_VALUES_EQUAL(samples[0].Offset, 0u);
     UNIT_ASSERT_VALUES_EQUAL(samples[0].Size, bufferSize);
@@ -2475,12 +2486,15 @@ Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
                 }
                 fixture.Initialize();
                 std::vector<TDeviceIoSample> samples;
+                ui64 completionCount = 0;
                 fixture.Router->SetSampleSink([&](const TDeviceIoSample& sample) { samples.push_back(sample); });
+                fixture.Router->SetIoCompletionSink([&] { ++completionCount; });
                 TScriptedOp op;
                 op.Callback = [&] {
                     // The completing CQE is retired before clients can recycle.
                     Y_ABORT_UNLESS(fixture.Backend->CqHead == fixture.Backend->CqTail);
                     Y_ABORT_UNLESS(samples.size() == 3);
+                    Y_ABORT_UNLESS(completionCount == 3);
                 };
                 if (fixed) {
                     const bool accepted = write
@@ -2566,6 +2580,8 @@ Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
         for (const int result : {0, -EIO, -EAGAIN, -EBUSY, -EINTR}) {
             TScriptedRouter fixture;
             fixture.Initialize();
+            ui64 completionCount = 0;
+            fixture.Router->SetIoCompletionSink([&] { ++completionCount; });
             char buffer[8] = {};
             TScriptedOp op;
             PrepareReadOp(op, buffer, sizeof(buffer), 0);
@@ -2582,6 +2598,7 @@ Y_UNIT_TEST_SUITE(TUringRouterScriptedTest) {
             UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 3u);
             UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 5u);
             UNIT_ASSERT_VALUES_EQUAL(op.TakeShortIoCount(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(completionCount, 1u);
             UNIT_ASSERT(!fixture.Router->IsBroken());
             UNIT_ASSERT_VALUES_EQUAL(fixture.Router->GetInflight(), 0u);
         }

@@ -424,8 +424,12 @@ message TTableDescription {
     repeated TMultiColumnStatisticsDescription MultiColumnStatistics = 53;
     repeated string DropMultiColumnStatistics = 54;
 
+    // Actual number of table partitions (shards), always filled in describe
+    // results, so clients don't need to request the TablePartitions list.
+    optional uint64 PartitionCount = 55;
+    
     // Captures the immutable source scheme for exporting CREATE TABLE SQL before the data backup starts
-    optional bool CaptureBackupSchemeSnapshot = 55 [default = false];
+    optional bool CaptureBackupSchemeSnapshot = 56 [default = false];
 }
 
 message TCompressionOptions {

@@ -155,7 +155,7 @@ class TCreateStreamingQuery : public TSubOperation {
         return true;
     }
 
-    void PersistCreateStreamingQuery(const TPathId& parentPathId, const TPathId& streamingQueryPathId, const TOperationContext& context) const {
+    void PersistCreateStreamingQuery(const TPathId& parentPathId, const TPathId& streamingQueryPathId, const TProposeContext& context) const {
         context.MemChanges.GrabNewPath(context.SS, streamingQueryPathId);
         context.MemChanges.GrabNewStreamingQuery(context.SS, streamingQueryPathId);
         context.MemChanges.GrabPath(context.SS, parentPathId);
@@ -167,7 +167,7 @@ class TCreateStreamingQuery : public TSubOperation {
         context.DbChanges.PersistTxState(OperationId);
     }
 
-    void AddPathIntoSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TPathId& newPathId, const TString& owner, TOperationContext& context) const {
+    void AddPathIntoSchemeShard(const THolder<TProposeResponse>& result, TPath& dstPath, const TPathId& newPathId, const TString& owner, TProposeContext& context) const {
         dstPath.MaterializeLeaf(owner, newPathId);
         dstPath.DomainInfo()->IncPathsInside(context.SS);
         IncAliveChildrenSafeWithUndo(OperationId, dstPath.Parent(), context);
@@ -226,7 +226,7 @@ public:
         return checks;
     }
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateStreamingQuery().GetName();
         YDB_LOG_NOTICE_CTX(context.Ctx, "",
@@ -256,7 +256,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

@@ -1001,6 +1001,27 @@ def test_ydb_udf_administrator_access(database_admin):
         body = b"\x00asm\x01\x00\x00\x00"
         with grpc.insecure_channel(endpoint) as channel:
             stub = UdfServiceStub(channel)
+            manifest = json.dumps(dict(module_name="rejected", module_type="library", module_kind="wasm"))
+            chunks = [udf.UploadModuleChunk(metadata=udf.UploadModuleMetadata(
+                params=udf.UploadModuleParams(manifest_json=manifest), total_size=len(body))),
+                udf.UploadModuleChunk(data=body)]
+            for metadata in [(), (("x-ydb-auth-ticket", "root@builtin"),),
+                             (("x-ydb-database", ""), ("x-ydb-auth-ticket", "root@builtin"))]:
+                responses = list(stub.UploadModule(iter(chunks), metadata=metadata, timeout=30))
+                assert len(responses) == 1
+                assert responses[0].operation.status == StatusIds.BAD_REQUEST, responses
+
+            with pytest.raises(grpc.RpcError) as error:
+                list(stub.UploadModule(iter(chunks), metadata=(
+                    ("x-ydb-database", database), ("x-ydb-auth-ticket", "invalid-token")), timeout=30))
+            assert error.value.code() == grpc.StatusCode.UNAUTHENTICATED
+
+            responses = list(stub.UploadModule(iter(chunks), metadata=(
+                ("x-ydb-database", database), ("x-ydb-auth-ticket", "no_connect@builtin")), timeout=30))
+            assert len(responses) == 1
+            assert responses[0].operation.status == StatusIds.UNAUTHORIZED, responses
+            assert "No permission to connect to the database" in str(responses[0].operation.issues)
+
             for user, allowed in [("root@builtin", True), ("owner@builtin", database_admin), ("ordinary@builtin", False)]:
                 metadata = (("x-ydb-database", database), ("x-ydb-auth-ticket", user))
                 expected = StatusIds.SUCCESS if allowed else StatusIds.UNAUTHORIZED
@@ -1644,7 +1665,13 @@ def _make_cluster(
         extra_grpc_services=["udf"],
     )
     if database_admin is not None:
-        configurator.yaml_config.setdefault("feature_flags", {})["enable_database_admin"] = database_admin
+        configurator.yaml_config.setdefault("feature_flags", {}).update(
+            enable_database_admin=database_admin, check_database_access_permission=True)
+        # An empty registration SID list exempts every authenticated caller
+        # from the database connect check. Restrict it to the bootstrap token.
+        configurator.yaml_config["domains_config"]["security_config"].update(
+            register_dynamic_node_allowed_sids=["root@builtin"], enforce_user_token_check_requirement=True)
+        configurator.yaml_config.setdefault("auth_config", {})["node_registration_token"] = "root@builtin"
     if enable_udf_store:
         udf_store_config = {"enabled": True, "kv_storage_media": "hdd"}
         if enable_native_udf:

@@ -168,7 +168,7 @@ class TAlterStreamingQuery : public TSubOperation {
         return true;
     }
 
-    void PersistAlterStreamingQuery(const TPath& dstPath, const TOperationContext& context) const {
+    void PersistAlterStreamingQuery(const TPath& dstPath, const TProposeContext& context) const {
         const TPathId& pathId = dstPath.Base()->PathId;
 
         context.MemChanges.GrabPath(context.SS, dstPath->ParentPathId);
@@ -211,7 +211,7 @@ class TAlterStreamingQuery : public TSubOperation {
 public:
     using TSubOperation::TSubOperation;
 
-    THolder<TProposeResponse> Propose(const TString& owner, TOperationContext& context) override {
+    THolder<TProposeResponse> Propose(const TString& owner, TProposeContext& context) override {
         Y_UNUSED(owner);
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -254,7 +254,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

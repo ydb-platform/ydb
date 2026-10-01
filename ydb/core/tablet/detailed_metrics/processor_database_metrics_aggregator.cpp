@@ -50,13 +50,15 @@ namespace NKikimr {
                 const TDetailedMetricsCounterNames& names,
                 const TTabletCountersBase* executorTemplate,
                 const TTabletCountersBase* appTemplate,
-                bool isPartitionBucket)
+                bool isPartitionBucket,
+                EYdbMetricNameScope nameScope,
+                bool isFollowerSource)
                 : IsPartitionBucket(isPartitionBucket)
                 , ExecutorCounters(GetOrCreateTypeGroup(rawGroup, type)
                                        ->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY))
                 , AppCounters(GetOrCreateTypeGroup(rawGroup, type)
                                   ->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY))
-                , Mapper(CreateYdbMetricsMapperByTabletType(type, targetGroup, rawGroup))
+                , Mapper(CreateYdbMetricsMapperByTabletType(type, targetGroup, rawGroup, nameScope, isFollowerSource))
             {
                 ExecutorCounters.Initialize(executorTemplate, &names.ExecutorNames);
                 AppCounters.Initialize(appTemplate, &names.AppNames);
@@ -308,10 +310,15 @@ namespace NKikimr {
                     }
                     // The partial's mapped group is detached: only the combined table
                     // rollup is public, so partials and leaves never overwrite each other.
+                    const EYdbMetricNameScope nameScope = key
+                        ? EYdbMetricNameScope::Partition
+                        : EYdbMetricNameScope::Aggregate;
+                    const bool isFollowerSource = key && key->second != 0;
                     auto appTemplate = CreateAppCountersByTabletType(type);
                     bucket = MakeHolder<TPublishedBucket>(rawGroup, mappedGroup, type, *names,
-                                                          ExecutorCountersTemplate.Get(), appTemplate.Get(), key.Defined());
-                    table.Aggregator->AddSourceCountersGroup(SourceId(key), mappedGroup, key && key->second != 0);
+                                                          ExecutorCountersTemplate.Get(), appTemplate.Get(),
+                                                          key.Defined(), nameScope, isFollowerSource);
+                    table.Aggregator->AddSourceCountersGroup(SourceId(key), mappedGroup, isFollowerSource, nameScope);
                 }
                 bucket->Apply(nodeId, diff);
                 contributions.insert(contribution);

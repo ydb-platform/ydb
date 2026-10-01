@@ -279,6 +279,9 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
     if (data.Finished) {
         if (!Finished.exchange(true)) {
             FinishTime = TInstant::Now();
+            if (FinishEpoch) {
+                (*FinishEpoch)++;
+            }
         }
         fillLevel = EDqFillLevel::NoLimit;
     } else {
@@ -336,6 +339,9 @@ void TLocalBuffer::EarlyFinish() {
                 {
                     std::lock_guard lock(Mutex);
                     ReadyHook.Mark();
+                    if (FinishEpoch) {
+                        (*FinishEpoch)++;
+                    }
                 }
                 NotifyInput(true);
                 NotifyOutput(true);
@@ -405,6 +411,9 @@ void TLocalBuffer::BindOutput() {
                 {
                     std::lock_guard lock(Mutex);
                     ReadyHook.Mark();
+                    if (FinishEpoch) {
+                        (*FinishEpoch)++;
+                    }
                 }
                 NotifyInput(true);
                 NotifyOutput(true);
@@ -444,6 +453,11 @@ void TLocalBuffer::NotifyOutput(bool force) {
 void TLocalBuffer::SetReadyHook(const TDqInputReadyHook& hook) {
     std::lock_guard lock(Mutex);
     ReadyHook = hook;
+}
+
+void TLocalBuffer::SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) {
+    std::lock_guard lock(Mutex);
+    FinishEpoch = epoch;
 }
 
 void TLocalBuffer::ExportPushStats(TDqAsyncStats& stats) {
@@ -616,6 +630,9 @@ void TOutputDescriptor::UpdatePopBytes(ui64 bytes, TNodeState* nodeState, std::s
                 << ", RemotePopBytes=" << bytes
                 << ", PushBytes=" << PushBytes.load());
             Finished.store(true);
+            if (FinishEpoch) {
+                (*FinishEpoch)++;
+            }
         }
     }
 
@@ -720,6 +737,12 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finis
     }
     if (finishing) {
         Finished.store(true);
+        {
+            std::lock_guard lock(FlowControlMutex);
+            if (FinishEpoch) {
+                (*FinishEpoch)++;
+            }
+        }
         ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         TDataChunk data;
         data.ConfirmFinish = true;
@@ -731,6 +754,11 @@ void TOutputDescriptor::HandleUpdate(bool earlyFinish, ui64 popBytes, bool finis
             << ", EarlyFinished=" << EarlyFinished.load()
             << ", Finished=" << Finished.load());
     }
+}
+
+void TOutputDescriptor::SetFinishEpoch(const std::shared_ptr<TDqOutputFinishEpoch>& epoch) {
+    std::lock_guard lock(FlowControlMutex);
+    FinishEpoch = epoch;
 }
 
 void TOutputDescriptor::BindStorage(std::shared_ptr<TOutputDescriptor>& self, std::shared_ptr<TNodeState>& nodeState, IDqChannelStorage::TPtr storage) {
@@ -2775,6 +2803,11 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
         buffer->SetFillAggregator(Aggregator);
     }
     Serializer->Buffer = buffer;
+    if (FinishEpoch) {
+        // the stub never finishes: the bound buffer may have already
+        Serializer->Buffer->SetFinishEpoch(FinishEpoch);
+        (*FinishEpoch)++;
+    }
     Service.reset();
 }
 

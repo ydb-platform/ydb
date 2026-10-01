@@ -1206,7 +1206,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(TableMetricsLevelCreateTableAs) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableDataShardDetailedMetrics(true);
-        TKikimrRunner kikimr(featureFlags);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableDataShardCreateTableAs(true);
+        TKikimrRunner kikimr(settings);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();
 
@@ -3404,6 +3406,43 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateTableWithUniformPartitionsCompat) {
         CreateTableWithUniformPartitions(true);
+    }
+
+    // KIKIMR-25849: partition_count must be filled without requesting
+    // table stats or shard boundaries
+    Y_UNIT_TEST(DescribeTablePartitionCount) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString tableName = "/Root/DescribeTablePartitionCount";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (
+                UNIFORM_PARTITIONS = 4
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // No extra options: partition_count must still be present
+        {
+            auto describeResult = session.DescribeTable(tableName).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            const auto& proto = NYdb::TProtoAccessor::GetProto(describeResult.GetTableDescription());
+            UNIT_ASSERT_VALUES_EQUAL(proto.partition_count(), 4);
+        }
+
+        // With table statistics: the legacy TableStats.partitions must match
+        {
+            auto describeResult = session.DescribeTable(tableName,
+                NYdb::NTable::TDescribeTableSettings().WithTableStatistics(true)).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetPartitionsCount(), 4);
+        }
     }
 
     void CreateTableWithPartitionAtKeysSimple(bool compat) {
@@ -17533,37 +17572,6 @@ END DO)",
             auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cascade compaction is not supported for column tables",
-                result.GetIssues().ToString());
-        }
-    }
-
-    Y_UNIT_TEST_TWIN(AlterTableCompactColumnTableDisabled, UseQueryService) {
-        // Without the column-compaction feature flag, forced compaction is rejected for column tables.
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableForcedCompactions(true);
-        TKikimrRunner kikimr(featureFlags);
-        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-        auto queryClient = kikimr.GetQueryClient();
-
-        {
-            auto query = R"sql(
-                CREATE TABLE `/Root/TestTable` (
-                    Key Uint64 NOT NULL,
-                    Value String,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = COLUMN
-                );)sql";
-            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-        {
-            auto query = R"sql(
-                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = false);
-            )sql";
-            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Compact is not allowed for column tables",
                 result.GetIssues().ToString());
         }
     }

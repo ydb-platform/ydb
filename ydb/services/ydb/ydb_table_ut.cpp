@@ -5007,6 +5007,78 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         checkDescription("/Root/MetricsAlter", std::nullopt);
     }
 
+    // The metrics settings of a table reach the impl table of its index; the table must stay
+    // usable by queries after they are set and dropped.
+    Y_UNIT_TEST(AlterMetricsSettingsOfIndexedTable) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableDataShardDetailedMetrics(true);
+        TKikimrWithGrpcAndRootSchema server(appConfig);
+
+        NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
+        NYdb::NTable::TTableClient client(driver);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        {
+            auto desc = TTableBuilder()
+                .AddNullableColumn("key", EPrimitiveType::Uint64)
+                .AddNullableColumn("value", EPrimitiveType::Utf8)
+                .SetPrimaryKeyColumn("key")
+                .AddSecondaryIndex("value_index", "value")
+                .Build();
+            auto result = session.CreateTable("/Root/Indexed", std::move(desc)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto checkLevel = [&](const TString& path, std::optional<TMetricsSettings::EMetricsLevel> expected) {
+            auto describe = session.DescribeTable(path).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto metrics = describe.GetTableDescription().GetMetricsSettings();
+            UNIT_ASSERT_VALUES_EQUAL_C(metrics.has_value(), expected.has_value(), path);
+            if (expected) {
+                UNIT_ASSERT_EQUAL_C(metrics->GetMetricsLevel(), *expected, path);
+            }
+        };
+
+        auto checkQueries = [&](ui64 key) {
+            auto upsert = session.ExecuteDataQuery(TStringBuilder()
+                    << "UPSERT INTO `/Root/Indexed` (key, value) VALUES (" << key << "u, \"value" << key << "\");",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+
+            auto select = session.ExecuteDataQuery(TStringBuilder()
+                    << "SELECT key FROM `/Root/Indexed` VIEW value_index WHERE value = \"value" << key << "\";",
+                TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(select.GetStatus(), EStatus::SUCCESS, select.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(select.GetResultSet(0)), TStringBuilder() << "[[[" << key << "u]]]");
+        };
+
+        checkQueries(1);
+
+        {
+            auto result = session.AlterTable("/Root/Indexed", TAlterTableSettings()
+                .BeginAlterMetricsSettings()
+                    .Set(TMetricsSettings::EMetricsLevel::Table)
+                .EndAlterMetricsSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        checkLevel("/Root/Indexed", TMetricsSettings::EMetricsLevel::Table);
+        checkLevel("/Root/Indexed/value_index/indexImplTable", TMetricsSettings::EMetricsLevel::Table);
+        checkQueries(2);
+
+        {
+            auto result = session.AlterTable("/Root/Indexed", TAlterTableSettings()
+                .BeginAlterMetricsSettings()
+                    .Drop()
+                .EndAlterMetricsSettings()
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        checkLevel("/Root/Indexed", std::nullopt);
+        checkLevel("/Root/Indexed/value_index/indexImplTable", std::nullopt);
+        checkQueries(3);
+    }
+
     Y_UNIT_TEST(TableKeyRangesSinglePartition) {
         TKikimrWithGrpcAndRootSchema server;
 

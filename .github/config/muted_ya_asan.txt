@@ -63,6 +63,7 @@ ydb/core/kqp/ut/query KqpQueryEventLog.StreamingBigResultReportsResultsSize
 ydb/core/kqp/ut/query unittest.[*/*] chunk
 ydb/core/kqp/ut/rbo KqpRboOlap.CountWhereColumnIsNull
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
+ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapPerfQueries
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboOlap.SimpleCountNoFilter
@@ -468,6 +469,7 @@ ydb/services/datastreams/ut DataStreams.TestGetRecordsKafkaBatches
 ydb/services/datastreams/ut DataStreams.TestReservedResourcesMetering
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleCreateAlterDropVolume
 ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV1
+ydb/services/keyvalue/ut KeyValueGRPCService.SimpleGetStorageChannelStatusV2
 ydb/services/keyvalue/ut unittest.sole chunk
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestAllFnxClustersHiddenWithoutBalancer
 ydb/services/persqueue_cluster_discovery/ut TPQCDTest.TestHealthAndPingPages

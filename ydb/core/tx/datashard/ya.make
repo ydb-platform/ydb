@@ -19,6 +19,7 @@ SRCS(
     datashard_txs.h
     datashard_user_db.h
     datashard_user_table.h
+    cdc_schema_change.h
     defs.h
     execution_unit.h
     execution_unit_ctors.h
@@ -41,6 +42,7 @@ SRCS(
     cdc_stream_scan.cpp
     change_collector_cdc_stream.cpp
     change_record_cdc_serializer.cpp
+    cdc_schema_change.cpp
     change_sender.cpp
     change_sender_async_index.cpp
     change_sender_cdc_stream.cpp

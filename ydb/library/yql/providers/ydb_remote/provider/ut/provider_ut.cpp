@@ -9,6 +9,9 @@
 #include <yql/essentials/core/sql_types/block.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/cast.h>
+
+#include <tuple>
 
 namespace NYql::NYdbRemote {
 namespace {
@@ -58,6 +61,8 @@ struct TFixture {
             .Table().Build("items")
             .Columns<TCoVoid>().Build()
             .Done();
+        // The core DataSource annotator runs before the provider in a real pipeline.
+        read.DataSource().Ptr()->SetTypeAnn(Ctx.MakeType<TUnitExprType>());
         const auto* row = State->Tables.at(TState::TTableKey("remote", "items")).RowType;
         read.Ptr()->SetTypeAnn(Ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
             world->GetTypeAnn(), Ctx.MakeType<TListExprType>(row)}));
@@ -76,6 +81,33 @@ struct TFixture {
         return Ctx.NewCallable(pos, "Read!", {
             typedRead.World().Ptr(), typedRead.DataSource().Ptr(), std::move(key),
             Ctx.NewCallable(pos, "Void", {}), Ctx.NewList(pos, {})});
+    }
+
+    TCoExtractMembers MakeProjection(TExprNode::TPtr input, const TVector<TString>& names) {
+        const auto* tableRow = State->Tables.at(TState::TTableKey("remote", "items")).RowType;
+        TExprNode::TListType members;
+        TVector<const TItemExprType*> items;
+        for (const auto& name : names) {
+            members.emplace_back(Ctx.NewAtom(input->Pos(), name));
+            items.push_back(tableRow->GetItems()[*tableRow->FindItem(name)]);
+        }
+        auto projection = Build<TCoExtractMembers>(Ctx, input->Pos())
+            .Input(input)
+            .Members(Ctx.NewList(input->Pos(), std::move(members)))
+            .Done();
+        projection.Ptr()->SetTypeAnn(Ctx.MakeType<TListExprType>(Ctx.MakeType<TStructExprType>(items)));
+        return projection;
+    }
+
+    TSource SerializeSource(const TDqSourceWrap& wrap) {
+        const auto source = Build<TDqSource>(Ctx, wrap.Pos())
+            .DataSource(wrap.DataSource()).Settings(wrap.Input()).Done();
+        google::protobuf::Any packed;
+        TString sourceType;
+        CreateDqIntegration(State)->FillSourceSettings(source.Ref(), packed, sourceType, 1, Ctx);
+        TSource payload;
+        UNIT_ASSERT(packed.UnpackTo(&payload));
+        return payload;
     }
 };
 
@@ -274,6 +306,8 @@ Y_UNIT_TEST_SUITE(TYdbRemoteProvider) {
         UNIT_ASSERT_VALUES_EQUAL(payload.GetTable(), "/Remote/items");
         UNIT_ASSERT_VALUES_EQUAL(payload.GetToken(), "cluster:default_remote");
         UNIT_ASSERT(payload.GetUseTls());
+        UNIT_ASSERT(payload.HasReadTimeoutMs());
+        UNIT_ASSERT_VALUES_EQUAL(payload.GetReadTimeoutMs(), 60000);
         UNIT_ASSERT_VALUES_EQUAL(payload.ColumnsSize(), 2);
         UNIT_ASSERT_VALUES_EQUAL(payload.GetColumns(0).GetName(), "key");
         UNIT_ASSERT(payload.GetColumns(0).GetType().has_type_id());
@@ -304,6 +338,149 @@ Y_UNIT_TEST_SUITE(TYdbRemoteProvider) {
         TSource payload;
         UNIT_ASSERT(packed.UnpackTo(&payload));
         UNIT_ASSERT_VALUES_EQUAL(payload.ColumnsSize(), 1);
+    }
+
+    Y_UNIT_TEST(ProjectionPrunesRightAndReadWrapBeforeSerialization) {
+        for (const bool readWrap : {false, true}) {
+            for (const TVector<TString>& columns : {TVector<TString>{"key"}, TVector<TString>{"value"}, TVector<TString>{}}) {
+                TFixture f;
+                const auto read = f.MakeRead();
+                TExprNode::TPtr wrapper = readWrap
+                    ? Build<TDqReadWrap>(f.Ctx, read.Pos()).Input(read).Flags().Build().Done().Ptr()
+                    : Build<TCoRight>(f.Ctx, read.Pos()).Input(read).Done().Ptr();
+                const auto projection = f.MakeProjection(wrapper, columns);
+                auto optimizer = CreateLogicalOptimizer(f.State);
+                TExprNode::TPtr output;
+                UNIT_ASSERT(optimizer->Transform(projection.Ptr(), output, f.Ctx).Level != IGraphTransformer::TStatus::Error);
+                UNIT_ASSERT_VALUES_EQUAL(output->Content(), wrapper->Content());
+                const TYdbRemoteReadTable pruned(output->ChildPtr(0));
+                UNIT_ASSERT_VALUES_EQUAL(pruned.Columns().Ref().ChildrenSize(), columns.size());
+                auto annotation = CreateTypeAnnotationTransformer(f.State);
+                TExprNode::TPtr annotated;
+                UNIT_ASSERT_VALUES_EQUAL(annotation->Transform(pruned.Ptr(), annotated, f.Ctx).Level, IGraphTransformer::TStatus::Ok);
+                const auto* row = pruned.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                UNIT_ASSERT_VALUES_EQUAL(row->GetSize(), columns.size());
+                if (!columns.empty()) {
+                    UNIT_ASSERT_VALUES_EQUAL(row->GetItems().front()->GetItemType()->GetKind(),
+                        columns.front() == "value" ? ETypeAnnotationKind::Optional : ETypeAnnotationKind::Data);
+                }
+                const TDqSourceWrap source(CreateDqIntegration(f.State)->WrapRead(pruned.Ptr(), f.Ctx, {}));
+                const auto payload = f.SerializeSource(source);
+                UNIT_ASSERT_VALUES_EQUAL(payload.ColumnsSize(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(payload.GetColumns(0).GetName(), columns.empty() ? "key" : columns.front());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ProjectionPrunesSourceAndRetainsCountCarrier) {
+        for (const TVector<TString>& columns : {TVector<TString>{"value"}, TVector<TString>{}}) {
+            TFixture f;
+            const auto read = f.MakeRead();
+            const auto wrap = CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {});
+            const auto projection = f.MakeProjection(wrap, columns);
+            auto optimizer = CreateLogicalOptimizer(f.State);
+            TExprNode::TPtr output;
+            UNIT_ASSERT(optimizer->Transform(projection.Ptr(), output, f.Ctx).Level != IGraphTransformer::TStatus::Error);
+            const TDqSourceWrap source(output);
+            const auto payload = f.SerializeSource(source);
+            UNIT_ASSERT_VALUES_EQUAL(payload.ColumnsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(payload.GetColumns(0).GetName(), columns.empty() ? "key" : "value");
+            // ExpandType represents StructType as one child per public field.
+            UNIT_ASSERT_VALUES_EQUAL(source.RowType().Ref().ChildrenSize(), columns.size());
+            auto annotation = CreateTypeAnnotationTransformer(f.State);
+            TExprNode::TPtr annotated;
+            UNIT_ASSERT_VALUES_EQUAL(annotation->Transform(source.Input().Ptr(), annotated, f.Ctx).Level, IGraphTransformer::TStatus::Ok);
+            const auto* physical = source.Input().Ref().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TStructExprType>();
+            UNIT_ASSERT_VALUES_EQUAL(physical->GetSize(), 2);
+            UNIT_ASSERT(physical->FindItem(BlockLengthColumnName));
+            UNIT_ASSERT(physical->FindItem(columns.empty() ? "key" : "value"));
+        }
+    }
+
+    Y_UNIT_TEST(ProjectionDoesNotCrossLocalFilter) {
+        TFixture f;
+        const auto read = f.MakeRead();
+        const auto wrap = CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {});
+        const auto filter = Build<TCoFilter>(f.Ctx, read.Pos())
+            .Input(wrap)
+            .Lambda()
+                .Args({"row"})
+                .Body<TCoExists>()
+                    .Optional<TCoMember>()
+                        .Struct("row")
+                        .Name().Build("value")
+                    .Build()
+                .Build()
+            .Build()
+            .Done();
+        const auto projection = f.MakeProjection(filter.Ptr(), {"key"});
+        auto optimizer = CreateLogicalOptimizer(f.State);
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL(optimizer->Transform(projection.Ptr(), output, f.Ctx).Level, IGraphTransformer::TStatus::Ok);
+        UNIT_ASSERT_VALUES_EQUAL(output.Get(), projection.Raw());
+        UNIT_ASSERT_VALUES_EQUAL(f.SerializeSource(TDqSourceWrap(wrap)).ColumnsSize(), 2);
+    }
+
+    Y_UNIT_TEST(LookupProducesQueryIssueAndGuardsPlannerBoundary) {
+        TFixture f;
+        const auto read = f.MakeRead();
+        const TDqSourceWrap wrap(CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {}));
+        const auto lookup = Build<TDqLookupSourceWrap>(f.Ctx, read.Pos())
+            .Input(wrap.Input()).DataSource(wrap.DataSource()).RowType(wrap.RowType()).Done();
+        auto optimizer = CreateLogicalOptimizer(f.State);
+        TExprNode::TPtr output;
+        UNIT_ASSERT_VALUES_EQUAL(optimizer->Transform(lookup.Ptr(), output, f.Ctx).Level, IGraphTransformer::TStatus::Error);
+        UNIT_ASSERT(f.Ctx.IssueManager.GetIssues().ToString().Contains("Native YDB streamlookup joins are not supported"));
+        google::protobuf::Any packed;
+        TString sourceType;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreateDqIntegration(f.State)->FillLookupSourceSettings(lookup.Ref(), packed, sourceType),
+            yexception, "Native YDB streamlookup joins are not supported");
+    }
+
+    Y_UNIT_TEST(ReadTimeoutIsConfigurableAndBounded) {
+        TFixture f;
+        THashMap<TString, TString> properties{
+            {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "NONE"}};
+        for (const auto* value : {"1", "120000", "3600000"}) {
+            properties["read_timeout_ms"] = value;
+            AddCluster(*f.State, "remote", properties);
+            const auto read = f.MakeRead();
+            const TDqSourceWrap wrap(CreateDqIntegration(f.State)->WrapRead(read.Ptr(), f.Ctx, {}));
+            const auto payload = f.SerializeSource(wrap);
+            UNIT_ASSERT(payload.HasReadTimeoutMs());
+            UNIT_ASSERT_VALUES_EQUAL(ToString(payload.GetReadTimeoutMs()), value);
+        }
+        for (const auto* value : {"", "0", "-1", "3600001", "18446744073709551616", "60s", "1.5"}) {
+            properties["read_timeout_ms"] = value;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(AddCluster(*f.State, "bad", properties), yexception,
+                "READ_TIMEOUT_MS must be an integer between 1 and 3600000");
+            UNIT_ASSERT(!f.State->ValidClusters.contains("bad"));
+        }
+    }
+
+    Y_UNIT_TEST(ClusterErrorsDoNotContainSourcePathsOrCredentials) {
+        TFixture f;
+        const THashMap<TString, TString> valid{
+            {"location", "localhost:2135"}, {"database_name", "/Remote"}, {"authMethod", "NONE"}};
+        const TVector<std::tuple<TString, TString, TString>> cases{
+            {"database_id", "private-managed-id", "Native YDB currently requires explicit LOCATION and DATABASE_NAME; database ID resolution is not supported"},
+            {"database_name", "relative-db", "Native YDB requires an absolute DATABASE_NAME"},
+            {"location", "grpc://secret@host:2135", "Native YDB requires LOCATION in host:port format"},
+            {"use_tls", "private-invalid-value", "Native YDB USE_TLS must be true or false"},
+            {"authMethod", "TOKEN", "Native YDB TOKEN credentials are missing"},
+            {"authMethod", "BASIC", "Native YDB currently supports only TOKEN and NONE authentication"},
+            {"read_timeout_ms", "private-invalid-value", "Native YDB READ_TIMEOUT_MS must be an integer between 1 and 3600000"}};
+        for (const auto& [property, value, expected] : cases) {
+            auto properties = valid;
+            properties[property] = value;
+            TString error;
+            try {
+                AddCluster(*f.State, "bad", properties);
+            } catch (const yexception& ex) {
+                error = ex.what();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(error, expected);
+        }
     }
 
     Y_UNIT_TEST(SourceUsesArrowBlocksWithRequiredKey) {

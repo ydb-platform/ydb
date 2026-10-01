@@ -7,13 +7,15 @@
 namespace NYql::NYdbRemote {
 
 void AddCluster(TState& state, const TString& name, const THashMap<TString, TString>& properties) {
-    Y_ENSURE(properties.Value("database_id", "").empty() && properties.Value("mdb_cluster_id", "").empty(),
-        "Native YDB currently requires explicit LOCATION and DATABASE_NAME; database ID resolution is not supported");
+    if (!properties.Value("database_id", "").empty() || !properties.Value("mdb_cluster_id", "").empty()) {
+        throw yexception() << "Native YDB currently requires explicit LOCATION and DATABASE_NAME; database ID resolution is not supported";
+    }
     TCluster cluster;
     cluster.Endpoint = properties.Value("location", "");
     cluster.Database = properties.Value("database_name", "");
-    Y_ENSURE(cluster.Database.StartsWith('/') && !cluster.Database.Contains('\0'),
-        "Native YDB requires an absolute DATABASE_NAME");
+    if (!cluster.Database.StartsWith('/') || cluster.Database.Contains('\0')) {
+        throw yexception() << "Native YDB requires an absolute DATABASE_NAME";
+    }
     while (cluster.Database.size() > 1 && cluster.Database.EndsWith('/')) {
         cluster.Database.pop_back();
     }
@@ -22,22 +24,33 @@ void AddCluster(TState& state, const TString& name, const THashMap<TString, TStr
     // credentials or an alternate endpoint to enter the serialized source.
     const auto portSeparator = cluster.Endpoint.rfind(':');
     ui32 port = 0;
-    Y_ENSURE(portSeparator != TString::npos && portSeparator != 0 &&
+    if (!(portSeparator != TString::npos && portSeparator != 0 &&
         !cluster.Endpoint.Contains('/') && !cluster.Endpoint.Contains('@') &&
         !cluster.Endpoint.Contains('?') && !cluster.Endpoint.Contains('#') &&
         !cluster.Endpoint.Contains('\0') &&
-        TryFromString(TStringBuf(cluster.Endpoint).SubStr(portSeparator + 1), port) && port > 0 && port <= 65535,
-        "Native YDB requires LOCATION in host:port format");
+        TryFromString(TStringBuf(cluster.Endpoint).SubStr(portSeparator + 1), port) && port > 0 && port <= 65535)) {
+        throw yexception() << "Native YDB requires LOCATION in host:port format";
+    }
 
     TString tls = properties.Value("use_tls", "false");
     tls.to_lower();
-    Y_ENSURE(tls == "true" || tls == "false", "Native YDB USE_TLS must be true or false");
+    if (tls != "true" && tls != "false") {
+        throw yexception() << "Native YDB USE_TLS must be true or false";
+    }
     cluster.UseTls = tls == "true";
+
+    if (const auto* timeout = properties.FindPtr("read_timeout_ms")) {
+        if (!TryFromString(*timeout, cluster.ReadTimeoutMs) || !cluster.ReadTimeoutMs || cluster.ReadTimeoutMs > 3600000) {
+            throw yexception() << "Native YDB READ_TIMEOUT_MS must be an integer between 1 and 3600000";
+        }
+    }
 
     TString token;
     const auto auth = properties.Value("authMethod", "");
     if (auth == "TOKEN") {
-        Y_ENSURE(!properties.Value("token", "").empty(), "Native YDB TOKEN credentials are missing");
+        if (properties.Value("token", "").empty()) {
+            throw yexception() << "Native YDB TOKEN credentials are missing";
+        }
         const auto reference = properties.Value("tokenReference", "");
         token = reference.empty()
             ? TStructuredTokenBuilder().SetIAMToken(properties.Value("token", "")).ToJson()
@@ -45,7 +58,7 @@ void AddCluster(TState& state, const TString& name, const THashMap<TString, TStr
     } else if (auth == "NONE") {
         token = TStructuredTokenBuilder().SetNoAuth().ToJson();
     } else {
-        ythrow yexception() << "Native YDB currently supports only TOKEN and NONE authentication";
+        throw yexception() << "Native YDB currently supports only TOKEN and NONE authentication";
     }
 
     state.Clusters[name] = std::move(cluster);

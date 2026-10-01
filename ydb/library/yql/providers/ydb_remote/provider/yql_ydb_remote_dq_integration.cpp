@@ -90,6 +90,7 @@ public:
         payload.SetTable(path.StartsWith('/') ? path : cluster.Database + "/" + path);
         payload.SetToken(settings.Token().Name().StringValue());
         payload.SetUseTls(cluster.UseTls);
+        payload.SetReadTimeoutMs(cluster.ReadTimeoutMs);
         for (const auto column : settings.Columns()) {
             auto* target = payload.AddColumns();
             target->SetName(column.StringValue());
@@ -97,6 +98,12 @@ public:
         }
         proto.PackFrom(payload);
         sourceType = "YdbRemote";
+    }
+
+    void FillLookupSourceSettings(const TExprNode&, google::protobuf::Any&, TString&) override {
+        // The logical optimizer reports this as a query issue. Keep the planner
+        // boundary guarded as well instead of reaching TDqIntegrationBase's ENSURE.
+        throw yexception() << "Native YDB streamlookup joins are not supported";
     }
 
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
@@ -119,6 +126,12 @@ public:
         properties["SourceType"] = "Ydb";
         properties["Table"] = settings.Table().StringValue();
         properties["Database"] = State_->Clusters.at(settings.Cluster().StringValue()).Database;
+        auto& columns = properties["ReadColumns"];
+        columns.SetType(NJson::JSON_ARRAY);
+        for (const auto column : settings.Columns()) {
+            columns.AppendValue(column.StringValue());
+        }
+        properties["ReadTimeoutMs"] = State_->Clusters.at(settings.Cluster().StringValue()).ReadTimeoutMs;
         return true;
     }
 

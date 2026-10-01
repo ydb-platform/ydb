@@ -157,7 +157,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Ydb),
-            CreateExternalDataSource(TString{enableNativeYdbProvider ? NYql::YdbRemoteProviderName : NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{enableNativeYdbProvider ? NYql::YdbRemoteProviderName : NYql::GenericProviderName}, {"NONE", "BASIC", "SERVICE_ACCOUNT", "TOKEN", "IAM"}, {"database_name", "use_tls", "database_id", "shared_reading", "shared_reading_group", "read_timeout_ms"}, hostnamePatternsRegEx)
         },
         {
             ToString(NYql::EDatabaseType::YT),

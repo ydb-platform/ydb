@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/database_type.h>
+#include <util/string/cast.h>
 
 namespace NKikimr::NExternalSource {
 
@@ -71,6 +72,12 @@ struct TExternalDataSource : public IExternalSource {
             if (!hasDatabaseName && !hasDatabaseId) {
                 throw TExternalSourceException()
                     << proto.GetSourceType() << " source must provide a non-empty database_name or database_id";
+            }
+            if (const auto it = props.find("read_timeout_ms"); it != props.end()) {
+                ui32 timeout = 0;
+                if (!TryFromString(it->second, timeout) || !timeout || timeout > 3600000) {
+                    throw TExternalSourceException() << "Ydb READ_TIMEOUT_MS must be an integer between 1 and 3600000";
+                }
             }
         }
 

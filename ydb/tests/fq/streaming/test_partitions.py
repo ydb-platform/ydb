@@ -5,7 +5,6 @@ import time
 from typing import Callable
 
 import pytest
-import ydb
 
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
 from ydb.tests.library.common.wait_for import wait_for

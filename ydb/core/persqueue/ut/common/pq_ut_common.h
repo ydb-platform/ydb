@@ -300,7 +300,8 @@ void SendPQTabletConfig(
     ui64 planStep);
 
 // txId и planStep по умолчанию берутся из возрастающего счётчика: каждый вызов - отдельная
-// транзакция. Явные значения нужны только там, где тест проверяет конкретную пару
+// транзакция. Явные значения нужны только там, где тест проверяет конкретную пару.
+// Отправленный шаг не ниже MinStep из PREPARED, даже если счётчик меньше.
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TConstArrayRef<TConsumerPreparationParameters> users,

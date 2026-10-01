@@ -122,10 +122,10 @@ public:
                     {"inFlight", MoveDataInFlight});
                 if (ev->Get()->Record.GetStatus() == NKikimrTabletBase::TEvMoveDataResponse::Success) {
                     ++TabletsDone;
+                    Hive->Execute(Hive->CreateRestartTablet(ToFullTabletId(tablet)));
                 } else if (FastFail) {
                     return ReplyAndPassAway(false);
                 }
-                Hive->Execute(Hive->CreateRestartTablet(ToFullTabletId(tablet)));
                 if (NextTablet != Tablets.end()) {
                     SendMoveData(i, *(NextTablet++));
                     break;
@@ -137,8 +137,22 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            if (ev->Get()->Dead && FastFail) {
-                return ReplyAndPassAway(false);
+            if (ev->Get()->Dead) {
+                if (FastFail) {
+                    return ReplyAndPassAway(false);
+                } else {
+                    --MoveDataInFlight;
+                    for (size_t i = 0; i < PipeClients.size(); ++i) {
+                        if (PipeClients[i].Tablet == ev->Get()->TabletId) {
+                            NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
+                            --MoveDataInFlight;
+                            if (NextTablet != Tablets.end()) {
+                                SendMoveData(i, *(NextTablet++));
+                            }
+                            break;
+                        }
+                    }
+                }
             } else {
                 Retry(ev->Get()->TabletId);
             }

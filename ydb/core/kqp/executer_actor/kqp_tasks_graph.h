@@ -117,6 +117,9 @@ struct TStageInfoMeta {
     // Used for single-partitioned stage and sequential inflight optimization.
     std::optional<TShardInfoWithId> VirtualPartition;
 
+    // This stage's share of the query-wide sampled shard concurrency budget.
+    ui32 SamplingMaxInFlightShards = 0;
+
     struct TIndexMeta {
         TTableId TableId;
         TString TablePath;

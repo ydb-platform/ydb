@@ -3089,11 +3089,19 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
     }
 
     const auto& partitions = stageInfo.Meta.PrunedPartitions.at(0);
+    if (partitions.empty()) {
+        return size_t(0);
+    }
     const bool isSequentialInFlight = source.GetSequentialInFlightShards() > 0
         && partitions.size() > source.GetSequentialInFlightShards();
 
     auto tasksByNode = GroupStageTasksByNode(stageInfo);
     THashMap<ui64, size_t> nodeCursor; // next task index per node within tasksByNode
+    ui32 samplingSlotsLeft = stageInfo.Meta.SamplingMaxInFlightShards;
+    size_t samplingTasksLeft = stageInfo.Tasks.size();
+    if (source.HasSampling()) {
+        YQL_ENSURE(samplingTasksLeft && samplingTasksLeft <= samplingSlotsLeft);
+    }
 
     auto createNewTask = [&](ui64 nodeId, TMaybe<ui64> maxInFlightShards) -> TTask& {
         auto& task = GetTask(tasksByNode.at(nodeId)[nodeCursor[nodeId]++]);
@@ -3180,6 +3188,20 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
         settings->SetReverse(source.GetReverse());
         settings->SetSorted(source.GetSorted());
 
+        if (source.HasSampling()) {
+            const auto& sampling = source.GetSampling();
+            settings->MutableSampling()->SetRate(sampling.GetRate());
+            settings->MutableSampling()->SetSeed(sampling.GetSeed());
+            settings->MutableSampling()->SetMemtableStride(sampling.GetMemtableStride());
+
+            // Actor caps survive repartitioning. Their sum bounds all readers, including
+            // children created by a split, independently of how many nodes own shards.
+            const ui64 actorSlots = samplingSlotsLeft / samplingTasksLeft;
+            maxInFlightShards = maxInFlightShards ? std::min(*maxInFlightShards, actorSlots) : actorSlots;
+            samplingSlotsLeft -= *maxInFlightShards;
+            --samplingTasksLeft;
+        }
+
         if (maxInFlightShards) {
             settings->SetMaxInFlightShards(*maxInFlightShards);
         }
@@ -3258,11 +3280,32 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
     using TShardRangesVector = TVector<TShardRangesWithShardId>;
 
     THashMap<ui64, TShardRangesVector> nodeIdToShardKeyRanges;
+    TShardRangesVector remoteShardRanges;
     for (const auto& [shardId, shardInfo] : partitions) {
         YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
         const ui64 nodeId = GetMeta().ShardIdToNodeId.at(shardId);
-        nodeIdToShardKeyRanges[nodeId].push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
+        auto& ranges = source.HasSampling() && !tasksByNode.contains(nodeId)
+            ? remoteShardRanges : nodeIdToShardKeyRanges[nodeId];
+        ranges.push_back(TShardRangesWithShardId{shardId, &*shardInfo.KeyReadRanges});
+    }
+
+    if (!remoteShardRanges.empty()) {
+        // There may be more shard-owning nodes than sampling slots. Keep local reads
+        // local where possible, and let the selected actors also read those other nodes.
+        TVector<ui64> nodes;
+        for (const auto& [nodeId, _] : tasksByNode) {
+            nodes.push_back(nodeId);
+            nodeIdToShardKeyRanges[nodeId];
+        }
+        std::sort(nodes.begin(), nodes.end());
+        for (const auto& ranges : remoteShardRanges) {
+            const auto node = std::min_element(nodes.begin(), nodes.end(), [&](ui64 lhs, ui64 rhs) {
+                return nodeIdToShardKeyRanges.at(lhs).size() * tasksByNode.at(rhs).size()
+                    < nodeIdToShardKeyRanges.at(rhs).size() * tasksByNode.at(lhs).size();
+            });
+            nodeIdToShardKeyRanges.at(*node).push_back(ranges);
+        }
     }
 
     auto DistributeShardsToTasks = [&](TShardRangesVector& shardsRanges, const size_t tasksCount, const TVector<NScheme::TTypeInfo>& keyTypes) {
@@ -3545,6 +3588,29 @@ size_t TKqpTasksGraph::BuildAllTasks(std::optional<TLlvmSettings> llvmSettings,
     const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot, TQueryExecutionStats* stats,
     const TPlacementParams& placementParams)
 {
+    constexpr ui32 SampledShardsPerScan = 12;
+    TVector<TStageInfo*> samplingStages;
+    for (auto& [_, stageInfo] : GetStagesInfo()) {
+        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        if (stage.SourcesSize() && stage.GetSources(0).HasReadRangesSource()
+            && stage.GetSources(0).GetReadRangesSource().HasSampling()
+            && !stageInfo.Meta.PrunedPartitions.empty() && !stageInfo.Meta.PrunedPartitions.at(0).empty())
+        {
+            samplingStages.push_back(&stageInfo);
+        }
+    }
+    YQL_ENSURE(samplingStages.size() <= SampledShardsPerScan,
+        "A sampled query cannot have more than " << SampledShardsPerScan << " read sources");
+    std::sort(samplingStages.begin(), samplingStages.end(), [](const auto* lhs, const auto* rhs) {
+        return lhs->Id.TxId != rhs->Id.TxId ? lhs->Id.TxId < rhs->Id.TxId : lhs->Id.StageId < rhs->Id.StageId;
+    });
+    ui32 samplingSlotsLeft = SampledShardsPerScan;
+    for (size_t i = 0; i < samplingStages.size(); ++i) {
+        auto& budget = samplingStages[i]->Meta.SamplingMaxInFlightShards;
+        budget = samplingSlotsLeft / (samplingStages.size() - i);
+        samplingSlotsLeft -= budget;
+    }
+
     // Counting tasks via MaxTasksGraph
 
     if (!resourcesSnapshot.empty()) {
@@ -4051,6 +4117,31 @@ void TKqpTasksGraph::CountScanTasksFromSource(TStageInfo& stageInfo, bool limitT
             // TODO: put the reason for task creation here.
             ++nodeTasks;
         }
+    }
+
+    if (source.HasSampling()) {
+        // Spread the available actors over shard-owning nodes without allowing each
+        // node to independently spend the whole query budget.
+        TVector<ui64> nodes;
+        for (const auto& [nodeId, _] : tasksPerNode) {
+            nodes.push_back(nodeId);
+        }
+        std::sort(nodes.begin(), nodes.end());
+        ui32 slotsLeft = stageInfo.Meta.SamplingMaxInFlightShards;
+        bool addedTask = true;
+        for (ui64 round = 0; slotsLeft && addedTask; ++round) {
+            addedTask = false;
+            for (ui64 nodeId : nodes) {
+                if (round < tasksPerNode.at(nodeId)) {
+                    MaxTasksGraph->AddTask(AddTask(stageInfo, TTask::DEFAULT_SOURCE_SCAN), nodeId);
+                    addedTask = true;
+                    if (!--slotsLeft) {
+                        break;
+                    }
+                }
+            }
+        }
+        return;
     }
 
     for (const auto [nodeId, tasks] : tasksPerNode) {

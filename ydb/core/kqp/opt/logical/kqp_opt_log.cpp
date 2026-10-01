@@ -134,8 +134,10 @@ protected:
     }
 
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
-        TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
-        DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
+        auto output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
+        if (output) {
+            DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 

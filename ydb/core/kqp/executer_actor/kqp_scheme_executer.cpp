@@ -884,7 +884,7 @@ public:
             return ReplyErrorAndDie(Ydb::StatusIds::UNAUTHORIZED, "Access denied for KILL SESSION");
         }
         const bool canKillAnySession = isAdmin
-            || (UserToken && security.CheckAccess(NACLib::GenericUse, *UserToken));
+            || (UserToken && security.CheckAccess(NACLib::UpdateRow, *UserToken));
 
         auto request = std::make_unique<TEvKqp::TEvKillSessionRequest>();
         auto& record = request->Record;

@@ -37,6 +37,10 @@ class Source:
     pull_requests: List[Any]
     is_merged: bool = True
     merged_at: Optional[datetime.datetime] = None
+    # Human-readable warning when the backported commit set may not cover the
+    # whole PR (e.g. a rebase-merge series that could not be fully recovered,
+    # or merge commits inside the PR that cherry-pick cannot apply)
+    incomplete_note: Optional[str] = None
 
 
 @dataclass
@@ -132,12 +136,17 @@ def create_commit_source(commit, linked_pr, logger) -> Source:
     )
 
 
-def get_pr_commit_shas(pull: Any, logger, expected_tip: Optional[str] = None) -> List[str]:
-    """Returns PR's own commits, skipping merge commits that cherry-pick can't apply"""
+def get_pr_commit_shas(pull: Any, logger, expected_tip: Optional[str] = None) -> Tuple[List[str], int]:
+    """Returns PR's own commits, skipping merge commits that cherry-pick can't apply.
+
+    Returns (commit_shas, skipped_merge_commit_count).
+    """
     commit_shas = []
+    skipped = 0
     for c in pull.get_commits():
         if len(c.parents) > 1:
             logger.warning(f"PR #{pull.number}: skipping merge commit {c.sha[:7]}")
+            skipped += 1
             continue
         commit_shas.append(c.sha)
     if not commit_shas:
@@ -148,7 +157,14 @@ def get_pr_commit_shas(pull: Any, logger, expected_tip: Optional[str] = None) ->
             f"(merged tip {expected_tip[:7]} is not among the PR's current commits), "
             f"backporting the current PR commits, which may differ from what was merged"
         )
-    return commit_shas
+    return commit_shas, skipped
+
+
+def merge_commit_skip_note(pull: Any, skipped: int) -> str:
+    return (
+        f"PR #{pull.number} contains {skipped} merge commit(s) that cherry-pick cannot apply; "
+        f"changes brought by them may be missing from the backport"
+    )
 
 
 def get_merged_commit_shas(pull: Any, repo, merge_commit, logger) -> List[str]:
@@ -170,7 +186,7 @@ def get_merged_commit_shas(pull: Any, repo, merge_commit, logger) -> List[str]:
                 break
             commit_shas.append(parent.sha)
             commit = parent
-    except GithubException as e:
+    except BaseException as e:
         logger.warning(f"PR #{pull.number}: failed to walk the merged series, falling back to merge_commit_sha: {e}")
         return [merge_commit.sha]
     return list(reversed(commit_shas))
@@ -178,16 +194,23 @@ def get_merged_commit_shas(pull: Any, repo, merge_commit, logger) -> List[str]:
 
 def create_pr_source(pull: Any, repo, logger) -> Source:
     """Creates source from PR"""
+    incomplete_note = None
     if not pull.merged:
-        commit_shas = get_pr_commit_shas(pull, logger)
+        commit_shas, skipped = get_pr_commit_shas(pull, logger)
+        if skipped:
+            incomplete_note = merge_commit_skip_note(pull, skipped)
         logger.info(f"PR #{pull.number} is unmerged, using {len(commit_shas)} commits from PR")
     elif not pull.merge_commit_sha:
-        commit_shas = get_pr_commit_shas(pull, logger)
+        commit_shas, skipped = get_pr_commit_shas(pull, logger)
+        if skipped:
+            incomplete_note = merge_commit_skip_note(pull, skipped)
         logger.info(f"PR #{pull.number} has no merge commit, using {len(commit_shas)} commits from PR")
     else:
         merge_commit = repo.get_commit(pull.merge_commit_sha)
         if len(merge_commit.parents) > 1:
-            commit_shas = get_pr_commit_shas(pull, logger, expected_tip=merge_commit.parents[1].sha)
+            commit_shas, skipped = get_pr_commit_shas(pull, logger, expected_tip=merge_commit.parents[1].sha)
+            if skipped:
+                incomplete_note = merge_commit_skip_note(pull, skipped)
             logger.info(f"PR #{pull.number} was merged as merge commit, using {len(commit_shas)} individual commits")
         else:
             commit_shas = get_merged_commit_shas(pull, repo, merge_commit, logger)
@@ -203,6 +226,11 @@ def create_pr_source(pull: Any, repo, logger) -> Source:
                     f"{merge_commit.sha[:7]} will be used. This is expected for a squash merge, "
                     f"but if the PR was rebased, its earlier commits may be missing from the backport"
                 )
+                incomplete_note = (
+                    f"PR #{pull.number} has {pull.commits} commits, but only merge_commit_sha "
+                    f"{merge_commit.sha[:7]} could be attributed to the merge; if the PR was rebased, "
+                    f"its earlier commits may be missing from the backport"
+                )
             else:
                 logger.info(f"PR #{pull.number} was merged as squash, using merge_commit_sha")
 
@@ -214,7 +242,8 @@ def create_pr_source(pull: Any, repo, logger) -> Source:
         author=pull.user.login,
         pull_requests=[pull],
         is_merged=bool(pull.merged),
-        merged_at=pull.merged_at if pull.merged else None
+        merged_at=pull.merged_at if pull.merged else None,
+        incomplete_note=incomplete_note
     )
 
 
@@ -399,6 +428,9 @@ def build_pr_content(
         title = f"[Backport {target_branch}] {', '.join(all_titles)}"
     if has_conflicts:
         title = f"[CONFLICT] {title}"
+    incomplete_notes = [s.incomplete_note for s in sources if s.incomplete_note]
+    if incomplete_notes:
+        title = f"[INCOMPLETE] {title}"
     if len(title) > 256: # GitHub limit for PR title
         title = title[:253] + "..."
     
@@ -452,6 +484,12 @@ def build_pr_content(
     description += f"- **Cherry-picked by:** @{workflow_triggerer}\n"
     description += f"- **Related issues:** {issue_refs}"
     
+    incomplete_section = ""
+    if incomplete_notes:
+        incomplete_section = "\n\n### ⚠️ Possible incomplete backport\n\n"
+        incomplete_section += "The backported commit set may not cover the whole original PR. Review manually before merging.\n\n"
+        incomplete_section += '\n'.join(f"- {note}" for note in incomplete_notes) + "\n"
+
     cherry_pick_log_section = ""
     if cherry_pick_logs:
         cherry_pick_log_section = "\n\n### Git Cherry-Pick Log\n\n```\n" + '\n'.join(log if log.endswith('\n') else log + '\n' for log in cherry_pick_logs) + "```\n"
@@ -479,7 +517,7 @@ git push
 ```
 
 After resolving conflicts:
-1. Fix the PR title (remove `[CONFLICT]` if conflicts are resolved)
+1. Fix the PR title (remove `[CONFLICT]` if conflicts are resolved; keep `[INCOMPLETE]` if present, see below)
 2. Mark PR as ready for review
 """
     
@@ -491,7 +529,7 @@ After resolving conflicts:
 
 ### Description for reviewers <!-- (optional) description for those who read this PR -->
 
-{description}{conflicts_section}{cherry_pick_log_section}{workflow_section}
+{description}{incomplete_section}{conflicts_section}{cherry_pick_log_section}{workflow_section}
 """
     
     return title, body
@@ -683,8 +721,9 @@ def process_branch(
         except GithubException:
             pass
     
-    # Enable automerge if no conflicts
-    if not has_conflicts:
+    # Enable automerge only when the PR is complete and conflict-free: an
+    # incomplete backport must be reviewed manually before merging
+    if not has_conflicts and not any(s.incomplete_note for s in sources):
         try:
             pr.enable_automerge(merge_method='MERGE')
         except Exception:

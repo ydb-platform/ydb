@@ -13,6 +13,7 @@ from github import GithubException
 
 from cherry_pick_v2 import (
     Source,
+    build_pr_content,
     collect_sources,
     create_commit_source,
     create_pr_source,
@@ -26,7 +27,7 @@ UTC = datetime.timezone.utc
 LOGGER = logging.getLogger("test_cherry_pick_v2")
 
 
-def make_source(title, is_merged=True, merged_at=None):
+def make_source(title, is_merged=True, merged_at=None, incomplete_note=None):
     return Source(
         type='pr',
         commit_shas=[title],
@@ -36,6 +37,7 @@ def make_source(title, is_merged=True, merged_at=None):
         pull_requests=[],
         is_merged=is_merged,
         merged_at=merged_at,
+        incomplete_note=incomplete_note,
     )
 
 
@@ -206,6 +208,80 @@ class CreatePrSourceTest(unittest.TestCase):
         pull = make_pull(False, None, [make_commit('m', ['a', 'main'])])
         with self.assertRaises(ValueError):
             create_pr_source(pull, make_repo(), LOGGER)
+
+
+class IncompleteNoteTest(unittest.TestCase):
+    def test_partial_rebase_walk_sets_note(self):
+        pull = make_pull(True, 'r2', [make_commit('a'), make_commit('b', ['a'])])
+        repo = make_repo(
+            make_commit('r2', ['r1'], [PR_NUMBER]),
+            make_commit('r1', ['base']),  # association lost mid-series
+        )
+        source = create_pr_source(pull, repo, LOGGER)
+        self.assertIn(f'PR #{PR_NUMBER} has 2 commits', source.incomplete_note)
+
+    def test_confirmed_squash_has_no_note(self):
+        pull = make_pull(True, 'merge', [make_commit('a'), make_commit('b', ['a'])])
+        merge_commit = make_commit('merge', ['base'])
+        merge_commit.commit.message = f'Fix something (#{PR_NUMBER})'
+        repo = make_repo(merge_commit, make_commit('base', ['older'], [2]))
+        self.assertIsNone(create_pr_source(pull, repo, LOGGER).incomplete_note)
+
+    def test_full_rebase_series_has_no_note(self):
+        pull = make_pull(True, 'r2', [make_commit('a'), make_commit('b', ['a'])])
+        repo = make_repo(
+            make_commit('r2', ['r1'], [PR_NUMBER]),
+            make_commit('r1', ['base'], [PR_NUMBER]),
+            make_commit('base', ['older'], [2]),
+        )
+        self.assertIsNone(create_pr_source(pull, repo, LOGGER).incomplete_note)
+
+    def test_single_commit_pr_has_no_note(self):
+        pull = make_pull(True, 'merge', [make_commit('a')])
+        repo = make_repo(make_commit('merge', ['base']), make_commit('base', ['older'], [2]))
+        self.assertIsNone(create_pr_source(pull, repo, LOGGER).incomplete_note)
+
+    def test_skipped_merge_commits_set_note(self):
+        pull = make_pull(False, None, [make_commit('a'), make_commit('m', ['a', 'main']), make_commit('b', ['m'])])
+        source = create_pr_source(pull, make_repo(), LOGGER)
+        self.assertIn('1 merge commit(s)', source.incomplete_note)
+
+    def test_no_skipped_merge_commits_no_note(self):
+        pull = make_pull(False, None, [make_commit('a'), make_commit('b', ['a'])])
+        self.assertIsNone(create_pr_source(pull, make_repo(), LOGGER).incomplete_note)
+
+
+class BuildPrContentTest(unittest.TestCase):
+    def make_repo(self):
+        repo = mock.Mock()
+        repo.full_name = 'ydb-platform/ydb'
+        return repo
+
+    def build(self, sources):
+        return build_pr_content(
+            'ydb-platform/ydb', self.make_repo(), 'token', 'stable', 'stable-dev-branch',
+            sources, [], [], 'triggerer', None, None, LOGGER,
+        )
+
+    def test_incomplete_note_marks_title_and_body(self):
+        source = make_source('PR #1: fix', incomplete_note='PR #1 has 3 commits, but only 1 recovered')
+        title, body = self.build([source])
+        self.assertTrue(title.startswith('[INCOMPLETE] [Backport stable] '))
+        self.assertIn('### ⚠️ Possible incomplete backport', body)
+        self.assertIn('- PR #1 has 3 commits, but only 1 recovered', body)
+
+    def test_complete_source_has_no_marker(self):
+        title, body = self.build([make_source('PR #1: fix')])
+        self.assertFalse(title.startswith('[INCOMPLETE] '))
+        self.assertNotIn('Possible incomplete backport', body)
+
+    def test_conflict_marker_combines_with_incomplete(self):
+        sources = [make_source('PR #1: fix', incomplete_note='PR #1 has 3 commits')]
+        title, _ = build_pr_content(
+            'ydb-platform/ydb', self.make_repo(), 'token', 'stable', 'stable-dev-branch',
+            sources, [mock.Mock(file_path='a.cpp')], [], 'triggerer', None, None, LOGGER,
+        )
+        self.assertTrue(title.startswith('[INCOMPLETE] [CONFLICT] [Backport stable] '))
 
 
 class GetMergedCommitShasTest(unittest.TestCase):

@@ -200,6 +200,7 @@ public:
     NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
     NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
     NCommon::TConfSetting<bool, Static> _ReplaceEmptyOpWithTouch;
+    NCommon::TConfSetting<bool, Static> _PruneSync;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

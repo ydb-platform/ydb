@@ -651,6 +651,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
     REGISTER_SETTING(*this, _ForbidReservedColumns);
     REGISTER_SETTING(*this, _ReplaceEmptyOpWithTouch);
+    REGISTER_SETTING(*this, _PruneSync);
     REGISTER_SETTING(*this, ApplyMaxJobCountToAll);
 }
 

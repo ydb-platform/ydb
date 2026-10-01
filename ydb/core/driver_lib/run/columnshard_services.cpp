@@ -129,7 +129,7 @@ TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunCon
 	: IKikimrServicesInitializer(runConfig) {
 }
 
-void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+NConveyorComposite::NConfig::TConfig TCompositeConveyorInitializer::BuildServiceConfig() const {
     const NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
         NKikimrConfig::TCompositeConveyorConfig result;
         if (Config.HasCompConveyorConfig()) {
@@ -259,13 +259,19 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 
-    if (serviceConfig->IsEnabled()) {
+    return serviceConfig.DetachResult();
+}
+
+void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    auto serviceConfig = BuildServiceConfig();
+
+    if (serviceConfig.IsEnabled()) {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMPOSITE_CONVEYOR");
 
         const auto registerService = [&](const ui32 poolId, bool useBatchPool) {
             auto poolConveyorGroup = conveyorGroup->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
-            auto service = NConveyorComposite::CreateService(*serviceConfig, poolConveyorGroup);
+            auto service = NConveyorComposite::CreateService(serviceConfig, poolConveyorGroup);
             setup->LocalServices.push_back(std::make_pair(
                 NConveyorComposite::TServiceOperator::MakeServiceId(NodeId, useBatchPool),
                 TActorSetupCmd(service, TMailboxType::HTSwap, poolId)));

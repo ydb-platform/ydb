@@ -13,6 +13,10 @@
 #include <expected>
 #include <memory>
 
+namespace parquet {
+class FileMetaData;
+}
+
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -93,6 +97,9 @@ public:
 
     // The row groups of the file whose metadata is open.
     virtual TVector<TRowGroupInfo> GetRowGroups() const = 0;
+
+    // The metadata of the open file, parsed once for everyone who needs it.
+    virtual std::shared_ptr<parquet::FileMetaData> GetFileMetadata() const = 0;
 
     virtual std::expected<void, TString> OpenRowGroup(ui32 rowGroupIndex) = 0;
 

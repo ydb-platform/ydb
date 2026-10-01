@@ -13,6 +13,7 @@
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
@@ -20,10 +21,15 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/arrow/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/parquet/file_reader.h>
+#include <contrib/libs/apache/arrow/cpp/src/generated/parquet_types.h>
+
+#include <contrib/restricted/thrift/thrift/protocol/TCompactProtocol.h>
+#include <contrib/restricted/thrift/thrift/transport/TBufferTransports.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/builder.h>
 
+#include <cstring>
 #include <numeric>
 
 namespace NKikimr::NDataShard {
@@ -216,6 +222,78 @@ private:
     TVector<TColumn> Columns;
 };
 
+// Arrow builds the tree of the schema by recursion, one level per nested
+// group and with no limit, so a footer with a deep enough chain of groups
+// overflows the stack. The depth is checked here first, on the flat list the
+// footer holds, which thrift reads without recursion. The list is in
+// preorder: an element with children is followed by them. A backup has one
+// level, and the import takes only top-level columns.
+constexpr size_t MaxSchemaNesting = 32;
+
+std::expected<void, TString> CheckSchemaNesting(arrow::io::RandomAccessFile& source) {
+    static constexpr int64_t FooterTail = 8; // the length of the footer and the magic
+
+    auto size = source.GetSize();
+    if (!size.ok()) {
+        return std::unexpected(TStringBuilder() << "failed to get the size of the parquet file: " << size.status().ToString());
+    }
+    if (*size < FooterTail + 4) {
+        return std::unexpected(TString("Parquet file is too small"));
+    }
+
+    auto tail = source.ReadAt(*size - FooterTail, FooterTail);
+    if (!tail.ok() || (*tail)->size() != FooterTail) {
+        return std::unexpected(TStringBuilder() << "failed to read the parquet footer: "
+            << (tail.ok() ? "short read" : tail.status().ToString()));
+    }
+    if (memcmp((*tail)->data() + 4, "PAR1", 4) != 0) {
+        return std::unexpected(TString("parquet magic bytes not found in footer"));
+    }
+    const uint32_t footerLength = arrow::util::SafeLoadAs<uint32_t>((*tail)->data());
+    if (footerLength > *size - FooterTail) {
+        return std::unexpected(TStringBuilder() << "parquet metadata length " << footerLength
+            << " exceeds file size " << *size);
+    }
+
+    auto footer = source.ReadAt(*size - FooterTail - footerLength, footerLength);
+    if (!footer.ok() || (*footer)->size() != footerLength) {
+        return std::unexpected(TStringBuilder() << "failed to read the parquet footer: "
+            << (footer.ok() ? "short read" : footer.status().ToString()));
+    }
+
+    parquet::format::FileMetaData metadata;
+    try {
+        // the same limits Arrow reads the footer with
+        using TBuffer = apache::thrift::transport::TMemoryBuffer;
+        auto transport = std::make_shared<TBuffer>(const_cast<uint8_t*>((*footer)->data()), footerLength);
+        apache::thrift::protocol::TCompactProtocolFactoryT<TBuffer> factory;
+        factory.setStringSizeLimit(100 * 1000 * 1000);
+        factory.setContainerSizeLimit(1000 * 1000);
+        metadata.read(factory.getProtocol(transport).get());
+    } catch (const std::exception& ex) {
+        return std::unexpected(TStringBuilder() << "failed to parse the parquet footer: " << ex.what());
+    }
+
+    TVector<int32_t> pending; // the children still to come, for every open group
+    for (const auto& element : metadata.schema) {
+        while (!pending.empty() && pending.back() == 0) {
+            pending.pop_back();
+        }
+        if (!pending.empty()) {
+            --pending.back();
+        }
+        if (element.num_children > 0) {
+            pending.push_back(element.num_children);
+            if (pending.size() > MaxSchemaNesting) {
+                return std::unexpected(TStringBuilder() << "Parquet schema is nested more than "
+                    << MaxSchemaNesting << " levels deep");
+            }
+        }
+    }
+
+    return {};
+}
+
 // The memory the arrays of a decoded batch hold.
 ui64 DecodedBytes(const arrow::RecordBatch& batch) {
     ui64 bytes = 0;
@@ -309,8 +387,13 @@ struct TParquetFileSession {
     std::unique_ptr<parquet::arrow::FileReader> FileReader;
     std::vector<int> ColumnIndices; // parquet leaf columns to decode, in scheme order
     std::vector<std::pair<std::string, std::shared_ptr<arrow::DataType>>> CastColumns; // see IsWriterCoercion
-    std::vector<int> RowGroups; // the row groups BatchReader reads, in that order
-    std::unique_ptr<arrow::RecordBatchReader> BatchReader;
+    std::vector<int> RowGroups; // the row groups to read, in that order
+    size_t CurrentGroup = 0; // the one of RowGroups that ColumnReaders read
+    // A reader for every column of the table, over the current row group. The
+    // columns are read one by one and put together in ReadBatch().
+    std::vector<std::unique_ptr<arrow::RecordBatchReader>> ColumnReaders;
+    std::shared_ptr<arrow::Schema> BatchSchema; // of the batches ReadBatch() makes
+    ui64 DecodedInGroup = 0; // the rows decoded from the current row group
     std::shared_ptr<arrow::RecordBatch> HeldBatch; // rows [HeldOffset, num_rows) not yet emitted
     TMaybe<TRowSizes> HeldSizes; // the sizes of the rows of HeldBatch
     i64 HeldOffset = 0;
@@ -478,6 +561,10 @@ public:
         session->Memory = std::make_unique<TDecodeMemoryPool>(DecodeMemoryLimit);
         session->Source = std::move(source);
 
+        if (auto result = CheckSchemaNesting(*session->Source); !result) {
+            return result;
+        }
+
         parquet::arrow::FileReaderBuilder builder;
         if (auto st = builder.Open(session->Source, parquet::ReaderProperties(session->Memory.get())); !st.ok()) {
             return std::unexpected(TStringBuilder() << "failed to open parquet file: " << st.ToString());
@@ -524,6 +611,25 @@ public:
             session->ColumnIndices.push_back(columnIndex);
         }
 
+        // A row group holds the same number of values in every column: its
+        // number of rows. Arrow trusts that, and reads out of bounds when a
+        // column of a crafted file turns out shorter than the first one, so
+        // the columns are read one by one here, see ReadBatch(). The footer
+        // is checked first: a file whose footer is wrong is rejected before
+        // any of its data is downloaded.
+        const auto metadata = session->FileReader->parquet_reader()->metadata();
+        for (int rowGroup = 0; rowGroup < metadata->num_row_groups(); ++rowGroup) {
+            const auto rowGroupMeta = metadata->RowGroup(rowGroup);
+            for (size_t i = 0; i < ColumnMeta.size(); ++i) {
+                const int64_t values = rowGroupMeta->ColumnChunk(session->ColumnIndices[i])->num_values();
+                if (values != rowGroupMeta->num_rows()) {
+                    return std::unexpected(TStringBuilder() << "Parquet column '" << ColumnMeta[i].Name
+                        << "' has " << values << " values in row group " << rowGroup
+                        << ", which has " << rowGroupMeta->num_rows() << " rows");
+                }
+            }
+        }
+
         Session = std::move(session);
         return {};
     }
@@ -554,6 +660,10 @@ public:
         return rowGroups;
     }
 
+    std::shared_ptr<parquet::FileMetaData> GetFileMetadata() const override {
+        return Session && Session->FileReader ? Session->FileReader->parquet_reader()->metadata() : nullptr;
+    }
+
     std::expected<void, TString> OpenRowGroup(ui32 rowGroupIndex) override {
         if (!Session || !Session->FileReader) {
             return std::unexpected(TString("Parquet metadata is not open"));
@@ -573,7 +683,10 @@ public:
         }
 
         Session->RowGroups.clear();
-        Session->BatchReader.reset();
+        Session->CurrentGroup = 0;
+        Session->ColumnReaders.clear();
+        Session->BatchSchema.reset();
+        Session->DecodedInGroup = 0;
         Session->HeldBatch.reset();
         Session->HeldSizes.Clear();
         Session->HeldOffset = 0;
@@ -590,7 +703,7 @@ public:
     {
         Y_UNUSED(pool); // Arrow owns the decoded data; cells point into the record batch
 
-        if (!Session || !Session->BatchReader) {
+        if (!Session || Session->ColumnReaders.empty()) {
             return TParsedBatch{};
         }
 
@@ -608,17 +721,17 @@ public:
         // Makes sure HeldBatch holds unread rows; false once the row group is exhausted.
         const auto fetch = [this, decodeBytes]() -> std::expected<bool, TString> {
             while (!Session->HeldBatch) {
-                std::shared_ptr<arrow::RecordBatch> batch;
-                if (auto st = ReadBatch(Session->BatchRows, batch); !st.ok()) {
+                auto decoded = DecodeNext(Session->BatchRows);
+                if (!decoded) {
                     if (!Session->Memory->HasRefused()) {
-                        return std::unexpected(TStringBuilder()
-                            << "failed to read parquet record batch: " << st.ToString());
+                        return std::unexpected(std::move(decoded.error()));
                     }
                     if (auto result = ReopenWithSmallerBatches(); !result) {
                         return std::unexpected(std::move(result.error()));
                     }
                     continue;
                 }
+                auto batch = std::move(*decoded);
                 if (!batch) {
                     return false;
                 }
@@ -797,17 +910,157 @@ private:
         return TStringBuilder() << "row " << row << " past the open row groups";
     }
 
-    // Decodes the next rows of the open row groups: the given number of them,
-    // or fewer at the end. The batch is null when no rows are left.
-    arrow::Status ReadBatch(i64 rows, std::shared_ptr<arrow::RecordBatch>& batch) {
+    // The rows of a row group by the footer.
+    ui64 RowsOfGroup(size_t index) const {
+        const auto metadata = Session->FileReader->parquet_reader()->metadata();
+        return static_cast<ui64>(Max<int64_t>(metadata->RowGroup(Session->RowGroups[index])->num_rows(), 0));
+    }
+
+    // The rows decoded from the open row groups so far.
+    ui64 DecodedRows() const {
+        ui64 rows = Session->DecodedInGroup;
+        for (size_t i = 0; i < Session->CurrentGroup; ++i) {
+            rows += RowsOfGroup(i);
+        }
+        return rows;
+    }
+
+    // Opens a reader for every column of the table over the current row group.
+    std::expected<void, TString> OpenColumnReaders() {
+        Session->ColumnReaders.clear();
+        const std::vector<int> rowGroup = {Session->RowGroups[Session->CurrentGroup]};
+
+        arrow::FieldVector fields;
+        fields.reserve(Session->ColumnIndices.size());
+        for (const int column : Session->ColumnIndices) {
+            std::unique_ptr<arrow::RecordBatchReader> reader;
+            if (auto st = Session->FileReader->GetRecordBatchReader(rowGroup, {column}, &reader); !st.ok()) {
+                return std::unexpected(TStringBuilder()
+                    << "failed to get parquet record batch reader: " << st.ToString());
+            }
+            fields.push_back(reader->schema()->field(0));
+            Session->ColumnReaders.push_back(std::move(reader));
+        }
+        Session->BatchSchema = arrow::schema(std::move(fields));
+
+        return {};
+    }
+
+    // The rows the reader of a column gives for one decode: the given number
+    // of them, or fewer at the end of the column. Arrow splits a decode only
+    // for a column of more than 2 GiB in a batch; the pieces are joined.
+    std::expected<std::shared_ptr<arrow::Array>, TString> ReadColumn(size_t column, i64 rows) {
+        arrow::ArrayVector pieces;
+        i64 length = 0;
+        while (length < rows) {
+            std::shared_ptr<arrow::RecordBatch> piece;
+            if (auto st = Session->ColumnReaders[column]->ReadNext(&piece); !st.ok()) {
+                return std::unexpected(TStringBuilder() << "failed to read parquet column '"
+                    << ColumnMeta[column].Name << "': " << st.ToString());
+            }
+            if (!piece) {
+                break;
+            }
+            if (piece->num_rows() > 0) {
+                length += piece->num_rows();
+                pieces.push_back(piece->column(0));
+            }
+        }
+
+        if (pieces.empty()) {
+            return nullptr;
+        }
+        if (pieces.size() == 1) {
+            return std::move(pieces.front());
+        }
+        auto joined = arrow::Concatenate(pieces, Session->Memory.get());
+        if (!joined.ok()) {
+            return std::unexpected(TStringBuilder() << "failed to join the pieces of parquet column '"
+                << ColumnMeta[column].Name << "': " << joined.status().ToString());
+        }
+        return std::move(*joined);
+    }
+
+    // Decodes the next rows of the current row group, a column at a time, and
+    // puts the columns together. Arrow does not look at their lengths when it
+    // puts them together itself, and reads out of bounds when a column of a
+    // crafted file is shorter than the first one; here a difference is an
+    // error. The batch is null at the end of the row group.
+    std::expected<std::shared_ptr<arrow::RecordBatch>, TString> ReadBatch(i64 rows) {
         Session->Memory->ResetRefused();
-        // The reader takes the batch size for every batch it decodes.
+        // The readers take the batch size for every batch they decode.
         Session->FileReader->set_batch_size(rows);
-        return Session->BatchReader->ReadNext(&batch);
+
+        arrow::ArrayVector columns;
+        columns.reserve(Session->ColumnReaders.size());
+        i64 length = 0;
+        for (size_t i = 0; i < Session->ColumnReaders.size(); ++i) {
+            auto column = ReadColumn(i, rows);
+            if (!column) {
+                return std::unexpected(std::move(column.error()));
+            }
+
+            const i64 columnLength = *column ? (*column)->length() : 0;
+            if (i == 0) {
+                length = columnLength;
+            } else if (columnLength != length) {
+                return std::unexpected(TStringBuilder() << "Parquet column '" << ColumnMeta[i].Name
+                    << "' has " << columnLength << " rows where column '" << ColumnMeta[0].Name
+                    << "' has " << length << ", from " << DescribeRow(DecodedRows()));
+            }
+            if (*column) {
+                columns.push_back(std::move(*column));
+            }
+        }
+
+        if (length == 0) {
+            return nullptr;
+        }
+        return arrow::RecordBatch::Make(Session->BatchSchema, length, std::move(columns));
+    }
+
+    // At the end of a row group its readers must have given all the rows the
+    // footer states. Fewer is a crafted file whose columns are all short.
+    std::expected<void, TString> CheckRowGroupRead() const {
+        const ui64 rows = RowsOfGroup(Session->CurrentGroup);
+        if (Session->DecodedInGroup != rows) {
+            return std::unexpected(TStringBuilder() << "Parquet row group "
+                << Session->RowGroups[Session->CurrentGroup] << " has " << rows
+                << " rows by its footer, but " << Session->DecodedInGroup << " were read");
+        }
+        return {};
+    }
+
+    // Decodes the next rows of the open row groups: the given number of them,
+    // or fewer at the end of a row group. The batch is null once the last row
+    // group is read to its end.
+    std::expected<std::shared_ptr<arrow::RecordBatch>, TString> DecodeNext(i64 rows) {
+        while (true) {
+            auto batch = ReadBatch(rows);
+            if (!batch) {
+                return batch;
+            }
+            if (*batch) {
+                Session->DecodedInGroup += (*batch)->num_rows();
+                return batch;
+            }
+
+            if (auto result = CheckRowGroupRead(); !result) {
+                return std::unexpected(std::move(result.error()));
+            }
+            if (Session->CurrentGroup + 1 == Session->RowGroups.size()) {
+                return nullptr;
+            }
+            ++Session->CurrentGroup;
+            Session->DecodedInGroup = 0;
+            if (auto result = OpenColumnReaders(); !result) {
+                return std::unexpected(std::move(result.error()));
+            }
+        }
     }
 
     // Called when a batch does not fit into the memory limit of the decoding.
-    // The reader cannot go on after a read that has failed, so the row groups
+    // The readers cannot go on after a read that has failed, so the row groups
     // are opened again, the rows that have been emitted are decoded once more,
     // in the batches they were decoded in, and dropped. The reading goes on
     // with a batch of one row. The batches of these row groups stay shorter
@@ -820,12 +1073,10 @@ private:
                 << " bytes of memory (twice RestoreReadBufferSizeLimit)");
         }
 
-        Session->BatchReader.reset();
-        if (auto st = Session->FileReader->GetRecordBatchReader(
-                Session->RowGroups, Session->ColumnIndices, &Session->BatchReader); !st.ok())
-        {
-            return std::unexpected(TStringBuilder()
-                << "failed to get parquet record batch reader: " << st.ToString());
+        Session->CurrentGroup = 0;
+        Session->DecodedInGroup = 0;
+        if (auto result = OpenColumnReaders(); !result) {
+            return result;
         }
 
         ui64 skipped = 0;
@@ -835,16 +1086,16 @@ private:
                 ? Min<ui64>(Session->DecodedBatches[i], left)
                 : 1;
 
-            std::shared_ptr<arrow::RecordBatch> batch;
-            if (auto st = ReadBatch(static_cast<i64>(rows), batch); !st.ok()) {
+            auto batch = DecodeNext(static_cast<i64>(rows));
+            if (!batch) {
                 return std::unexpected(TStringBuilder()
-                    << "failed to read parquet record batch again: " << st.ToString());
+                    << "failed to read parquet rows again: " << batch.error());
             }
-            if (!batch || static_cast<ui64>(batch->num_rows()) > left) {
+            if (!*batch || static_cast<ui64>((*batch)->num_rows()) > left) {
                 return std::unexpected(TStringBuilder() << "parquet rows read again differ from those read before "
                     << DescribeRow(Session->RowsRead));
             }
-            skipped += batch->num_rows();
+            skipped += (*batch)->num_rows();
         }
 
         Session->BatchRows = 1;
@@ -855,14 +1106,14 @@ private:
     std::expected<void, TString> OpenRowGroups(std::vector<int> rowGroupIndices) {
         ResetRowGroup();
 
-        if (auto st = Session->FileReader->GetRecordBatchReader(
-                rowGroupIndices, Session->ColumnIndices, &Session->BatchReader); !st.ok())
-        {
-            ResetRowGroup();
-            return std::unexpected(TStringBuilder()
-                << "failed to get parquet record batch reader: " << st.ToString());
-        }
         Session->RowGroups = std::move(rowGroupIndices);
+        if (Session->RowGroups.empty()) {
+            return {}; // nothing to read
+        }
+        if (auto result = OpenColumnReaders(); !result) {
+            ResetRowGroup();
+            return result;
+        }
 
         return {};
     }

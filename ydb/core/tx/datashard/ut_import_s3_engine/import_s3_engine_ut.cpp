@@ -19,6 +19,13 @@
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 #include <parquet/file_reader.h>
+
+// For the footers of crafted files. The header brings Arrow's logging with it,
+// which does not compile under our warnings.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#include <parquet/thrift_internal.h>
+#pragma GCC diagnostic pop
 #include <contrib/libs/zstd/include/zstd.h>
 
 #include <util/generic/maybe.h>
@@ -28,8 +35,10 @@
 #include <util/stream/null.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
+#include <util/system/unaligned_mem.h>
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <utility>
 
@@ -539,6 +548,59 @@ TString BuildKeyValueParquet(
         arrow::Table::Make(std::make_shared<arrow::Schema>(std::move(fields)), std::move(columns)),
         rowGroupSize,
         compression);
+}
+
+// The footer of a Parquet file as Parquet's thrift structure, and where it
+// starts. For the tests that craft a file the writer refuses to write.
+parquet::format::FileMetaData ReadFooter(const TString& file, size_t* footerStart) {
+    UNIT_ASSERT(file.size() >= 12 && file.EndsWith("PAR1"));
+    const ui32 footerLength = ReadUnaligned<ui32>(file.data() + file.size() - 8);
+    UNIT_ASSERT(footerLength + 12 <= file.size());
+    *footerStart = file.size() - 8 - footerLength;
+
+    parquet::format::FileMetaData metadata;
+    ui32 length = footerLength;
+    parquet::DeserializeThriftUnencryptedMsg(
+        reinterpret_cast<const uint8_t*>(file.data() + *footerStart), &length, &metadata);
+    return metadata;
+}
+
+// A Parquet file of the given body and footer.
+TString WithFooter(TStringBuf body, const parquet::format::FileMetaData& metadata) {
+    std::string serialized;
+    parquet::ThriftSerializer serializer;
+    serializer.SerializeToString(&metadata, &serialized);
+    const ui32 length = serialized.size();
+    return TStringBuilder() << body << serialized
+        << TStringBuf(reinterpret_cast<const char*>(&length), sizeof(length)) << "PAR1";
+}
+
+// The file with its footer changed by patch.
+TString PatchFooter(const TString& file, const std::function<void(parquet::format::FileMetaData&)>& patch) {
+    size_t footerStart = 0;
+    auto metadata = ReadFooter(file, &footerStart);
+    patch(metadata);
+    return WithFooter(TStringBuf(file).SubStr(0, footerStart), metadata);
+}
+
+// The bytes of a column chunk in its file: the dictionary page, when there is
+// one, and the data pages.
+std::pair<size_t, size_t> ChunkRange(const parquet::format::ColumnChunk& chunk) {
+    const auto& meta = chunk.meta_data;
+    i64 start = meta.data_page_offset;
+    if (meta.__isset.dictionary_page_offset && meta.dictionary_page_offset < start) {
+        start = meta.dictionary_page_offset;
+    }
+    return {static_cast<size_t>(start), static_cast<size_t>(meta.total_compressed_size)};
+}
+
+// Values v0, v1, ... of the given prefix.
+TVector<TString> SomeValues(TStringBuf prefix, ui32 count) {
+    TVector<TString> values;
+    for (ui32 i = 0; i < count; ++i) {
+        values.push_back(TStringBuilder() << prefix << i);
+    }
+    return values;
 }
 
 // A column type with restrictions on its values that the Arrow type of the
@@ -2135,8 +2197,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
         UNIT_ASSERT_C(outcome.Error, "a row group above the buffer limit was imported");
         UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet row group 0 takes ");
-        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
-            " bytes in the file, the limit is 196608 bytes (RestoreReadBufferSizeLimit)");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, " bytes in the file, the limit is ");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, " bytes (RestoreReadBufferSizeLimit less what the footer takes)");
         UNIT_ASSERT(outcome.Rows.empty());
         // The footer is enough to reject it: the row group itself is not downloaded.
         UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
@@ -2146,7 +2208,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         // A row group above the limit of the buffer, in the file or
         // uncompressed, is rejected by the footer with an error that names it.
         static constexpr ui64 Limit = 128_KB;
-        const TString limitText = ", the limit is 131072 bytes (RestoreReadBufferSizeLimit)";
+        const TString limitText = ", the limit is "; // of what is left of the buffer after the footer
         const TString narrow = "narrow";
         const TEngineFixture fixture;
 
@@ -2250,6 +2312,218 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         // the end of the file, where the footer is looked for, and the two
         // columns of the table
         UNIT_ASSERT_LT_C(outcome.RequestedBytes, 64_KB + 1_KB, outcome.RequestedBytes);
+    }
+
+    Y_UNIT_TEST(ParquetRejectsAFooterWhoseColumnsDisagreeOnRows) {
+        // Every column chunk of a row group holds a value for each of its
+        // rows. A footer that says otherwise is wrong, and the file is
+        // rejected by it, before any of its data is downloaded.
+        const TString source = PatchFooter(
+            BuildKeyValueParquet(MakeStringArray(SomeValues("v", 10)), /*rowGroupSize=*/10),
+            [](parquet::format::FileMetaData& metadata) {
+                metadata.row_groups[0].columns[1].meta_data.num_values = 6;
+            });
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source);
+
+        UNIT_ASSERT_C(outcome.Error, "a file whose footer has a column short of values was imported");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
+            "Parquet column 'value' has 6 values in row group 0, which has 10 rows");
+        UNIT_ASSERT(outcome.Rows.empty());
+        UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
+    }
+
+    Y_UNIT_TEST(ParquetRejectsARowGroupShorterThanItsFooterSays) {
+        // The pages hold six rows, the footer says ten, for the row group and
+        // for every column. Arrow reads the six and stops. The import must not
+        // take the row group as complete.
+        const TString source = PatchFooter(
+            BuildKeyValueParquet(MakeStringArray(SomeValues("v", 6)), /*rowGroupSize=*/6),
+            [](parquet::format::FileMetaData& metadata) {
+                metadata.num_rows = 10;
+                metadata.row_groups[0].num_rows = 10;
+                for (auto& column : metadata.row_groups[0].columns) {
+                    column.meta_data.num_values = 10;
+                }
+            });
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source);
+
+        UNIT_ASSERT_C(outcome.Error, "a row group shorter than its footer says was imported as complete");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
+            "Parquet row group 0 has 10 rows by its footer, but 6 were read");
+        // the six rows are emitted before the end of the row group is met
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), 6);
+    }
+
+    Y_UNIT_TEST(ParquetRejectsAColumnShorterThanTheFirstOne) {
+        // A row group whose first column has more rows than another makes
+        // Arrow read out of bounds when it puts the columns together, so the
+        // parser puts them together and compares them. The file: the key
+        // column of ten rows, the value column of six, taken from another
+        // file, and the footer of the first file pointing at it, still
+        // claiming ten rows for it.
+        const TString ten = BuildKeyValueParquet(MakeStringArray(SomeValues("v", 10)), /*rowGroupSize=*/10);
+        const TString six = BuildKeyValueParquet(MakeStringArray(SomeValues("w", 6)), /*rowGroupSize=*/6);
+
+        size_t sixFooter = 0;
+        const auto sixMetadata = ReadFooter(six, &sixFooter);
+        const auto& sixChunk = sixMetadata.row_groups[0].columns[1];
+        const auto [sixStart, sixLength] = ChunkRange(sixChunk);
+
+        size_t tenFooter = 0;
+        auto metadata = ReadFooter(ten, &tenFooter);
+        auto& chunk = metadata.row_groups[0].columns[1];
+        const i64 shift = static_cast<i64>(tenFooter) - static_cast<i64>(sixStart);
+        chunk.file_offset = sixChunk.file_offset + shift;
+        chunk.meta_data.data_page_offset = sixChunk.meta_data.data_page_offset + shift;
+        if (sixChunk.meta_data.__isset.dictionary_page_offset) {
+            chunk.meta_data.__set_dictionary_page_offset(sixChunk.meta_data.dictionary_page_offset + shift);
+        }
+        chunk.meta_data.total_compressed_size = sixChunk.meta_data.total_compressed_size;
+        chunk.meta_data.total_uncompressed_size = sixChunk.meta_data.total_uncompressed_size;
+        // num_values stays ten: the footer is consistent, the data is not
+
+        const TString source = WithFooter(
+            TStringBuilder() << TStringBuf(ten).SubStr(0, tenFooter) << TStringBuf(six).SubStr(sixStart, sixLength),
+            metadata);
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source);
+
+        UNIT_ASSERT_C(outcome.Error, "a row group whose columns differ in length was imported");
+        // batches of 1, 2 and 4 rows: the third is where the value column ends
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
+            "Parquet column 'value' has 3 rows where column 'key' has 4, from row 3 of row group 0");
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), 3);
+    }
+
+    Y_UNIT_TEST(ParquetRejectsAFooterAboveTheLimit) {
+        // A footer is parsed into many times its size, so it has a limit of
+        // its own, an eighth of the buffer, checked by the length in the last
+        // bytes of the file: the footer itself is not downloaded.
+        static constexpr ui64 BufferLimit = 1_MB;
+        const TString source = PatchFooter(
+            BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
+            [](parquet::format::FileMetaData& metadata) {
+                parquet::format::KeyValue padding;
+                padding.__set_key("padding");
+                padding.__set_value(std::string(200_KB, 'p'));
+                metadata.key_value_metadata.push_back(std::move(padding));
+                metadata.__isset.key_value_metadata = true;
+            });
+        UNIT_ASSERT_GT(source.size(), 200_KB);
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source, BufferLimit);
+
+        UNIT_ASSERT_C(outcome.Error, "a footer above the limit was taken");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet footer is ");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
+            " bytes, the limit is 131072 bytes (an eighth of RestoreReadBufferSizeLimit)");
+        UNIT_ASSERT(outcome.Rows.empty());
+        UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
+    }
+
+    Y_UNIT_TEST(ParquetRejectsAFooterThatTakesTheBuffer) {
+        // A footer within its limit can still take most of the buffer once it
+        // is parsed, when it is made of many small entries. What it takes is
+        // estimated from its counts, and a footer that leaves nothing for the
+        // row groups is rejected. Here: 400 row groups of two columns in a
+        // footer of a few tens of KB, against a buffer of 512 KB.
+        static constexpr ui64 BufferLimit = 512_KB;
+        const TString source = PatchFooter(
+            BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
+            [](parquet::format::FileMetaData& metadata) {
+                auto& rowGroup = metadata.row_groups[0];
+                rowGroup.num_rows = 0;
+                for (auto& column : rowGroup.columns) {
+                    column.meta_data.num_values = 0;
+                    column.meta_data.__isset.statistics = false;
+                    column.meta_data.__isset.encoding_stats = false;
+                }
+                metadata.row_groups.resize(400, rowGroup);
+                metadata.num_rows = 0;
+            });
+        UNIT_ASSERT_LT(source.size(), 64_KB);
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source, BufferLimit);
+
+        UNIT_ASSERT_C(outcome.Error, "a footer that takes the buffer was taken");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet footer takes about ");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error,
+            " bytes in memory, the limit is 524288 bytes (RestoreReadBufferSizeLimit)");
+        UNIT_ASSERT(outcome.Rows.empty());
+        UNIT_ASSERT_LE(outcome.RequestedBytes, 64_KB);
+    }
+
+    Y_UNIT_TEST(ParquetFooterEstimateCoversTheThriftStructs) {
+        // The estimate counts a few hundred bytes per entry: at least what the
+        // thrift structures take before the vectors they hold.
+        UNIT_ASSERT_GE(ParquetFooterBytesPerColumnChunk, sizeof(parquet::format::ColumnChunk));
+        UNIT_ASSERT_GE(ParquetFooterBytesPerRowGroup, sizeof(parquet::format::RowGroup));
+        UNIT_ASSERT_GE(ParquetFooterBytesPerColumn, sizeof(parquet::format::SchemaElement));
+    }
+
+    Y_UNIT_TEST(ParquetRejectsASchemaNestedTooDeep) {
+        // Arrow builds the schema tree by recursion, so a footer with a deep
+        // chain of groups overflows the stack. The depth is checked on the
+        // footer's flat list before Arrow sees it. Here: the root, a chain of
+        // 40 groups of one child each, and a leaf.
+        const TString source = PatchFooter(
+            BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
+            [](parquet::format::FileMetaData& metadata) {
+                const auto leaf = metadata.schema.back();
+                metadata.schema.clear();
+                for (ui32 level = 0; level < 41; ++level) {
+                    parquet::format::SchemaElement group;
+                    group.__set_name(level ? TStringBuilder() << "g" << level : TString("schema"));
+                    group.__set_num_children(1);
+                    metadata.schema.push_back(std::move(group));
+                }
+                metadata.schema.push_back(leaf);
+            });
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source);
+
+        UNIT_ASSERT_C(outcome.Error, "a schema nested too deep was taken");
+        UNIT_ASSERT_STRING_CONTAINS(*outcome.Error, "Parquet schema is nested more than 32 levels deep");
+        UNIT_ASSERT(outcome.Rows.empty());
+    }
+
+    Y_UNIT_TEST(ParquetIgnoresANestedColumnTheTableDoesNotHave) {
+        // The depth limit is for crafted files: a file with a nested column
+        // next to the table's columns is within it, and the column is left
+        // alone like any other column the table does not have.
+        const TVector<TString> values = SomeValues("v", 4);
+        auto inner = arrow::StructArray::Make(
+            {MakeNumericArray<arrow::Int32Type>(arrow::int32(), {1, 2, 3, 4})}, {"b"}).ValueOrDie();
+        auto nested = arrow::StructArray::Make({inner}, {"a"}).ValueOrDie();
+        TVector<TString> keys;
+        for (size_t i = 0; i < values.size(); ++i) {
+            keys.push_back(TStringBuilder() << "k" << i);
+        }
+        const auto schema = arrow::schema({
+            arrow::field("key", arrow::utf8()),
+            arrow::field("value", arrow::utf8()),
+            arrow::field("nested", nested->type()),
+        });
+        const TString source = WriteParquetLikeExporter(
+            arrow::Table::Make(schema, {MakeStringArray(keys), MakeStringArray(values), nested}),
+            /*rowGroupSize=*/4);
+
+        const TEngineFixture fixture;
+        const auto outcome = ImportKeyValueParquet(fixture, source);
+
+        UNIT_ASSERT_C(!outcome.Error, outcome.Error.GetOrElse(""));
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Rows.size(), values.size());
+        for (size_t i = 0; i < values.size(); ++i) {
+            UNIT_ASSERT_C(outcome.Rows[i].second == MakeMaybe(values[i]), "row " << i);
+        }
     }
 
     Y_UNIT_TEST(ParquetPreservesCachedFooterAcrossRangeRetry) {

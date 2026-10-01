@@ -325,6 +325,28 @@ std::expected<TMaybe<TParquetFetchRange>, TString> TParquetSparseFile::TryParseF
     });
 }
 
+std::expected<ui64, TString> TParquetSparseFile::FooterMetadataLength() const {
+    const int64_t footerReadSize = GetFooterReadSize(FileSize);
+    if (footerReadSize < 0) {
+        return std::unexpected(TString("parquet file is too small"));
+    }
+
+    const ui64 footerOffset = FileSize - static_cast<ui64>(footerReadSize);
+    auto footerData = ReadBytes(footerOffset, static_cast<ui64>(footerReadSize));
+    if (!footerData) {
+        return std::unexpected(TString("parquet footer tail is not loaded"));
+    }
+
+    auto metadataLen = ParseFooterLength(
+        reinterpret_cast<const uint8_t*>(footerData->data()),
+        footerReadSize,
+        FileSize);
+    if (!metadataLen) {
+        return std::unexpected(std::move(metadataLen.error()));
+    }
+    return static_cast<ui64>(*metadataLen);
+}
+
 std::expected<TVector<TParquetFetchRange>, TString> TParquetSparseFile::PlanColumnChunkRanges(
     const std::shared_ptr<TParquetSparseFile>& owner) const
 {
@@ -354,28 +376,26 @@ std::expected<TVector<TParquetFetchRange>, TString> TParquetSparseFile::PlanColu
 
 std::expected<TVector<TVector<TParquetFetchRange>>, TString>
 TParquetSparseFile::PlanColumnChunkRangesByRowGroup(
-    const std::shared_ptr<TParquetSparseFile>& owner,
+    const parquet::FileMetaData& metadata,
     const std::vector<int>& columns) const
 {
     try {
-        auto source = MakeRandomAccessFile(owner);
-        const auto metadata = parquet::ReadMetaData(source);
         for (const int col : columns) {
-            if (col < 0 || col >= metadata->num_columns()) {
+            if (col < 0 || col >= metadata.num_columns()) {
                 return std::unexpected(TStringBuilder() << "parquet column " << col
-                    << " is outside a file with " << metadata->num_columns() << " columns");
+                    << " is outside a file with " << metadata.num_columns() << " columns");
             }
         }
 
         TVector<TVector<TParquetFetchRange>> outRanges;
-        outRanges.resize(metadata->num_row_groups());
+        outRanges.resize(metadata.num_row_groups());
 
-        for (int32_t row = 0; row < metadata->num_row_groups(); ++row) {
+        for (int32_t row = 0; row < metadata.num_row_groups(); ++row) {
             TVector<ReadRange> ranges;
             ranges.reserve(columns.size());
             for (const int col : columns) {
                 ranges.push_back(ComputeColumnChunkRange(
-                    metadata.get(),
+                    &metadata,
                     static_cast<int64_t>(FileSize),
                     row,
                     col));
@@ -449,6 +469,15 @@ TVector<TParquetFetchRange> TParquetSparseFile::SubtractLoaded(const TVector<Rea
     }
 
     return result;
+}
+
+ui64 EstimateParquetFooterMemory(const parquet::FileMetaData& metadata, ui64 footerBytes) {
+    const ui64 rowGroups = static_cast<ui64>(Max(metadata.num_row_groups(), 0));
+    const ui64 columns = static_cast<ui64>(Max(metadata.num_columns(), 0));
+    return footerBytes
+        + rowGroups * ParquetFooterBytesPerRowGroup
+        + rowGroups * columns * ParquetFooterBytesPerColumnChunk
+        + columns * ParquetFooterBytesPerColumn;
 }
 
 } // namespace NKikimr::NDataShard

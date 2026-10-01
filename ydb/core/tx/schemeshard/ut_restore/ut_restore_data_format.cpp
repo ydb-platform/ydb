@@ -1099,7 +1099,7 @@ Y_UNIT_TEST_SUITE(TImportFromS3DataFormatTests) {
                 ERestoreDataFormat::Parquet,
                 Ydb::StatusIds::CANCELLED,
                 /*enableParquetFeatureFlag=*/true,
-                "the limit is 81920 bytes (RestoreReadBufferSizeLimit)",
+                "bytes (RestoreReadBufferSizeLimit less what the footer takes)",
                 /*enableDirectPartImport=*/false,
                 // above the 64 KB of the file the footer is looked for in
                 /*readBufferSizeLimit=*/80_KB);

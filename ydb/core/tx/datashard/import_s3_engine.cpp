@@ -694,6 +694,7 @@ public:
         : ContentLength(settings.ContentLength)
         , ReadBatchSize(settings.ReadBatchSize)
         , BufferSizeLimit(settings.BufferSizeLimit)
+        , DataBufferLimit(settings.BufferSizeLimit)
         , ValidateChecksum(settings.ValidateChecksum)
         , Parser(std::move(parser))
     {
@@ -1056,6 +1057,7 @@ private:
     void ResetDownload() {
         Parser->ResetFile();
         SparseFile.reset();
+        DataBufferLimit = BufferSizeLimit;
         FetchQueue.clear();
         RowGroupRanges.clear();
         OutstandingRange.Clear();
@@ -1151,11 +1153,11 @@ private:
 
     std::expected<void, TString> CanReserveMore(ui64 length) const {
         const ui64 buffered = PendingBytes();
-        if (buffered >= BufferSizeLimit || length >= BufferSizeLimit - buffered) {
+        if (buffered >= DataBufferLimit || length >= DataBufferLimit - buffered) {
             TString error = TStringBuilder() << "reached buffer size limit"
                 << ": buffered=" << buffered
                 << ", requested=" << length
-                << ", limit=" << BufferSizeLimit;
+                << ", limit=" << DataBufferLimit;
             if (Phase == EPhase::RowGroupData || Phase == EPhase::ParseRowGroup ||
                 (Phase == EPhase::SequentialData && UseOnePassChecksum && !RowGroupRanges.empty())) {
                 error += TStringBuilder() << ", rowGroup=" << CurrentRowGroup;
@@ -1196,6 +1198,9 @@ private:
             if (!metadataRange) {
                 return std::unexpected(std::move(metadataRange.error()));
             }
+            if (auto result = CheckFooterSize(); !result) {
+                return result;
+            }
 
             if (*metadataRange) {
                 FooterSuffixStart = (**metadataRange).Offset;
@@ -1222,11 +1227,54 @@ private:
         return {};
     }
 
+    // The footer is parsed into many times its size (see
+    // EstimateParquetFooterMemory), so it is bounded on its own, by its length
+    // in the last bytes of the file, before it is downloaded.
+    ui64 FooterSizeLimit() const {
+        static constexpr ui64 FooterTailBytes = 64 * 1024; // what is read anyway, see FooterTailRange()
+        return Max(BufferSizeLimit / 8, FooterTailBytes);
+    }
+
+    std::expected<void, TString> CheckFooterSize() const {
+        auto length = SparseFile->FooterMetadataLength();
+        if (!length) {
+            return std::unexpected(std::move(length.error()));
+        }
+        if (*length > FooterSizeLimit()) {
+            return std::unexpected(TStringBuilder() << "Parquet footer is " << *length
+                << " bytes, the limit is " << FooterSizeLimit()
+                << " bytes (an eighth of RestoreReadBufferSizeLimit)");
+        }
+        return {};
+    }
+
     std::expected<void, TString> InitializeRowGroups() {
         if (auto result = Parser->OpenMetadata(SparseFile->MakeRandomAccessFile(SparseFile)); !result) {
             return result;
         }
-        auto ranges = SparseFile->PlanColumnChunkRangesByRowGroup(SparseFile, Parser->GetColumnIndices());
+        const auto metadata = Parser->GetFileMetadata();
+        if (!metadata) {
+            Parser->ResetFile();
+            return std::unexpected("Parquet metadata is not open");
+        }
+
+        // The parsed footer stays for the whole import, so it is counted
+        // against the buffer: the row groups get what is left of it.
+        auto footerLength = SparseFile->FooterMetadataLength();
+        if (!footerLength) {
+            Parser->ResetFile();
+            return std::unexpected(std::move(footerLength.error()));
+        }
+        const ui64 footerMemory = EstimateParquetFooterMemory(*metadata, *footerLength);
+        if (footerMemory >= BufferSizeLimit) {
+            Parser->ResetFile();
+            return std::unexpected(TStringBuilder() << "Parquet footer takes about " << footerMemory
+                << " bytes in memory, the limit is " << BufferSizeLimit
+                << " bytes (RestoreReadBufferSizeLimit)");
+        }
+        DataBufferLimit = BufferSizeLimit - footerMemory;
+
+        auto ranges = SparseFile->PlanColumnChunkRangesByRowGroup(*metadata, Parser->GetColumnIndices());
         if (!ranges) {
             Parser->ResetFile();
             return std::unexpected(std::move(ranges.error()));
@@ -1278,7 +1326,7 @@ private:
     // memory the decoding takes at a time is limited by the parser.
     TString RowGroupIsTooBig(ui32 rowGroup, const TString& size) const {
         return TStringBuilder() << "Parquet row group " << rowGroup << " takes " << size
-            << ", the limit is " << BufferSizeLimit << " bytes (RestoreReadBufferSizeLimit)";
+            << ", the limit is " << DataBufferLimit << " bytes (RestoreReadBufferSizeLimit less what the footer takes)";
     }
 
     std::expected<void, TString> CheckRowGroupSizes() const {
@@ -1293,13 +1341,13 @@ private:
             for (const auto& range : RowGroupRanges[rowGroup]) {
                 fileBytes = SumWithSaturation(fileBytes, range.Length);
             }
-            if (fileBytes >= BufferSizeLimit) {
+            if (fileBytes >= DataBufferLimit) {
                 return std::unexpected(RowGroupIsTooBig(rowGroup,
                     TStringBuilder() << fileBytes << " bytes in the file"));
             }
 
             const ui64 uncompressedBytes = rowGroups[rowGroup].UncompressedBytes;
-            if (uncompressedBytes >= BufferSizeLimit) {
+            if (uncompressedBytes >= DataBufferLimit) {
                 return std::unexpected(RowGroupIsTooBig(rowGroup,
                     TStringBuilder() << uncompressedBytes << " bytes when uncompressed"));
             }
@@ -1389,7 +1437,7 @@ private:
             const ui64 peakBytes = SumWithSaturation(
                 SumWithSaturation(suffixBytes, prefixBytes),
                 pendingReadBytes);
-            if (peakBytes >= BufferSizeLimit) {
+            if (peakBytes >= DataBufferLimit) {
                 return false;
             }
         }
@@ -1530,6 +1578,7 @@ private:
     const ui64 ContentLength;
     const ui32 ReadBatchSize;
     const ui64 BufferSizeLimit;
+    ui64 DataBufferLimit; // BufferSizeLimit less what the parsed footer takes
     const bool ValidateChecksum;
     IParquetStreamParser::TPtr Parser;
     std::shared_ptr<TParquetSparseFile> SparseFile;

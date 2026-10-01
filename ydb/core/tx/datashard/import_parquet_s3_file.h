@@ -11,6 +11,10 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
+namespace parquet {
+class FileMetaData;
+}
+
 namespace NKikimr::NDataShard {
 
 struct TParquetFetchRange {
@@ -47,13 +51,17 @@ public:
 
     std::expected<TMaybe<TParquetFetchRange>, TString> TryParseFooterMetadataRange() const;
 
+    // The length of the footer, by the last bytes of the file. They must be
+    // loaded.
+    std::expected<ui64, TString> FooterMetadataLength() const;
+
     std::expected<TVector<TParquetFetchRange>, TString> PlanColumnChunkRanges(
         const std::shared_ptr<TParquetSparseFile>& owner) const;
 
     // The ranges of the file that hold the given columns, for every row group.
     // The other columns are not read, so they are not downloaded either.
     std::expected<TVector<TVector<TParquetFetchRange>>, TString> PlanColumnChunkRangesByRowGroup(
-        const std::shared_ptr<TParquetSparseFile>& owner,
+        const parquet::FileMetaData& metadata,
         const std::vector<int>& columns) const;
 
     void Clear();
@@ -87,6 +95,18 @@ private:
     ui64 BufferedBytes_ = 0;
     TVector<TSegment> Segments;
 };
+
+// What a parsed footer takes in memory, by estimate. Arrow keeps it as thrift
+// structures: one per column chunk, one per row group and one per column, a
+// few hundred bytes each (sizeof is 560, 96 and 320 in this Arrow, before the
+// vectors they hold), while a column chunk takes as little as 3 bytes in the
+// footer. The strings they hold are copies of what is in the footer, so its
+// own size covers them.
+constexpr ui64 ParquetFooterBytesPerColumnChunk = 640;
+constexpr ui64 ParquetFooterBytesPerRowGroup = 128;
+constexpr ui64 ParquetFooterBytesPerColumn = 384;
+
+ui64 EstimateParquetFooterMemory(const parquet::FileMetaData& metadata, ui64 footerBytes);
 
 } // namespace NKikimr::NDataShard
 

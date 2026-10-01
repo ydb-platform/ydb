@@ -6,9 +6,9 @@
 namespace NYql::NDq {
 
 void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
-    const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
+    TYdbRemoteDriverFactory driverFactory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
     factory.RegisterSource<NYdbRemote::TSource>("YdbRemote",
-        [driver, tlsDriver, credentialsFactory = std::move(credentialsFactory)](
+        [driverFactory = std::move(driverFactory), credentialsFactory = std::move(credentialsFactory)](
             NYdbRemote::TSource&& source, IDqAsyncIoFactory::TSourceArguments&& args) {
             NYdbRemote::ValidateSource(source);
             YQL_ENSURE(args.ReadRanges.size() <= 1, "YdbRemote version 1 supports a single split");
@@ -30,10 +30,11 @@ void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
                     ythrow yexception() << "YdbRemote credentials could not be initialized";
                 }
             }
-            auto client = std::make_shared<NYdb::NQuery::TQueryClient>(source.GetUseTls() ? tlsDriver : driver, clientSettings);
+            auto client = std::make_shared<NYdb::NQuery::TQueryClient>(driverFactory(source.GetUseTls()), clientSettings);
             NNative::TReadActorSettings settings;
             settings.Timeout = TDuration::MilliSeconds(source.GetReadTimeoutMs());
             settings.MaxBatchBytes = source.GetMaxBatchBytes();
+            settings.MaxRowBytes = NYdbRemote::MaxOutputRowBytes;
             settings.MaxRetries = source.GetMaxRetries();
             for (const auto& column : source.GetColumns()) {
                 settings.Columns.push_back(column.GetName());
@@ -43,6 +44,12 @@ void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
                     return NYdbRemote::CreateReadStream(client, source, context);
                 }, std::move(settings), std::move(args));
         });
+}
+
+void RegisterYdbRemoteReadActorFactory(TDqAsyncIoFactory& factory,
+    const NYdb::TDriver& driver, const NYdb::TDriver& tlsDriver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory) {
+    RegisterYdbRemoteReadActorFactory(factory,
+        [driver, tlsDriver](bool useTls) { return useTls ? tlsDriver : driver; }, std::move(credentialsFactory));
 }
 
 } // namespace NYql::NDq

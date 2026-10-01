@@ -1,6 +1,7 @@
 #include <ydb/library/yql/providers/ydb_remote/actors/read_stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>
+#include <yql/essentials/public/udf/arrow/util.h>
 #include <arrow/api.h>
 #include <arrow/ipc/writer.h>
 #include <arrow/ipc/metadata_internal.h>
@@ -103,10 +104,113 @@ Y_UNIT_TEST_SUITE(YdbRemoteReadStream) {
             {{1, 0, 0}}, {{0, 0}, {0, 8}}, arrow::ipc::IpcWriteOptions::Defaults(), &metadata).ok());
         auto result = RawResult(arrow::schema({arrow::field("value", arrow::uint64())}), metadata, std::string(4096, '\0'));
         auto decoded = DecodeArrowResult(result, Source(), 8192);
-        const auto& buffer = decoded->column_data(0)->buffers[1];
+        auto output = TakeOutputBatch(*decoded, 0, 1024, MaxOutputRowBytes);
+        decoded.reset();
+        const auto& buffer = output->column_data(0)->buffers[1];
         UNIT_ASSERT(!buffer->parent());
         UNIT_ASSERT_VALUES_EQUAL(buffer->size(), buffer->capacity());
         UNIT_ASSERT(buffer->size() < 4096);
+    }
+
+    Y_UNIT_TEST(SplitsByOwnedBytesAndPreservesOffsetsAndNulls) {
+        arrow::StringBuilder strings;
+        arrow::UInt64Builder integers;
+        arrow::UInt8Builder flags;
+        for (ui64 row = 0; row < 97; ++row) {
+            UNIT_ASSERT(integers.Append(row).ok());
+            if (row % 7 == 0) {
+                UNIT_ASSERT(strings.AppendNull().ok());
+                UNIT_ASSERT(flags.AppendNull().ok());
+            } else {
+                UNIT_ASSERT(strings.Append(std::string(37 * (row % 19), 'a' + row % 26)).ok());
+                UNIT_ASSERT(flags.Append(row % 2).ok());
+            }
+        }
+        auto batch = arrow::RecordBatch::Make(arrow::schema({
+            arrow::field("value", arrow::utf8()), arrow::field("key", arrow::uint64()),
+            arrow::field("flag", arrow::uint8())}), 97,
+            {strings.Finish().ValueOrDie(), integers.Finish().ValueOrDie(), flags.Finish().ValueOrDie()});
+        batch = batch->Slice(3, 90); // Exercise input offsets and non-byte-aligned bitmaps.
+        ui64 blocks = 0;
+        int64_t offset = 0;
+        while (offset < batch->num_rows()) {
+            auto output = TakeOutputBatch(*batch, offset, 2048, MaxOutputRowBytes);
+            UNIT_ASSERT(output->ValidateFull().ok());
+            UNIT_ASSERT(output->num_rows() > 0);
+            UNIT_ASSERT(NUdf::GetSizeOfArrowBatchInBytes(*output) <= 2048);
+            for (const auto& column : output->columns()) {
+                UNIT_ASSERT_VALUES_EQUAL(column->offset(), 0);
+                for (const auto& buffer : column->data()->buffers) {
+                    if (buffer) {
+                        UNIT_ASSERT(!buffer->parent());
+                        UNIT_ASSERT_VALUES_EQUAL(buffer->size(), buffer->capacity());
+                    }
+                }
+            }
+            const auto& values = static_cast<const arrow::StringArray&>(*output->column(0));
+            const auto& keys = static_cast<const arrow::UInt64Array&>(*output->column(1));
+            const auto& bools = static_cast<const arrow::UInt8Array&>(*output->column(2));
+            for (int64_t row = 0; row < output->num_rows(); ++row) {
+                const ui64 expected = offset + row + 3;
+                UNIT_ASSERT_VALUES_EQUAL(keys.Value(row), expected);
+                UNIT_ASSERT_VALUES_EQUAL(values.IsNull(row), expected % 7 == 0);
+                UNIT_ASSERT_VALUES_EQUAL(bools.IsNull(row), expected % 7 == 0);
+                if (!values.IsNull(row)) {
+                    UNIT_ASSERT_VALUES_EQUAL(values.GetString(row), std::string(37 * (expected % 19), 'a' + expected % 26));
+                    UNIT_ASSERT_VALUES_EQUAL(bools.Value(row), expected % 2);
+                }
+            }
+            offset += output->num_rows();
+            ++blocks;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(offset, 90);
+        UNIT_ASSERT(blocks > 1);
+    }
+
+    Y_UNIT_TEST(LargeRowUsesOwnBlockAndDoesNotRetainFollowingRows) {
+        arrow::StringBuilder builder;
+        const std::string value(2 * 1024 * 1024, 'x');
+        UNIT_ASSERT(builder.Append(value).ok());
+        UNIT_ASSERT(builder.AppendNull().ok());
+        UNIT_ASSERT(builder.Append("tail").ok());
+        auto decoded = DecodeArrowResult(Result(builder.Finish().ValueOrDie()), Source(Ydb::Type::UTF8, true), MaxDecodedPartBytes);
+        std::weak_ptr<arrow::Buffer> inputBuffer = decoded->column_data(0)->buffers[2];
+        auto first = TakeOutputBatch(*decoded, 0, 1024 * 1024, MaxOutputRowBytes);
+        UNIT_ASSERT_VALUES_EQUAL(first->num_rows(), 1);
+        UNIT_ASSERT(NUdf::GetSizeOfArrowBatchInBytes(*first) > 1024 * 1024);
+        auto tail = TakeOutputBatch(*decoded, 1, 1024 * 1024, MaxOutputRowBytes);
+        UNIT_ASSERT_VALUES_EQUAL(tail->num_rows(), 2);
+        decoded.reset();
+        UNIT_ASSERT(inputBuffer.expired());
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<const arrow::StringArray&>(*first->column(0)).GetString(0), value);
+        const auto& values = static_cast<const arrow::StringArray&>(*tail->column(0));
+        UNIT_ASSERT(values.IsNull(0));
+        UNIT_ASSERT_VALUES_EQUAL(values.GetString(1), "tail");
+    }
+
+    Y_UNIT_TEST(SingleRowLimitIncludesPaddingOffsetsAndAccounting) {
+        arrow::StringBuilder builder;
+        UNIT_ASSERT(builder.Append(std::string(4096, 'x')).ok());
+        auto decoded = DecodeArrowResult(Result(builder.Finish().ValueOrDie()), Source(Ydb::Type::UTF8), MaxDecodedPartBytes);
+        auto output = TakeOutputBatch(*decoded, 0, 1024, MaxOutputRowBytes);
+        const auto bytes = NUdf::GetSizeOfArrowBatchInBytes(*output);
+        UNIT_ASSERT(bytes > 4096);
+        UNIT_ASSERT(TakeOutputBatch(*decoded, 0, 1024, bytes));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TakeOutputBatch(*decoded, 0, 1024, bytes - 1), yexception, "single output row");
+    }
+
+    Y_UNIT_TEST(RejectsAliasedFixedWidthBuffersBeforeOutputCopy) {
+        auto source = Source();
+        auto* second = source.AddColumns();
+        *second = source.GetColumns(0);
+        second->SetName("other");
+        std::shared_ptr<arrow::Buffer> metadata;
+        UNIT_ASSERT(arrow::ipc::internal::WriteRecordBatchMessage(512, 4096, nullptr,
+            {{512, 0, 0}, {512, 0, 0}}, {{0, 0}, {0, 4096}, {0, 0}, {0, 4096}},
+            arrow::ipc::IpcWriteOptions::Defaults(), &metadata).ok());
+        auto result = RawResult(arrow::schema({arrow::field("value", arrow::uint64()),
+            arrow::field("other", arrow::uint64())}), metadata, std::string(4096, '\0'));
+        UNIT_ASSERT_EXCEPTION_CONTAINS(DecodeArrowResult(result, source, 5000), yexception, "decoded buffers");
     }
 
     Y_UNIT_TEST(RejectsWrongNamesTypesAndOversizedPayload) {

@@ -122,6 +122,57 @@ Y_UNIT_TEST_SUITE(KqpNativeYdb) {
         UNIT_ASSERT(!rows.TryNextRow());
     }
 
+    Y_UNIT_TEST(MultipleArrowPartsPreserveAggregateRowsAndBytes) {
+        TNativeYdbFixture fixture;
+        fixture.Scheme("CREATE TABLE `/Remote/many_rows` (Key Uint64 NOT NULL, Value String, PRIMARY KEY(Key));", true);
+        const auto populated = fixture.Remote.GetQueryClient().ExecuteQuery(R"(
+            $rows = ListMap(ListFromRange(0ul, 20000ul), ($key) -> (
+                AsStruct($key AS Key, ListConcat(ListReplicate("abcdefgh", 25)) AS Value)));
+            UPSERT INTO `/Remote/many_rows` SELECT * FROM AS_TABLE($rows);
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
+        // Several server chunks cross the soft 1 MiB threshold. All rows and
+        // bytes must survive local splitting before this consumer-side aggregate.
+        const auto result = fixture.Read(R"(
+            SELECT COUNT(*) AS Total, SUM(Key) AS Keys, SUM(LENGTH(Value)) AS Bytes
+            FROM remote_db.`many_rows`;
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 1);
+        UNIT_ASSERT(rows.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Total").GetUint64(), 20000);
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Keys").GetOptionalUint64().value(), 199990000);
+        UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Bytes").GetOptionalUint64().value(), 4000000);
+    }
+
+    Y_UNIT_TEST(SingleValuesOfTwoAndSixteenMiBAreReadable) {
+        TNativeYdbFixture fixture;
+        fixture.Scheme("CREATE TABLE `/Remote/large_rows` (Key Uint64 NOT NULL, Value String, PRIMARY KEY(Key));", true);
+        for (ui64 size : {2 * 1024 * 1024, 16 * 1024 * 1024}) {
+            auto params = TParamsBuilder().AddParam("$key").Uint64(size).Build()
+                .AddParam("$value").String(std::string(size, 'x')).Build().Build();
+            const auto populated = fixture.Remote.GetQueryClient().ExecuteQuery(R"(
+                DECLARE $key AS Uint64;
+                DECLARE $value AS String;
+                UPSERT INTO `/Remote/large_rows` (Key, Value) VALUES ($key, $value);
+            )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(populated.IsSuccess(), populated.GetIssues().ToString());
+        }
+        const auto result = fixture.Read(R"(
+            SELECT Key, CAST(LENGTH(Value) AS Uint64) AS Bytes FROM remote_db.`large_rows` ORDER BY Key;
+        )");
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        auto rows = result.GetResultSetParser(0);
+        UNIT_ASSERT_VALUES_EQUAL(rows.RowsCount(), 2);
+        for (ui64 size : {2 * 1024 * 1024, 16 * 1024 * 1024}) {
+            UNIT_ASSERT(rows.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Key").GetUint64(), size);
+            UNIT_ASSERT_VALUES_EQUAL(rows.ColumnParser("Bytes").GetOptionalUint64().value(), size);
+        }
+        UNIT_ASSERT(!rows.TryNextRow());
+    }
+
     Y_UNIT_TEST(FilterAndProjectionStayCorrectLocally) {
         TNativeYdbFixture fixture;
         fixture.Populate();

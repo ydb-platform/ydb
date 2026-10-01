@@ -20,6 +20,8 @@ message TSource {
     optional bool UseTls = 6;
     repeated TColumn Columns = 7;
     optional uint32 ReadTimeoutMs = 8 [default = 60000];
+    // Server chunk/output target; the provider separately bounds accepted
+    // response parts and permits one larger row within its explicit row limit.
     optional uint32 MaxBatchBytes = 9 [default = 1048576];
     optional uint32 MaxRetries = 10 [default = 2];
 }

@@ -20,6 +20,7 @@
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway_factory.h>
 #include <ydb/library/yql/providers/pq/transform/yql_pq_dq_transform.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
+#include <ydb/library/yql/providers/ydb_remote/common/read_limits.h>
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
 #include <ydb/public/sdk/cpp/adapters/executor/executor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -136,11 +137,7 @@ namespace {
     std::shared_ptr<NYdb::TDriver> MakeNativeYdbDriver() {
         NYdb::TDriverConfig config;
         config.SetDiscoveryMode(NYdb::EDiscoveryMode::Off);
-        config.SetMaxInboundMessageSize(8ULL << 20);
-        config.SetGrpcMemoryQuota(16ULL << 20);
-        // Keep response callback stacks serialized: a new read can be requested
-        // as soon as its predecessor's future is ready, before that callback exits.
-        config.SetNetworkThreadsNum(1);
+        config.SetMaxInboundMessageSize(NYql::NYdbRemote::MaxInboundMessageBytes);
         return MakeSharedYdbDriverWithStop(std::make_unique<NYdb::TDriver>(config));
     }
 

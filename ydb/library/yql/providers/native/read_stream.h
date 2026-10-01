@@ -20,6 +20,7 @@ struct TReadResult {
 };
 
 struct TReadContext : TOperationContext {
+    // Desired output block size; a stream may have a separate input-part limit.
     ui64 MaxBatchBytes = 0;
 };
 
@@ -36,7 +37,9 @@ using TReadStreamFactory = std::function<std::shared_ptr<IReadStream>(const TRea
 
 struct TReadActorSettings {
     TDuration Timeout;
+    // Multi-row output bound. A single row may use MaxRowBytes instead.
     ui64 MaxBatchBytes = 0;
+    ui64 MaxRowBytes = 0;
     ui32 MaxRetries = 0;
     TVector<TString> Columns;
 };

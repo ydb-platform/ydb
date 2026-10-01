@@ -122,8 +122,8 @@ public:
             auto value = HolderFactory_.CreateDirectArrayHolder(Settings_.Columns.size() + 1, items);
             for (size_t i = 0; i < ColumnPositions_.size(); ++i) {
                 // Output buffers belong to the task allocator so operators retaining
-                // many batches remain subject to their memory quota. The single
-                // prefetched SDK batch is size checked, but has no RM reservation.
+                // many batches remain subject to their memory quota. The
+                // buffered SDK part is size checked, but has no RM reservation.
                 items[ColumnPositions_[i]] = HolderFactory_.CreateArrowBlock(
                     arrow::Datum(arrow::MakeArray(CopyToTaskAllocator(batch.column_data(i)))), ValidationMode_);
             }
@@ -165,6 +165,9 @@ private:
     }
 
     void CloseOperation() {
+        if (IngressStats_.CurrentPauseTs) {
+            IngressStats_.Resume();
+        }
         Cancellation_.Cancel();
         DeadlineTimer_.Detach();
         RetryTimer_.Detach();
@@ -187,7 +190,7 @@ private:
     }
 
     // At most one outstanding Next and one ready batch. SDK parsing and the
-    // prefetched batch are not reserved against the resource manager in this stage.
+    // buffered input part are not reserved against the resource manager in this stage.
     void Pull() {
         if (!Demand_ || InFlight_ || Ready_ || RetryPending_ || Finished_ || Failed_ || Stopping_) {
             return;
@@ -201,6 +204,7 @@ private:
                 Stream_ = Factory_(Context_);
             }
             InFlight_ = true;
+            IngressStats_.TryPause();
             Stream_->Next().Subscribe([mailbox = Mailbox_](const auto& future) {
                 TReadResult result;
                 try {
@@ -221,6 +225,7 @@ private:
         if (Failed_ || Stopping_) {
             return;
         }
+        IngressStats_.Resume();
         auto result = std::move(ev->Get()->Result);
         if (result.Error) {
             Ready_.reset();
@@ -240,7 +245,9 @@ private:
             return;
         }
         if (result.Batch && result.Batch->num_rows()) {
-            if (result.Bytes > Settings_.MaxBatchBytes || result.Batch->num_columns() != static_cast<int>(Settings_.Columns.size())) {
+            const auto limit = result.Batch->num_rows() == 1
+                ? std::max(Settings_.MaxBatchBytes, Settings_.MaxRowBytes) : Settings_.MaxBatchBytes;
+            if (result.Bytes > limit || result.Batch->num_columns() != static_cast<int>(Settings_.Columns.size())) {
                 Fail("Native source returned a batch exceeding its contract");
                 return;
             }

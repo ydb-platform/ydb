@@ -4,6 +4,7 @@
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <arrow/api.h>
+#include <yql/essentials/public/udf/arrow/util.h>
 
 #include <atomic>
 #include <mutex>
@@ -69,13 +70,13 @@ private:
 };
 
 void Init(TFakeCASetup& setup, TReadStreamFactory factory,
-          TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false) {
+          TDuration timeout = TDuration::Seconds(30), bool pollBeforeBootstrap = false, ui64 maxRowBytes = 0) {
     setup.Execute([&](TFakeActor& actor) {
         NDqProto::TTaskInput input;
         THashMap<TString, TString> params;
         TVector<TString> ranges;
         auto [asyncInput, readActor] = CreateNativeReadActor(std::move(factory),
-            {.Timeout = timeout, .MaxBatchBytes = 1024, .MaxRetries = 2, .Columns = {"value"}},
+            {.Timeout = timeout, .MaxBatchBytes = 1024, .MaxRowBytes = maxRowBytes, .MaxRetries = 2, .Columns = {"value"}},
             IDqAsyncIoFactory::TSourceArguments{
                 .InputDesc = input,
                 .InputIndex = 0,
@@ -168,6 +169,46 @@ Y_UNIT_TEST_SUITE(NativeReadActor) {
         UNIT_ASSERT(first.Notification.Wait(WaitTimeout));
         UNIT_ASSERT(Pull(setup, 0).Finished);
         UNIT_ASSERT(!error.HasValue());
+    }
+
+    Y_UNIT_TEST(SingleOversizedRowUsesExplicitRowAllowance) {
+        TFakeCASetup setup;
+        auto stream = std::make_shared<TStream>();
+        Init(setup, [stream](const auto&) { return stream; }, TDuration::Seconds(30), false, 8192);
+        auto ready = Pull(setup, 1);
+        UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
+        arrow::BinaryBuilder builder;
+        UNIT_ASSERT(builder.Append(std::string(4096, 'x')).ok());
+        auto array = builder.Finish().ValueOrDie();
+        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::binary())}), 1, {array});
+        const auto bytes = NUdf::GetSizeOfArrowBatchInBytes(*batch);
+        UNIT_ASSERT(bytes > 1024 && bytes <= 8192);
+        stream->Resolve({.Batch = std::move(batch), .Bytes = bytes});
+        UNIT_ASSERT(ready.Notification.Wait(WaitTimeout));
+        const auto delivered = Pull(setup, 1);
+        UNIT_ASSERT_VALUES_EQUAL(delivered.Rows, 1);
+        UNIT_ASSERT_VALUES_EQUAL(delivered.Bytes, bytes);
+        UNIT_ASSERT_VALUES_EQUAL(stream->Calls.load(), 1); // Backpressure still applies.
+    }
+
+    Y_UNIT_TEST(RowAllowanceCannotAdmitOversizedMultiRowBatch) {
+        TFakeCASetup setup;
+        auto stream = std::make_shared<TStream>();
+        auto error = setup.AsyncInputPromises->FatalError.GetFuture();
+        Init(setup, [stream](const auto&) { return stream; }, TDuration::Seconds(30), false, 8192);
+        Pull(setup, 1);
+        UNIT_ASSERT(stream->Started.GetFuture().Wait(WaitTimeout));
+        arrow::BinaryBuilder builder;
+        UNIT_ASSERT(builder.Append(std::string(2000, 'x')).ok());
+        UNIT_ASSERT(builder.Append(std::string(2000, 'y')).ok());
+        auto array = builder.Finish().ValueOrDie();
+        auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("value", arrow::binary())}), 2, {array});
+        const auto bytes = NUdf::GetSizeOfArrowBatchInBytes(*batch);
+        UNIT_ASSERT(bytes > 1024 && bytes <= 8192);
+        stream->Resolve({.Batch = std::move(batch), .Bytes = bytes});
+        UNIT_ASSERT(error.Wait(WaitTimeout));
+        UNIT_ASSERT_STRING_CONTAINS(error.GetValue().ToString(), "exceeding its contract");
+        UNIT_ASSERT(stream->Cancelled.load());
     }
 
     Y_UNIT_TEST(CancellationBeforeDemandDoesNotStartRemoteOperation) {

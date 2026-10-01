@@ -10,9 +10,11 @@
 #include <arrow/ipc/reader.h>
 #include <arrow/ipc/dictionary.h>
 #include <arrow/ipc/metadata_internal.h>
+#include <arrow/util/bitmap_ops.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 #include <mutex>
 #include <cstring>
 #include <optional>
@@ -70,9 +72,36 @@ T Checked(arrow::Result<T> result) {
     return std::move(result).ValueOrDie();
 }
 
+// TResultSet copies share the immutable SDK implementation. Keep it alive while
+// Arrow views the IPC body; output compaction copies only rows actually delivered.
+class TResultBuffer final : public arrow::Buffer {
+public:
+    TResultBuffer(const std::string& bytes, const NYdb::TResultSet& owner)
+        : arrow::Buffer(reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size())
+        , Owner_(owner) {}
+private:
+    NYdb::TResultSet Owner_;
+};
+
+class TResponseError : public yexception {};
+class TResponseLimitError : public TResponseError {};
+
+void CheckResponse(bool accepted, const char* category) {
+    if (!accepted) {
+        ythrow TResponseError() << "YdbRemote response validation failed: " << category;
+    }
+}
+
+void CheckLimit(bool accepted, const char* category, ui64 limit) {
+    if (!accepted) {
+        ythrow TResponseLimitError() << "YdbRemote response limit exceeded: " << category
+            << " (limit " << limit << " bytes)";
+    }
+}
+
 // Arrow Message::Open copies custom metadata into std::strings. Check the raw
 // Flatbuffer first: repeated offsets can expand a small wire message arbitrarily.
-std::unique_ptr<arrow::ipc::Message> ReadIpcMessage(const std::string& bytes) {
+std::unique_ptr<arrow::ipc::Message> ReadIpcMessage(const std::string& bytes, const NYdb::TResultSet& owner) {
     YQL_ENSURE(bytes.size() >= 8, "YdbRemote incomplete Arrow IPC message");
     auto word = [&](size_t offset) {
         const auto* p = reinterpret_cast<const ui8*>(bytes.data() + offset);
@@ -95,17 +124,18 @@ std::unique_ptr<arrow::ipc::Message> ReadIpcMessage(const std::string& bytes) {
     YQL_ENSURE(flatMessage->bodyLength() >= 0 &&
                static_cast<ui64>(flatMessage->bodyLength()) <= bytes.size() - bodyOffset,
                "YdbRemote invalid Arrow IPC body size");
-    auto buffer = arrow::Buffer::FromString(bytes);
+    auto buffer = std::make_shared<TResultBuffer>(bytes, owner);
     return Checked(arrow::ipc::Message::Open(arrow::SliceBuffer(buffer, offset, metadataSize),
         arrow::SliceBuffer(buffer, bodyOffset, flatMessage->bodyLength())));
 }
 
 bool IsRetryable(NYdb::EStatus status) {
+    // Baseline SDK does not distinguish message-size rejection from other
+    // RESOURCE_EXHAUSTED causes. Retrying can repeat the same oversized result.
     switch (status) {
         case NYdb::EStatus::ABORTED:
         case NYdb::EStatus::UNAVAILABLE:
         case NYdb::EStatus::OVERLOADED:
-        case NYdb::EStatus::CLIENT_RESOURCE_EXHAUSTED:
         case NYdb::EStatus::TRANSPORT_UNAVAILABLE:
             return true;
         default:
@@ -115,8 +145,12 @@ bool IsRetryable(NYdb::EStatus status) {
 
 NNative::TReadResult Error(const NYdb::TStatus& status) {
     // Do not propagate server issues: they can contain query text or authentication data.
-    return {.Error = TStringBuilder() << "YdbRemote query failed with status " << static_cast<size_t>(status.GetStatus()),
-            .Retryable = IsRetryable(status.GetStatus())};
+    TStringBuilder message;
+    message << "YdbRemote query failed with status " << ToString(status.GetStatus());
+    if (status.GetStatus() == NYdb::EStatus::BAD_REQUEST || status.GetStatus() == NYdb::EStatus::UNSUPPORTED) {
+        message << "; verify the source schema and remote Query Service support for Arrow results";
+    }
+    return {.Error = message, .Retryable = IsRetryable(status.GetStatus())};
 }
 
 class TYdbReadStream final : public NNative::IReadStream, public std::enable_shared_from_this<TYdbReadStream> {
@@ -142,6 +176,8 @@ public:
     NThreading::TFuture<NNative::TReadResult> Next() override {
         auto promise = NThreading::NewPromise<NNative::TReadResult>();
         std::shared_ptr<NYdb::NQuery::TExecuteQueryIterator> iterator;
+        std::shared_ptr<arrow::RecordBatch> buffered;
+        int64_t offset = 0;
         {
             std::lock_guard lock(Mutex_);
             if (Cancelled_ || Context_.Cancellation.IsCancellationRequested()) {
@@ -158,9 +194,13 @@ public:
             }
             Pending_ = promise;
             iterator = Iterator_;
+            buffered = Buffered_;
+            offset = BufferedOffset_;
         }
         try {
-            if (iterator) {
+            if (buffered) {
+                Deliver(std::move(buffered), offset, promise);
+            } else if (iterator) {
                 Read(iterator, promise);
             } else {
                 const auto now = TInstant::Now();
@@ -212,6 +252,8 @@ public:
                     }
                 });
             }
+        } catch (const TResponseError& error) {
+            Complete(promise, {.Error = error.what()});
         } catch (...) {
             Complete(promise, {.Error = "YdbRemote could not start the query read"});
         }
@@ -226,6 +268,8 @@ public:
             Cancelled_ = true;
             pending = std::exchange(Pending_, {});
             iterator = std::move(Iterator_);
+            Buffered_.reset();
+            BufferedOffset_ = 0;
         }
         if (pending) {
             pending->TrySetValue({.Error = "YdbRemote read cancelled"});
@@ -236,6 +280,21 @@ public:
     }
 
 private:
+    void Deliver(std::shared_ptr<arrow::RecordBatch> batch, int64_t offset,
+                 NThreading::TPromise<NNative::TReadResult> promise) {
+        auto output = TakeOutputBatch(*batch, offset, Context_.MaxBatchBytes, MaxOutputRowBytes);
+        offset += output->num_rows();
+        {
+            std::lock_guard lock(Mutex_);
+            if (!Cancelled_ && !Context_.Cancellation.IsCancellationRequested()) {
+                Buffered_ = offset < batch->num_rows() ? std::move(batch) : nullptr;
+                BufferedOffset_ = offset;
+            }
+        }
+        const ui64 bytes = NUdf::GetSizeOfArrowBatchInBytes(*output);
+        Complete(promise, {.Batch = std::move(output), .Bytes = bytes});
+    }
+
     void Complete(NThreading::TPromise<NNative::TReadResult> promise, NNative::TReadResult result) {
         {
             std::lock_guard lock(Mutex_);
@@ -272,14 +331,15 @@ private:
                     self->Complete(promise, Error(part));
                 } else if (part.HasResultSet()) {
                     YQL_ENSURE(part.GetResultSetIndex() == 0, "YdbRemote unexpected result set");
-                    auto batch = DecodeArrowResult(part.GetResultSet(), self->Source_, self->Context_.MaxBatchBytes);
-                    const ui64 bytes = NUdf::GetSizeOfArrowBatchInBytes(*batch);
-                    self->Complete(promise, {.Batch = std::move(batch), .Bytes = bytes});
+                    auto batch = DecodeArrowResult(part.GetResultSet(), self->Source_, MaxDecodedPartBytes);
+                    self->Deliver(std::move(batch), 0, promise);
                 } else {
                     self->Complete(promise, {});
                 }
+            } catch (const TResponseError& error) {
+                self->Complete(promise, {.Error = error.what()});
             } catch (...) {
-                self->Complete(promise, {.Error = "YdbRemote invalid, unsupported or oversized response"});
+                self->Complete(promise, {.Error = "YdbRemote Arrow validation failed: malformed or unsupported response"});
             }
         });
     }
@@ -291,6 +351,10 @@ private:
     bool Cancelled_ = false;
     std::optional<NThreading::TPromise<NNative::TReadResult>> Pending_;
     std::shared_ptr<NYdb::NQuery::TExecuteQueryIterator> Iterator_;
+    // Retain one validated part while the consumer pulls compact output blocks.
+    // No further SDK ReadNext is issued until all of its rows have been consumed.
+    std::shared_ptr<arrow::RecordBatch> Buffered_;
+    int64_t BufferedOffset_ = 0;
 };
 
 } // namespace
@@ -300,7 +364,7 @@ void ValidateSource(const TSource& source) {
     YQL_ENSURE(!source.GetEndpoint().empty() && !source.GetDatabase().empty(), "YdbRemote endpoint and database are required");
     YQL_ENSURE(source.GetReadTimeoutMs() && source.GetReadTimeoutMs() <= 3600000, "YdbRemote invalid read timeout");
     YQL_ENSURE(source.GetMaxBatchBytes() >= 1024 && source.GetMaxBatchBytes() <= 1024 * 1024,
-               "YdbRemote invalid batch memory limit");
+               "YdbRemote invalid output batch target");
     YQL_ENSURE(source.GetMaxRetries() <= 5, "YdbRemote invalid retry limit");
     YQL_ENSURE(source.ColumnsSize() && source.ColumnsSize() <= MaxColumns, "YdbRemote invalid column count");
     THashSet<TString> names;
@@ -331,21 +395,24 @@ TString BuildReadQuery(const TSource& source) {
 }
 
 std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& result,
-    const TSource& source, ui64 maxBatchBytes) {
+    const TSource& source, ui64 maxDecodedBytes) {
     YQL_ENSURE(!result.Truncated(), "YdbRemote returned a truncated result");
-    YQL_ENSURE(NYdb::TArrowAccessor::Format(result) == NYdb::TResultSet::EFormat::Arrow,
-               "YdbRemote requires the Arrow query result format");
+    CheckResponse(NYdb::TArrowAccessor::Format(result) == NYdb::TResultSet::EFormat::Arrow,
+                  "remote Query Service did not return the required Arrow format");
     const auto& schemaBytes = NYdb::TArrowAccessor::GetArrowSchema(result);
     const auto& chunks = NYdb::TArrowAccessor::GetArrowBatches(result);
     YQL_ENSURE(schemaBytes.size() <= MaxSchemaBytes && !schemaBytes.empty(), "YdbRemote invalid Arrow schema size");
-    YQL_ENSURE(chunks.size() <= 1 && (chunks.empty() || chunks.front().size() <= maxBatchBytes), "YdbRemote oversized Arrow part");
+    YQL_ENSURE(chunks.size() <= 1, "YdbRemote unexpected multiple Arrow chunks");
+    CheckLimit(chunks.empty() || chunks.front().size() <= maxDecodedBytes, "Arrow part", maxDecodedBytes);
 
     // Validate the flat schema before recursive Arrow schema decoding. No dictionaries,
-    // nested children or compression are accepted, so decoded memory cannot expand remotely.
-    auto schemaMessage = ReadIpcMessage(schemaBytes);
+    // nested children or compression are accepted. Aliases and Bool expansion are
+    // accounted separately below, before Arrow opens or converts the batch.
+    auto schemaMessage = ReadIpcMessage(schemaBytes, result);
     YQL_ENSURE(schemaMessage && schemaMessage->type() == arrow::ipc::MessageType::SCHEMA && schemaMessage->header(), "YdbRemote expected Arrow schema");
     const auto* flatSchema = static_cast<const arrow::flatbuf::Schema*>(schemaMessage->header());
-    YQL_ENSURE(flatSchema->fields() && flatSchema->fields()->size() == source.ColumnsSize(), "YdbRemote schema column count changed");
+    CheckResponse(flatSchema->fields() && flatSchema->fields()->size() == source.ColumnsSize(),
+                  "schema column count changed; recompile the query");
     YQL_ENSURE(!flatSchema->custom_metadata() || flatSchema->custom_metadata()->size() == 0,
                "YdbRemote Arrow schema custom metadata is unsupported");
     YQL_ENSURE(flatSchema->endianness() == arrow::flatbuf::Endianness::Little,
@@ -355,8 +422,8 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
         YQL_ENSURE(field, "YdbRemote missing Arrow schema field");
         YQL_ENSURE(!field->custom_metadata() || field->custom_metadata()->size() == 0,
                    "YdbRemote Arrow field custom metadata is unsupported");
-        YQL_ENSURE(field->name() && TStringBuf(field->name()->c_str(), field->name()->size()) ==
-                   source.GetColumns(fieldIndex++).GetName(), "YdbRemote result column name changed");
+        CheckResponse(field->name() && TStringBuf(field->name()->c_str(), field->name()->size()) ==
+                   source.GetColumns(fieldIndex++).GetName(), "schema column name changed; recompile the query");
         YQL_ENSURE(field->type(), "YdbRemote missing Arrow field type");
         switch (field->type_type()) {
             case arrow::flatbuf::Type::Int:
@@ -366,7 +433,7 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
             case arrow::flatbuf::Type::Bool:
                 break;
             default:
-                ythrow yexception() << "YdbRemote Arrow type is unsupported";
+                ythrow TResponseError() << "YdbRemote response validation failed: unsupported Arrow type";
         }
         YQL_ENSURE(!field->dictionary() && (!field->children() || field->children()->size() == 0), "YdbRemote nested Arrow types are unsupported");
     }
@@ -376,8 +443,8 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
         const auto& column = source.GetColumns(i);
         const bool compatibleType = schema->field(i)->type()->Equals(ArrowType(column.GetType())) ||
             (IsBool(column.GetType()) && schema->field(i)->type()->id() == arrow::Type::BOOL);
-        YQL_ENSURE(schema->field(i)->name() == column.GetName() && compatibleType,
-                   "YdbRemote result schema changed; recompile the query");
+        CheckResponse(schema->field(i)->name() == column.GetName() && compatibleType,
+                      "schema changed; recompile the query");
     }
 
     if (chunks.empty()) {
@@ -387,11 +454,11 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
         }
         return arrow::RecordBatch::Make(schema, 0, std::move(empty));
     }
-    auto message = ReadIpcMessage(chunks.front());
+    auto message = ReadIpcMessage(chunks.front(), result);
     YQL_ENSURE(message && message->type() == arrow::ipc::MessageType::RECORD_BATCH && message->header(), "YdbRemote expected an Arrow record batch");
     const auto* flatBatch = static_cast<const arrow::flatbuf::RecordBatch*>(message->header());
     YQL_ENSURE(!flatBatch->compression(), "YdbRemote compressed Arrow responses are unsupported");
-    YQL_ENSURE(flatBatch->length() >= 0 && static_cast<ui64>(flatBatch->length()) <= maxBatchBytes,
+    YQL_ENSURE(flatBatch->length() >= 0 && static_cast<ui64>(flatBatch->length()) <= maxDecodedBytes,
                "YdbRemote excessive Arrow batch row count");
     YQL_ENSURE(flatBatch->nodes() && flatBatch->nodes()->size() == source.ColumnsSize() &&
                flatBatch->buffers() && flatBatch->buffers()->size() <= MaxColumns * 3,
@@ -407,8 +474,7 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
                    buffer->length() <= message->body_length() - buffer->offset(),
                    "YdbRemote invalid Arrow buffer bounds");
         const ui64 alignedLength = (static_cast<ui64>(buffer->length()) + 63) & ~ui64(63);
-        YQL_ENSURE(alignedLength <= maxBatchBytes - allocationBudget,
-                   "YdbRemote Arrow buffers exceed the decoded memory limit");
+        CheckLimit(alignedLength <= maxDecodedBytes - allocationBudget, "decoded buffers", maxDecodedBytes);
         allocationBudget += alignedLength;
     }
     for (const auto& field : schema->fields()) {
@@ -417,8 +483,7 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
             // UInt8 replacement before any conversion can allocate its first column.
             const ui64 expanded = ((flatBatch->length() + 63) & ~ui64(63)) +
                                   (((flatBatch->length() + 7) / 8 + 63) & ~ui64(63));
-            YQL_ENSURE(expanded <= maxBatchBytes - allocationBudget,
-                       "YdbRemote Bool expansion exceeds the decoded memory limit");
+            CheckLimit(expanded <= maxDecodedBytes - allocationBudget, "Bool expansion", maxDecodedBytes);
             allocationBudget += expanded;
         }
     }
@@ -451,26 +516,106 @@ std::shared_ptr<arrow::RecordBatch> DecodeArrowResult(const NYdb::TResultSet& re
             columns[i] = Checked(builder.Finish());
             fields[i] = fields[i]->WithType(arrow::uint8());
         }
-        // DQ charges the visible buffer sizes, not the parent IPC blob. Detach every
-        // buffer so padding/unused wire data cannot remain alive after delivery.
-        auto compact = columns[i]->data()->Copy();
-        for (auto& buffer : compact->buffers) {
-            if (!buffer) {
-                continue;
-            }
-            const ui64 bytes = (static_cast<ui64>(buffer->size()) + 63) & ~ui64(63);
-            auto copy = Checked(arrow::AllocateBuffer(bytes));
-            if (buffer->size()) {
-                std::memcpy(copy->mutable_data(), buffer->data(), buffer->size());
-                std::memset(copy->mutable_data() + buffer->size(), 0, bytes - buffer->size());
-            }
-            buffer = std::move(copy);
-        }
-        columns[i] = arrow::MakeArray(std::move(compact));
     }
     auto output = arrow::RecordBatch::Make(arrow::schema(std::move(fields)), batch->num_rows(), std::move(columns));
-    YQL_ENSURE(NUdf::GetSizeOfArrowBatchInBytes(*output) <= maxBatchBytes, "YdbRemote decoded batch exceeds the memory limit");
+    CheckLimit(NUdf::GetSizeOfArrowBatchInBytes(*output) <= maxDecodedBytes, "decoded buffers", maxDecodedBytes);
     return output;
+}
+
+std::shared_ptr<arrow::RecordBatch> TakeOutputBatch(const arrow::RecordBatch& batch,
+    int64_t offset, ui64 targetBytes, ui64 maxRowBytes) {
+    YQL_ENSURE(offset >= 0 && offset <= batch.num_rows() && targetBytes && maxRowBytes,
+               "YdbRemote invalid output batch bounds");
+    if (offset == batch.num_rows()) {
+        return batch.Slice(offset, 0);
+    }
+    const auto aligned = [](ui64 bytes) { return (bytes + 63) & ~ui64(63); };
+    const auto isBinary = [](const arrow::Array& array) {
+        return array.type_id() == arrow::Type::BINARY || array.type_id() == arrow::Type::STRING;
+    };
+    // Count precisely the standalone buffers allocated below, including bitmap,
+    // offset and allocator padding. IPC part size and row count are not proxies
+    // for output size: variable-width rows can differ by many megabytes.
+    const auto outputSize = [&](int64_t rows) {
+        ui64 bytes = sizeof(batch) + batch.num_columns() * sizeof(void*);
+        for (const auto& column : batch.columns()) {
+            bytes += sizeof(arrow::ArrayData) + (isBinary(*column) ? 3 : 2) * sizeof(void*);
+            if (column->null_count()) {
+                bytes += aligned((rows + 7) / 8);
+            }
+            if (isBinary(*column)) {
+                const auto& binary = static_cast<const arrow::BinaryArray&>(*column);
+                bytes += aligned((rows + 1) * sizeof(int32_t));
+                bytes += aligned(binary.value_offset(offset + rows) - binary.value_offset(offset));
+            } else {
+                const auto& type = static_cast<const arrow::FixedWidthType&>(*column->type());
+                bytes += aligned(rows * (type.bit_width() / 8));
+            }
+        }
+        return bytes;
+    };
+    CheckLimit(outputSize(1) <= maxRowBytes, "single output row", maxRowBytes);
+    int64_t rows = 1;
+    if (outputSize(1) <= targetBytes) {
+        int64_t end = batch.num_rows() - offset;
+        while (rows < end) {
+            const auto middle = rows + (end - rows + 1) / 2;
+            if (outputSize(middle) <= targetBytes) {
+                rows = middle;
+            } else {
+                end = middle - 1;
+            }
+        }
+    }
+
+    const auto allocate = [&](ui64 bytes) -> std::shared_ptr<arrow::Buffer> {
+        auto buffer = Checked(arrow::AllocateBuffer(aligned(bytes)));
+        if (static_cast<ui64>(buffer->size()) > bytes) {
+            std::memset(buffer->mutable_data() + bytes, 0, buffer->size() - bytes);
+        }
+        return std::move(buffer);
+    };
+    const auto copy = [&](const uint8_t* data, ui64 bytes) {
+        auto buffer = allocate(bytes);
+        if (bytes) {
+            std::memcpy(buffer->mutable_data(), data, bytes);
+        }
+        return buffer;
+    };
+    std::vector<std::shared_ptr<arrow::Array>> columns;
+    columns.reserve(batch.num_columns());
+    for (const auto& column : batch.columns()) {
+        std::vector<std::shared_ptr<arrow::Buffer>> buffers;
+        if (column->null_count()) {
+            auto bitmap = allocate((rows + 7) / 8);
+            std::memset(bitmap->mutable_data(), 0, (rows + 7) / 8);
+            arrow::internal::CopyBitmap(column->null_bitmap_data(), column->offset() + offset,
+                rows, bitmap->mutable_data(), 0);
+            buffers.push_back(std::move(bitmap));
+        } else {
+            buffers.push_back(nullptr);
+        }
+        if (isBinary(*column)) {
+            const auto& binary = static_cast<const arrow::BinaryArray&>(*column);
+            const auto begin = binary.value_offset(offset);
+            const auto bytes = binary.value_offset(offset + rows) - begin;
+            auto offsets = allocate((rows + 1) * sizeof(int32_t));
+            auto* values = reinterpret_cast<int32_t*>(offsets->mutable_data());
+            for (int64_t row = 0; row <= rows; ++row) {
+                values[row] = binary.value_offset(offset + row) - begin;
+            }
+            buffers.push_back(std::move(offsets));
+            buffers.push_back(copy(bytes ? binary.raw_data() + begin : nullptr, bytes));
+        } else {
+            const auto& type = static_cast<const arrow::FixedWidthType&>(*column->type());
+            const auto width = type.bit_width() / 8;
+            buffers.push_back(copy(column->data()->buffers[1]->data() +
+                (column->offset() + offset) * width, rows * width));
+        }
+        columns.push_back(arrow::MakeArray(arrow::ArrayData::Make(column->type(), rows,
+            std::move(buffers), column->null_count() ? arrow::kUnknownNullCount : 0)));
+    }
+    return arrow::RecordBatch::Make(batch.schema(), rows, std::move(columns));
 }
 
 std::shared_ptr<NNative::IReadStream> CreateReadStream(std::shared_ptr<NYdb::NQuery::TQueryClient> client,

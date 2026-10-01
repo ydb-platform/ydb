@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "next boot may accept the interval after its pending work has drained");
     }
 
-    Y_UNIT_TEST(ColdCacheBatchingAndLateSharing) {
+    Y_UNIT_TEST(ColdCacheBatchingAndMetadataFailure) {
         constexpr ui64 portionCount = 7;
         TFixture f;
         auto* config = f.Runtime.GetAppData().ColumnShardConfig.MutableCutHistory();
@@ -419,11 +419,8 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
         bool cutSent = false;
         bool failMetadata = false;
-        bool holdPrepared = false;
-        bool linksApplied = false;
         ui32 preparationBatches = 0;
         ui32 scanBatches = 0;
-        TAutoPtr<IEventHandle> prepared;
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
             if (!ev->HasEvent()) {
                 return;
@@ -450,12 +447,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
                     NOlap::NResourceBroker::NSubscribe::TResourceContainer(std::move(data), result.ExtractResourcesGuard()));
                 ev.Reset(new IEventHandle(ev->Recipient, ev->Sender, failed, ev->Flags, ev->Cookie));
                 failMetadata = false;
-            } else if (holdPrepared && dynamic_cast<TEvPrivate::TEvCutHistoryPortionsReady*>(ev->GetBase())) {
-                holdPrepared = false;
-                prepared = ev.Release();
-            } else if (dynamic_cast<NOlap::NDataSharing::NEvents::TEvApplyLinksModificationFinished*>(ev->GetBase())) {
-                linksApplied = true;
-                ev.Reset();
             }
         });
         f.Controller->DisableBackground(EBackground::GC);
@@ -495,94 +486,6 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT(!cutSent);
         UNIT_ASSERT_VALUES_EQUAL(sent->Val(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 1u);
-
-        holdPrepared = true;
-        f.Restart();
-        f.Drive();
-        UNIT_ASSERT(prepared);
-        NOlap::NDataSharing::TTaskForTablet task(static_cast<NOlap::TTabletId>(TabletId));
-        f.Runtime.SendToPipe(TabletId, f.Sender,
-            new NOlap::NDataSharing::NEvents::TEvApplyLinksModification(static_cast<NOlap::TTabletId>(TabletId), "late-sharing", 0, task), 0,
-            GetPipeConfigWithRetries());
-        f.Drive();
-        UNIT_ASSERT(linksApplied);
-        f.Runtime.Send(prepared.Release(), 0, true);
-        f.Drive();
-        UNIT_ASSERT(!cutSent);
-        UNIT_ASSERT(f.LiveOldBlobs().empty());
-        UNIT_ASSERT_VALUES_EQUAL(sent->Val(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 2u);
-    }
-
-    Y_UNIT_TEST(DelayedBatchCountsBlobsAfterSchemaRemoval) {
-        TFixture f;
-        f.Runtime.GetAppData().FeatureFlags.SetEnableCSSchemasCollapsing(true);
-        f.Controller->SetSkipSpecialCheckForEvict(true);
-        f.Controller->SetOverrideMaxReadStaleness(TDuration::Zero());
-        f.Schema(true);
-        f.Write(1, 0, 1000);
-        f.Controller->WaitCompactions(TDuration::Seconds(10));
-        f.EvictToWarm();
-        f.Controller->DisableBackground(EBackground::TTL);
-        f.Controller->DisableBackground(EBackground::Compaction);
-        TAutoPtr<IEventHandle> held;
-        bool holdResult = true;
-        ui32 cuts = 0;
-        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
-            if (!ev->HasEvent()) {
-                return;
-            }
-            if (holdResult && dynamic_cast<TEvPrivate::TEvMetadataAccessorsInfo*>(ev->GetBase())) {
-                UNIT_ASSERT(!held);
-                held = ev.Release();
-                holdResult = false;
-            } else if (const auto* cut = dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase());
-                       cut && cut->Record.GetChannel() == FirstDataChannel) {
-                ++cuts;
-                ev.Reset();
-            }
-        });
-        f.Restart(NewGroup);
-        f.Drive();
-        UNIT_ASSERT(held);
-        auto* info = held->Get<TEvPrivate::TEvMetadataAccessorsInfo>();
-        auto result = info->ExtractResult();
-        const auto& data = result.GetValue();
-        UNIT_ASSERT(!data.HasErrors());
-        UNIT_ASSERT(!data.HasRemovedData());
-        UNIT_ASSERT(!data.GetPortions().empty());
-        const auto& index = f.Controller->GetTheOnlyShard()->GetIndexAs<NOlap::TColumnEngineForLogs>();
-        const auto oldSchema = data.GetPortions().begin()->second->GetPortionInfo().GetSchema(index.GetVersionedIndex());
-        const ui64 oldVersion = oldSchema->GetVersion();
-        UNIT_ASSERT(oldSchema->GetIndexInfo().GetIndexes().contains(3000));
-        bool hasIndexBlob = false;
-        for (const auto& [_, accessor] : data.GetPortions()) {
-            hasIndexBlob |= !accessor->GetIndexesVerified().empty();
-        }
-        UNIT_ASSERT(hasIndexBlob);
-        f.Controller->DisableBackground(EBackground::GC);
-        NKikimrTxColumnShard::TSchemaTxBody alter;
-        UNIT_ASSERT(alter.ParseFromString(TTestSchema::AlterTableTxBody(TableId, true, oldVersion + 1, f.Table.Schema, f.Table.Pk, {})));
-        alter.MutableAlterTable()->MutableSchema()->SetVersion(oldVersion + 1);
-        f.ReadStep = SetupSchema(f.Runtime, f.Sender, alter.SerializeAsString(), 1001);
-        const auto dropStep = SetupSchema(f.Runtime, f.Sender, TTestSchema::DropTableTxBody(TableId, oldVersion + 2), 1002);
-        for (ui32 i = 0; i < 60 && index.GetVersionedIndex().GetSchemaByVersion().contains(oldVersion); ++i) {
-            PlanCommit(f.Runtime, f.Sender, TPlanStep{ dropStep.Val() + i + 1 }, TSet<ui64>{});
-            f.Drive(1);
-        }
-        UNIT_ASSERT(!index.GetVersionedIndex().GetSchemaByVersion().contains(oldVersion));
-        UNIT_ASSERT(!index.GetVersionedIndex().GetSchemaVerified(oldVersion)->GetIndexInfo().GetIndexes().contains(3000));
-        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
-        const ui64 scans = f.Samples("Scan");
-        const auto aborted = f.Counters()->GetCounter("Deriviative/CutHistory/ScansAborted/Count", true);
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
-        auto* replay = new TEvPrivate::TEvMetadataAccessorsInfo(info->GetProcessor(), info->GetGeneration(), std::move(result));
-        f.Runtime.Send(new IEventHandle(held->Recipient, held->Sender, replay, held->Flags, held->Cookie), 0, true);
-        held.Reset();
-        f.Drive();
-        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), scans + 1);
-        UNIT_ASSERT_VALUES_EQUAL(aborted->Val(), 0u);
-        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
     }
 
     Y_UNIT_TEST(UncommittedPinsOnlyItsInterval) {

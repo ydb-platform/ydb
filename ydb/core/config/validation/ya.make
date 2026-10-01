@@ -13,6 +13,7 @@ SRCS(
 PEERDIR(
     ydb/core/blobstorage/base
     ydb/core/protos
+    ydb/core/path_aliasing
     ydb/core/formats/arrow/serializer
     ydb/core/tx/conveyor_composite/common
     library/cpp/protobuf/json

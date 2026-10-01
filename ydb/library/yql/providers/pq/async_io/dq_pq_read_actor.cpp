@@ -1095,8 +1095,7 @@ private:
                 Self.Send(Self.ComputeActorId, new TEvAsyncInputError(Self.InputIndex, TIssues({TIssue(message)}), NYql::NDqProto::StatusIds::SCHEME_ERROR));
                 return;
             }
-            // Do not confirm the end of a partition session. Its child partitions
-            // will be picked up after the streaming query restarts on a partition-count change.
+            event.Confirm();
         }
 
         void operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionStatusEvent& event) {

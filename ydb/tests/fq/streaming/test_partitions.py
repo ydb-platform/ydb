@@ -177,6 +177,12 @@ class TestStreamingPartitions(StreamingTestBase):
         for message_index, partition_id in enumerate(child_partition_ids):
             message = f"partition-{partition_id}-{message_index}"
             child_partition_messages.append(message)
+            logger.info(
+                "Writing to topic %s, partition ID=%d, message=%r",
+                input_topic,
+                partition_id,
+                message,
+            )
             topic_ydb_client.topic_write(
                 input_topic,
                 [message],

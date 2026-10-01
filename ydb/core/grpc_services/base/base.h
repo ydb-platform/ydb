@@ -1901,20 +1901,6 @@ public:
         , DatabaseAccessVerdict(databaseAccessVerdict)
     {}
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TAuditLogParts& auditLogParts)
-        : Status(status)
-        , AuditLogParts(auditLogParts)
-    {
-        Issues.AddIssue(issue);
-    }
-
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error, const TAuditLogParts& auditLogParts)
-        : Status(status)
-        , AuditLogParts(auditLogParts)
-    {
-        Issues.AddIssue(error);
-    }
-
     TEvRequestAuthAndCheckResult(
         const TString& database,
         const TMaybe<TString>& ydbToken,

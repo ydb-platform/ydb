@@ -288,13 +288,12 @@ public:
                         << ", user: " << TBase::GetUserSID()
                         << ", from ip: " << GrpcRequestBaseCtx_->GetPeerName());
                     if (enforceDatabaseAccess) {
-                        if (HttpDatabaseAccessVerdict_ == EHttpDatabaseAccessVerdict::NoConnectRight) {
-                            AuditLogConnectDbAccessDenied(
-                                GrpcRequestBaseCtx_,
-                                CheckedDatabaseName_,
-                                TBase::GetUserSID(),
-                                TBase::GetSanitizedToken());
-                        }
+                        AuditLogConnectDbAccessDenied(
+                            GrpcRequestBaseCtx_,
+                            CheckedDatabaseName_,
+                            TBase::GetUserSID(),
+                            TBase::GetSanitizedToken(),
+                            TStringBuilder() << "HTTP monitoring database access denied: " << ToString(HttpDatabaseAccessVerdict_));
                         // Actual HTTP denials never reach LogAuthorizedHttpRequest – count them here
                         Counters_->IncDatabaseHttpAccessDenyCounter();
                         Request_->Get()->DatabaseAccessVerdict = HttpDatabaseAccessVerdict_;
@@ -313,7 +312,12 @@ public:
         {
             auto [error, issue] = CheckConnectRight();
             if (error) {
-                AuditLogConnectDbAccessDenied(GrpcRequestBaseCtx_, CheckedDatabaseName_, TBase::GetUserSID(), TBase::GetSanitizedToken());
+                AuditLogConnectDbAccessDenied(
+                    GrpcRequestBaseCtx_,
+                    CheckedDatabaseName_,
+                    TBase::GetUserSID(),
+                    TBase::GetSanitizedToken(),
+                    issue->GetMessage());
                 ReplyUnauthorizedAndDie(*issue);
                 return;
             }
@@ -761,14 +765,12 @@ private:
             return {EConnectRightVerdict::Allowed, "user is an admin"};
         }
 
-        if constexpr (IsGrpcRequest) {
-            // The user-level connect right cannot limit node registration: registration is a
-            // cluster-wide system action (via the discovery service), not a per-database/tenant
-            // one. Requiring here the root database as a cluster alias would add no value and
-            // introduce technical issues.
-            if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
-                return {EConnectRightVerdict::Allowed, "user is a special subject for node registration"};
-            }
+        // The user-level connect right cannot limit node registration: registration is a
+        // cluster-wide system action (via the discovery service), not a per-database/tenant
+        // one. Requiring here the root database as a cluster alias would add no value and
+        // introduce technical issues.
+        if (IsTokenAllowed(parsedToken.Get(), AppData()->RegisterDynamicNodeAllowedSIDs)) {
+            return {EConnectRightVerdict::Allowed, "user is a special subject for node registration"};
         }
 
         if (!SecurityObject_->CheckAccess(NACLib::ConnectDatabase, *parsedToken)) {

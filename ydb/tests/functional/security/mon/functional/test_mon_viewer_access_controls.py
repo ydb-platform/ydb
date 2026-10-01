@@ -528,7 +528,7 @@ def test_viewer_tabletinfo_path_with_node_id_for_strict_database_token(
         _assert_status(base, allowed_path, 'database@builtin', 200)
 
 
-@pytest.fixture(params=[False, True], ids=['observe', 'enforce'])
+@pytest.fixture(scope='module', params=[False, True], ids=['observe', 'enforce'])
 def database_access_cluster(request, certificates):
     configurator = create_ydb_configurator(certificates, enforce_user_token_requirement=True)
     flags = configurator.yaml_config.setdefault('feature_flags', {})
@@ -537,6 +537,7 @@ def database_access_cluster(request, certificates):
     flags['check_database_access_permission'] = False
     security = configurator.yaml_config['domains_config']['security_config']
     security['database_allowed_sids'] = ['database_with_connect@builtin', 'database_without_connect@builtin']
+    security['register_dynamic_node_allowed_sids'] = ['root@builtin']
     security['default_access'] = [
         '+F:root@builtin',
         '+(DS|ConnDB):database_with_connect@builtin',

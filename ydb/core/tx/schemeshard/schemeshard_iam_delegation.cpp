@@ -150,7 +150,8 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvClaimIamDelegationRevocations::TPtr
     const TDuration lease = record.HasLeaseSeconds()
         ? TDuration::Seconds(ClampVal(record.GetLeaseSeconds(), MinClaimLease.Seconds(), MaxClaimLease.Seconds()))
         : DefaultClaimLease;
-    const ui64 claimId = ++NextIamDelegationClaimId;
+    AFL_ENSURE(NextIamDelegationClaimId < Max<ui32>())("tablet_id", TabletID());
+    const ui64 claimId = (Generation() << 32) | ++NextIamDelegationClaimId;
     auto result = MakeHolder<TEvSchemeShard::TEvClaimIamDelegationRevocationsResult>();
     result->Record.SetClaimId(claimId);
     for (const auto& [referrerId, revocation] : IamDelegationRevocations) {

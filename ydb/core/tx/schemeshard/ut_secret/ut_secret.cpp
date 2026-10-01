@@ -1,4 +1,5 @@
 #include <ydb/core/tx/schemeshard/schemeshard_iam_delegation.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <util/string/join.h>
 #include <util/string/split.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -1481,24 +1482,61 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         TestMkDir(t.Runtime, ++t.TxId, "/MyRoot", "dir2");
         t.Wait();
         t.CreateConfirmed("/MyRoot/dir2", "s2", "aje-sa-2", "b1g-cloud-1", "referrer-2");
-        const auto pathId = [&](const TString& path) { return DescribePath(t.Runtime, path).GetPathDescription().GetSelf().GetPathId(); };
+        const ui64 dir = DescribePath(t.Runtime, "/MyRoot/dir").GetPathDescription().GetSelf().GetPathId();
+        const ui64 dir2 = DescribePath(t.Runtime, "/MyRoot/dir2").GetPathDescription().GetSelf().GetPathId();
+
+        const auto blocksTx = [](ui64 txId) {
+            return [txId](const auto& ev) {
+                for (const auto& tx : ev->Get()->Record.GetTransactions()) {
+                    if (tx.GetTxId() == txId) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+        };
 
         const ui64 create = ++t.TxId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> createPlan(t.Runtime, blocksTx(create));
         AsyncCreateSecret(t.Runtime, create, "/MyRoot/dir", DelegationSecret("s1", "aje-sa-1", "b1g-cloud-1", "referrer-1"));
+        t.Runtime.WaitFor("blocked CREATE plan", [&] { return !createPlan.empty(); });
         const ui64 drop = ++t.TxId;
-        AsyncForceDropUnsafe(t.Runtime, drop, pathId("/MyRoot/dir"));
+        TestForceDropUnsafe(t.Runtime, drop, dir);
+        createPlan.Unblock().Stop();
         t.Env.TestWaitNotification(t.Runtime, {create, drop});
         TestLs(t.Runtime, "/MyRoot/dir", false, NLs::PathNotExist);
 
         const ui64 stage = ++t.TxId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> stagePlan(t.Runtime, blocksTx(stage));
         AsyncAlterSecret(t.Runtime, stage, "/MyRoot/dir2", StageSecret("s2", "aje-sa-3", "b1g-cloud-1", "referrer-3"));
+        t.Runtime.WaitFor("blocked STAGE plan", [&] { return !stagePlan.empty(); });
         const ui64 drop2 = ++t.TxId;
-        AsyncForceDropUnsafe(t.Runtime, drop2, pathId("/MyRoot/dir2"));
+        TestForceDropUnsafe(t.Runtime, drop2, dir2);
+        stagePlan.Unblock().Stop();
         t.Env.TestWaitNotification(t.Runtime, {stage, drop2});
         TestLs(t.Runtime, "/MyRoot/dir2", false, NLs::PathNotExist);
 
         t.ExpectRevocations("referrer-2", EDue::Now);
         t.ExpectRevocations("referrer-1,referrer-3", EDue::AfterLease);
+    }
+
+    Y_UNIT_TEST(OldAcknowledgementCannotDeleteAReusedReferrerAfterReboot) {
+        TDelegationTest t;
+        t.CreateConfirmed("/MyRoot", "first", "old-sa", "cloud", "referrer");
+        t.Drop("/MyRoot", "first");
+        t.Claim();
+        const ui64 oldClaim = t.LastClaimId;
+        t.Revoked({"referrer"});
+        t.CreateConfirmed("/MyRoot", "second", "new-sa", "cloud", "referrer");
+        t.Drop("/MyRoot", "second");
+        t.Reboot();
+        t.Claim();
+        UNIT_ASSERT_UNEQUAL(t.LastClaimId, oldClaim);
+        t.Revoked({"referrer"}, oldClaim);
+        t.Reboot();
+        const auto remaining = t.Claim();
+        UNIT_ASSERT_VALUES_EQUAL(remaining.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(remaining.front().GetServiceAccountId(), "new-sa");
     }
 
     Y_UNIT_TEST(NamedIamDelegationsDueTimes) {

@@ -36,6 +36,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TVector<TPathId> RestoreTablesToUnmark;
     TVector<ui64> IncrementalBackupsToResume;
     TVector<ui64> FullBackupsToResume;
+    TVector<TPathId> StreamingQueriesOperationsToResume;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -2189,8 +2190,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto& streamingQuery = Self->StreamingQueries.Set(pathId, new TStreamingQueryInfo());
                 streamingQuery->AlterVersion = rowset.GetValue<Schema::StreamingQueryState::AlterVersion>();
                 Y_PROTOBUF_SUPPRESS_NODISCARD streamingQuery->Properties.ParseFromString(rowset.GetValue<Schema::StreamingQueryState::Properties>());
+                streamingQuery->OperationOwnerActorId = rowset.GetValue<Schema::StreamingQueryState::OperationOwnerActorId>();
 
                 const auto pathIt = Self->PathsById.find(pathId);
+                if (streamingQuery->OperationOwnerActorId && pathIt != Self->PathsById.end() && !pathIt->second->Dropped()) {
+                    StreamingQueriesOperationsToResume.emplace_back(pathId);
+                }
+
                 if (pathIt == Self->PathsById.end() || (pathIt->second->StepCreated != InvalidStepId && !pathIt->second->Dropped())) {
                     Self->TabletCounters->Simple()[COUNTER_STREAMING_QUERY_COUNT].Add(1);
                     if (const auto& props = streamingQuery->Properties.GetProperties();
@@ -6787,6 +6793,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
             .IncrementalBackupIds = std::move(IncrementalBackupsToResume),
             .FullBackupIds = std::move(FullBackupsToResume),
+            .StreamingQueriesOperations = std::move(StreamingQueriesOperationsToResume),
         });
 
         Self->ScheduleForcedCompactionProgress(ctx);

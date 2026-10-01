@@ -1253,6 +1253,9 @@ void TPathDescriber::DescribeStreamingQuery(TPathId pathId, TPathElement::TPtr p
     auto& entry = *Result->Record.MutablePathDescription()->MutableStreamingQueryDescription();
     entry.SetName(pathEl->Name);
     *entry.MutableProperties() = streamingQueryInfo->Properties;
+    if (streamingQueryInfo->OperationOwnerActorId) {
+        ActorIdToProto(streamingQueryInfo->OperationOwnerActorId, entry.MutableOperationOwnerActorId());
+    }
 }
 
 void TPathDescriber::DescribeTestShardSet(TPathId pathId, TPathElement::TPtr pathEl) {

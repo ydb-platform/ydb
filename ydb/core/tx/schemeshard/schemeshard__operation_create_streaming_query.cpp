@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/library/actors/core/event_pb.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
@@ -147,6 +149,12 @@ class TCreateStreamingQuery : public TSubOperation {
     }
 
     bool IsDescriptionValid(const THolder<TProposeResponse>& result) const {
+        const auto& info = Transaction.GetCreateStreamingQuery();
+        if (info.HasOperationOwnerActorId() && !ActorIdFromProto(info.GetOperationOwnerActorId())) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty");
+            return false;
+        }
+
         if (const ui64 propertiesSize = Transaction.GetCreateStreamingQuery().GetProperties().ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
             result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Maximum size of properties must be less or equal equal to " << MAX_PROTOBUF_SIZE << " but got " << propertiesSize);
             return false;
@@ -202,9 +210,11 @@ class TCreateStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
+        const auto& info = Transaction.GetCreateStreamingQuery();
         const auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
             .AlterVersion = 1,
-            .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
+            .Properties = info.GetProperties(),
+            .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
         });
         context.SS->StreamingQueries.Set(dstPath.Base()->PathId, streamingQueryInfo);
     }

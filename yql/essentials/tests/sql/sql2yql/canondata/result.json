@@ -7776,6 +7776,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_pg-pg_array_cast_/sql.yql"
         }
     ],
+    "test_sql2yql.test[pg-pg_array_cast_empty]": [
+        {
+            "checksum": "cd70dd2025e3ecd73aeb305c74a0e919",
+            "size": 1366,
+            "uri": "https://{canondata_backend}/1809005/afe6daabac6320daa1405abc1a0a54e7b1f13e57/resource.tar.gz#test_sql2yql.test_pg-pg_array_cast_empty_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[pg-pg_array_compare]": [
         {
             "checksum": "8f7108180e9221d19ef5b187a1b4e945",
@@ -18523,6 +18530,11 @@
     "test_sql_format.test[pg-numeric_to_pg]": [
         {
             "uri": "file://test_sql_format.test_pg-numeric_to_pg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[pg-pg_array_cast_empty]": [
+        {
+            "uri": "file://test_sql_format.test_pg-pg_array_cast_empty_/formatted.sql"
         }
     ],
     "test_sql_format.test[pg-pg_in_dict_key_with_stable_pickle]": [

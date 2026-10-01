@@ -375,9 +375,11 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
         constexpr ui32 blockSize = 4096;
         constexpr ui64 requestCookie = 0x1234;
+        constexpr ui64 configurationId = 1;
         f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
             auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
             auto& cfg = ev->Record;
+            cfg.SetConfigurationId(configurationId);
             cfg.SetMaxInflightLsns(4);
             cfg.SetFlushBatchSize(1);
             cfg.SetEraseBatchSize(1);
@@ -387,6 +389,11 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             cfg.SetIoSizeBytes(blockSize);
             NTabletPipe::SendData(f.Edge, pipe, ev.release());
         });
+        auto configured = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvConfigureTabletResult>(
+            f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(configured);
+        UNIT_ASSERT_VALUES_EQUAL(configured->Get()->Record.GetConfigurationId(), configurationId);
+        UNIT_ASSERT_C(configured->Get()->Record.GetSuccess(), configured->Get()->Record.GetError());
 
         TString firstPeer;
         ui32 injectedReplies = 0;

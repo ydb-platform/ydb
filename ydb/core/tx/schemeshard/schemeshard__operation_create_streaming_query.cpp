@@ -2,6 +2,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/library/actors/core/event_pb.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 #define RETURN_RESULT_UNLESS(x) if (!(x)) return result;
 
@@ -147,6 +149,12 @@ class TCreateStreamingQuery : public TSubOperation {
     }
 
     bool IsDescriptionValid(const THolder<TProposeResponse>& result, const TStreamingQueryInfo::TPtr& queryInfo) const {
+        const auto& info = Transaction.GetCreateStreamingQuery();
+        if (info.HasOperationOwnerActorId() && !ActorIdFromProto(info.GetOperationOwnerActorId())) {
+            result->SetError(NKikimrScheme::StatusInvalidParameter, "Operation owner actor id must not be empty");
+            return false;
+        }
+
         if (const ui64 propertiesSize = queryInfo->Properties.ByteSizeLong(); propertiesSize > MAX_PROTOBUF_SIZE) {
             result->SetError(NKikimrScheme::StatusSchemeError, TStringBuilder() << "Maximum size of properties must be less or equal equal to " << MAX_PROTOBUF_SIZE << " but got " << propertiesSize);
             return false;
@@ -206,7 +214,8 @@ class TCreateStreamingQuery : public TSubOperation {
     }
 
     TStreamingQueryInfo::TPtr GetQueryInfo(const TString& owner, const TOperationContext& context) const {
-        auto properties = Transaction.GetCreateStreamingQuery().GetProperties();
+        const auto& info = Transaction.GetCreateStreamingQuery();
+        auto properties = info.GetProperties();
         auto& propertiesMap = *properties.MutableProperties();
         const TString& userSID = context.UserToken ? context.UserToken->GetUserSID() : owner;
         propertiesMap["__created_by"] = userSID;
@@ -221,6 +230,7 @@ class TCreateStreamingQuery : public TSubOperation {
         return MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
             .AlterVersion = 1,
             .Properties = std::move(properties),
+            .OperationOwnerActorId = info.HasOperationOwnerActorId() ? ActorIdFromProto(info.GetOperationOwnerActorId()) : TActorId(),
         });
     }
 

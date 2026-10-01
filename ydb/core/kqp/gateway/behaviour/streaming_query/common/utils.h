@@ -2,8 +2,8 @@
 
 #include <yql/essentials/sql/v1/translation/node.h>
 
-#include <util/generic/string.h>
 #include <util/datetime/base.h>
+#include <util/generic/string.h>
 
 namespace NKikimrSchemeOp {
 
@@ -25,6 +25,13 @@ public:
         static inline constexpr char DatabaseId[] = "database_id";
         static inline constexpr char QueryPath[] = "query_path";
         static inline constexpr char State[] = "state";
+        static inline constexpr char ExpireAt[] = "expire_at";
+    };
+
+    struct TOperations {
+        static inline constexpr char Create[] = "create";
+        static inline constexpr char Alter[] = "alter";
+        static inline constexpr char Drop[] = "drop";
     };
 
     // Properties which crated during query translation
@@ -49,6 +56,8 @@ public:
         static inline constexpr char StoppedBy[] = "__stopped_by";
         static inline constexpr char CreatedAt[] = "__created_at";
         static inline constexpr char ModifiedAt[] = "__modified_at";
+        static inline constexpr char OperationOwnerUserToken[] = "__operation_owner_user_token";
+        static inline constexpr char InflightOperation[] = "__inflight_operation";
     };
 
     static inline constexpr char InternalTablesPath[] = "streaming/queries";
@@ -76,6 +85,7 @@ public:
     TString StoppedBy;
     TInstant CreatedAt;
     TInstant ModifiedAt;
+    TString InflightOperation;
 };
 
 }  // namespace NKikimr::NKqp

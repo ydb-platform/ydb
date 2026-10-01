@@ -4536,6 +4536,7 @@ struct TStreamingQueryInfo : TSimpleRefCount<TStreamingQueryInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TStreamingQueryProperties Properties;
+    TActorId OperationOwnerActorId;
 };
 
 struct TTestShardSetInfo : public TSimpleRefCount<TTestShardSetInfo> {

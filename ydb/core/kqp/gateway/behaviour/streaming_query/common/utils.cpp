@@ -57,6 +57,8 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
             if (const auto us = TryFromString<ui64>(value)) {
                 ModifiedAt = TInstant::MicroSeconds(*us);
             }
+        } else if (name == TStreamingQueryMeta::TProperties::InflightOperation) {
+            InflightOperation = value;
         }
     }
 

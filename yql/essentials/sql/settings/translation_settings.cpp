@@ -218,6 +218,9 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
         } else if (const auto* parser = Parsers.FindPtr(flag)) {
             (*parser)(args, settings);
         } else {
+            if (settings.StrictConfigValidation) {
+                throw yexception() << "Unknown SQL flag: " << flag;
+            }
             // Ignore unknown valuable flags, like we are
             // able to ignore TTranslationSettings::Flags.
         }

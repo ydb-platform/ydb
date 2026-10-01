@@ -407,6 +407,11 @@ def _PEERDIR_TS_RESOURCE(unit: ymake.Unit, *resources: str) -> None:
 
     _check_nodejs_version(unit, nodejs_version.major)
     for tool in resources:
+        if tool == "pnpm":
+            dirs.append("build/external_resources/pnpm")
+            unit.set(["PNPM_ROOT", "$PNPM_RESOURCE_GLOBAL"])
+            unit.set(["PNPM-ROOT-VAR-NAME", "PNPM_RESOURCE_GLOBAL"])
+            continue
         dir_name = erm_json.canonize_name(tool)
         if erm_json.use_resource_directly(tool):
             # These tools are installed with the project dependencies, not as build resources.

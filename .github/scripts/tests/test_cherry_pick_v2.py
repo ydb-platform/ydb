@@ -9,7 +9,18 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from cherry_pick_v2 import Source, create_commit_source, create_pr_source, sort_sources, to_utc
+from github import GithubException
+
+from cherry_pick_v2 import (
+    Source,
+    collect_sources,
+    create_commit_source,
+    create_pr_source,
+    get_merged_commit_shas,
+    pick_linked_pr,
+    sort_sources,
+    to_utc,
+)
 
 UTC = datetime.timezone.utc
 LOGGER = logging.getLogger("test_cherry_pick_v2")
@@ -92,13 +103,14 @@ class SortSourcesTest(unittest.TestCase):
 
 PR_NUMBER = 1
 MERGED_AT = datetime.datetime(2026, 1, 1, tzinfo=UTC)
+COMMITTED_AT = datetime.datetime(2026, 2, 1, tzinfo=UTC)
 
 
 def make_commit(sha, parents=('base',), pr_numbers=(), committer_date=None):
     commit = mock.Mock(sha=sha, parents=[mock.Mock(sha=p) for p in parents])
-    commit.get_pulls.return_value = [mock.Mock(number=n) for n in pr_numbers]
     commit.commit.message = f'Commit {sha}'
     commit.commit.committer.date = committer_date
+    commit.get_pulls.return_value.get_page.return_value = [mock.Mock(number=n, merged=True) for n in pr_numbers]
     return commit
 
 
@@ -148,10 +160,36 @@ class CreatePrSourceTest(unittest.TestCase):
         )
         self.assertEqual(create_pr_source(pull, repo, LOGGER).commit_shas, ['r1', 'r2'])
 
+    def test_partial_rebase_walk_warns_about_missing_commits(self):
+        pull = make_pull(True, 'r2', [make_commit('a'), make_commit('b', ['a'])])
+        repo = make_repo(
+            make_commit('r2', ['r1'], [PR_NUMBER]),
+            make_commit('r1', ['base']),  # association lost mid-series
+        )
+        with self.assertLogs(LOGGER, level='WARNING'):
+            source = create_pr_source(pull, repo, LOGGER)
+        self.assertEqual(source.commit_shas, ['r2'])
+
+    def test_squash_merge_title_suppresses_ambiguity_warning(self):
+        pull = make_pull(True, 'merge', [make_commit('a'), make_commit('b', ['a'])])
+        merge_commit = make_commit('merge', ['base'])
+        merge_commit.commit.message = f'Fix something (#{PR_NUMBER})'
+        repo = make_repo(merge_commit, make_commit('base', ['older'], [2]))
+        with self.assertNoLogs(LOGGER, level='WARNING'):
+            source = create_pr_source(pull, repo, LOGGER)
+        self.assertEqual(source.commit_shas, ['merge'])
+
     def test_merge_commit_uses_individual_commits(self):
         pull = make_pull(True, 'merge', [make_commit('a'), make_commit('b', ['a'])])
         repo = make_repo(make_commit('merge', ['base', 'b']))
         self.assertEqual(create_pr_source(pull, repo, LOGGER).commit_shas, ['a', 'b'])
+
+    def test_force_pushed_branch_warns(self):
+        pull = make_pull(True, 'merge', [make_commit('a'), make_commit('b', ['a'])])
+        repo = make_repo(make_commit('merge', ['base', 'rewritten']))
+        with self.assertLogs(LOGGER, level='WARNING'):
+            source = create_pr_source(pull, repo, LOGGER)
+        self.assertEqual(source.commit_shas, ['a', 'b'])
 
     def test_unmerged_uses_individual_commits(self):
         pull = make_pull(False, None, [make_commit('a'), make_commit('b', ['a'])])
@@ -170,36 +208,162 @@ class CreatePrSourceTest(unittest.TestCase):
             create_pr_source(pull, make_repo(), LOGGER)
 
 
+class GetMergedCommitShasTest(unittest.TestCase):
+    def test_full_rebase_series(self):
+        pull = mock.Mock(number=PR_NUMBER, commits=2)
+        repo = make_repo(
+            make_commit('r2', ['r1'], [PR_NUMBER]),
+            make_commit('r1', ['base'], [PR_NUMBER]),
+        )
+        self.assertEqual(get_merged_commit_shas(pull, repo, repo.get_commit('r2'), LOGGER), ['r1', 'r2'])
+
+    def test_walk_stops_when_association_is_lost(self):
+        pull = mock.Mock(number=PR_NUMBER, commits=2)
+        repo = make_repo(
+            make_commit('r2', ['r1'], [PR_NUMBER]),
+            make_commit('r1', ['base']),  # not associated with the PR
+        )
+        self.assertEqual(get_merged_commit_shas(pull, repo, repo.get_commit('r2'), LOGGER), ['r2'])
+
+    def test_api_failure_falls_back_to_merge_commit(self):
+        pull = mock.Mock(number=PR_NUMBER, commits=3)
+        repo = mock.Mock()
+        repo.get_commit.side_effect = GithubException(403, {}, None)
+        merge_commit = make_commit('r2', ['r1'], [PR_NUMBER])
+        self.assertEqual(get_merged_commit_shas(pull, repo, merge_commit, LOGGER), ['r2'])
+
+
+class PickLinkedPrTest(unittest.TestCase):
+    def test_prefers_merged_pr(self):
+        commit = make_commit('c' * 40)
+        open_pr = mock.Mock(number=10, merged=False, merged_at=None)
+        merged_pr = mock.Mock(number=11, merged=True, merged_at=MERGED_AT)
+        commit.get_pulls.return_value.get_page.return_value = [open_pr, merged_pr]
+        self.assertIs(pick_linked_pr(commit, LOGGER), merged_pr)
+
+    def test_prefers_most_recently_merged_pr(self):
+        commit = make_commit('c' * 40)
+        older = mock.Mock(number=10, merged=True, merged_at=datetime.datetime(2026, 1, 1, tzinfo=UTC))
+        newer = mock.Mock(number=11, merged=True, merged_at=datetime.datetime(2026, 2, 1, tzinfo=UTC))
+        commit.get_pulls.return_value.get_page.return_value = [newer, older]
+        self.assertIs(pick_linked_pr(commit, LOGGER), newer)
+
+    def test_falls_back_to_first_pr_when_none_merged(self):
+        commit = make_commit('c' * 40)
+        open_pr = mock.Mock(number=10, merged=False, merged_at=None)
+        commit.get_pulls.return_value.get_page.return_value = [open_pr]
+        self.assertIs(pick_linked_pr(commit, LOGGER), open_pr)
+
+    def test_no_prs(self):
+        commit = make_commit('c' * 40)
+        commit.get_pulls.return_value.get_page.return_value = []
+        self.assertIsNone(pick_linked_pr(commit, LOGGER))
+
+    def test_api_failure_returns_none(self):
+        commit = make_commit('c' * 40)
+        commit.get_pulls.side_effect = GithubException(403, {}, None)
+        self.assertIsNone(pick_linked_pr(commit, LOGGER))
+
+
 class CreateCommitSourceTest(unittest.TestCase):
-    COMMITTED_AT = datetime.datetime(2026, 2, 1, tzinfo=UTC)
-
-    def make_commit_with_pull(self, pull):
-        commit = make_commit('c' * 40, committer_date=self.COMMITTED_AT)
-        commit.get_pulls.return_value = mock.Mock(totalCount=1 if pull else 0)
-        commit.get_pulls.return_value.get_page.return_value = [pull] if pull else []
-        return commit
-
     def test_merged_linked_pr_uses_pr_merge_time(self):
-        source = create_commit_source(self.make_commit_with_pull(make_pull(True)), None, LOGGER)
+        source = create_commit_source(make_commit('c' * 40, committer_date=COMMITTED_AT), make_pull(True), LOGGER)
         self.assertTrue(source.is_merged)
         self.assertEqual(source.merged_at, MERGED_AT)
 
     def test_unmerged_linked_pr(self):
-        source = create_commit_source(self.make_commit_with_pull(make_pull(False)), None, LOGGER)
+        source = create_commit_source(make_commit('c' * 40, committer_date=COMMITTED_AT), make_pull(False), LOGGER)
         self.assertFalse(source.is_merged)
         self.assertIsNone(source.merged_at)
 
     def test_no_linked_pr_falls_back_to_committer_date(self):
-        source = create_commit_source(self.make_commit_with_pull(None), None, LOGGER)
+        source = create_commit_source(make_commit('c' * 40, committer_date=COMMITTED_AT), None, LOGGER)
         self.assertTrue(source.is_merged)
-        self.assertEqual(source.merged_at, self.COMMITTED_AT)
+        self.assertEqual(source.merged_at, COMMITTED_AT)
 
-    def test_linked_pr_lookup_failure_falls_back_to_committer_date(self):
-        commit = self.make_commit_with_pull(None)
-        commit.get_pulls.side_effect = RuntimeError('API error')
-        source = create_commit_source(commit, None, LOGGER)
-        self.assertTrue(source.is_merged)
-        self.assertEqual(source.merged_at, self.COMMITTED_AT)
+
+def make_repo_for_commit(commit):
+    repo = mock.Mock()
+    commits = mock.Mock(totalCount=1)
+    commits.__getitem__ = lambda s, i: commit
+    repo.get_commits.return_value = commits
+    repo.get_commit.return_value = commit
+    return repo
+
+
+class CollectSourcesTest(unittest.TestCase):
+    def test_pr_number_resolves_to_pr_source(self):
+        pull = make_pull(True, 'merge', [make_commit('a')])
+        repo = make_repo(make_commit('merge', ['base']), make_commit('base', ['older'], [2]))
+        repo.get_pull.return_value = pull
+        sources = collect_sources(repo, ['123'], False, LOGGER)
+        self.assertEqual([s.commit_shas for s in sources], [['merge']])
+        self.assertTrue(sources[0].is_merged)
+
+    def test_unmerged_pr_without_allow_unmerged_exits(self):
+        pull = make_pull(False, None, [make_commit('a')])
+        repo = make_repo()
+        repo.get_pull.return_value = pull
+        with self.assertRaises(SystemExit):
+            collect_sources(repo, ['123'], False, LOGGER)
+
+    def test_unmerged_pr_with_allow_unmerged(self):
+        pull = make_pull(False, None, [make_commit('a'), make_commit('b', ['a'])])
+        repo = make_repo()
+        repo.get_pull.return_value = pull
+        sources = collect_sources(repo, ['123'], True, LOGGER)
+        self.assertEqual(sources[0].commit_shas, ['a', 'b'])
+        self.assertFalse(sources[0].is_merged)
+
+    def test_pr_api_error_exits(self):
+        repo = mock.Mock()
+        repo.get_pull.side_effect = GithubException(404, {}, None)
+        with self.assertRaises(SystemExit):
+            collect_sources(repo, ['123'], False, LOGGER)
+
+    def test_sha_resolves_to_commit_source(self):
+        commit = make_commit('abc123def456', committer_date=COMMITTED_AT)
+        commit.get_pulls.return_value.get_page.return_value = []
+        sources = collect_sources(make_repo_for_commit(commit), ['abc123'], False, LOGGER)
+        self.assertEqual(sources[0].commit_shas, ['abc123def456'])
+        self.assertTrue(sources[0].is_merged)
+        self.assertEqual(sources[0].merged_at, COMMITTED_AT)
+
+    def test_sha_with_open_and_merged_prs_prefers_merged(self):
+        commit = make_commit('abc123def456', committer_date=COMMITTED_AT)
+        open_pr = mock.Mock(number=10, merged=False, merged_at=None)
+        merged_pr = mock.Mock(number=11, merged=True, merged_at=MERGED_AT)
+        commit.get_pulls.return_value.get_page.return_value = [open_pr, merged_pr]
+        sources = collect_sources(make_repo_for_commit(commit), ['abc123'], False, LOGGER)
+        self.assertTrue(sources[0].is_merged)
+
+    def test_sha_with_unmerged_pr_exits(self):
+        commit = make_commit('abc123def456')
+        commit.get_pulls.return_value.get_page.return_value = [mock.Mock(number=10, merged=False, merged_at=None)]
+        with self.assertRaises(SystemExit):
+            collect_sources(make_repo_for_commit(commit), ['abc123'], False, LOGGER)
+
+    def test_unknown_sha_exits(self):
+        repo = mock.Mock()
+        repo.get_commits.return_value = mock.Mock(totalCount=0)
+        with self.assertRaises(SystemExit):
+            collect_sources(repo, ['deadbeef'], False, LOGGER)
+
+    def test_pr_number_and_sha_mixed(self):
+        pull = make_pull(True, 'merge', [make_commit('a')])
+        commit = make_commit('abc123def456', committer_date=COMMITTED_AT)
+        commit.get_pulls.return_value.get_page.return_value = []
+        merge_commit = make_commit('merge', ['base'])
+        repo = make_repo(merge_commit, make_commit('base', ['older'], [2]))
+        repo.get_pull.return_value = pull
+        commits = mock.Mock(totalCount=1)
+        commits.__getitem__ = lambda s, i: commit
+        repo.get_commits.return_value = commits
+        by_sha = {c.sha: c for c in [merge_commit, make_commit('base', ['older'], [2]), commit]}
+        by_sha[merge_commit.sha] = merge_commit
+        repo.get_commit.side_effect = lambda sha: by_sha[sha]
+        sources = collect_sources(repo, ['123', 'abc123'], False, LOGGER)
+        self.assertEqual([s.type for s in sources], ['pr', 'commit'])
 
 
 if __name__ == '__main__':

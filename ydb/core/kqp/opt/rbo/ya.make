@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    copy_logical_subtree.cpp
     global_inlining.cpp
     global_pruning.cpp
     kqp_expression.cpp

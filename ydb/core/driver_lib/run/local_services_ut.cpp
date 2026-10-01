@@ -1,10 +1,25 @@
 #include "kikimr_services_initializers.h"
 
 #include <ydb/core/mind/local.h>
+#include <ydb/core/mind/tenant_pool.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKikimrServicesInitializers {
 Y_UNIT_TEST_SUITE(LocalTabletRegistration) {
+    Y_UNIT_TEST(RegisterTenantAndSupportingServices) {
+        NKikimrConfig::TAppConfig config;
+        TAppData appData(1, 2, 3, 4, {}, nullptr, nullptr, nullptr, nullptr);
+        TKikimrRunConfig run(config, 17);
+        TActorSystemSetup setup;
+        TLocalServiceInitializer(run).InitializeServices(&setup, &appData);
+        UNIT_ASSERT_VALUES_EQUAL(setup.LocalServices.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(setup.LocalServices.front().first, MakeTenantPoolRootID());
+        for (const auto& service : setup.LocalServices) {
+            UNIT_ASSERT(service.second.Actor);
+            UNIT_ASSERT_VALUES_EQUAL(service.second.PoolId, 0);
+        }
+    }
+
     Y_UNIT_TEST(PreserveAvailabilityOverridesAndDefaults) {
         NKikimrConfig::TAppConfig config;
         TAppData appData(1, 2, 3, 4, {}, nullptr, nullptr, nullptr, nullptr);

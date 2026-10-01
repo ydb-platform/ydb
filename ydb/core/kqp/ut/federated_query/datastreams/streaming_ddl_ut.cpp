@@ -5364,7 +5364,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
         constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
         constexpr char pqSource[] = "pqSource";
+        bool isTopicDropped = false;
         CreateTopic(topic);
+        Y_DEFER {
+            if (!isTopicDropped) {
+                DropTopic(topic);
+            }
+        };
         /* topic dropped explicitly (and unique-named) */
         CreatePqSource(pqSource);
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
@@ -5395,6 +5401,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
 
         DropTopic(topic);
+        isTopicDropped = true;
 
         Sleep(TDuration::Seconds(3));
 

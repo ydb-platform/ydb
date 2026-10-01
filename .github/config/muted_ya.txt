@@ -21,6 +21,11 @@ ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.OnlineUniqueValidationFailureCleansUpAndAllowsRetry
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
 ydb/core/persqueue/ut TPQTest.TestCompactifiedWithRetention
+ydb/core/persqueue/ut TPQTest.TestMaxTimeLagRewind
+ydb/core/persqueue/ut TPQTest.TestPQPartialRead
+ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
+ydb/core/persqueue/ut TPQTest.TestReadSessions
+ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/persqueue/ut TPQTest.TestWritePQ
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot

@@ -1,5 +1,6 @@
 #include "ydb_common_ut.h"
 
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/services/keyvalue/grpc_service_v1.h>
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
@@ -37,7 +38,7 @@ namespace NKikimr::NGRpcService {
             rule->SetDst(dst);
         }
 
-        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false, bool enableRelativePaths = true) {
+        NKikimrConfig::TAppConfig MakeConfig(bool useSimpleProxy = false, bool enablePathAliasing = true, bool nestedAliasParent = false, bool enableRelativePaths = false) {
             NKikimrConfig::TAppConfig config;
             config.MutableGRpcConfig()->SetSkipSchemeCheck(useSimpleProxy);
             config.MutableFeatureFlags()->SetEnableRelativePaths(enableRelativePaths);
@@ -107,7 +108,7 @@ namespace NKikimr::NGRpcService {
             NYdb::TKikimrWithGrpcAndRootSchema Server;
             std::shared_ptr<grpc::Channel> Channel;
 
-            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false, bool enableRelativePaths = true)
+            explicit TFixture(bool useSimpleProxy = false, bool enablePathAliasing = true, bool createTenant = true, bool nestedAliasParent = false, bool enableRelativePaths = false)
                 : Server(MakeConfig(useSimpleProxy, enablePathAliasing, nestedAliasParent, enableRelativePaths), {}, {}, false, nullptr, [](Tests::TServerSettings& settings) {
                     settings.StoragePoolTypes.clear();
                     settings.AddStoragePool("hdd");
@@ -233,6 +234,24 @@ namespace NKikimr::NGRpcService {
             Success(Call(*stub, &TTable::DeleteSession, close, "/alias"));
         }
 
+        Y_UNIT_TEST_TWIN(RelativeDatabaseIsResolvedBeforeAliasing, useSimpleProxy) {
+            TFixture fixture(useSimpleProxy, /*enablePathAliasing=*/true, /*createTenant=*/true,
+                /*nestedAliasParent=*/true, /*enableRelativePaths=*/true);
+            auto stub = Ydb::Table::V1::TableService::NewStub(fixture.Channel);
+
+            const auto session = Result<Ydb::Table::CreateSessionResult>(
+                Call(*stub, &TTable::CreateSession, Ydb::Table::CreateSessionRequest{}, "virtual"));
+            UNIT_ASSERT(!session.session_id().empty());
+
+            Ydb::Table::KeepAliveRequest keepAlive;
+            keepAlive.set_session_id(session.session_id());
+            Success(Call(*stub, &TTable::KeepAlive, keepAlive, "virtual"));
+
+            Ydb::Table::DeleteSessionRequest close;
+            close.set_session_id(session.session_id());
+            Success(Call(*stub, &TTable::DeleteSession, close, "virtual"));
+        }
+
         Y_UNIT_TEST(DiscoveryKeepsHeaderAndBodySeparate) {
             TFixture fixture;
             auto stub = Ydb::Discovery::V1::DiscoveryService::NewStub(fixture.Channel);
@@ -263,7 +282,7 @@ namespace NKikimr::NGRpcService {
 
         Y_UNIT_TEST(UnmatchedInputsPreserveDisabledIngressBehavior) {
             auto observe = [](bool enablePathAliasing) {
-                TFixture fixture(false, enablePathAliasing, true, /*nestedAliasParent=*/false, /*enableRelativePaths=*/false);
+                TFixture fixture(false, enablePathAliasing);
                 auto discovery = Ydb::Discovery::V1::DiscoveryService::NewStub(fixture.Channel);
                 auto keyValue = Ydb::KeyValue::V1::KeyValueService::NewStub(fixture.Channel);
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 from .conftest import LoadSuiteBase
 from .tpch import TpchSuiteBase
 from time import time, sleep
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadError
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 import allure

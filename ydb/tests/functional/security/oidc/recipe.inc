@@ -17,9 +17,10 @@ USE_RECIPE(
     ydb/tests/functional/security/oidc/recipe/oidc_recipe
 )
 
-SIZE(MEDIUM)
+INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/large.inc)
 
 REQUIREMENTS(
     cpu:4
     dns:dns64
+    container:4467981730
 )

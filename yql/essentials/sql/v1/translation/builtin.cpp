@@ -4103,6 +4103,13 @@ TNodeResult BuildBuiltinFunc(
                 }
 
                 settings(label, item->GetLiteralValue());
+            } else if (label == "DisableStatistics") {
+                if (!item->IsLiteral() || item->GetLiteralType() != "Bool") {
+                    return TNonNull(TNodePtr(new TInvalidBuiltin(
+                        pos, TStringBuilder() << name << " disable statistics must be bool literal")));
+                }
+
+                settings(label, FromString<bool>(item->GetLiteralValue()));
             } else if (EqualToOneOf(label, "BlockstatDict", "ParseWithFat")) {
                 continue;
             } else {
@@ -4110,7 +4117,7 @@ TNodeResult BuildBuiltinFunc(
                     pos,
                     TStringBuilder()
                         << name << " got unsupported setting: " << label
-                        << "; supported: Entities, EntitiesStrategy, BlockstatDict, ParseWithFat")));
+                        << "; supported: Entities, EntitiesStrategy, Mode, DisableStatistics, BlockstatDict, ParseWithFat")));
             }
         }
 

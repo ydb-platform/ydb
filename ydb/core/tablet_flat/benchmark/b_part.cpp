@@ -36,7 +36,7 @@ namespace {
 
         conf.Groups.resize(groups);
         
-        conf.WriteBTreeIndex = writeBTreeIndex;
+        conf.WriteBTreeIndexV1 = writeBTreeIndex;
 
         return conf;
     }
@@ -65,7 +65,7 @@ namespace {
                 dataPages += IndexTools::CountMainPages(*part);
                 indexBytes += part->IndexesRawSize;
                 if (useBTree) {
-                    bTreeLevels = Max(bTreeLevels, part->IndexPages.BTreeGroups[0].LevelCount);
+                    bTreeLevels = Max(bTreeLevels, part->IndexPages.BTreeGroups[0].LevelCount());
                 }
             }
             state.counters["DataBytes"] = dataBytes;

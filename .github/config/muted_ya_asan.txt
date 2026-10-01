@@ -411,6 +411,7 @@ ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcro
 ydb/core/tx/schemeshard/ut_full_backup TFullBackupRebootTest.ForgetIsDurableAcrossReboots[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_full_backup unittest.sole chunk
 ydb/core/tx/schemeshard/ut_generated_columns unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_index_build VectorIndexBuildTest.Metering_ServerLessDB_Restarts-doRestarts-false
 ydb/core/tx/schemeshard/ut_index_build VectorIndexBuildTest.Metering_ServerLessDB_Restarts-doRestarts-true
 ydb/core/tx/schemeshard/ut_index_build unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login TSchemeShardLoginTest.CheckThatLockedOutParametersIsRestoredFromLocalDb

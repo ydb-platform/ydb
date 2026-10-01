@@ -13,6 +13,8 @@
 #include "schemeshard_svp_migration.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/metadata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
@@ -398,6 +400,7 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
     ResumeCdcStreamScans(opts.CdcStreamScans, ctx);
     ResumeIncrementalBackups(opts.IncrementalBackupIds, ctx);
     ResumeFullBackups(opts.FullBackupIds, ctx);
+    ResumeStreamingQueriesOperations(opts.StreamingQueriesOperations);
 
     ParentDomainLink.SendSync(ctx);
 
@@ -4125,7 +4128,8 @@ void TSchemeShard::PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId) {
 
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::StreamingQueryState::AlterVersion>{streamingQuery->AlterVersion},
-        NIceDb::TUpdate<Schema::StreamingQueryState::Properties>{streamingQuery->Properties.SerializeAsString()}
+        NIceDb::TUpdate<Schema::StreamingQueryState::Properties>{streamingQuery->Properties.SerializeAsString()},
+        NIceDb::TUpdate<Schema::StreamingQueryState::OperationOwnerActorId>{streamingQuery->OperationOwnerActorId}
     );
 }
 
@@ -4136,6 +4140,39 @@ void TSchemeShard::PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId path
     }
 
     db.Table<Schema::StreamingQueryState>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
+}
+
+void TSchemeShard::ResumeStreamingQueriesOperations(const TVector<TPathId>& ids) {
+    for (const auto& id : ids) {
+        const auto streamingQueryIt = StreamingQueries.find(id);
+        Y_ABORT_UNLESS(streamingQueryIt != StreamingQueries.end());
+        const auto streamingQuery = streamingQueryIt->second;
+        Y_ABORT_UNLESS(streamingQuery);
+        Y_ABORT_UNLESS(streamingQuery->OperationOwnerActorId);
+
+        const auto path = TPath::Init(id, this);
+        auto ev = MakeHolder<NMetadata::NProvider::TEvTrackOperationCompletion>();
+        ev->SetTypeId("STREAMING_QUERY");
+        ev->SetPathId(id);
+        ev->SetRequestGeneration(Generation());
+        ev->SetObjectGeneration(streamingQuery->AlterVersion);
+        ev->SetOperationOwner(streamingQuery->OperationOwnerActorId);
+        ev->SetSchemeTxId(ui64(path.Base()->LastTxId));
+        for (const auto& [key, value] : streamingQuery->Properties.GetProperties()) {
+            ev->MutableProperties().emplace(key, value);
+        }
+
+        const auto database = path.GetDomainPathString();
+        ev->SetDatabase(database);
+        ev->SetDatabaseId(CreateDatabaseId(database, path.DomainInfo()->GetResourcesDomainId() != path.GetDomainKey(), path.GetDomainKey()));
+
+        std::pair<TString, TString> splitPath;
+        TString error;
+        Y_ABORT_UNLESS(TrySplitPathByDb(path.PathString(), database, splitPath, error), "%s", error.c_str());
+        ev->SetObjectId(std::move(splitPath.second));
+
+        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), std::move(ev));
+    }
 }
 
 void TSchemeShard::PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId) {

@@ -18,6 +18,7 @@ private:
 
     TVector<TExecutorPoolCounters> PoolCounters;
     TActorSystemCounters ActorSystemCounters;
+    std::vector<TAllocationCacheFamilyStats> AllocationCacheStats;
 
 public:
     TImpl(ui32 intervalSec, const TActorSystemSetup& setup, NMonitoring::TDynamicCounterPtr counters)
@@ -54,11 +55,12 @@ public:
         }
         THarmonizerStats harmonizerStats;
         statsSubSystem.GetHarmonizerStats(harmonizerStats);
-        TAllocationCacheProcessStats frameCacheStats;
+        AllocationCacheStats.clear();
         if (const auto* cacheSystem = ctx.ActorSystem()->GetSubSystem<TAllocationCacheSubSystem>()) {
-            frameCacheStats = cacheSystem->GetCachedStats(TAsyncFrameCacheFrontend::FamilyId());
+            cacheSystem->GetFamilyStats(&AllocationCacheStats);
         }
-        ActorSystemCounters.Set(harmonizerStats, frameCacheStats);
+        ActorSystemCounters.Set(harmonizerStats, {});
+        ActorSystemCounters.SetAllocationCacheStats(AllocationCacheStats);
         actor->OnWakeup(ctx);
         ctx.Schedule(TDuration::Seconds(IntervalSec) - (ctx.Now() - StartOfCollecting), new TEvents::TEvWakeup(0));
     }

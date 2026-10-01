@@ -4,6 +4,8 @@
 #include <ydb/library/actors/core/subsystem.h>
 #include <ydb/library/actors/core/thread_context.h>
 
+#include <util/generic/string.h>
+
 #include <functional>
 #include <mutex>
 
@@ -31,6 +33,11 @@ using TLocalAllocationCache = std::unique_ptr<void, void (*)(void*)>;
 class TAllocationCacheFamilyRegistry {
 public:
     static size_t NextId() noexcept;
+};
+
+struct TAllocationCacheFamilyStats {
+    TString Name;
+    TAllocationCacheProcessStats Stats;
 };
 
 class TAllocationCacheSubSystem;
@@ -86,18 +93,20 @@ class TAllocationCacheSubSystem final : public ISubSystem {
 public:
     using TFactory = std::function<TLocalAllocationCache(TAllocationCacheCounters*)>;
     ~TAllocationCacheSubSystem() override;
-    void RegisterFamily(size_t family, size_t budget, TFactory factory);
+    void RegisterFamily(size_t family, size_t budget, const TString& name, TFactory factory);
     void OnBeforeStart(TActorSystem&) override;
     void OnExecutorThreadStart(TThreadContext* context) override;
     void OnExecutorThreadStop(TThreadContext* context) override;
     std::unique_ptr<TAllocationCacheWorker> CreateWorker();
     TAllocationCacheProcessStats GetCachedStats(size_t family) const;
+    void GetFamilyStats(std::vector<TAllocationCacheFamilyStats>* stats) const;
     size_t GetWorkerBudget() const noexcept { return WorkerBudget; }
 
 private:
     friend class TAllocationCacheWorker;
     void UnregisterWorker(TAllocationCacheWorkerCounters* counters);
     struct TFamily {
+        TString Name;
         TFactory Factory;
     };
     std::vector<TFamily> Families;
@@ -140,7 +149,7 @@ public:
 
     void OnDependenciesResolved(const TResolvedSubSystemDependencies& dependencies) override {
         auto* system = static_cast<TAllocationCacheSubSystem*>(dependencies.front().Instance);
-        system->RegisterFamily(FamilyId(), Budget,
+        system->RegisterFamily(FamilyId(), Budget, TTag::Name,
             [budget = Budget](TAllocationCacheCounters* counters) {
                 auto cache = TLocalAllocationCache(new TAllocationCache<TTag>(budget), [](void* cache) {
                     delete static_cast<TAllocationCache<TTag>*>(cache);

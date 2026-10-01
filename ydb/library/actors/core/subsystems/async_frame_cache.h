@@ -6,6 +6,7 @@ namespace NActors {
 
 // The allocation ABI is independent of each actor system's retention budget.
 struct TAsyncFrameCacheTag {
+    static constexpr const char* Name = "AsyncFrames";
     static constexpr size_t MinAllocationSize = 1_KB;
     static constexpr size_t MaxAllocationSize = 64_KB;
 };

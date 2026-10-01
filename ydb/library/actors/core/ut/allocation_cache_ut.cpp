@@ -18,11 +18,14 @@ using namespace NActors;
 namespace {
 
 struct TSmallTag {
+    static constexpr const char* Name = "Small";
     static constexpr size_t MinAllocationSize = 64;
     static constexpr size_t MaxAllocationSize = 512;
 };
 
-struct TOtherTag : TSmallTag {};
+struct TOtherTag : TSmallTag {
+    static constexpr const char* Name = "Other";
+};
 struct TAbsentTag : TSmallTag {};
 
 using TSmallFrontend = TAllocationCacheFrontend<TSmallTag>;
@@ -99,6 +102,32 @@ public:
 } // namespace
 
 Y_UNIT_TEST_SUITE(AllocationCacheSubsystem) {
+    Y_UNIT_TEST(FamilySnapshotsIncludeAllWorkersAndEmptyFamilies) {
+        auto setup = MakeSetup();
+        TActorSystem system(setup);
+        system.Start();
+        auto* core = system.GetSubSystem<TAllocationCacheSubSystem>();
+        auto first = core->CreateWorker();
+        auto second = core->CreateWorker();
+        first->Get<TSmallTag>()->Release(first->Get<TSmallTag>()->Allocate(1), 1);
+        second->Get<TSmallTag>()->Release(second->Get<TSmallTag>()->Allocate(1), 1);
+        std::vector<TAllocationCacheFamilyStats> stats;
+        core->GetFamilyStats(&stats);
+        UNIT_ASSERT_VALUES_EQUAL(stats.size(), 3);
+        for (const auto& family : stats) {
+            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedFrames, family.Name == "Small" ? 2 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedBytes, family.Name == "Small" ? 128 : 0);
+        }
+        first.reset();
+        second.reset();
+        core->GetFamilyStats(&stats);
+        for (const auto& family : stats) {
+            UNIT_ASSERT_VALUES_EQUAL(family.Stats.CachedBytes, 0);
+        }
+        system.Stop();
+        system.Cleanup();
+    }
+
     Y_UNIT_TEST(RealWorkersWithoutMetricsAndRepeatedWorkerIds) {
         auto setup = MakeSetup();
         setup->RegisterSubSystem(std::unique_ptr<TActorSystemStatsSubSystem>(new TUnavailableStats));

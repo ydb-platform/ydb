@@ -35,15 +35,19 @@ TAllocationCacheWorker::~TAllocationCacheWorker() {
     Caches.clear();
 }
 
-void TAllocationCacheSubSystem::RegisterFamily(size_t family, size_t budget, TFactory factory) {
+void TAllocationCacheSubSystem::RegisterFamily(size_t family, size_t budget, const TString& name, TFactory factory) {
     Y_ABORT_UNLESS(!Frozen, "allocation cache families are frozen");
     if (Families.size() <= family) {
         Families.resize(family + 1);
     }
     Y_ABORT_UNLESS(!Families[family].Factory, "duplicate allocation cache family");
     Y_ABORT_UNLESS(budget <= std::numeric_limits<size_t>::max() - WorkerBudget);
+    Y_ABORT_UNLESS(!name.empty(), "allocation cache family name is empty");
+    for (const auto& entry : Families) {
+        Y_ABORT_UNLESS(!entry.Factory || entry.Name != name, "duplicate allocation cache family name");
+    }
     WorkerBudget += budget;
-    Families[family] = {std::move(factory)};
+    Families[family] = {name, std::move(factory)};
 }
 
 void TAllocationCacheSubSystem::OnBeforeStart(TActorSystem&) {
@@ -111,6 +115,22 @@ TAllocationCacheProcessStats TAllocationCacheSubSystem::GetCachedStats(size_t fa
         }
     }
     return stats;
+}
+
+void TAllocationCacheSubSystem::GetFamilyStats(std::vector<TAllocationCacheFamilyStats>* stats) const {
+    stats->clear();
+    stats->reserve(Families.size());
+    std::lock_guard guard(WorkersMutex);
+    for (size_t family = 0; family < Families.size(); ++family) {
+        if (!Families[family].Factory) {
+            continue;
+        }
+        auto& snapshot = stats->emplace_back();
+        snapshot.Name = Families[family].Name;
+        for (const auto& worker : Workers) {
+            snapshot.Stats.Add(worker->Families[family].GetCachedStats());
+        }
+    }
 }
 
 } // namespace NActors

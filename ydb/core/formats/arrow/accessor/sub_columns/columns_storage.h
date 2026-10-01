@@ -49,7 +49,9 @@ public:
         EValueType ValueType;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
         const arrow::Array* CurrentArrayData;
+        // Currently iterated accessor relative to GlobalChunkedArray
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
+        // Currently iterated arrow chunk relative to GlobalChunkedArray
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
 

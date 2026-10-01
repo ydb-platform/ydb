@@ -27,15 +27,15 @@ TString BlobCheckerWorkerQuantumStatusToString(EBlobCheckerWorkerQuantumStatus v
 struct TBlobCheckerGroupStatus {
 public:
     TBlobCheckerGroupStatus() = default;
-    TBlobCheckerGroupStatus(ui64 status, TMonotonic lastScan, TLogoBlobID maxChecked);
+    TBlobCheckerGroupStatus(ui64 status, TInstant lastScan, TLogoBlobID maxChecked);
     static TBlobCheckerGroupStatus Deserialize(TString serializedStatus);
-    static TString CreateInitialSerialized(TMonotonic now);
+    static TString CreateInitialSerialized(TInstant now);
     TString SerializeProto() const;
     TString ToString() const;
 
 public:
     ui64 ShortStatus = 0;
-    TMonotonic LastScanFinishedTimestamp = TMonotonic::Zero();
+    TInstant LastScanFinishedTimestamp = TInstant::Zero();
     TLogoBlobID MaxCheckedBlob = TLogoBlobID(0, 0, 0);
 };
 

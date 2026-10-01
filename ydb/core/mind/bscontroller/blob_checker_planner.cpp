@@ -127,6 +127,10 @@ public:
         GroupsAllowedToScan.Clear();
         NodeLockQueues.clear();
 
+        ResetPacing();
+    }
+
+    void ResetPacing() {
         TimeWasted = TDuration::Zero();
         LastPlannedTimestamp = TMonotonic::Zero();
     }
@@ -238,6 +242,10 @@ bool TBlobCheckerPlanner::DequeueCheck(TGroupId groupId) {
 
 void TBlobCheckerPlanner::ResetState() {
     Impl->ResetState();
+}
+
+void TBlobCheckerPlanner::ResetPacing() {
+    Impl->ResetPacing();
 }
 
 TMonotonic TBlobCheckerPlanner::GetNextAllowedCheckTimestamp(TMonotonic now) {

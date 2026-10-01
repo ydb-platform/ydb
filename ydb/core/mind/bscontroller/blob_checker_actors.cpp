@@ -2,7 +2,7 @@
 #include "blob_checker_actors.h"
 #include "blob_checker_events.h"
 
-#include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <unordered_set>
 
@@ -22,8 +22,9 @@ public:
     {}
 
     void Bootstrap() {
-        STLOG(PRI_NOTICE, BLOB_CHECKER_WORKER, BSW01, "Bootstrapping BlobCheckerWorker",
-                (GroupId, GroupId));
+        YDB_LOG_NOTICE_COMP(BLOB_CHECKER_WORKER, "Bootstrapping BlobCheckerWorker",
+            {"marker", "BSW01"},
+            {"groupId", GroupId});
 
         QuantumStart = TActivationContext::Monotonic();
         RequestNextPage();
@@ -36,19 +37,26 @@ public:
 private:
     STRICT_STFUNC(StateAssimilating, {
         hFunc(TEvBlobStorage::TEvAssimilateResult, Handle);
-        cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+        cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
     });
 
     STRICT_STFUNC(StateCheckingIntegrity, {
         hFunc(TEvBlobStorage::TEvCheckIntegrityResult, Handle);
-        cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+        cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
     });
 
 private:
+    void HandlePoison() {
+        // The orchestrator uses this final result to release the controller's
+        // scrub exclusion before allowing a replacement worker to start.
+        FinishQuantum(EBlobCheckerWorkerQuantumStatus::Error);
+    }
+
     void Handle(const TEvBlobStorage::TEvAssimilateResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BLOB_CHECKER_WORKER, BSW10, "Handle TEvAssimilateResult",
-                (GroupId, GroupId),
-                (Event, ev->Get()->ToString()));
+        YDB_LOG_DEBUG_COMP(BLOB_CHECKER_WORKER, "Handle TEvAssimilateResult",
+            {"marker", "BSW10"},
+            {"groupId", GroupId},
+            {"event", ev->Get()->ToString()});
 
         TEvBlobStorage::TEvAssimilateResult* res = ev->Get();
         if (res->Status != NKikimrProto::OK) {
@@ -78,9 +86,10 @@ private:
 
     void Handle(const TEvBlobStorage::TEvCheckIntegrityResult::TPtr& ev) {
         const TEvBlobStorage::TEvCheckIntegrityResult* res = ev->Get();
-        STLOG(PRI_DEBUG, BLOB_CHECKER_WORKER, BSW11, "Handle TEvCheckIntegrityResult",
-                (GroupId, GroupId),
-                (Event, res->ToString()));
+        YDB_LOG_DEBUG_COMP(BLOB_CHECKER_WORKER, "Handle TEvCheckIntegrityResult",
+            {"marker", "BSW11"},
+            {"groupId", GroupId},
+            {"event", res->ToString()});
 
         if (res->Status != NKikimrProto::OK) {
             // Most likely CheckIntegrity fails when group is in DISINTEGRATED state
@@ -142,18 +151,20 @@ private:
         TLogoBlobID blobId = BlobsToCheck.front().Id;
         BlobsToCheck.pop_front();
 
-        STLOG(PRI_DEBUG, BLOB_CHECKER_WORKER, BSW12, "Send TEvCheckIntegrity",
-                (GroupId, GroupId),
-                (BlobId, blobId.ToString()));
+        YDB_LOG_DEBUG_COMP(BLOB_CHECKER_WORKER, "Send TEvCheckIntegrity",
+            {"marker", "BSW12"},
+            {"groupId", GroupId},
+            {"blobId", blobId.ToString()});
 
         SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvCheckIntegrity(blobId, TInstant::Max(),
                 NKikimrBlobStorage::EGetHandleClass::LowRead, true));
     }
 
     void FinishQuantum(EBlobCheckerWorkerQuantumStatus quantumStatus) {
-        STLOG(PRI_DEBUG, BLOB_CHECKER_WORKER, BSW20, "Finish Quantum",
-                (GroupId, GroupId),
-                (QuantumStatus, BlobCheckerWorkerQuantumStatusToString(quantumStatus)));
+        YDB_LOG_DEBUG_COMP(BLOB_CHECKER_WORKER, "Finish Quantum",
+            {"marker", "BSW20"},
+            {"groupId", GroupId},
+            {"quantumStatus", BlobCheckerWorkerQuantumStatusToString(quantumStatus)});
 
         Send(OrchestratorActorId, new TEvBlobCheckerFinishQuantum(GroupId, quantumStatus, MaxCheckedBlob,
                 std::exchange(UnknownDataStatusCount, 0),
@@ -214,7 +225,6 @@ public:
             TDuration periodicity, ::NMonitoring::TDynamicCounterPtr counters)
         : BSCActorId(bscActorId)
         , CheckPeriodicity(periodicity)
-        , ParentCounters(counters)
         , Counters(counters->GetSubgroup("subsystem", "blob_checker"))
         , DataIssues(Counters->GetCounter("DataIssues", false))
         , PlacementIssues(Counters->GetCounter("PlacementIssues", false))
@@ -225,12 +235,9 @@ public:
         AddGroups(std::move(serializedGroups));
     }
 
-    ~TBlobCheckerOrchestrator() {
-        ParentCounters->RemoveSubgroup("subsystem", "blob_checker");
-    }
-
     void Bootstrap() {
-        STLOG(PRI_NOTICE, BLOB_CHECKER_ORCHESTRATOR, BSO01, "Bootstrapping BlobCheckerOrchestrator");
+        YDB_LOG_NOTICE_COMP(BLOB_CHECKER_ORCHESTRATOR, "Bootstrapping BlobCheckerOrchestrator",
+            {"marker", "BSO01"});
         Become(&TThis::StateFunc);
         HandleWakeup();
     }
@@ -240,6 +247,20 @@ public:
     }
 
 private:
+    static constexpr TDuration BSCRequestDelay = TDuration::Minutes(1);
+    static constexpr TDuration InitialRetryDelay = TDuration::Minutes(1);
+    static constexpr TDuration MaxRetryDelay = TDuration::Hours(1);
+
+    struct TGroupCheckInfo {
+        TBlobCheckerGroupStatus Status;
+        bool RequestPending = false;
+        bool CancellationPending = false;
+        bool DeleteAfterWorker = false;
+        std::optional<TActorId> WorkerId = std::nullopt;
+        std::optional<TBlobCheckerGroupStatus> ReplacementStatus;
+        TDuration RetryDelay = InitialRetryDelay;
+    };
+
     STRICT_STFUNC(StateFunc, {
         hFunc(TEvBlobCheckerFinishQuantum, Handle);
         cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
@@ -251,11 +272,13 @@ private:
 
 private:
     void HandlePoison() {
-        STLOG(PRI_NOTICE, BLOB_CHECKER_ORCHESTRATOR, BSO30, "Received Poison");
+        YDB_LOG_NOTICE_COMP(BLOB_CHECKER_ORCHESTRATOR, "Received Poison",
+            {"marker", "BSO30"});
 
         for (const auto& [id, info] : Groups) {
             if (info.WorkerId) {
                 Send(*info.WorkerId, new TEvents::TEvPoisonPill);
+                ++*WorkersTerminated;
             }
         }
 
@@ -271,22 +294,47 @@ private:
 
     void Handle(const TEvBlobCheckerDecision::TPtr& ev) {
         TGroupId groupId = ev->Get()->GroupId;
-        STLOG(PRI_DEBUG, BLOB_CHECKER_ORCHESTRATOR, BSO21, "Got decision from BSC",
-                (GroupId, groupId),
-                (Status, NKikimrProto::EReplyStatus_Name(ev->Get()->Status)));
+        YDB_LOG_DEBUG_COMP(BLOB_CHECKER_ORCHESTRATOR, "Got decision from BSC",
+            {"marker", "BSO21"},
+            {"groupId", groupId},
+            {"status", NKikimrProto::EReplyStatus_Name(ev->Get()->Status)});
 
         const auto it = Groups.find(groupId);
         if (it == Groups.end()) {
-            Y_DEBUG_ABORT_S("Unknown GroupId# " << groupId);
+            YDB_LOG_DEBUG_COMP(BLOB_CHECKER_ORCHESTRATOR,
+                "Ignoring decision for a removed BlobChecker group",
+                {"marker", "BSO24"},
+                {"groupId", groupId});
             return;
         }
 
         TGroupCheckInfo& info = it->second;
+        const bool requestWasPending = std::exchange(info.RequestPending, false);
 
-        TMonotonic now = TActivationContext::Monotonic();
         switch (ev->Get()->Status) {
         case NKikimrProto::OK: {
+            if (!requestWasPending) {
+                YDB_LOG_DEBUG_COMP(BLOB_CHECKER_ORCHESTRATOR,
+                    "Ignoring stale successful BlobChecker decision",
+                    {"marker", "BSO25"},
+                    {"groupId", groupId});
+                if (!info.WorkerId) {
+                    // A plan request from a deleted incarnation can be
+                    // accepted after the same group id is re-created. It must
+                    // still release the controller's planner locks.
+                    Send(BSCActorId, new TEvBlobCheckerUpdateGroupStatus(groupId,
+                            info.Status.SerializeProto(), /*finishScan=*/true));
+                }
+                break;
+            }
             if (info.WorkerId) {
+                break;
+            }
+            if (CheckPeriodicity == TDuration::Zero()) {
+                // A decision may have crossed a disable request. Complete it
+                // without spawning a worker so BSC can release its group lock.
+                Send(BSCActorId, new TEvBlobCheckerUpdateGroupStatus(groupId,
+                        info.Status.SerializeProto(), /*finishScan=*/true));
                 break;
             }
             if (info.Status.ShortStatus & EBlobCheckerResultStatusFlags::ScanFinished) {
@@ -300,11 +348,13 @@ private:
         }
         case NKikimrProto::ERROR:
             if (info.WorkerId) {
-                Send(*info.WorkerId, new TEvents::TEvPoisonPill);
-                info.WorkerId.reset();
+                if (!info.CancellationPending) {
+                    info.CancellationPending = true;
+                    Send(*info.WorkerId, new TEvents::TEvPoisonPill);
+                }
+            } else if (requestWasPending) {
+                ScheduleRetry(groupId, info);
             }
-            OutgoingRequests.emplace(now + RetryDelay, groupId);
-            ++*WorkersTerminated;
             break;
         default:
             Y_DEBUG_ABORT_S("Unexpected status# " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
@@ -314,8 +364,9 @@ private:
     void Handle(const TEvBlobCheckerFinishQuantum::TPtr& ev) {
         TEvBlobCheckerFinishQuantum* res = ev->Get();
         TGroupId groupId = res->GroupId;
-        STLOG(PRI_DEBUG, BLOB_CHECKER_ORCHESTRATOR, BSO20, "Worker finished quantum",
-                (Event, res->ToString()));
+        YDB_LOG_DEBUG_COMP(BLOB_CHECKER_ORCHESTRATOR, "Worker finished quantum",
+            {"marker", "BSO20"},
+            {"event", res->ToString()});
 
         auto it = Groups.find(groupId);
         if (it == Groups.end()) {
@@ -325,70 +376,138 @@ private:
 
         TGroupCheckInfo& info = it->second;
         if (!info.WorkerId || *info.WorkerId != ev->Sender) {
-            STLOG(PRI_DEBUG, BLOB_CHECKER_ORCHESTRATOR, BSO23,
-                    "Ignoring result from a stale BlobChecker worker",
-                    (GroupId, groupId),
-                    (Sender, ev->Sender),
-                    (CurrentWorkerId, info.WorkerId ? info.WorkerId->ToString() : TString("<none>")));
+            YDB_LOG_DEBUG_COMP(BLOB_CHECKER_ORCHESTRATOR,
+                "Ignoring result from a stale BlobChecker worker",
+                {"marker", "BSO23"},
+                {"groupId", groupId},
+                {"sender", ev->Sender},
+                {"currentWorkerId", info.WorkerId ? info.WorkerId->ToString() : TString("<none>")});
             return;
         }
 
         bool finishScan = false;
-        TMonotonic now = TActivationContext::Monotonic();
+        TInstant now = TActivationContext::Now();
 
-        switch (res->QuantumStatus) {
-        case EBlobCheckerWorkerQuantumStatus::FinishOk:
-            info.Status.LastScanFinishedTimestamp = now;
-            ++*ChecksCompleted;
-            [[fallthrough]];
-        case EBlobCheckerWorkerQuantumStatus::Error:
-            finishScan = true;
-            info.Status.ShortStatus |= EBlobCheckerResultStatusFlags::ScanFinished;
-            CheckOrder.emplace(info.Status.LastScanFinishedTimestamp, groupId);
-            ++*WorkersTerminated;
-            [[fallthrough]];
-        case EBlobCheckerWorkerQuantumStatus::IntermediateOk:
-            if (res->QuantumStatus != EBlobCheckerWorkerQuantumStatus::Error) {
-                // don't update on fallthrough from Error case
-                info.Status.MaxCheckedBlob = res->MaxCheckedBlob;
-            }
-            if (res->PlacementIssuesCount) {
-                *PlacementIssues += res->PlacementIssuesCount;
-                info.Status.ShortStatus |= EBlobCheckerResultStatusFlags::PlacementIssues;
-                STLOG(PRI_INFO, BLOB_CHECKER_ORCHESTRATOR, BSO50, "BlobChecker found placement issues",
-                        (PlacementIssuesCount, res->PlacementIssuesCount));
-            }
-            if (!res->BlobsWithDataIssues.empty()) {
-                *DataIssues += res->BlobsWithDataIssues.size();
-                TStringStream str;
-                str << "[ ";
-                for (const TLogoBlobID& blobId : res->BlobsWithDataIssues) {
-                    str << blobId.ToString() << " ";
-                }
-                str << "]";
-
-                info.Status.ShortStatus |= EBlobCheckerResultStatusFlags::DataIssues;
-                STLOG(PRI_CRIT, BLOB_CHECKER_ORCHESTRATOR, BSO51, "BlobChecker found data issues",
-                        (BlobIds, str.Str()));
-            }
+        if (info.DeleteAfterWorker &&
+                res->QuantumStatus == EBlobCheckerWorkerQuantumStatus::IntermediateOk) {
+            // A checkpoint may cross the deletion request. Do not publish old
+            // incarnation state after its record has been removed/re-created.
+            return;
         }
 
-        if (finishScan) {
+        switch (res->QuantumStatus) {
+        case EBlobCheckerWorkerQuantumStatus::FinishOk: {
+            info.Status.LastScanFinishedTimestamp = now;
+            info.Status.ShortStatus |= EBlobCheckerResultStatusFlags::ScanFinished;
+            info.Status.MaxCheckedBlob = res->MaxCheckedBlob;
             info.WorkerId.reset();
+            info.CancellationPending = false;
+            info.RetryDelay = InitialRetryDelay;
+            finishScan = true;
+            ++*ChecksCompleted;
+            ++*WorkersTerminated;
+            if (!info.DeleteAfterWorker && CheckPeriodicity != TDuration::Zero()) {
+                CheckOrder.emplace(info.Status.LastScanFinishedTimestamp, groupId);
+            }
+            break;
+        }
+        case EBlobCheckerWorkerQuantumStatus::Error: {
+            finishScan = true;
+            info.WorkerId.reset();
+            info.CancellationPending = false;
+            ++*WorkersTerminated;
+            if (!info.DeleteAfterWorker) {
+                ScheduleRetry(groupId, info);
+            }
+            break;
+        }
+        case EBlobCheckerWorkerQuantumStatus::IntermediateOk:
+            info.Status.MaxCheckedBlob = res->MaxCheckedBlob;
+            break;
+        }
+
+        if (res->PlacementIssuesCount) {
+            *PlacementIssues += res->PlacementIssuesCount;
+            info.Status.ShortStatus |= EBlobCheckerResultStatusFlags::PlacementIssues;
+            YDB_LOG_INFO_COMP(BLOB_CHECKER_ORCHESTRATOR, "BlobChecker found placement issues",
+                {"marker", "BSO50"},
+                {"placementIssuesCount", res->PlacementIssuesCount});
+        }
+        if (!res->BlobsWithDataIssues.empty()) {
+            *DataIssues += res->BlobsWithDataIssues.size();
+            info.Status.ShortStatus |= EBlobCheckerResultStatusFlags::DataIssues;
+            YDB_LOG_CRIT_COMP(BLOB_CHECKER_ORCHESTRATOR, "BlobChecker found data issues",
+                {"marker", "BSO51"},
+                {"blobIds", res->BlobsWithDataIssues});
+        }
+
+        const bool deleteAfterWorker = finishScan && info.DeleteAfterWorker;
+        std::optional<TBlobCheckerGroupStatus> replacementStatus;
+        if (deleteAfterWorker) {
+            replacementStatus = std::move(info.ReplacementStatus);
         }
 
         Send(BSCActorId, new TEvBlobCheckerUpdateGroupStatus(groupId,
-                info.Status.SerializeProto(), finishScan));
+                replacementStatus ? replacementStatus->SerializeProto() : info.Status.SerializeProto(),
+                finishScan));
+
+        if (deleteAfterWorker) {
+            Groups.erase(it);
+            if (replacementStatus) {
+                auto [newIt, inserted] = Groups.try_emplace(groupId);
+                Y_ABORT_UNLESS(inserted);
+                newIt->second.Status = std::move(*replacementStatus);
+                if (CheckPeriodicity != TDuration::Zero()) {
+                    CheckOrder.emplace(newIt->second.Status.LastScanFinishedTimestamp, groupId);
+                }
+            }
+        }
     }
 
     void Handle(const TEvBlobCheckerUpdateSettings::TPtr& ev) {
-        STLOG(PRI_INFO, BLOB_CHECKER_ORCHESTRATOR, BSO11, "Handle TEvBlobCheckerUpdateSettings",
-                (Event, ev->ToString()));
+        YDB_LOG_INFO_COMP(BLOB_CHECKER_ORCHESTRATOR, "Handle TEvBlobCheckerUpdateSettings",
+            {"marker", "BSO11"},
+            {"event", ev->ToString()});
+        const bool wasEnabled = CheckPeriodicity != TDuration::Zero();
         CheckPeriodicity = ev->Get()->Periodicity;
+
+        if (CheckPeriodicity == TDuration::Zero()) {
+            CheckOrder.clear();
+            OutgoingRequests.clear();
+            for (auto& [groupId, info] : Groups) {
+                if (std::exchange(info.RequestPending, false)) {
+                    // Requests queued behind another group's node locks may
+                    // have no decision yet. Explicitly finish them so disable
+                    // cannot strand planner locks across re-enable.
+                    Send(BSCActorId, new TEvBlobCheckerUpdateGroupStatus(groupId,
+                            info.Status.SerializeProto(), /*finishScan=*/true));
+                }
+                if (info.WorkerId && !info.CancellationPending) {
+                    info.CancellationPending = true;
+                    Send(*info.WorkerId, new TEvents::TEvPoisonPill);
+                }
+            }
+            return;
+        }
+
+        if (!wasEnabled) {
+            // Rebuild scheduling only for groups that are not still finishing a
+            // worker or awaiting a decision from BSC.
+            for (const auto& [groupId, info] : Groups) {
+                if (!info.WorkerId && !info.RequestPending && !info.DeleteAfterWorker) {
+                    CheckOrder.emplace(info.Status.LastScanFinishedTimestamp, groupId);
+                }
+            }
+        }
         CheckGroups();
     }
 
     void HandleWakeup() {
+        if (CheckPeriodicity == TDuration::Zero()) {
+            Schedule(BSCRequestDelay, new TEvents::TEvWakeup);
+            return;
+        }
+
         const TMonotonic now = TActivationContext::Monotonic();
         while (!OutgoingRequests.empty() && OutgoingRequests.begin()->first <= now) {
             const TGroupId groupId = OutgoingRequests.begin()->second;
@@ -401,12 +520,27 @@ private:
 
 private:
     void AddGroups(std::unordered_map<TGroupId, TString>&& newGroups) {
-        STLOG(PRI_DEBUG, BLOB_CHECKER_ORCHESTRATOR, BSO10, "Adding new groups",
-                (NewGroupsCount, newGroups.size()));
+        YDB_LOG_DEBUG_COMP(BLOB_CHECKER_ORCHESTRATOR, "Adding new groups",
+            {"marker", "BSO10"},
+            {"newGroupsCount", newGroups.size()});
         for (const auto& [groupId, serializedState] : newGroups) {
             TBlobCheckerGroupStatus status = TBlobCheckerGroupStatus::Deserialize(serializedState);
-            Groups[groupId].Status = status;
-            CheckOrder.emplace(status.LastScanFinishedTimestamp, groupId);
+            const auto [it, inserted] = Groups.try_emplace(groupId);
+            if (!inserted) {
+                if (it->second.DeleteAfterWorker) {
+                    // Do not overlap a re-created group with the worker of its
+                    // previous incarnation. Install the replacement after the
+                    // old worker acknowledges cancellation.
+                    it->second.ReplacementStatus = std::move(status);
+                }
+                // Group-set updates may be retried. Keep them idempotent so a
+                // duplicate neither overwrites live state nor adds a schedule.
+                continue;
+            }
+            it->second.Status = std::move(status);
+            if (CheckPeriodicity != TDuration::Zero()) {
+                CheckOrder.emplace(it->second.Status.LastScanFinishedTimestamp, groupId);
+            }
         }
     }
 
@@ -416,13 +550,19 @@ private:
             if (it != Groups.end()) {
                 TGroupCheckInfo& info = it->second;
                 if (info.WorkerId) {
-                    Send(*info.WorkerId, new TEvents::TEvPoisonPill);
+                    info.DeleteAfterWorker = true;
+                    info.ReplacementStatus.reset();
+                    if (!info.CancellationPending) {
+                        info.CancellationPending = true;
+                        Send(*info.WorkerId, new TEvents::TEvPoisonPill);
+                    }
+                } else {
+                    Groups.erase(it);
                 }
-                Groups.erase(it);
             }
         }
 
-        auto eraseDeleted = [&deletedGroups](std::multimap<TMonotonic, TGroupId>& scheduled) {
+        auto eraseDeleted = [&deletedGroups](auto& scheduled) {
             for (auto it = scheduled.begin(); it != scheduled.end(); ) {
                 if (deletedGroups.contains(it->second)) {
                     it = scheduled.erase(it);
@@ -436,48 +576,56 @@ private:
     }
 
     void SendRequest(TGroupId groupId) {
-        STLOG(PRI_NOTICE, BLOB_CHECKER_ORCHESTRATOR, BSO22, "Sending request to BSC",
-                (GroupId, groupId));
+        const auto it = Groups.find(groupId);
+        if (it == Groups.end() || it->second.RequestPending || it->second.WorkerId ||
+                it->second.DeleteAfterWorker ||
+                CheckPeriodicity == TDuration::Zero()) {
+            return;
+        }
+
+        YDB_LOG_NOTICE_COMP(BLOB_CHECKER_ORCHESTRATOR, "Sending request to BSC",
+            {"marker", "BSO22"},
+            {"groupId", groupId});
+        it->second.RequestPending = true;
         Send(BSCActorId, new TEvBlobCheckerPlanCheck(groupId));
     }
 
     void CheckGroups() {
-        const TMonotonic now = TActivationContext::Monotonic();
+        if (CheckPeriodicity == TDuration::Zero()) {
+            return;
+        }
+
+        const TInstant now = TActivationContext::Now();
         for (auto it = CheckOrder.begin(); it != CheckOrder.end(); ) {
             const auto [ts, groupId] = *it;
-            if (ts + CheckPeriodicity >= now) {
+            if (ts + CheckPeriodicity > now) {
                 break;
             }
 
             it = CheckOrder.erase(it);
-            if (!Groups[groupId].WorkerId) {
-                SendRequest(groupId);
-            }
+            SendRequest(groupId);
         }
     }
 
-private:
-    struct TGroupCheckInfo {
-        TBlobCheckerGroupStatus Status;
-        bool RequestPending = false;
-        std::optional<TActorId> WorkerId = std::nullopt;
-    };
+    void ScheduleRetry(TGroupId groupId, TGroupCheckInfo& info) {
+        if (CheckPeriodicity == TDuration::Zero()) {
+            return;
+        }
+        OutgoingRequests.emplace(TActivationContext::Monotonic() + info.RetryDelay, groupId);
+        info.RetryDelay = TDuration::MicroSeconds(Min<ui64>(
+                info.RetryDelay.MicroSeconds() * 2, MaxRetryDelay.MicroSeconds()));
+    }
 
 private:
     TActorId BSCActorId;
 
     std::unordered_map<TGroupId, TGroupCheckInfo> Groups;
-    std::multimap<TMonotonic, TGroupId> CheckOrder;
+    std::multimap<TInstant, TGroupId> CheckOrder;
     std::multimap<TMonotonic, TGroupId> OutgoingRequests;
 
     TDuration CheckPeriodicity = TDuration::Days(30);
-    // TODO: set it via ICB
-    constexpr static TDuration BSCRequestDelay = TDuration::Minutes(1);
-    // TODO: something smarter
-    constexpr static TDuration RetryDelay = TDuration::Hours(1);
 
     // counters
-    ::NMonitoring::TDynamicCounterPtr ParentCounters;
     ::NMonitoring::TDynamicCounterPtr Counters;
     ::NMonitoring::TDynamicCounters::TCounterPtr DataIssues;
     ::NMonitoring::TDynamicCounters::TCounterPtr PlacementIssues;

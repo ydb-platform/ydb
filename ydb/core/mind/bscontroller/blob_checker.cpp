@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NBsController {
 
-TBlobCheckerGroupStatus::TBlobCheckerGroupStatus(ui64 status, TMonotonic lastScan,
+TBlobCheckerGroupStatus::TBlobCheckerGroupStatus(ui64 status, TInstant lastScan,
         TLogoBlobID maxChecked)
     : ShortStatus(status)
     , LastScanFinishedTimestamp(lastScan)
@@ -20,12 +20,12 @@ TBlobCheckerGroupStatus TBlobCheckerGroupStatus::Deserialize(TString serializedS
         return TBlobCheckerGroupStatus{};
     }
     ui64 shortStatus = status.GetShortStatus();
-    TMonotonic timestamp = TMonotonic::FromValue(status.GetLastScanFinishedTimestamp());
+    TInstant timestamp = TInstant::FromValue(status.GetLastScanFinishedTimestamp());
     TLogoBlobID blob = LogoBlobIDFromLogoBlobID(status.GetMaxCheckedBlob());
     return TBlobCheckerGroupStatus(shortStatus, timestamp, blob);
 }
 
-TString TBlobCheckerGroupStatus::CreateInitialSerialized(TMonotonic now) {
+TString TBlobCheckerGroupStatus::CreateInitialSerialized(TInstant now) {
     NKikimrBlobChecker::TBlobCheckerGroupStatus proto;
     proto.SetShortStatus(0);
     proto.SetLastScanFinishedTimestamp(now.GetValue());

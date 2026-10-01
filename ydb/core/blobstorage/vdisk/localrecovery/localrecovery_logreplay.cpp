@@ -174,11 +174,10 @@ namespace NKikimr {
                                 lsn, id.ToString().data()));
                 TLogoBlobID genId(id, 0);
                 if (fromVPutCommand)
-                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, id.PartId(), ingress, TRope(buf), lsn,
-                            THullDbRecovery::RECOVERY);
+                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, id.PartId(), ingress, TRope(buf),
+                        std::nullopt, lsn, THullDbRecovery::RECOVERY);
                 else
-                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, ingress, lsn,
-                            THullDbRecovery::RECOVERY);
+                    LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, ingress, lsn, THullDbRecovery::RECOVERY);
             }
         }
 

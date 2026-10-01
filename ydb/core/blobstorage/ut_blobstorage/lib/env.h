@@ -232,11 +232,11 @@ struct TEnvironmentSetup {
         return TAppData::TimeProvider->Now();
     }
 
-    TString GenerateRandomString(ui32 len) {
+    static TString GenerateRandomString(ui32 len, ui64 seed) {
         TString res = TString::Uninitialized(len);
         char *p = res.Detach();
         char *end = p + len;
-        TReallyFastRng32 rng(RandomNumber<ui64>());
+        TReallyFastRng32 rng(seed);
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
             WriteUnaligned<ui32>(p, rng());
         }
@@ -244,6 +244,10 @@ struct TEnvironmentSetup {
             *p = rng();
         }
         return res;
+    }
+
+    TString GenerateRandomString(ui32 len) {
+        return GenerateRandomString(len, RandomNumber<ui64>());
     }
 
     ui32 GetNumDataCenters() const {
@@ -479,6 +483,7 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
                 ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL("DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy", false, false, true, false);
 
                 ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
                 ADD_ICB_CONTROL("VDiskControls.HullCompThrottlerBytesRate", 0, 0, 10737418240, 0);
@@ -493,6 +498,8 @@ struct TEnvironmentSetup {
                 ADD_ICB_CONTROL("VDiskControls.MaxChunksToDefragInflight", 10, 1, 50, 10);
                 ADD_ICB_CONTROL("VDiskControls.DefaultHugeGarbagePerMille", 300, 0, 1000, 300);
                 ADD_ICB_CONTROL("VDiskControls.GarbageThresholdToRunFullCompactionPerMille", 0, 0, 300, 0);
+                ADD_ICB_CONTROL("VDiskControls.EnableChecksumReadValidationOnVDisk", false, false, true, false);
+                ADD_ICB_CONTROL("VDiskControls.EnableChecksumWriteValidationOnVDisk", false, false, true, false);
 #undef ADD_ICB_CONTROL
 
                 {
@@ -840,7 +847,7 @@ struct TEnvironmentSetup {
         WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
             Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(blobId, TRope(part), vdiskId, false, nullptr,
-                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog)), queueId.NodeId());
+                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false)), queueId.NodeId());
             auto r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
 
             auto& record = r->Get()->Record;
@@ -979,12 +986,17 @@ struct TEnvironmentSetup {
         TIntrusivePtr<TStoragePoolCounters> storagePoolCounters = perPoolCounters.GetPoolCounters("pool_name");
         TControlWrapper enablePutBatching(true, false, true);
         TControlWrapper enableVPatch(false, false, true);
+        TControlWrapper enableChecksumCalcAndValidationOnDsProxy(false, false, true);
+        if (auto it = IcbControls.find({nodeId, "DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy"}); it != IcbControls.end()) {
+            enableChecksumCalcAndValidationOnDsProxy = it->second;
+        }
         auto info = GetGroupInfo(groupId);
         IActor *dsproxy = CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(info), nullptr, true, nodeMon,
             std::move(storagePoolCounters), TBlobStorageProxyParameters{
                     .Controls = TBlobStorageProxyControlWrappers{
                         .EnablePutBatching = enablePutBatching,
                         .EnableVPatch = enableVPatch,
+                        .EnableChecksumCalcAndValidationOnDsProxy = enableChecksumCalcAndValidationOnDsProxy,
                     }
                 }
             );

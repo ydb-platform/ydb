@@ -3,6 +3,7 @@
 
 #include "vdisk_events_quoter.h"
 #include "vdisk_performance_params.h"
+#include "blob_header_mode.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/base/blobstorage.h>
@@ -136,7 +137,7 @@ namespace NKikimr {
         TControlWrapper MaxActiveCompactionsPerPDisk;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
-        bool AddHeader;
+        EBlobHeaderMode BlobHeaderMode;
 
         //////////////// LOG CUTTER SETTINGS ////////////////
         TDuration RecoveryLogCutterFirstDuration;
@@ -268,6 +269,8 @@ namespace NKikimr {
 
         ///////////// SYNC SETTINGS //////////////////
         TControlWrapper MaxInProgressSyncCount;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

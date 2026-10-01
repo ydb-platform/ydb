@@ -21,6 +21,10 @@ from dataclasses import dataclass, field
 from github import Github, GithubException, Auth
 import requests
 
+# Sentinel merge time for sources whose merge time is unknown: sorts them
+# before all merged sources with a known time
+_EPOCH = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
+
 
 @dataclass
 class ConflictInfo:
@@ -95,14 +99,13 @@ def pick_linked_pr(commit, logger) -> Optional[Any]:
     associated PR is used.
     """
     try:
-        prs = commit.get_pulls().get_page(0)
+        prs = list(commit.get_pulls())
     except Exception as e:
         logger.warning(f"Failed to get PRs linked to commit {commit.sha[:7]}, treating it as a plain commit: {e}")
         return None
     merged = [p for p in prs if p.merged]
     if merged:
-        epoch = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-        return max(merged, key=lambda p: to_utc(p.merged_at) or epoch)
+        return max(merged, key=lambda p: to_utc(p.merged_at) or _EPOCH)
     return prs[0] if prs else None
 
 
@@ -282,8 +285,7 @@ def sort_sources(sources: List[Source], logger) -> List[Source]:
         )
 
     # Sources without a known merge time sort first, keeping their input order
-    epoch = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
-    merged.sort(key=lambda s: to_utc(s.merged_at) or epoch)
+    merged.sort(key=lambda s: to_utc(s.merged_at) or _EPOCH)
 
     ordered = merged + unmerged
     logger.info(

@@ -812,7 +812,7 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(
 std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
     const TExprBase& body, const TExprBase& node, TExprContext& ctx, const THashSet<TString>& indexedColumns,
     const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns,
-    EJsonIndexSelectionMode selectionMode)
+    EJsonIndexSelectionMode selectionMode, const TExprNode* expectedRow)
 {
     auto result = VisitJsonPredicate(body, ctx, indexedColumns);
     if (!result.has_value()) {
@@ -874,7 +874,7 @@ std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
             "And", "OptionalIf", "Just", "AssumeStrict"
         };
         TExprVisitPtrFunc extract = [&](const TExprNode::TPtr& expr) {
-            TryExtractPrefixValues(expr, prefixColumnsSet, capturedPrefixColumns);
+            TryExtractPrefixValues(expr, prefixColumnsSet, capturedPrefixColumns, expectedRow);
             auto optionalIf = TExprBase(expr).Maybe<TCoOptionalIf>();
             if (optionalIf) {
                 VisitExpr(optionalIf.Cast().Predicate().Ptr(), extract);

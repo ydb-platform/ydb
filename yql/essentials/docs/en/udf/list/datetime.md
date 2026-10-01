@@ -99,9 +99,26 @@ SELECT
     DateTime::GetDayOfWeekName($tm) as WeekDay; -- "Wednesday"
 ```
 
+## Init/Init64 {#init}
+
+Available since version [2026.03](../../changelog/2026.03.md#datetime-module).
+
+Creates an internal date-time representation. Unspecified or NULL components default to year 1970, month 1, day 1, and zero for all remaining components. An unspecified time zone uses GMT. `Timezone` is accepted only as a named argument. Returns NULL for invalid components or invalid dates.
+
+#### List of functions
+
+```yql
+DateTime::Init([ Year:Uint16?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM>?
+DateTime::Init64([ Year:Int32?, Month:Uint8?, Day:Uint8?, Hour:Uint8?, Minute:Uint8?, Second:Uint8?, Microsecond:Uint32?, Timezone:String? ]) -> Resource<TM64>?
+```
+
+```yql
+SELECT DateTime::MakeTimestamp(DateTime::Init(2024 as Year, 2 as Month, 29 as Day)); -- 2024-02-29T00:00:00Z
+```
+
 ## Update {#update}
 
-Updating one or more components in the internal representation. Returns either an updated copy or NULL, if an update produces an invalid date or other inconsistencies.
+Updating one or more components in the internal representation. `Timezone` is accepted only as a named argument. Returns either an updated copy or NULL, if an update produces an invalid date or other inconsistencies.
 
 #### List of functions
 

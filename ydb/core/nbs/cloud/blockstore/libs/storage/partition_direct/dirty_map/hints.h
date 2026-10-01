@@ -24,8 +24,8 @@ struct TReadRangeHint
     TReadRangeHint(
         THostMask hostMask,
         TPBufferKey pBufferKey,
-        TBlockRange64 requestRelativeRange,
-        TBlockRange64 vchunkRange,
+        TBlockRange16 requestRelativeRange,
+        TBlockRange16 vchunkRange,
         TRangeLock&& lock);
 
     TReadRangeHint(TReadRangeHint&& other) noexcept;
@@ -39,10 +39,10 @@ struct TReadRangeHint
     TPBufferKey PBufferKey;
 
     // Range relative to the request.
-    TBlockRange64 RequestRelativeRange;
+    TBlockRange16 RequestRelativeRange;
 
     // Range relative to the VChunk.
-    TBlockRange64 VChunkRange;
+    TBlockRange16 VChunkRange;
 
     // Should call Lock.Arm() before reading.
     TRangeLock Lock;
@@ -65,7 +65,7 @@ struct TReadHint
 struct TPBufferSegment
 {
     TPBufferKey PBufferKey;
-    TBlockRange64 Range;
+    TBlockRange16 Range;
 
     static TVector<TPBufferKey> MakePBufferKeys(
         std::span<const TPBufferSegment> segments);
@@ -89,7 +89,7 @@ public:
         THostIndex source,
         THostIndex destination,
         TPBufferKey pBufferKey,
-        TBlockRange64 range);
+        TBlockRange16 range);
 
     [[nodiscard]] bool Empty() const;
 
@@ -144,7 +144,7 @@ struct TSyncHint
 {
     ui64 SyncId = 0;
     THostIndex Host = InvalidHostIndex;
-    TBlockRange64 Range;
+    TBlockRange16 Range;
 
     // ReadyToStart will be triggered at the moment when all
     // overlapping flush operations with this range are completed.

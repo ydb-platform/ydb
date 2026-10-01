@@ -2,12 +2,17 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TReject: public ISubOperation {
+    const char* Name() const override final { return "TReject"; }
+    const char* CurrentStateName() const override final { return "none"; }
+
     const TOperationId OperationId;
     THolder<TProposeResponse> Response;
 
@@ -17,37 +22,32 @@ public:
         , Response(std::move(response))
     {}
 
-    TReject(TOperationId id, NKikimrScheme::EStatus status, const TString& explain)
+    TReject(TOperationId id, NKikimrScheme::EStatus status, const TString& reason)
         : OperationId(id)
-        , Response(
-            new TEvSchemeShard::TEvModifySchemeTransactionResult(
-                NKikimrScheme::StatusAccepted, 0, 0))
+        , Response(new TEvSchemeShard::TEvModifySchemeTransactionResult(NKikimrScheme::StatusAccepted, 0, 0))
     {
-        Response->SetError(status, explain);
+        Response->SetError(status, reason);
     }
 
-    const TOperationId& GetOperationId() const override {
+    const TOperationId GetId() const override {
         return OperationId;
     }
 
-    const TTxTransaction& GetTransaction() const override {
-        static const TTxTransaction fake;
+    const NKikimrSchemeOp::TModifyScheme& GetModifyScheme() const override {
+        static const NKikimrSchemeOp::TModifyScheme fake;
         return fake;
     }
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         Y_ABORT_UNLESS(Response);
 
-        const auto ssId = context.SS->SelfTabletId();
-
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TReject Propose"
-                         << ", opId: " << OperationId
-                         << ", explain: " << Response->Record.GetReason()
-                         << ", at schemeshard: " << ssId);
-
         Response->Record.SetTxId(ui64(OperationId.GetTxId()));
-        Response->Record.SetSchemeshardId(ui64(ssId));
+        Response->Record.SetSchemeshardId(context.SS->TabletID());
+
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"reason", Response->Record.GetReason()},
+        );
+
         return std::move(Response);
     }
 
@@ -77,3 +77,5 @@ ISubOperation::TPtr CreateReject(TOperationId id, NKikimrScheme::EStatus status,
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

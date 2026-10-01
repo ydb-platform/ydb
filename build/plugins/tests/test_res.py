@@ -27,6 +27,44 @@ def write_json(path, value):
     path.write_text(json.dumps(value))
 
 
+def test_ya_tools_conf_normalizes_nested_windows_paths(tmp_path, monkeypatch):
+    conf_dir = tmp_path / 'conf'
+    write_json(conf_dir / 'ya.conf.json', {'bottles': {}})
+    write_json(
+        conf_dir / 'tools' / 'tools' / 'parent' / 'default-child.tool.json',
+        {'tool': {'type': 'simple'}},
+    )
+    touch(tmp_path / 'build' / 'external_resources' / 'parent' / 'default-child' / 'resources.json')
+
+    real_walk = os.walk
+    real_open = open
+
+    def windows_walk(path):
+        for root, dirs, files in real_walk(path):
+            yield root.replace('/', '\\'), dirs, files
+
+    def windows_open(path, *args, **kwargs):
+        return real_open(str(path).replace('\\', '/'), *args, **kwargs)
+
+    monkeypatch.setattr(res.os, 'walk', windows_walk)
+    monkeypatch.setattr(res, 'open', windows_open, raising=False)
+
+    unit = FakeUnit(str(tmp_path))
+    res._YA_TOOLS_CONF(unit, 'conf')
+
+    assert unit.resource_files == [
+        ['STRIP', 'conf/', 'conf/ya.conf.json'],
+        [
+            'PREFIX',
+            'yatools',
+            'STRIP',
+            'conf',
+            'conf/tools/tools/parent/default-child.tool.json',
+        ],
+        'build/external_resources/parent/default-child/resources.json',
+    ]
+
+
 def test_ya_tools_conf_collects_resource_files(tmp_path):
     conf_dir = tmp_path / 'conf'
     write_json(

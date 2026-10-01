@@ -334,6 +334,24 @@ std::optional<EBridgeValueKind> NodeValueKind(const TWasmBridgeNodeTable::TNode&
 
 bool SlotAcceptsNull(const TType* type);
 
+//! Empty optional markers retain their depth even without a payload kind.
+//! Check the declared layers before treating one as a missing container item.
+bool NullValueMatchesType(TUnboxedValuePod value, const TType* type, const ITypeInfoHelper* helper) {
+    for (ui32 depth = 0; type && depth <= MaxBridgeOptionalDepth; ++depth) {
+        const TOptionalTypeInspector optional(*helper, type);
+        if (!optional) {
+            return helper->GetTypeKind(type) == ETypeKind::Null && !value;
+        }
+        if (!value) {
+            return true;
+        }
+        value = value.GetOptionalValue();
+        type = optional.GetItemType();
+    }
+    return false;
+}
+
+
 //! Guard for a guest handle the host is about to hand to MiniKQL as a value of
 //! `expected`. MiniKQL reads it as the declared type without re-checking, and
 //! the mismatch does not surface as an exception but as a Y_ABORT inside the
@@ -367,9 +385,9 @@ void EnsureNodeMatchesType(
     if (expectedFamily == EBridgeKindFamily::Null) {
         return;
     }
-    if (!node.Value) {
-        // A null: MiniKQL stores an absent value the same way whatever the
-        // payload type is, and the hashers answer for it without looking in.
+    if (!node.Value.HasValue()) {
+        Y_ENSURE(NullValueMatchesType(node.Value, expected, helper),
+            "Bridge: " << what << " null value does not match the declared Optional layers");
         return;
     }
     const auto family = NodeValueFamily(node);
@@ -377,10 +395,6 @@ void EnsureNodeMatchesType(
         // An unnamed payload leaves nothing to compare.
         return;
     }
-    // A value the guest made optional twice -- Just(null), Just(Just(x)) --
-    // lands here as an Optional over an Optional or over the Null family. Only
-    // a doubly optional slot can read one, a depth the bridge does not track,
-    // so refuse it: a guest that means a null passes the null handle itself.
     ythrow yexception()
         << "Bridge: " << what << " expected a " << BridgeKindFamilyAsStr(expectedFamily)
         << " value, got " << BridgeKindFamilyAsStr(*family);
@@ -407,8 +421,8 @@ bool HandleMatchesExpectedType(ui64 handle, const TType* expected) {
     if (expectedFamily == EBridgeKindFamily::Null) {
         return true;
     }
-    if (!node.Value) {
-        return true;
+    if (!node.Value.HasValue()) {
+        return NullValueMatchesType(node.Value, expected, helper);
     }
     const auto family = NodeValueFamily(node);
     return !family || *family == expectedFamily;
@@ -786,7 +800,24 @@ ui64 BridgeGetOptionalHost(ui64 handle) {
         return NullBridgeHandle;
     }
     const TType* itemType = OptionalItemTypeOf(node.Type);
-    return RegisterChild(inner, itemType ? itemType : node.AuxType);
+    if (itemType || !node.GuestOptionalDepth || !node.InnerValueKind) {
+        return RegisterChild(inner, itemType ? itemType : node.AuxType);
+    }
+    auto& table = CurrentBridgeTable();
+    const auto depth = node.GuestOptionalDepth;
+    const auto kind = *node.InnerValueKind;
+    const auto* baseType = node.AuxType;
+    if (depth > 1) {
+        const auto handle = table.Register(EBridgeNodeKind::Optional, EBridgeValueKind::Optional, nullptr, inner, baseType);
+        table.Resolve(handle).GuestOptionalDepth = depth - 1;
+        table.Resolve(handle).InnerValueKind = kind;
+        return handle;
+    }
+    if (baseType) {
+        return RegisterChild(inner, baseType);
+    }
+    const auto kinds = BridgeKindsFromValue(inner);
+    return table.Register(kinds.Node, kind, nullptr, inner);
 }
 
 ui64 BridgeGetElementHost(ui64 handle, i32 index) {
@@ -1082,32 +1113,27 @@ ui64 BridgeMakeOptionalHost(ui64 innerHandle) {
     }
     auto& table = CurrentBridgeTable();
     const auto& inner = table.Resolve(innerHandle);
-    const TType* innerType = inner.Type;
-    const EBridgeValueKind innerKind = inner.ValueKind;
+    const TType* innerType = inner.GuestOptionalDepth ? inner.AuxType : inner.Type;
+    const auto innerKind = inner.Value
+        ? BridgeNodeValueKind(inner, table.GetTypeInfoHelper())
+        : std::make_optional(EBridgeValueKind::Null);
+    const ui32 optionalDepth = inner.GuestOptionalDepth + 1;
     const TUnboxedValuePod optional = inner.Value.MakeOptional();
-    // Asked before the node exists: RegisterOrReuse answers with the existing
-    // handle for this identity and says nothing about which of the two it did.
-    const bool reused = table.TryReuse(optional) != NullBridgeHandle;
     // MiniKQL represents Optional over a boxed value or a refcounted string as
-    // the payload itself, so MakeOptional gives back the identity it was
-    // handed. RegisterOrReuse then returns innerHandle with an extra ref
-    // instead of a second node, keeping one node per identity and the resident
-    // cache keyed once. The reused node keeps its original kind: the guest may
-    // still be reading it as the list or dict it was registered as.
-    const ui64 handle = table.RegisterOrReuse(
+    // the payload itself. Preserve the existing view explicitly for this
+    // operation; ordinary traversal must reuse only a matching typed view.
+    if (const ui64 existing = table.TryReuse(optional); existing != NullBridgeHandle) {
+        const auto& node = table.Resolve(existing);
+        return table.RegisterOrReuse(node.Kind, node.ValueKind, node.Type, optional, node.AuxType);
+    }
+    const ui64 handle = table.Register(
         EBridgeNodeKind::Optional,
         EBridgeValueKind::Optional,
         /*type*/ nullptr,
-        optional,
+        TUnboxedValue(optional),
         innerType);
-    if (!reused) {
-        // A node that really is an Optional has to remember what the guest
-        // wrapped, since the pod alone cannot tell a Just(list) from a
-        // Just(scalar). A reused node is left alone: it keeps the kind it was
-        // registered with, and writing an inner kind onto it would rename the
-        // value the rest of the query reads through that same handle.
-        table.Resolve(handle).InnerValueKind = innerKind;
-    }
+    table.Resolve(handle).InnerValueKind = innerKind;
+    table.Resolve(handle).GuestOptionalDepth = optionalDepth;
     return handle;
 }
 

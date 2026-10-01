@@ -278,25 +278,6 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     TStringStreamWrapper wrapper(Stream);
 
-    std::optional<TString> generatedContext;
-    for (const auto& column : tableDesc.GetColumns()) {
-        if (!column.HasDefaultFromExpression()) {
-            continue;
-        }
-
-        const auto& context = column.GetDefaultFromExpression().GetContext();
-        if (generatedContext && *generatedContext != context) {
-            return TFormatResult(
-                Ydb::StatusIds::UNSUPPORTED,
-                "Generated columns have inconsistent expression contexts");
-        }
-        generatedContext = context;
-    }
-
-    if (generatedContext && !generatedContext->empty()) {
-        Stream << *generatedContext << "\n";
-    }
-
     Ydb::Table::CreateTableRequest createRequest;
     if (temporary) {
         Stream << "CREATE TEMPORARY TABLE ";
@@ -431,6 +412,12 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     if (createRequest.has_read_replicas_settings()) {
         printed |= Format(createRequest.read_replicas_settings(), del, !printed);
+    }
+
+    FillMetricsSettings(createRequest, tableDesc);
+
+    if (createRequest.has_metrics_settings()) {
+        printed |= Format(createRequest.metrics_settings(), del, !printed);
     }
 
     FillKeyBloomFilter(createRequest, tableDesc);
@@ -691,6 +678,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
             case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT:
                 Stream << del << "vector_type=\"float\"";
                 break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT16:
+                Stream << del << "vector_type=\"float16\"";
+                break;
+            case Ydb::Table::VectorIndexSettings::VECTOR_TYPE_BFLOAT16:
+                Stream << del << "vector_type=\"bfloat16\"";
+                break;
             default:
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::VectorIndexSettings");
         }
@@ -751,7 +744,12 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
                 ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected Ydb::Table::FulltextIndexSettings::Tokenizer");
         }
         if (analyzers.has_language()) {
-            Stream << ", language=" << analyzers.language();
+            Stream << ", language=";
+            if (analyzers.language().find(',') == TString::npos) {
+                Stream << analyzers.language();
+            } else {
+                EscapeString(analyzers.language(), Stream);
+            }
         }
         if (analyzers.has_use_filter_lowercase()) {
             Stream << ", use_filter_lowercase=" << (analyzers.use_filter_lowercase() ? "true" : "false");
@@ -1075,7 +1073,43 @@ bool TCreateTableFormatter::Format(const Ydb::Table::ReadReplicasSettings& readR
     return false;
 }
 
-void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage) {
+bool TCreateTableFormatter::Format(const Ydb::Table::MetricsSettings& metricsSettings, TString& del, bool needWith) {
+    switch (metricsSettings.metrics_level()) {
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_DATABASE:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"DATABASE\"";
+            del = ",\n";
+            return true;
+        }
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_TABLE:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"TABLE\"";
+            del = ",\n";
+            return true;
+        }
+        case Ydb::Table::MetricsSettings::METRICS_LEVEL_PARTITION:
+        {
+            if (needWith) {
+                Stream << " WITH (\n";
+            }
+            Stream << del << "\tMETRICS_LEVEL = \"PARTITION\"";
+            del = ",\n";
+            return true;
+        }
+        default:
+            break;
+    }
+    return false;
+}
+
+void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TString> storage,
+    std::optional<TString> objectKeyPrefix) {
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     Stream << "INTERVAL(";
     const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(expireAfterSeconds * 1000000));
@@ -1085,6 +1119,10 @@ void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TStrin
     if (storage) {
         Stream << "TO EXTERNAL DATA SOURCE ";
         EscapeName(*storage, Stream);
+        if (objectKeyPrefix) {
+            Stream << '.';
+            EscapeName(*objectKeyPrefix, Stream);
+        }
     } else {
         Stream << "DELETE";
     }
@@ -1174,9 +1212,12 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
                     case Ydb::Table::TtlTier::kDelete:
                         Format(expireAfterSeconds);
                         break;
-                    case Ydb::Table::TtlTier::kEvictToExternalStorage:
-                        Format(expireAfterSeconds, tier.evict_to_external_storage().storage());
+                    case Ydb::Table::TtlTier::kEvictToExternalStorage: {
+                        const auto& settings = tier.evict_to_external_storage();
+                        Format(expireAfterSeconds, settings.storage(),
+                            settings.has_object_key_prefix() ? std::make_optional(TString(settings.object_key_prefix())) : std::nullopt);
                         break;
+                    }
                     case Ydb::Table::TtlTier::ACTION_NOT_SET:
                         ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Tier action is undefined");
                 }
@@ -1799,9 +1840,12 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kDelete:
                     Format(tier.GetApplyAfterSeconds());
                     break;
-                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage:
-                    Format(tier.GetApplyAfterSeconds(), tier.GetEvictToExternalStorage().GetStorage());
+                case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::kEvictToExternalStorage: {
+                    const auto& settings = tier.GetEvictToExternalStorage();
+                    Format(tier.GetApplyAfterSeconds(), settings.GetStorage(),
+                        settings.HasObjectKeyPrefix() ? std::make_optional(settings.GetObjectKeyPrefix()) : std::nullopt);
                     break;
+                }
                 case NKikimrSchemeOp::TTTLSettings::TTier::ActionCase::ACTION_NOT_SET:
                     ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Undefined tier action");
             }
@@ -2190,6 +2234,13 @@ void TCreateTableFormatter::FormatUpsertOptions(const TString& fullPath, const N
         EscapeName("DEDUPLICATION_ENABLED", paramsStr);
         paramsStr << "=";
         EscapeValue(options.GetDeduplicationEnabled(), paramsStr);
+        del = ", ";
+    }
+    if (options.HasCacheBlobsAfterWrite()) {
+        paramsStr << del;
+        EscapeName("CACHE_BLOBS_AFTER_WRITE", paramsStr);
+        paramsStr << "=";
+        EscapeValue(options.GetCacheBlobsAfterWrite(), paramsStr);
         del = ", ";
     }
     if (options.HasCompactionPlannerConstructor()) {

@@ -30,7 +30,7 @@ IF (SANITIZER_TYPE)
 ELSE()
     SIZE(MEDIUM)
     FORK_SUBTESTS()
-    REQUIREMENTS(ram:12)
+    REQUIREMENTS(ram:16)
     SPLIT_FACTOR(20)
 ENDIF()
 
@@ -55,4 +55,5 @@ END()
 RECURSE_FOR_TESTS(
     streaming_large
     generic
+    logbroker
 )

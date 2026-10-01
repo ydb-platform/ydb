@@ -11,6 +11,7 @@ ENDIF()
 
 PEERDIR(
     ydb/core/tx/replication/ut_helpers
+    ydb/core/tx/replication/ydb_proxy/local_proxy
     ydb/public/sdk/cpp/src/client/topic
     library/cpp/testing/unittest
 )

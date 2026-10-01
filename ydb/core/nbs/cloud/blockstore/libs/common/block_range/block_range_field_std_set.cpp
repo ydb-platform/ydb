@@ -23,7 +23,7 @@ IBlockRangeFieldImpl::EBackend TBlockRangeFieldStdSet::GetBackend() const
 
 bool TBlockRangeFieldStdSet::TryAdd(TBlockRange16 range, bool* changed)
 {
-    if (Pool.GetUsedSize() >= MemUsageLimit) {
+    if (Pool.GetMemoryStats().UsedSize >= MemUsageLimit) {
         return false;
     }
 
@@ -72,7 +72,7 @@ bool TBlockRangeFieldStdSet::TryAdd(TBlockRange16 range, bool* changed)
 
 bool TBlockRangeFieldStdSet::TryRemove(TBlockRange16 range, bool* changed)
 {
-    if (Pool.GetUsedSize() >= MemUsageLimit) {
+    if (Pool.GetMemoryStats().UsedSize >= MemUsageLimit) {
         return false;
     }
 
@@ -164,14 +164,9 @@ size_t TBlockRangeFieldStdSet::GetSegmentCount() const
     return Intervals.size();
 }
 
-size_t TBlockRangeFieldStdSet::GetAllocatedSize() const
+TArenaPoolStats TBlockRangeFieldStdSet::GetMemoryStats() const
 {
-    return Pool.GetAllocatedSize();
-}
-
-size_t TBlockRangeFieldStdSet::GetUsedSize() const
-{
-    return Pool.GetUsedSize();
+    return Pool.GetMemoryStats();
 }
 
 //////////////////////////////////////////////////////////////////////////////

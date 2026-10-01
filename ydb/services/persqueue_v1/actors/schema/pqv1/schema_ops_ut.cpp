@@ -431,6 +431,47 @@ Y_UNIT_TEST(ZeroPartitionsRejected) {
     AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, "Partitions count must be positive");
 }
 
+Y_UNIT_TEST(AutoPartitioningNegativeAndHugeCountsRejected) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto expectBad = [&](const TString& path, auto mutate, const TString& needle) {
+        auto request = MakeCreateTopicRequest(path);
+        mutate(*request.mutable_settings());
+        auto result = DoActorRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+            runtime, request, CreateCreateTopicActor, path);
+        AssertStatus(result, Ydb::StatusIds::BAD_REQUEST, needle);
+    };
+
+    expectBad("/Root/topic_neg_auto_min", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(-1);
+        autoP->set_max_active_partitions(2);
+    }, "positive");
+
+    expectBad("/Root/topic_neg_auto_max", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(1);
+        autoP->set_max_active_partitions(-1);
+    }, "non-negative");
+
+    expectBad("/Root/topic_huge_auto_min", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(static_cast<i64>(NPQ::MAX_TOPIC_PARTITIONS) + 1);
+        autoP->set_max_active_partitions(static_cast<i64>(NPQ::MAX_TOPIC_PARTITIONS) + 1);
+    }, "less than");
+
+    expectBad("/Root/topic_huge_auto_max", [](auto& settings) {
+        auto* autoP = settings.mutable_auto_partitioning_settings();
+        autoP->set_strategy(Ydb::PersQueue::V1::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+        autoP->set_min_active_partitions(1);
+        autoP->set_max_active_partitions(static_cast<i64>(NPQ::MAX_TOPIC_PARTITIONS) + 1);
+    }, "less than");
+}
+
 Y_UNIT_TEST(UnknownFormatRejected) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();

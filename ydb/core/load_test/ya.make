@@ -8,6 +8,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/svnversion
     library/cpp/json
     library/cpp/json/writer
     library/cpp/monlib/service/pages
@@ -33,6 +34,7 @@ PEERDIR(
 END()
 
 RECURSE_FOR_TESTS(
+    blobstorage
     ut
     ut_ycsb
 )

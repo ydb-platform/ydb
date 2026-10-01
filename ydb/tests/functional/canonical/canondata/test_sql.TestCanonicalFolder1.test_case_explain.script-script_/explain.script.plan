@@ -518,7 +518,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 1
+                                    }
+                                ],
                                 "Name": "Replace",
                                 "Path": "/local/base_explain_script_script/ScriptingTest",
                                 "SinkType": "KqpTableSink",
@@ -572,7 +576,11 @@
                         "Node Type": "Sink",
                         "Operators": [
                             {
-                                "Inputs": [],
+                                "Inputs": [
+                                    {
+                                        "ExternalPlanNodeId": 1
+                                    }
+                                ],
                                 "Name": "Replace",
                                 "Path": "/local/base_explain_script_script/ScriptingTest",
                                 "SinkType": "KqpTableSink",

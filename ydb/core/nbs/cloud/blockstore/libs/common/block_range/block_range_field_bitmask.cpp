@@ -136,67 +136,18 @@ size_t TBlockRangeFieldBitMask::GetBlockCount() const
     return BlockCount;
 }
 
-size_t TBlockRangeFieldBitMask::GetAllocatedSize() const
+TArenaPoolStats TBlockRangeFieldBitMask::GetMemoryStats() const
 {
-    return GetMaskSize();
-}
-
-size_t TBlockRangeFieldBitMask::GetUsedSize() const
-{
-    return GetMaskSize();
+    return {
+        .ReservedSize = GetMaskSize(),
+        .UsedSize = GetMaskSize(),
+        .AllocationCount = 1,
+    };
 }
 
 std::optional<TBlockRange16> TBlockRangeFieldBitMask::GetFirstRange() const
 {
-    if (Empty()) {
-        return std::nullopt;
-    }
-
-    const auto* mask =
-        reinterpret_cast<const TBigIntegerType*>(Mask.GetRawData());
-    const size_t chunkCount = GetMaskSize() / sizeof(TBigIntegerType);
-    constexpr size_t BitsPerChunk = sizeof(TBigIntegerType) * 8;
-
-    // Find the first set bit.
-    std::optional<ui64> start;
-    for (size_t i = 0; i < chunkCount; ++i) {
-        if (mask[i]) {
-            start = i * BitsPerChunk + GetValueBitCount(mask[i] & -mask[i]) - 1;
-            break;
-        }
-    }
-    if (!start) {
-        return std::nullopt;
-    }
-
-    // Find the first zero bit at or after *start: the end of the
-    // contiguous run of set bits.
-    ui64 end = *start;
-    const size_t startChunk = *start / BitsPerChunk;
-    const size_t startBit = *start % BitsPerChunk;
-    for (size_t i = startChunk; i < chunkCount; ++i) {
-        TBigIntegerType zeros = ~mask[i];
-        if (i == startChunk) {
-            // Ignore zero bits below *start within the same chunk.
-            zeros &=
-                ~((startBit == BitsPerChunk - 1)
-                      ? Max<TBigIntegerType>()
-                      : ((TBigIntegerType{1} << (startBit + 1)) - 1));
-        }
-        if (!zeros) {
-            end = (i + 1) * BitsPerChunk - 1;
-            continue;
-        }
-        const auto firstZeroBit = GetValueBitCount(zeros & -zeros) - 1;
-        if (i * BitsPerChunk + firstZeroBit > end) {
-            end = i * BitsPerChunk + firstZeroBit - 1;
-        }
-        break;
-    }
-
-    return TBlockRange16::MakeClosedInterval(
-        static_cast<ui16>(*start),
-        static_cast<ui16>(end));
+    return FindNextRange(0);
 }
 
 TString TBlockRangeFieldBitMask::Save() const
@@ -208,7 +159,9 @@ TString TBlockRangeFieldBitMask::Save() const
 
 TString TBlockRangeFieldBitMask::Print() const
 {
-    return TStringBuilder() << "Blocks:" << GetBlockCount();
+    TStringBuilder result;
+    Enumerate([&result](TBlockRange16 range) { result << range.Print(); });
+    return result;
 }
 
 void TBlockRangeFieldBitMask::DeserializeFromBitmap(const TString& input)
@@ -275,6 +228,67 @@ bool TBlockRangeFieldBitMask::OverlapsWithBitMask(
     }
 
     return false;
+}
+
+std::optional<TBlockRange16> TBlockRangeFieldBitMask::FindNextRange(
+    size_t firstBlock) const
+{
+    if (firstBlock >= MaxBlockCount) {
+        return std::nullopt;
+    }
+
+    const auto* mask =
+        reinterpret_cast<const TBigIntegerType*>(Mask.GetRawData());
+    const size_t chunkCount = GetMaskSize() / sizeof(TBigIntegerType);
+    constexpr size_t BitsPerChunk = sizeof(TBigIntegerType) * 8;
+
+    // Find the first set bit at or after firstBlock.
+    std::optional<size_t> start;
+    const size_t firstChunk = firstBlock / BitsPerChunk;
+    const size_t firstBit = firstBlock % BitsPerChunk;
+    for (size_t i = firstChunk; i < chunkCount; ++i) {
+        TBigIntegerType bits = mask[i];
+        if (i == firstChunk) {
+            bits &= Max<TBigIntegerType>() << firstBit;
+        }
+        if (bits) {
+            start = i * BitsPerChunk + GetValueBitCount(bits & -bits) - 1;
+            break;
+        }
+    }
+    if (!start) {
+        return std::nullopt;
+    }
+
+    // Find the first zero bit after start.
+    size_t end = *start;
+    const size_t startChunk = *start / BitsPerChunk;
+    const size_t startBit = *start % BitsPerChunk;
+    for (size_t i = startChunk; i < chunkCount; ++i) {
+        TBigIntegerType zeros = ~mask[i];
+        if (i == startChunk) {
+            zeros &= Max<TBigIntegerType>() << startBit;
+        }
+        if (!zeros) {
+            end = (i + 1) * BitsPerChunk - 1;
+            continue;
+        }
+        const size_t firstZeroBit = GetValueBitCount(zeros & -zeros) - 1;
+        end = i * BitsPerChunk + firstZeroBit - 1;
+        break;
+    }
+
+    return TBlockRange16::MakeClosedInterval(*start, end);
+}
+
+void TBlockRangeFieldBitMask::Enumerate(
+    TFunctionRef<void(TBlockRange16)> func) const
+{
+    auto range = GetFirstRange();
+    while (range) {
+        func(*range);
+        range = FindNextRange(static_cast<size_t>(range->End) + 1);
+    }
 }
 
 size_t TBlockRangeFieldBitMask::GetMaskSize() const

@@ -120,6 +120,11 @@
             "Match": {"Type": "Callable", "Name": "YtflowSourceMap!"}
         },
         {
+            "Name": "TYtflowTransformSourceMap",
+            "Base": "TYtflowMapBase",
+            "Match": {"Type": "Callable", "Name": "YtflowTransformSourceMap!"}
+        },
+        {
             "Name": "TYtflowTransformMap",
             "Base": "TYtflowMapBase",
             "Match": {"Type": "Callable", "Name": "YtflowTransformMap!"},

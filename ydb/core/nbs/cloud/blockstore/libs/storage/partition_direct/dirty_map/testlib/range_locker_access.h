@@ -15,7 +15,7 @@ public:
 
     static TRangeLock Make(
         ILockableRangesWeakPtr lockableRanges,
-        TBlockRange64 range,
+        TBlockRange16 range,
         THostMask mask);
 };
 

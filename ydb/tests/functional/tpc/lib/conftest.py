@@ -10,24 +10,43 @@ class FunctionalTestBase:
 
     @classmethod
     def setup_cluster(cls, table_service_config: dict = {}, memory_controller_config: dict = {}) -> None:
+        cls.setup_cluster_ext(
+            table_service_config=table_service_config,
+            memory_controller_config=memory_controller_config,
+        )
+
+    @classmethod
+    def setup_cluster_ext(cls,
+                          table_service_config: dict = {},
+                          memory_controller_config: dict = {},
+                          extra_feature_flags: list[str] | None = None,
+                          query_service_config: dict | None = None,
+                          actor_system_config: dict | None = None) -> None:
+        flags = [
+            "enable_resource_pools",
+            "enable_resource_pools_counters",
+            "enable_table_pg_types",
+            "enable_forced_compactions",
+        ]
+        if extra_feature_flags:
+            flags.extend(extra_feature_flags)
         config_generator = KikimrConfigGenerator(
             domain_name='local',
-            extra_feature_flags=[
-                "enable_resource_pools",
-                "enable_resource_pools_counters",
-                "enable_table_pg_types",
-                "enable_forced_compactions"
-            ],
+            extra_feature_flags=flags,
             use_in_memory_pdisks=True,
             column_shard_config={
                 "alter_object_enabled": True,
             },
+            overrided_actor_system_config=actor_system_config,
         )
         if table_service_config:
             config_generator.yaml_config["table_service_config"] = table_service_config
 
         if memory_controller_config:
             config_generator.yaml_config["memory_controller_config"] = memory_controller_config
+
+        if query_service_config:
+            config_generator.yaml_config["query_service_config"] = query_service_config
 
         cls.cluster = KiKiMR(configurator=config_generator)
         cls.cluster.start()

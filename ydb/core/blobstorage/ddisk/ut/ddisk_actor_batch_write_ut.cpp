@@ -1,3 +1,5 @@
+#include "ddisk_actor_test_helpers.h"
+
 // Tests for ProcessPersistentBufferBatchWrite:
 // verifies that data is written and restored correctly with a unified header sector.
 //
@@ -350,6 +352,8 @@ TString MakeData(char ch, ui32 size) {
     return data;
 }
 
+using NDDisk::NTesting::GetRegistrationToken;
+
 NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, ui64 tabletId, ui32 generation) {
     const bool isPersistentBuffer = serviceId.IsService() && serviceId.ServiceId().StartsWith("NPB_");
     NDDisk::TQueryCredentials creds = isPersistentBuffer
@@ -362,7 +366,7 @@ NDDisk::TQueryCredentials Connect(TTestContext& ctx, const TActorId& serviceId, 
     creds.ConnectionToken.emplace(connectResult->Get()->Record.GetConnectionToken());
 
     if (isPersistentBuffer) {
-        SendToDDisk(ctx, serviceId, new NDDisk::TEvRegisterPersistentBuffer(creds, ctx.Runtime.GetClock()));
+        SendToDDisk(ctx, serviceId, new NDDisk::TEvRegisterPersistentBuffer(creds, GetRegistrationToken(ctx, serviceId, creds)));
         auto edges = ctx.PDiskEdges;
         edges.insert(ctx.Edge);
         for (;;) {
@@ -997,13 +1001,16 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         std::optional<TActorId> disk2PdiskEdge;
 
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
-            // Drop all PDisk-bound events from disk1's actor.
+            // Both the old and restored buffer periodically refresh free space.
+            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType
+                    && (ev->Sender == disk1ActorId
+                        || (disk2PdiskEdge && ev->GetRecipientRewrite() == *disk2PdiskEdge))) {
+                ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                    0, ev->Cookie), NodeId);
+                return false;
+            }
             if (ev->Sender == disk1ActorId) {
-                if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
-                    ctx.Runtime.Send(new IEventHandle(ev->Sender, disk1.PDiskEdge,
-                        new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
-                        0, ev->Cookie), NodeId);
-                }
                 return false;
             }
             // Auto-respond to TEvChunkReadRaw from disk2 with the captured chunk slice.
@@ -1231,13 +1238,16 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         std::optional<TActorId> disk2PdiskEdge;
 
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
-            // Drop all PDisk-bound events from disk1's actor.
+            // Both the old and restored buffer periodically refresh free space.
+            if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType
+                    && (ev->Sender == disk1ActorId
+                        || (disk2PdiskEdge && ev->GetRecipientRewrite() == *disk2PdiskEdge))) {
+                ctx.Runtime.Send(new IEventHandle(ev->Sender, ev->GetRecipientRewrite(),
+                    new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
+                    0, ev->Cookie), NodeId);
+                return false;
+            }
             if (ev->Sender == disk1ActorId) {
-                if (ev->GetTypeRewrite() == NPDisk::TEvCheckSpace::EventType) {
-                    ctx.Runtime.Send(new IEventHandle(ev->Sender, disk1.PDiskEdge,
-                        new NPDisk::TEvCheckSpaceResult(NKikimrProto::OK, 0, 0, 0, 0, 0, 0, 0, "", 0),
-                        0, ev->Cookie), NodeId);
-                }
                 return false;
             }
             // Auto-respond to TEvChunkReadRaw from disk2 with the captured chunk slice.

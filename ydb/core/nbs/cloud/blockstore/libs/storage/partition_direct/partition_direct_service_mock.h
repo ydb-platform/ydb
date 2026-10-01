@@ -31,6 +31,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     struct TUpdateConfigRequest
     {
         NStorage::NPartitionDirect::TVChunkConfig Config;
+        TDirtyMapStateProto Proto;
         TPersistResultPromise Promise;
     };
 
@@ -58,6 +59,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TVector<TAddHostRequest> AddHostRequests;
     TVector<TRemoveHostRequest> RemoveHostRequests;
     ui64 LsnGenerator = 0;
+    size_t InflightWriteCount = 0;
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
     size_t CopyRangeBudgetRequestCount = 0;
@@ -65,6 +67,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     TDuration CopyRangeBudgetDelay;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
     TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
+    TVector<ui32> TouchedVChunkIndices;
     TVector<TPersistHostHealthRequest> PersistHostHealthRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
@@ -84,12 +87,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         executor->ExecuteSimple(std::move(callback));
     }
 
-    TPersistResultFuture UpdateVChunkConfig(
-        const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
+    TPersistResultFuture UpdateVChunkState(
+        const NStorage::NPartitionDirect::TVChunkConfig& cfg,
+        TDirtyMapStateProto state) override
     {
-        UpdateConfigRequests.emplace_back(
-            cfg,
-            NThreading::NewPromise<EPersistResult>());
+        UpdateConfigRequests.emplace_back(TUpdateConfigRequest{
+            .Config = cfg,
+            .Proto = std::move(state),
+            .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateConfigRequests.back().Promise.GetFuture();
     }
 
@@ -102,6 +107,14 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
             .Proto = std::move(state),
             .Promise = NThreading::NewPromise<EPersistResult>()});
         return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
+    }
+
+    TPersistResultFuture SetVChunkTouched(ui32 vChunkIndex) override
+    {
+        TouchedVChunkIndices.push_back(vChunkIndex);
+        auto promise = NThreading::NewPromise<EPersistResult>();
+        promise.SetValue(EPersistResult::Success);
+        return promise.GetFuture();
     }
 
     void QueryAddHost(
@@ -124,24 +137,27 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
             .DBGConnectionsConfigGeneration = dbgConnectionsConfigGeneration});
     }
 
-    ui64 GenerateLsn() override
+    ui64 OnWriteStarted() override
     {
+        ++InflightWriteCount;
         return ++LsnGenerator;
+    }
+
+    void OnWriteFinished() override
+    {
+        Y_ABORT_UNLESS(InflightWriteCount > 0);
+        --InflightWriteCount;
+    }
+
+    [[nodiscard]] size_t GetInflightWriteCount() const override
+    {
+        return InflightWriteCount;
     }
 
     void StopTablet(const TString& reason) override
     {
         ++BlockedGenerationCount;
         LastBlockedReason = reason;
-    }
-
-    bool TryAdvancePBufferBarrier(
-        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
-        ui64 lsn) override
-    {
-        Y_UNUSED(pbufferDDiskId);
-        Y_UNUSED(lsn);
-        return true;
     }
 
     TDuration TakeVolumeCopyRangeBudget(ui64 byteCount) override

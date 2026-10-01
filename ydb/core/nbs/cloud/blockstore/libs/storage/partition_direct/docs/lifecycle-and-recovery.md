@@ -32,6 +32,20 @@ information; subsequent wire operations use the shared DDisk token contract.
 Blocked-generation errors cause the partition to stop rather than serving
 with stale ownership.
 
+For a PB connection, `TICStorageTransportActor` retains the successful
+`TEvConnect` response while it obtains a single-use token through
+`TEvGetPersistentBufferRegistrationToken` and sends `TEvRegisterPersistentBuffer`
+with that token and the connection's tablet/generation/DBG identity. Registration
+`BUSY` or `OVERLOADED` responses retry after 100 ms within the same connection
+attempt, reusing the token without extending its lifetime. Token acquisition
+errors complete the connection attempt with an error. An expired or consumed
+token produces `OUTDATED`; the caller must start a new connection attempt to
+obtain a fresh token. After registration succeeds or is rejected as a duplicate,
+the transport probes with `TEvListPersistentBuffer`. Only a successful probe
+completes the connection promise successfully. This prevents an existing
+but retiring registration from being published as a usable PB connection.
+The later recovery listing still supplies the records to the dirty map.
+
 ## Restoring PB records
 
 `DoListPBuffers` runs [TRestoreRequestExecutor](../restore_request.cpp),
@@ -88,7 +102,7 @@ The gates in [TBlocksDirtyMap](../dirty_map/dirty_map.cpp) and
 6. A record becomes flushed only after every desired enabled destination
    confirms and at least three confirmations exist. A failure clears that
    destination's requested bit and requeues the record.
-7. PB locks postpone erase. Erase also waits for durable ahead/behind state
+7. PB locks postpone erase. Erase also waits for durable behind state
    when the record overlaps a tracked outdated range.
 
 Write completion starts flush work. Flush completion starts erase and state
@@ -105,16 +119,19 @@ erases, compact erase records and barriers, use the shared PB page.
 
 ## Persisted DDisk state and repair
 
-[TDDiskState](../dirty_map/ddisk_state.cpp) combines an operational watermark
-with two range sets:
+[TDDiskState](../dirty_map/ddisk_state.cpp) keeps the ranges that do not have
+up-to-date data in its Behind field. Only the continuous prefix before the
+first Behind range can be read. Successful flush and copy operations remove
+their ranges from Behind, while a flush missed by a lagging DDisk adds its
+range.
 
-- Ahead ranges have newer data beyond the normal copied prefix.
-- Behind ranges missed a flush and contain outdated data.
-
-The configuration watermark initializes a fresh DDisk. Flush results update
-the range sets, incrementing the dirty-map state generation. `DoPersistDirtyMap`
-sends that state to
-[part_updatedirtymapstate.cpp](../../partition_direct_tablet/part_updatedirtymapstate.cpp).
+For a touched vChunk, adding a DDisk initializes its Behind field to the full
+range; for an untouched vChunk, it starts empty. A configuration change and
+the corresponding Behind state are committed atomically. Flush results
+update the Behind field, incrementing the dirty-map state generation.
+`DoPersistDirtyMap` sends standalone state updates through the same ordered
+transaction queue in
+[part_updatevchunkstate.cpp](../../partition_direct_tablet/part_updatevchunkstate.cpp).
 Only transaction completion advances the dirty map's persisted generation.
 `CheckEraseAbility` records which generation must be durable before an
 overlapping PB record can be erased. This preserves the information needed
@@ -137,7 +154,7 @@ one peer-to-peer DDisk wire sync.
 
 Host health and vChunk configuration are separate: temporary unavailability
 does not itself remove a host's DDisk role. Promotion, demotion and evacuation
-update masks and watermarks; new/fresh destinations need repair before they
+update host roles; new/fresh destinations need repair before they
 can serve their full range.
 
 [part_add_host_to_dbg.cpp](../../partition_direct_tablet/part_add_host_to_dbg.cpp)
@@ -172,7 +189,14 @@ For partition deletion,
 [delete_partition.cpp](../../partition_direct_tablet/delete_partition.cpp)
 stops the fast path and starts
 [TPartitionCleanupActor](../../partition_direct_tablet/partition_cleanup_actor.cpp).
-Cleanup wipes PB records, deletes DDisk tablet chunks and then requests BSC
+Cleanup sends `TEvUnregisterPersistentBuffer` for every tablet/DBG registration
+in the persisted connections. Endpoints are deduplicated within each DBG,
+so two DBGs sharing a PB still produce separate unregister requests. Each
+successful response follows the PB's maximum-barrier write, twice the
+registration timeout, and durable removal of the barrier. Cleanup treats
+an absent registration (`INCORRECT_REQUEST`) as already removed and retries
+`BUSY` after 100 ms within its existing 60-second timeout. It waits for all
+PB registrations before deleting DDisk tablet chunks and requesting BSC
 deallocation. This is an explicit resource lifecycle; stopping an ordinary
 worker or completing a user write does not imply deletion of its DBG.
 

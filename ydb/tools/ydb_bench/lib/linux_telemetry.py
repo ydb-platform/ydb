@@ -10,6 +10,10 @@ from pathlib import Path
 
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
+CPU_METRIC_NAMES = tuple(
+    role + "_cpu_" + suffix for role in ("static", "dynamic", "cli", "host") for suffix in ("mean", "max")
+)
+
 
 def _is_finite_number(value):
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -117,7 +121,15 @@ class LogicalCpuSampler:
 
 
 class LinuxCpuMonitor:
-    def __init__(self, role_pids, role_cpu_counts, interval=0.5, proc_root=Path("/proc")):
+    def __init__(
+        self,
+        role_pids,
+        role_cpu_counts,
+        interval=0.5,
+        proc_root=Path("/proc"),
+        max_records=None,
+        stable_pids_only=False,
+    ):
         self.role_pids = role_pids
         self.role_cpu_counts = role_cpu_counts
         self.interval = interval
@@ -129,6 +141,10 @@ class LinuxCpuMonitor:
         self._previous_process = {}
         self._previous_host = None
         self._previous_time = None
+        self._previous_pids = {}
+        self.max_records = max_records
+        self.stable_pids_only = stable_pids_only
+        self.truncated = False
 
     @property
     def records(self):
@@ -174,14 +190,16 @@ class LinuxCpuMonitor:
         now = time.monotonic()
         now_unix = time.time()
         host = self._read_host_ticks()
+        pids = {role: tuple(provider()) for role, provider in self.role_pids.items()}
         process_ticks = {
-            role: sum(ticks for pid in tuple(provider()) if (ticks := self._read_process_ticks(pid)) is not None)
-            for role, provider in self.role_pids.items()
+            role: sum(ticks for pid in values if (ticks := self._read_process_ticks(pid)) is not None)
+            for role, values in pids.items()
         }
         if self._previous_time is None:
             self._previous_time = now
             self._previous_host = host
             self._previous_process = process_ticks
+            self._previous_pids = pids
             return
 
         elapsed = now - self._previous_time
@@ -189,6 +207,8 @@ class LinuxCpuMonitor:
             return
         record = {"elapsed_seconds": elapsed}
         for role, ticks in process_ticks.items():
+            if self.stable_pids_only and set(pids[role]) != set(self._previous_pids.get(role, ())):
+                continue
             previous = self._previous_process.get(role)
             if previous is None or ticks < previous:
                 continue
@@ -204,10 +224,14 @@ class LinuxCpuMonitor:
         if len(record) > 1:
             record["timestamp_monotonic"] = now
             record["timestamp_unix"] = now_unix
-            self._records.append(record)
+            if self.max_records is None or len(self._records) < self.max_records:
+                self._records.append(record)
+            else:
+                self.truncated = True
         self._previous_time = now
         self._previous_host = host
         self._previous_process = process_ticks
+        self._previous_pids = pids
 
     def summary(self, started_at_unix=None, finished_at_unix=None):
         windowed = started_at_unix is not None or finished_at_unix is not None

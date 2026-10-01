@@ -72,6 +72,14 @@ namespace NKikimr {
             ui64 recoveryLogConfirmedLsn = 783246;
             TestEmptySyncLog(chunksToDeleteDelayed, recoveryLogConfirmedLsn);
         }
+
+        Y_UNIT_TEST(EmptyDiskSpaceStat) {
+            const TSyncLogDiskSpaceStat stat = CreateEmpty()->GetDiskSpaceStat();
+            UNIT_ASSERT_VALUES_EQUAL(stat.ChunkSizeBytes, 64ull << 20);
+            UNIT_ASSERT_VALUES_EQUAL(stat.ActiveChunkCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.UsedBytes, 0);
+            UNIT_ASSERT_VALUES_EQUAL(stat.FreeBytes, 0);
+        }
     }
 
 } // NKikimr

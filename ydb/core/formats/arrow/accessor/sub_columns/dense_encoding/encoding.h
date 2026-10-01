@@ -15,7 +15,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 // [width][byte-stream-split lengths], where width is 1, 2, or 4 bytes.
 TString EncodeLengths(TConstArrayRef<ui32> values);
-TVector<ui32> DecodeLengths(TStringBuf data, ui32 count);
+TVector<ui32> DecodeLengths(TConstArrayRef<ui8> data, ui32 count);
 
 // Serialize an arrow::is_binary_like sub-column (the values of a plain column or a dictionary) as
 //   [has-nulls][validity section][lengths section][value bytes section].

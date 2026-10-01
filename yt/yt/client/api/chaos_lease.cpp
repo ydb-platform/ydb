@@ -83,10 +83,11 @@ TDuration TChaosLease::GetTimeout() const
 
 TFuture<void> TChaosLease::Ping(const TPrerequisitePingOptions& /*options*/)
 {
-    return Client_->PingChaosLease(GetId(), TChaosLeasePingOptions{
+    auto pingOptions = TChaosLeasePingOptions{
         .PingAncestors = PingAncestors_,
-    }).Apply(
-        BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& resultOrError) {
+    };
+    return Client_->PingChaosLease(GetId(), pingOptions)
+        .Apply(BIND([=, this, this_ = MakeStrong(this)] (const TErrorOr<void>& resultOrError) {
             if (resultOrError.IsOK()) {
                 YT_TLOG_DEBUG("Chaos lease pinged");
             } else if (resultOrError.FindMatching(NYTree::EErrorCode::ResolveError) ||

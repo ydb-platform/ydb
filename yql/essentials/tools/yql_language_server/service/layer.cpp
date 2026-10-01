@@ -4,7 +4,7 @@ namespace NLsp::NYql {
 
 TServiceLayer MakeServiceLayer() {
     return {
-        .TextDocuments = MakeTextDocuments(),
+        .TextDocuments = MakeTextDocuments(NSQLPureAST::MakeParser()),
         .Completion = MakeCompletionService(),
         .Formatting = MakeFormattingService(),
         .Diagnostic = MakeDiagnosticService(),

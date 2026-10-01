@@ -1,5 +1,9 @@
 #include "schemeshard_impl.h"
 
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -28,13 +32,13 @@ struct TSchemeShard::TTxUnmarkRestoreTables : public TTransactionBase<TSchemeSha
             if (Self->Tables.contains(tableId)) {
                 auto table = Self->Tables.at(tableId);
                 table->IsRestore = false;
-                Self->PersistTableIsRestore(db, tableId, table);        
+                Self->PersistTableIsRestore(db, tableId, table);
             }
-            
+
             if (Self->ColumnTables.contains(tableId)) {
                 auto table = Self->ColumnTables.at(tableId).GetPtr();
                 table->IsRestore = false;
-                Self->PersistTableIsRestore(db, tableId, table);        
+                Self->PersistTableIsRestore(db, tableId, table);
             }
 
             ++UnmarkedCount;
@@ -46,11 +50,10 @@ struct TSchemeShard::TTxUnmarkRestoreTables : public TTransactionBase<TSchemeSha
 
     void Complete(const TActorContext &ctx) override {
         if (UnmarkedCount) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                "TTxUnmarkRestoreTables Complete"
-                << ", done for " << UnmarkedCount << " tables"
-                << ", left " << RestoreTablesToUnmark.size()
-                << ", at schemeshard: "<< Self->TabletID()
+            YDB_LOG_NOTICE_CTX(ctx, "TTxUnmarkRestoreTables Complete",
+                {"unmarkedCount", UnmarkedCount},
+                {"remaining", RestoreTablesToUnmark.size()},
+                {"schemeshard", Self->TabletID()},
             );
         }
 
@@ -66,3 +69,4 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxUnmarkRestoreTables(TVe
 
 } // NKikimr::NSchemeShard
 
+#undef YDB_LOG_THIS_FILE_COMPONENT

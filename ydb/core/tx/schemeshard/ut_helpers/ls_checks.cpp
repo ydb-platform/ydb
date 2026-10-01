@@ -156,6 +156,18 @@ TCheckFunc ExtractTenantStatisticsAggregator(ui64* tenantSAId) {
     };
 }
 
+TCheckFunc ExtractTenantWasmCompileController(ui64* tenantWCCId) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+        const auto& pathDescr = record.GetPathDescription();
+        UNIT_ASSERT(pathDescr.HasDomainDescription());
+        const auto& domainDesc = pathDescr.GetDomainDescription();
+        UNIT_ASSERT(domainDesc.HasProcessingParams());
+        const auto& procParams = domainDesc.GetProcessingParams();
+        *tenantWCCId = procParams.GetWasmCompileController();
+    };
+}
+
 TCheckFunc ExtractDomainHive(ui64* domainHiveId) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);

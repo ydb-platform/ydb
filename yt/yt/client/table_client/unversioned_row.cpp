@@ -714,12 +714,6 @@ private:
     bool AttributesFound_ = false;
 };
 
-void ValidateAnyValue(TStringBuf yson)
-{
-    TYsonAnyValidator validator;
-    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
-}
-
 bool CheckSortedAnyValue(TStringBuf yson)
 {
     TYsonAnyValidator validator;
@@ -855,6 +849,14 @@ void ValidateClientRow(
 }
 
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+void ValidateAnyValue(TStringBuf yson)
+{
+    TYsonAnyValidator validator;
+    ParseYsonStringBuffer(yson, EYsonType::Node, &validator);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1311,12 +1313,16 @@ bool ValidateNonKeyColumnsAgainstLock(
         if (mappedId < 0 || mappedId >= std::ssize(schema.Columns())) {
             int size = nameTable->GetSize();
             if (value.Id >= size) {
-                THROW_ERROR_EXCEPTION("Expected value id in range [0:%v] but got %v",
+                THROW_ERROR_EXCEPTION(
+                    NTableClient::EErrorCode::SchemaViolation,
+                    "Expected value id in range [0:%v] but got %v",
                     size - 1,
                     value.Id);
             }
 
-            THROW_ERROR_EXCEPTION("Unexpected column %Qv",
+            THROW_ERROR_EXCEPTION(
+                NTableClient::EErrorCode::SchemaViolation,
+                "Unexpected column %Qv",
                 nameTable->GetName(value.Id));
         }
 
@@ -1331,7 +1337,9 @@ bool ValidateNonKeyColumnsAgainstLock(
             hasNonKeyColumns = true;
 
             if (lockType != ELockType::Exclusive && lockType != ELockType::SharedWrite) {
-                THROW_ERROR_EXCEPTION("No write lock taken for column %Qv",
+                THROW_ERROR_EXCEPTION(
+                    NTableClient::EErrorCode::RequiredWriteLockMissing,
+                    "No write lock taken for column %Qv",
                     nameTable->GetName(value.Id));
             }
         }

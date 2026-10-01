@@ -63,7 +63,7 @@ private:
 
     void DescribeTopic(const TActorContext& ctx);
 
-    TLogPrefix BuildLogPrefix() const override;
+    TStructuredMessage BuildLogPrefix() const override;
 
 public:
     TMirrorDescriber(

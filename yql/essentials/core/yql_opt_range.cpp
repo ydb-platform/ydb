@@ -27,15 +27,15 @@ TExprNode::TPtr BuildBoundaryNode(TPositionHandle pos, const TRangeBoundary& bou
 }
 
 TExprNode::TPtr BuildRange(TPositionHandle pos, const TRangeBoundary& left, const TRangeBoundary& right,
-    TExprContext& ctx)
+                           TExprContext& ctx)
 {
-    return ctx.NewList(pos, { BuildBoundaryNode(pos, left, ctx), BuildBoundaryNode(pos, right, ctx) });
+    return ctx.NewList(pos, {BuildBoundaryNode(pos, left, ctx), BuildBoundaryNode(pos, right, ctx)});
 }
 
 TExprNode::TPtr BuildRangeSingle(TPositionHandle pos, const TRangeBoundary& left, const TRangeBoundary& right,
                                  TExprContext& ctx)
 {
-    return ctx.NewCallable(pos, "AsRange", { BuildRange(pos, left, right, ctx) });
+    return ctx.NewCallable(pos, "AsRange", {BuildRange(pos, left, right, ctx)});
 }
 
 TMaybe<EDataSlot> GetBaseDataSlot(const TTypeAnnotationNode* keyType) {
@@ -64,7 +64,6 @@ TExprNode::TPtr MakeNaNBoundary(TPositionHandle pos, const TTypeAnnotationNode* 
         .Callable("SafeCast")
             .Callable(0, NUdf::GetDataTypeInfo(keySlot).Name)
             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                // clang-format on
                 parent.Atom(0, "nan", TNodeFlags::Default);
                 if (keySlot == EDataSlot::Decimal) {
                     auto decimalType = baseType->Cast<TDataExprParamsType>();
@@ -72,7 +71,6 @@ TExprNode::TPtr MakeNaNBoundary(TPositionHandle pos, const TTypeAnnotationNode* 
                     parent.Atom(2, decimalType->GetParamTwo());
                 }
                 return parent;
-            // clang-format off
             })
             .Seal()
             .Add(1, ExpandType(pos, *ctx.MakeType<TOptionalExprType>(keyType), ctx))
@@ -123,7 +121,7 @@ TRangeBoundary BuildPlusInf(TPositionHandle pos, const TTypeAnnotationNode* keyT
         result.Value = MakeNaNBoundary(pos, keyType, ctx);
     } else {
         auto optKeyTypeNode = ExpandType(pos, *ctx.MakeType<TOptionalExprType>(keyType), ctx);
-        result.Value = ctx.NewCallable(pos, "Nothing", { optKeyTypeNode });
+        result.Value = ctx.NewCallable(pos, "Nothing", {optKeyTypeNode});
     }
 
     result.Included = false;
@@ -171,41 +169,83 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
     const TTypeAnnotationNode* baseKeyType = RemoveAllOptionals(keyType);
     const auto keySlot = baseKeyType->Cast<TDataExprType>()->GetSlot();
     switch (keySlot) {
-        case EDataSlot::Int8:   name = "Int8"; maxValueStr = ToString(Max<i8>()); break;
-        case EDataSlot::Uint8:  name = "Uint8"; maxValueStr = ToString(Max<ui8>()); break;
-        case EDataSlot::Int16:  name = "Int16"; maxValueStr = ToString(Max<i16>()); break;
-        case EDataSlot::Uint16: name = "Uint16"; maxValueStr = ToString(Max<ui16>()); break;
-        case EDataSlot::Int32:  name = "Int32"; maxValueStr = ToString(Max<i32>()); break;
-        case EDataSlot::Uint32: name = "Uint32"; maxValueStr = ToString(Max<ui32>()); break;
-        case EDataSlot::Int64:  name = "Int64"; maxValueStr = ToString(Max<i64>()); break;
-        case EDataSlot::Uint64: name = "Uint64"; maxValueStr = ToString(Max<ui64>()); break;
+        case EDataSlot::Int8:
+            name = "Int8";
+            maxValueStr = ToString(Max<i8>());
+            break;
+        case EDataSlot::Uint8:
+            name = "Uint8";
+            maxValueStr = ToString(Max<ui8>());
+            break;
+        case EDataSlot::Int16:
+            name = "Int16";
+            maxValueStr = ToString(Max<i16>());
+            break;
+        case EDataSlot::Uint16:
+            name = "Uint16";
+            maxValueStr = ToString(Max<ui16>());
+            break;
+        case EDataSlot::Int32:
+            name = "Int32";
+            maxValueStr = ToString(Max<i32>());
+            break;
+        case EDataSlot::Uint32:
+            name = "Uint32";
+            maxValueStr = ToString(Max<ui32>());
+            break;
+        case EDataSlot::Int64:
+            name = "Int64";
+            maxValueStr = ToString(Max<i64>());
+            break;
+        case EDataSlot::Uint64:
+            name = "Uint64";
+            maxValueStr = ToString(Max<ui64>());
+            break;
 
-        case EDataSlot::Date:        name = "Date"; maxValueStr = ToString(NUdf::MAX_DATE - 1); break;
-        case EDataSlot::Datetime:    name = "Datetime"; maxValueStr = ToString(NUdf::MAX_DATETIME - 1); break;
-        case EDataSlot::Timestamp:   name = "Timestamp"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1); break;
-        case EDataSlot::Date32:      name = "Date32"; maxValueStr = ToString(NUdf::MAX_DATE32); break;
-        case EDataSlot::Datetime64:  name = "Datetime64"; maxValueStr = ToString(NUdf::MAX_DATETIME64); break;
-        case EDataSlot::Timestamp64: name = "Timestamp64"; maxValueStr = ToString(NUdf::MAX_TIMESTAMP64); break;
+        case EDataSlot::Date:
+            name = "Date";
+            maxValueStr = ToString(NUdf::MAX_DATE - 1);
+            break;
+        case EDataSlot::Datetime:
+            name = "Datetime";
+            maxValueStr = ToString(NUdf::MAX_DATETIME - 1);
+            break;
+        case EDataSlot::Timestamp:
+            name = "Timestamp";
+            maxValueStr = ToString(NUdf::MAX_TIMESTAMP - 1);
+            break;
+        case EDataSlot::Date32:
+            name = "Date32";
+            maxValueStr = ToString(NUdf::MAX_DATE32);
+            break;
+        case EDataSlot::Datetime64:
+            name = "Datetime64";
+            maxValueStr = ToString(NUdf::MAX_DATETIME64);
+            break;
+        case EDataSlot::Timestamp64:
+            name = "Timestamp64";
+            maxValueStr = ToString(NUdf::MAX_TIMESTAMP64);
+            break;
         default:
             ythrow yexception() << "Unexpected type: " << baseKeyType->Cast<TDataExprType>()->GetName();
     }
 
-    TExprNode::TPtr maxValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, maxValueStr, TNodeFlags::Default) });
+    TExprNode::TPtr maxValue = ctx.NewCallable(pos, name, {ctx.NewAtom(pos, maxValueStr, TNodeFlags::Default)});
     TExprNode::TPtr addValue;
     if (keySlot == EDataSlot::Date) {
-        addValue = ctx.NewCallable(pos, "Interval", { ctx.NewAtom(pos, "86400000000", TNodeFlags::Default) });
+        addValue = ctx.NewCallable(pos, "Interval", {ctx.NewAtom(pos, "86400000000", TNodeFlags::Default)});
     } else if (keySlot == EDataSlot::Datetime) {
-        addValue = ctx.NewCallable(pos, "Interval", { ctx.NewAtom(pos, "1000000", TNodeFlags::Default) });
+        addValue = ctx.NewCallable(pos, "Interval", {ctx.NewAtom(pos, "1000000", TNodeFlags::Default)});
     } else if (keySlot == EDataSlot::Timestamp) {
-        addValue = ctx.NewCallable(pos, "Interval", { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
+        addValue = ctx.NewCallable(pos, "Interval", {ctx.NewAtom(pos, "1", TNodeFlags::Default)});
     } else if (keySlot == EDataSlot::Date32) {
-        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "86400000000", TNodeFlags::Default) });
+        addValue = ctx.NewCallable(pos, "Interval64", {ctx.NewAtom(pos, "86400000000", TNodeFlags::Default)});
     } else if (keySlot == EDataSlot::Datetime64) {
-        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "1000000", TNodeFlags::Default) });
+        addValue = ctx.NewCallable(pos, "Interval64", {ctx.NewAtom(pos, "1000000", TNodeFlags::Default)});
     } else if (keySlot == EDataSlot::Timestamp64) {
-        addValue = ctx.NewCallable(pos, "Interval64", { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
+        addValue = ctx.NewCallable(pos, "Interval64", {ctx.NewAtom(pos, "1", TNodeFlags::Default)});
     } else {
-        addValue = ctx.NewCallable(pos, name, { ctx.NewAtom(pos, "1", TNodeFlags::Default) });
+        addValue = ctx.NewCallable(pos, name, {ctx.NewAtom(pos, "1", TNodeFlags::Default)});
     }
 
     TExprNode::TPtr key = ctx.NewArgument(pos, "optKey");
@@ -262,18 +302,18 @@ TExprNode::TPtr MakeWidePointRangeLambda(TPositionHandle pos, const TTypeAnnotat
         .Seal()
         .Build();
     // clang-format on
-    return ctx.NewLambda(pos, ctx.NewArguments(pos, { key }), std::move(body));
+    return ctx.NewLambda(pos, ctx.NewArguments(pos, {key}), std::move(body));
 }
 
 TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnotationNode* keyType,
-    TStringBuf op, TExprContext& ctx)
+                                          TStringBuf op, TExprContext& ctx)
 {
     // key is argument of Optional<keyType> type
     const auto key = ctx.NewArgument(pos, "key");
     const auto keySlot = GetBaseDataSlot(keyType);
     const bool isTzKey = keySlot && (NUdf::GetDataTypeInfo(*keySlot).Features & NUdf::EDataTypeFeatures::TzDateType);
     const bool isIntegralOrDateKey = keySlot && (NUdf::GetDataTypeInfo(*keySlot).Features &
-        (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType));
+                                                 (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType));
     const auto downKey = isTzKey ? TzRound(key, keyType, /*down=*/true, ctx) : key;
     const auto upKey = isTzKey ? TzRound(key, keyType, /*down=*/false, ctx) : key;
     if (op == "!=") {
@@ -290,16 +330,16 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
         right = BuildPlusInf(pos, keyType, ctx, excludeNaN);
         auto rightRange = BuildRange(pos, left, right, ctx);
 
-        auto body = ctx.NewCallable(pos, "AsRange", { leftRange, rightRange });
+        auto body = ctx.NewCallable(pos, "AsRange", {leftRange, rightRange});
         if (HasUncomparableNaNs(keyType)) {
             // NaN is not equal to any value (including NaN itself), so we must include it
             left.Included = true;
             left.Value = MakeNaNBoundary(pos, keyType, ctx);
             right = left;
             auto nan = BuildRangeSingle(pos, left, right, ctx);
-            body = ctx.NewCallable(pos, "RangeUnion", { body, nan });
+            body = ctx.NewCallable(pos, "RangeUnion", {body, nan});
         }
-        return ctx.NewLambda(pos, ctx.NewArguments(pos, { key }), std::move(body));
+        return ctx.NewLambda(pos, ctx.NewArguments(pos, {key}), std::move(body));
     }
 
     if (op == "===") {
@@ -323,7 +363,7 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
         right = BuildPlusInf(pos, keyType, ctx);
         left.Value = (op == ">=") ? downKey : upKey;
         left.Included = (op == ">=");
-    } else if (op == "Exists" || op == "NotExists" ) {
+    } else if (op == "Exists" || op == "NotExists") {
         YQL_ENSURE(keyType->GetKind() == ETypeAnnotationKind::Optional || keyType->GetKind() == ETypeAnnotationKind::Pg);
         // clang-format off
         auto nullKey = ctx.Builder(pos)
@@ -352,15 +392,15 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
     TExprNode::TPtr body = BuildRangeSingle(pos, left, right, ctx);
     if (op == "==" && HasUncomparableNaNs(keyType)) {
         auto fullRangeWithoutNaNs = BuildRangeSingle(pos,
-            BuildMinusInf(pos, keyType, ctx),
-            BuildPlusInf(pos, keyType, ctx), ctx);
-        body = ctx.NewCallable(pos, "RangeIntersect", { body, fullRangeWithoutNaNs });
+                                                     BuildMinusInf(pos, keyType, ctx),
+                                                     BuildPlusInf(pos, keyType, ctx), ctx);
+        body = ctx.NewCallable(pos, "RangeIntersect", {body, fullRangeWithoutNaNs});
     }
 
-    return ctx.NewLambda(pos, ctx.NewArguments(pos, { key }), std::move(body));
+    return ctx.NewLambda(pos, ctx.NewArguments(pos, {key}), std::move(body));
 }
 
-} //namespace
+} // namespace
 
 TExprNode::TPtr ExpandRangeEmpty(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(node->IsCallable("RangeEmpty"));
@@ -368,14 +408,14 @@ TExprNode::TPtr ExpandRangeEmpty(const TExprNode::TPtr& node, TExprContext& ctx)
         return ctx.RenameNode(*node, "EmptyList");
     }
 
-    return ctx.NewCallable(node->Pos(), "List", { ExpandType(node->Pos(), *node->GetTypeAnn(), ctx) });
+    return ctx.NewCallable(node->Pos(), "List", {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
 }
 
 TExprNode::TPtr ExpandAsRange(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(node->IsCallable("AsRange"));
     YQL_ENSURE(node->ChildrenSize());
 
-    return ctx.NewCallable(node->Pos(), "RangeCreate", { ctx.RenameNode(*node, "AsList") });
+    return ctx.NewCallable(node->Pos(), "RangeCreate", {ctx.RenameNode(*node, "AsList")});
 }
 
 TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -391,10 +431,10 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
     const TTypeAnnotationNode* valueBaseType = RemoveAllOptionals(valueType);
 
     const TExprNode::TPtr castedToKey = ctx.NewCallable(pos, "StrictCast",
-        { value, ExpandType(pos, *optKeyType, ctx) });
+                                                        {value, ExpandType(pos, *optKeyType, ctx)});
 
     const TExprNode::TPtr emptyRange = ctx.NewCallable(pos, "RangeEmpty",
-        { ExpandType(pos, *keyType, ctx) });
+                                                       {ExpandType(pos, *keyType, ctx)});
 
     TExprNode::TPtr rangeForNullCast;
     if (op == "==" || op == "===" || op == "StartsWith") {
@@ -402,8 +442,8 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
     } else if (op == "!=" || op == "NotStartsWith") {
         bool excludeNaN = false;
         rangeForNullCast = BuildRangeSingle(pos,
-            BuildMinusInf(pos, keyType, ctx),
-           BuildPlusInf(pos, keyType, ctx, excludeNaN), ctx);
+                                            BuildMinusInf(pos, keyType, ctx),
+                                            BuildPlusInf(pos, keyType, ctx, excludeNaN), ctx);
     }
 
     TExprNode::TPtr result;
@@ -434,7 +474,7 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
         YQL_ENSURE(rangeForNullCast);
 
         const auto boundary = ctx.NewArgument(pos, "boundary");
-        const auto next = ctx.NewCallable(pos, "NextValue", { boundary });
+        const auto next = ctx.NewCallable(pos, "NextValue", {boundary});
 
         TExprNode::TPtr rangeForIfNext;
         TExprNode::TPtr rangeForIfNotNext;
@@ -569,8 +609,19 @@ TExprNode::TPtr ExpandRangeFor(const TExprNode::TPtr& node, TExprContext& ctx) {
 
 TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(node->IsCallable("RangeToPg"));
-    const size_t numComponents = node->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->
-        Cast<TTupleExprType>()->GetItems().front()->Cast<TTupleExprType>()->GetSize();
+
+    const size_t numComponents =
+        node
+            ->Head()
+            .GetTypeAnn()
+            ->Cast<TListExprType>()
+            ->GetItemType()
+            ->Cast<TTupleExprType>()
+            ->GetItems()
+            .front()
+            ->Cast<TTupleExprType>()
+            ->GetSize();
+
     // clang-format off
     return ctx.Builder(node->Pos())
         .Callable("OrderedMap")
@@ -583,18 +634,14 @@ TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) 
                         .Param("boundary")
                         .List()
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                // clang-format on
                                 for (size_t i = 0; i < numComponents; ++i) {
                                     if (i % 2 == 0) {
-                                        // clang-format off
                                         parent
                                             .Callable(i, "Nth")
                                                 .Arg(0, "boundary")
                                                 .Atom(1, i)
                                             .Seal();
-                                        // clang-format on
                                     } else {
-                                        // clang-format off
                                         parent
                                             .Callable(i, "Map")
                                                 .Callable(0, "Nth")
@@ -608,11 +655,9 @@ TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) 
                                                     .Seal()
                                                 .Seal()
                                             .Seal();
-                                        // clang-format on
                                     }
                                 }
                                 return parent;
-                            // clang-format off
                             })
                         .Seal()
                     .Seal()
@@ -622,4 +667,4 @@ TExprNode::TPtr ExpandRangeToPg(const TExprNode::TPtr& node, TExprContext& ctx) 
         .Build();
     // clang-format on
 }
-}
+} // namespace NYql

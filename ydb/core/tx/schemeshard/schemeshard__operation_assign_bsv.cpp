@@ -1,28 +1,29 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TAssignBlockStoreVolume: public TSubOperationBase {
-public:
+    virtual const char* Name() const override final { return "TAssignBlockStoreVolume"; }
+    virtual const char* CurrentStateName() const override final { return "none"; }
+
+    public:
     using TSubOperationBase::TSubOperationBase;
 
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
-        const TTabletId ssId = context.SS->SelfTabletId();
-
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetAssignBlockStoreVolume().GetName();
         const TString mountToken = Transaction.GetAssignBlockStoreVolume().GetNewMountToken();
         const auto version = Transaction.GetAssignBlockStoreVolume().GetTokenVersion();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAssignBlockStoreVolume Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "",
+            {"path", TStringBuilder() << parentPathStr << "/" << name},
+        );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -111,3 +112,5 @@ ISubOperation::TPtr CreateAssignBSV(TOperationId id, TTxState::ETxState state) {
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

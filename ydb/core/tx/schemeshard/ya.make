@@ -406,6 +406,7 @@ PEERDIR(
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/aclib/protos/identity
+    ydb/library/backup/proto
     ydb/library/login
     ydb/library/login/protos
     ydb/library/protobuf_printer

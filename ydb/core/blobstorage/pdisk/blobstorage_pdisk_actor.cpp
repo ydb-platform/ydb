@@ -464,12 +464,19 @@ public:
                         options.PlainDataChunks = cfg->PlainDataChunks;
                         options.EnableFormatAndMetadataEncryption = cfg->EnableFormatAndMetadataEncryption;
                         options.EnableSectorEncryption = cfg->FeatureFlags.GetEnablePDiskDataEncryption();
+                        if (cfg->PhysicalChunkSize) {
+                            options.PhysicalChunkSizeBytes = cfg->PhysicalChunkSize;
+                        }
 
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
+                            // Keep the configured mode, only shrink the chunk to fit a small disk.
+                            if (options.PhysicalChunkSizeBytes) {
+                                options.PhysicalChunkSizeBytes = NPDisk::SmallDiskMaximumChunkSize;
+                            }
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
                                 cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(),
                                 options);
@@ -908,7 +915,8 @@ public:
 
     void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
         PDisk->Mon.ChunkForget.CountRequest();
-        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, StateErrorReason));
+        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, StateErrorReason),
+            0, ev->Get()->IsDDisk ? ev->Cookie : 0);
         PDisk->Mon.ChunkForget.CountResponse();
     }
 
@@ -1075,13 +1083,19 @@ public:
         PDisk->InputRequest(request);
     }
 
+    void Handle(NPDisk::TEvCompactionBidder::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TCompactionBidder>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
     void Handle(NPDisk::TEvChunkReserve::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender, ev->Cookie);
         PDisk->InputRequest(request);
     }
 
     void Handle(NPDisk::TEvChunkForget::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkForget>(*ev->Get(), ev->Sender);
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkForget>(*ev->Get(), ev->Sender,
+            ev->Get()->IsDDisk ? ev->Cookie : 0);
         PDisk->InputRequest(request);
     }
 
@@ -1592,6 +1606,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, InitHandle);
             hFunc(NPDisk::TEvYardResize, InitHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, InitHandle);
+            IgnoreFunc(NPDisk::TEvCompactionBidder); // no owner is initialized yet
 
             hFunc(TEvReadMetadata, Handle);
             hFunc(TEvWriteMetadata, Handle);
@@ -1629,6 +1644,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, Handle);
             hFunc(NPDisk::TEvYardResize, Handle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, Handle);
+            hFunc(NPDisk::TEvCompactionBidder, Handle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);
             hFunc(NMon::TEvHttpInfo, Handle);
@@ -1669,6 +1685,7 @@ public:
             hFunc(NPDisk::TEvContinueShred, ErrorHandle);
             hFunc(NPDisk::TEvYardResize, ErrorHandle);
             hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
+            IgnoreFunc(NPDisk::TEvCompactionBidder); // nothing is written to a PDisk in error
             hFunc(NPDisk::TEvConfigureScheduler, ErrorHandle);
 
             cFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison);

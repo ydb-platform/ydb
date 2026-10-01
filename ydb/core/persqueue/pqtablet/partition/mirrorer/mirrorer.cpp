@@ -5,9 +5,10 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+#include <ydb/library/actors/struct_log/text_writer.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -28,6 +29,13 @@ static constexpr TDuration DEFAULT_REWIND_COMMIT_OFFSET_DELAY = TDuration::Minut
 static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 
 namespace {
+
+TString StructuredLogPrefixText(const TStructuredMessage& prefix) {
+    TStringBuilder out;
+    NActors::NStructuredLog::TTextWriter writer;
+    writer.Write(out, prefix);
+    return out;
+}
 
 struct TBatchInfo {
     ui32 LogicalMessageCount = 1;
@@ -176,15 +184,6 @@ bool AppendToWriteRequest(
     }
     nextOffset += logicalMessageCount;
     return true;
-}
-
-bool TMirrorer::AddToWriteRequest(
-    NKikimrClient::TPersQueuePartitionRequest& request,
-    TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message,
-    bool& incorrectRequest,
-    ui64& nextOffset
-) {
-    return AppendToWriteRequest(request, message, incorrectRequest, nextOffset);
 }
 
 void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg) {
@@ -432,7 +431,6 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
-    //ToDo
     req->SetTopic(TopicConverter->GetClientsideName());
     req->SetPartition(Partition);
     req->SetMessageNo(0);
@@ -440,7 +438,7 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 
     bool incorrectRequest = false;
     ui64 nextOffset = 0;
-    while (!Queue.empty() && AddToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
+    while (!Queue.empty() && AppendToWriteRequest(*req, Queue.front(), incorrectRequest, nextOffset)) {
         WriteInFlight.emplace_back(std::move(Queue.front()));
         Queue.pop_front();
     }
@@ -468,8 +466,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         LOG_D("Postpone split-merge event until all write operations completed");
         return;
     }
-    const bool isSplit = EndPartitionSessionEvent->GetAdjacentPartitionIds().empty();
-    if (!isSplit) {
+    if (!EndPartitionSessionEvent->GetAdjacentPartitionIds().empty()) {
         LOG_W("Topic merge not supported yet");
         return;
     }
@@ -477,16 +474,12 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         LOG_W("Split-merge operation has no child partitions");
         return;
     }
-    const ::NKikimrPQ::EScaleStatus value = isSplit ? NKikimrPQ::EScaleStatus::NEED_SPLIT : NKikimrPQ::EScaleStatus::NEED_MERGE;
     THolder request = MakeHolder<TEvPQ::TEvPartitionScaleStatusChanged>();
     request->Record.SetPartitionId(Partition);
-    request->Record.SetScaleStatus(value);
+    request->Record.SetScaleStatus(NKikimrPQ::EScaleStatus::NEED_SPLIT);
     auto* relation = request->Record.MutableParticipatingPartitions();
     for (const auto& p : EndPartitionSessionEvent->GetChildPartitionIds()) {
         relation->AddChildPartitionIds(p);
-    }
-    for (const auto& p : EndPartitionSessionEvent->GetAdjacentPartitionIds()) {
-        relation->AddAdjacentPartitionIds(p);
     }
     Send(PartitionActor, std::move(request));
     EndPartitionSessionEvent = std::nullopt;
@@ -604,9 +597,6 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     });
 
     try {
-        if (ReadSession) {
-            ReadSession->Close(TDuration::Zero());
-        }
         ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
     } catch(...) {
         ProcessError(ctx, TStringBuilder() << "got an exception during the creation read session: " << CurrentExceptionMessage());
@@ -722,9 +712,8 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
-TLogPrefix TMirrorer::BuildLogPrefix() const {
+TStructuredMessage TMirrorer::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "Mirrorer"},
         {"topic", TopicConverter->GetPrintableString()},
         {"partition", Partition});
 }

@@ -6,6 +6,7 @@
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -33,8 +34,10 @@ void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, 
 auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TTabletId datashardId, ui32 followerId,
     TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats, const TActorContext& ctx)
 {
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "BuildStatsForCollector: datashardId " <<  datashardId << ", followerId " << followerId);
+    YDB_LOG_TRACE_CTX(ctx, "BuildStatsForCollector",
+        {"datashard", datashardId},
+        {"followerId", followerId},
+    );
 
     auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>(
         GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId())));
@@ -135,10 +138,10 @@ private:
 };
 
 
-THolder<TProposeRequest> MergeRequest(
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> MergeRequest(
     TSchemeShard* ss, TTxId& txId, TPathId& pathId, const TVector<TShardIdx>& shardsToMerge)
 {
-    auto request = MakeHolder<TProposeRequest>(ui64(txId), ui64(ss->SelfTabletId()));
+    auto request = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ui64(ss->TabletID()));
     auto& record = request->Record;
 
     TPath tablePath = TPath::Init(pathId, ss);
@@ -274,19 +277,19 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     const auto pathElementIt = Self->PathsById.find(pathId);
     if (pathElementIt == Self->PathsById.end()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats for pathId " << pathId
-            << ", tabletId " << datashardId
-            << ", followerId " << followerId
-            << ": unknown pathId"
+        YDB_LOG_DEBUG_CTX(ctx, "PersistSingleStats: unknown pathId",
+            {"pathId", pathId},
+            {"tabletId", datashardId},
+            {"followerId", followerId},
         );
         return true;
     }
     const auto& pathElement = pathElementIt->second;
     if (pathElement->Dropped()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "PersistSingleStats for pathId " << pathId
-            << ", tabletId " << datashardId
-            << ", followerId " << followerId
-            << ": pathId is dropped"
+        YDB_LOG_DEBUG_CTX(ctx, "PersistSingleStats: pathId is dropped",
+            {"pathId", pathId},
+            {"tabletId", datashardId},
+            {"followerId", followerId},
         );
         return true;
     }
@@ -296,7 +299,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     const bool isColumnTable = pathElement->IsColumnTable();
 
     if (!isDataShard && !isOlapStore && !isColumnTable) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
+        YDB_LOG_DEBUG_CTX(ctx, "Unexpected stats from shard",
+            {"tabletId", datashardId},
+        );
         return true;
     }
 
@@ -305,17 +310,23 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         return (found != Self->TabletIdToShardIdx.end()) ? found->second : InvalidShardIdx;
     }();
     if (!shardIdx) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "No shardIdx for shard " << datashardId);
+        YDB_LOG_ERROR_CTX(ctx, "No shardIdx for shard",
+            {"tabletId", datashardId},
+        );
         return true;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "PersistSingleStats for pathId " << pathId.LocalPathId << " shard idx " << shardIdx << " data size " << dataSize << " row count " << rowCount
+    YDB_LOG_DEBUG_CTX(ctx, "PersistSingleStats",
+        {"pathId", pathId.LocalPathId},
+        {"shardIdx", shardIdx},
+        {"dataSize", dataSize},
+        {"rowCount", rowCount},
     );
     const auto* shardInfo = Self->ShardInfos.FindPtr(shardIdx);
     if (!shardInfo) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "No ShardInfo by shardIdx " << shardIdx << " of shard " << datashardId;
+        YDB_LOG_DEBUG_CTX(ctx, "No ShardInfo by shardIdx",
+            {"shardIdx", shardIdx},
+            {"tabletId", datashardId},
         );
         return true;
     }
@@ -324,15 +335,18 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     const TPartitionStats newStats = PrepareStats(rec, now, subDomainInfo->EffectiveStoragePools(), shardInfo->BindedChannels);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TTxStoreTableStats.PersistSingleStats: main stats from"
-                    << " datashardId(TabletID)=" << datashardId << " maps to shardIdx: " << shardIdx
-                    << " followerId=" << followerId
-                    << ", pathId: " << pathId << ", pathId map=" << pathElement->Name
-                    << ", is column=" << isColumnTable << ", is olap=" << isOlapStore
-                    << ", RowCount " << newStats.RowCount
-                    << ", DataSize " << newStats.DataSize
-                    << (newStats.HasBorrowedData ? ", with borrowed parts" : ""));
+    YDB_LOG_DEBUG_CTX(ctx, "TTxStoreTableStats.PersistSingleStats: main stats from datashard",
+        {"tabletId", datashardId},
+        {"shardIdx", shardIdx},
+        {"followerId", followerId},
+        {"pathId", pathId},
+        {"pathElement", pathElement->Name},
+        {"isColumn", isColumnTable},
+        {"isOlap", isOlapStore},
+        {"rowCount", newStats.RowCount},
+        {"dataSize", newStats.DataSize},
+        {"hasBorrowedData", newStats.HasBorrowedData},
+    );
 
     NIceDb::TNiceDb db(txc.DB);
 
@@ -359,7 +373,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         if (!Self->Tables.contains(pathId)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Row table not found: " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Row table not found",
+                {"pathId", pathId},
+            );
             return true;
         }
 
@@ -391,23 +407,19 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         TString splitReason;
 
         if (!(table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, splitReason))) {
-            LOG_DEBUG_S(
-                ctx,
-                NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Do not want to split tablet " << datashardId
-                    << " by the CPU load from the follower ID " << followerId
-                    << ", reason: " << splitReason
+            YDB_LOG_DEBUG_CTX(ctx, "Do not want to split tablet by the CPU load from the follower",
+                {"tabletId", datashardId},
+                {"followerId", followerId},
+                {"reason", splitReason},
             );
 
             return true;
         }
 
-        LOG_NOTICE_S(
-            ctx,
-            NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Want to split tablet " << datashardId
-                << " by the CPU load from the follower ID " << followerId
-                << ", reason: " << splitReason
+        YDB_LOG_NOTICE_CTX(ctx, "Want to split tablet by the CPU load from the follower",
+            {"tabletId", datashardId},
+            {"followerId", followerId},
+            {"reason", splitReason},
         );
 
         VerifySplitAndRequestStats(
@@ -431,7 +443,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     if (isDataShard) {
         if (!Self->Tables.contains(pathId)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Row table not found: " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Row table not found",
+                {"pathId", pathId},
+            );
             return true;
         }
 
@@ -458,7 +472,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         Self->PersistTablePartitionStats(db, pathId, shardIdx, table);
     } else if (isOlapStore) {
         if (!Self->OlapStores.contains(pathId)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Olap store not found: " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Olap store not found",
+                {"pathId", pathId},
+            );
             return true;
         }
 
@@ -471,7 +487,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         updateSubdomainInfo = true;
 
         const auto tables = rec.GetTables();
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "OLAP store contains " << tables.size() << " tables.");
+        YDB_LOG_DEBUG_CTX(ctx, "OLAP store content",
+            {"pathId", pathId},
+            {"tableCount", tables.size()},
+        );
 
         for (const auto& table : tables) {
             const TPartitionStats newTableStats = PrepareStats(table, now, {}, {});
@@ -479,30 +498,35 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             const TPathId tablePathId = TPathId(TOwnerId(pathId.OwnerId), TLocalPathId(table.GetTableLocalId()));
 
             if (Self->ColumnTables.contains(tablePathId)) {
-                LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                            "add stats for exists table with pathId=" << tablePathId);
+                YDB_LOG_TRACE_CTX(ctx, "add stats for existing table",
+                    {"pathId", tablePathId},
+                );
 
                 Self->ColumnTables.GetVerifiedPtr(tablePathId)->UpdateTableStats(shardIdx, tablePathId, newTableStats, now);
             } else {
-                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                           "failed add stats for table with pathId=" << tablePathId);
+                YDB_LOG_WARN_CTX(ctx, "Failed to add stats for table",
+                    {"pathId", tablePathId},
+                );
             }
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Aggregated stats for pathId " << pathId.LocalPathId
-            << ": RowCount " << olapStore->Stats.Aggregated.RowCount
-            << ", DataSize " << olapStore->Stats.Aggregated.DataSize
+        YDB_LOG_DEBUG_CTX(ctx, "Aggregated stats for OLAP store",
+            {"pathId", pathId.LocalPathId},
+            {"rowCount", olapStore->Stats.Aggregated.RowCount},
+            {"dataSize", olapStore->Stats.Aggregated.DataSize},
         );
 
     } else if (isColumnTable) {
         if (!Self->ColumnTables.contains(pathId)) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Column table not found: " << pathId);
+            YDB_LOG_WARN_CTX(ctx, "Column table not found",
+                {"pathId", pathId},
+            );
             return true;
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
+        YDB_LOG_INFO_CTX(ctx, "PersistSingleStats: ColumnTable",
+            {"tableCount", rec.GetTables().size()},
+        );
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
         const ui64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsVolumeBytes;
@@ -512,10 +536,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         smallBlobsCountDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Aggregated stats for pathId " << pathId.LocalPathId
-            << ": RowCount " << columnTable->Stats.Aggregated.RowCount
-            << ", DataSize " << columnTable->Stats.Aggregated.DataSize
+        YDB_LOG_DEBUG_CTX(ctx, "Aggregated stats for column table",
+            {"pathId", pathId.LocalPathId},
+            {"rowCount", columnTable->Stats.Aggregated.RowCount},
+            {"dataSize", columnTable->Stats.Aggregated.DataSize},
         );
     }
 
@@ -561,7 +585,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     // and potential split will probably be rejected later.
     TString inflightLimitErrStr;
     if (!Self->CheckInFlightLimit(TTxState::ETxType::TxSplitTablePartition, inflightLimitErrStr)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Do not consider split-merge: " << inflightLimitErrStr);
+        YDB_LOG_DEBUG_CTX(ctx, "Do not consider split-merge",
+            {"reason", inflightLimitErrStr},
+        );
         return true;
     }
 
@@ -574,19 +600,19 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         TTxId txId = Self->GetCachedTxId(ctx);
 
         if (!txId) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Do not request merge op"
-                        << ", reason: no cached tx ids for internal operation"
-                        << ", shardIdx: " << shardIdx
-                        << ", size of merge: " << shardsToMerge.size());
+            YDB_LOG_WARN_CTX(ctx, "Do not request merge op: no cached tx ids for internal operation",
+                {"shardIdx", shardIdx},
+                {"mergeSize", shardsToMerge.size()},
+            );
             return true;
         }
 
         auto request = MergeRequest(Self, txId, Self->ShardInfos[shardIdx].PathId, shardsToMerge);
 
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Propose merge request: " << request->Record.ShortDebugString()
-            << ", reason: " << mergeReason);
+        YDB_LOG_INFO_CTX(ctx, "Propose merge request",
+            {"request", request->Record.ShortDebugString()},
+            {"reason", mergeReason},
+        );
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
@@ -607,21 +633,29 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TString reason;
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason)) {
         // We would like to split by size and do this no matter how many partitions there are
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Want to split tablet " << datashardId << " by size: " << reason);
+        YDB_LOG_NOTICE_CTX(ctx, "Want to split tablet by size",
+            {"datashard", datashardId},
+            {"reason", reason},
+        );
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId << " by load,"
-            << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
+        YDB_LOG_DEBUG_CTX(ctx, "Do not want to split tablet by load: table already has max partitions",
+            {"datashard", datashardId},
+            {"currentPartitions", table->GetPartitions().size()},
+            {"maxPartitions", table->GetMaxPartitionsCount()},
+        );
         return true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Want to split tablet " << datashardId << " by load: " << reason);
+        YDB_LOG_NOTICE_CTX(ctx, "Want to split tablet by load",
+            {"datashard", datashardId},
+            {"reason", reason},
+        );
         collectKeySample = true;
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId << ": " << reason);
+        YDB_LOG_DEBUG_CTX(ctx, "Do not want to split tablet",
+            {"datashard", datashardId},
+            {"reason", reason},
+        );
         return true;
     }
 
@@ -659,14 +693,11 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     {
         constexpr ui64 deltaShards = 2;
         if ((pathElement->GetShardsInside() + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShardsInPath) {
-            LOG_NOTICE_S(
-                ctx,
-                NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Do not request full stats from datashard " << datashardId
-                    << ", reason: shards count limit exceeded (in path)"
-                    << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShardsInPath
-                    << ", current: " << pathElement->GetShardsInside()
-                    << ", delta: " << deltaShards
+            YDB_LOG_NOTICE_CTX(ctx, "Do not request full stats from datashard: shards count limit exceeded (in path)",
+                {"datashard", datashardId},
+                {"limit", subDomainInfo->GetSchemeLimits().MaxShardsInPath},
+                {"current", pathElement->GetShardsInside()},
+                {"delta", deltaShards},
             );
 
             return false;
@@ -674,15 +705,11 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
 
         const auto currentShards = (subDomainInfo->GetShardsInside() - subDomainInfo->GetBackupShards());
         if ((currentShards + deltaShards) > subDomainInfo->GetSchemeLimits().MaxShards) {
-            LOG_NOTICE_S(
-                ctx,
-                NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Do not request full stats from datashard " << datashardId
-                    << ", datashard: " << datashardId
-                    << ", reason: shards count limit exceeded (in subdomain)"
-                    << ", limit: " << subDomainInfo->GetSchemeLimits().MaxShards
-                    << ", current: " << currentShards
-                    << ", delta: " << deltaShards
+            YDB_LOG_NOTICE_CTX(ctx, "Do not request full stats from datashard: shards count limit exceeded (in subdomain)",
+                {"datashard", datashardId},
+                {"limit", subDomainInfo->GetSchemeLimits().MaxShards},
+                {"current", currentShards},
+                {"delta", deltaShards},
             );
 
             return false;
@@ -690,11 +717,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     }
 
     if (newPartitionStats.HasBorrowedData) {
-        LOG_NOTICE_S(
-            ctx,
-            NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId
-                << " because it has borrow parts, enqueue compact them first"
+        YDB_LOG_NOTICE_CTX(ctx, "Postpone split tablet: it has borrowed parts, enqueue compact them first",
+            {"datashard", datashardId},
         );
 
         Self->EnqueueBorrowedCompaction(shardIdx);
@@ -704,22 +728,17 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     // path.IsLocked() and path.LockedBy() equivalent
     if (const auto& found = Self->LockedPaths.find(pathId); found != Self->LockedPaths.end()) {
         const auto txId = found->second;
-        LOG_NOTICE_S(
-            ctx,
-            NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId
-                << " because it is locked by " << txId
+        YDB_LOG_NOTICE_CTX(ctx, "Postpone split tablet: it is locked by tx",
+            {"datashard", datashardId},
+            {"txId", txId},
         );
 
         return false;
     }
 
     // Request histograms from the datashard
-    LOG_NOTICE_S(
-        ctx,
-        NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Requesting full tablet stats " << datashardId
-            << " to split it"
+    YDB_LOG_NOTICE_CTX(ctx, "Requesting full tablet stats to split it",
+        {"datashard", datashardId},
     );
 
     auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
@@ -815,22 +834,24 @@ void TSchemeShard::HandlePeriodicTableStats(TEvDataShard::TEvPeriodicTableStats:
             ? TPathId(TOwnerId(rec.GetTableOwnerId()), TLocalPathId(rec.GetTableLocalId()))
             : MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Got periodic table stats at tablet " << TabletID()
-                                                     << " from shard " << datashardId
-                                                     << " followerId " << followerId
-                                                     << " pathId " << pathId
-                                                     << " state '" << DatashardStateName(rec.GetShardState()) << "'"
-                                                     << " dataSize " << dataSize
-                                                     << " rowCount " << rowCount
-                                                     << " cpuUsage " << tabletMetrics.GetCPU()/10000.0);
+    YDB_LOG_DEBUG_CTX(ctx, "Got periodic table stats",
+        {"datashard", datashardId},
+        {"followerId", followerId},
+        {"pathId", pathId},
+        {"state", DatashardStateName(rec.GetShardState())},
+        {"dataSize", dataSize},
+        {"rowCount", rowCount},
+        {"cpuUsage", tabletMetrics.GetCPU()/10000.0},
+        {"schemeshard", TabletID()},
+    );
 
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Got periodic table stats at tablet " << TabletID()
-                                                     << " from shard " << datashardId
-                                                     << " followerId " << followerId
-                                                     << " pathId " << pathId
-                                                     << " raw table stats:\n" << tableStats.ShortDebugString());
+    YDB_LOG_TRACE_CTX(ctx, "Got periodic table stats (raw)",
+        {"datashard", datashardId},
+        {"followerId", followerId},
+        {"pathId", pathId},
+        {"statsMessage", tableStats.ShortDebugString()},
+        {"schemeshard", TabletID()},
+    );
 
     TStatsId statsId(pathId, datashardId, followerId);
 
@@ -849,8 +870,10 @@ void TSchemeShard::HandlePeriodicTableStats(TEvDataShard::TEvPeriodicTableStats:
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvPersistTableStats::TPtr&, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-           "Started TEvPersistStats at tablet " << TabletID() << ", queue size# " << TableStatsQueue.Size());
+    YDB_LOG_DEBUG_CTX(ctx, "Started TEvPersistStats",
+        {"tableStatsQueueSize", TableStatsQueue.Size()},
+        {"schemeshard", TabletID()},
+    );
 
     TableStatsBatchScheduled = false;
     ExecuteTableStatsBatch(ctx);
@@ -860,8 +883,9 @@ void TSchemeShard::ExecuteTableStatsBatch(const TActorContext& ctx) {
     if (!TablePersistStatsPending && !TableStatsQueue.Empty()) {
         TablePersistStatsPending = true;
         EnqueueExecute(new TTxStoreTableStats(this, TableStatsQueue, TablePersistStatsPending));
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Will execute TTxStoreStats, queue# " << TableStatsQueue.Size());
+        YDB_LOG_TRACE_CTX(ctx, "Will execute TTxStoreStats",
+            {"tableStatsQueueSize", TableStatsQueue.Size()},
+        );
         ScheduleTableStatsBatch(ctx);
     }
 }
@@ -869,8 +893,10 @@ void TSchemeShard::ExecuteTableStatsBatch(const TActorContext& ctx) {
 void TSchemeShard::ScheduleTableStatsBatch(const TActorContext& ctx) {
     if (!TableStatsBatchScheduled && !TableStatsQueue.Empty()) {
         TDuration delay = TableStatsQueue.Delay();
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "Will delay TTxStoreTableStats on# " << delay << ", queue# " << TableStatsQueue.Size());
+        YDB_LOG_TRACE_CTX(ctx, "Will delay TTxStoreTableStats",
+            {"delay", delay},
+            {"tableStatsQueueSize", TableStatsQueue.Size()},
+        );
 
         ctx.Schedule(delay, new TEvPrivate::TEvPersistTableStats());
         TableStatsBatchScheduled = true;
@@ -942,3 +968,5 @@ void TSchemeShard::RemoveShardMetrics(const TShardIdx& shardIdx) {
 }
 
 }}
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

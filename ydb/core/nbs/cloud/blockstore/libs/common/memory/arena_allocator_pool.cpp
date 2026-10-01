@@ -4,8 +4,20 @@
 #include <util/system/yassert.h>
 
 #include <cstring>
+#include <memory>
 
 namespace NYdb::NBS::NBlockStore {
+
+//////////////////////////////////////////////////////////////////////////////
+
+// TODO: Move this implementation back to arena_allocator.cpp after fixing
+// the final static link order for users of TArenaPoolStats.
+void TArenaPoolStats::Aggregate(const TArenaPoolStats& stats)
+{
+    ReservedSize += stats.ReservedSize;
+    UsedSize += stats.UsedSize;
+    AllocationCount += stats.AllocationCount;
+}
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -33,6 +45,11 @@ TArenaAllocatorPool::TSlot::~TSlot()
     if (Base) {
         Allocator->DeAllocate(Base);
     }
+}
+
+IArenaAllocatorPtr TArenaAllocatorPool::GetAllocator() const
+{
+    return Allocator;
 }
 
 void* TArenaAllocatorPool::TSlot::Allocate()
@@ -97,6 +114,30 @@ size_t TArenaAllocatorPool::TSlots::GetAllocatedSize() const
     return Slots.size() * SlotSize;
 }
 
+TArenaAllocatorSlotStats TArenaAllocatorPool::TSlots::GetStats(
+    size_t chunkSize) const
+{
+    return {
+        .SlotSize = chunkSize,
+        .ArenaSize = SlotSize,
+        .ReservedSize = GetAllocatedSize(),
+        .UsedSize = UsedSize,
+        .MaxUsedSize = MaxUsedSize,
+        .Count = AllocationCount};
+}
+
+void TArenaAllocatorPool::TSlots::OnAllocate(size_t chunkSize)
+{
+    UsedSize += chunkSize;
+    MaxUsedSize = Max(MaxUsedSize, UsedSize);
+    ++AllocationCount;
+}
+
+void TArenaAllocatorPool::TSlots::OnDeallocate(size_t chunkSize)
+{
+    UsedSize -= chunkSize;
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 TArenaAllocatorPool::TArenaAllocatorPool(
@@ -121,6 +162,7 @@ void* TArenaAllocatorPool::Allocate(size_t size)
     }
 
     if (void* ptr = slots.CurrentSlot->Allocate()) {
+        slots.OnAllocate(size);
         UsedSize += size;
         return ptr;
     }
@@ -129,6 +171,7 @@ void* TArenaAllocatorPool::Allocate(size_t size)
     Bases.emplace(slot->Base, slot);
     void* ptr = slot->Allocate();
     Y_ABORT_UNLESS(ptr);
+    slots.OnAllocate(size);
     UsedSize += size;
     return ptr;
 }
@@ -155,26 +198,29 @@ void TArenaAllocatorPool::Deallocate(void* ptr) noexcept
         "Deallocate: unknown pointer");
 
     UsedSize -= chunkSize;
+    auto& slots = SizeMap[chunkSize];
+    slots.OnDeallocate(chunkSize);
     slot->Free(ptr);
 
     if (slot->Empty()) {
         Bases.erase(it);
-        auto& slots = SizeMap[chunkSize];
         slots.Release(slot);
-        if (slots.Empty()) {
-            SizeMap.erase(chunkSize);
-        }
     }
 }
 
-size_t TArenaAllocatorPool::GetAllocatedSize() const
+TArenaPoolStats TArenaAllocatorPool::GetMemoryStats() const
 {
-    size_t result = 0;
-    for (const auto& [size, slots]: SizeMap) {
-        Y_UNUSED(size);
-        result += slots.GetAllocatedSize();
+    size_t reservedSize = 0;
+    size_t allocationCount = 0;
+    for (const auto& [chunkSize, slots]: SizeMap) {
+        reservedSize += slots.GetAllocatedSize();
+        allocationCount += slots.GetStats(chunkSize).Count;
     }
-    return result;
+    return {
+        .ReservedSize = reservedSize,
+        .UsedSize = UsedSize,
+        .AllocationCount = allocationCount,
+    };
 }
 
 size_t TArenaAllocatorPool::GetUsedSize() const
@@ -182,6 +228,22 @@ size_t TArenaAllocatorPool::GetUsedSize() const
     return UsedSize;
 }
 
+TArenaAllocatorStats TArenaAllocatorPool::GetDetailedStat() const
+{
+    TArenaAllocatorStats result;
+    result.reserve(SizeMap.size());
+    for (const auto& [chunkSize, slots]: SizeMap) {
+        result.push_back(slots.GetStats(chunkSize));
+    }
+    return result;
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
+TArenaAllocatorPoolPtr CreateArenaAllocatorPool()
+{
+    return std::make_shared<TArenaAllocatorPool>(CreateArenaAllocator());
+}
+
+//////////////////////////////////////////////////////////////////////////////
 }   // namespace NYdb::NBS::NBlockStore

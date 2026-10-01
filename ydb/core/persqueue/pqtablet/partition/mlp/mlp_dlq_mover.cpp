@@ -65,9 +65,8 @@ void TDLQMoverActor::PassAway() {
     TActor::PassAway();
 }
 
-TLogPrefix TDLQMoverActor::BuildLogPrefix() const {
+TStructuredMessage TDLQMoverActor::BuildLogPrefix() const {
     return YDB_LOG_CREATE_MESSAGE(
-        {"actorClassName", "MLPDLQMover"},
         {"tabletId", Settings.TabletId},
         {"partition", Settings.PartitionId},
         {"consumer", Settings.ConsumerName});

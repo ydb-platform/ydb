@@ -87,6 +87,7 @@ TBlockRangeField::TBlockRangeField(TBlockRangeField&& other) noexcept
     , SimpleImpl(std::move(other.SimpleImpl))
     , NodeBasedImpl(std::move(other.NodeBasedImpl))
     , BitMaskBasedImpl(std::move(other.BitMaskBasedImpl))
+    , AllocationCount(other.AllocationCount)
 {}
 
 TBlockRangeField& TBlockRangeField::operator=(TBlockRangeField&& other) noexcept
@@ -97,6 +98,7 @@ TBlockRangeField& TBlockRangeField::operator=(TBlockRangeField&& other) noexcept
     SimpleImpl = std::move(other.SimpleImpl);
     NodeBasedImpl = std::move(other.NodeBasedImpl);
     BitMaskBasedImpl = std::move(other.BitMaskBasedImpl);
+    AllocationCount = other.AllocationCount;
     return *this;
 }
 
@@ -288,14 +290,11 @@ void TBlockRangeField::DeserializeFromRLE(const TString& source)
         });
 }
 
-size_t TBlockRangeField::GetAllocatedSize() const
+TArenaPoolStats TBlockRangeField::GetMemoryStats() const
 {
-    return GetImpl()->GetAllocatedSize();
-}
-
-size_t TBlockRangeField::GetUsedSize() const
-{
-    return GetImpl()->GetUsedSize();
+    auto result = GetImpl()->GetMemoryStats();
+    result.AllocationCount += AllocationCount;
+    return result;
 }
 
 IBlockRangeFieldImpl::EBackend TBlockRangeField::GetBackend() const
@@ -333,6 +332,7 @@ void TBlockRangeField::UpgradeToPreferredBackend()
     auto newBackend = MakeImpl(PreferredBackend, MaxBlockCount, ArenaAllocator);
     CopyRanges(*GetNodeBasedImpl(), newBackend.get());
 
+    AllocationCount += GetImpl()->GetMemoryStats().AllocationCount;
     BitMaskBasedImpl.reset();
     NodeBasedImpl = std::move(newBackend);
     SimpleImpl.reset();
@@ -349,6 +349,7 @@ void TBlockRangeField::UpgradeToBitmapBackend()
         MaxBlockCount);
     CopyRanges(*GetNodeBasedImpl(), newBackend.get());
 
+    AllocationCount += GetImpl()->GetMemoryStats().AllocationCount;
     BitMaskBasedImpl = std::move(newBackend);
     NodeBasedImpl.reset();
     SimpleImpl.reset();
@@ -360,6 +361,7 @@ void TBlockRangeField::DowngradeToSimpleBackendIfEmpty()
         return;
     }
 
+    AllocationCount += GetImpl()->GetMemoryStats().AllocationCount;
     BitMaskBasedImpl.reset();
     NodeBasedImpl.reset();
     SimpleImpl = TBlockRangeFieldSimple{};

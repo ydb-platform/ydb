@@ -11,6 +11,7 @@ from ydb.tools.cfg.templates import (
     kikimr_cfg_for_static_node_new_style,
     kikimr_cfg_for_static_node_new_style_v2,
 )
+from ydb.tools.ydbd_slice import process_profiles
 
 # Remove specified keys
 STORAGE_ONLY_KEYS = [
@@ -102,6 +103,7 @@ class YamlConfigurator(object):
             self.cluster_description.domains = _domains.get('domains', [])
 
         self._slot_args = YDBDArgsBuilder()
+        self.enable_process_profiles = False
 
     @property
     def v2(self):
@@ -244,10 +246,29 @@ class YamlConfigurator(object):
             str: Path to the static configuration directory
         """
 
-        write_to_file(
-            os.path.join(self.__static_cfg, 'config.yaml'),
-            self.static
-        )
+        if self.v2 and (
+            self.enable_process_profiles
+            or process_profiles.yaml_uses_process_profiles(self.static_dict)
+            or process_profiles.yaml_uses_process_profiles(self.static_config_dict)
+        ):
+            raise ValueError('process profiles are not supported for v2 yaml config')
+
+        config_yaml_path = os.path.join(self.__static_cfg, 'config.yaml')
+        if self.enable_process_profiles or process_profiles.needs_strip(self.static_dict):
+            write_to_file(
+                config_yaml_path,
+                process_profiles.dump_yaml(process_profiles.strip_slice_only_fields(self.static_dict)),
+            )
+        else:
+            write_to_file(config_yaml_path, self.static)
+
+        if self.enable_process_profiles:
+            process_profiles.emit_profile_yaml_files(
+                config_yaml_path,
+                self.static_dict,
+                convert_sys=False,
+            )
+
         write_to_file(
             os.path.join(self.__static_cfg, 'kikimr.cfg'),
             self.kikimr_cfg

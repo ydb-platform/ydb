@@ -64,8 +64,7 @@ public:
     void DeserializeFromRLE(const TString& source);
 
     // Memory usage.
-    [[nodiscard]] size_t GetAllocatedSize() const;
-    [[nodiscard]] size_t GetUsedSize() const;
+    [[nodiscard]] TArenaPoolStats GetMemoryStats() const;
 
 private:
     friend class TBlockRangeFieldTestAccessor;
@@ -96,6 +95,7 @@ private:
     std::optional<TBlockRangeFieldSimple> SimpleImpl;
     std::unique_ptr<TNodeBasedBlockRangeField> NodeBasedImpl;
     std::unique_ptr<TBlockRangeFieldBitMask> BitMaskBasedImpl;
+    size_t AllocationCount = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////////

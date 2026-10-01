@@ -174,6 +174,7 @@ def validate_cfg(result):
             "param",
             "langver",
             "gateway_cfg_patch",
+            "yt_out_table_attr",
             ), "Unknown command in .cfg: %s" % (r[0])
 
 

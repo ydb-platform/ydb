@@ -1,7 +1,6 @@
 #pragma once
 #include "uring_router.h"
 #include "uring_router_backend.h"
-#include "liburing_compat.h"
 
 namespace NKikimr::NPDisk {
 
@@ -17,9 +16,11 @@ public:
     }
     static int WakeFd(const TUringRouter& router) { return router.WakeEventFd; }
     static std::unique_ptr<TUringRouter> Create(
-            std::unique_ptr<NUringPrivate::IUringRouterBackend> backend, ui32 depth = 16) {
+            std::unique_ptr<NUringPrivate::IUringRouterBackend> backend, ui32 depth = 16,
+            bool devNullMode = false) {
         return std::unique_ptr<TUringRouter>(new TUringRouter(TFileHandle(), nullptr,
-            TUringRouterConfig{.QueueDepth = depth, .IdleSpinUs = 0}, {}, std::move(backend)));
+            TUringRouterConfig{.QueueDepth = depth, .IdleSpinUs = 0, .DevNullMode = devNullMode},
+            {}, std::move(backend)));
     }
 
     static void SetFd(TUringRouter& router, TFileHandle fd) { router.Fd = std::move(fd); }
@@ -40,8 +41,8 @@ public:
     static void WaitProgress(TUringRouter& router) { router.WaitForProgress(); }
     static void WaitSync(TUringRouter& router) { router.WaitSync(); }
     static EUringRouterState State(const TUringRouter& router) { return router.State.load(); }
-    static unsigned Ready(const TUringRouter& router) { return io_uring_sq_ready(router.Ring.get()); }
-    static unsigned Staged(const TUringRouter& router) { return router.Ring->sq.sqe_tail - router.Ring->sq.sqe_head; }
+    static unsigned Ready(const TUringRouter& router);
+    static unsigned Staged(const TUringRouter& router);
 
     static void AbandonFakeOperations(TUringRouter& router) {
         // Assertion unwinding must not abort StopSync. This is only safe for the
@@ -55,4 +56,3 @@ public:
 };
 
 } // namespace NKikimr::NPDisk
-

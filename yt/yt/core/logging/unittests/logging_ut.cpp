@@ -76,14 +76,16 @@ void WriteMessage(TTaggedPayloadWriter* writer, TStringBuf message)
 
 void WriteTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf value)
 {
-    writer->BeginTag(key)->AppendString(value);
-    writer->EndTag();
+    writer->AppendTag(key, [&] (TStringBuilderBase* builder) {
+        builder->AppendString(value);
+    });
 }
 
 void WriteWellKnownTag(TTaggedPayloadWriter* writer, TStringBuf key, TStringBuf value)
 {
-    writer->BeginWellKnownTag(key)->AppendString(value);
-    writer->EndTag();
+    writer->AppendWellKnownTag(key, [&] (TStringBuilderBase* builder) {
+        builder->AppendString(value);
+    });
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1913,6 +1915,38 @@ TEST_F(TCustomWriterTest, WriterConfigValidation)
             })", CustomWriterType));
         },
         "Expected >= 0, found -10");
+}
+
+TEST_F(TCustomWriterTest, UnknownWriterInDynamicRule)
+{
+    auto config = ConvertTo<TLogManagerConfigPtr>(TYsonString(Format(R"({
+        rules = [{min_level = info; writers = [custom];}];
+        writers = {custom = {type = "%v"; padding = 0;};};
+    })", CustomWriterType)));
+    auto* logManager = TLogManager::Get();
+    auto dynamicConfig = New<TLogManagerDynamicConfig>();
+    auto unknownWriterRule = New<TRuleConfig>();
+    unknownWriterRule->Writers = {"debug"};
+    auto mixedWriterRule = New<TRuleConfig>();
+    mixedWriterRule->Writers = {"custom", "debug"};
+    mixedWriterRule->MaxLevel = ELogLevel::Debug;
+    dynamicConfig->Rules = std::vector<TRuleConfigPtr>{
+        unknownWriterRule,
+        mixedWriterRule,
+        config->Rules.front(),
+    };
+    logManager->Configure(config->ApplyDynamic(dynamicConfig), /*sync*/ true);
+    auto writer = WriterFactory_->GetWriter();
+
+    SetThreadMinLogLevel(ELogLevel::Minimum);
+    YT_TLOG_DEBUG("Valid writer in a mixed rule still works");
+    YT_TLOG_INFO("Valid logging rule still works");
+    logManager->Synchronize();
+
+    const auto& messages = writer->GetMessages();
+    ASSERT_EQ(2, std::ssize(messages));
+    EXPECT_EQ("Valid writer in a mixed rule still works", messages[0]);
+    EXPECT_EQ("Valid logging rule still works", messages[1]);
 }
 
 TEST_F(TCustomWriterTest, Write)

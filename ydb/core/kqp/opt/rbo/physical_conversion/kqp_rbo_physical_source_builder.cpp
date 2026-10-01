@@ -9,42 +9,43 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
-namespace {
-
-THashMap<TString, TString> BuildOutputToPhysicalColumnMap(const TOpRead& read) {
-    THashMap<TString, TString> renameMap;
-    Y_ENSURE(read.Columns.size() == read.OutputIUs.size());
-    for (ui32 i = 0; i < read.Columns.size(); ++i) {
-        const auto& physicalColumn = read.Columns[i];
-        const auto& outputIU = read.OutputIUs[i];
-        if (outputIU.GetFullName() != physicalColumn) {
-            renameMap[outputIU.GetFullName()] = physicalColumn;
-        }
-        if (outputIU.GetColumnName() != physicalColumn) {
-            renameMap[outputIU.GetColumnName()] = physicalColumn;
-        }
-    }
-    return renameMap;
-}
-
-} // anonymous namespace
-
 TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
+    TVector<TString> storageColumns;
+    TVector<std::pair<TString, TString>> renames;
+    THashMap<TString, TString> olapNames;
+    for (const auto id : Read.GetColumns()) {
+        const auto column = Registry.Get(id).GetColumnName();
+        storageColumns.push_back(column);
+        renames.emplace_back(column, Names.Get(id));
+        olapNames.emplace(Ctx.GetIndexAsString(id), column);
+    }
+    // OLAP execution needs a nonempty storage projection to retain row counts.
+    // The carrier has no logical ID and is dropped by the NarrowMap below.
+    if (storageColumns.empty() && Read.GetTableStorageType() == NYql::EStorageType::ColumnStorage) {
+        Y_ENSURE(!CarrierColumn.empty(), "An empty OLAP payload needs a storage carrier column");
+        storageColumns.push_back(CarrierColumn);
+    }
+    // Block reads expose TStructExprType's lexical field order, not ID order.
+    // Fetch a storage field once even when multiple logical IDs refer to it.
+    std::sort(storageColumns.begin(), storageColumns.end());
+    storageColumns.erase(std::unique(storageColumns.begin(), storageColumns.end()), storageColumns.end());
     TVector<TExprNode::TPtr> columns;
-    for (const auto& column : Read->Columns) {
+    THashMap<TString, ui32> positions;
+    for (const auto& column : storageColumns) {
+        positions.emplace(column, columns.size());
         columns.push_back(Ctx.NewAtom(Pos, column));
     }
     // Extract ranges.
-    TExprNode::TPtr ranges = Read->GetRanges() ? Read->GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
+    TExprNode::TPtr ranges = Read.GetRanges() ? Read.GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
 
-    switch (Read->GetTableStorageType()) {
+    switch (Read.GetTableStorageType()) {
         case NYql::EStorageType::RowStorage: {
             TKqpReadTableSettings settings;
-            if (Read->SortDir != ESortDir::None) {
-                settings.SetSorting(Read->SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC);
-                if (Read->Limit) {
-                    settings.SetItemsLimit(Read->Limit);
+            if (Read.SortDir != ESortDir::None) {
+                settings.SetSorting(Read.SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC);
+                if (Read.Limit) {
+                    settings.SetItemsLimit(Read.Limit);
                 }
             }
 
@@ -54,7 +55,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                     .Category<TCoAtom>().Build("KqpReadRangesSource")
                 .Build()
                 .Settings<TKqpReadRangesSourceSettings>()
-                    .Table(Read->TableCallable)
+                    .Table(Read.TableCallable)
                     .Columns()
                         .Add(columns)
                     .Build()
@@ -64,15 +65,6 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 .Build()
             .Done().Ptr();
             // clang-format on
-
-            const auto& columns = Read->Columns;
-            const auto& outputs = Read->OutputIUs;
-            Y_ENSURE(columns.size() == outputs.size());
-
-            TVector<std::pair<TString, TString>> renames;
-            for (ui32 i = 0; i < columns.size(); ++i) {
-                renames.emplace_back(columns[i], outputs[i].GetFullName());
-            }
 
             const auto programArg = Build<TCoArgument>(Ctx, Pos).Name("program_arg").Done().Ptr();
             const auto renameMap = NPhysicalConvertionUtils::BuildRenameMap(programArg, renames, Ctx);
@@ -98,30 +90,29 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
-            if (Read->OlapFilterLambda) {
-                processLambda = Read->OlapFilterLambda;
-                const auto renameMap = BuildOutputToPhysicalColumnMap(*Read);
-                if (!renameMap.empty()) {
-                    processLambda = NOpt::TOlapFilterInspector::RenameColumns(processLambda, renameMap, Ctx);
-                }
+            if (Read.OlapFilterLambda) {
+                // Do not carry the optimizer's ID-keyed argument type across the
+                // storage-name boundary. The read annotator supplies the storage row.
+                processLambda = Ctx.DeepCopyLambda(*NOpt::TOlapFilterInspector::RenameColumns(
+                    Read.OlapFilterLambda, olapNames, Ctx));
             }
 
             TKqpReadTableSettings settings;
-            if (Read->Limit) {
-                settings.SetItemsLimit(Read->Limit);
+            if (Read.Limit) {
+                settings.SetItemsLimit(Read.Limit);
             }
 
-            if (Read->SortDir != ESortDir::None) {
-                const auto sortDirection = Read->SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC;
+            if (Read.SortDir != ESortDir::None) {
+                const auto sortDirection = Read.SortDir == ESortDir::Asc ? ERequestSorting::ASC : ERequestSorting::DESC;
                 settings.SetSorting(sortDirection);
-            } else if (Read->Limit) {
+            } else if (Read.Limit) {
                 // Limit without sort.
                 settings.SequentialInFlight = 1;
             }
 
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
-                .Table(Read->TableCallable)
+                .Table(Read.TableCallable)
                 .Ranges(ranges)
                 .Columns().Add(columns).Build()
                 .Settings(settings.BuildNode(Ctx, Pos))
@@ -139,7 +130,17 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             .Done().Ptr();
             // clang-format on
 
-            auto narrowMap = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(flowNonBlockRead, Read->OutputIUs, Ctx);
+            TExprNode::TListType args;
+            for (ui32 i = 0; i < storageColumns.size(); ++i) {
+                args.push_back(Ctx.NewArgument(Pos, "column_" + ToString(i)));
+            }
+            TExprNode::TListType fields;
+            for (const auto& [column, name] : renames) {
+                fields.push_back(Ctx.NewList(Pos, {Ctx.NewAtom(Pos, name), args.at(positions.at(column))}));
+            }
+            auto row = Ctx.NewCallable(Pos, "AsStruct", std::move(fields));
+            auto lambda = Ctx.NewLambda(Pos, Ctx.NewArguments(Pos, std::move(args)), std::move(row));
+            auto narrowMap = Build<TCoNarrowMap>(Ctx, Pos).Input(flowNonBlockRead).Lambda(lambda).Done().Ptr();
 
             // clang-format off
             source = Build<TCoFromFlow>(Ctx, Pos)

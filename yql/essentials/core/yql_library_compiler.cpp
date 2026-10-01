@@ -61,9 +61,10 @@ TString Load(const TString& path)
     return TString(buffer.data(), buffer.size());
 }
 
-}
+} // namespace
 
 bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
+    TTypeAnnotationContext types;
     TExprNode::TListType tupleItems;
     for (const auto& x : cohesion.Exports.Symbols()) {
         tupleItems.push_back(x.second);
@@ -71,7 +72,7 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
 
     auto root = ctx.NewList(TPositionHandle(), std::move(tupleItems));
     for (;;) {
-        auto status = ExpandApply(root, root, ctx);
+        auto status = ExpandApply(root, root, ctx, types);
         if (status == IGraphTransformer::TStatus::Error) {
             return false;
         }
@@ -91,7 +92,7 @@ bool OptimizeLibrary(TLibraryCohesion& cohesion, TExprContext& ctx) {
 }
 
 bool CompileLibrary(const NSQLTranslation::TTranslators& translators, const TString& alias,
-    const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
+                    const TString& script, TExprContext& ctx, TLibraryCohesion& cohesion, bool optimize)
 {
     TAstParseResult res;
     if (alias.EndsWith(".yqls")) {
@@ -151,7 +152,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
             if (import.second.first == lib.first) {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' tries to import itself."));
+                                    TStringBuilder() << "Library '" << lib.first << "' tries to import itself."));
                 return false;
             }
 
@@ -166,7 +167,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 
             if (!exportTable) {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'."));
+                                    TStringBuilder() << "Library '" << lib.first << "' has unresolved dependency from '" << import.second.first << "'."));
                 return false;
             }
 
@@ -174,7 +175,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
                 replaces[import.first] = externalModule ? ctxToClone.DeepCopy(*ex->second, exportTable->ExprCtx(), clones, /*internStrings=*/true, /*copyTypes=*/false) : ex->second;
             } else {
                 ctx.AddError(TIssue(ctxToClone.GetPosition(import.first->Pos()),
-                    TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'."));
+                                    TStringBuilder() << "Library '" << lib.first << "' has unresolved symbol '" << import.second.second << "' from '" << import.second.first << "'."));
                 return false;
             }
         }
@@ -196,7 +197,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
             for (const auto& expo : lib.second.Exports.Symbols()) {
                 if (!ReplaceNodes(*expo.second, replaces, hasChanges)) {
                     ctx.AddError(TIssue(ctxToClone.GetPosition(expo.second->Pos()),
-                        TStringBuilder() << "Cross reference detected under '" << expo.first << "' in '" << lib.first << "'."));
+                                        TStringBuilder() << "Cross reference detected under '" << expo.first << "' in '" << lib.first << "'."));
                     return false;
                 }
             }
@@ -207,7 +208,7 @@ bool LinkLibraries(THashMap<TString, TLibraryCohesion>& libs, TExprContext& ctx,
 }
 
 bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TUserDataTable& userData,
-    TExprContext& ctx, TModulesTable& modules, bool optimize)
+                      TExprContext& ctx, TModulesTable& modules, bool optimize)
 {
     THashMap<TString, TLibraryCohesion> libs;
     for (const auto& data : userData) {
@@ -233,4 +234,4 @@ bool CompileLibraries(const NSQLTranslation::TTranslators& translators, const TU
     return LinkLibraries(libs, ctx, ctx);
 }
 
-}
+} // namespace NYql

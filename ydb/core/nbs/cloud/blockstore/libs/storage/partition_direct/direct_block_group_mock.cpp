@@ -1,5 +1,8 @@
 #include "direct_block_group_mock.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/memory/arena_allocator_pool.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 using namespace NThreading;
@@ -143,6 +146,7 @@ TString TOracleMock::Dump() const
 
 TDirectBlockGroupMock::TDirectBlockGroupMock()
 {
+    ArenaAllocatorPool = CreateArenaAllocatorPool();
     Executor = TExecutor::Create("NBS_TEST");
     Executor->Start();
 
@@ -222,9 +226,49 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     };
 }
 
+TArenaAllocatorPoolPtr TDirectBlockGroupMock::GetArenaAllocatorPool()
+{
+    return ArenaAllocatorPool;
+}
+
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
 {
     VChunks.push_back(std::move(vChunk));
+}
+
+THostIndex TDirectBlockGroupMock::AllocateDDiskForPromote(
+    const TVChunkConfig& config)
+{
+    const auto candidates = THostMask::MakeAll(config.GetHostCount())
+                                .Exclude(config.GetDisabledHosts())
+                                .Exclude(config.GetDDisks());
+    const THostIndex selected = candidates.First().value_or(InvalidHostIndex);
+    if (selected != InvalidHostIndex) {
+        AllocateDDiskPromotion(config.GetVChunkIndex(), selected);
+    }
+    return selected;
+}
+
+void TDirectBlockGroupMock::AllocateDDiskPromotion(
+    ui32 vChunkId,
+    THostIndex hostIndex)
+{
+    Y_ABORT_UNLESS(!PendingDDiskAllocations.contains(vChunkId));
+    PendingDDiskAllocations.emplace(vChunkId, hostIndex);
+}
+
+void TDirectBlockGroupMock::CommitDDiskPromotion(const TVChunkConfig& config)
+{
+    PendingDDiskAllocations.erase(config.GetVChunkIndex());
+}
+
+THostMask TDirectBlockGroupMock::SelectDDiskForDemote(
+    THostMask candidates) const
+{
+    if (const auto selected = candidates.First()) {
+        return THostMask::MakeOne(*selected);
+    }
+    return THostMask::MakeEmpty();
 }
 
 TExecutorPtr TDirectBlockGroupMock::GetExecutor()
@@ -272,7 +316,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroupMock::ReadBlocksFromDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -289,7 +333,7 @@ TDirectBlockGroupMock::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -306,7 +350,7 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroupMock::WriteBlocksToDDisk(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -323,7 +367,7 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
@@ -341,7 +385,7 @@ void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
     TPBufferKey pBufferKey,
-    TBlockRange64 range,
+    TBlockRange16 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId,
@@ -381,17 +425,6 @@ TDirectBlockGroupMock::BatchEraseFromPBuffer(
     const NWilson::TTraceId& traceId)
 {
     return BatchEraseFromPBufferHandler(hostIndex, segments, traceId);
-}
-
-void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
-{
-    Y_UNUSED(lsn);
-}
-
-NThreading::TFuture<std::optional<TPBufferKey>>
-TDirectBlockGroupMock::GatherSafeBarrierForErase()
-{
-    return NThreading::MakeFuture<std::optional<TPBufferKey>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>
@@ -453,10 +486,18 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
     return DumpHandler();
 }
 
-NThreading::TFuture<TDbgSnapshot>
-TDirectBlockGroupMock::BuildMonSnapshot() const
+NThreading::TFuture<TDbgSnapshot> TDirectBlockGroupMock::BuildMonSnapshot(
+    EDbgMonSnapshotDetail detail) const
 {
+    Y_UNUSED(detail);
     return NThreading::MakeFuture(TDbgSnapshot{});
+}
+
+void TDirectBlockGroupMock::BalanceDDisks(EDDiskBalanceStrategy strategy)
+{
+    if (BalanceDDisksHandler) {
+        BalanceDDisksHandler(strategy);
+    }
 }
 
 NThreading::TFuture<TVChunkStatsGatherResult>

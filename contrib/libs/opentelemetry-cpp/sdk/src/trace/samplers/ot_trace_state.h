@@ -33,6 +33,11 @@ static constexpr uint64_t kMaxRandomValue = kMaxThreshold - 1;
 // range [0, kMaxThreshold].
 uint64_t CalculateThreshold(double sampling_probability) noexcept;
 
+// Returns ratio unchanged when it is 0 or within [2^-56, 1.0]. Anything else
+// (including NaN) logs a warning under sampler_name and returns the
+// configuration default 1.0.
+double ValidateRatio(double ratio, const char *sampler_name) noexcept;
+
 // Extracts the 56-bit randomness value from the least significant 56 bits of
 // the trace id, as specified by W3C Trace Context Level 2.
 uint64_t GetRandomnessFromTraceId(const opentelemetry::trace::TraceId &trace_id) noexcept;

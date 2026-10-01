@@ -472,6 +472,7 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     MemoryUsage.Resize(taskCount);
     MaxMemoryUsage.Resize(taskCount);
     Finished.resize(taskCount);
+    TaskNodeId.resize(taskCount);
 }
 
 void TStageExecutionStats::SetHistorySampleCount(ui32 historySampleCount) {
@@ -539,7 +540,19 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
     return baseTimeMs;
 }
 
-ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
+void TStageExecutionStats::SetTaskNode(ui32 index, ui32 nodeId) {
+    AFL_ENSURE(index < TaskNodeId.size());
+    if (nodeId && !TaskNodeId[index]) {
+        TaskNodeId[index] = nodeId;
+        auto& node = Nodes[nodeId];
+        node.Tasks++;
+        if (Finished[index]) {
+            node.Finished++;
+        }
+    }
+}
+
+ui64 TStageExecutionStats::UpdateStats(ui32 nodeId, const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 memoryUsage, ui64 maxMemoryUsage, ui64 durationUs) {
     auto taskId = taskStats.GetTaskId();
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
@@ -558,10 +571,15 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         index = it->second;
     }
 
+    SetTaskNode(index, nodeId);
+
     if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
         if (!Finished[index]) {
             Finished[index] = true;
             FinishedCount++;
+            if (auto taskNodeId = TaskNodeId[index]) {
+                Nodes[taskNodeId].Finished++;
+            }
         }
     }
 
@@ -881,6 +899,7 @@ void TNodeExecutionStats::UpdateStats(const NYql::NDqProto::TEvNodeState& state)
         .InputInflightBytes = state.GetInputInflightBytes(),
         .OutputInflightBytes = state.GetOutputInflightBytes(),
         .LocalInflightBytes = state.GetLocalInflightBytes(),
+        .MemQueryAllocated = state.GetMemQueryAllocated(),
     });
 }
 
@@ -1048,7 +1067,7 @@ void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& st
 }
 
 ui64 TQueryExecutionStats::EstimateCollectMem() {
-    ui64 result = 0;
+    ui64 result = CollectCurrentQueryStats ? CurrentTaskStats.capacity() * sizeof(TCurrentTaskStats) : 0;
     for (auto& [_, stageStat] : StageStats) {
         result += stageStat.EstimateMem();
     }
@@ -1218,6 +1237,15 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
     NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 
     if (taskId) {
+        if (CollectCurrentQueryStats) {
+            AFL_ENSURE(taskId <= TaskCount);
+            CurrentTaskStats.resize(TaskCount);
+            auto& current = CurrentTaskStats[taskId - 1];
+            CurrentMemoryBytes -= current.MemoryBytes;
+            current.MemoryBytes = state == NDqProto::COMPUTE_STATE_EXECUTING
+                ? stats.GetMemoryUsage() : 0;
+            CurrentMemoryBytes += current.MemoryBytes;
+        }
         // CA may fail before SetTaskRunner (e.g. WASM compartment acquire);
         // FillStats then sends empty Tasks. Do not ENSURE — that would mask
         // the real failure issues from COMPUTE_STATE_FAILURE.
@@ -1226,6 +1254,26 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
         }
         AFL_ENSURE(stats.GetTasks().size() == 1);
         AFL_ENSURE(stats.GetTasks(0).GetTaskId() == taskId);
+        if (CollectCurrentQueryStats) {
+            auto readIngressBytes = stats.GetTasks(0).GetIngressBytes();
+            if (!CollectFullStats(StatsMode) && TasksGraph) {
+                const auto& task = TasksGraph->GetTask(taskId);
+                const auto& stage = TasksGraph->GetStageInfo(task.StageId);
+                if (task.Meta.ScanTask && (stage.Meta.IsDatashard() || stage.Meta.IsOlap())) {
+                    // Scan compute actors include scan bytes in IngressBytes only in FULL/PROFILE.
+                    // BASIC already carries the same counter in table stats.
+                    for (const auto& table : stats.GetTasks(0).GetTables()) {
+                        if (table.GetTablePath() == stage.Meta.TablePath) {
+                            readIngressBytes += table.GetReadBytes();
+                        }
+                    }
+                }
+            }
+            auto& current = CurrentTaskStats[taskId - 1];
+            CurrentReadIngressBytes -= current.ReadIngressBytes;
+            current.ReadIngressBytes = std::max(current.ReadIngressBytes, readIngressBytes);
+            CurrentReadIngressBytes += current.ReadIngressBytes;
+        }
     }
 
     for (auto& taskStats : stats.GetTasks()) {
@@ -1279,7 +1327,7 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.TaskCount = 4;
                     stageStats.Resize(4);
                 }
-                BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
+                BaseTimeMs = NonZeroMin(BaseTimeMs, stageStats.UpdateStats(nodeId, taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 
                 if (DeadlockTimeoutUs) {
                     if (stageStats.CurrentWaitOutputTimeUs.MinValue > DeadlockTimeoutUs) {
@@ -1535,11 +1583,27 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
 }
 
+TCurrentQueryResources TQueryExecutionStats::GetCurrentQueryResources() const {
+    TCurrentQueryResources result;
+    result.CpuTimeUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    result.ComputeMemoryBytes = CurrentMemoryBytes;
+    result.ReadIngressBytes = CurrentReadIngressBytes;
+    return result;
+}
+
+TCurrentExecStatsReport TQueryExecutionStats::TakeCurrentStats(bool finished) {
+    auto current = GetCurrentQueryResources();
+    if (finished) {
+        current.ComputeMemoryBytes = 0;
+    }
+    return {current, ++CurrentStatsSequenceNo};
+}
+
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     if (!metrics) {
         return;
     }
-    metrics->CpuTimeMs = (StorageCpuTimeUs + ComputeCpuTimeUs.Sum) / 1000;
+    metrics->CpuTimeMs = GetCpuTimeUs() / 1000;
     metrics->DurationSeconds = (TInstant::Now().MicroSeconds() - StartTs.MicroSeconds()) / 1000000;
 
     ui64 memoryUsageBytes = 0;
@@ -1580,6 +1644,21 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 auto& stageStats = *it->second;
                 stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
                 stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
+
+                // Tasks that have not sent stats yet are attributed to the node their compute actor was started on
+                for (auto& [taskId, index] : stageStat.Task2Index) {
+                    if (taskId && !stageStat.TaskNodeId[index]) {
+                        if (const auto& computeActorId = TasksGraph->GetTask(taskId).ComputeActorId) {
+                            stageStat.SetTaskNode(index, computeActorId.NodeId());
+                        }
+                    }
+                }
+                for (auto& [nodeId, node] : stageStat.Nodes) {
+                    auto& nodeStats = *stageStats.AddNodes();
+                    nodeStats.SetNodeId(nodeId);
+                    nodeStats.SetTasks(node.Tasks);
+                    nodeStats.SetFinished(node.Finished);
+                }
 
                 stageStats.SetBaseTimeMs(BaseTimeMs);
                 stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
@@ -1707,6 +1786,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                         stats.SetInputInflightBytes((usage.InputInflightBytes + 512_KB) / 1_MB);
                         stats.SetOutputInflightBytes((usage.OutputInflightBytes + 512_KB) / 1_MB);
                         stats.SetLocalInflightBytes((usage.LocalInflightBytes + 512_KB) / 1_MB);
+                        stats.SetMemQueryAllocated((usage.MemQueryAllocated + 512_KB) / 1_MB);
                     }
                 }
             }
@@ -1717,7 +1797,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         }
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            stats.SetCpuTimeUs(StorageCpuTimeUs + ComputeCpuTimeUs.Sum);
+            stats.SetCpuTimeUs(GetCpuTimeUs());
             stats.SetDurationUs(TInstant::Now().MicroSeconds() - StartTs.MicroSeconds());
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:

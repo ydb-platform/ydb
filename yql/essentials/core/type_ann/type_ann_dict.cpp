@@ -3,7 +3,6 @@
 
 #include <yql/essentials/core/langver/feature.gen.h>
 
-
 namespace NYql::NTypeAnnImpl {
 
 constexpr TStringBuf MutDictResourcePrefix = "_MutDict_";
@@ -18,7 +17,7 @@ const TTypeAnnotationNode* ConvertDictTypeToMutDictType(const TDictExprType* dic
 }
 
 bool ParseMutDictType(TPositionHandle pos, const TTypeAnnotationNode* type,
-    const TDictExprType*& dictType, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
+                      const TDictExprType*& dictType, TExprContext& ctx, TTypeAnnotationContext& typeCtx) {
     bool isDynamic;
     auto innerType = GetLinearItemType(*type, isDynamic);
     auto resType = innerType->UserCast<TResourceExprType>(ctx.GetPosition(pos), ctx);
@@ -41,7 +40,7 @@ bool ParseMutDictType(TPositionHandle pos, const TTypeAnnotationNode* type,
     return dictType != nullptr;
 }
 
-}
+} // namespace
 
 const TDictExprType* GetCachedMutDictType(const TStringBuf& resourceTag, const TExprContext& ctx) {
     TStringBuf tag = resourceTag;
@@ -73,7 +72,7 @@ IGraphTransformer::TStatus MutDictCreateWrapper(const TExprNode::TPtr& input, TE
     auto type = input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
     if (type->GetKind() != ETypeAnnotationKind::Dict) {
         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected dict type, but got: "
-            << *type));
+                                                                                             << *type));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -362,8 +361,7 @@ IGraphTransformer::TStatus MutDictItemsWrapper(const TExprNode::TPtr& input, TEx
     auto list = ctx.Expr.MakeType<TListExprType>(
         ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
             dictType->GetKeyType(),
-            dictType->GetPayloadType()})
-    );
+            dictType->GetPayloadType()}));
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
         input->Child(0)->GetTypeAnn(),
@@ -398,8 +396,7 @@ IGraphTransformer::TStatus MutDictKeysWrapper(const TExprNode::TPtr& input, TExp
     }
 
     auto list = ctx.Expr.MakeType<TListExprType>(
-        dictType->GetKeyType()
-    );
+        dictType->GetKeyType());
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
         input->Child(0)->GetTypeAnn(),
@@ -434,8 +431,7 @@ IGraphTransformer::TStatus MutDictPayloadsWrapper(const TExprNode::TPtr& input, 
     }
 
     auto list = ctx.Expr.MakeType<TListExprType>(
-        dictType->GetPayloadType()
-    );
+        dictType->GetPayloadType());
 
     auto pair = ctx.Expr.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{
         input->Child(0)->GetTypeAnn(),
@@ -478,8 +474,9 @@ IGraphTransformer::TStatus DictBlindOpWrapper(const TExprNode::TPtr& input, TExp
     }
 
     if (type->GetKind() != ETypeAnnotationKind::Dict) {
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder()
-            << "Expected dict or optional of dict, but got: " << *input->Head().GetTypeAnn()));
+        ctx.Expr.AddError(TIssue(
+            ctx.Expr.GetPosition(input->Head().Pos()),
+            TStringBuilder() << "Expected dict or optional of dict, but got: " << *input->Head().GetTypeAnn()));
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -521,6 +518,5 @@ template IGraphTransformer::TStatus MutDictBlindOpWrapper<false>(const TExprNode
 
 template IGraphTransformer::TStatus DictBlindOpWrapper<true>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 template IGraphTransformer::TStatus DictBlindOpWrapper<false>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
-
 
 } // namespace NYql::NTypeAnnImpl

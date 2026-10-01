@@ -348,6 +348,8 @@ void TLocalLeaderElection::StartSession() {
         });
 
     auto ev = std::make_unique<NKikimr::NGRpcService::TEvCoordinationSessionRequest>(std::move(ctx), NKikimr::NGRpcService::TRequestAuxSettings{});
+    // The tenant and coordination node were resolved by the owning service.
+    ev->DisablePathNormalization();
     if (token) {
         ev->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(token));
     }

@@ -2,9 +2,7 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace {
 
@@ -12,14 +10,10 @@ using namespace NKikimr;
 using namespace NSchemeShard;
 
 class TPropose: public TSubOperationState {
+    virtual const char* Name() const override final { return "TPropose"; }
+
 private:
     TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-            << "TAlterSecret TPropose"
-            << " operationId# " << OperationId;
-    }
 
 public:
     explicit TPropose(TOperationId id)
@@ -28,7 +22,7 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_I(DebugHint() << " ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "Propose to coordinator");
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -41,7 +35,9 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_I(DebugHint() << "HandleReply TEvOperationPlan" << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "Operation plan received",
+            {"step", step},
+        );
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -72,6 +68,8 @@ public:
 };
 
 class TAlterSecret: public TSubOperation {
+    virtual const char* Name() const override final { return "TAlterSecret"; }
+
     static TTxState::ETxState NextState() {
         return TTxState::Propose;
     }
@@ -107,9 +105,8 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& secretName = alterSecretProto.GetName();
 
-        LOG_N("TAlterSecret Propose"
-            << ", path: " << parentPathStr << "/" << secretName
-            << ", opId: " << OperationId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "Alter secret",
+            {"path", parentPathStr + "/" + secretName},
         );
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -218,15 +215,14 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TAlterSecret AbortPropose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TAlterSecret AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterSecret AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->SelfTabletId()},
         );
 
         context.OnComplete.DoneOperation(OperationId);
@@ -247,3 +243,5 @@ ISubOperation::TPtr CreateAlterSecret(TOperationId id, TTxState::ETxState state)
 }
 
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

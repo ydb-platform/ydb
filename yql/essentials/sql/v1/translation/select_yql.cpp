@@ -1,6 +1,7 @@
 #include "select_yql.h"
 
 #include "context.h"
+#include "source.h"
 
 #include <util/generic/overloaded.h>
 #include <util/generic/scope.h>
@@ -37,7 +38,7 @@ public:
         TNodePtr source = BuildDataSource();
         TNodePtr key = BuildKey(ctx);
 
-        if (!source->Init(ctx, src) || !key->Init(ctx, src)) {
+        if (!key || !source->Init(ctx, src) || !key->Init(ctx, src)) {
             return false;
         }
 
@@ -75,6 +76,10 @@ private:
 
         auto cluster = ToDeferredAtom(Cluster, ctx);
         auto key = ToDeferredAtom(Key, ctx);
+        if (!View.empty()) {
+            TNodePtr tableKey = BuildTableKey(Pos_, Service, cluster, key, View);
+            return tableKey->GetTableKeys()->BuildKeys(ctx, ITableKeys::EBuildKeysMode::INPUT);
+        }
 
         TNodePtr prefixed = ctx.GetPrefixedPath(Service, cluster, key);
         YQL_ENSURE(prefixed);
@@ -268,6 +273,7 @@ public:
         auto projection = InitProjection(ctx, src);
 
         if (!projection ||
+            !InitWithout(ctx) ||
             !InitSource(ctx, src) ||
             (Where && !Where->GetRef().Init(ctx, src)) ||
             (GroupBy && !Init(ctx, src, *GroupBy)) ||
@@ -282,12 +288,20 @@ public:
 
         TNodePtr item = Y();
         {
-            TNodePtr items = BuildYqlResultItems(*projection);
+            TNodePtr items = BuildYqlResultItems(*projection, ctx);
             if (!items) {
                 return false;
             }
 
             item->Add(Q(Y(Q("result"), Q(std::move(items)))));
+        }
+
+        if (Without) {
+            TNodePtr setting = Y(Q("without"), Q(BuildWithoutColumns(Without->Columns)));
+            if (Without->IsIfExists) {
+                setting->Add(Q("if_exists"));
+            }
+            item->Add(Q(std::move(setting)));
         }
 
         if (Distinct) {
@@ -334,6 +348,9 @@ public:
 
         if (GroupBy) {
             item->Add(Q(Y(Q("group_by"), Q(BuildGroupBy(*GroupBy)))));
+            if (GroupBy->IsCompact) {
+                item->Add(Q(Y(Q("group_by_compact"))));
+            }
         }
 
         if (Having) {
@@ -407,6 +424,30 @@ public:
     }
 
 private:
+    bool InitWithout(TContext& ctx) const {
+        if (!Without || !IsJoin()) {
+            return true;
+        }
+        bool valid = true;
+        for (const auto& column : Without->Columns) {
+            if (column.Source.empty()) {
+                ctx.Error(column.Position) << "Expected correlation name for WITHOUT in JOIN";
+                valid = false;
+            }
+        }
+        return valid;
+    }
+
+    TNodePtr BuildWithoutColumns(const TVector<TYqlWithout::TColumn>& withoutColumns) const {
+        TNodePtr columns = Y();
+        for (const auto& column : withoutColumns) {
+            columns->Add(Q(Y(
+                BuildQuotedAtom(column.Position, column.Source),
+                BuildQuotedAtom(column.Position, column.Name))));
+        }
+        return columns;
+    }
+
     TMaybe<TVector<TProjectionItem>> InitProjection(TContext& ctx, ISource* src) const {
         return std::visit(
             TOverloaded{
@@ -548,23 +589,26 @@ private:
         }
     }
 
-    TNodePtr BuildYqlResultItems(const TVector<TProjectionItem>& projection) const {
+    TNodePtr BuildYqlResultItems(const TVector<TProjectionItem>& projection, TContext& ctx) const {
         if (projection.empty()) {
-            return BuildYqlResultItems(TPlainAsterisk());
+            return BuildYqlResultItems(TPlainAsterisk(), ctx);
         }
 
         TNodePtr items = Y();
         for (const auto& [term, isSynthetic] : projection) {
-            items->Add(BuildYqlResultItem(term->GetLabel(), isSynthetic, term));
+            items->Add(BuildYqlResultItem(isSynthetic, term, ctx));
         }
         return items;
     }
 
-    TNodePtr BuildYqlResultItems(const TPlainAsterisk&) const {
-        return Y(BuildYqlResultItem(/*name=*/"", /*isSynthetic=*/false, Y("YqlStar")));
+    TNodePtr BuildYqlResultItems(const TPlainAsterisk&, TContext& ctx) const {
+        return Y(BuildYqlResultItem(/*isSynthetic=*/false, Y("YqlStar"), ctx));
     }
 
-    TNodePtr BuildYqlResultItem(TString name, bool isSynthetic, TNodePtr term) const {
+    TNodePtr BuildYqlResultItem(bool isSynthetic, TNodePtr term, TContext& ctx) const {
+        const TString name = term->GetLabel();
+        const bool isImplicitlyLabeled = term->IsImplicitLabel();
+
         TNodePtr nameAtom = BuildQuotedAtom(Pos_, name);
 
         TNodePtr item = Y("YqlResultItem");
@@ -572,6 +616,9 @@ private:
         item = L(std::move(item), Y("Void"));
         if (isSynthetic) {
             item = L(std::move(item), Q(Y(Q(Y(Q("synthetic"))))));
+        }
+        if (isImplicitlyLabeled && ctx.WarnOnAnsiAliasShadowing) {
+            item = L(std::move(item), Q(Y(Q(Y(Q("warnShadow"))))));
         }
         item = L(std::move(item), Y("lambda", Q(Y()), std::move(term)));
         return item;
@@ -585,8 +632,7 @@ private:
         TString name = *term->GetColumnName();
 
         if (const auto* source = term->GetSourceName();
-            source && !source->empty() &&
-            Source && 1 < Source->Sources.size()) {
+            source && !source->empty() && IsJoin()) {
             name.prepend(".").prepend(*source);
         }
 
@@ -868,6 +914,10 @@ private:
         }
     }
 
+    bool IsJoin() const {
+        return Source && 1 < Source->Sources.size();
+    }
+
     TNodePtr Node_;
 };
 
@@ -1130,7 +1180,7 @@ public:
             return false;
         }
 
-        Node_ = ToSubLink(Source_, Variant_);
+        Node_ = BuildSubLink(Source_, Variant_, ctx);
         return true;
     }
 
@@ -1163,13 +1213,13 @@ private:
         return in.Expression->Init(ctx, src);
     }
 
-    TNodePtr ToSubLink(TNodePtr source, const TVariant& variant) {
+    TNodePtr BuildSubLink(TNodePtr source, const TVariant& variant, TContext& ctx) {
         source = Y("lambda", Q(Y()), std::move(source));
         return std::visit(
             TOverloaded{
                 [&](const TScalar& x) { return ToSubLink(std::move(source), x); },
                 [&](const TExists& x) { return ToSubLink(std::move(source), x); },
-                [&](const TIn& x) { return ToSubLink(std::move(source), x); },
+                [&](const TIn& x) { return ToSubLink(std::move(source), x, ctx); },
             }, variant);
     }
 
@@ -1181,9 +1231,15 @@ private:
         return Y("YqlSubLink", Q("exists"), Y("Void"), Y("Void"), Y("Void"), std::move(lambda));
     }
 
-    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in) {
+    TNodePtr ToSubLink(TNodePtr lambda, const TIn& in, const TContext& ctx) {
         TNodePtr compare = Y("lambda", Q(Y("value")), Y("==", in.Expression, "value"));
-        return Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+        TNodePtr link = Y("YqlSubLink", Q("any"), Y("Void"), Y("Void"), std::move(compare), std::move(lambda));
+        if (!ctx.AnsiInForEmptyOrNullableItemsCollections.Defined()) {
+            link = L(std::move(link), Q(Y(Q(Y(Q("warnNoAnsiIn"))))));
+        } else if (*ctx.AnsiInForEmptyOrNullableItemsCollections) {
+            link = L(std::move(link), Q(Y(Q(Y(Q("ansiIn"))))));
+        }
+        return link;
     }
 
     static TNodePtr Unbox(TNodePtr node) {

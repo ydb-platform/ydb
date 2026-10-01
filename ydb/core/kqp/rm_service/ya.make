@@ -3,13 +3,16 @@ LIBRARY()
 SRCS(
     kqp_resource_estimation.cpp
     kqp_resource_info_exchanger.cpp
+    kqp_rm_memory_quota.cpp
     kqp_rm_service.cpp
     kqp_snapshot_manager.cpp
 )
 
 PEERDIR(
+    library/cpp/html/pcdata
     ydb/library/actors/core
     ydb/library/actors/interconnect
+    ydb/library/yql/dq/actors/compute
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/cms/console

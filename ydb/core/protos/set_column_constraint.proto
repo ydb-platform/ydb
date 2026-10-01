@@ -27,6 +27,7 @@ message TSetColumnConstraint {
     optional google.protobuf.Timestamp StartTime = 5;
     optional google.protobuf.Timestamp EndTime = 6;
     optional string UserSID = 7;
+    repeated Ydb.Issue.IssueMessage Issues = 8;
 }
 
 // schemeshard public api:

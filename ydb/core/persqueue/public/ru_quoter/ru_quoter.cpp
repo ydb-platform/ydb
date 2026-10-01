@@ -78,9 +78,8 @@ public:
         SendDatabaseNavigate();
     }
 
-    TLogPrefix BuildLogPrefix() const override {
+    TStructuredMessage BuildLogPrefix() const override {
         return YDB_LOG_CREATE_MESSAGE(
-            {"actorClassName", "RequestUnitsQuoter"},
             {"database", Settings_.Database});
     }
 

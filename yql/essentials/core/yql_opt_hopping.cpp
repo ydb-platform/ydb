@@ -158,7 +158,7 @@ TString BuildColumnName(const TExprBase& column) {
     }
 
     YQL_ENSURE(false, "Invalid node. Expected Atom or AtomList, but received: "
-        << column.Ptr()->Dump());
+                          << column.Ptr()->Dump());
 }
 
 bool IsLegacyHopping(const TExprNode::TPtr& hoppingSetting) {
@@ -169,7 +169,7 @@ void EnsureNotDistinct(const TCoAggregate& aggregate) {
     const auto& aggregateHandlers = aggregate.Handlers();
 
     YQL_ENSURE(
-        AllOf(aggregateHandlers, [](const auto& t){ return !t.DistinctName(); }),
+        AllOf(aggregateHandlers, [](const auto& t) { return !t.DistinctName(); }),
         "Distinct is not supported for aggregation with hop");
 }
 
@@ -186,12 +186,12 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
     }
 
     const auto hoppingColumn = IsLegacyHopping(hopSetting)
-        ? "_yql_time"
-        : TString(hopSetting->Child(1)->Child(0)->Content());
+                                   ? "_yql_time"
+                                   : TString(hopSetting->Child(1)->Child(0)->Content());
 
     const auto traitsNode = IsLegacyHopping(hopSetting)
-        ? hopSetting->Child(1)
-        : hopSetting->Child(1)->Child(1);
+                                ? hopSetting->Child(1)
+                                : hopSetting->Child(1)->Child(1);
 
     const auto maybeTraits = TMaybeNode<TCoHoppingTraits>(traitsNode);
     if (!maybeTraits) {
@@ -283,7 +283,7 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
         return true;
     };
     if (!validatePolicy(TCoHoppingTraits::idx_EarlyPolicy, earlyPolicy, "EarlyPolicy") ||
-        !validatePolicy(TCoHoppingTraits::idx_LatePolicy,  latePolicy,  "LatePolicy")) {
+        !validatePolicy(TCoHoppingTraits::idx_LatePolicy, latePolicy, "LatePolicy")) {
         return Nothing();
     }
     if (latePolicy.GetOrElse(NHoppingWindow::TSettings{}.LatePolicy) == NHoppingWindow::EPolicy::Close) {
@@ -301,14 +301,14 @@ TMaybe<THoppingTraits> ExtractHopTraits(const TCoAggregate& aggregate, TExprCont
         .Done();
     // clang-format on
 
-    return THoppingTraits {
-        .Column=hoppingColumn,
-        .Traits=newTraits,
-        .Hop=static_cast<ui64>(hopTime),
-        .Interval=static_cast<ui64>(intervalTime),
-        .Delay=static_cast<ui64>(delayTime),
-        .EarlyPolicy=earlyPolicy,
-        .LatePolicy=latePolicy,
+    return THoppingTraits{
+        .Column = hoppingColumn,
+        .Traits = newTraits,
+        .Hop = static_cast<ui64>(hopTime),
+        .Interval = static_cast<ui64>(intervalTime),
+        .Delay = static_cast<ui64>(delayTime),
+        .EarlyPolicy = earlyPolicy,
+        .LatePolicy = latePolicy,
     };
 }
 
@@ -615,7 +615,7 @@ TExprNode::TPtr BuildFinishHopLambda(
         }
 
         YQL_ENSURE(false, "Invalid node. Expected Atom or AtomList, but received: "
-            << tuple.ColumnName().Ptr()->Dump());
+                              << tuple.ColumnName().Ptr()->Dump());
     }
 
     // clang-format off
@@ -720,4 +720,4 @@ TExprNode::TPtr BuildLoadHopLambda(const TCoAggregate& aggregate, TExprContext& 
     // clang-format on
 }
 
-} // NYql::NHopping
+} // namespace NYql::NHopping

@@ -407,12 +407,21 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr RmMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExternalMemory;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughMemory;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmOptionalMemoryRefused; // optional Memory refused at the spilling threshold
     ::NMonitoring::TDynamicCounters::TCounterPtr RmNotEnoughComputeActors;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnStartAllocs;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmExtraMemFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmOnCompleteFree;
     ::NMonitoring::TDynamicCounters::TCounterPtr RmInternalError;
+    // Memory arena (see TKqpResourceManager::ResizeArenaLocked)
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaUsed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaDeficit;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaShrinks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaGrowFailures;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RmArenaBurstGrows; // growth rounds made by AllocateResources itself
     NMonitoring::THistogramPtr RmSnapshotLatency;
     NMonitoring::THistogramPtr NodeServiceStartEventDelivery;
     NMonitoring::THistogramPtr NodeServiceProcessTime;
@@ -464,6 +473,9 @@ public:
 
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWriteOnlyOperations;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorReadWriteOperations;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorLocalShardWrites;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorRemoteShardWrites;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;

@@ -342,7 +342,7 @@ public:
         Closed = true;
     }
 
-    void Invalidate() {
+    virtual void Invalidate() {
         if (HasStarted()) {
             Invalidated = true;
         }

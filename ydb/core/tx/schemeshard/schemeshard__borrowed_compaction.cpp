@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShardIdx& shardIdx) {
@@ -9,9 +11,10 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve shard info "
-            "for borrowed compaction# " << shardIdx
-            << " at schemeshard# " << TabletID());
+        YDB_LOG_WARN_CTX(ctx, "Unable to resolve shard info for borrowed compaction",
+            {"shardIdx", shardIdx},
+            {"schemeshard", TabletID()},
+        );
 
         return NOperationQueue::EStartStatus::EOperationRemove;
     }
@@ -19,13 +22,15 @@ NOperationQueue::EStartStatus TSchemeShard::StartBorrowedCompaction(const TShard
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RunBorrowedCompaction "
-        "for pathId# " << pathId << ", datashard# " << datashardId
-        << ", next wakeup# " << BorrowedCompactionQueue->GetWakeupDelta()
-        << ", rate# " << BorrowedCompactionQueue->GetRate()
-        << ", in queue# " << BorrowedCompactionQueue->Size() << " shards"
-        << ", running# " << BorrowedCompactionQueue->RunningSize() << " shards"
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "RunBorrowedCompaction",
+        {"pathId", pathId},
+        {"datashard", datashardId},
+        {"nextWakeup", BorrowedCompactionQueue->GetWakeupDelta()},
+        {"rate", BorrowedCompactionQueue->GetRate()},
+        {"queueSize", BorrowedCompactionQueue->Size()},
+        {"runningSize", BorrowedCompactionQueue->RunningSize()},
+        {"schemeshard", TabletID()},
+    );
 
     std::unique_ptr<TEvDataShard::TEvCompactBorrowed> request(
         new TEvDataShard::TEvCompactBorrowed(pathId.OwnerId, pathId.LocalPathId));
@@ -48,21 +53,24 @@ void TSchemeShard::OnBorrowedCompactionTimeout(const TShardIdx& shardIdx) {
 
     auto it = ShardInfos.find(shardIdx);
     if (it == ShardInfos.end()) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve shard info "
-            "for timeout borrowed compaction# " << shardIdx
-            << " at schemeshard# " << TabletID());
+        YDB_LOG_WARN_CTX(ctx, "Unable to resolve shard info for timeout borrowed compaction",
+            {"shardIdx", shardIdx},
+            {"schemeshard", TabletID()},
+        );
         return;
     }
 
     const auto& datashardId = it->second.TabletID;
     const auto& pathId = it->second.PathId;
 
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Borrowed compaction timeout "
-        "for pathId# " << pathId << ", datashard# " << datashardId
-        << ", next wakeup# " << BorrowedCompactionQueue->GetWakeupDelta()
-        << ", in queue# " << BorrowedCompactionQueue->Size() << " shards"
-        << ", running# " << BorrowedCompactionQueue->RunningSize() << " shards"
-        << " at schemeshard " << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Borrowed compaction timeout",
+        {"pathId", pathId},
+        {"datashard", datashardId},
+        {"nextWakeup", BorrowedCompactionQueue->GetWakeupDelta()},
+        {"queueSize", BorrowedCompactionQueue->Size()},
+        {"runningSize", BorrowedCompactionQueue->RunningSize()},
+        {"schemeshard", TabletID()},
+    );
 
     // retry
     EnqueueBorrowedCompaction(shardIdx);
@@ -96,8 +104,10 @@ void TSchemeShard::EnqueueBorrowedCompaction(const TShardIdx& shardIdx) {
     auto ctx = ActorContext();
 
     if (BorrowedCompactionQueue->Enqueue(shardIdx)) {
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Borrowed compaction enqueued shard# " << shardIdx << " at schemeshard " << TabletID());
+        YDB_LOG_TRACE_CTX(ctx, "Borrowed compaction enqueued shard",
+            {"shardIdx", shardIdx},
+            {"schemeshard", TabletID()},
+        );
         UpdateBorrowedCompactionQueueMetrics();
     }
 }
@@ -132,24 +142,28 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
     auto duration = BorrowedCompactionQueue->OnDone(shardIdx);
 
     if (shardIdx == InvalidShardIdx) {
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished borrowed compaction of unknown shard "
-            "for pathId# " << pathId << ", datashard# " << tabletId
-            << " in# " << duration.MilliSeconds()
-            << ", next wakeup# " << BorrowedCompactionQueue->GetWakeupDelta()
-            << ", rate# " << BorrowedCompactionQueue->GetRate()
-            << ", in queue# " << BorrowedCompactionQueue->Size() << " shards"
-            << ", running# " << BorrowedCompactionQueue->RunningSize() << " shards"
-            << " at schemeshard " << TabletID());
+        YDB_LOG_WARN_CTX(ctx, "Finished borrowed compaction of unknown shard",
+            {"pathId", pathId},
+            {"datashard", tabletId},
+            {"durationMs", duration.MilliSeconds()},
+            {"nextWakeup", BorrowedCompactionQueue->GetWakeupDelta()},
+            {"rate", BorrowedCompactionQueue->GetRate()},
+            {"queueSize", BorrowedCompactionQueue->Size()},
+            {"runningSize", BorrowedCompactionQueue->RunningSize()},
+            {"schemeshard", TabletID()},
+        );
     } else {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Finished borrowed compaction "
-            "for pathId# " << pathId << ", datashard# " << tabletId
-            << ", shardIdx# " << shardIdx
-            << " in# " << duration.MilliSeconds()
-            << ", next wakeup# " << BorrowedCompactionQueue->GetWakeupDelta()
-            << ", rate# " << BorrowedCompactionQueue->GetRate()
-            << ", in queue# " << BorrowedCompactionQueue->Size() << " shards"
-            << ", running# " << BorrowedCompactionQueue->RunningSize() << " shards"
-            << " at schemeshard " << TabletID());
+        YDB_LOG_INFO_CTX(ctx, "Finished borrowed compaction",
+            {"pathId", pathId},
+            {"datashard", tabletId},
+            {"shardIdx", shardIdx},
+            {"durationMs", duration.MilliSeconds()},
+            {"nextWakeup", BorrowedCompactionQueue->GetWakeupDelta()},
+            {"rate", BorrowedCompactionQueue->GetRate()},
+            {"queueSize", BorrowedCompactionQueue->Size()},
+            {"runningSize", BorrowedCompactionQueue->RunningSize()},
+            {"schemeshard", TabletID()},
+        );
     }
 
     RunningBorrowedCompactions.erase(shardIdx);
@@ -159,3 +173,5 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactBorrowedResult::TPtr &ev, cons
 }
 
 } // NKikimr::NSchemeShard
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

@@ -270,6 +270,7 @@ protected:
     bool MoveDataRecordTouched = false;
     TLogoBlobID MoveDataBlobId;
     THashMap<TLogoBlobID, TLogoBlobID> MoveDataBlobIdToNewBlobId; // for blobs with refcount > 1
+    ui64 MoveDataBlobsMoved = 0;
     // trash checking stage
     std::optional<ui64> MoveDataTrashCheckingVacuumGeneration = {}; // not set for Trash, set for TrashForVacuum
     TLogoBlobID MoveDataTrashCheckingBlobId;
@@ -431,8 +432,9 @@ public:
         ISimpleDb& db);
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> TryCheckTrash();
     std::unique_ptr<TEvKeyValue::TEvAdvanceMoveDataResult> CheckTrash();
-    void FinishMoveData(const TActorContext& ctx);
-    void CancelMoveData();
+    void ResetMoveData();
+    void FinishMoveDataSuccess(const TActorContext& ctx);
+    void FinishMoveDataNotEnoughSpace(const TActorContext& ctx);
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,

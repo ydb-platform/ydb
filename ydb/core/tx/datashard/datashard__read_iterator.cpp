@@ -4065,6 +4065,15 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             code,
             msg);
         result->Record.SetReadId(readId.ReadId);
+        if (record.HasSampling() && (code == Ydb::StatusIds::OVERLOADED || code == Ydb::StatusIds::NOT_FOUND)) {
+            // The request was rejected before creating a reader, so it has no
+            // unpublished sampling decisions. Preserve its incoming checkpoint.
+            NKikimrTxDataShard::TReadContinuationToken token;
+            token.SetFirstUnprocessedQuery(0);
+            *token.MutableSampling() = record.GetSampling().GetContinuation();
+            Y_ENSURE(token.SerializeToString(result->Record.MutableContinuationToken()));
+            result->Record.SetSeqNo(1);
+        }
         ctx.Send(ev->Sender, result.release());
 
         request->ReadSpan.EndError(msg);
@@ -4454,6 +4463,27 @@ void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TStr
         SetStatusError(result->Record, code, issue);
         result->Record.SetReadId(readId.ReadId);
         result->Record.SetSeqNo(state.SeqNo + 1);
+
+        if (state.Sampling && !state.IsFinished && state.SeqNo > 0
+            && state.IsExhausted() && !state.ReadContinuePending)
+        {
+            // A quota-exhausted reader has sent all its decisions and cannot
+            // execute again before an ACK. This terminal checkpoint permits a
+            // split handover; an executing reader must fail instead of redrawing
+            // a decision that only its current transaction knows about.
+            NKikimrTxDataShard::TReadContinuationToken token;
+            token.SetFirstUnprocessedQuery(state.FirstUnprocessedQuery);
+            if (state.LastProcessedKey) {
+                token.SetLastProcessedKey(state.LastProcessedKey);
+            }
+            auto* sampling = token.MutableSampling();
+            sampling->SetLastProcessedKeyInclusive(state.LastProcessedKeyErased);
+            if (state.PendingSelectedUnit) {
+                SaveSamplingBounds(*state.PendingSelectedUnit, *sampling->MutablePendingSelectedUnit());
+            }
+            Y_ENSURE(token.SerializeToString(result->Record.MutableContinuationToken()));
+            state.ReadVersion.ToProto(result->Record.MutableSnapshot());
+        }
 
         SendViaSession(state.SessionId, readId.Sender, SelfId(), result.release());
         state.Request->ReadSpan.EndError("Cancelled");

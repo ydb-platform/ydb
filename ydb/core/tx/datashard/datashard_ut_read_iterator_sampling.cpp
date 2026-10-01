@@ -104,9 +104,8 @@ struct TSamplingTestHelper {
                 if (ev->Get()->PageCollection->Label().TabletID() != tabletId) {
                     return;
                 }
-                for (auto pageId : ev->Get()->Pages) {
-                    pages += NTable::NPage::EPage(ev->Get()->PageCollection->Page(pageId).Type)
-                        == NTable::NPage::EPage::DataPage;
+                for (const auto& location : ev->Get()->Pages) {
+                    pages += location.Type == NTable::NPage::EPage::DataPage;
                 }
             });
     }
@@ -726,15 +725,15 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSampling) {
         helper.Compact();
         helper.FixedSnapshot = CreateVolatileSnapshot(helper.Server, {"/Root/table-1"}, TDuration::Hours(1));
         RebootTablet(helper.Runtime(), helper.TabletId(), helper.Sender);
-        THashSet<std::pair<TLogoBlobID, ui32>> indexPages;
+        THashSet<std::pair<TLogoBlobID, NTable::NPage::TPageOffset>> indexPages;
         auto observer = helper.Runtime().AddObserver<NSharedCache::TEvRequest>([&](auto& ev) {
             const auto& pages = *ev->Get();
             if (pages.PageCollection->Label().TabletID() != helper.TabletId()) {
                 return;
             }
-            for (const auto pageId : pages.Pages) {
-                if (NTable::NPage::EPage(pages.PageCollection->Page(pageId).Type) == NTable::NPage::EPage::BTreeIndex) {
-                    indexPages.emplace(pages.PageCollection->Label(), pageId);
+            for (const auto& location : pages.Pages) {
+                if (location.Type == NTable::NPage::EPage::BTreeIndex) {
+                    indexPages.emplace(pages.PageCollection->Label(), location.Offset);
                 }
             }
         });

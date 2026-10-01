@@ -30,7 +30,7 @@ A catalog of items from the popular game Animal Crossing: New Horizons.
 
     - {{ ydb-ui-name }}
 
-      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
+      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `accessories` (

@@ -195,22 +195,6 @@ CREATE RESOURCE POOL the_ceo WITH (
 
 Вес 80 для `the_ceo` фактически означает, что при конкуренции за ресурсы пул `the_ceo` будет получать приоритет в 4 раза больше, чем пул `olap`. Если в оба пула поступают запросы, система пересчитает лимиты, и для `olap` лимит `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` будет сокращён до 20%, а для `the_ceo` — увеличен до 80%. Это перераспределение ресурсов основано на весах, как описано [выше](#resources_weight).
 
-## Явный выбор пула ресурсов для запроса
-
-При необходимости пользователь может явно указать, в каком пуле следует выполнить заданный запрос. В настоящий момент это можно сделать следующим образом:
-
-- **{{ ydb-ui-name }}** — в окне настройки запуска запроса `Query execution settings` через параметр `Resource pool`.
-- **YDB CLI** — в команде [`ydb sql`](../reference/ydb-cli/sql.md) с параметром `--resource-pool`, например, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
-- **YDB CLI ([интерактивный режим](../reference/ydb-cli/interactive-cli.md))** — [командой](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, где `my_pool` — наименование пула ресурсов.
-- **YDB CPP SDK** — в настройках запуска запроса через параметр [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111).
-- **YDB GO SDK** — в настройках запуска запроса `ExecuteOption` через вызов [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool).
-
-{% note warning %}
-
-Текущая версия **YDB Python SDK** не позволяет определять пул ресурсов, в котором необходимо выполнить запрос.
-
-{% endnote %}
-
 ## Диагностика
 
 ### План запроса

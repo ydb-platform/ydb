@@ -18,7 +18,7 @@
 
 - {{ ydb-ui-name }}
 
-  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
+  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `netflix` (

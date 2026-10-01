@@ -18,7 +18,7 @@ Data on video game sales.
 
     - {{ ydb-ui-name }}
 
-      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
+      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `vgsales` (

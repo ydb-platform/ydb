@@ -18,7 +18,7 @@ Data on movies and TV shows available on Netflix.
 
     - {{ ydb-ui-name }}
 
-      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
+      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `netflix` (

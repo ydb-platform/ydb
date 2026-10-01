@@ -191,26 +191,8 @@ In the example above, two resource pools are created: `olap` for the analyst tea
 
 - **Resource pool 'the_ceo'**:
 
-  - Has a higher weight — 80.
-  - Has no limit on running queries when overloaded.
-
-A weight of 80 for `the_ceo` effectively means that when competing for resources, pool `the_ceo` will receive 4 times more priority than pool `olap`. If queries arrive in both pools, the system will recalculate the limits, and for `olap` the `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` limit will be reduced to 20%, while for `the_ceo` it will be increased to 80%. This resource redistribution is based on weights, as described [above](#resources_weight).
-
-## Explicit selection of a resource pool for a query
-
-If necessary, the user can explicitly specify in which pool a given query should be executed. Currently, this can be done as follows:
-
-- **{{ ydb-ui-name }}** — in the query launch settings window `Query execution settings` via the `Resource pool` parameter.
-- **YDB CLI** — in the [`ydb sql`](../reference/ydb-cli/sql.md) command with the `--resource-pool` parameter, for example, `ydb sql --resource-pool my_pool -s "SELECT 1"`.
-- **YDB CLI ([interactive mode](../reference/ydb-cli/interactive-cli.md))** — using the [command](../reference/ydb-cli/interactive-cli.md#internal-vars) `SET resource_pool = my_pool`, where `my_pool` is the name of the resource pool.
-- **YDB CPP SDK** — in the query launch settings via the [ResourcePool](https://github.com/ydb-platform/ydb/blob/fb05a8472be6b2770528b3e90093e67a7bca8f0e/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h#L111) parameter.
-- **YDB GO SDK** — in the query launch settings `ExecuteOption` via the [WithResourcePool](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3@v3.133.1/query#WithResourcePool) call.
-
-{% note warning %}
-
-The current version of **YDB Python SDK** does not allow specifying the resource pool in which the query should be executed.
-
-{% endnote %}
+    - Has more weight - 80.
+    - Has no restrictions on queries that can be launched when overloaded.
 
 ## Diagnostics
 

@@ -24,7 +24,7 @@ User behavior data from a multi-category online store.
 
     - {{ ydb-ui-name }}
 
-      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
+      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `ecommerce_table` (

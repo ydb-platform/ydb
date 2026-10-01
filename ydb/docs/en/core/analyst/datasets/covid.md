@@ -24,7 +24,7 @@ An open dataset of COVID-19 research.
 
     - {{ ydb-ui-name }}
 
-      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
+      For more information on [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring).
 
       ```sql
       CREATE TABLE `covid_research` (

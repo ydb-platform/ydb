@@ -24,7 +24,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
 
 - {{ ydb-ui-name }}
 
-  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring.md).
+  Подробнее про [{{ ydb-ui-name }}](../../reference/ydb-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `covid_research` (

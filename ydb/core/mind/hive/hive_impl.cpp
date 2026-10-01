@@ -4710,7 +4710,7 @@ bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
             {"tabletsToMoveDataCount", tabletsToMoveData.size()},
             {"remainingHistoryCount", pool.RemainingHistory.size()});
         UpdateCounterShrinkRemainingHistory();
-        StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, SelfId(), 1, TStringBuilder() << "shrink pool " << pool.Name, std::make_unique<TShrinkPoolMoveDataCallback>(pool.Name));
+        StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, SelfId(), 1, TStringBuilder() << "shrink pool " << pool.Name, std::make_unique<TShrinkPoolMoveDataCallback>(pool.Name), true);
         return true;
     }
 }

@@ -3615,23 +3615,21 @@ public:
             if (tablet.IsDeleting()) {
                 continue;
             }
-            bool found = false;
+            bool ok = false;
             for (const auto& channel : tablet.TabletStorageInfo->Channels) {
                 if (StoragePool && channel.StoragePool != StoragePool) {
                     continue;
                 }
                 const auto* latest = channel.LatestEntry();
-                for (const auto& entry : channel.History) {
-                    if (&entry != latest && groups.contains(entry.GroupID)) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (found) {
+                if (!latest || groups.contains(latest->GroupID)) {
+                    ok = false;
                     break;
                 }
+                if (std::ranges::any_of(channel.History, [&](auto&& entry) { return groups.contains(entry.GroupID); })) {
+                    ok = true;
+                }
             }
-            if (found) {
+            if (ok) {
                 tablets.push_back(tabletId);
             }
         }
@@ -3676,7 +3674,7 @@ public:
         jsonOperation["MoveData"] = description;
         WriteOperation(db, jsonOperation);
 
-        Self->StartMoveDataActor(std::move(tablets), GroupIds, Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringMoveDataCallback>());
+        Self->StartMoveDataActor(std::move(tablets), GroupIds, Wait ? Source : TActorId(), MaxInFlight, description, std::make_unique<TMonitoringMoveDataCallback>(), false);
         return true;
     }
 

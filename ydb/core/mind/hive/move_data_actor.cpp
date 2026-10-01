@@ -30,9 +30,10 @@ public:
     // Sends, not iterator position: NextTablet is advanced before SendMoveData in one caller and after in the other.
     size_t SentCount = 0;
     ui64 TabletsDone = 0;
+    bool FastFail;
     THive* Hive;
 
-    TMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui64 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, THive* hive)
+    TMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui64 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, bool fastFail, THive* hive)
         : Tablets(std::move(tablets))
         , NextTablet(Tablets.begin())
         , Groups(groups)
@@ -40,6 +41,7 @@ public:
         , Description(std::move(description))
         , Callback(std::move(callback))
         , PipeClients(std::max<ui64>(maxInFlight, 1))
+        , FastFail(fastFail)
         , Hive(hive)
     {
     }
@@ -63,7 +65,7 @@ public:
     }
 
     void ReplyAndPassAway(bool success) {
-        if (Source) {
+        if (Source && Callback) {
             Send(Source, Callback->MakeEvent(success, TabletsDone));
         }
         return PassAway();
@@ -118,7 +120,11 @@ public:
                     {"status", (ui32)ev->Get()->Record.GetStatus()},
                     {"queued", Queued()},
                     {"inFlight", MoveDataInFlight});
-                ++TabletsDone;
+                if (ev->Get()->Record.GetStatus() == NKikimrTabletBase::TEvMoveDataResponse::Success) {
+                    ++TabletsDone;
+                } else if (FastFail) {
+                    return ReplyAndPassAway(false);
+                }
                 Hive->Execute(Hive->CreateRestartTablet(ToFullTabletId(tablet)));
                 if (NextTablet != Tablets.end()) {
                     SendMoveData(i, *(NextTablet++));
@@ -131,7 +137,7 @@ public:
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            if (ev->Get()->Dead) {
+            if (ev->Get()->Dead && FastFail) {
                 return ReplyAndPassAway(false);
             } else {
                 Retry(ev->Get()->TabletId);
@@ -168,8 +174,8 @@ public:
     }
 };
 
-void THive::StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback) {
-    auto* actor = new TMoveDataActor(std::move(tablets), groups, source, maxInFlight, std::move(description), std::move(callback), this);
+void THive::StartMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TActorId& source, ui32 maxInFlight, TString description, std::unique_ptr<IMoveDataCallback> callback, bool fastFail) {
+    auto* actor = new TMoveDataActor(std::move(tablets), groups, source, maxInFlight, std::move(description), std::move(callback), fastFail, this);
     SubActors.emplace_back(actor);
     RegisterWithSameMailbox(actor);
 }

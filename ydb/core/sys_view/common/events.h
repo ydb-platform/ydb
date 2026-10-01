@@ -452,7 +452,6 @@ struct TEvSysView {
         {}
     };
 
-
     struct TEvInitPartitionStatsCollector : public TEventLocal<
         TEvInitPartitionStatsCollector,
         EvInitPartitionStatsCollector>

@@ -1167,7 +1167,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char pqSourceName[] = "pqSourceName";
         CreatePqSourceBasicAuth(pqSourceName, /* useSchemaSecrets  */ true);
 
-        constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(10);
+        // Keep checkpoint timing independent of query setup and message delivery.
+        const auto unblockCheckpoints = BlockCheckpointCreation();
+        constexpr TDuration CHECKPOINT_INTERVAL = TDuration::Seconds(1);
         const auto queryName = TStringBuilder() << Name_ << "StreamingQuery";
         ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}` WITH (
@@ -1262,7 +1264,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Checkpoint will be injected into source stage and must pass all stages
 
         auto newSeqNo = CheckNoCheckpointUpdate(checkpointId, CHECKPOINT_INTERVAL / 2);
-        UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // No checkpoints due to checkpointing interval
+        UNIT_ASSERT_VALUES_EQUAL(newSeqNo, seqNo); // Checkpoint creation is still blocked
 
         const auto pqCountersExtractor = [&](const ui64 nodeIndex) -> std::function<ui64()> {
             const NMonitoring::TDynamicCounterPtr kqpCounters = GetCounters("kqp", nodeIndex);
@@ -1288,7 +1290,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         UNIT_ASSERT_C(counters, "Counters not found for PQ sink");
         UNIT_ASSERT_VALUES_EQUAL(counters(), 0);
 
-        WaitFor(CHECKPOINT_INTERVAL, "checkpoint propagation", [&](TString& error) {
+        unblockCheckpoints();
+        WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint propagation", [&](TString& error) {
             if (GetLastCheckpointSeqNo(checkpointId) == seqNo) {
                 error = "new checkpoint still is not created";
                 return false;

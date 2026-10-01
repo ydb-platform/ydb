@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h>
@@ -29,6 +30,43 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NYql::NConnector::NApi;
 using namespace NYql::NConnector::NTest;
+
+namespace {
+
+class TCheckpointCreationBlocker : public TActor<TCheckpointCreationBlocker> {
+public:
+    explicit TCheckpointCreationBlocker(TActorId storageProxy)
+        : TActor(&TCheckpointCreationBlocker::StateFunc)
+        , StorageProxy(storageProxy)
+    {}
+
+private:
+    STFUNC(StateFunc) {
+        if (ev->GetTypeRewrite() == TEvents::TEvWakeup::EventType) {
+            Blocked = false;
+            for (auto& pending : Pending) {
+                Forward(pending, StorageProxy);
+            }
+            Pending.clear();
+            return;
+        }
+
+        if (Blocked && ev->GetTypeRewrite() == NFq::TEvCheckpointStorage::TEvCreateCheckpointRequest::EventType
+            && ev->Get<NFq::TEvCheckpointStorage::TEvCreateCheckpointRequest>()->CheckpointId.SeqNo > 1)
+        {
+            Pending.emplace_back(ev.Release());
+            return;
+        }
+
+        Forward(ev, StorageProxy);
+    }
+
+    const TActorId StorageProxy;
+    bool Blocked = true;
+    std::vector<THolder<IEventHandle>> Pending;
+};
+
+} // anonymous namespace
 
 TStreamingTestFixture::~TStreamingTestFixture () {
     if (PqGatewayDriver) {
@@ -882,6 +920,26 @@ void TStreamingTestFixture::CheckScriptExecutionsCount(ui64 expectedExecutionsCo
     });
 }
 
+std::function<void()> TStreamingTestFixture::BlockCheckpointCreation() {
+    auto& runtime = GetRuntime();
+    std::vector<TActorId> blockers;
+    for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+        const auto serviceId = NYql::NDq::MakeCheckpointStorageID();
+        const auto storageProxy = runtime.GetLocalServiceId(serviceId, nodeIndex);
+        UNIT_ASSERT(storageProxy);
+        const auto blocker = runtime.Register(new TCheckpointCreationBlocker(storageProxy), nodeIndex);
+        runtime.RegisterService(serviceId, blocker, nodeIndex);
+        blockers.push_back(blocker);
+    }
+
+    return [&runtime, blockers = std::move(blockers)] {
+        for (const auto& blocker : blockers) {
+            runtime.Send(new IEventHandle(blocker, TActorId(), new TEvents::TEvWakeup()),
+                blocker.NodeId() - runtime.GetFirstNodeId());
+        }
+    };
+}
+
 void TStreamingTestFixture::WaitCheckpointUpdate(const TString& checkpointId, std::optional<std::pair<ui64, ui64>> initialBound) {
     std::optional<ui64> minGeneration;
     std::optional<ui64> minSeqNo;
@@ -969,7 +1027,7 @@ ui64 TStreamingTestFixture::CheckNoCheckpointUpdate(const TString& checkpointId,
 
     Sleep(waitDuration);
     const auto seqNo = GetLastCheckpointSeqNo(checkpointId);
-    UNIT_ASSERT_C(expectedSeqNoSet.contains(seqNo), "Unexpected checkpoint for graph " << seqNo << ", expected set: " << JoinSeq(", ", expectedSeqNoSet));
+    UNIT_ASSERT_C(expectedSeqNoSet.contains(seqNo), "Unexpected checkpoint " << seqNo << " for graph " << checkpointId << ", expected set: " << JoinSeq(", ", expectedSeqNoSet));
 
     return seqNo;
 }

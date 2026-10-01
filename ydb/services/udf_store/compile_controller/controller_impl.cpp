@@ -329,6 +329,16 @@ void TWasmCompileController::Handle(TEvControllerPrivate::TEvReconcileResult::TP
         return;
     }
     ArtifactsByCpuSpec[msg->CpuSpec] = std::move(msg->ArtifactKeys);
+    for (const auto& entry : Modules) {
+        if (HasArtifact(msg->CpuSpec, entry.Name, entry.Kind, entry.Uid)) {
+            BroadcastArtifactReady(TGapKey{
+                .Name = entry.Name,
+                .Kind = entry.Kind,
+                .Uid = entry.Uid,
+                .CpuSpec = msg->CpuSpec,
+            });
+        }
+    }
     RebuildQueue();
     ScheduleAssignments();
 }

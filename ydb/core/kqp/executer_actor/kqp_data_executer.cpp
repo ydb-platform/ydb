@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -206,6 +207,7 @@ public:
 
     void Finalize() {
         Y_ABORT_UNLESS(!AlreadyReplied);
+        EndQueryTraceSpan(ExecuterStateSpan, Ydb::StatusIds::SUCCESS);
 
         FillLocksFromExtraData();
         TxManager->SetHasSnapshot(GetSnapshot().IsValid());
@@ -388,7 +390,6 @@ public:
 
         LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, ResponseEv->ResultsSize(), ResponseEv->GetByteSize());
 
-        ExecuterSpan.EndOk();
 
         AlreadyReplied = true;
         PassAway();
@@ -923,8 +924,17 @@ private:
 
     void OnShardsResolve() {
         if (ForceAcquireSnapshot()) {
+            ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterAcquireSnapshot,
+                ExecuterSpan.GetTraceId(), {
+                    .Name = "Acquire snapshot",
+                    .Phase = "Snapshot",
+                    .ActorType = "TKqpDataExecuter",
+                    .Component = "KqpExecuter.Prepare",
+                    .PeerActorType = "TLongTxService",
+                });
             auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot));
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database, TableIdsForSnapshot),
+                0, 0, ExecuterStateSpan.GetTraceId());
 
             YDB_LOG_TRACE("Create temporary mvcc snapshot, become WaitSnapshotState",
                 {"marker", "KQPDATA"},
@@ -933,7 +943,6 @@ private:
                 {"ctx", *GetUserRequestContext()},
                 {"traceId", TraceId()});
             Become(&TKqpDataExecuter::WaitSnapshotState);
-            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterAcquireSnapshot, ExecuterSpan.GetTraceId(), "WaitForSnapshot");
 
             return;
         }
@@ -991,6 +1000,12 @@ private:
         OnEmptyResult();
 
         StartStreamingQueriesActors();
+        ExecuterStateSpan = MakeQueryPhaseTraceSpan(TWilsonKqp::DataExecuterRunTasks,
+            ExecuterSpan.GetTraceId(), {
+                .Name = "Run tasks",
+                .Phase = "RunTasks",
+                .Component = "DqExecution",
+            }, NWilson::EFlags::AUTO_END);
 
         if (!ExecuteTasks()) {
             return;
@@ -1000,7 +1015,6 @@ private:
             return;
         }
 
-        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterRunTasks, ExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
         YDB_LOG_DEBUG("Become ExecuteState",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},
@@ -1239,7 +1253,23 @@ private:
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {
             for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
-                *graphParams.AddTasks() = task.GetDqTask();
+                auto& checkpointTask = *graphParams.AddTasks();
+                checkpointTask = task.GetDqTask();
+                checkpointTask.ClearSecureParams();
+
+                auto& requestContext = *checkpointTask.MutableRequestContext();
+                requestContext["Database"] = Database;
+                requestContext["UserSID"] = UserToken ? UserToken->GetUserSID() : TString();
+                requestContext["UserGroupSIDs"] = SequenceToJsonString(UserToken ? UserToken->GetGroupSIDs() : TVector<NACLib::TSID>{});
+
+                const auto& stageInfo = TasksGraph.GetStageInfo(TasksGraph.GetTask(checkpointTask.GetId()).StageId);
+                for (const auto& output : stageInfo.Meta.GetStage(stageInfo.Id).GetSinks()) {
+                    const auto& externalSink = output.GetExternalSink();
+                    NYql::NPq::NProto::TDqPqTopicSink sink;
+                    if (externalSink.GetType() == "PqSink" && externalSink.GetSettings().UnpackTo(&sink) && sink.GetDeferredPublicationExtIdPrefix()) {
+                        (*checkpointTask.MutableSecureParams())[sink.GetToken().GetName()] = CreateStructuredTokenParser(externalSink.GetAuthInfo()).ToBuilder().RemoveSecrets().ToJson();
+                    }
+                }
             }
         }
 

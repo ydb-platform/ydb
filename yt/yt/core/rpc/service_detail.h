@@ -637,7 +637,7 @@ protected:
         //! Also system methods do not require authentication.
         bool System = false;
 
-        //! Log level for events emitted via |Set(Request|Response)Info|-like functions.
+        //! Log level for the request and response log messages.
         NLogging::ELogLevel LogLevel = NLogging::ELogLevel::Debug;
         //! Log level for events emitted when method fails, by default |LogLevel| is used.
         std::optional<NLogging::ELogLevel> ErrorLogLevel;

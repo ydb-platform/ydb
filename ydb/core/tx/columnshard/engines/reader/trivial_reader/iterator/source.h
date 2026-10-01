@@ -13,6 +13,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/comparable.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
@@ -260,6 +261,10 @@ private:
 
     std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
         const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::TIndexCheckOperation& op) const;
+    // Resolves the index meta (nullptr if there is no suitable index) for every check operation of the fetch context.
+    THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> SelectIndexesForFetch(const TFetchIndexContext& indexContext) const;
+    // Stored bytes of the indexes selected for the given contexts. Inplace payload is included: the scan copies it.
+    ui64 GetIndexesDataSizeForFetch(const THashMap<ui32, TFetchIndexContext>& indexes) const;
 
     virtual TConclusion<NCommon::TExecutionResult> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;

@@ -39,6 +39,7 @@ namespace NActors {
 
     protected:
         friend class TBasicExecutorPool;
+        friend class TSharedExecutorPool;
         friend class TIOExecutorPool;
         TThreadParkPad WaitingPad;
 
@@ -208,6 +209,8 @@ namespace NActors {
             const std::atomic<ui64>& reductions,
             ui64 wakerRequestBit);
 
+        bool ParkForWaker(const std::atomic<bool>& stopFlag);
+
         void Interrupt() {
             WaitingPad.Interrupt();
         }
@@ -227,6 +230,23 @@ namespace NActors {
         i16 AdjacentPoolId = -1;
         NHPTimer::STime SoftDeadlineForPool = 0;
         NHPTimer::STime SoftProcessingDurationTs = 0;
+
+        void SetWorkForWaker() {
+            EThreadState state = GetState<EThreadState>();
+            while (state == EThreadState::None || state == EThreadState::Spin) {
+                if (ReplaceState(state, EThreadState::Work)) {
+                    return;
+                }
+            }
+            // A dequeue racing with a sleep or waker request owns its mailbox.
+            // Preserve the request until that activation has finished.
+            Y_DEBUG_ABORT_UNLESS(state == EThreadState::Blocking || IsNeedToBeWaker(state));
+        }
+
+        void UnsetWorkForWaker() {
+            EThreadState state = EThreadState::Work;
+            ReplaceState(state, EThreadState::None);
+        }
 
         bool Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag, std::atomic<ui64> *localNotifications, std::atomic<ui64> *threadsState); // in executor_pool_united.cpp
 

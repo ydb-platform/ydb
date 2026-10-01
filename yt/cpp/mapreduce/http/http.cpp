@@ -322,6 +322,11 @@ TString THttpHeader::GetUrl(bool needProxy) const
     return url.Str();
 }
 
+TMaybe<TString> THttpHeader::GetRequestCompression() const
+{
+    return RequestCompression_;
+}
+
 bool THttpHeader::ShouldAcceptFraming() const
 {
     return TConfig::Get()->CommandsWithFraming.contains(Command_);

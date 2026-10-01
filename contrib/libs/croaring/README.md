@@ -1198,7 +1198,7 @@ If you use  "copy-on-write" (default to disabled), then you should pass copies t
 
 To summarize:
 - If you do not use copy-on-write, you can access concurrent the same bitmap safely as long as you do not modify it. If you plan on modifying it, you should pass different copies to the different threads.
-- If you use copy-on-write, you should always pass copies to the different threads. The copies and then lightweight (shared containers).
+- If you use copy-on-write, you should always pass copies to the different threads. The copies are then lightweight (shared containers).
 
 Thus the following pattern where you copy bitmaps and pass them to different threads is safe with or without COW:
 

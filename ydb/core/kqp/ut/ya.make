@@ -1,4 +1,5 @@
 RECURSE_FOR_TESTS(
+    tracing
     arrow
     batch_operations
     channels

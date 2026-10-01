@@ -5,7 +5,11 @@
 namespace NSQLComplete {
 
 TCompletionInput SharpedInput(TString& text) {
-    return NSQLPureAST::TCursorText::FromSharped(text);
+    using NSQLPureAST::TCursorText;
+
+    TCompletionInput input;
+    static_cast<TCursorText&>(input) = TCursorText::FromSharped(text);
+    return input;
 }
 
 } // namespace NSQLComplete

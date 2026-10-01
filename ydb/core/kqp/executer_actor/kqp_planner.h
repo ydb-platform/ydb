@@ -20,6 +20,18 @@
 
 namespace NKikimr::NKqp {
 
+class TExecutionTrace;
+class IQueryQuotaManager;
+
+struct TKqpStatsReportingSettings {
+    bool WithProgressStats = false;
+    bool CollectCurrentQueryStats = false;
+    TMaybe<NYql::NDq::TReportStatsSettings> RemoteReportStatsSettings;
+    TMaybe<NYql::NDq::TReportStatsSettings> LocalReportStatsSettings;
+};
+
+TKqpStatsReportingSettings MakeStatsReportingSettings(const TUserRequestContext& context, TDuration progressStatsPeriod);
+
 class TKqpPlanner {
 
     struct TRequestData {
@@ -48,9 +60,10 @@ public:
         const TIntrusiveConstPtr<NACLib::TUserToken>& UserToken;
         const TInstant Deadline;
         const Ydb::Table::QueryStatsCollection::Mode& StatsMode;
-        const bool WithProgressStats;
+        const TKqpStatsReportingSettings& StatsReportingSettings;
         const TMaybe<NKikimrKqp::TRlPath>& RlPath;
         NWilson::TSpan& ExecuterSpan;
+        const TExecutionTrace* Trace = nullptr;
         TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
         const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
         const ui64 MkqlMemoryLimit;
@@ -103,6 +116,7 @@ private:
     void PrepareToProcess();
     TString GetEstimationsInfo() const;
 
+    NYql::NDqProto::TDqTask* SerializeTaskForExecution(const TTask& task);
     std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> SerializeRequest(const TRequestData& requestData);
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 
@@ -119,11 +133,12 @@ private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TInstant Deadline;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
-    const bool WithProgressStats;
+    const TKqpStatsReportingSettings StatsReportingSettings;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
     TVector<NKikimrKqp::TKqpNodeResources> ResourcesSnapshot;
     NWilson::TSpan& ExecuterSpan;
+    const TExecutionTrace* Trace;
     const NKikimrConfig::TTableServiceConfig::TExecuterRetriesConfig& ExecuterRetriesConfig;
     ui64 LocalRunMemoryEst = 0;
     TVector<TTaskResourceEstimation> ResourceEstimations;
@@ -143,7 +158,7 @@ private:
     TString SerializedGUCSettings;
     std::shared_ptr<NKikimr::NKqp::NRm::IKqpResourceManager> ResourceManager_;
     std::shared_ptr<NKikimr::NKqp::NComputeActor::IKqpNodeComputeActorFactory> CaFactory_;
-    TIntrusivePtr<NRm::TTxState> TxInfo;
+    std::shared_ptr<IQueryQuotaManager> QueryQuotaManager;
     TVector<TProgressStat> LastStats;
     const NKikimrConfig::TTableServiceConfig::EBlockTrackingMode BlockTrackingMode;
     const TMaybe<ui8> ArrayBufferMinFillPercentage;

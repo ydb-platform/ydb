@@ -44,7 +44,7 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *kDeploymentEnvironment =
 static constexpr const char *kDeploymentEnvironmentName = "deployment.environment.name";
 
 /**
-  The id of the deployment.
+  The ID of the deployment.
  */
 static constexpr const char *kDeploymentId = "deployment.id";
 

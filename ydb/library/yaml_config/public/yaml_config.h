@@ -212,6 +212,12 @@ void EnumerateDistinctProjections(
     const TVector<TString>& sections,
     const std::function<void(NFyaml::TNodeRef)>& onProjection);
 
+// Collect top-level section paths from the base config and all selector overrides.
+TSet<TString> CollectConfigSections(NFyaml::TDocument& doc);
+
+// Check selector application for all compatible labels, resolving each section independently.
+void ValidateResolve(NFyaml::TDocument& doc);
+
 /**
  * Calculates hash of resolved config
  * Used to ensure that cli resolves config the same as a server

@@ -40,7 +40,7 @@ class BaseConfigBuilder:
 
     def add_pdisk(self, node_id=1, pdisk_id=1, expected_slot_count=0, slot_size_in_units=0, enforced_dynamic_slot_size=0,
                   box_id=1, pdisk_type=kikimr_bsbase3.EPDiskType.ROT, drive_status=kikimr_bsbase3.EDriveStatus.ACTIVE,
-                  slot_count=None):
+                  metrics_expected_slot_count=None):
         pdisk = self._base_config.PDisk.add()
         pdisk.NodeId = node_id
         pdisk.PDiskId = pdisk_id
@@ -51,7 +51,9 @@ class BaseConfigBuilder:
         pdisk.ExpectedSlotCount = expected_slot_count
         pdisk.PDiskConfig.ExpectedSlotCount = expected_slot_count
         pdisk.PDiskConfig.SlotSizeInUnits = slot_size_in_units
-        pdisk.PDiskMetrics.SlotCount = slot_count if slot_count is not None else expected_slot_count
+        pdisk.PDiskMetrics.ExpectedSlotCount = (
+            metrics_expected_slot_count if metrics_expected_slot_count is not None else expected_slot_count
+        )
         pdisk.PDiskMetrics.SlotSizeInUnits = slot_size_in_units
         pdisk.PDiskMetrics.EnforcedDynamicSlotSize = enforced_dynamic_slot_size
         return self
@@ -111,7 +113,7 @@ class BaseConfigBuilder:
         return self
 
     def update_pdisk(self, node_id, pdisk_id, slot_size_in_units=None, enforced_dynamic_slot_size=None,
-                     expected_slot_count=None, slot_count=None):
+                     expected_slot_count=None, metrics_expected_slot_count=None):
         for pdisk in self._base_config.PDisk:
             if pdisk.NodeId == node_id and pdisk.PDiskId == pdisk_id:
                 if slot_size_in_units is not None:
@@ -122,9 +124,9 @@ class BaseConfigBuilder:
                 if expected_slot_count is not None:
                     pdisk.ExpectedSlotCount = expected_slot_count
                     pdisk.PDiskConfig.ExpectedSlotCount = expected_slot_count
-                    pdisk.PDiskMetrics.SlotCount = expected_slot_count
-                if slot_count is not None:
-                    pdisk.PDiskMetrics.SlotCount = slot_count
+                    pdisk.PDiskMetrics.ExpectedSlotCount = expected_slot_count
+                if metrics_expected_slot_count is not None:
+                    pdisk.PDiskMetrics.ExpectedSlotCount = metrics_expected_slot_count
                 break
         return self
 

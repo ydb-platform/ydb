@@ -324,8 +324,6 @@ def _create_pm(unit: ymake.Unit) -> 'PackageManager':
         sources_path=unit.resolve(sources_path),
         build_root="$B",
         build_path=unit.path().replace("$S", "$B", 1),
-        nodejs_bin_path=None,
-        script_path=None,
         module_path=module_path,
         inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
     )

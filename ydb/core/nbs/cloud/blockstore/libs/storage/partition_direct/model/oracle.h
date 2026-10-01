@@ -150,6 +150,10 @@ public:
 
     [[nodiscard]] const THostStat& GetHostStatistics(
         THostIndex hostIndex) const override;
+
+    // Returns the current group-wide state of a host.
+    [[nodiscard]] EHostState GetHostState(THostIndex hostIndex) const;
+
     [[nodiscard]] TString Dump() const override;
 
     // The FastPath service that owns the disk-wide in-flight write count.

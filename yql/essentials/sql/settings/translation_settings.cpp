@@ -184,11 +184,11 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
         {
             "YqlSelect",
             [](const TVector<TString>& args, TTranslationSettings& s) {
-                if (args.size() == 1 && args[0] == "disable") {
+                if (!args.empty() && args[0] == "disable") {
                     s.YqlSelect = EYqlSelect::Disable;
-                } else if (args.size() == 1 && args[0] == "auto") {
+                } else if (!args.empty() && args[0] == "auto") {
                     s.YqlSelect = EYqlSelect::Auto;
-                } else if (args.size() == 1 && args[0] == "force") {
+                } else if (!args.empty() && args[0] == "force") {
                     s.YqlSelect = EYqlSelect::Force;
                 } else {
                     ThrowBad("YqlSelect", args);
@@ -198,7 +198,7 @@ void ParseTranslationSettings(const TExtendedSqlFlags& flags, TTranslationSettin
         {
             "MaxParseTreeDepth",
             [](const TVector<TString>& args, TTranslationSettings& s) {
-                if (args.size() != 1) {
+                if (args.empty()) {
                     ThrowBad("MaxParseTreeDepth", args);
                 }
 

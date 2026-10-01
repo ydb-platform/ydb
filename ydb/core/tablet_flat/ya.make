@@ -73,6 +73,8 @@ SRCS(
     flat_store_hotdog.cpp
     flat_table.cpp
     flat_table.h
+    flat_table_key_blocks.cpp
+    flat_table_key_blocks.h
     flat_table_part.cpp
     flat_table_part.h
     flat_table_misc.cpp

@@ -85,7 +85,7 @@ void TTxInternalScan::StartScanActor(
     const TVersionedIndex* index = Self->HasIndex() ? &Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex() : nullptr;
     readMetadataRange->OnBeforeStartReading(*Self);
 
-    const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index);
+    const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(readMetadataRange, index, request.GetPathId().GetInternalPathId());
     if (diagnostics) {
         diagnostics->RequestId = requestCookie;
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(diagnostics));

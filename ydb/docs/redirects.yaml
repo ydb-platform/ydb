@@ -126,6 +126,12 @@ common:
     to: /devops/configuration-management/configuration-v1/dynamic-config-volatile-config.md
   - from: /maintenance/manual/cms.md
     to: /devops/configuration-management/configuration-v1/cms.md
+  - from: /maintenance/manual/selfheal.md
+    to: /devops/concepts/selfheal-storage.md
+  - from: /maintenance/manual/selfheal_statestorage.md
+    to: /devops/concepts/selfheal-metadata-distribution.md
+  - from: /devops/concepts/selfheal-state-storage.md
+    to: /devops/concepts/selfheal-metadata-distribution.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
   - from: /devops/manual/backup-and-recovery.md
@@ -411,9 +417,11 @@ common:
   - from: /recipes/nfs-backup/(.*)$
     to: /recipes/backup/nfs-backup/$1
   - from: /recipes/import-export-column-tables.md
-    to: /recipes/backup/import-export-column-tables.md
+    to: /concepts/query_execution/federated_query/import_and_export.md
   - from: /recipes/backup/import-export-column-tables/import-export-column-tables.md
-    to: /recipes/backup/import-export-column-tables.md
+    to: /concepts/query_execution/federated_query/import_and_export.md
+  - from: /recipes/backup/import-export-column-tables.md
+    to: /concepts/query_execution/federated_query/import_and_export.md
 
 # Redirects from export_import to export-import
   - from: /reference/ydb-cli/export_import/s3_conn.md

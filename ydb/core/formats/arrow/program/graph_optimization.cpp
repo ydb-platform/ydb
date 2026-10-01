@@ -75,8 +75,9 @@ void TGraph::RemoveNode(const ui32 idenitifier) {
     Nodes.erase(it);
 }
 
-TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver)
-    : Resolver(resolver) {
+TGraph::TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory)
+    : ReserveIndexMemory(reserveIndexMemory)
+    , Resolver(resolver) {
     NextResourceId = 0;
     for (auto&& i : processors) {
         for (auto&& input : i->GetInput()) {
@@ -250,18 +251,23 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
     } else if (dataAddresses.size() == 1) {
         nodeFetch = dataAddresses.front();
     }
-    if (nodeFetch) {
+    const auto attachReserveMemory = [&](TGraphNode* fetchNode) {
         std::shared_ptr<IMemoryCalculationPolicy> policy;
         if (baseNode->Is(EProcessorType::Filter) || baseNode->Is(EProcessorType::DistinctMarker)) {
             policy = std::make_shared<TFilterCalculationPolicy>();
         } else if (baseNode->Is(EProcessorType::Projection)) {
             policy = std::make_shared<TFetchingCalculationPolicy>();
         }
-        auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*nodeFetch->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
+        AFL_VERIFY(policy);
+        auto reserveMemory = std::make_shared<TReserveMemoryProcessor>(*fetchNode->GetProcessorAs<TOriginalColumnDataProcessor>(), policy);
         auto nodeReserve = AddNode(reserveMemory);
         nodeReserve->GetProcessor()->AddOutput(0);
-        nodeFetch->GetProcessor()->AddInput(0);
-        AddEdge(nodeReserve.get(), nodeFetch, 0);
+        fetchNode->GetProcessor()->AddInput(0);
+        AddEdge(nodeReserve.get(), fetchNode, 0);
+        changed = true;
+    };
+    if (nodeFetch) {
+        attachReserveMemory(nodeFetch);
     }
 
     if (indexes.size() + headers.size() > 1) {
@@ -296,7 +302,12 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
             }
             RemoveNode(i->GetIdentifier());
         }
+        if (ReserveIndexMemory && !indexes.empty()) {
+            attachReserveMemory(nodeFetch.get());
+        }
         changed = true;
+    } else if (ReserveIndexMemory && indexes.size() == 1 && headers.empty()) {
+        attachReserveMemory(indexes.front());
     }
     return changed;
 }
@@ -518,6 +529,12 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
         const auto proc = condNode->GetProcessorAs<TCalculationProcessor>();
         if (!proc->GetKernelLogic()) {
             return std::nullopt;
+        }
+        if (const auto inputIdx = proc->GetKernelLogic()->GetOriginalAddressFromInput()) {
+            if (proc->GetInput().size() <= *inputIdx) {
+                return std::nullopt;
+            }
+            return GetOriginalAddress(GetProducerVerified(proc->GetInput()[*inputIdx].GetColumnId()));
         }
         if (proc->GetKernelLogic()->GetClassName() == TGetJsonPath::GetClassNameStatic()) {
         } else if (proc->GetKernelLogic()->GetClassName() == TExistsJsonPath::GetClassNameStatic()) {

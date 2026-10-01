@@ -97,6 +97,21 @@ namespace NActors {
         alignas(64) NThreading::TPadded<std::atomic<ui64>> ThreadsState;
         alignas(64) std::atomic<bool> StopFlag;
 
+        // Set during pool registration, before any executor thread starts.
+        bool HasWakerPools = false;
+        // Only the shared waker changes sleep decisions and their accounting.
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SharedSleepingCount = 0;
+        alignas(PLATFORM_CACHE_LINE) std::vector<bool> SleepingWorkers;
+        static constexpr i16 InvalidWakerWorkerId = -1;
+        alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
+        std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;
+
+        void RequestWaker(i16 workerId = InvalidWakerWorkerId);
+        void RunWaker(TWorkerId workerId);
+        void WakerLoop(TWorkerId workerId, EThreadState* resumeState);
+        void SetSleeping(TWorkerId workerId, bool sleeping);
+        TMailbox* GetReadyActivationWaker(ui64 revolvingCounter);
+
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
     public:
         struct TThreadsState {
@@ -146,6 +161,7 @@ namespace NActors {
         void GetSharedStatsForHarmonizer(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
         void GetSharedStats(i16 poolId, TVector<TExecutorThreadStats>& statsCopy) const override;
 
+        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;

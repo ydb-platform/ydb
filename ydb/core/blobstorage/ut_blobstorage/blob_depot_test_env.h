@@ -168,21 +168,24 @@ struct TBlobDepotTestEnvironment {
     ui32 BlobDepotTabletId;
 
     TBlobDepotTestEnvironment(ui32 seed = 0, ui32 numGroups = 1, ui32 nodeCount = 8,
-            TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4)
+            TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            const TFeatureFlags& featureFlags = {})
         : RandomSeed(seed)
         , Mt(seed)
         , Mt64(seed) {
         Cerr << "Mersenne random seed " << seed << Endl;
-        ConfigureEnvironment(numGroups, Env, RegularGroups, BlobDepot, nodeCount, erasure);
+        ConfigureEnvironment(numGroups, Env, RegularGroups, BlobDepot, nodeCount, erasure, featureFlags);
         BlobDepotTabletId = 0;
     }
 
     void ConfigureEnvironment(ui32 numGroups, std::unique_ptr<TEnvironmentSetup>& envPtr, std::vector<ui32>& regularGroups, ui32& blobDepot,
-            ui32 nodeCount = 8, TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4) {
+            ui32 nodeCount = 8, TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            const TFeatureFlags& featureFlags = {}) {
         envPtr = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
             .NodeCount = nodeCount,
             .Erasure = erasure,
             .SetupHive = true,
+            .FeatureFlags = featureFlags,
             .SetupResourceBroker = true,
         });
 

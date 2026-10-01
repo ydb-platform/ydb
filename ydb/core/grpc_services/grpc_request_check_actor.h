@@ -70,7 +70,7 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
     }
 }
 
-inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev, const TCloudPermissionsSettings& settings) {
+inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAndCheckRequest(TEvHttpRequestAuthAndCheck::TPtr& ev, const TCloudPermissionsSettings& settings) {
     const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
     if (!isBearerToken || !settings.UseAccessService || !settings.NeedClusterAccessResourceCheck) {
         return {};
@@ -119,7 +119,7 @@ class TGrpcRequestCheckActor
     using TSelf = TGrpcRequestCheckActor<TEvent>;
     using TBase = TActorBootstrappedSecureRequest<TGrpcRequestCheckActor>;
 
-    static constexpr bool IsHttpRequest = std::is_same_v<TEvent, TEvRequestAuthAndCheck>;
+    static constexpr bool IsHttpRequest = std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>;
     static constexpr bool IsGrpcRequest = !IsHttpRequest;
 
 public:
@@ -173,7 +173,7 @@ public:
             entries.emplace_back(GetPermissions(), attributes);
         }
 
-        if constexpr (std::is_same_v<TEvent, TEvRequestAuthAndCheck>) {
+        if constexpr (std::is_same_v<TEvent, TEvHttpRequestAuthAndCheck>) {
             TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> authCheckRequestEntries = GetEntriesForAuthAndCheckRequest(Request_, CloudPermissionsSettings);
             entries.insert(entries.end(), authCheckRequestEntries.begin(), authCheckRequestEntries.end());
         }
@@ -692,7 +692,7 @@ private:
         ReplyBackAndDie();
     }
 
-    void HandleAndDie(TEvRequestAuthAndCheck::TPtr& ev) {
+    void HandleAndDie(TEvHttpRequestAuthAndCheck::TPtr& ev) {
         // Request audit happen after successful authentication
         // and authorization check against the database
         // TODO: refactor: http monitoring authentication/authorization scheme must pass the same

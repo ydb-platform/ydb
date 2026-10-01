@@ -1,5 +1,7 @@
 #include "kqp_compile_service.h"
+#include "kqp_warmup_compile_actor.h"
 
+#include <ydb/core/kqp/tracing/kqp_query_rendering.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/wilson_ids/wilson.h>
@@ -87,7 +89,7 @@ public:
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UserRequestContext(userRequestContext)
-        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
+        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "Compile query")
         , TempTablesState(std::move(tempTablesState))
         , CollectFullDiagnostics(collectFullDiagnostics)
         , CompileAction(compileAction)
@@ -222,9 +224,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, GetYdbStatus(result));
 
         PassAway();
     }
@@ -370,9 +370,10 @@ private:
         counters->TxProxyMon = Counters->TxProxyMon;
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup,
+                CompileActorSpan.GetTraceId());
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
-            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
+            ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig, CompileActorSpan.GetTraceId());
         Gateway->SetToken(QueryId.Cluster, UserToken);
         Gateway->SetClientAddress(ClientAddress);
 
@@ -490,9 +491,9 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        CompileActorSpan.Attribute("ydb.actor.type", TString("TKqpCompileActor"));
+        CompileActorSpan.Attribute("ydb.cpu_us", static_cast<i64>(CompileCpuTime.MicroSeconds()));
+        EndQueryTraceSpan(CompileActorSpan, KqpCompileResult->Status);
 
         PassAway();
     }
@@ -563,9 +564,7 @@ private:
 
         Counters->ReportCompileFinish(DbCounters);
 
-        if (CompileActorSpan) {
-            CompileActorSpan.End();
-        }
+        EndQueryTraceSpan(CompileActorSpan, Ydb::StatusIds::SUCCESS);
 
         PassAway();
     }
@@ -686,9 +685,20 @@ private:
         }
         meta["parameters"] = parameters;
         if (UserToken && !UserToken->GetUserSID().empty()) {
-            NJson::TJsonValue groups(NJson::JSON_ARRAY);
-            for (const auto& sid : UserToken->GetGroupSIDs()) {
-                groups.AppendValue(sid);
+            const auto groupSids = UserToken->GetGroupSIDs();
+            // Null marks an oversized group set; a missing field means legacy metadata.
+            NJson::TJsonValue groups(NJson::JSON_NULL);
+            if (groupSids.size() <= MaxWarmupGroupSids) {
+                groups.SetType(NJson::JSON_ARRAY);
+                size_t bytes = 0;
+                for (const auto& sid : groupSids) {
+                    if (sid.size() > MaxWarmupGroupSidsBytes - bytes) {
+                        groups = NJson::TJsonValue(NJson::JSON_NULL);
+                        break;
+                    }
+                    bytes += sid.size();
+                    groups.AppendValue(sid);
+                }
             }
             meta["user_group_sids"] = std::move(groups);
         }

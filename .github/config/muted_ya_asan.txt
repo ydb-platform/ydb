@@ -371,6 +371,12 @@ ydb/core/persqueue/public/schema/ut SchemaOps.CreateAlterDropSmoke
 ydb/core/persqueue/public/schema/ut SchemaOps.MeteringEnabledCreateModes
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyAlterSchema
 ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyUpdateRow
+ydb/core/persqueue/ut TPQTest.TestMaxTimeLagRewind
+ydb/core/persqueue/ut TPQTest.TestPQPartialRead
+ydb/core/persqueue/ut TPQTest.TestPQRead
+ydb/core/persqueue/ut TPQTest.TestPQReadWithoutReadToBlobEnd
+ydb/core/persqueue/ut TPQTest.TestReadSessions
+ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics
 ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
@@ -507,6 +513,7 @@ ydb/tests/functional/audit test_auditlog.py.test_dml_requests_logged_when_sid_is
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_skips_not_bsc_ready
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_filter_healthy_groups_requires_bsc_ready
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots

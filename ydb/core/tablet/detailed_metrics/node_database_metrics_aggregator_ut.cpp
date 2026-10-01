@@ -1,7 +1,10 @@
 #include "node_database_metrics_aggregator.h"
+#include "detailed_metrics_counter_set.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/sys_view/service/db_counters_codec.h>
+#include <ydb/core/tablet/private/aggregated_tablet_counters.h>
+#include <ydb/core/tablet_flat/flat_executor_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -2872,5 +2875,48 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const auto& counters = packed.Get(1).GetTableCounters().GetExecutorCounters();
         UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU), 25);
         UNIT_ASSERT_VALUES_EQUAL(counters.GetSimple(DB_UNIQUE_ROWS_TOTAL), 17);
+    }
+
+    Y_UNIT_TEST(NonDerivativeHistogramsOfDataShardAreConsumedCpuOnly) {
+        // Of the published executor histograms only HIST(ConsumedCPU) is non-derivative
+        // (the current state rather than increments), so it alone travels as its full value
+        NTabletFlatExecutor::TExecutorCounters executorCounters;
+        const auto* names = GetDetailedMetricsCounterNames(TTabletTypes::DataShard);
+        UNIT_ASSERT(names);
+
+        ::NKikimr::NPrivate::TAggregatedTabletCounters aggregated(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        aggregated.Initialize(&executorCounters, &names->ExecutorNames);
+        const auto& indices = aggregated.GetNonDerivativeHistogramIndices();
+        UNIT_ASSERT_VALUES_EQUAL(indices.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(indices[0], (ui32)NTabletFlatExecutor::TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
+    }
+
+    Y_UNIT_TEST(NonDerivativeHistogramIndicesFollowTheDerivativeRule) {
+        // A percentile counter is non-derivative when it is Integral or a HIST(x) aggregate,
+        // whatever its Integral flag; an unpublished one is skipped and keeps no index
+        constexpr const char* simpleNames[] = {"Gauge"};
+        constexpr const char* percentileNames[] = {
+            "Increments",
+            "UnpublishedState",
+            "State",
+            "HIST(Gauge)",
+            "Increments2",
+        };
+        TTabletCountersBase counters(
+            Y_ARRAY_SIZE(simpleNames), 0, Y_ARRAY_SIZE(percentileNames),
+            simpleNames, nullptr, percentileNames);
+        counters.Percentile()[0].Initialize(PERCENTILE_RANGES, false /* integral */);
+        counters.Percentile()[1].Initialize(PERCENTILE_RANGES, true /* integral */);
+        counters.Percentile()[2].Initialize(PERCENTILE_RANGES, true /* integral */);
+        counters.Percentile()[3].Initialize(PERCENTILE_RANGES, false /* integral */);
+        counters.Percentile()[4].Initialize(PERCENTILE_RANGES, false /* integral */);
+
+        const THashSet<TString> published = {"Gauge", "Increments", "State", "HIST(Gauge)", "Increments2"};
+        ::NKikimr::NPrivate::TAggregatedTabletCounters aggregated(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        aggregated.Initialize(&counters, &published);
+
+        // Indices into the full-size histogram list of ToProto ({2, 3}), not into
+        // the published ones, where the unpublished counter leaves no gap ({1, 2})
+        UNIT_ASSERT_VALUES_EQUAL(aggregated.GetNonDerivativeHistogramIndices(), TVector<ui32>({2, 3}));
     }
 }

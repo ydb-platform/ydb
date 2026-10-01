@@ -79,6 +79,19 @@ public:
 
     bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
 
+    /**
+     * The published non-derivative histograms: the Integral percentile counters and
+     * the HIST(x) aggregates (monlib HIST) that pass the name filter. They hold the current
+     * state, whose bucket counts go up and down, unlike the derivative ones (monlib
+     * HIST_RATE) that accumulate increments.
+     *
+     * @return Ascending indices into NKikimrSysView::TDbCounters::Histogram, as filled
+     *         by ToProto, fixed by Initialize
+     */
+    const TVector<ui32>& GetNonDerivativeHistogramIndices() const {
+        return NonDerivativePercentile;
+    }
+
 private:
     template <bool IsSaving>
     void Convert(NKikimrSysView::TDbCounters& sumCounters, NKikimrSysView::TDbCounters& maxCounters);
@@ -90,6 +103,7 @@ private:
     THashSet<ui32> DeprecatedCumulative;
     ui32 FullSizePercentile = 0;
     THashSet<ui32> DeprecatedPercentile;
+    TVector<ui32> NonDerivativePercentile;
     //
     TAggregatedSimpleCounters AggregatedSimpleCounters;
     TCountersVector CumulativeCounters;

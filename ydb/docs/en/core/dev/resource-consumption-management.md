@@ -186,7 +186,7 @@ WITH (
 
 Suppose there are two resource pool classifiers with conflicting conditions, and user `user1@domain` matches both resource pools: `olap1` and `olap2`. If no classifier existed in the system before, then `olap1` is set for `RANK=1000`, and `olap2` for `RANK=2000`. Resource pool classifiers with a lower `RANK` value have higher priority. In this example, since `olap1` has a higher priority `RANK` than `olap2`, it will be selected.
 
-You can also set `RANK` for resource pool classifiers when creating them using the [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md) syntax construct, or change `RANK` for existing resource pool classifiers using [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
+You can also set `RANK` for resource pool classifiers when creating them using the [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md) syntax construct, or change `RANK` for existing resource pool classifiers using [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
 
 The system cannot have two classifiers with the same `RANK` value, which makes it possible to uniquely determine which resource pool will be selected in case of conflicting conditions.
 
@@ -322,6 +322,6 @@ Information about system views related to resource pools and resource pool class
 - [{#T}](../yql/reference/syntax/create-resource-pool.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

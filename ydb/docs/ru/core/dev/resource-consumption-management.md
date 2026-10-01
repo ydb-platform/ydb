@@ -170,7 +170,7 @@ WITH (
 
 Допустим, имеются два классификатора пулов ресурсов с конфликтующими условиями, и пользователь `user1@domain` подходит под оба пула ресурсов: `olap1` и `olap2`. Если до этого в системе не существовало ни одного классификатора, то для `olap1` устанавливается `RANK=1000`, а для `olap2` — `RANK=2000`. Классификаторы пулов ресурсов с меньшим значением `RANK` имеют более высокий приоритет. В данном примере, так как у `olap1` более приоритетный `RANK`, чем у `olap2`, будет выбран именно он.
 
-Также можно самостоятельно задавать `RANK` для классификаторов пулов ресурсов при создании с помощью синтаксической конструкции [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md), либо изменять `RANK` для существующих классификаторов пулов ресурсов с помощью [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
+Также можно самостоятельно задавать `RANK` для классификаторов пулов ресурсов при создании с помощью синтаксической конструкции [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md), либо изменять `RANK` для существующих классификаторов пулов ресурсов с помощью [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md).
 
 В системе не может существовать два классификатора с одинаковым значением `RANK`, что позволяет однозначно определить, какой пул ресурсов будет выбран в случае конфликтующих условий.
 
@@ -299,6 +299,6 @@ where State = 'EXECUTING'
 - [{#T}](../yql/reference/syntax/create-resource-pool.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-- [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
+- [CREATE RESOURCE POOL CLASSIFIER](../yql/reference/syntax/create-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
 - [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)

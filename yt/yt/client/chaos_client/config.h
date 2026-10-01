@@ -75,4 +75,35 @@ DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TChaosLeaseCacheConfig
+    : public TAsyncExpiringCacheConfig
+    , public TChaosCacheChannelConfig
+{
+    bool EnableWatching;
+
+    TChaosLeaseCacheConfigPtr ApplyDynamic(const TChaosLeaseCacheDynamicConfigPtr& dynamicConfig) const;
+
+    REGISTER_YSON_STRUCT(TChaosLeaseCacheConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TChaosLeaseCacheConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TChaosLeaseCacheDynamicConfig
+    : public TAsyncExpiringCacheDynamicConfig
+{
+    std::optional<bool> EnableWatching;
+
+    REGISTER_YSON_STRUCT(TChaosLeaseCacheDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TChaosLeaseCacheDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NChaosClient

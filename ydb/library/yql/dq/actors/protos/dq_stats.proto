@@ -187,8 +187,8 @@ message TDqTableStats {
 
     uint32 AffectedPartitions = 8; // TODO: move it to the Extra
 
-    // Populated when collect_affected_rows is enabled. Affected row count (logical base-table rows only).
-    uint64 AffectedRows = 9;
+    // Set only when collect_affected_rows is enabled. Affected row count (logical base-table rows only).
+    optional uint64 AffectedRows = 9;
 
     google.protobuf.Any Extra = 100;
 }
@@ -378,7 +378,7 @@ message TDqTableAggrStats {
     TDqStatsAggr EraseBytes = 7;
 
     uint32 AffectedPartitions = 8;
-    uint64 AffectedRows = 9;
+    optional uint64 AffectedRows = 9;
 
     google.protobuf.Any Extra = 100;
 }
@@ -401,6 +401,13 @@ message TDqOperatorStatsAggr {
         TDqFilterStatsAggr Filter = 5;
         TDqAggregationStatsAggr Aggregation = 6;
     }
+}
+
+// task counts of one stage on one node
+message TDqStageNodeStats {
+    uint32 NodeId = 1;
+    uint32 Tasks = 2;
+    uint32 Finished = 3;
 }
 
 // aggregated stats for all tasks of the stage
@@ -478,6 +485,8 @@ message TDqStageStats {
     TDqStatsAggr MaxMemoryUsage = 24;
     TDqStatsAggr MemoryUsageMB = 54;
 
+    repeated TDqStageNodeStats Nodes = 55; // task distribution over nodes, sorted by NodeId
+
     google.protobuf.Any Extra = 100;
 }
 
@@ -492,6 +501,7 @@ message TDqMemoryHistoryItem {
     uint64 InputInflightBytes  = 8;
     uint64 OutputInflightBytes = 9;
     uint64 LocalInflightBytes  = 10;
+    uint64 MemQueryAllocated   = 11;
 }
 
 message TDqNodeStats {

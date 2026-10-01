@@ -343,6 +343,196 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 25);
     }
 
+    // The reserve is enforced through the color an owner is told about, which is what stops
+    // its user writes. It must not also stop the compaction output that is the only way that
+    // owner can give space back, or a disk that reaches this point never comes out of it.
+    Y_UNIT_TEST(StaticGroupReserveDoesNotBlockHousekeeping) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 100,
+            .ExpectedOwnerCount = 4,
+            // As the disks in question are configured: the personal quota is reported no
+            // worse than green, so what an owner is judged by is the shared quota alone.
+            .SpaceColorBorder = TColor::GREEN,
+        };
+        SetupStaticGroupParams(params);
+
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+
+        const TOwner staticOwner = 101;
+        const TOwner dynamicOwner = 102;
+        chunkTracker.AddOwner(staticOwner, StaticVDiskId());
+        chunkTracker.AddOwner(dynamicOwner, DynamicVDiskId());
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerStaticReserve(staticOwner), 25);
+
+        // Fill the neighbour until an ordinary chunk reservation would be refused. It gets
+        // there while the shared quota itself still has the whole reserve free.
+        double occupancy;
+        for (ui32 i = 0; i < 1000 && chunkTracker.EstimateSpaceColor(dynamicOwner, 1, &occupancy) < TColor::BLACK; ++i) {
+            UNIT_ASSERT_C(chunkTracker.TryAllocate(dynamicOwner, 1, errorReason), errorReason);
+        }
+        UNIT_ASSERT_EQUAL_X(chunkTracker.EstimateSpaceColor(dynamicOwner, 1, &occupancy), TColor::BLACK);
+
+        // What AllocateChunkForOwner() sees for a write of newly accepted data: no room.
+        UNIT_ASSERT_EQUAL_X(chunkTracker.EstimateAllocationColor(dynamicOwner, 1, false, &occupancy), TColor::BLACK);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetSpaceHeadroom(dynamicOwner).ToBlack, 0);
+
+        // ... and what it sees for compaction output: the reserve is not held against it.
+        UNIT_ASSERT(chunkTracker.EstimateAllocationColor(dynamicOwner, 1, true, &occupancy) < TColor::BLACK);
+        const ui64 room = chunkTracker.GetSpaceHeadroom(dynamicOwner).AllocatableToBlack;
+        UNIT_ASSERT(room > 0);
+
+        // The compaction budget is that room exactly: spending all of it stays out of black,
+        // so housekeeping cannot run the shared pool dry either.
+        UNIT_ASSERT(chunkTracker.EstimateAllocationColor(dynamicOwner, room, true, &occupancy) < TColor::BLACK);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.EstimateAllocationColor(dynamicOwner, room + 1, true, &occupancy),
+            TColor::BLACK);
+
+        // A non-user owner has no housekeeping exception to make.
+        UNIT_ASSERT_EQUAL_X(chunkTracker.EstimateAllocationColor(OwnerSystem, 1, true, &occupancy),
+            chunkTracker.EstimateSpaceColor(OwnerSystem, 1, &occupancy));
+    }
+
+    Y_UNIT_TEST(AllocationReservesProtectSystemAcrossOwnersAndReturnOnRelease) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        using EPurpose = EAllocationPurpose;
+        TChunkTracker tracker;
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::GREEN,
+        };
+        SetupStaticGroupParams(params);
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, StaticVDiskId());
+        tracker.AddOwner(102, DynamicVDiskId());
+        tracker.AddOwner(103, DynamicVDiskId(2));
+        tracker.SetAllocationReserves(10, 20);
+
+        // USER leaves both reserves alone; the two dynamic owners share the pool, so one of them using up its
+        // USER room uses up the other's too.
+        const ui64 userRoom = tracker.GetAllocationHeadroom(102, EPurpose::User);
+        UNIT_ASSERT_C(tracker.TryAllocate(102, userRoom, error), error);
+        for (TOwner owner : {102, 103}) {
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(owner, EPurpose::User), 0);
+            UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(owner, EPurpose::Recovery), 20);
+        }
+        // Recovery leaves the system reserve alone.
+        UNIT_ASSERT_C(tracker.TryAllocate(103, 12, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), 8);
+        UNIT_ASSERT_C(tracker.TryAllocate(102, 8, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetWorstAllocationHeadroom(EPurpose::Recovery), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetSpaceHeadroom(102).ToRed, 10);
+        double occupancy;
+        UNIT_ASSERT(tracker.EstimateAllocationColor(102, 10, false, &occupancy) < TColor::RED);
+        // SYSTEM may spend the reserve, and so may maintenance: it is what gives space back.
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::System), Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Maintenance), Max<ui64>());
+        UNIT_ASSERT(tracker.GetSpaceHeadroom(102).AllocatableToBlack > 10);
+
+        // Completion/forecast alone returns nothing. Releasing actual output or
+        // input chunks restores the shared workspace for every owner.
+        tracker.Release(103, 12);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), 12);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::User), 0);
+        tracker.Release(102, 9);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(103, EPurpose::User), 1);
+        tracker.SetAllocationReserves(0, 20);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(102, EPurpose::Recovery), Max<ui64>());
+    }
+
+    Y_UNIT_TEST(AllocationHeadroomIsPerOwner) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        using EPurpose = EAllocationPurpose;
+        TChunkTracker tracker;
+        // A RED color border enforces the personal quotas, so an owner can run out of room on its own.
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::RED,
+        };
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, DynamicVDiskId());
+        tracker.AddOwner(102, DynamicVDiskId(2));
+        tracker.SetAllocationReserves(10, 20);
+
+        const ui64 room = tracker.GetAllocationHeadroom(101, EPurpose::User);
+        UNIT_ASSERT(room > 0);
+        UNIT_ASSERT_C(tracker.TryAllocate(101, room, error), error);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetAllocationHeadroom(101, EPurpose::User), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetWorstAllocationHeadroom(EPurpose::User), 0);
+        // The neighbour keeps the room of its own quota.
+        UNIT_ASSERT(tracker.GetAllocationHeadroom(102, EPurpose::User) > 0);
+        UNIT_ASSERT_C(tracker.TryAllocate(102, 1, error), error);
+    }
+
+    Y_UNIT_TEST(CompactionPressureUsesEffectiveDynamicOwnerColor) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        TChunkTracker tracker;
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::GREEN,
+        };
+        SetupStaticGroupParams(params);
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        const TOwner staticOwner = 101;
+        const TOwner dynamicOwner = 102;
+        tracker.AddOwner(staticOwner, StaticVDiskId());
+        tracker.AddOwner(dynamicOwner, DynamicVDiskId());
+        double occupancy;
+        while (tracker.GetSpaceColor(dynamicOwner, &occupancy) < TColor::PRE_ORANGE) {
+            UNIT_ASSERT_C(tracker.TryAllocate(dynamicOwner, 1, error), error);
+        }
+        UNIT_ASSERT(tracker.GetSharedPoolColor() < TColor::YELLOW);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::PRE_ORANGE);
+        UNIT_ASSERT_EQUAL(tracker.GetSpaceHeadroom(dynamicOwner).ToPreOrange, 0);
+
+        // Changing the static reserve changes pressure without allocating or
+        // freeing a physical chunk. Removing an owner must remove its color too.
+        const i64 used = tracker.GetTotalUsed();
+        tracker.RemoveOwner(staticOwner);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetTotalUsed(), used);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), tracker.GetSharedPoolColor());
+        tracker.Release(dynamicOwner, tracker.GetOwnerUsed(dynamicOwner));
+        tracker.RemoveOwner(dynamicOwner);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::GREEN);
+
+        // Reset must forget the old owner list before reconstructing it.
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::GREEN);
+    }
+
+    Y_UNIT_TEST(CompactionPressureUsesPersonalQuota) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        TChunkTracker tracker;
+        TKeeperParams params {
+            .TotalChunks = 205 + 1000,
+            .ExpectedOwnerCount = 4,
+            .SpaceColorBorder = TColor::YELLOW,
+        };
+        TString error;
+        UNIT_ASSERT_C(tracker.Reset(params, TColorLimits::MakeLogLimits(), error), error);
+        tracker.AddOwner(101, DynamicVDiskId());
+        UNIT_ASSERT_C(tracker.TryAllocate(101, 240, error), error);
+        UNIT_ASSERT_EQUAL(tracker.GetSharedPoolColor(), TColor::GREEN);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::YELLOW);
+        tracker.SetOwnerWeight(101, 2);
+        UNIT_ASSERT_EQUAL(tracker.GetCompactionPressureColor(), TColor::GREEN);
+    }
+
     Y_UNIT_TEST(StaticGroupReserveIsHeldBackWhileItIsNotUsed) {
         using namespace NPDisk;
 
@@ -710,6 +900,99 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 25);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 25);
     }
+
+    Y_UNIT_TEST(SpaceHeadroomMatchesEstimatedColor) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 100,
+            .ExpectedOwnerCount = 1,
+            .SpaceColorBorder = TColor::BLACK,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeChunkLimits(params.ChunkBaseLimit), errorReason),
+            errorReason);
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+
+        // The headroom is exactly the largest allocation that still estimates better
+        // than the boundary, so the two views of the disk cannot disagree.
+        double occupancy = 0;
+        for (TColor::E color : {TColor::PRE_ORANGE, TColor::ORANGE, TColor::RED, TColor::BLACK}) {
+            const i64 headroom = chunkTracker.GetHeadroomBelow(owner, color);
+            UNIT_ASSERT(headroom > 0);
+            UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, headroom, &occupancy) < color);
+            UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, headroom + 1, &occupancy) >= color);
+        }
+
+        const TSpaceHeadroom headroom = chunkTracker.GetSpaceHeadroom(owner);
+        UNIT_ASSERT(headroom.Valid);
+        UNIT_ASSERT(headroom.ToPreOrange < headroom.ToOrange);
+        UNIT_ASSERT(headroom.ToOrange < headroom.ToRed);
+        UNIT_ASSERT(headroom.ToRed < headroom.ToBlack);
+    }
+
+    Y_UNIT_TEST(SpaceHeadroomShrinksAsTheDiskFills) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 100,
+            .ExpectedOwnerCount = 1,
+            .SpaceColorBorder = TColor::BLACK,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeChunkLimits(params.ChunkBaseLimit), errorReason),
+            errorReason);
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+
+        const i64 toPreOrange = chunkTracker.GetHeadroomBelow(owner, TColor::PRE_ORANGE);
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(owner, toPreOrange, errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetHeadroomBelow(owner, TColor::PRE_ORANGE), 0);
+
+        double occupancy = 0;
+        UNIT_ASSERT(chunkTracker.GetSpaceColor(owner, &occupancy) < TColor::PRE_ORANGE);
+        UNIT_ASSERT(chunkTracker.EstimateSpaceColor(owner, 1, &occupancy) >= TColor::PRE_ORANGE);
+    }
+
+    Y_UNIT_TEST(TightSpaceColorFloorsHonorIcbCyanPermille) {
+        using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 10'205,
+            .ExpectedOwnerCount = 1,
+            .SysLogSize = 0,
+            .CommonLogSize = 0,
+            .MaxCommonLogChunks = 0,
+            .SeparateCommonLog = true,
+            .ChunkBaseLimit = 50,
+            .TightSpaceColorFloors = true,
+        };
+        TString errorReason;
+        UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
+
+        const TOwner owner = 101;
+        chunkTracker.AddOwner(owner, DynamicVDiskId());
+
+        const i64 hard = chunkTracker.GetTotalHardLimit();
+        UNIT_ASSERT_VALUES_EQUAL(hard, 10'200);
+        const i64 cyanQuota = TColorLimits::MakeChunkLimits(params.ChunkBaseLimit, true)
+            .GetQuotaForColor(TColor::CYAN, hard);
+        UNIT_ASSERT_VALUES_EQUAL(cyanQuota, 510);
+
+        double occupancy = 0;
+        UNIT_ASSERT_VALUES_EQUAL(
+            chunkTracker.EstimateSpaceColor(owner, hard - cyanQuota, &occupancy), TColor::CYAN);
+        UNIT_ASSERT_VALUES_EQUAL(
+            chunkTracker.EstimateSpaceColor(owner, hard - cyanQuota - 1, &occupancy), TColor::GREEN);
+    }
+
 }
 
 #undef UNIT_ASSERT_EQUAL_X

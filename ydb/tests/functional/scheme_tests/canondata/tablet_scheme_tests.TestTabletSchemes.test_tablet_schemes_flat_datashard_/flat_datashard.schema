@@ -2378,6 +2378,139 @@
         }
     },
     {
+        "TableId": 41,
+        "TableName": "AncestorShardsLocks",
+        "TableKey": [
+            1,
+            2
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "LockId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "TabletId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "Generation",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Counter",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "CreateTimestamp",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Flags",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 42,
+        "TableName": "AncestorLockWriteSeqNums",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "LockId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "TabletId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "WriterIndex",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "WriteSeqNum",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "WriteResult",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
         "TableId": 101,
         "TableName": "LockChangeRecords",
         "TableKey": [

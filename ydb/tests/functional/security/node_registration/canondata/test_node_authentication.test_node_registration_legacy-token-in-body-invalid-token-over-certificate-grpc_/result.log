@@ -1,0 +1,7 @@
+{
+  "details": "unauthenticated, unauthenticated: { <main>: Error: Could not find correct token validator }",
+  "grpc_status": "UNAUTHENTICATED",
+  "ydb_log": [
+    "GRPC_SERVER DEBUG: issuing response Name# NKikimrClient.TGRpcServer/RegisterNode nodata (unauthenticated, unauthenticated: { <main>: Error: Could not find correct token validator }) peer# <peer>, grpc status# (16)"
+  ]
+}

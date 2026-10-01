@@ -26,8 +26,8 @@ using TReplyStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
 namespace {
 
 // a poor error mapping (we can't map io_uring errors 1:1 to our errors)
-TReplyStatus::E UringErrorToStatus(i32 result, NPDisk::TUringOperationBase::EOperationType opType) {
-    const int err = -result;
+TReplyStatus::E UringErrorToStatus(i64 result, NPDisk::TUringOperationBase::EOperationType opType) {
+    const int err = static_cast<int>(-result);
     switch (err) {
         case EAGAIN:
 #if EAGAIN != EWOULDBLOCK
@@ -49,6 +49,35 @@ TReplyStatus::E UringErrorToStatus(i32 result, NPDisk::TUringOperationBase::EOpe
 
 } // anonymous
 
+// Keep the actor reference independently of the operation: recycling or publishing
+// a retry can immediately transfer the operation to another thread.
+class TDDiskActor::TDirectIoOpBase::TCompletionGuard {
+    TDDiskActor& Actor;
+    NActors::TActorSystem* const ActorSystem;
+    TDirectIoOpBase* Op;
+
+public:
+    TCompletionGuard(TDirectIoOpBase* op, NActors::TActorSystem* actorSystem)
+        : Actor(op->Actor)
+        , ActorSystem(actorSystem)
+        , Op(op)
+    {}
+
+    ~TCompletionGuard() {
+        if (Op) {
+            Op->SelfRecycle();
+        }
+        Actor.OnDirectIODone(ActorSystem);
+    }
+
+    std::unique_ptr<TDirectIoOpBase> Release() {
+        return std::unique_ptr<TDirectIoOpBase>(std::exchange(Op, nullptr));
+    }
+
+    TCompletionGuard(const TCompletionGuard&) = delete;
+    TCompletionGuard& operator=(const TCompletionGuard&) = delete;
+};
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDDiskActor::TDirectIoOpBase
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,48 +92,34 @@ TDDiskActor::TDirectIoOpBase::~TDirectIoOpBase() = default;
 
 void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem) noexcept
 {
-    std::unique_ptr<TDirectIoOpBase> guard(this);
+    TCompletionGuard guard(this, actorSystem);
 
-    Actor.Counters.DirectIO.RunningCount->Dec();
-
-    const size_t operationBytes = GetOperationBytes();
     const auto opType = GetOperationType();
-    i32 result = GetResult();
+    const i64 result = GetResult();
     const double requestTimeMs = TimePassed();
-
-    // note, we assume there is no short read/write with zero bytes,
-    // otherwise we might loop forever on the short path
-    if (Y_UNLIKELY(result == 0 && operationBytes > 0)) {
-        result = -EIO;
-        SetResult(result);
-    }
-
-    size_t bytesProcessed = 0;
-    if (result >= 0) {
-        bytesProcessed = static_cast<ui32>(result);
-    }
+    AccountShortIo();
 
     // EAGAIN/ENOMEM/ENOSPC on integrity/formatting I/O must not brick the DDisk: retry the same op
-    // (buffers still owned here) through the short-I/O path. Defer Done() until the retry
+    // (buffers still owned here) through the actor retry path. Defer Done() until the retry
     // completes or a hard error is reported.
     if (Y_UNLIKELY(result < 0 && IsCriticalDDiskIo()
-            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED)) {
-        auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvShortIO>(std::move(guard));
+            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED
+            && RetryCount < MaxResubmissions)) {
+        ++RetryCount;
+        auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvRetryIO>(guard.Release());
         actorSystem->Send(new IEventHandle(DDiskId, {}, ev.release()));
         return;
     }
 
-    if (result < 0 || bytesProcessed == operationBytes) {
-        switch (opType) {
-        case TUringOperationBase::EREAD:
-            Actor.Counters.DirectIO.Read.Done(GetTotalSize(), requestTimeMs);
-            break;
-        case TUringOperationBase::EWRITE:
-            Actor.Counters.DirectIO.Write.Done(GetTotalSize(), requestTimeMs);
-            break;
-        default:
-            Y_ABORT("Unknown OperationType");
-        }
+    switch (opType) {
+    case TUringOperationBase::EREAD:
+        Actor.Counters.DirectIO.Read.Done(GetTotalSize(), requestTimeMs);
+        break;
+    case TUringOperationBase::EWRITE:
+        Actor.Counters.DirectIO.Write.Done(GetTotalSize(), requestTimeMs);
+        break;
+    default:
+        Y_ABORT("Unknown OperationType");
     }
 
     if (Y_UNLIKELY(result < 0)) {
@@ -124,46 +139,23 @@ void TDDiskActor::TDirectIoOpBase::OnComplete(NActors::TActorSystem* actorSystem
             << " chunkOffset=" << ChunkOffsetInBytes
             << " DDiskId=" << DDiskId;
         YDB_LOG_ERROR_CTX(*actorSystem, reason);
-        Reply(actorSystem, UringErrorToStatus(result, opType), std::move(reason));
-        Y_UNUSED(guard.release());
-        SelfRecycle();
+        const bool exhausted = IsCriticalDDiskIo()
+            && UringErrorToStatus(result, opType) == TReplyStatus::OVERLOADED;
+        if (exhausted) {
+            reason += TStringBuilder() << " retry exhausted: attempts=" << (RetryCount + 1);
+        }
+        Reply(actorSystem, exhausted ? TReplyStatus::ERROR : UringErrorToStatus(result, opType), std::move(reason));
         return;
     }
 
-    if (bytesProcessed == operationBytes) {
-        Reply(actorSystem, TReplyStatus::OK);
-        Y_UNUSED(guard.release());
-        SelfRecycle();
-        return;
-    }
-
-    // Below is an unlikely scenario: either short operation because of interrupt (or other reason),
-    // or we have requested more bytes than i32 cqe->res (here it is Result) can report.
-
-    this->AdvanceIov(bytesProcessed);
-
-    switch (opType) {
-    case TUringOperationBase::EREAD:
-        Actor.Counters.DirectIO.ShortReads->Inc();
-        break;
-    case TUringOperationBase::EWRITE:
-        Actor.Counters.DirectIO.ShortWrites->Inc();
-        break;
-    default:
-        Y_ABORT("Unknown OperationType");
-    }
-
-    // Defer the retry through the actor so ownership and DDisk accounting stay
-    // on the normal submission path.
-    auto ddiskId = DDiskId;
-    auto ev = std::make_unique<TDDiskActor::TEvPrivate::TEvShortIO>(std::move(guard));
-    actorSystem->Send(new IEventHandle(ddiskId, {}, ev.release()));
+    // Both the router and the PDisk fallback complete the whole logical request.
+    Y_ABORT_UNLESS(static_cast<ui64>(result) == GetTotalSize());
+    Reply(actorSystem, TReplyStatus::OK);
 }
 
-void TDDiskActor::TDirectIoOpBase::OnDrop() noexcept {
-    std::unique_ptr<TDirectIoOpBase> guard(this);
-
-    Actor.Counters.DirectIO.RunningCount->Dec();
+void TDDiskActor::TDirectIoOpBase::OnDrop(NActors::TActorSystem* actorSystem) noexcept {
+    TCompletionGuard guard(this, actorSystem);
+    AccountShortIo();
 
     switch (GetOperationType()) {
     case TUringOperationBase::EREAD:
@@ -176,8 +168,24 @@ void TDDiskActor::TDirectIoOpBase::OnDrop() noexcept {
         Y_ABORT("Unknown OperationType");
     }
 
-    Y_UNUSED(guard.release());
-    SelfRecycle();
+    Reply(actorSystem, TReplyStatus::SESSION_MISMATCH, "io_uring request dropped");
+}
+
+void TDDiskActor::TDirectIoOpBase::AccountShortIo() noexcept {
+    const ui64 count = TakeShortIoCount();
+    if (!count) {
+        return;
+    }
+    switch (GetOperationType()) {
+    case TUringOperationBase::EREAD:
+        *Actor.Counters.DirectIO.ShortReads += count;
+        break;
+    case TUringOperationBase::EWRITE:
+        *Actor.Counters.DirectIO.ShortWrites += count;
+        break;
+    default:
+        Y_ABORT("Unknown OperationType");
+    }
 }
 
 void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChunkIdx chunkIdx, ui32 chunkOffset) {
@@ -278,7 +286,7 @@ double TDDiskActor::TDirectIoOpBase::TimePassed() const {
     return HPMilliSecondsFloat(HPNow() - StartTs);
 }
 
-void TDDiskActor::TDirectIoOpBase::SetResult(i32 result, TRope&& data) {
+void TDDiskActor::TDirectIoOpBase::SetResult(i64 result, TRope&& data) {
     SetResult(result);
     Data = std::move(data);
 }
@@ -321,10 +329,10 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
         TString reason) noexcept {
     std::unique_ptr<IEventBase> reply;
     const auto opType = GetOperationType();
-    const i32 result = GetResult();
+    const i64 result = GetResult();
     if (status == TReplyStatus::OVERLOADED) {
         if (!reason) {
-            reason = "io_uring request temporarily overloaded (short I/O retry)";
+            reason = "io_uring request temporarily overloaded (I/O error retry)";
         }
     } else if (status != TReplyStatus::OK) {
         if (!reason) {
@@ -344,7 +352,7 @@ void TDDiskActor::TPersistentBufferPartIoOp::Reply(NActors::TActorSystem* actorS
 
     switch (opType) {
         case TUringOperationBase::EREAD: {
-            TRope data = ExtractData();
+            TRope data = status == TReplyStatus::OK ? ExtractData() : TRope();
             reply = std::make_unique<TEvPrivate::TEvReadPersistentBufferPart>(
                 GetCookie(), PartCookie, status, std::move(reason), std::move(data), IsRestore);
             break;
@@ -379,6 +387,7 @@ void TDDiskActor::TDirectIoOpBase::Reinit(const IEventHandle* ev) {
     ChunkIdx = 0;
     ChunkOffsetInBytes = 0;
     ReadUsedBlocksMask.reset();
+    RetryCount = 0;
 }
 
 void TDDiskActor::TDirectIoOpBase::ClearForRecycle() noexcept {
@@ -386,6 +395,7 @@ void TDDiskActor::TDirectIoOpBase::ClearForRecycle() noexcept {
     Data.reset();
     Span = {};
     ReadUsedBlocksMask.reset();
+    RetryCount = 0;
 }
 
 void TDDiskActor::TDDiskIoOp::SelfRecycle() noexcept {
@@ -440,11 +450,11 @@ void TDDiskActor::TIntegrityIoOp::SelfRecycle() noexcept {
 
 void TDDiskActor::TInternalSyncWriteOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status,
         TString reason) noexcept {
-    const i32 result = GetResult();
+    const i64 result = GetResult();
 
     if (status == TReplyStatus::OVERLOADED) {
         if (!reason) {
-            reason = "io_uring request temporarily overloaded (short I/O retry)";
+            reason = "io_uring request temporarily overloaded (I/O error retry)";
         }
     } else if (status != TReplyStatus::OK) {
         if (!reason) {
@@ -476,7 +486,7 @@ void TDDiskActor::TInternalSyncWriteOp::Reply(NActors::TActorSystem* actorSystem
 
 void TDDiskActor::TIntegrityIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status,
         TString reason) noexcept {
-    const i32 result = GetResult();
+    const i64 result = GetResult();
     TRope data;
 
     if (status != TReplyStatus::OK && !reason) {
@@ -503,7 +513,7 @@ void TDDiskActor::TIntegrityIoOp::Reply(NActors::TActorSystem* actorSystem, TRep
 void TDDiskActor::TChunkFormatIoOp::Reply(NActors::TActorSystem* actorSystem, TReplyStatus::E status,
         TString reason) noexcept {
     if (status != TReplyStatus::OK && !reason) {
-        const i32 result = GetResult();
+        const i64 result = GetResult();
         if (result < 0) {
             reason = TStringBuilder() << "chunk zero-format write failed: " << strerror(-result)
                 << " (errno " << (-result) << ")";

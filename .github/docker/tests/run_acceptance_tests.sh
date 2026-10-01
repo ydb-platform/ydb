@@ -30,6 +30,10 @@ trap cleanup EXIT
 source "${SCRIPT_DIR}/acceptance/test_image_metadata.sh"
 # shellcheck source=acceptance/test_default_startup.sh
 source "${SCRIPT_DIR}/acceptance/test_default_startup.sh"
+# shellcheck source=acceptance/test_actor_system_autoconfig.sh
+source "${SCRIPT_DIR}/acceptance/test_actor_system_autoconfig.sh"
+# shellcheck source=acceptance/test_read_only_rootfs.sh
+source "${SCRIPT_DIR}/acceptance/test_read_only_rootfs.sh"
 # shellcheck source=acceptance/test_custom_config.sh
 source "${SCRIPT_DIR}/acceptance/test_custom_config.sh"
 # shellcheck source=acceptance/test_default_tls.sh
@@ -49,8 +53,12 @@ source "${SCRIPT_DIR}/acceptance/test_failing_init_script.sh"
 # shellcheck source=acceptance/test_interactive.sh
 source "${SCRIPT_DIR}/acceptance/test_interactive.sh"
 
+bash "${SCRIPT_DIR}/test_healthcheck.sh"
+
 test_image_metadata
 test_default_startup
+test_actor_system_autoconfig
+test_read_only_rootfs
 test_custom_config
 test_default_tls
 test_custom_tls

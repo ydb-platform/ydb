@@ -50,12 +50,14 @@ public:
         Become(&TTopicOffsetsActor::StateWork);
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[TTopicOffsetsActor][" << Settings.Path << "]";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "TopicOffsetsActor"},
+            {"path", Settings.Path});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
-        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        DoLogUnhandledException(Service, *this, exc);
         if (Response) {
             ReplyError(
                 Ydb::StatusIds::INTERNAL_ERROR,
@@ -125,7 +127,7 @@ private:
         const auto it = ev->Get()->Topics.find(Settings.Path);
         AFL_ENSURE(it != ev->Get()->Topics.end())("path", Settings.Path);
         const auto& topicInfo = it->second;
-        if (topicInfo.Status != NDescriber::EStatus::SUCCESS) {
+        if (topicInfo.Status != NDescriber::EStatus::Success) {
             return HandleDescribeError(topicInfo);
         }
 
@@ -189,7 +191,7 @@ private:
         auto status = NDescriber::Convert(topicInfo.Status);
         if (Settings.UnauthenticatedExistenceCheck && !Settings.Token.empty()) {
             if (!DidUnauthenticatedExistenceCheck &&
-                topicInfo.Status == NDescriber::EStatus::UNAUTHORIZED)
+                topicInfo.Status == NDescriber::EStatus::Unauthorized)
             {
                 DidUnauthenticatedExistenceCheck = true;
                 StartDescribe(/*anonymous=*/true);

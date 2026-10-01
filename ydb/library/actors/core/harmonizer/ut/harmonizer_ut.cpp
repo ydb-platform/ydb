@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/executor_pool_shared.h>
 #include <ydb/library/actors/core/executor_thread_ctx.h>
 #include <ydb/library/actors/helpers/pool_stats_collector.h>
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 using namespace NActors;
 
@@ -206,6 +208,92 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         auto stats = harmonizer->GetPoolStats(0);
         Y_UNUSED(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPool->ThreadCount, 4);  // Should start with default
+    }
+
+    Y_UNIT_TEST(TestInMemoryMetricsAndPreStop) {
+        for (bool stopBeforeFirstHarmonize : {false, true}) {
+            TTestActorRuntimeBase runtime;
+            runtime.SetupNodeSubSystems = [](ui32, TActorSystemSetup* setup) {
+                setup->RegisterSubSystem(MakeInMemoryMetricsRegistry({
+                    .MemoryBytes = 16384,
+                    .ChunkSizeBytes = 256,
+                    .MaxLines = 32,
+                    .AllowedMetricPrefixes = {"harmonizer."},
+                }));
+            };
+            runtime.Initialize();
+            auto* actorSystem = runtime.GetActorSystem(0);
+            auto* registry = GetInMemoryMetrics(*actorSystem);
+            UNIT_ASSERT(registry);
+            auto mockPool = std::make_unique<TMockExecutorPool>();
+            auto harmonizer = MakeHarmonizer(Us2Ts(1'000'000));
+            harmonizer->AddPool(mockPool.get());
+            harmonizer->SetActorSystem(actorSystem);
+            if (stopBeforeFirstHarmonize) {
+                actorSystem->Stop();
+                harmonizer->Harmonize(Us2Ts(1'000'000));
+                UNIT_ASSERT(!registry->RequestSnapshot(runtime.AllocateEdgeActor()));
+                continue;
+            }
+            harmonizer->Harmonize(Us2Ts(1'000'000));
+            // The first report registers lines; delivery is asynchronous.
+            const auto edge = runtime.AllocateEdgeActor();
+            UNIT_ASSERT(registry->RequestSnapshot(edge));
+            runtime.GrabEdgeEventRethrow<TEvInMemoryMetricsSnapshot>(edge, TDuration::Seconds(5));
+            harmonizer->Harmonize(Us2Ts(2'000'000));
+
+            THarmonizerStats stats;
+            harmonizer->GetStats(stats);
+            const auto poolStats = harmonizer->GetPoolStats(0);
+            UNIT_ASSERT(registry->RequestSnapshot(edge));
+            auto response = runtime.GrabEdgeEventRethrow<TEvInMemoryMetricsSnapshot>(edge, TDuration::Seconds(5));
+            auto captured = response->Get()->Snapshot;
+            captured.Read([&](const TSnapshotView& snapshot) {
+                UNIT_ASSERT_VALUES_EQUAL(snapshot.LinesSize(), 11);
+                snapshot.ForEachLine([&](const TLineSnapshot& line) {
+                    UNIT_ASSERT(!line.Closed);
+                    if (line.Name.StartsWith("harmonizer.pool.")) {
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels.size(), 2);
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[0].Name, "pool");
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[0].Value, "MockPool");
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[1].Name, "pool_id");
+                        UNIT_ASSERT_VALUES_EQUAL(line.Labels[1].Value, "0");
+                    } else {
+                        UNIT_ASSERT(line.Labels.empty());
+                    }
+                    if (line.Name.StartsWith("harmonizer.pool.is_")) {
+                        const auto values = line.ReadValuesAs<bool>();
+                        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+                        if (line.Name == "harmonizer.pool.is_needy") {
+                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.IsNeedy);
+                        }
+                    } else {
+                        const auto values = line.ReadValuesAs<float>();
+                        UNIT_ASSERT_VALUES_EQUAL(values.size(), 1);
+                        if (line.Name == "harmonizer.budget") {
+                            UNIT_ASSERT_VALUES_EQUAL(values.front(), stats.Budget);
+                        } else if (line.Name == "harmonizer.pool.potential_max_thread_count") {
+                            UNIT_ASSERT_VALUES_EQUAL(values.front(), poolStats.PotentialMaxThreadCount);
+                        }
+                    }
+                });
+            });
+
+            actorSystem->Stop();
+            harmonizer->Harmonize(Us2Ts(3'000'000));
+            UNIT_ASSERT(!registry->RequestSnapshot(edge));
+            captured.Read([&](const TSnapshotView& snapshot) {
+                UNIT_ASSERT_VALUES_EQUAL(snapshot.LinesSize(), 11);
+                snapshot.ForEachLine([](const TLineSnapshot& line) {
+                    UNIT_ASSERT(!line.Closed); // Captured metadata is immutable.
+                    if (line.Name.StartsWith("harmonizer.pool.is_")) {
+                        UNIT_ASSERT_VALUES_EQUAL(line.ReadValuesAs<bool>().size(), 1);
+                    } else {
+                        UNIT_ASSERT_VALUES_EQUAL(line.ReadValuesAs<float>().size(), 1);
+                    }
+                });
+            });
+        }
     }
 
     Y_UNIT_TEST(TestDefaultNeedyCpuWindowIsOneSecond) {

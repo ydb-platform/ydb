@@ -27,6 +27,7 @@ struct TCredential {
 struct TUserCredentials {
     TString OauthToken;
     TString BlackboxSessionIdCookie;
+    TString QueryIdentityToken;
 };
 
 class TCredentials: public TThrRefBase {

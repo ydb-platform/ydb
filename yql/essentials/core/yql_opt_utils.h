@@ -38,14 +38,14 @@ TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& sr
 TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr& node, TExprContext& ctx);
 
 // returns true if usedFields contains subset of fields
-template<class TFieldsSet>
+template <class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap,
-                    bool allowDependsOn = true);
+                      bool allowDependsOn = true);
 bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType);
 
-template<class TFieldsSet>
+template <class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
-    TExprContext& ctx, bool singleValue);
+                               TExprContext& ctx, bool singleValue);
 
 TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx);
 
@@ -58,8 +58,9 @@ bool IsEmptyContainer(const TExprNode& node);
 const TTypeAnnotationNode* RemoveOptionalType(const TTypeAnnotationNode* type);
 const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type);
 
-template<typename T>
+template <typename T>
 TExprNode::TPtr RemoveMembers(TPositionHandle pos, const TExprNode::TPtr& structNode, const T& members, TExprContext& ctx) {
+    // clang-format off
     return ctx.Builder(pos)
             .Callable("RemoveMembers")
                 .Add(0, structNode)
@@ -74,6 +75,7 @@ TExprNode::TPtr RemoveMembers(TPositionHandle pos, const TExprNode::TPtr& struct
                 .Seal()
             .Seal()
             .Build();
+    // clang-format on
 }
 
 TExprNode::TPtr GetSetting(const TExprNode& settings, const TStringBuf& name);
@@ -96,9 +98,9 @@ enum class EDictType {
 TMaybe<TIssue> ParseToDictSettings(const TExprNode& node, TExprContext& ctx, TMaybe<EDictType>& type, TMaybe<bool>& isMany, TMaybe<ui64>& itemsCount, bool& isCompact);
 EDictType SelectDictType(EDictType type, const TTypeAnnotationNode* keyType);
 
-using MemberUpdaterFunc = std::function<bool (TString& memberName, const TTypeAnnotationNode* TypeAnnotation)>;
+using MemberUpdaterFunc = std::function<bool(TString& memberName, const TTypeAnnotationNode* TypeAnnotation)>;
 bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members,
-    MemberUpdaterFunc updaterFunc = MemberUpdaterFunc(), const TTypeAnnotationNode* nodeType = nullptr);
+                         MemberUpdaterFunc updaterFunc = MemberUpdaterFunc(), const TTypeAnnotationNode* nodeType = nullptr);
 
 void GetAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms);
 void GetOrTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms);
@@ -135,15 +137,23 @@ TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakePgBool(TPositionHandle position, bool value, TExprContext& ctx);
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx);
 
-constexpr std::initializer_list<std::string_view> SkippableCallables = {"Unordered", "AssumeSorted", "AssumeUnique", "AssumeDistinct",
-    "AssumeChopped", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce", "AssumeConstraints"};
+constexpr std::initializer_list<std::string_view> SkippableCallables = {
+    "Unordered",
+    "AssumeSorted",
+    "AssumeUnique",
+    "AssumeDistinct",
+    "AssumeChopped",
+    "AssumeColumnOrder",
+    "AssumeAllMembersNullableAtOnce",
+    "AssumeConstraints",
+};
 
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables);
 
 void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TExprNode::TPtr& sortKey, TExprNode::TPtr& sortOrder, TExprContext& ctx);
 void ExtractSessionWindowParams(TPositionHandle pos, const TExprNode::TPtr& sessionTraits, TExprNode::TPtr& sessionKey,
-    const TTypeAnnotationNode*& sessionKeyType, const TTypeAnnotationNode*& sessionParamsType, TExprNode::TPtr& sessionSortTraits, TExprNode::TPtr& sessionInit,
-    TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
+                                const TTypeAnnotationNode*& sessionKeyType, const TTypeAnnotationNode*& sessionParamsType, TExprNode::TPtr& sessionSortTraits, TExprNode::TPtr& sessionInit,
+                                TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
 
 void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TSortParams& sortParams, TExprContext& ctx);
 void ExtractSessionWindowParams(TPositionHandle pos, TSessionWindowParams& sessionParams, TExprContext& ctx);
@@ -190,15 +200,15 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
 TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExprContext& ctx);
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
-    TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
-    std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler);
+                                               TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
+                                               std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler);
 
-template<bool Ordered = false>
+template <bool Ordered = false>
 std::optional<TPartOfConstraintBase::TPathType> GetPathToKey(const TExprNode& body, const TExprNode& arg);
-template<bool Ordered = false>
+template <bool Ordered = false>
 std::optional<std::pair<TPartOfConstraintBase::TPathType, ui32>> GetPathToKey(const TExprNode& body, const TExprNode::TChildrenType& args);
 
-template<bool Ordered = false>
+template <bool Ordered = false>
 TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExprNode& arg);
 
 // generates column names with pattern "prefixN" that do not clash with source columns
@@ -210,16 +220,15 @@ bool CheckSupportedTypes(
     const TSet<TString>& typesSupported,
     const TSet<NUdf::EDataSlot>& dataSlotsSupported,
     std::function<void(const TString&)> unsupportedTypeHandler,
-    bool allowNestedOptionals = true
-);
+    bool allowNestedOptionals = true);
 
-template<const char* OptName>
+template <const char* OptName>
 bool IsOptimizerEnabled(const TTypeAnnotationContext& types) {
     static const TString NormallizedName = to_lower(TString(OptName));
     return types.OptimizerFlags.contains(NormallizedName);
 }
 
-template<const char* OptName>
+template <const char* OptName>
 bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
     static const TString NormallizedName = to_lower("Disable" + TString(OptName));
     return types.OptimizerFlags.contains(NormallizedName);
@@ -229,7 +238,7 @@ extern const char KeepWorldOptName[]; // NOLINT(modernize-avoid-c-arrays)
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
 
-template<typename C>
+template <typename C>
 TExprNode::TPtr MakeAtomList(TPositionHandle pos, const C& container, TExprContext& ctx) {
     TExprNodeList atoms;
     for (auto& atom : container) {
@@ -249,4 +258,4 @@ bool IsEmitPruneKeysEnabled(const TTypeAnnotationContext* types);
 
 bool CanPushdownFiltersOverWindow(const TTypeAnnotationContext* types);
 
-}
+} // namespace NYql

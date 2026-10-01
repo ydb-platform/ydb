@@ -10,6 +10,7 @@
 #include <util/string/cast.h>
 #include <array>
 #include <cstring>
+#include <initializer_list>
 
 using namespace NActors;
 
@@ -133,6 +134,24 @@ void CheckSerializeThenDeserialize(bool withPayload, bool buffer, ui32 metaLengt
 }
 
 Y_UNIT_TEST_SUITE(EventSerializerV2) {
+
+    Y_UNIT_TEST(UnusedNonAlignedScratchIsNotTrimmed) {
+        TEventSerializer ser(false);
+        TRcBuf buffer = TRcBuf::Uninitialized(5000);
+        std::vector<TContiguousSpan> spans;
+        UNIT_ASSERT_VALUES_EQUAL(ser.ProduceOutputStream(buffer, &spans), 0);
+        UNIT_ASSERT_VALUES_EQUAL(buffer.size(), 5000);
+        UNIT_ASSERT(spans.empty());
+
+        TEventSerializer xdcSer(false, true);
+        TRcBuf main = TRcBuf::Uninitialized(5000);
+        TRcBuf xdc = TRcBuf::Uninitialized(5000);
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        UNIT_ASSERT_VALUES_EQUAL(xdcSer.ProduceOutputStream(main, &mainSpans, &xdc, &xdcSpans, 5000, 5000), 0);
+        UNIT_ASSERT_VALUES_EQUAL(main.size(), 5000);
+        UNIT_ASSERT_VALUES_EQUAL(xdc.size(), 5000);
+    }
 
     Y_UNIT_TEST(CheckSerializeThenDeserializeProtoWithoutPayload) {
         CheckSerializeThenDeserialize(false, false, 10);
@@ -705,6 +724,56 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         CheckIndexedEvent(*processor.Events.front(), 1, 8192, true);
     }
 
+    Y_UNIT_TEST(XdcCoverageFollowsCompletePush) {
+        for (bool preserialize : {false, true}) {
+            auto h = MakeIndexedEvent(1, 7, 8192, true);
+            if (preserialize) {
+                h->Preserialize(/*allowExternalDataChannel=*/true);
+            }
+            TEventSerializer ser(false, true);
+            ser.Push(std::move(h));
+
+            std::vector<TRcBuf> mainBufs;
+            std::vector<TRcBuf> xdcBufs;
+            auto [mainSpans, xdcSpans] = SerializeXdc(ser, mainBufs, xdcBufs);
+            const TString main = ConcatSpans(mainSpans);
+            const size_t xdcBytes = ConcatSpans(xdcSpans).size();
+
+            ui64 expectedXdcEnd = 0;
+            UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), 0u);
+            for (size_t offset = 0; offset < main.size();) {
+                TEventSerializer::TChunkHeader header;
+                UNIT_ASSERT(main.size() - offset >= sizeof(header));
+                memcpy(&header, main.data() + offset, sizeof(header));
+                // A PUSH consists only of its header on main; Length counts bytes on XDC.
+                const size_t end = offset + header.GetMainChannelLength();
+                UNIT_ASSERT(end <= main.size());
+                if (header.GetType() == TEventSerializer::TChunkHeader::kXdcPush) {
+                    UNIT_ASSERT_GT(header.Length, 0u);
+                    ser.IssueMainBytes(end - 1);
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+
+                    ser.IssueMainBytes(end);
+                    expectedXdcEnd += header.Length;
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+
+                    // A short completion retains issued credit; retrying the same endpoint adds none.
+                    ser.CommitProducedBytes(end - 1 - ser.GetCumulativeCommittedMain());
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+                    ser.IssueMainBytes(end);
+                    UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+                    ser.CommitProducedBytes(1);
+                } else {
+                    ser.IssueMainBytes(end);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(ser.GetXdcAllowedToSend(), expectedXdcEnd);
+                offset = end;
+            }
+            UNIT_ASSERT_GT(expectedXdcEnd, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(expectedXdcEnd, xdcBytes);
+        }
+    }
+
     Y_UNIT_TEST(XdcFragmentedMainAndXdc) {
         constexpr ui64 numEvents = 40;
         TEventSerializer ser(true, true);
@@ -970,14 +1039,14 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         while (pos + sizeof(TChunkHeader) <= main.size()) {
             TChunkHeader chunk;
             memcpy(&chunk, main.data() + pos, sizeof(chunk));
+            UNIT_ASSERT(pos + chunk.GetMainChannelLength() <= main.size());
             pos += sizeof(chunk);
-            UNIT_ASSERT(pos + chunk.Length <= main.size());
             if (chunk.GetType() == TChunkHeader::kEventHeader) {
                 UNIT_ASSERT(headerOffset + chunk.Length <= sizeof(header));
                 memcpy(reinterpret_cast<char*>(&header) + headerOffset, main.data() + pos, chunk.Length);
                 headerOffset += chunk.Length;
             }
-            pos += chunk.Length;
+            pos += chunk.GetMainChannelLength() - sizeof(TChunkHeader);
         }
         UNIT_ASSERT_VALUES_EQUAL(headerOffset, sizeof(header));
         return header;
@@ -1071,6 +1140,45 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
         CheckXdcWithBuffers(/*bufSize=*/128, /*maxPerCall=*/37, /*payloadLen=*/5000, /*numEvents=*/8, false);
     }
 
+    Y_UNIT_TEST(XdcNonAlignedBuffersAndBudgets) {
+        CheckXdcWithBuffers(5000, 4097, 20000, 8, false);
+        CheckXdcWithBuffers(5000, 4097, 20000, 8, /*preserialize=*/true);
+    }
+
+    Y_UNIT_TEST(DroppedScratchTailsKeepUncommittedBytesAlive) {
+        TEventSerializer ser(true, true);
+        constexpr size_t NumEvents = 32;
+        for (size_t i = 0; i < NumEvents; ++i) {
+            ser.Push(MakeIndexedEvent(1, i, 32, true));
+        }
+
+        std::vector<TContiguousSpan> mainSpans;
+        std::vector<TContiguousSpan> xdcSpans;
+        for (size_t batch = 0; ser.IsTrafficPending(); ++batch) {
+            UNIT_ASSERT_LT(batch, NumEvents);
+            TRcBuf main = TRcBuf::Uninitialized(5000);
+            TRcBuf xdc = TRcBuf::Uninitialized(5000);
+            UNIT_ASSERT(ser.ProduceOutputStream(main, &mainSpans, &xdc, &xdcSpans, 1024, 1024));
+            // Both tails go out of scope before any completion. Only the serializer
+            // retains the scratch slabs, as when the engine lowers a scratch target.
+        }
+
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        const TString xdc = ConcatSpans(xdcSpans);
+        size_t xdcPos = 0;
+        deser.Push(TRcBuf::Copy(TContiguousSpan(ConcatSpans(mainSpans))), &processor, {});
+        FeedXdc(deser, xdc, xdcPos, processor);
+        UNIT_ASSERT_VALUES_EQUAL(xdcPos, xdc.size());
+        UNIT_ASSERT_VALUES_EQUAL(processor.Events.size(), NumEvents);
+        for (size_t i = 0; i < NumEvents; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(processor.Events[i]->Cookie, i);
+            CheckIndexedEvent(*processor.Events[i], 1, 32, true);
+        }
+        ser.CommitProducedBytes(ser.GetCumulativeProducedMain(), ser.GetCumulativeProducedXdc());
+        UNIT_ASSERT_VALUES_EQUAL(ser.GetNumBytesInScratchBuffers(), 0);
+    }
+
     // A payload well past the ui16 PUSH limit has to be split across many PUSH commands.
     Y_UNIT_TEST(XdcLargePayloadManyPushes) {
         CheckXdcWithBuffers(65536, Max<size_t>(), 1 << 20, 2, false);
@@ -1100,5 +1208,90 @@ Y_UNIT_TEST_SUITE(EventSerializerV2) {
 
         ser.CommitProducedBytes(0, producedXdc, nullptr, &events, &buffers);
         UNIT_ASSERT_VALUES_EQUAL(events.size(), 2u);
+    }
+
+    Y_UNIT_TEST(XdcSectionGeometryHelper) {
+        UNIT_ASSERT(IsXdcSectionGeometryInRange(0, 0, 0, 0));
+        UNIT_ASSERT(IsXdcSectionGeometryInRange(EventMaxByteSize, EventMaxByteSize, EventMaxByteSize, 1));
+        UNIT_ASSERT(IsXdcSectionGeometryInRange(1, 0, 0, 4096));
+        UNIT_ASSERT(!IsXdcSectionGeometryInRange(EventMaxByteSize + 1, 0, 0, 0));
+        UNIT_ASSERT(!IsXdcSectionGeometryInRange(0, EventMaxByteSize + 1, 0, 0));
+        UNIT_ASSERT(!IsXdcSectionGeometryInRange(0, 0, EventMaxByteSize + 1, 0));
+        UNIT_ASSERT(!IsXdcSectionGeometryInRange(0, 0, 0, EventMaxByteSize + 1));
+        UNIT_ASSERT(!IsXdcSectionGeometryInRange(1, 0, 0, 3));
+
+        TEventSerializationInfo info;
+        info.Sections.push_back(TEventSectionInfo{0, 100, 0, 0, false, false});
+        UNIT_ASSERT(IsXdcDeclareWithinLimit(info, 100, EventMaxByteSize));
+        UNIT_ASSERT(!IsXdcDeclareWithinLimit(info, 100, 50));
+        UNIT_ASSERT(FitsXdcDeclaredLimit(100, 0, EventMaxByteSize));
+        UNIT_ASSERT(!FitsXdcDeclaredLimit(100, EventMaxByteSize - 50, EventMaxByteSize));
+        UNIT_ASSERT(CanAddXdcSection(100, 0, 0, 0, 0, EventMaxByteSize));
+        UNIT_ASSERT(!CanAddXdcSection(100, 0, 0, 0, EventMaxByteSize - 50, EventMaxByteSize));
+        info.Sections[0].Size = EventMaxByteSize + 1;
+        UNIT_ASSERT(!IsXdcDeclareWithinLimit(info, 8, EventMaxByteSize));
+    }
+
+    TRcBuf MakeXdcDeclareChunk(std::initializer_list<TEventSerializer::TXdcSection> recs, ui16 channel = 1) {
+        using TChunkHeader = TEventSerializer::TChunkHeader;
+        using TXdcSection = TEventSerializer::TXdcSection;
+        const size_t n = recs.size() * sizeof(TXdcSection);
+        TString bytes = TString::Uninitialized(sizeof(TChunkHeader) + n);
+        char* p = bytes.Detach();
+        TChunkHeader hdr{
+            .Length = static_cast<ui16>(n),
+            .TypeChannel = static_cast<ui16>(channel | TChunkHeader::kXdcDeclare),
+        };
+        memcpy(p, &hdr, sizeof(hdr));
+        p += sizeof(hdr);
+        for (const auto& rec : recs) {
+            memcpy(p, &rec, sizeof(rec));
+            p += sizeof(rec);
+        }
+        return TRcBuf::Copy(TContiguousSpan(bytes));
+    }
+
+    void AssertXdcDeclareRejected(std::initializer_list<TEventSerializer::TXdcSection> recs) {
+        TEventDeserializer deser(TScopeId{});
+        TEventProcessor processor;
+        UNIT_ASSERT_EXCEPTION(deser.Push(MakeXdcDeclareChunk(recs), &processor, {}), TExEventFormatError);
+        UNIT_ASSERT(processor.Events.empty());
+    }
+
+    Y_UNIT_TEST(XdcDeclareRejectsOutOfRangeGeometry) {
+        AssertXdcDeclareRejected({TEventSerializer::TXdcSection{
+            .Size = static_cast<ui32>(EventMaxByteSize + 1),
+        }});
+        AssertXdcDeclareRejected({TEventSerializer::TXdcSection{
+            .Headroom = static_cast<ui32>(EventMaxByteSize + 1),
+            .Size = 8,
+        }});
+        AssertXdcDeclareRejected({
+            TEventSerializer::TXdcSection{.Size = static_cast<ui32>(EventMaxByteSize - 1)},
+            TEventSerializer::TXdcSection{.Size = 2},
+        });
+    }
+
+    struct TEvHugeXdcSection : public TEventPB<TEvHugeXdcSection, TMessageWithPayload, TEvPrivate::EvTest> {
+        TEventSerializationInfo CreateSerializationInfo(bool allowExternalDataChannel) const override {
+            if (!allowExternalDataChannel) {
+                return {};
+            }
+            TEventSerializationInfo info;
+            info.IsExtendedFormat = true;
+            info.Sections.push_back(TEventSectionInfo{0, EventMaxByteSize + 1, 0, 0, false, false});
+            return info;
+        }
+    };
+
+    Y_UNIT_TEST(XdcDeclareNotEmittedForOversizedSectionTable) {
+        auto ev = std::make_unique<TEvHugeXdcSection>();
+        auto h = std::make_unique<IEventHandle>(TActorId(2, 3, 4, 5), TActorId(1, 2, 3, 4), ev.release(), 0, 1);
+        TEventSerializer ser(true, /*useExternalDataChannel=*/true);
+        ser.Push(std::move(h));
+
+        std::vector<TRcBuf> mainBufs;
+        std::vector<TRcBuf> xdcBufs;
+        UNIT_ASSERT_EXCEPTION(SerializeXdc(ser, mainBufs, xdcBufs), TExEventTooLarge);
     }
 }

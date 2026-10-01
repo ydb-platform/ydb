@@ -153,6 +153,20 @@
             "uri": "https://{canondata_backend}/1889210/9f4b906f09e498ba6ae471f1757ad6c2e977b007/resource.tar.gz#test.test_EquiJoin-JoinInMemRename-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[File-FolderPath--Debug]": [
+        {
+            "checksum": "0b2e5b0bfcea3e4e03e992387565c90c",
+            "size": 716,
+            "uri": "https://{canondata_backend}/1871102/0eb31ff6d758ed78cdb8557e3d577ee42bf736e8/resource.tar.gz#test.test_File-FolderPath--Debug_/opt.yql"
+        }
+    ],
+    "test.test[File-FolderPath--Results]": [
+        {
+            "checksum": "d01b4174c57a4b484a734ff1786e3173",
+            "size": 147,
+            "uri": "https://{canondata_backend}/1871102/0eb31ff6d758ed78cdb8557e3d577ee42bf736e8/resource.tar.gz#test.test_File-FolderPath--Results_/results.txt"
+        }
+    ],
     "test.test[Flow-DependsOnFlowMultipleClients-default.txt-Debug]": [
         {
             "checksum": "bcaf7cb52647bf1156533e4f4b7586d9",

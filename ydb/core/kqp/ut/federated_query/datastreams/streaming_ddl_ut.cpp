@@ -1,10 +1,12 @@
 #include "common.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/localdb.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/common/json_utils.h>
@@ -12,6 +14,34 @@
 #include <fmt/format.h>
 
 #include <random>
+
+namespace {
+
+struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
+    TCgiParameters Params_;
+
+    explicit TMockMonHttpRequest(const TString& params) {
+        Params_.Scan(params);
+    }
+
+    const TCgiParameters& GetParams() const override { return Params_; }
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
+
+} // namespace
 
 namespace NKikimr::NKqp {
 
@@ -23,14 +53,295 @@ using namespace NTestUtils;
 using namespace NFederatedQueryTest;
 using namespace NYdb::NConsoleClient::NAi;
 
+namespace {
+
+class THoppingWindowTestFixture : public TStreamingTestFixture {
+public:
+    void Init(bool enabled, bool watermarks = false) {
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableHoppingWindowStartCheck(enabled);
+        config.MutableTableServiceConfig()->SetEnableWatermarks(watermarks);
+        config.MutableTableServiceConfig()->SetEnableWatermarksAdvanced(watermarks);
+        CreateTopic("hoppingInput");
+        CreatePqSource("hoppingSource");
+    }
+
+    void DropTopics() {
+        DropTopic("hoppingInput");
+    }
+
+    void WriteEvent(i32 key, TInstant time) {
+        WriteTopicMessage("hoppingInput", fmt::format(R"({{"Key":{},"Ts":"{}"}})", key, time.ToString()));
+    }
+
+    void WaitCheckpoint() {
+        const auto completed = GetCounters()->GetSubgroup("subsystem", "checkpoint_coordinator")
+            ->GetCounter("CompletedCheckpoints", true);
+        const auto initial = completed->Val();
+        NTestUtils::WaitFor(TDuration::Seconds(15), "hopping state and source offsets checkpointed", [&](TString& error) {
+            error = TStringBuilder() << "Completed " << completed->Val() << ", need " << initial + 2;
+            return completed->Val() >= initial + 2;
+        });
+    }
+
+    void CheckEvictedKeysAfterRestart(bool watermarks) {
+        Init(/* enabled */ true, watermarks);
+        Y_DEFER {
+            DropTopics();
+        };
+        CreateScopedTopic("hoppingOutput");
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY hoppingQuery AS DO BEGIN
+                PRAGMA ydb.MaxTasksPerStage = "1";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    {{ "tx": 0, "stage": 0, "tasks": 1 }},
+                    {{ "tx": 0, "stage": 1, "tasks": 1 }}
+                ] @@;
+                $windows = SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
+                    FROM hoppingSource.hoppingInput WITH (
+                        FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL) {}
+                    )
+                    GROUP BY {}, Key;
+                INSERT INTO hoppingSource.hoppingOutput
+                    SELECT Unwrap(CAST(Key AS String) || ":" || CAST(Count AS String) || ":" || CAST(Ts AS String))
+                    FROM $windows;
+            END DO
+        )", watermarks
+                ? R"(, WATERMARK = CAST(Ts AS Timestamp) - Interval("PT0S"), WATERMARK_IDLE_TIMEOUT = "PT1H")"
+                : "",
+            watermarks
+                ? R"(HoppingWindow(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S"))"
+                : R"(HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"))"));
+
+        // Keep explicit event-time watermarks within the source's five-minute future limit.
+        const auto base = TInstant::Seconds(TInstant::Now().Seconds());
+        const auto output = [&](i32 key, ui64 count, ui64 second) {
+            return fmt::format("{}:{}:{}", key, count, (base + TDuration::Seconds(second)).ToStringUpToSeconds());
+        };
+        std::vector<std::string> expected = {output(1, 1, 0)};
+        WriteEvent(1, base);
+        WriteEvent(2, base + TDuration::Seconds(20));
+        ReadTopicMessages("hoppingOutput", expected);
+
+        // Key 1 has been removed after its window closed. Neither it nor a new
+        // key may recreate a window behind the global event-time frontier.
+        WriteEvent(1, base);
+        WriteEvent(3, base);
+        WriteEvent(2, base + TDuration::Seconds(40));
+        expected.push_back(output(2, 1, 20));
+        ReadTopicMessages("hoppingOutput", expected);
+        WaitCheckpoint();
+        ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = FALSE)");
+        CheckScriptExecutionsCount(1, 0);
+
+        // No new watermark has arrived after restart: the restored minimum
+        // window start must reject both returning and previously unseen keys.
+        WriteEvent(1, base);
+        WriteEvent(4, base);
+        WriteEvent(2, base + TDuration::Seconds(40));
+        WriteEvent(2, base + TDuration::Seconds(60));
+        ExecQuery("ALTER STREAMING QUERY hoppingQuery SET (RUN = TRUE)");
+        CheckScriptExecutionsCount(2, 1);
+        expected.push_back(output(2, 2, 40)); // The open aggregate must also survive the checkpoint.
+        ReadTopicMessages("hoppingOutput", expected);
+        WaitCheckpoint();
+        EnsureTopicEndOffset("hoppingOutput", expected.size());
+    }
+};
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
+    Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysInOrdinaryQuery, Enabled, THoppingWindowTestFixture) {
+        Init(Enabled);
+        Y_DEFER {
+            DropTopics();
+        };
+        const auto base = TInstant::ParseIso8601("2026-09-24T00:00:00Z");
+        for (ui32 day = 1; day <= 3; ++day) {
+            WriteEvent(1, base);
+            WriteEvent(2, base + TDuration::Days(day));
+        }
+        const auto results = ExecQuery(R"(
+            PRAGMA ydb.MaxTasksPerStage = "1";
+            PRAGMA ydb.OverridePlanner = @@ [
+                { "tx": 0, "stage": 0, "tasks": 1 },
+                { "tx": 0, "stage": 1, "tasks": 1 }
+            ] @@;
+            SELECT Key, COUNT(*) AS Count, HOP_START() AS Ts
+            FROM hoppingSource.hoppingInput WITH (
+                FORMAT = "json_each_row", SCHEMA (Key Int32 NOT NULL, Ts String NOT NULL)
+            )
+            GROUP BY HOP(Unwrap(CAST(Ts AS Timestamp)), "PT1S", "PT1S", "PT0S"), Key
+            ORDER BY Key, Ts;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        std::vector<std::pair<i32, TInstant>> expected;
+        // With the flag disabled, preserve the old behavior, including reopening
+        // the same already emitted window for key 1 on every late event.
+        for (ui32 i = 0; i < (Enabled ? 1 : 3); ++i) {
+            expected.emplace_back(1, base);
+        }
+        for (ui32 day = 1; day <= 3; ++day) {
+            expected.emplace_back(2, base + TDuration::Days(day));
+        }
+        size_t index = 0;
+        CheckScriptResult(results.front(), 3, expected.size(), [&](NYdb::TResultSetParser& row) {
+            UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("Key").GetInt32(), expected[index].first);
+            UNIT_ASSERT_VALUES_EQUAL(row.ColumnParser("Count").GetUint64(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(*row.ColumnParser("Ts").GetOptionalTimestamp(), expected[index].second);
+            ++index;
+        });
+    }
+
+    Y_UNIT_TEST_TWIN_F(HoppingEvictedKeysBeforeAndAfterRestart, Watermarks, THoppingWindowTestFixture) {
+        CheckEvictedKeysAfterRestart(Watermarks);
+    }
+
+    void ConfigureRowDispatcherMemoryLimit(TStreamingTestFixture& self, ui64 memoryLimit) {
+        auto& appConfig = self.SetupAppConfig();
+        appConfig.MutableFeatureFlags()->SetEnableSharedReadingInStreamingQueries(true);
+        appConfig.MutableFeatureFlags()->SetEnableSharedReadingStructuredJsonParsing(true);
+        appConfig.MutableFeatureFlags()->SetEnableRowDispatcherMemoryLimiting(true);
+        appConfig.MutableFeatureFlags()->SetEnableStreamingQueriesCounters(false);
+        auto& resourceManager = *appConfig.MutableTableServiceConfig()->MutableResourceManager();
+        resourceManager.SetQueryMemoryLimit(memoryLimit);
+        resourceManager.SetKqpLevelCacheMaxSizeBytes(0);
+        // the memory arena charges the prepaid memory of the query tasks to the same node total: no headroom, units
+        // almost free and small MKQL limits keep that charge to about 1 MiB next to the row dispatcher allocations
+        resourceManager.SetExecutionUnitMemory(100);
+        resourceManager.SetMemoryArenaMinFreeSize(0);
+        resourceManager.SetMemoryArenaMaxFreeSize(0);
+        auto* queue = appConfig.MutableResourceBrokerConfig()->AddQueues();
+        queue->SetName(NLocalDb::KqpResourceManagerQueue);
+        queue->MutableLimit()->SetMemory(memoryLimit);
+        resourceManager.SetMkqlLightProgramMemoryLimit(128_KB);
+        resourceManager.SetMkqlHeavyProgramMemoryLimit(128_KB);
+        resourceManager.SetChannelBufferSize(128_KB);
+    }
+
+    void CreateRowDispatcherMemoryLimitTopics(TStreamingTestFixture& self) {
+        self.GetRuntime().SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
+        self.ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        self.CreateTopic("memoryLimitInput");
+        self.CreateTopic("memoryLimitOutput");
+        self.ExecQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE memoryLimitSource WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "{endpoint}",
+                DATABASE_NAME = "{database}",
+                AUTH_METHOD = "NONE",
+                SHARED_READING = "true"
+            );)",
+            "endpoint"_a = TStreamingTestFixture::YDB_ENDPOINT,
+            "database"_a = TStreamingTestFixture::YDB_DATABASE));
+    }
+
+    void DropRowDispatcherMemoryLimitTopics(TStreamingTestFixture& self) {
+        self.DropTopic("memoryLimitInput");
+        self.DropTopic("memoryLimitOutput");
+    }
+
+    void WaitForRowDispatcherMemoryLimit(TStreamingTestFixture& self, const TString& memoryName) {
+        WaitFor(TDuration::Seconds(60), "Row Dispatcher memory limit", [&](TString& error) {
+            error = self.GetStreamingQueryIssues("memoryLimitQuery");
+            return error.contains("Row dispatcher memory limit exceeded")
+                && error.contains("bytes for " + memoryName) && error.contains("failed with code OVERLOADED");
+        });
+        UNIT_ASSERT_GT(self.GetCounters()->GetCounter("RM/NotEnoughMemory", true)->Val(), 0);
+        self.ExecQuery("ALTER STREAMING QUERY memoryLimitQuery SET (RUN = FALSE);");
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnParserCreation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
+        constexpr ui64 memoryLimit = 8_MB;
+        ConfigureRowDispatcherMemoryLimit(*this, memoryLimit);
+        const auto pqGateway = SetupMockPqGateway();
+        CreateRowDispatcherMemoryLimitTopics(*this);
+        Y_DEFER {
+            DropRowDispatcherMemoryLimitTopics(*this);
+        };
+
+        TStringBuilder schema;
+        TStringBuilder columns;
+        for (size_t i = 0; i < 512; ++i) {
+            if (i) {
+                schema << ", ";
+                columns << ", ";
+            }
+            schema << "c" << i << " String NOT NULL";
+            columns << "c" << i;
+        }
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT String::JoinFromList(AsList({columns}), "")
+                FROM memoryLimitSource.memoryLimitInput WITH (
+                    FORMAT = "json_each_row", SCHEMA ({schema})
+                );
+            END DO;)", "columns"_a = TString(columns), "schema"_a = TString(schema)));
+
+        WaitForRowDispatcherMemoryLimit(*this, "JsonParserAlloc");
+        const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "json_each_row");
+        UNIT_ASSERT(!formatCounters->FindCounter("ActiveFilters"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnReadSessionCreation, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
+        ConfigureRowDispatcherMemoryLimit(*this, 12_MB);
+        const auto pqGateway = SetupMockPqGateway();
+        CreateRowDispatcherMemoryLimitTopics(*this);
+        Y_DEFER {
+            DropRowDispatcherMemoryLimitTopics(*this);
+        };
+        ExecQuery(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT Data FROM memoryLimitSource.memoryLimitInput;
+            END DO;
+        )");
+
+        WaitForRowDispatcherMemoryLimit(*this, "ReadSessionMemory");
+        const auto formatCounters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
+        UNIT_ASSERT(formatCounters->FindCounter("ActiveFilters"));
+        UNIT_ASSERT(!pqGateway->ExtractReadSession("memoryLimitInput"));
+    }
+
+    Y_UNIT_TEST_F(RowDispatcherMemoryLimitOnLargeMessage, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1); // checkpoint queries would take the node total the test is tuned for
+        ConfigureRowDispatcherMemoryLimit(*this, 64_MB);
+        CreateRowDispatcherMemoryLimitTopics(*this);
+        Y_DEFER {
+            DropRowDispatcherMemoryLimitTopics(*this);
+        };
+        ExecQuery(R"(
+            CREATE STREAMING QUERY memoryLimitQuery AS DO BEGIN
+                INSERT INTO memoryLimitSource.memoryLimitOutput
+                SELECT value FROM memoryLimitSource.memoryLimitInput WITH (
+                    FORMAT = "json_each_row", SCHEMA (value String NOT NULL)
+                );
+            END DO;
+        )");
+
+        WaitStreamingQueryStatus("memoryLimitQuery");
+        WriteTopicMessage("memoryLimitInput", R"({"value": "small"})");
+        const auto readBytes = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetCounter("SessionDataRate", true);
+        WaitFor(TDuration::Seconds(60), "Row Dispatcher receives the control message", [&] {
+            return readBytes->Val() > 0;
+        });
+        ReadTopicMessages("memoryLimitOutput", {"small"});
+        WriteTopicMessage("memoryLimitInput", "{\"value\":\"" + std::string(8_MB, 'x') + "\"}");
+        WaitForRowDispatcherMemoryLimit(*this, "SimdJsonMemory");
+    }
+
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -68,8 +379,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
 
+        const auto checkpointId = GetStreamingQueryCheckpointId(queryName);
+        WaitCheckpointUpdate(checkpointId);
+
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+        WaitCheckpointUpdate(checkpointId);
+
+        // Seeing the output only means the message was processed, not that its input offset
+        // is durable. ALTER with a changed query text cancels the running execution and the
+        // new one restores offsets from the last *completed* checkpoint, so an offset that is
+        // not checkpointed yet makes the message replay (at-least-once). Wait for two
+        // checkpoint updates: the first may belong to a checkpoint whose barrier was injected
+        // before the message was consumed, the second is guaranteed to be injected after it.
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
 
         ExecQuery(fmt::format(R"(
             CREATE TABLE test_table2 (Key Int32 NOT NULL, PRIMARY KEY (Key));
@@ -147,8 +471,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndDropStreamingQuery, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndDropStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndDropStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -202,9 +526,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 10;
         constexpr char inputTopicName[] = "maxPartitionReadSkewRestartInputTopic";
         constexpr char outputTopicName[] = "maxPartitionReadSkewRestartOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -288,9 +612,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 2;
         constexpr char inputTopicName[] = "idleTimeoutBalancerInputTopic";
         constexpr char outputTopicName[] = "idleTimeoutBalancerOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings()
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings()
             .PartitioningSettings(partitionCount, partitionCount));
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -338,8 +662,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingPartitionBalancingDisabledInputTopic";
         constexpr char outputTopicName[] = "streamingPartitionBalancingDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -366,8 +690,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui64 executionsLimit = 3;
         constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";
         constexpr char outputTopicName[] = "maxStreamingQueryExecutionsLimitOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -443,9 +767,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto firstInputTopicName = TStringBuilder() << Name_ << "InputTopicName1";
         const auto secondInputTopicName = TStringBuilder() << Name_ << "InputTopicName2";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(firstInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
-        CreateTopic(secondInputTopicName, std::nullopt, LocalTopics);
-        CreateTopic(outputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(firstInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2), LocalTopics);
+        CreateScopedTopicExt(secondInputTopicName, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
 
         constexpr char tableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -567,10 +891,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptExecutionsCount(1, 1);
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 6));
-
-        DropTopic(firstInputTopicName, LocalTopics);
-        DropTopic(secondInputTopicName, LocalTopics);
-        DropTopic(outputTopicName, LocalTopics);
     }
 
     Y_UNIT_TEST_TWIN_F(CheckpointPropagationWithUninitializedStatefulOperator, ModernChannels, TStreamingWithSchemaSecretsTestFixture) {
@@ -585,10 +905,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto mainInputTopicName = TStringBuilder() << Name_ << "InputTopicNameMain";
         const auto auxInputTopicName = TStringBuilder() << Name_ << "InputTopicNameAux";
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
-        CreateTopic(limitedInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        CreateTopic(mainInputTopicName);
-        CreateTopic(auxInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        CreateTopic(outputTopicName);
+        CreateScopedTopicExt(limitedInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(mainInputTopicName);
+        CreateScopedTopicExt(auxInputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char outputTableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -608,6 +928,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             );)",
             "lookup_table"_a = lookupTableName
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{lookup_table}`;)",
+                "lookup_table"_a = lookupTableName
+            ));
+        };
 
         constexpr char ydbSourceName[] = "ydbSourceName";
         constexpr char pqSourceName[] = "pqSourceName";
@@ -807,15 +1133,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         Sleep(TDuration::Seconds(1));
         CheckScriptExecutionsCount(2, 1);
-
-        DropTopic(limitedInputTopicName);
-        DropTopic(auxInputTopicName);
-        DropTopic(mainInputTopicName);
-        DropTopic(outputTopicName);
-        ExecExternalQuery(fmt::format(R"(
-            DROP TABLE `{table_name}`;)",
-            "table_name"_a = lookupTableName
-        ));
     }
 
     Y_UNIT_TEST_TWIN_F(CheckpointPropagationWithFiniteResultAndCheckpoints, ModernChannels, TStreamingWithSchemaSecretsTestFixture) {
@@ -833,9 +1150,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         const auto firstOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName1";
         const auto secondOutputTopicName = TStringBuilder() << Name_ << "OutputTopicName2";
-        CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        CreateTopic(firstOutputTopicName);
-        CreateTopic(secondOutputTopicName);
+        CreateScopedTopicExt(inputTopicName, NYdb::NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(firstOutputTopicName);
+        CreateScopedTopic(secondOutputTopicName);
 
         constexpr char tableName[] = "outputTable";
         ExecQuery(fmt::format(R"(
@@ -991,16 +1308,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         ValidateStreamingQueryAst(queryName, AstChecker(/* txCount */ 1, /* stagesCount */ 4));
 
-        DropTopic(inputTopicName);
-        DropTopic(firstOutputTopicName);
-        DropTopic(secondOutputTopicName);
     }
 
     Y_UNIT_TEST_F(CreateStreamingQueryWithDefineAction, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1038,8 +1352,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateStreamingQueryMatchRecognize, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createStreamingQueryMatchRecognizeInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryMatchRecognizeOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1092,8 +1406,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryReplaceAfterError, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1147,8 +1461,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryTextChangeWithCreateOrReplace, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createAndReplaceStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndReplaceStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1207,8 +1521,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryCreateOrReplaceFailure, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "createOrReplaceStreamingQueryFailInputTopic";
         constexpr char outputTopicName[] = "createOrReplaceStreamingQueryFailOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1255,7 +1569,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         const auto pqGateway = SetupMockPqGateway();
 
         constexpr char inputTopicName[] = "streamingQuerySolomonInsertInputTopic";
-        CreateTopic(inputTopicName);
+        CreateScopedTopic(inputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -1345,7 +1659,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryS3InsertInputTopic";
         constexpr char pqSourceName[] = "sourceName";
-        CreateTopic(inputTopicName);
+        CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert";
@@ -1411,8 +1725,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char s3SourceName[] = "s3Source";
@@ -1484,8 +1798,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "inputTopicName";
         constexpr char outputTopicName[] = "outputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -1501,6 +1815,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
 
@@ -1588,8 +1908,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "doubleYdbJoinInputTopicName";
         constexpr char outputTopicName[] = "doubleYdbJoinOutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -1604,6 +1924,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {{"fqdn", Ydb::Type::STRING}};
@@ -1686,8 +2012,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljInputTopicName";
         constexpr char outputTopicName[] = "sljOutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -1703,6 +2029,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -1892,8 +2224,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljShuffleInputTopicName";
         constexpr char outputTopicName[] = "sljShuffleOutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -1909,6 +2241,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -2068,8 +2406,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljShuffleHashInputTopicName";
         constexpr char outputTopicName[] = "sljShuffleHashOutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -2085,6 +2423,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -2225,12 +2569,157 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
     }
 
+    Y_UNIT_TEST_OCTET_F(StreamingQueryWithStreamLookupJoinLocalTable, WithFeatureFlag, WithFullscanFlag, WithColumns, TStreamingTestFixture) {
+        if (!WithFeatureFlag && (WithFullscanFlag || WithColumns)) {
+            // legal, but nothing to check
+            return;
+        }
+        LogSettings
+            .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
+        {
+            auto& setupAppConfig = SetupAppConfig();
+            setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
+            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(WithFeatureFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(WithFullscanFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableNodeShutdownHints(true);
+        }
+
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopicName[] = "sljInputTopicName";
+        constexpr char outputTopicName[] = "sljOutputTopicName";
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "pqSourceName";
+        CreatePqSource(pqSourceName);
+
+        constexpr char ydbTable[] = "lookup";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{table}` (
+                fqdn String NOT NULL,
+                payload String,
+                PRIMARY KEY (fqdn)
+            ) {with_columns})",
+            "table"_a = ydbTable,
+            "with_columns"_a = WithColumns ? "WITH (STORE = COLUMN)" : ""
+        ));
+
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P1"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P3"))",
+            "table"_a = ydbTable
+        ));
+
+        constexpr char queryName[] = "streamingQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $ydb_lookup = SELECT * FROM `{ydb_table}`;
+
+                $pq_source = SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA (
+                        time Int32 NOT NULL,
+                        event String,
+                        host String
+                    )
+                );
+
+                $joined = SELECT l.payload AS payload, p.* FROM $pq_source AS p
+                LEFT JOIN /*+ streamlookup(TTL 1) */ ANY $ydb_lookup AS l
+                ON (l.fqdn = p.host);
+
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Unwrap(event || "-" || (payload ?? "NULL")) FROM $joined
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "ydb_table"_a = ydbTable,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ),
+        WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
+        WithFeatureFlag ? "" : "local table lookups are disabled. Please contact your system administrator to enable it");
+        if (!WithFeatureFlag) {
+            return;
+        }
+
+        CheckScriptExecutionsCount(1, 1);
+
+        auto readSession = pqGateway->WaitReadSession(inputTopicName);
+        const std::vector<IMockPqReadSession::TMessage> sampleMessages = {
+            {0, R"({"time": 0, "event": "A", "host": "host1.example.com"})"},
+            {1, R"({"time": 1, "event": "B", "host": "host3.example.com"})"},
+            {2, R"({"time": 2, "event": "A", "host": "host1.example.com"})"},
+            {2, R"({"time": 2, "event": "C", "host": "host2.example.com"})"},
+        };
+        readSession->AddDataReceivedEvent(sampleMessages);
+
+        const std::vector<TString> sampleResult = {"A-P1", "B-P3", "A-P1", "C-NULL"};
+        pqGateway->WaitWriteSession(outputTopicName)->ExpectMessages(sampleResult);
+
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+
+        readSession = pqGateway->WaitReadSession(inputTopicName);
+        readSession->AddDataReceivedEvent(sampleMessages);
+        auto writeSession = pqGateway->WaitWriteSession(outputTopicName);
+        writeSession->ExpectMessages(sampleResult);
+
+        Sleep(TDuration::Seconds(2));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P4"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P5"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P6"))",
+            "table"_a = ydbTable
+        ));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4", "C-P5"});
+
+        {
+            TMockMonHttpRequest monReq("force_shutdown=all");
+            auto edgeActor = GetRuntime().AllocateEdgeActor();
+            auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime().GetNodeId(0));
+            GetRuntime().Send(kqpProxy, edgeActor, new NActors::NMon::TEvHttpInfo(monReq));
+            GetRuntime().template GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>(edgeActor, TDuration::Seconds(5));
+        }
+
+        Sleep(TDuration::Seconds(2));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P7"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P8"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P9"))",
+            "table"_a = ydbTable
+        ));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession->ExpectMessages({"A-P7", "B-P9", "A-P7", "C-P8"});
+
+        CheckScriptExecutionsCount(1, 1);
+        const auto results = ExecQuery(
+            "SELECT ast_compressed FROM `.metadata/script_executions`;"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 1);
+        CheckScriptResult(results[0], 1, 1, [](TResultSetParser& result) {
+            const auto& ast = result.ColumnParser(0).GetOptionalString();
+            UNIT_ASSERT(ast);
+            UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
+    }
+
     Y_UNIT_TEST_F(StreamingQueryWithLocalYdbJoin, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithLocalYdbJoinInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithLocalYdbJoinOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char streamLookupTableName[] = "oltpStreamLookupTable";
@@ -2335,8 +2824,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnRetryInputTopic";
         constexpr char outputTopicName[] = "streamingQueryJoinRecalculationOnRetryOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char oltpTableName[] = "oltpTable";
@@ -2417,8 +2906,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartInputTopic";
         constexpr char outputTopicName[] = "streamingQueryJoinRecalculationOnManualRestartOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char oltpTableName[] = "oltpTable";
@@ -2518,8 +3007,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        CreateTopic(outputTopicName);
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(10, 10));
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char tableName[] = "oltpTable";
@@ -2619,8 +3108,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryPrecomputeRecalculationOnRetryInputTopic";
         constexpr char outputTopicName[] = "streamingQueryPrecomputeRecalculationOnRetryOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char tableName[] = "oltpTable";
@@ -2740,8 +3229,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesInputTopicName";
         constexpr char outputTopicName[] = "streamingQueryWithDifferentPrecomputeTypesOutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         for (const auto& sourceName : {oltpTableName, olapTableName, externalTableName}) {
             constexpr char queryName[] = "streamingQuery";
@@ -2781,8 +3270,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryUnderSecureScriptExecutionsInputTopic";
         constexpr char outputTopicName[] = "streamingQueryUnderSecureScriptExecutionsOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -2892,8 +3381,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,InputTopic";
         constexpr char outputTopicName[] = "offsetsRecoveryAfterManualAndInternalRetry,OutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -2932,7 +3421,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WaitFor(TDuration::Seconds(10), "Wait fail", [&](TString& error) {
             const auto& issues = GetStreamingQueryIssues(queryName);
             error = TStringBuilder() << "Query issues: " << issues;
-            return issues.contains("no read rule provided for consumer 'test_consumer'");
+            return issues.contains("no read rule provided for consumer 'test_consumer'")
+                || issues.contains("no consumer 'test_consumer' in topic");
         });
 
         ExecExternalQuery(fmt::format(R"(
@@ -2993,8 +3483,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "internalRetryInputTopicName";
         constexpr char outputTopicName[] = "internalRetryOutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char s3SourceName[] = "s3Source";
@@ -3062,10 +3552,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopicName, "A-2025-08-24T00:00:00.000000Z-P1-1");
 
         Sleep(TDuration::Seconds(2));
-        auto readDisposition = TInstant::Now();
+        const auto readDisposition = TInstant::Now();
 
-        // Write failure message for key B
-        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-24T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
+        // Keep the failure message in the open window so it is not dropped as late after recovery.
+        WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
 
         // Wait script execution retry
         WaitFor(TDuration::Seconds(10), "wait retry", [&](TString& error) {
@@ -3093,18 +3583,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 {"fqdn": "host2.example.com", "payload": "P2"             })");
         Sleep(TDuration::Seconds(2));
 
-        // Check that offset is restored
+        // Both B messages must be counted after the failed message is replayed from the restored offset.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-25T00:00:00.000000Z", "event": "B", "host": "host2.example.com"})");
-        ReadTopicMessage(outputTopicName, "B-2025-08-24T00:00:00.000000Z-P2-1", readDisposition);
 
-        Sleep(TDuration::Seconds(1));
-        readDisposition = TInstant::Now();
-
-        // Check that HOP state is restored
+        // Close the window and check both the restored HOP state for A and the replayed input for B.
         WriteTopicMessage(inputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A", "host": "host1.example.com"})");
         ReadTopicMessages(outputTopicName, {
             "A-2025-08-25T00:00:00.000000Z-P1-1",
-            "B-2025-08-25T00:00:00.000000Z-P2-1"
+            "B-2025-08-25T00:00:00.000000Z-P2-2"
         }, readDisposition, /* sort */ true);
     }
 
@@ -3170,6 +3656,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryOnManualRestart, TStreamingTestFixture) {
         const auto info = SetupCheckpointRecoveryTest(*this);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
 
         WriteTopicMessages(info.InputTopicName, {
             R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
@@ -3208,6 +3698,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeBasic, TStreamingTestFixture) {
         const auto info = SetupCheckpointRecoveryTest(*this);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
 
         WriteTopicMessages(info.InputTopicName, {
             R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
@@ -3249,6 +3743,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeCreateOrReplace, TStreamingTestFixture) {
         const auto info = SetupCheckpointRecoveryTest(*this);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
 
         WriteTopicMessages(info.InputTopicName, {
             R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
@@ -3289,6 +3787,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(OffsetsRecoveryOnQueryTextChangeWithFail, TStreamingTestFixture) {
         const auto info = SetupCheckpointRecoveryTest(*this);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
 
         WriteTopicMessages(info.InputTopicName, {
             R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
@@ -3329,6 +3831,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
     Y_UNIT_TEST_F(OffsetsAndStateRecoveryAfterQueryTextChange, TStreamingTestFixture) {
         const auto info = SetupCheckpointRecoveryTest(*this);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
 
         WriteTopicMessages(info.InputTopicName, {
             R"({"time": "2025-08-24T00:00:00.000000Z", "event": "A"})",
@@ -3406,8 +3912,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "sljInputTopicName";
         constexpr char outputTopicName[] = "sljOutputTopicName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "pqSourceName";
         constexpr char ydbSourceName[] = "ydbSourceName";
@@ -3423,6 +3929,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ))",
             "table"_a = ydbTable
         ));
+        Y_DEFER {
+            ExecExternalQuery(fmt::format(R"(
+                DROP TABLE `{table}`;)",
+                "table"_a = ydbTable
+            ));
+        };
 
         {   // Prepare connector mock
             const std::vector<TColumn> columns = {
@@ -3518,7 +4030,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CheckpointPropagationWithS3Insert, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "s3InsertCheckpointsInputTopicName";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
+        CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
         constexpr char sourceBucket[] = "test_bucket_streaming_query_s3_insert_checkpoint_propagation";
@@ -3591,7 +4103,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         for (const bool rowTables : {true, false}) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbInputTopicName" << rowTables;
-            CreateTopic(inputTopicName);
+            CreateScopedTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -3669,7 +4181,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         for (const bool rowTables : {true, false}) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
-            CreateTopic(inputTopicName);
+            CreateScopedTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -3726,7 +4238,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         for (const bool rowTables : {true, false}) {
             const auto inputTopicName = TStringBuilder() << "writingInLocalYdbWithLimitInputTopicName" << rowTables;
-            CreateTopic(inputTopicName);
+            CreateScopedTopic(inputTopicName);
 
             const auto ydbTable = TStringBuilder() << "tableSink" << rowTables;
             ExecQuery(fmt::format(R"(
@@ -3850,8 +4362,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "createStreamingQueryUnderTimeoutInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryUnderTimeoutOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -3888,8 +4400,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "createStreamingQueryDispositionDisabledInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryDispositionDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -3908,13 +4420,438 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ), EStatus::GENERIC_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
     }
 
+    class TConsumerRewindFixture : public TStreamingWithSchemaSecretsTestFixture {
+    public:
+        void DropTopics() {
+            DropTopic("rewindInput");
+            DropTopic("rewindOutput");
+        }
+        void InitConsumerRewind(bool sharedReading, bool enableReadFrom = true) {
+            UsesSharedReading = sharedReading;
+            auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+            featureFlags->SetEnableStreamingQueryDisposition(true);
+            featureFlags->SetEnableStreamingQueryReadFrom(enableReadFrom);
+            featureFlags->SetEnableSharedReadingInStreamingQueries(true);
+            ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+            CreateTopic("rewindInput");
+            CreateTopic("rewindOutput");
+            ExecQuery(fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE rewindSource WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "{endpoint}",
+                    DATABASE_NAME = "{database}",
+                    AUTH_METHOD = "NONE",
+                    SHARED_READING = "{shared_reading}"
+                );)",
+                "endpoint"_a = YDB_ENDPOINT,
+                "database"_a = YDB_DATABASE,
+                "shared_reading"_a = sharedReading ? "true" : "false"));
+        }
+
+        NYdb::NTopic::TPartitionConsumerStats GetConsumerStats() {
+            const auto result = GetTopicClient()->DescribeConsumer("rewindInput", "test_consumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValue(TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            UNIT_ASSERT(partitions.front().GetPartitionConsumerStats());
+            return *partitions.front().GetPartitionConsumerStats();
+        }
+
+        void CommitConsumer(ui64 offset) {
+            const auto result = GetTopicClient()->CommitOffset("rewindInput", 0, "test_consumer", offset)
+                .GetValue(TEST_OPERATION_TIMEOUT);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        void WaitConsumerOffset(ui64 offset) {
+            WaitFor(TDuration::Seconds(30), "consumer committed offset", [&](TString& error) {
+                const auto committed = GetConsumerStats().GetCommittedOffset();
+                error = TStringBuilder() << "Committed offset: " << committed << ", expected: " << offset;
+                return committed == offset;
+            });
+        }
+
+        void WaitConsumerSession(bool running) {
+            WaitFor(TDuration::Seconds(30), "consumer read session", [&](TString& error) {
+                const auto session = GetConsumerStats().GetReadSessionId();
+                error = TStringBuilder() << "Read session: " << session << ", expected running: " << running;
+                return !session.empty() == running;
+            });
+        }
+
+        void CheckReadingMode(bool sharedReading) {
+            WaitConsumerSession(true);
+            const auto counters = GetCounters()->GetSubgroup("subsystem", "row_dispatcher")->GetSubgroup("format", "raw");
+            const auto filters = counters->FindCounter("ActiveFilters");
+            UNIT_ASSERT_VALUES_EQUAL(bool(filters && filters->Val()), sharedReading);
+        }
+
+        void CreateConsumerQuery(const std::string& disposition) {
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY rewindQuery WITH (STREAMING_DISPOSITION = {disposition}) AS DO BEGIN
+                    PRAGMA pq.Consumer = "test_consumer";
+                    INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
+                END DO;)", "disposition"_a = disposition));
+        }
+
+        void StopConsumerQuery() {
+            ExecQuery("ALTER STREAMING QUERY rewindQuery SET (RUN = FALSE);");
+            WaitConsumerSession(false);
+        }
+
+        void CheckpointAndStopConsumerQuery(ui64 committedOffset) {
+            WaitConsumerCheckpoint();
+            if (!UsesSharedReading) {
+                WaitConsumerOffset(committedOffset);
+            }
+            StopConsumerQuery();
+            if (UsesSharedReading) {
+                // RD persists offsets in checkpoints, but does not commit its
+                // topic consumer. Model an external commit after closing the session.
+                CommitConsumer(committedOffset);
+            }
+            WaitConsumerOffset(committedOffset);
+        }
+
+        void ResumeConsumerQuery(const std::string& disposition = {}) {
+            ExecQuery(fmt::format("ALTER STREAMING QUERY rewindQuery SET (RUN = TRUE{disposition});",
+                "disposition"_a = disposition.empty() ? "" : ", STREAMING_DISPOSITION = " + disposition));
+        }
+
+        void WaitConsumerCheckpoint() {
+            const auto checkpointId = GetStreamingQueryCheckpointId("rewindQuery");
+            // The first completed checkpoint may have started before the last output.
+            WaitCheckpointUpdate(checkpointId);
+            WaitCheckpointUpdate(checkpointId);
+        }
+
+    private:
+        bool UsesSharedReading = false;
+    };
+
+    Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDisabled, SharedReading, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading, /* enableReadFrom */ false);
+        Y_DEFER {
+            DropTopics();
+        };
+        WriteTopicMessage("rewindInput", "committed");
+        CommitConsumer(1);
+
+        CreateConsumerQuery("OLDEST");
+        CheckReadingMode(SharedReading);
+        UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 1);
+        WriteTopicMessage("rewindInput", "live");
+        ReadTopicMessages("rewindOutput", {"live"});
+        StopConsumerQuery();
+        EnsureTopicEndOffset("rewindOutput", 1);
+    }
+
+    Y_UNIT_TEST_TWIN_F(StreamingQueryConsumerRewindDispositions, SharedReading, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
+        WriteTopicMessage("rewindInput", "old");
+        Sleep(TDuration::Seconds(1));
+        const auto fromTime = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage("rewindInput", "recent");
+
+        CreateConsumerQuery("OLDEST");
+        CheckReadingMode(SharedReading);
+        std::vector<std::string> expected = {"old", "recent"};
+        ReadTopicMessages("rewindOutput", expected);
+
+        const std::vector<std::pair<std::string, std::vector<std::string>>> replays = {
+            {"OLDEST", {"old", "recent"}},
+            {fmt::format("(FROM_TIME = \"{}\")", fromTime.ToString()), {"recent"}},
+            {"(TIME_AGO = \"PT1H\")", {"old", "recent"}},
+        };
+        for (const auto& [disposition, replay] : replays) {
+            // Replay actual payloads after both a completed checkpoint and a
+            // consumer commit. RD uses the external commit in the helper.
+            CheckpointAndStopConsumerQuery(2);
+            ResumeConsumerQuery(disposition);
+            CheckReadingMode(SharedReading);
+            expected.insert(expected.end(), replay.begin(), replay.end());
+            ReadTopicMessages("rewindOutput", expected);
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+        CheckpointAndStopConsumerQuery(2);
+
+        WriteTopicMessage("rewindInput", "skip-on-fresh");
+        ResumeConsumerQuery("FRESH");
+        CheckReadingMode(SharedReading);
+        UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 2);
+        WriteTopicMessage("rewindInput", "live");
+        expected.push_back("live");
+        ReadTopicMessages("rewindOutput", expected);
+        CheckpointAndStopConsumerQuery(4);
+
+        ResumeConsumerQuery(fmt::format("(FROM_TIME = \"{}\")", (TInstant::Now() + TDuration::Hours(1)).ToString()));
+        CheckReadingMode(SharedReading);
+        WriteTopicMessage("rewindInput", "skip-before-future-time");
+        WaitConsumerCheckpoint();
+        UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 4);
+        EnsureTopicEndOffset("rewindOutput", expected.size());
+        StopConsumerQuery();
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryConsumerCheckpointOffsets, SharedReading, CommittedAhead, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
+        WriteTopicMessage("rewindInput", "first");
+        CreateConsumerQuery("OLDEST");
+        CheckReadingMode(SharedReading);
+        std::vector<std::string> expected = {"first"};
+        ReadTopicMessages("rewindOutput", expected);
+
+        for (const std::string& disposition : {"", "FROM_CHECKPOINT", "FROM_CHECKPOINT_FORCE"}) {
+            CheckpointAndStopConsumerQuery(expected.size());
+            const ui64 savedOffset = expected.size();
+            expected.push_back("after-checkpoint-" + std::to_string(savedOffset));
+            WriteTopicMessage("rewindInput", expected.back());
+            if constexpr (CommittedAhead) {
+                CommitConsumer(savedOffset + 1);
+            }
+            ResumeConsumerQuery(disposition);
+
+            if constexpr (CommittedAhead) {
+                const TString expectedIssue = TStringBuilder()
+                    << "trying to read from position that is less than committed: read "
+                    << savedOffset << " committed " << savedOffset + 1;
+                WaitFor(TDuration::Seconds(30), "checkpoint offset below consumer commit is rejected", [&](TString& error) {
+                    error = GetStreamingQueryIssues("rewindQuery");
+                    return error.Contains(expectedIssue);
+                });
+                StopConsumerQuery();
+                UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), savedOffset + 1);
+                EnsureTopicEndOffset("rewindOutput", savedOffset);
+                // Repair the external commit; the same checkpoint must then resume normally.
+                CommitConsumer(savedOffset);
+                ResumeConsumerQuery(disposition);
+            }
+
+            CheckReadingMode(SharedReading);
+            ReadTopicMessages("rewindOutput", expected);
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+        CheckpointAndStopConsumerQuery(expected.size());
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryConsumerCheckpointWithoutOffsets, SharedReading, FromCheckpoint, TConsumerRewindFixture) {
+        InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
+        CreateConsumerQuery(FromCheckpoint ? "FROM_CHECKPOINT" : "FRESH");
+        CheckReadingMode(SharedReading);
+        // No data was read, so the checkpoint only contains the starting timestamp.
+        WaitConsumerCheckpoint();
+        StopConsumerQuery();
+        WriteTopicMessage("rewindInput", "while-stopped");
+        CommitConsumer(1);
+        ResumeConsumerQuery();
+        CheckReadingMode(SharedReading);
+        if constexpr (SharedReading) {
+            UNIT_ASSERT_VALUES_EQUAL(GetConsumerStats().GetCommittedOffset(), 1);
+        }
+        WriteTopicMessage("rewindInput", "after-restart");
+
+        std::vector<std::string> expected = {"after-restart"};
+        ReadTopicMessages("rewindOutput", expected);
+        CheckpointAndStopConsumerQuery(2);
+        EnsureTopicEndOffset("rewindOutput", expected.size());
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryReadFromConsumerRewind, SharedReading, FromTimestamp, TConsumerRewindFixture) {
+        // Keep checkpoint commits from advancing the offset again before we observe the rewind.
+        CheckpointPeriod = TDuration::Hours(1);
+        InitConsumerRewind(SharedReading);
+        Y_DEFER {
+            DropTopics();
+        };
+        WriteTopicMessage("rewindInput", "first");
+        WriteTopicMessage("rewindInput", "second");
+
+        const std::string readFrom = FromTimestamp
+            ? "CurrentUtcTimestamp() - Interval(\"PT1H\")"
+            : "EARLIEST";
+        std::vector<std::string> expected;
+        for (const bool alter : {false, true}) {
+            CommitConsumer(2);
+            WaitConsumerOffset(2);
+
+            if (alter) {
+                ExecQuery(fmt::format("ALTER STREAMING QUERY rewindQuery SET (RUN = TRUE, READ_FROM = {});", readFrom));
+            } else {
+                ExecQuery(fmt::format(R"(
+                    CREATE STREAMING QUERY rewindQuery WITH (READ_FROM = {read_from}) AS DO BEGIN
+                        PRAGMA pq.Consumer = "test_consumer";
+                        INSERT INTO rewindSource.rewindOutput SELECT Data FROM rewindSource.rewindInput;
+                    END DO;)", "read_from"_a = readFrom));
+            }
+
+            CheckReadingMode(SharedReading);
+            WaitConsumerOffset(0);
+            expected.insert(expected.end(), {"first", "second"});
+            ReadTopicMessages("rewindOutput", expected);
+            WaitConsumerOffset(0);
+            StopConsumerQuery();
+            EnsureTopicEndOffset("rewindOutput", expected.size());
+        }
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryReadFromDisabled, TStreamingWithSchemaSecretsTestFixture) {
+        auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+        featureFlags->SetEnableStreamingQueryDisposition(true);
+        featureFlags->SetEnableStreamingQueryReadFrom(false);
+        CreateScopedTopic("readFromDisabledInput");
+        CreateScopedTopic("readFromDisabledOutput");
+        CreatePqSource("sourceName");
+
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
+            ExecQuery(TStringBuilder() << R"(
+                CREATE STREAMING QUERY my_query WITH (RUN = FALSE, READ_FROM = )" << value << R"() AS DO BEGIN
+                    INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
+                END DO;)", EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
+        }
+
+        ExecQuery(R"(
+            CREATE STREAMING QUERY my_query WITH (RUN = FALSE, STREAMING_DISPOSITION = OLDEST) AS DO BEGIN
+                INSERT INTO sourceName.readFromDisabledOutput SELECT * FROM sourceName.readFromDisabledInput
+            END DO;)");
+        for (const TString& value : {"EARLIEST", "LATEST", "CurrentUtcTimestamp() - Interval(\"PT1H\")"}) {
+            ExecQuery(TStringBuilder() << "ALTER STREAMING QUERY my_query SET (READ_FROM = " << value << ");",
+                EStatus::GENERIC_ERROR, "Streaming query READ_FROM is disabled");
+        }
+    }
+
+    Y_UNIT_TEST_QUAD_F(StreamingQueryReadFrom, WithConsumer, LocalTopics, TStreamingWithSchemaSecretsTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+        // READ_FROM is independent of the legacy syntax flag.
+        auto* featureFlags = SetupAppConfig().MutableFeatureFlags();
+        featureFlags->SetEnableStreamingQueryReadFrom(true);
+        featureFlags->SetEnableStreamingQueryDisposition(false);
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        constexpr char inputTopic[] = "readFromInput";
+        constexpr char outputTopic[] = "readFromOutput";
+        CreateScopedTopicExt(inputTopic, std::nullopt, LocalTopics);
+        CreateScopedTopicExt(outputTopic, std::nullopt, LocalTopics);
+        if constexpr (!LocalTopics) {
+            CreatePqSource("sourceName");
+        }
+
+        WriteTopicMessage(inputTopic, "data1", 0, LocalTopics);
+        Sleep(TDuration::Seconds(1));
+        const auto readFrom = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, "data2", 0, LocalTopics);
+
+        if constexpr (WithConsumer) {
+            const auto status = GetTopicClient(LocalTopics)->CommitOffset(inputTopic, 0, "test_consumer", 2).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        const auto describeConsumer = [&]() {
+            const auto result = GetTopicClient(LocalTopics)->DescribeConsumer(inputTopic, "test_consumer",
+                NYdb::NTopic::TDescribeConsumerSettings().IncludeStats(true)).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            const auto& partitions = result.GetConsumerDescription().GetPartitions();
+            UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+            const auto& stats = partitions.front().GetPartitionConsumerStats();
+            UNIT_ASSERT(stats);
+            return *stats;
+        };
+        const auto waitCommitted = [&](ui64 offset) {
+            if constexpr (WithConsumer) {
+                WaitFor(TDuration::Seconds(30), "Wait consumer offset committed", [&](TString& error) {
+                    const auto stats = describeConsumer();
+                    error = TStringBuilder() << "Committed offset: " << stats.GetCommittedOffset();
+                    return stats.GetCommittedOffset() == offset;
+                });
+            }
+        };
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY my_query WITH (READ_FROM = EARLIEST) AS DO BEGIN
+                {consumer}
+                INSERT INTO {source}readFromOutput SELECT * FROM {source}readFromInput
+            END DO;)",
+            "consumer"_a = WithConsumer ? "PRAGMA pq.Consumer = 'test_consumer';" : "",
+            "source"_a = LocalTopics ? "" : "sourceName."
+        ));
+        CheckScriptExecutionsCount(1, 1);
+        ReadTopicMessages(outputTopic, {"data1", "data2"}, TInstant::Zero(), false, LocalTopics);
+        waitCommitted(2);
+        auto writeFrom = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY my_query SET (READ_FROM = Timestamp("{timestamp}"));)",
+            "timestamp"_a = readFrom.ToString()));
+        CheckScriptExecutionsCount(2, 1);
+        ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            $timestamp = Timestamp("{timestamp}");
+            ALTER STREAMING QUERY my_query SET (READ_FROM = $timestamp + Interval("PT1S"));)",
+            "timestamp"_a = (readFrom - TDuration::Seconds(1)).ToString()));
+        CheckScriptExecutionsCount(3, 1);
+        ReadTopicMessage(outputTopic, "data2", writeFrom, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        ExecQuery("ALTER STREAMING QUERY my_query SET (READ_FROM = EARLIEST);");
+        CheckScriptExecutionsCount(4, 1);
+        ReadTopicMessages(outputTopic, {"data1", "data2"}, writeFrom, false, LocalTopics);
+        waitCommitted(2);
+        writeFrom = TInstant::Now();
+
+        const auto previousReadSessionId = WithConsumer ? describeConsumer().GetReadSessionId() : std::string{};
+        ExecQuery("ALTER STREAMING QUERY my_query SET (READ_FROM = LATEST);");
+        CheckScriptExecutionsCount(4, 1);
+        Sleep(TDuration::Seconds(1));
+        if constexpr (WithConsumer) {
+            WaitFor(TDuration::Seconds(30), "Wait latest consumer session", [&](TString& error) {
+                const auto stats = describeConsumer();
+                error = TStringBuilder() << "Read session: " << stats.GetReadSessionId();
+                if (stats.GetReadSessionId().empty() || stats.GetReadSessionId() == previousReadSessionId) {
+                    return false;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(stats.GetCommittedOffset(), 2);
+                return true;
+            });
+        }
+        WriteTopicMessage(inputTopic, "data3", 0, LocalTopics);
+        ReadTopicMessage(outputTopic, "data3", writeFrom, LocalTopics);
+        waitCommitted(3);
+
+        // A normal restart must resume from its checkpoint after a rewind.
+        const auto checkpointId = GetStreamingQueryCheckpointId("my_query");
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+        ExecQuery("ALTER STREAMING QUERY my_query SET (RUN = FALSE);");
+        CheckScriptExecutionsCount(4, 0);
+        WriteTopicMessage(inputTopic, "data4", 0, LocalTopics);
+        writeFrom = TInstant::Now();
+        ExecQuery("ALTER STREAMING QUERY my_query SET (RUN = TRUE);");
+        CheckScriptExecutionsCount(4, 1);
+        ReadTopicMessage(outputTopic, "data4", writeFrom, LocalTopics);
+        waitCommitted(4);
+    }
+
     Y_UNIT_TEST_F(StreamingQueryDisposition, TStreamingWithSchemaSecretsTestFixture) {
         SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueryDisposition(true);
 
         constexpr char inputTopicName[] = "createStreamingQueryDispositionInputTopic";
         constexpr char outputTopicName[] = "createStreamingQueryDispositionOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4027,9 +4964,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "createStreamingQueryWithMultipleWritesOutputTopic1";
         constexpr char outputTopic2[] = "createStreamingQueryWithMultipleWritesOutputTopic2";
         constexpr char pqSource[] = "sourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic1);
-        CreateTopic(outputTopic2);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char sinkBucket[] = "test_bucket_streaming_query_multi_insert";
@@ -4199,9 +5136,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "streamingQueryMultiOutputRestartOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputRestartOutputTopic2";
         constexpr char pqSource[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic1);
-        CreateTopic(outputTopic2);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char rowTable[] = "rowSink";
@@ -4249,9 +5186,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic2";
         constexpr char pqSource[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic1);
-        CreateTopic(outputTopic2);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char rowTable[] = "rowSink";
@@ -4303,9 +5240,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic1[] = "streamingQueryMultiOutputConsistencyOutputTopic1";
         constexpr char outputTopic2[] = "streamingQueryMultiOutputConsistencyOutputTopic2";
         constexpr char pqSource[] = "pqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic1);
-        CreateTopic(outputTopic2);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic1);
+        CreateScopedTopic(outputTopic2);
         CreatePqSource(pqSource);
 
         constexpr char rowTable[] = "rowSink";
@@ -4340,8 +5277,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTopic[] = "streamingQueryMultiOutputInvalidOutputTopic";
         constexpr char pqSource[] = "pqSourceName";
         constexpr char otherPqSource[] = "otherPqSourceName";
-        CreateTopic(inputTopic);
-        CreateTopic(outputTopic);
+        CreateScopedTopic(inputTopic);
+        CreateScopedTopic(outputTopic);
         CreatePqSource(pqSource);
         CreatePqSource(otherPqSource);
 
@@ -4428,7 +5365,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
         constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
         constexpr char pqSource[] = "pqSource";
+        bool isTopicDropped = false;
         CreateTopic(topic);
+        Y_DEFER {
+            if (!isTopicDropped) {
+                DropTopic(topic);
+            }
+        };
+        /* topic dropped explicitly (and unique-named) */
         CreatePqSource(pqSource);
         ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
 
@@ -4458,6 +5402,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         });
 
         DropTopic(topic);
+        isTopicDropped = true;
 
         Sleep(TDuration::Seconds(3));
 
@@ -4520,8 +5465,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryDdlRetriesInputTopic";
         constexpr char outputTopicName[] = "streamingQueryDdlRetriesOutputTopic";
         constexpr char pqSourceName[] = "sourceName";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
         GetRuntime().Register(new TTabletKiller(Tests::SchemeRoot, TDuration::MilliSeconds(500)));
@@ -4529,11 +5474,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui64 queriesCount = 1000;
         constexpr ui64 inflightLimit = 250;
 
-        std::vector<TAsyncExecuteQueryResult> results;
+        std::vector<TAsyncStatus> results;
         std::vector<NThreading::TFuture<void>> futures;
         for (ui64 i = 0; i < queriesCount; ++i) {
-            results.emplace_back(GetQueryClient()->ExecuteQuery(fmt::format(R"(
-                CREATE STREAMING QUERY `query_{i}` WITH (RUN = FALSE) AS
+            // The SDK may replay a batch after a committed scheme transaction loses its reply.
+            const auto query = fmt::format(R"(
+                CREATE STREAMING QUERY IF NOT EXISTS `query_{i}` WITH (RUN = FALSE) AS
                 DO BEGIN
                     INSERT INTO `{source}`.`{output_topic}` SELECT * FROM `{source}`.`{input_topic}`;
                 END DO;
@@ -4545,7 +5491,28 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 "source"_a = pqSourceName,
                 "output_topic"_a = outputTopicName,
                 "input_topic"_a = inputTopicName
-            ), TTxControl::NoTx()));
+            );
+            results.emplace_back(GetQueryClient()->RetryQuery([query](TQueryClient& client) {
+                return client.ExecuteQuery(query, TTxControl::NoTx(), TExecuteQuerySettings().RetrySettings(TRetryOperationSettings().MaxRetries(0)))
+                    .Apply([](const TAsyncExecuteQueryResult& future) -> TStatus {
+                        const auto& result = future.GetValue();
+                        const TString issues(result.GetIssues().ToOneLineString());
+                        if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
+                            if (issues.Contains("Streaming query already under operation")
+                                || issues.Contains("path version mistmach")
+                                || issues.Contains("path exists but creating right now")
+                                || issues.Contains("path is under operation")
+                                || issues.Contains("path is being deleted right now")) {
+                                return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
+                            }
+                        } else if (result.GetStatus() == EStatus::SCHEME_ERROR) {
+                            if (issues.Contains("already exists")) {
+                                return TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues(result.GetIssues()));
+                            }
+                        }
+                        return result;
+                    });
+            }, TRetryOperationSettings().Idempotent(true).MaxRetries(100).MaxTimeout(TDuration::Minutes(2))));
 
             futures.emplace_back(results.back().IgnoreResult());
 
@@ -4575,8 +5542,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryRestartAfterShutdownInputTopic";
         constexpr char outputTopicName[] = "streamingQueryRestartAfterShutdownOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
-        CreateTopic(outputTopicName);
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4644,9 +5611,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithTwoGroupByHopsInputTopic";
         constexpr char outputTopicName1[] = "streamingQueryWithTwoGroupByHopsOutputTopic1";
         constexpr char outputTopicName2[] = "streamingQueryWithTwoGroupByHopsOutputTopic2";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName1);
-        CreateTopic(outputTopicName2);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName1);
+        CreateScopedTopic(outputTopicName2);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4734,9 +5701,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName[] = "streamingQueryWithTwoGroupByHopsOnSameKeyInputTopic";
         constexpr char outputTopicName1[] = "streamingQueryWithTwoGroupByHopsOnSameKeyOutputTopic1";
         constexpr char outputTopicName2[] = "streamingQueryWithTwoGroupByHopsOnSameKeyOutputTopic2";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName1);
-        CreateTopic(outputTopicName2);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName1);
+        CreateScopedTopic(outputTopicName2);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4855,9 +5822,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopicName1[] = "unionAllTwoTopicsInputTopic1";
         constexpr char inputTopicName2[] = "unionAllTwoTopicsInputTopic2";
         constexpr char outputTopicName[] = "unionAllTwoTopicsOutputTopic";
-        CreateTopic(inputTopicName1);
-        CreateTopic(inputTopicName2);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName1);
+        CreateScopedTopic(inputTopicName2);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4911,8 +5878,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(UnionAllTopicWithItself, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "unionAllTopicWithItselfInputTopic";
         constexpr char outputTopicName[] = "unionAllTopicWithItselfOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4964,8 +5931,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithFlattenListBy, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithFlattenListByInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithFlattenListByOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -4994,8 +5961,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(StreamingQueryWithOffsetAndLimit, TStreamingTestFixture) {
         constexpr char inputTopicName[] = "streamingQueryWithOffsetAndLimitInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithOffsetAndLimitOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5030,8 +5997,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryWithProcessInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithProcessOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5078,7 +6045,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(UseLocalTopics);
 
         constexpr char outputTopic[] = "outputTopicName";
-        CreateTopic(outputTopic, std::nullopt, UseLocalTopics);
+        CreateScopedTopicExt(outputTopic, std::nullopt, UseLocalTopics);
 
         constexpr char outPqSource[] = "outSourceName";
         CreatePqSource(outPqSource);
@@ -5169,7 +6136,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CreatePqSource(sourceName);
 
         const std::string topicName = "schema_with_ydb_prefix_topic";
-        CreateTopic(topicName);
+        CreateScopedTopic(topicName);
 
         // Schema column name starting with __ydb_ should be rejected
         ExecQuery(fmt::format(R"(
@@ -5193,8 +6160,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "streamingQueryInvalidationAfterCreationInputTopic1";
         constexpr char outputTopicName[] = "streamingQueryInvalidationAfterCreationOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5268,8 +6235,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr ui32 partitionCount = 1000;
         constexpr char inputTopicName[] = "createAndAlterStreamingQueryInputTopic";
         constexpr char outputTopicName[] = "createAndAlterStreamingQueryOutputTopic";
-        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
-        CreateTopic(outputTopicName);
+        CreateScopedTopicExt(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(partitionCount, partitionCount));
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5321,7 +6288,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char outputTableName[] = "sqRestartsUpsertMissingTableRuntime";
         constexpr char queryName[] = "sqRestartsUpsertMissingTableRuntimeQuery";
 
-        CreateTopic(inputTopicName);
+        CreateScopedTopic(inputTopicName);
         CreatePqSource(pqSourceName);
 
         ExecQuery(fmt::format(R"(
@@ -5365,7 +6332,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         // Trigger another batch so the write actor tries to write to the now-deleted table.
         WriteTopicMessage(inputTopicName, R"({"Key": "key2", "Value": "value2"})");
 
-        WaitFor(TDuration::Seconds(60), "Wait for execution restart after table drop", [&](TString& error) {
+        // Shard-write retries followed by table-resolution retries can exceed a minute.
+        WaitFor(TDuration::Minutes(2), "Wait for execution restart after table drop", [&](TString& error) {
             const auto& result = ExecQuery(
                 R"sql(SELECT lease_generation FROM `.metadata/script_executions`;)sql"
             );
@@ -5385,8 +6353,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "checkpointSupportValidationForCallablesInputTopic";
         constexpr char outputTopicName[] = "checkpointSupportValidationForCallablesOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5495,6 +6463,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char queryName[] = "streamingQuery";
         const auto info = SetupCheckpointIntervalTest(*this, queryName);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
         CreatePqSource(info.PqSourceName);
 
         const auto createQuery = [&](const std::string& checkpointInterval) {
@@ -5586,7 +6558,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char defaultQueryName[] = "defaultIntervalStreamingQuery";
         constexpr char fastQueryName[] = "fastIntervalStreamingQuery";
         const auto defaultInfo = SetupCheckpointIntervalTest(*this, defaultQueryName);
+        Y_DEFER {
+            DropTopic(defaultInfo.InputTopicName);
+            DropTopic(defaultInfo.OutputTopicName);
+        };
         const auto fastInfo = SetupCheckpointIntervalTest(*this, fastQueryName);
+        Y_DEFER {
+            DropTopic(fastInfo.InputTopicName);
+            DropTopic(fastInfo.OutputTopicName);
+        };
         CreatePqSource(defaultInfo.PqSourceName);
 
         // Query without setting uses cluster wide checkpointing period
@@ -5658,6 +6638,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char queryName[] = "streamingQuery";
         const auto info = SetupCheckpointIntervalTest(*this, queryName);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
         CreatePqSource(info.PqSourceName);
 
         const auto alterQuery = [&](const std::string& checkpointInterval) {
@@ -5734,6 +6718,10 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char queryName[] = "fastIntervalStreamingQuery";
         const auto info = SetupCheckpointIntervalTest(*this, queryName);
+        Y_DEFER {
+            DropTopic(info.InputTopicName);
+            DropTopic(info.OutputTopicName);
+        };
         CreatePqSource(info.PqSourceName);
 
         // Query with zero checkpointing period
@@ -5767,8 +6755,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
         constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);
@@ -5832,8 +6820,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "deliveryGuarantyWriteSettingDisabledInputTopic";
         constexpr char outputTopicName[] = "deliveryGuarantyWriteSettingDisabledOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         constexpr char pqSourceNameNoAuth[] = "sourceNameNoAuth";
@@ -5886,8 +6874,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         constexpr char inputTopicName[] = "backPressureOnWritingIntoTopicsInputTopic";
         constexpr char outputTopicName[] = "backPressureOnWritingIntoTopicsOutputTopic";
-        CreateTopic(inputTopicName);
-        CreateTopic(outputTopicName);
+        CreateScopedTopic(inputTopicName);
+        CreateScopedTopic(outputTopicName);
 
         constexpr char pqSourceName[] = "sourceName";
         CreatePqSource(pqSourceName);

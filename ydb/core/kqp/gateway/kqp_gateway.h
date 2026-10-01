@@ -162,6 +162,7 @@ public:
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
         bool FlushEffects = false;
+        bool DisablePessimisticLocks = false;
         bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
         std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
@@ -240,7 +241,8 @@ public:
 
 TIntrusivePtr<IKqpGateway> CreateKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId,
     std::shared_ptr<IKqpGateway::IKqpTableMetadataLoader>&& metadataLoader, NActors::TActorSystem* actorSystem,
-    ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig());
+    ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig = NKikimrConfig::TQueryServiceConfig(),
+    NWilson::TTraceId traceId = {});
 
 } // namespace NKikimr::NKqp
 

@@ -1,5 +1,6 @@
 #include "spack_v1.h"
 
+#include <library/cpp/monlib/consumers/collecting_consumer.h>
 #include <library/cpp/monlib/encode/protobuf/protobuf.h>
 #include <library/cpp/monlib/metrics/labels.h>
 #include <library/cpp/monlib/metrics/histogram_snapshot.h>
@@ -48,6 +49,16 @@ void AssertPointEqual(const NProto::TPoint& p, TInstant time, i64 value) {
     UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kInt64);
     UNIT_ASSERT_VALUES_EQUAL(p.GetInt64(), value);
 }
+
+class TStartTimeCollectingConsumer final: public TCollectingConsumer {
+public:
+    void OnStartTimeSeconds(ui32 startTimeSeconds) override {
+        StartTimeSeconds.push_back(startTimeSeconds);
+        TCollectingConsumer::OnStartTimeSeconds(startTimeSeconds);
+    }
+
+    TVector<ui32> StartTimeSeconds;
+};
 
 Y_UNIT_TEST_SUITE(TSpackTest) {
     ui8 expectedHeader_v1_0[] = {
@@ -1221,6 +1232,135 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         UNIT_ASSERT_VALUES_EQUAL(header->Version, static_cast<ui16>(SV1_03));
         UNIT_ASSERT_VALUES_EQUAL(header->MetricCount, 0u);
         UNIT_ASSERT_VALUES_EQUAL(header->PointsCount, 0u);
+    }
+
+    Y_UNIT_TEST(V14StartTimeSeconds) {
+        constexpr ui32 commonStartTimeSeconds = 1'700'000'000;
+        constexpr ui32 metricStartTimeSeconds = 1'700'000'100;
+        constexpr ui32 histogramStartTimeSeconds = 1'700'000'200;
+        const TInstant commonTime = TInstant::Seconds(commonStartTimeSeconds + 15);
+
+        TBuffer buffer;
+        {
+            TBufferOutput out(buffer);
+            auto e = EncoderSpackV14(&out, ETimePrecision::SECONDS, ECompression::IDENTITY);
+
+            auto writeLabels = [&](TStringBuf sensor) {
+                e->OnLabelsBegin();
+                e->OnLabel("sensor", sensor);
+                e->OnLabelsEnd();
+            };
+
+            e->OnStreamBegin();
+            e->OnCommonTime(commonTime);
+            e->OnCommonStartTimeSeconds(commonStartTimeSeconds);
+
+            e->OnMetricBegin(EMetricType::RATE);
+            writeLabels("shared");
+            TRate{10, commonStartTimeSeconds}.Accept(commonTime, e.Get());
+            e->OnMetricEnd();
+
+            e->OnMetricBegin(EMetricType::GAUGE);
+            writeLabels("noStart");
+            e->OnStartTimeSeconds(metricStartTimeSeconds + 1);
+            e->OnDouble(commonTime, 1.5);
+            e->OnMetricEnd();
+
+            e->OnMetricBegin(EMetricType::RATE);
+            writeLabels("zero");
+            TRate{1, 0}.Accept(commonTime, e.Get());
+            e->OnMetricEnd();
+
+            e->OnMetricBegin(EMetricType::RATE);
+            writeLabels("own");
+            TLazyRate{[] { return ui64{20}; }, metricStartTimeSeconds}.Accept(
+                TInstant::Seconds(metricStartTimeSeconds + 5),
+                e.Get());
+            e->OnMetricEnd();
+
+            e->OnMetricBegin(EMetricType::HIST_RATE);
+            writeLabels("histogram");
+            e->OnStartTimeSeconds(histogramStartTimeSeconds);
+            e->OnHistogram(
+                TInstant::Seconds(histogramStartTimeSeconds + 5),
+                ExplicitHistogramSnapshot({10, 20, Max<double>()}, {1, 2, 3}));
+            e->OnMetricEnd();
+
+            e->OnStreamEnd();
+            e->Close();
+        }
+
+        const auto* header = reinterpret_cast<const TSpackHeader*>(buffer.Data());
+        UNIT_ASSERT_VALUES_EQUAL(header->Version, static_cast<ui16>(SV1_04));
+        UNIT_ASSERT_VALUES_EQUAL(header->MetricCount, 5u);
+        UNIT_ASSERT_VALUES_EQUAL(header->PointsCount, 5u);
+
+        TStartTimeCollectingConsumer consumer;
+        TBufferInput in(buffer);
+        DecodeSpackV1(&in, &consumer);
+
+        UNIT_ASSERT_VALUES_EQUAL(consumer.CommonStartTimeSeconds, commonStartTimeSeconds);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics.size(), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[0].StartTimeSeconds, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[1].StartTimeSeconds, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[2].StartTimeSeconds, 0u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[3].StartTimeSeconds, metricStartTimeSeconds);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[4].StartTimeSeconds, histogramStartTimeSeconds);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds.size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds[0], 0u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds[1], metricStartTimeSeconds);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds[2], histogramStartTimeSeconds);
+    }
+
+    Y_UNIT_TEST(V14DecoderForwardsStartTimeFlagForNonRate) {
+        constexpr ui32 startTimeSeconds = 1'700'000'100;
+        TSpackHeader header;
+        header.Version = SV1_04;
+        header.TimePrecision = EncodeTimePrecision(ETimePrecision::SECONDS);
+        header.Compression = EncodeCompression(ECompression::IDENTITY);
+        header.LabelNamesSize = 1;
+        header.LabelValuesSize = 1;
+        header.MetricCount = 1;
+        header.PointsCount = 0;
+
+        TBuffer buffer;
+        TBufferOutput out(buffer);
+        out.Write(&header, sizeof(header));
+
+        constexpr TStringBuf labelName = "sensor";
+        constexpr TStringBuf labelValue = "gauge";
+        const ui8 labelNameSize = labelName.size();
+        const ui8 labelValueSize = labelValue.size();
+        out.Write(&labelNameSize, sizeof(labelNameSize));
+        out.Write(labelName.data(), labelName.size());
+        out.Write(&labelValueSize, sizeof(labelValueSize));
+        out.Write(labelValue.data(), labelValue.size());
+
+        constexpr ui32 commonTime = 0;
+        constexpr ui32 commonStartTimeSeconds = 0;
+        constexpr ui8 noLabels = 0;
+        constexpr ui8 oneLabel = 1;
+        constexpr ui8 typesByte = EncodeMetricType(EMetricType::GAUGE) << 2;
+        constexpr ui8 flagsByte = 0x02;
+        out.Write(&commonTime, sizeof(commonTime));
+        out.Write(&commonStartTimeSeconds, sizeof(commonStartTimeSeconds));
+        out.Write(&noLabels, sizeof(noLabels));
+        out.Write(&typesByte, sizeof(typesByte));
+        out.Write(&flagsByte, sizeof(flagsByte));
+        out.Write(&startTimeSeconds, sizeof(startTimeSeconds));
+        out.Write(&oneLabel, sizeof(oneLabel));
+        out.Write(&noLabels, sizeof(noLabels));
+        out.Write(&noLabels, sizeof(noLabels));
+
+        TStartTimeCollectingConsumer consumer;
+        TBufferInput in(buffer);
+        DecodeSpackV1(&in, &consumer);
+
+        UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.StartTimeSeconds[0], startTimeSeconds);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[0].Kind, EMetricType::GAUGE);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.Metrics[0].StartTimeSeconds, startTimeSeconds);
     }
 
     Y_UNIT_TEST(V12MissingNameForOneMetric) {

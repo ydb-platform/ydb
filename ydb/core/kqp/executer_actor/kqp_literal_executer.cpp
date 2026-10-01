@@ -1,6 +1,8 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 
+#include <ydb/core/kqp/tracing/kqp_execution_rendering.h>
+
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
@@ -85,15 +87,17 @@ public:
         , Counters(counters)
         , OwnerActor(owner)
         , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {}, nullptr, false)
-        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
+        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "Execute plan")
         , UserRequestContext(userRequestContext)
     {
+        LiteralExecuterSpan.Attribute("ydb.actor.type", TString("TKqpLiteralExecuter"));
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
             Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
 
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
+        TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
@@ -204,7 +208,9 @@ public:
         std::optional<NUdfStore::NWasm::TQueryCompartmentScope> wasmScope;
         std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
         if (stage.WasmUdfModulesSize() > 0) {
-            wasmScope.emplace(NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules()));
+            wasmScope.emplace(
+                NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules()),
+                alloc);
             if (wasmScope->HasHandle()) {
                 wasmGuard.emplace(wasmScope->MakeTlsGuard());
             }
@@ -311,7 +317,9 @@ public:
         }
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
-        LiteralExecuterSpan.EndOk();
+        AddExecutionTraceCpuTime(LiteralExecuterSpan,
+            *ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), Stats->GetCpuTimeUs());
+        EndQueryTraceSpan(LiteralExecuterSpan, Ydb::StatusIds::SUCCESS);
         CleanupCtx();
         YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Execution is complete",
             {"marker", "KQPLIT"},
@@ -418,7 +426,7 @@ private:
 
         LWTRACK(KqpLiteralExecuterCreateErrorResponse, ResponseEv->Orbit, TxId);
 
-        LiteralExecuterSpan.EndError(response.DebugString());
+        EndQueryTraceSpan(LiteralExecuterSpan, status);
 
         CleanupCtx();
         UpdateCounters();

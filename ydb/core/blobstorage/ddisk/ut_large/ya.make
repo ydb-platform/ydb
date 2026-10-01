@@ -2,6 +2,9 @@ UNITTEST_FOR(ydb/core/blobstorage/ddisk)
 
 FORK_SUBTESTS()
 
+# Keep each long-running scenario in its own timeout budget.
+SPLIT_FACTOR(22)
+
 SIZE(LARGE)
 
 TAG(ya:fat)

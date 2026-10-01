@@ -56,6 +56,8 @@ namespace NKikimr {
             logPos.SetHugeBlobLoggedLsn(HugeBlobLoggedLsn);
             logPos.SetLogoBlobsDbSlotDelLsn(LogoBlobsDbSlotDelLsn);
             logPos.SetEntryPointLsn(EntryPointLsn);
+            logPos.SetBlocksDbSlotDelLsn(BlocksDbSlotDelLsn);
+            logPos.SetBarriersDbSlotDelLsn(BarriersDbSlotDelLsn);
         }
 
         void THullHugeRecoveryLogPos::LoadFromProto(const NKikimrVDiskData::THullHugeRecoveryLogPos& logPos) {
@@ -64,6 +66,8 @@ namespace NKikimr {
             HugeBlobLoggedLsn = logPos.GetHugeBlobLoggedLsn();
             LogoBlobsDbSlotDelLsn = logPos.GetLogoBlobsDbSlotDelLsn();
             EntryPointLsn = logPos.GetEntryPointLsn();
+            BlocksDbSlotDelLsn = logPos.GetBlocksDbSlotDelLsn();
+            BarriersDbSlotDelLsn = logPos.GetBarriersDbSlotDelLsn();
         }
 
         ////////////////////////////////////////////////////////////////////////////

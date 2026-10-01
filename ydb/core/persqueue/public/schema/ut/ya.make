@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/persqueue/public/schema)
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(8)
 SIZE(MEDIUM)
 
 YQL_LAST_ABI_VERSION()
@@ -9,7 +11,9 @@ SRCS(
     create_topic_ut.cpp
     describe_operation_ut.cpp
     dlq_acl_ut.cpp
+    propose_create_ut.cpp
     schema_ops_ut.cpp
+    schema_operation_ut.cpp
     validation_ut.cpp
 )
 

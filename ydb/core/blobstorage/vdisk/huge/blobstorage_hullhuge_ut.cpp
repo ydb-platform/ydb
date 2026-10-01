@@ -40,6 +40,44 @@ namespace NKikimr {
             UNIT_ASSERT(THullHugeKeeperPersState::CheckEntryPoint(serialized));
         }
 
+        Y_UNIT_TEST(ProtoLogPosPreservesBlocksAndBarriersLsn) {
+            ui32 chunkSize = 134274560u;
+            ui32 appendBlockSize = 56896u;
+            ui32 milestoneHugeBlobInBytes = 512u << 10u;
+            ui32 maxBlobInBytes = 10u << 20u;
+            ui32 overhead = 8;
+            ui32 freeChunksReservation = 2;
+            const ui64 entryPointLsn = 70;
+
+            auto logf = [] (const TString &state) { STR << state; };
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
+            auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
+                nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
+
+            std::unique_ptr<THullHugeKeeperPersState> initial(
+                    new THullHugeKeeperPersState(vctx, chunkSize, appendBlockSize,
+                        appendBlockSize, milestoneHugeBlobInBytes, maxBlobInBytes,
+                        overhead, 0, false, freeChunksReservation, false, logf));
+            initial->LogPos = THullHugeRecoveryLogPos(10, 20, 30, 40, 50, 60, entryPointLsn);
+
+            TString serialized(initial->SaveToProto());
+            UNIT_ASSERT(THullHugeKeeperPersState::CheckEntryPoint(serialized));
+
+            std::unique_ptr<THullHugeKeeperPersState> restored(
+                    new THullHugeKeeperPersState(vctx, chunkSize, appendBlockSize,
+                        appendBlockSize, milestoneHugeBlobInBytes, maxBlobInBytes,
+                        overhead, 0, false, freeChunksReservation, entryPointLsn,
+                        TRcBuf(serialized), false, logf));
+            UNIT_ASSERT_VALUES_EQUAL(restored->LogPos.ChunkAllocationLsn, 10u);
+            UNIT_ASSERT_VALUES_EQUAL(restored->LogPos.ChunkFreeingLsn, 20u);
+            UNIT_ASSERT_VALUES_EQUAL(restored->LogPos.HugeBlobLoggedLsn, 30u);
+            UNIT_ASSERT_VALUES_EQUAL(restored->LogPos.LogoBlobsDbSlotDelLsn, 40u);
+            UNIT_ASSERT_VALUES_EQUAL(restored->LogPos.BlocksDbSlotDelLsn, 50u);
+            UNIT_ASSERT_VALUES_EQUAL(restored->LogPos.BarriersDbSlotDelLsn, 60u);
+            UNIT_ASSERT_VALUES_EQUAL(restored->LogPos.EntryPointLsn, entryPointLsn);
+        }
+
         Y_UNIT_TEST(ChunksSoftLockingIsPropagatedInEntryPointCtor) {
             ui32 chunkSize = 134274560u;
             ui32 appendBlockSize = 56896u;
@@ -309,6 +347,8 @@ namespace NKikimr {
             UNIT_ASSERT(parsedStripe.ParseFromString(stripeData));
             UNIT_ASSERT(parsedStripe.IsStripe);
             UNIT_ASSERT_VALUES_EQUAL(parsedStripe.DiskAddr.ChunkIdx, 5u);
+            UNIT_ASSERT(stripeRec.ToString().Contains("IsStripe# true"));
+            UNIT_ASSERT(slotRec.ToString().Contains("IsStripe# false"));
         }
     }
 

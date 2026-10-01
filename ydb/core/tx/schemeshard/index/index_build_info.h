@@ -2,6 +2,8 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr {
 namespace NSchemeShard {
 using namespace NTableIndex;
@@ -92,6 +94,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Unlocking = 60,
         AlterSequence = 61,
         PrepareValidation = 62,
+        AlterIndexTable = 63,
         Done = 200,
 
         Cancellation_Applying = 350,
@@ -122,6 +125,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // dense seq) that the posting scan then reads so doc ids arrive ascending and densely packed.
         FulltextRowIdSrc = 203,
         FulltextIndexPrefixBorders = 204,
+
+        RebuildReplacing = 300,
     };
 
     struct TColumnBuildInfo {
@@ -205,6 +210,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     bool IsRebuild = false;
 
     TString IndexName;
+    // Empty for builds started before online rebuilds were supported.
+    TString RebuildIndexName;
+
+    const TString& GetBuildIndexName() const {
+        return RebuildIndexName.empty() ? IndexName : RebuildIndexName;
+    }
+
     TVector<TString> IndexColumns;
     TVector<TString> DataColumns;
     TVector<TString> FillIndexColumns;
@@ -216,6 +228,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TString TargetName;
     TVector<NKikimrSchemeOp::TTableDescription> ImplTableDescriptions;
+
+    size_t IndexPartitions = 0;
+    size_t IndexHistogramFields = 0;
+    std::shared_ptr<TEqHeightHistogram> IndexHistogram;
 
     std::variant<std::monostate,
         NKikimrSchemeOp::TVectorIndexKmeansTreeDescription,
@@ -234,13 +250,15 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         // progress
         enum EState : ui32 {
             Sample = 0,
-            Reshuffle,
+            ReshuffleLegacy, // deprecated, should not be used in new code
             MultiLocal,
             Recompute,
             Filter,
             FilterBorders,
             RebuildDrop,    // dropping old impl tables for rebuild
             RebuildCreate,  // creating new impl tables for rebuild
+            Reshuffle,
+            UploadClusters, // new version of Sample+Upload which runs after Reshuffle
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -577,6 +595,7 @@ public:
                     row.template GetValue<Schema::IndexBuild::TableLocalId>());
 
         indexInfo->IndexName = row.template GetValue<Schema::IndexBuild::IndexName>();
+        indexInfo->RebuildIndexName = row.template GetValueOrDefault<Schema::IndexBuild::RebuildIndexName>();
         indexInfo->IndexType = row.template GetValue<Schema::IndexBuild::IndexType>();
 
         indexInfo->CancelRequested =
@@ -745,8 +764,10 @@ public:
                 }
         }
 
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "Restored index build id# " << indexInfo->Id << ": " << *indexInfo);
+        YDB_LOG_DEBUG("Restored index build",
+            {"buildId", indexInfo->Id},
+            {"indexInfo", *indexInfo},
+        );
     }
 
     template<class TRow>
@@ -763,8 +784,10 @@ public:
             row.template GetValue<Schema::IndexBuildShardStatus::LastKeyAck>();
 
         TSerializedTableRange bound{range};
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx);
+        YDB_LOG_DEBUG("AddShardStatus",
+            {"buildId", Id},
+            {"shardIdx", shardIdx},
+        );
         if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
             KMeans.State != TIndexBuildInfo::TKMeans::Filter &&
             KMeans.State != TIndexBuildInfo::TKMeans::FilterBorders)
@@ -810,7 +833,7 @@ public:
         return CancelRequested;
     }
 
-    TString InvalidBuildKind() {
+    TString InvalidBuildKind() const {
         return TStringBuilder() << "Invalid index build kind " << static_cast<int>(BuildKind)
             << " for index type " << static_cast<int>(IndexType);
     }
@@ -821,6 +844,11 @@ public:
 
     bool IsBuildSecondaryUniqueIndex() const {
         return BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
+    }
+
+    bool IsBuildSimpleIndex() const {
+        return BuildKind == EBuildKind::BuildSecondaryIndex ||
+            BuildKind == EBuildKind::BuildSecondaryUniqueIndex;
     }
 
     bool IsBuildPrefixedVectorIndex() const {
@@ -1005,6 +1033,9 @@ public:
         return 0.f;
     }
 
+    std::vector<ui32> GetSecondaryIndexKeyTags(TSchemeShard* ss) const;
+    void FillIndexPresharding(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& implDesc) const;
+    bool HasPartitionSettings() const;
     void SerializeToProto(TSchemeShard* ss, NKikimrIndexBuilder::TColumnBuildSettings* to) const;
     void SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* to) const;
 
@@ -1142,3 +1173,5 @@ Y_DECLARE_OUT_SPEC(inline, NKikimr::NSchemeShard::TIndexBuildInfo, o, info) {
 
     o << "}";
 }
+
+#undef YDB_LOG_THIS_FILE_COMPONENT

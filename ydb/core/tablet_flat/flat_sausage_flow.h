@@ -46,7 +46,7 @@ namespace NPageCollection {
             ui32 From, To;
         };
 
-        TPagesToBlobsConverter(const TPageCollectionClass &pageCollection, TArrayRef<const ui32> pages)
+        TPagesToBlobsConverter(const TPageCollectionClass &pageCollection, TArrayRef<const TPageLocation> pages)
             : PageCollection(pageCollection)
             , Slice(pages)
         {}
@@ -98,7 +98,7 @@ namespace NPageCollection {
         }
 
         const TPageCollectionClass &PageCollection;
-        const TArrayRef<const ui32> Slice;
+        const TArrayRef<const TPageLocation> Slice;
 
         ui32 Head = 0;      /* Slot Offset of the first entry   */
         ui32 Tail = 0;      /* Next page slot to process        */

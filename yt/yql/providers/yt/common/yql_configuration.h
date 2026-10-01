@@ -68,6 +68,7 @@ constexpr bool DEFAULT_JOIN_COMMON_USE_FLAT_PAYLOAD = false;
 constexpr ui64 DEFAULT_JOIN_COMMON_FLAT_PAYLOAD_COLUMN_LIMIT = 1024;
 
 constexpr bool DEFAULT_USE_RPC_READER_IN_DQ = false;
+constexpr bool DEFAULT_PASS_OPT_LLVM_TO_DQ_CODECS = false;
 constexpr size_t DEFAULT_RPC_READER_INFLIGHT = 1;
 constexpr TDuration DEFAULT_RPC_READER_TIMEOUT = TDuration::Seconds(120);
 const TSet<TString> DEFAULT_BLOCK_READER_SUPPORTED_TYPES = {"pg", "tuple"};
@@ -131,6 +132,8 @@ constexpr EFuseMapToMapReduceMode DEFAULT_FUSE_MAP_TO_MAPREDUCE = EFuseMapToMapR
 constexpr bool DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS = false;
 
 constexpr bool DEFAULT_USE_QL_FILTER = false;
+// Leave room below YT's MaxExpressionDepth because YQL and YT have independent release cycles.
+constexpr ui32 DEFAULT_QL_FILTER_DEPTH_LIMIT = 45;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
 

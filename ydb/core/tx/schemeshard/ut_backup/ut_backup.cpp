@@ -422,7 +422,6 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
                     ExprText: "a + b"
                     Stored: true
                     DependencyColumnNames: ["a", "b"]
-                    Context: ""
                 }
             }
             KeyColumnNames: ["key"]

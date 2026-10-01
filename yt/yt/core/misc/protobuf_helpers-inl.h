@@ -566,20 +566,20 @@ void FromProto(
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TSerialized, NYT::NDetail::CToProtoOriginal TOriginal, class... TArgs>
-auto ToProto(const TOriginal& original, TArgs&&... args)
+auto ToProto(TOriginal&& original, TArgs&&... args)
 {
     using NYT::ToProto;
-    typename NYT::NDetail::TToProtoResult<TSerialized, TOriginal>::T serialized;
-    ToProto(&serialized, original, std::forward<TArgs>(args)...);
+    typename NYT::NDetail::TToProtoResult<TSerialized, std::remove_cvref_t<TOriginal>>::T serialized;
+    ToProto(&serialized, std::forward<TOriginal>(original), std::forward<TArgs>(args)...);
     return serialized;
 }
 
 template <class TOriginal, class TSerialized, class... TArgs>
-TOriginal FromProto(const TSerialized& serialized, TArgs&&... args)
+TOriginal FromProto(TSerialized&& serialized, TArgs&&... args)
 {
     using NYT::FromProto;
     TOriginal original;
-    FromProto(&original, serialized, std::forward<TArgs>(args)...);
+    FromProto(&original, std::forward<TSerialized>(serialized), std::forward<TArgs>(args)...);
     return original;
 }
 

@@ -373,6 +373,13 @@ namespace NKikimr::NBlobDepot {
             NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
         Y_ABORT_UNLESS(IsKeyLoaded(key));
 
+        YDB_LOG_DEBUG("ReplaceLocatorForMoveData",
+            {"marker", "BDT11"},
+            {"id", Self->GetLogId()},
+            {"key", key},
+            {"valueChainIndex", valueChainIndex},
+            {"expectedValueVersion", expectedValueVersion});
+
         const TValue *value = FindKey(key);
         if (!value) {
             return EMoveDataReplaceResult::KeyMissing;
@@ -394,10 +401,10 @@ namespace NKikimr::NBlobDepot {
             return EMoveDataReplaceResult::KeyChanged;
         }
 
+        Y_ABORT_UNLESS(RefCountBlobs.contains(Self->MoveData.BlobId));
+        bool multipleRefs = RefCountBlobs[Self->MoveData.BlobId] > 1;
+
         Self->MoveData.ApplyingIndexUpdate = true;
-        Y_DEFER {
-            Self->MoveData.ApplyingIndexUpdate = false;
-        };
 
         const bool changed = UpdateKey(key, txc, cookie, "ReplaceLocatorForMoveData",
             [&](TValue& mutableValue, bool inserted) {
@@ -412,6 +419,14 @@ namespace NKikimr::NBlobDepot {
                 return EUpdateOutcome::CHANGE;
             });
         Y_ABORT_UNLESS(changed);
+
+        Self->MoveData.ApplyingIndexUpdate = false;
+
+        if (multipleRefs) {
+            const bool inserted = Self->MoveData.BlobIdToNewLocator.emplace(Self->MoveData.BlobId, newLocator).second;
+            Y_ABORT_UNLESS(inserted);
+        }
+
         return EMoveDataReplaceResult::Replaced;
     }
 
@@ -779,6 +794,43 @@ namespace NKikimr::NBlobDepot {
         });
 
         // delete selected keys
+        for (const TKey& key : keysToDelete) {
+            DeleteKey(key, txc, cookie);
+        }
+
+        return finished;
+    }
+
+    bool TData::OnTabletDeleted(ui64 tabletId, ui32& maxItems, NTabletFlatExecutor::TTransactionContext& txc,
+            void *cookie) {
+        YDB_LOG_DEBUG("OnTabletDeleted",
+            {"marker", "BDT85"},
+            {"id", Self->GetLogId()},
+            {"tabletId", tabletId},
+            {"maxItems", maxItems});
+
+        Y_ABORT_UNLESS(Loaded);
+
+        // the whole tablet is gone, so this covers all of its channels in a single scan
+        const TData::TKey first(TLogoBlobID(tabletId, 0, 0, 0, 0, 0));
+        const TData::TKey last(TLogoBlobID(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
+            TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode));
+
+        bool finished = true;
+        TScanRange r{first, last, TData::EScanFlags::INCLUDE_BEGIN | TData::EScanFlags::INCLUDE_END};
+        std::vector<TKey> keysToDelete;
+        ScanRange(r, nullptr, nullptr, [&](auto& key, auto& /*value*/) {
+            // a complete deletion is a hard barrier, so Keep flags do not save anything here
+            if (maxItems) {
+                keysToDelete.push_back(key);
+                --maxItems;
+            } else {
+                finished = false;
+                return false;
+            }
+            return true;
+        });
+
         for (const TKey& key : keysToDelete) {
             DeleteKey(key, txc, cookie);
         }

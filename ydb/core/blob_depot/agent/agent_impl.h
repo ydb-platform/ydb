@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blob_depot/s3_router_events.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/protos/blob_depot_config.pb.h>
 #include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -399,6 +400,18 @@ namespace NKikimr::NBlobDepot {
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
         float ApproximateFreeSpaceShare = 0.0f;
 
+        // Channel -> highest step the tablet reclaimed in BlobDepotGeneration while we were disconnected. Cleared
+        // when registration changes that generation. An id at or below this step is void: the tablet may already
+        // have collected the blob, so a query still holding one must fail instead of committing it.
+        THashMap<ui8, ui32> ExpiredSteps;
+
+        bool IsBlobSeqIdExpired(const TBlobSeqId& blobSeqId) const {
+            const auto it = ExpiredSteps.find(blobSeqId.Channel);
+            return it != ExpiredSteps.end()
+                && blobSeqId.Generation == BlobDepotGeneration
+                && blobSeqId.Step <= it->second;
+        }
+
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
         // S3WrapperId is always the per-node router service id obtained from NodeWarden
         // (TEvNodeWardenAcquireBlobDepotS3Router). The agent is responsible for releasing
@@ -464,7 +477,7 @@ namespace NKikimr::NBlobDepot {
             void CheckQueryExecutionTime(TMonotonic now);
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason,
-                bool isTabletStorageInfoVersionObsolete = false);
+                bool isTabletStorageInfoVersionObsolete = false, ui32 actualGeneration = 0);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
             TString GetName() const;
             TString GetQueryId() const;
@@ -642,9 +655,17 @@ namespace NKikimr::NBlobDepot {
         // restore the cap. Throttling is per-agent because GETs are issued from the agent without any tablet
         // round-trip, so there is no central place to gate them.
 
-        static constexpr ui32 MaxS3GetsInFlight = 32;
         static constexpr ui32 SuccessesPerGetConcurrencyStepUp = 3;
         static constexpr ui32 MaxS3GetSlowDownRetries = 100;
+
+        TControlWrapper S3MaxGetsInFlight = 32;
+        ui32 MaxS3GetsInFlight() const { return S3ControlLimit(S3MaxGetsInFlight); }
+
+        void ApplyMaxS3GetsInFlight() {
+            if (ClampToS3ControlLimit(CurrentMaxS3GetsInFlight, S3MaxGetsInFlight) && S3GetsMaxInFlightCounter) {
+                *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
+            }
+        }
 
         struct TPendingS3Read {
             TString Key;
@@ -671,7 +692,7 @@ namespace NKikimr::NBlobDepot {
         TBackoff S3GetBackoff{TDuration::MilliSeconds(100), TDuration::Seconds(60)};
         TMonotonic S3GetThrottleUntil;
         bool S3GetWakeupScheduled = false;
-        ui32 CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
+        ui32 CurrentMaxS3GetsInFlight = 32;
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
         ui32 S3PutsInFlight = 0;

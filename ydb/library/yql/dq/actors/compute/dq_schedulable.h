@@ -36,6 +36,12 @@ struct IDqSchedulableWork {
     // Called after the unit finishes; releases the quota.
     virtual void StopExecution() = 0;
 
+    // Reports how a throttling wait ended: a wake-up delivered by the scheduler
+    // (byScheduler = true) is accounted separately from a self-scheduled retry
+    // after the delay returned by TryStartExecution has expired. The value is
+    // consumed and reset by the next StopExecution().
+    virtual void NotifyResumed(bool byScheduler) = 0;
+
     // Subscribe on wake-up when quota frees up. The actor will receive
     // TEvWakeup from the scheduler.
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;
@@ -43,24 +49,21 @@ struct IDqSchedulableWork {
     virtual TWorkScope GetWorkScope() const = 0;
 };
 
-///
-/// Factory carried through TSourceArguments. Implementation is provided by
-/// the scheduler layer; sources create per-actor/coroutine schedulable-work
-/// wrappers from it without pulling in scheduler internals.
-///
-struct IDqSchedulerContext {
-    virtual ~IDqSchedulerContext() = default;
+// Produces schedulable work for one fixed scope.
+struct IDqSchedulableWorkFactory {
+    virtual ~IDqSchedulableWorkFactory() = default;
 
     // Each caller must own its own IDqSchedulableWork instance — Start/Stop
-    // state is not thread-safe and not shareable across actors.
+    // state is not thread-safe and not shareable across actors. Whatever the
+    // instances share (a query, a rate limiter) stays behind this factory.
     virtual std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() = 0;
 
-    // Scope identity without creating a Work object. Use when a caller only
+    // Scope identity without creating a work object. Use when a caller only
     // needs the routing/tagging token (e.g. for HTTP request routing).
     virtual TWorkScope GetWorkScope() const = 0;
 };
 
-using IDqSchedulerContextPtr = std::shared_ptr<IDqSchedulerContext>;
+using IDqSchedulableWorkFactoryPtr = std::shared_ptr<IDqSchedulableWorkFactory>;
 
 } // namespace NYql::NDq
 

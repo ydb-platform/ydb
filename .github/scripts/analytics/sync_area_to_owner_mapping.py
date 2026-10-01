@@ -13,7 +13,11 @@ from ydb_wrapper import YDBWrapper
 
 
 def load_area_to_owner(config_dir: str) -> List[Tuple[str, str]]:
-    """Build (area, owner_team) from owner_area_mapping.json (owner -> area or list of areas). owner_team stored lowercase for consistency (Topics -> topics)."""
+    """Build (area, owner_team) from owner_area_mapping.json (owner -> area or list of areas). owner_team stored lowercase for consistency (Topics -> topics).
+
+    Also keep alias rows from areas.json so historical issue labels
+    (area/system-infra, area/yql, …) still join after the canonical rename.
+    """
     path = os.path.join(config_dir, 'owner_area_mapping.json')
     area_to_owner = {}
     with open(path, 'r', encoding='utf-8') as f:
@@ -24,6 +28,13 @@ def load_area_to_owner(config_dir: str) -> List[Tuple[str, str]]:
         for area in areas:
             if area:
                 area_to_owner[area] = owner_lower
+    aliases_path = os.path.join(config_dir, 'areas.json')
+    if os.path.isfile(aliases_path):
+        with open(aliases_path, encoding='utf-8') as f:
+            aliases = json.load(f).get('aliases') or {}
+        for alias, canonical in aliases.items():
+            if alias and canonical in area_to_owner and alias not in area_to_owner:
+                area_to_owner[alias] = area_to_owner[canonical]
     return list(area_to_owner.items())
 
 

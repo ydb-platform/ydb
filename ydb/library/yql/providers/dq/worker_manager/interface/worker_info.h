@@ -127,6 +127,8 @@ struct TWorkerInfo: public TThrRefBase {
     i64 CpuSystem = 0;
     i64 CpuUser = 0;
     i64 CpuTotal = 0;
+    i64 MaxRss = 0;
+    i64 CurrentRss = 0;
     i64 MajorPageFaults = 0;
 
     int RunningRequests = 0;

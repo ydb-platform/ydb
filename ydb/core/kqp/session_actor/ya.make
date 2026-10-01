@@ -12,6 +12,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/tracing
     ydb/core/docapi
     ydb/core/kqp/common
     ydb/core/kqp/federated_query

@@ -1,6 +1,8 @@
 #pragma once
 
-#include "file_commands.h"
+#include "command.h"
+
+#include <yt/yt/client/api/client.h>
 
 #include <yt/yt/client/ypath/rich.h>
 

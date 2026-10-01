@@ -731,4 +731,4 @@ NActors::TActorId MakeServiceId(ui32 nodeId) {
 }
 
 
-}  // namespace NKikimr::NWorkloadManager
+} // namespace NKikimr::NWorkloadManager

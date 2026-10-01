@@ -28,6 +28,13 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostQueuesCount());
         UNIT_ASSERT(config.GetEnableChecksums());
+        UNIT_ASSERT(!config.GetCheckChecksumBeforeWrite());
+        UNIT_ASSERT(!config.GetCheckChecksumWhenRead());
+        UNIT_ASSERT_VALUES_EQUAL(10u, config.GetIdleSpinUs());
+        UNIT_ASSERT_VALUES_EQUAL(
+            64ull << 20,
+            config.GetIntegrityChecksumCacheBytes());
+        UNIT_ASSERT(!config.GetDevNullMode());
         UNIT_ASSERT_VALUES_EQUAL(200, config.GetCopyRangeBandwidthMbs());
     }
 
@@ -42,6 +49,11 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         proto.SetVhostThreadsCount(12);
         proto.SetVhostQueuesCount(16);
         proto.SetEnableChecksums(false);
+        proto.SetCheckChecksumBeforeWrite(true);
+        proto.SetCheckChecksumWhenRead(true);
+        proto.SetIdleSpinUs(42);
+        proto.SetIntegrityChecksumCacheBytes(12345678);
+        proto.SetDevNullMode(true);
         proto.SetCopyRangeBandwidthMbs(100);
 
         TStorageConfig config{proto};
@@ -58,6 +70,13 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(12u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(16u, config.GetVhostQueuesCount());
         UNIT_ASSERT(!config.GetEnableChecksums());
+        UNIT_ASSERT(config.GetCheckChecksumBeforeWrite());
+        UNIT_ASSERT(config.GetCheckChecksumWhenRead());
+        UNIT_ASSERT_VALUES_EQUAL(42u, config.GetIdleSpinUs());
+        UNIT_ASSERT_VALUES_EQUAL(
+            12345678ull,
+            config.GetIntegrityChecksumCacheBytes());
+        UNIT_ASSERT(config.GetDevNullMode());
         UNIT_ASSERT_VALUES_EQUAL(100u, config.GetCopyRangeBandwidthMbs());
     }
 
@@ -80,6 +99,17 @@ Y_UNIT_TEST_SUITE(TStorageConfigTest)
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostThreadsCount());
         UNIT_ASSERT_VALUES_EQUAL(4u, config.GetVhostQueuesCount());
         UNIT_ASSERT_VALUES_EQUAL(200, config.GetCopyRangeBandwidthMbs());
+    }
+
+    Y_UNIT_TEST(ExplicitFlatDevNullFalseIsPreservedAlongsideNestedTrue)
+    {
+        NProto::TStorageServiceConfig proto;
+        proto.MutableGlobalDDiskConfig()->SetDevNullMode(true);
+        proto.SetDevNullMode(false);
+        TStorageConfig config{proto};
+        UNIT_ASSERT(proto.HasDevNullMode());
+        UNIT_ASSERT(!config.GetDevNullMode());
+        UNIT_ASSERT(proto.GetGlobalDDiskConfig().GetDevNullMode());
     }
 
     Y_UNIT_TEST(ShouldAcceptOnlyVhostThreadsCountAndKeepOtherDefaults)

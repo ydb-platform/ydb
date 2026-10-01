@@ -24,6 +24,7 @@ PEERDIR(
     ydb/core/grpc_services/counters
     ydb/core/kqp/counters
     ydb/core/protos
+    ydb/core/sys_view/service
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/scheme_cache

@@ -192,6 +192,7 @@ namespace NActors {
 
     private:
         alignas(PLATFORM_CACHE_LINE) std::atomic<i64> ActivationCredits = 0;
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> DesiredSharedThreads = 0;
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SleepingCount = 0;
         alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
         alignas(PLATFORM_CACHE_LINE) std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;
@@ -261,6 +262,7 @@ namespace NActors {
         void Shutdown() override;
 
         void GetCurrentStats(TExecutorPoolStats& poolStats, TVector<TExecutorThreadStats>& statsCopy) const override;
+        void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const override;
         void GetExecutorPoolState(TExecutorPoolState &poolState) const override;
         TString GetName() const override {
             return PoolName;

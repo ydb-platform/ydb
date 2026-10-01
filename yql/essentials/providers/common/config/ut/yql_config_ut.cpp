@@ -631,6 +631,24 @@ Y_UNIT_TEST(RegisterSettingMacro) {
     UNIT_ASSERT_VALUES_EQUAL("macro_test", *MySetting.Get(ALL_CLUSTERS));
 }
 
+Y_UNIT_TEST(UnknownSettingAtConfigErrorsInStrictMode) {
+    TSettingDispatcher dispatcher("", {}, /*strictConfigValidation=*/true);
+    TTestErrorCollector errors;
+    errors.ShouldContinue = false;
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    UNIT_ASSERT(!ok);
+    UNIT_ASSERT(errors.LastIsError);
+    UNIT_ASSERT(errors.LastMessage.Contains("Unknown setting name"));
+}
+
+Y_UNIT_TEST(StrictModeDefaultsToFalse) {
+    TSettingDispatcher dispatcher;
+    TTestErrorCollector errors;
+    bool ok = dispatcher.Dispatch(ALL_CLUSTERS, "Unknown", TString("val"), TSettingDispatcher::EStage::CONFIG, errors.MakeCallback());
+    UNIT_ASSERT(ok);
+    UNIT_ASSERT(errors.LastMessage.empty());
+}
+
 } // Y_UNIT_TEST_SUITE(TSettingDispatcherTest)
 
 Y_UNIT_TEST_SUITE(TDefaultParserTest) {

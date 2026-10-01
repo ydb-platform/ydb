@@ -15,7 +15,7 @@ TRangeLock TRangeLockAccess::Make(
 
 TRangeLock TRangeLockAccess::Make(
     ILockableRangesWeakPtr lockableRanges,
-    TBlockRange64 range,
+    TBlockRange16 range,
     THostMask mask)
 {
     return TRangeLock(std::move(lockableRanges), range, mask);

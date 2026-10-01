@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/load_test/events.h>
+#include <ydb/core/load_test/service_actor.h>
 #include <ydb/core/load_test/nbs_dbg_like_load.h>
 #include <ydb/core/load_test/nbs_dbg_like_load_tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
@@ -13,6 +14,23 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/protos/load_test.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
+#include <library/cpp/monlib/service/mon_service_http_request.h>
+
+namespace {
+struct TResultsHttpRequest : NMonitoring::IHttpRequest {
+    TCgiParameters Params;
+    THttpHeaders Headers;
+
+    const char* GetURI() const override { return "/?mode=results"; }
+    const char* GetPath() const override { return "/"; }
+    const TCgiParameters& GetParams() const override { return Params; }
+    const TCgiParameters& GetPostParams() const override { return Params; }
+    TStringBuf GetPostContent() const override { return {}; }
+    HTTP_METHOD GetMethod() const override { return HTTP_METHOD_GET; }
+    const THttpHeaders& GetHeaders() const override { return Headers; }
+    TString GetRemoteAddr() const override { return {}; }
+};
+}
 
 Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
@@ -22,14 +40,19 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         TEnvironmentSetup Env;
         TActorId Edge;
 
-        explicit TFixture(ui32 numDDiskGroups = 4)
+        explicit TFixture(ui32 numDDiskGroups = 4, bool enableChecksums = true)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
-                .ConfigPreprocessor = [](ui32, TNodeWardenConfig& cfg) {
+                .ConfigPreprocessor = [enableChecksums](ui32, TNodeWardenConfig& cfg) {
+                    NYdb::NBS::NProto::TDDiskConfig ddisk;
+                    ddisk.SetEnableChecksums(enableChecksums);
+                    cfg.DDiskConfig = ddisk;
+
                     NYdb::NBS::NProto::TPBufferConfig pb;
                     pb.SetMaxChunks(10);
                     pb.SetMaxInMemoryCache(128_MB);
+                    pb.SetEnableChecksums(enableChecksums);
                     cfg.PBufferConfig = pb;
                 },
                 .SetupHive = true})
@@ -142,6 +165,20 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                 Edge, /*termOnCapture=*/false, Deadline(TDuration::Seconds(10)));
         }
 
+        static void AddWritePayload(
+            TEvLoad::TEvNbsWrite& ev,
+            TRope payload,
+            bool enableChecksums = true)
+        {
+            if (enableChecksums) {
+                for (const ui64 checksum : NDDisk::CalculatePayloadChecksums(payload)) {
+                    ev.Record.AddChecksums(checksum);
+                }
+            }
+            const ui32 payloadId = ev.AddPayload(std::move(payload));
+            ev.Record.SetPayloadId(payloadId);
+        }
+
         ENbsLoadTabletStatus TabletCreate(
             TActorId pipe, ui32 numDirectBlockGroups, ui64 bscTabletId = 1)
         {
@@ -177,9 +214,13 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         TRunResultInfo RunViaLoadActor(
             ui64 tabletId,
             ui64 tag = 1,
-            ui32 numDirectBlockGroupsToUse = 0)
+            ui32 numDirectBlockGroupsToUse = 0,
+            bool enableChecksums = true,
+            bool automation = false)
         {
             TEvLoadTestRequest::TNbsDbgLikeLoad cmd;
+            cmd.SetRequireReady(automation);
+            cmd.SetStartupTimeoutSeconds(1);
             cmd.SetNbsDbgLikeTabletId(tabletId);
             cmd.SetTag(tag);
             auto& wc = *cmd.MutableWorkloadConfig();
@@ -195,6 +236,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             auto& tcfg = *wc.MutableTabletConfig();
             tcfg.SetMaxInflightLsns(64);
             tcfg.SetPBufferReplyTimeoutMicroseconds(500000); // 500 ms - slack for sim
+            tcfg.SetEnableChecksums(enableChecksums);
 
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             Env.Runtime->Register(
@@ -319,6 +361,97 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         }
     };
 
+    void CheckPbWriteQuorumLoss(TStringBuf firstErrorReason) {
+        using TStatus = NKikimrBlobStorage::NDDisk::TReplyStatus;
+
+        TFixture f;
+        const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1);
+        TActorId pipe = f.OpenTabletPipe(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, /*numDirectBlockGroups=*/1), NBSLT_OK);
+        f.Env.Sim(TDuration::Seconds(5));
+
+        constexpr ui32 blockSize = 4096;
+        constexpr ui64 requestCookie = 0x1234;
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
+            auto& cfg = ev->Record;
+            cfg.SetMaxInflightLsns(4);
+            cfg.SetFlushBatchSize(1);
+            cfg.SetEraseBatchSize(1);
+            cfg.SetSyncRequestsBatchSize(1);
+            cfg.SetPBufferReplyTimeoutMicroseconds(500000);
+            cfg.SetNumDirectBlockGroupsToUse(1);
+            cfg.SetIoSizeBytes(blockSize);
+            NTabletPipe::SendData(f.Edge, pipe, ev.release());
+        });
+
+        TString firstPeer;
+        ui32 injectedReplies = 0;
+        auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffersResult::EventType) {
+                auto& record = event->Get<NDDisk::TEvWritePersistentBuffersResult>()->Record;
+                UNIT_ASSERT_VALUES_EQUAL(record.ResultSize(), 3);
+                for (const auto& sub : record.GetResult()) {
+                    UNIT_ASSERT_C(sub.GetResult().GetStatus() == TStatus::OK, sub.DebugString());
+                }
+
+                // Mutate the aggregate in place to preserve its LSN cookie and
+                // the peer identities used by the tablet's quorum calculation.
+                const auto& id = record.GetResult(0).GetPersistentBufferId();
+                firstPeer = TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId()
+                    << ":" << id.GetDDiskSlotId();
+                auto* first = record.MutableResult(0)->MutableResult();
+                first->SetStatus(TStatus::ERROR);
+                first->SetErrorReason(TString(firstErrorReason));
+                auto* second = record.MutableResult(1)->MutableResult();
+                second->SetStatus(TStatus::OVERFILL);
+                second->SetErrorReason("later PB failure");
+                ++injectedReplies;
+            }
+            return previousFilter ? previousFilter(node, event) : true;
+        };
+
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(/*address=*/0, blockSize);
+            TFixture::AddWritePayload(*ev, TRope(TString(blockSize, 'x')));
+            NTabletPipe::SendData(f.Edge, pipe, ev.release(), requestCookie);
+        });
+        auto reply = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsWriteResult>(
+            f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(30)));
+        f.Env.Runtime->FilterFunction = std::move(previousFilter);
+
+        UNIT_ASSERT(reply);
+        UNIT_ASSERT_VALUES_EQUAL(injectedReplies, 1);
+        UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, requestCookie);
+        UNIT_ASSERT_C(reply->Get()->Record.GetStatus() == NBSIO_QUORUM_LOST,
+            reply->Get()->Record.DebugString());
+        const auto& reason = reply->Get()->Record.GetReason();
+        UNIT_ASSERT_STRING_CONTAINS(reason, "confirmed# 1");
+        UNIT_ASSERT_STRING_CONTAINS(reason, "need# 3");
+        UNIT_ASSERT_STRING_CONTAINS(reason, "PB");
+        UNIT_ASSERT_STRING_CONTAINS(reason, firstPeer);
+        UNIT_ASSERT_STRING_CONTAINS(reason, "ERROR");
+        if (firstErrorReason) {
+            UNIT_ASSERT_STRING_CONTAINS(reason, firstErrorReason);
+        } else {
+            UNIT_ASSERT_C(!reason.Contains("ERROR:"), reason);
+        }
+        UNIT_ASSERT_C(!reason.Contains("OVERFILL"), reason);
+        UNIT_ASSERT_C(!reason.Contains("later PB failure"), reason);
+
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+        f.ClosePipe(pipe);
+    }
+
+    Y_UNIT_TEST(PbWriteQuorumLossIncludesFirstFailure) {
+        CheckPbWriteQuorumLoss("first PB failure");
+    }
+
+    Y_UNIT_TEST(PbWriteQuorumLossWithoutErrorReason) {
+        CheckPbWriteQuorumLoss("");
+    }
+
     // Create + Run + Delete with a single DBG. Verifies the full lifecycle:
     // - Hive boots the tablet
     // - tablet allocates 1 DBG (5 DDisks + 5 PBs) via BSC
@@ -341,6 +474,82 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
         UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
         f.ClosePipe(pipe);
+    }
+
+    Y_UNIT_TEST(WriteChecksumsFollowRunConfiguration) {
+        for (const bool enableChecksums : {false, true}) {
+            TFixture f(/*numDDiskGroups=*/4, enableChecksums);
+            const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1);
+            TActorId pipe = f.OpenTabletPipe(tabletId);
+
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, /*numDirectBlockGroups=*/1), NBSLT_OK);
+            f.Env.Sim(TDuration::Seconds(5));
+
+            ui64 nbsWrites = 0;
+            ui64 pbWrites = 0;
+            TString invalidReason;
+            auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+            f.Env.Runtime->FilterFunction =
+                [&](ui32 nodeId, std::unique_ptr<IEventHandle>& event) {
+                    if (event->GetTypeRewrite() == TEvLoad::TEvNbsWrite::EventType) {
+                        const auto* msg = event->Get<TEvLoad::TEvNbsWrite>();
+                        ++nbsWrites;
+                        const ui32 expectedCount = enableChecksums
+                            ? msg->Record.GetSizeBytes() / NDDisk::IntegrityUnitSize
+                            : 0;
+                        if (static_cast<ui32>(msg->Record.ChecksumsSize()) != expectedCount
+                                && invalidReason.empty())
+                        {
+                            invalidReason = TStringBuilder()
+                                << "TEvNbsWrite checksum count# " << msg->Record.ChecksumsSize()
+                                << " expected# " << expectedCount;
+                        }
+                    } else if (event->GetTypeRewrite() == NDDisk::TEvWritePersistentBuffers::EventType) {
+                        const auto* msg = event->Get<NDDisk::TEvWritePersistentBuffers>();
+                        ++pbWrites;
+                        const auto& record = msg->Record;
+                        const NDDisk::TWriteInstruction instruction(record.GetInstruction());
+                        if (!instruction.PayloadId
+                                || *instruction.PayloadId >= msg->GetPayloadCount())
+                        {
+                            if (invalidReason.empty()) {
+                                invalidReason = "TEvWritePersistentBuffers has no valid payload";
+                            }
+                        } else {
+                            const auto expected = enableChecksums
+                                ? NDDisk::CalculatePayloadChecksums(msg->GetPayload(*instruction.PayloadId))
+                                : std::vector<ui64>{};
+                            if (static_cast<size_t>(record.ChecksumsSize()) != expected.size()
+                                    && invalidReason.empty())
+                            {
+                                invalidReason = TStringBuilder()
+                                    << "TEvWritePersistentBuffers checksum count# " << record.ChecksumsSize()
+                                    << " expected# " << expected.size();
+                            }
+                            for (ui32 i = 0; i < expected.size() && invalidReason.empty(); ++i) {
+                                if (record.GetChecksums(i) != expected[i]) {
+                                    invalidReason = TStringBuilder()
+                                        << "TEvWritePersistentBuffers checksum mismatch at block# " << i;
+                                }
+                            }
+                        }
+                    }
+                    return previousFilter ? previousFilter(nodeId, event) : true;
+                };
+
+            auto fin = f.RunViaLoadActor(
+                tabletId, /*tag=*/1, /*numDbgsToUse=*/0, enableChecksums);
+            f.Env.Runtime->FilterFunction = std::move(previousFilter);
+
+            UNIT_ASSERT(fin.FinishedReceived);
+            UNIT_ASSERT_C(fin.ErrorReason.empty(), fin.ErrorReason);
+            UNIT_ASSERT_C(nbsWrites > 0, "no TEvNbsWrite observed");
+            UNIT_ASSERT_C(pbWrites > 0, "no TEvWritePersistentBuffers observed");
+            UNIT_ASSERT_C(invalidReason.empty(), invalidReason);
+
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+            f.ClosePipe(pipe);
+        }
     }
 
     // Same lifecycle with 2 DBGs - exercises the cookie scheme that routes
@@ -436,6 +645,223 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             "expected error when tablet has no DBGs allocated");
     }
 
+    Y_UNIT_TEST(AutomationWaitsForEntirePrefixAndConfiguration) {
+        for (bool blockConfiguration : {false, true}) {
+            TFixture f;
+            const ui64 tabletId = f.CreateNbsLoadTabletViaHive(1);
+            const auto pipe = f.OpenTabletPipe(tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, 2), NBSLT_OK);
+            f.Env.Sim(TDuration::Seconds(5));
+            ui32 writes = 0;
+            auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+            f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+                if (event->GetTypeRewrite() == TEvLoad::TEvNbsWrite::EventType) { ++writes; }
+                if (blockConfiguration && event->GetTypeRewrite() == TEvLoad::TEvConfigureTabletResult::EventType) {
+                    return false;
+                }
+                if (!blockConfiguration && event->GetTypeRewrite() == TEvLoad::TEvNbsLoadTabletGetSummaryResult::EventType) {
+                    event->Get<TEvLoad::TEvNbsLoadTabletGetSummaryResult>()->Record.SetNumReadyDirectBlockGroups(1);
+                }
+                return previousFilter ? previousFilter(node, event) : true;
+            };
+            const auto result = f.RunViaLoadActor(tabletId, 1, 0, true, true);
+            f.Env.Runtime->FilterFunction = std::move(previousFilter);
+            UNIT_ASSERT(result.FinishedReceived);
+            UNIT_ASSERT(!result.ErrorReason.empty());
+            UNIT_ASSERT_VALUES_EQUAL(writes, 0);
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+            f.ClosePipe(pipe);
+        }
+    }
+
+    Y_UNIT_TEST(AutomationControlAcrossNodes) {
+        TFixture f;
+        using TControl = NKikimrClient::TNbsDbgLikeLoadControl;
+        using TResult = NKikimrClient::TNbsDbgLikeLoadResult;
+        for (ui32 node = 1; node <= 8; ++node) {
+            f.Env.Runtime->RegisterService(MakeLoadServiceID(node),
+                f.Env.Runtime->Register(CreateLoadTestActor(MakeIntrusive<::NMonitoring::TDynamicCounters>()), node));
+        }
+        auto call = [&](const TControl& request) {
+            auto event = std::make_unique<TEvLoad::TEvNbsDbgLikeLoadControl>();
+            event->Record = request;
+            f.Env.Runtime->Send(new IEventHandle(MakeLoadServiceID(2), f.Edge, event.release()), f.Edge.NodeId());
+            auto response = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsDbgLikeLoadControlResponse>(
+                f.Edge, false, f.Deadline(TDuration::Seconds(90)));
+            UNIT_ASSERT(response);
+            return response->Get()->Record;
+        };
+        TControl request;
+        request.SetDatabase("/Root");
+        request.SetOperation(TControl::CAPABILITIES);
+        auto capabilities = call(request);
+        UNIT_ASSERT_VALUES_EQUAL(capabilities.GetStatus(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(capabilities.GetCoordinatorNodeId(), 2);
+        request.SetDatabase("/Other");
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        request.SetDatabase("/Root");
+        request.SetCoordinatorNodeId(2);
+        request.SetIncarnation(capabilities.GetIncarnation());
+        request.SetOperation(TControl::CREATE);
+        request.SetOwnerIndex(123);
+        auto* allocation = request.MutableAllocation();
+        allocation->SetDDiskPoolName("ddisk_pool");
+        allocation->SetPersistentBufferDDiskPoolName("ddisk_pool");
+        for (ui32 i = 0; i < 3; ++i) { allocation->AddTabletStoragePools(f.Env.StoragePoolName); }
+        allocation->SetNumDirectBlockGroups(0);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        auto list = request;
+        list.SetOperation(TControl::LIST);
+        UNIT_ASSERT_VALUES_EQUAL(call(list).TabletsSize(), 0); // validation precedes Hive creation
+        allocation->ClearNumDirectBlockGroups();
+        auto created = call(request);
+        UNIT_ASSERT_VALUES_EQUAL_C(created.GetStatus(), 1, created.GetError());
+        UNIT_ASSERT_VALUES_EQUAL(created.TabletsSize(), 1);
+        const ui64 tabletId = created.GetTablets(0).GetTabletId();
+        auto listed = call(list);
+        UNIT_ASSERT_VALUES_EQUAL(listed.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetTablets(0).ChannelPoolsSize(), 3);
+        for (const auto& pool : listed.GetTablets(0).GetChannelPools()) {
+            UNIT_ASSERT_VALUES_EQUAL(pool, f.Env.StoragePoolName);
+        }
+        bool incompleteOnce = true;
+        auto previousStorageFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (incompleteOnce && event->GetTypeRewrite() == TEvHive::TEvGetTabletStorageInfoResult::EventType) {
+                auto& result = event->Get<TEvHive::TEvGetTabletStorageInfoResult>()->Record;
+                if (result.GetTabletID() == tabletId) {
+                    result.MutableInfo()->ClearChannels();
+                    incompleteOnce = false;
+                }
+            }
+            return previousStorageFilter ? previousStorageFilter(node, event) : true;
+        };
+        auto retry = call(request);
+        UNIT_ASSERT_VALUES_EQUAL_C(retry.GetStatus(), 1, retry.GetError());
+        UNIT_ASSERT(!incompleteOnce);
+        f.Env.Runtime->FilterFunction = std::move(previousStorageFilter);
+        auto previousTimeoutFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvHive::TEvGetTabletStorageInfoResult::EventType) {
+                auto& result = event->Get<TEvHive::TEvGetTabletStorageInfoResult>()->Record;
+                if (result.GetTabletID() == tabletId) { result.MutableInfo()->ClearChannels(); }
+            }
+            return previousTimeoutFilter ? previousTimeoutFilter(node, event) : true;
+        };
+        auto assignmentTimeout = call(request);
+        UNIT_ASSERT_VALUES_EQUAL(assignmentTimeout.GetStatus(), 128);
+        UNIT_ASSERT_VALUES_EQUAL(assignmentTimeout.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(assignmentTimeout.GetTablets(0).GetTabletId(), tabletId);
+        UNIT_ASSERT_STRING_CONTAINS(assignmentTimeout.GetError(), "channel assignment deadline expired");
+        f.Env.Runtime->FilterFunction = std::move(previousTimeoutFilter);
+        allocation->SetTabletStoragePools(1, "different-pool");
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        allocation->SetTabletStoragePools(1, f.Env.StoragePoolName);
+        allocation->SetNumDirectBlockGroups(2);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        const ui64 unrelatedTabletId = f.CreateNbsLoadTabletViaHive(124);
+        ui32 unrelatedStorageRequests = 0;
+        auto previousFilter = std::move(f.Env.Runtime->FilterFunction);
+        f.Env.Runtime->FilterFunction = [&](ui32 node, std::unique_ptr<IEventHandle>& event) {
+            if (event->GetTypeRewrite() == TEvHive::TEvGetTabletStorageInfo::EventType
+                && event->Get<TEvHive::TEvGetTabletStorageInfo>()->Record.GetTabletID() == unrelatedTabletId) {
+                ++unrelatedStorageRequests;
+            }
+            return previousFilter ? previousFilter(node, event) : true;
+        };
+        auto describe = request;
+        describe.ClearAllocation();
+        describe.SetOperation(TControl::DESCRIBE);
+        UNIT_ASSERT_VALUES_EQUAL_C(call(describe).GetStatus(), 1, "describe healthy tablet");
+        request.ClearAllocation();
+        request.SetOperation(TControl::START);
+        request.SetRequestId("original");
+        auto* cmd = request.MutableLoad()->MutableNbsDbgLikeLoad();
+        auto* target = cmd->AddTargets();
+        target->SetTabletId(tabletId);
+        target->SetNodeId(3); // force remote generation; exercises full-width child tags
+        auto* workload = cmd->MutableWorkloadConfig();
+        workload->SetDurationSeconds(1);
+        workload->SetDelayBeforeMeasurementsSeconds(0);
+        workload->SetMaxInFlight(0);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        workload->SetMaxInFlight(1);
+        workload->SetStopOnWritesDoneCount(50);
+        request.SetStartupTimeoutSeconds(3601);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128); // startup budget is bounded
+        request.ClearStartupTimeoutSeconds();
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1); // lost reply retry
+        workload->SetMaxInFlight(2);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        workload->SetMaxInFlight(1);
+        const auto originalStart = request;
+        request.ClearLoad();
+        request.SetOperation(TControl::GET);
+        NKikimrClient::TNbsDbgLikeLoadControlResponse finished;
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            finished = call(request);
+            UNIT_ASSERT_VALUES_EQUAL_C(finished.GetStatus(), 1, finished.GetError());
+            if (finished.GetRun().HasFinishedAtMs()) { break; }
+            f.Env.Sim(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(finished.GetRun().GetState()), static_cast<int>(TResult::SUCCEEDED), finished.GetRun().GetExecutionError());
+        UNIT_ASSERT(finished.GetRun().GetTerminationConfirmed());
+        UNIT_ASSERT_VALUES_EQUAL(finished.GetRun().GetEffectiveConfig().GetNbsDbgLikeLoad().GetTargets(0).GetNodeId(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(finished.GetRun().TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(finished.TabletsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(call(originalStart).GetRun().GetStartedAtMs(), finished.GetRun().GetStartedAtMs());
+
+        // A later trial resolves current placement, whereas retrying the old ID
+        // keeps the original explicit generator node.
+        auto next = originalStart;
+        next.SetRequestId("cancel-running");
+        next.MutableLoad()->MutableNbsDbgLikeLoad()->MutableTargets(0)->ClearNodeId();
+        next.MutableLoad()->MutableNbsDbgLikeLoad()->MutableWorkloadConfig()->SetDurationSeconds(60);
+        next.MutableLoad()->MutableNbsDbgLikeLoad()->MutableWorkloadConfig()->SetStopOnWritesDoneCount(0);
+        UNIT_ASSERT_VALUES_EQUAL(call(next).GetStatus(), 1);
+        ui32 writes = 0;
+        const auto deadline = f.Deadline(TDuration::Seconds(90));
+        f.Env.Runtime->Sim([&] { return !writes && f.Env.Runtime->GetClock() < deadline; },
+            [&](IEventHandle& event) { writes += event.GetTypeRewrite() == TEvLoad::TEvNbsWrite::EventType; });
+        UNIT_ASSERT(writes);
+        TResultsHttpRequest httpRequest;
+        httpRequest.Params.emplace("mode", "results");
+        httpRequest.Params.emplace("uuid", "cancel-running");
+        NMonitoring::TMonService2HttpRequest monRequest(nullptr, &httpRequest, nullptr, nullptr, "", nullptr);
+        const TActorId htmlEdge = f.Env.Runtime->AllocateEdgeActor(2);
+        f.Env.Runtime->Send(new IEventHandle(MakeLoadServiceID(2), htmlEdge,
+            new NMon::TEvHttpInfo(monRequest)), 2);
+        auto htmlResult = f.Env.WaitForEdgeActorEvent<NMon::TEvHttpInfoRes>(
+            htmlEdge, false, f.Deadline(TDuration::Seconds(30)));
+        UNIT_ASSERT(htmlResult);
+        UNIT_ASSERT_STRING_CONTAINS(htmlResult->Get()->Answer,
+            "No load actor result found for requested UUID");
+        request.SetOperation(TControl::DELETE);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        request.SetRequestId(next.GetRequestId());
+        request.SetOperation(TControl::STOP);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        request.SetOperation(TControl::GET);
+        for (ui32 attempt = 0; attempt < 100; ++attempt) {
+            finished = call(request);
+            UNIT_ASSERT_VALUES_EQUAL_C(finished.GetStatus(), 1, finished.GetError());
+            if (finished.GetRun().HasFinishedAtMs()) { break; }
+            f.Env.Sim(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(static_cast<int>(finished.GetRun().GetState()), static_cast<int>(TResult::CANCELLED), finished.GetRun().GetExecutionError());
+        UNIT_ASSERT(finished.GetRun().GetTerminationConfirmed());
+        UNIT_ASSERT_VALUES_EQUAL(finished.GetRun().GetEffectiveConfig().GetNbsDbgLikeLoad().GetTargets(0).GetNodeId(), finished.GetTablets(0).GetNodeId());
+        request.SetOperation(TControl::DELETE);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 1);
+        request.SetOperation(TControl::GET);
+        request.SetIncarnation("old");
+        UNIT_ASSERT_VALUES_EQUAL(call(request).GetStatus(), 128);
+        f.Env.Runtime->FilterFunction = std::move(previousFilter);
+        UNIT_ASSERT_VALUES_EQUAL(unrelatedStorageRequests, 0);
+    }
+
     // Issuing a second Create after a successful Create must be rejected.
     Y_UNIT_TEST(DoubleCreate) {
         TFixture f;
@@ -482,8 +908,8 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.ClosePipe(pipe);
     }
 
-    // End-to-end data-integrity test that drives the merged tablet directly,
-    // bypassing the load-actor / Run path. Spec §12.1: TEvNbsWrite/Read
+    // End-to-end data-integrity test that drives the load tablet directly,
+    // bypassing the load-actor / Run path. TEvNbsWrite/Read
     // travel over the tablet pipe and carry user payload via TRope. The
     // first 8 bytes of each block encode the block number; we write 1000
     // unique 4 KiB blocks and read them back, asserting the round-trip
@@ -525,8 +951,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                     /*address=*/i * kBlockSize, /*sizeBytes=*/kBlockSize);
                 TString data(kBlockSize, '\0');
                 memcpy(data.Detach(), &i, sizeof(i));
-                const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
-                ev->Record.SetPayloadId(payloadId);
+                TFixture::AddWritePayload(*ev, TRope(std::move(data)));
                 NTabletPipe::SendData(f.Edge, pipe, ev.release(), /*cookie=*/i);
             }
         });
@@ -636,8 +1061,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                         addressOf(dbg, i), /*sizeBytes=*/kBlockSize);
                     TString data(kBlockSize, '\0');
                     memcpy(data.Detach(), &cookie, sizeof(cookie));
-                    const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
-                    ev->Record.SetPayloadId(payloadId);
+                    TFixture::AddWritePayload(*ev, TRope(std::move(data)));
                     NTabletPipe::SendData(f.Edge, pipe, ev.release(), cookie);
                 }
             }
@@ -700,12 +1124,10 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
     // Regression for cross-DBG LSN collision. With a single DDisk group PB
     // slots are scarce, so the BSC packs both DBGs of one tablet onto the SAME
     // persistent-buffer slot instance (AllocatePersistentBuffer refcounts and
-    // reuses slots; there is no cross-DBG exclusion). A PB record is deduped by
-    // {TabletId, Generation, Lsn} only -- the per-DBG DDiskInstanceGuid is the
-    // slot-instance id, not part of the key. Each DBG worker used to assign LSNs
-    // from an independent sequence starting at 1, so DBG0 and DBG1 emitted
-    // identical LSNs with different data to the shared slot -> "duplicate record
-    // with incorrect data" -> the write lost quorum (NBSIO_QUORUM_LOST). Drives
+    // reuses slots; there is no cross-DBG exclusion). The original regression
+    // predated the DBG index in PB record identity: independent sequences
+    // starting at 1 collided on the shared slot and lost write quorum.
+    // Current PB keys include the DBG index and load LSNs remain strided. Drives
     // a few writes per DBG at distinct offsets (so flushes hit different DD
     // blocks); every write must be accepted.
     Y_UNIT_TEST(MultiDbgSharedDDiskNoLsnCollision) {
@@ -764,8 +1186,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                         addressOf(dbg, i), /*sizeBytes=*/kBlockSize);
                     TString data(kBlockSize, '\0');
                     memcpy(data.Detach(), &cookie, sizeof(cookie));
-                    const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
-                    ev->Record.SetPayloadId(payloadId);
+                    TFixture::AddWritePayload(*ev, TRope(std::move(data)));
                     NTabletPipe::SendData(f.Edge, pipe, ev.release(), cookie);
                 }
             }

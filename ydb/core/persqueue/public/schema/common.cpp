@@ -75,6 +75,15 @@ std::expected<i32, TString> CheckRetentionPeriod(i64 seconds) {
     return seconds;
 }
 
+TResult ValidateTopicPartitionCount(i64 count, TStringBuf what) {
+    if (std::cmp_greater(count, MAX_TOPIC_PARTITIONS)) {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+            << what << " must be less than or equal to " << MAX_TOPIC_PARTITIONS
+            << ", provided " << count};
+    }
+    return {};
+}
+
 std::expected<std::optional<TDuration>, TResult> ConvertConsumerAvailabilityPeriod(const google::protobuf::Duration& duration, std::string_view consumerName) {
     if (auto val = ConvertPositiveDuration(duration); val.has_value()) {
         if (val.value() == TDuration::Zero()) {
@@ -456,7 +465,7 @@ TResult AddConsumer(
 
     if (consumerConfig.important()) {
         if (pqConfig.GetTopicsAreFirstClassCitizen() && !enableTopicDiskSubDomainQuota) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "important flag is forbiden for consumer " << consumerConfig.name()};
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "important flag is forbidden for consumer " << consumerConfig.name()};
         }
         consumer->SetImportant(true);
     }

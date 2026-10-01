@@ -8,6 +8,30 @@
 
 namespace NKikimr {
 
+TString MakeYdbMetricName(TStringBuf protoName, EYdbMetricNameScope scope) {
+    if (scope == EYdbMetricNameScope::Aggregate) {
+        return TString(protoName);
+    }
+
+    // For Partition scope, insert "partition." after the second dot
+    size_t firstDot = protoName.find('.');
+    size_t secondDot = TStringBuf::npos;
+    if (firstDot != TStringBuf::npos) {
+        secondDot = protoName.find('.', firstDot + 1);
+    }
+
+    Y_ABORT_UNLESS(
+        secondDot != TStringBuf::npos && secondDot + 1 < protoName.size(),
+        "metric name %s has fewer than three segments",
+        TString(protoName).c_str());
+
+    return TString::Join(
+        protoName.substr(0, secondDot + 1),
+        "partition.",
+        protoName.substr(secondDot + 1)
+    );
+}
+
 /**
  * The implementation of the mapper from tablet/executor metrics
  * to the corresponding YDB metrics (for example, table.datashard.*).
@@ -33,10 +57,14 @@ public:
      *
      * @param[in] targetCounterGroup The counter group where the target (mapped) counters are created
      * @param[in] sourceCounterGroup The counter group where the source counters are looked up
+     * @param[in] nameScope The scope for the published metric names (Aggregate or Partition)
+     * @param[in] isFollowerSource When true, creates no target for LeaderOnly metrics
      */
     TYdbMetricsMapperImpl(
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
-        NMonitoring::TDynamicCounterPtr sourceCounterGroup
+        NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        EYdbMetricNameScope nameScope,
+        bool isFollowerSource
     )
         : SourceCounterGroup(sourceCounterGroup)
         , SourceCountersFound(false)
@@ -65,7 +93,9 @@ public:
         >(
             this->SimpleCountersOpts(),
             targetCounterGroup,
-            SimpleCounters
+            SimpleCounters,
+            nameScope,
+            isFollowerSource
         );
 
         // Create all target cumulative counters
@@ -82,7 +112,9 @@ public:
         >(
             this->CumulativeCountersOpts(),
             targetCounterGroup,
-            CumulativeCounters
+            CumulativeCounters,
+            nameScope,
+            isFollowerSource
         );
 
         // Create all target percentile counters
@@ -93,7 +125,9 @@ public:
         >(
             this->PercentileCountersOpts(),
             targetCounterGroup,
-            PercentileCounters
+            PercentileCounters,
+            nameScope,
+            isFollowerSource
         );
     }
 
@@ -158,6 +192,11 @@ private:
         TTargetCounters& targetCounters
     ) {
         for (size_t i = 0; i < counterOptions->Size; ++i) {
+            // A follower mapper creates no target for the LeaderOnly metrics
+            if (!targetCounters[i].TargetCounter) {
+                continue;
+            }
+
             const auto& allSourceCounters = counterOptions->GetSourceCounters(i);
 
             targetCounters[i].SourceCounters.clear();
@@ -229,6 +268,11 @@ private:
     >
     void TransferCounterValuesForCounterType(const TTargetCounters& targetCounters) {
         for (const auto& counter : targetCounters) {
+            // A follower mapper creates no target for the LeaderOnly metrics
+            if (!counter.TargetCounter) {
+                continue;
+            }
+
             // NOTE: The destructor will update the target counter value
             TMetricValueAggregator aggregator(counter.TargetCounter);
 
@@ -412,7 +456,9 @@ private:
 TYdbMetricsMapperPtr CreateYdbMetricsMapperByTabletType(
     TTabletTypes::EType tabletType,
     NMonitoring::TDynamicCounterPtr targetCounterGroup,
-    NMonitoring::TDynamicCounterPtr sourceCounterGroup
+    NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+    EYdbMetricNameScope nameScope,
+    bool isFollowerSource
 ) {
     switch (tabletType) {
     case TTabletTypes::DataShard:
@@ -422,7 +468,9 @@ TYdbMetricsMapperPtr CreateYdbMetricsMapperByTabletType(
             NDataShard::EPercentileDetailedCounters_descriptor
         >>(
            targetCounterGroup,
-           sourceCounterGroup
+           sourceCounterGroup,
+           nameScope,
+           isFollowerSource
         );
 
     default:

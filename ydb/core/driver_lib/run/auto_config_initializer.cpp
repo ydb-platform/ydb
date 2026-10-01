@@ -235,6 +235,10 @@ namespace NKikimr::NAutoConfigInitializer {
     void ApplyAutoConfig(NKikimrConfig::TActorSystemConfig *config, bool isDynamicNode, bool tinyMode) {
         config->SetUseAutoConfig(true);
         config->ClearExecutor();
+        // These lists hold indices into Executor; the auto config replaces the executor
+        // list entirely, so any configured indices no longer reference the intended pools.
+        config->ClearBlobStorageExecutor();
+        config->ClearInterconnectSessionExecutor();
 
         i16 cpuCount = config->HasCpuCount() ? config->GetCpuCount() : GetCpuCount();
         Y_ABORT_UNLESS(cpuCount);
@@ -282,6 +286,7 @@ namespace NKikimr::NAutoConfigInitializer {
                 executor->SetSpinThreshold(0);
                 executor->SetHasSharedThread(hasSharedThread);
                 executor->SetAllThreadsAreShared(useUnitedPool);
+                executor->SetEnableWaker(config->GetUseWaker());
             };
 
             assignPool(systemExecutor, "System", 30, cpuCount >= 3);
@@ -383,6 +388,7 @@ namespace NKikimr::NAutoConfigInitializer {
             executor->SetPriority(priorities[poolIdx]);
             executor->SetName(names[poolIdx]);
             executor->SetAllThreadsAreShared(useUnitedPool);
+            executor->SetEnableWaker(config->GetUseWaker());
 
             if (names[poolIdx] == TASPools::CommonPoolName) {
                 executor->SetSpinThreshold(0);

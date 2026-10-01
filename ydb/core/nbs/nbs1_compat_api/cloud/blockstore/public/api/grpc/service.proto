@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+import "ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos/io.proto";
+import "ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos/mount.proto";
+import "ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/protos/ping.proto";
+
+import "google/api/annotations.proto";
+
+package NYdb.NBS.NNbs1CompatApi.NBlockStore.NProto;
+
+option go_package = "github.com/ydb-platform/ydb/ydb/core/nbs/nbs1_compat_api/cloud/blockstore/public/api/grpc";
+
+////////////////////////////////////////////////////////////////////////////////
+// Schema of the NBS2-compatible subset, with isolated descriptor names.
+// The transport adapter publishes the original NBS1 RPC paths explicitly;
+// gRPC stubs generated from this package would use different paths.
+
+service TBlockStoreService
+{
+    rpc Ping(TPingRequest) returns (TPingResponse) {
+        option (google.api.http) = {
+            post: "/ping"
+            body: "*"
+        };
+    }
+
+    rpc MountVolume(TMountVolumeRequest) returns (TMountVolumeResponse) {
+        option (google.api.http) = {
+            post: "/mount_volume"
+            body: "*"
+        };
+    }
+
+    rpc UnmountVolume(TUnmountVolumeRequest) returns (TUnmountVolumeResponse) {
+        option (google.api.http) = {
+            post: "/unmount_volume"
+            body: "*"
+        };
+    }
+
+    rpc ReadBlocks(TReadBlocksRequest) returns (TReadBlocksResponse) {
+        option (google.api.http) = {
+            post: "/read_blocks"
+            body: "*"
+        };
+    }
+
+    rpc WriteBlocks(TWriteBlocksRequest) returns (TWriteBlocksResponse) {
+        option (google.api.http) = {
+            post: "/write_blocks"
+            body: "*"
+        };
+    }
+}

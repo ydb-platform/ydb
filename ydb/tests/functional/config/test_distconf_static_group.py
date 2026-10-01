@@ -359,7 +359,7 @@ class TestStaticGroupSelfHealPlacementPolicy:
                 if (
                     pdisk.NodeId == source[0]
                     and pdisk.PDiskId != source[1]
-                    and pdisk.DriveStatus == bsconfig.EDriveStatus.ACTIVE
+                    and pdisk.DriveStatus == bsbase.EDriveStatus.ACTIVE
                 )
             ]
             assert_that(local_spares, "No local spare PDisk is available")

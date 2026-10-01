@@ -99,12 +99,14 @@ TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransact
 
 //// TQueryBase
 
-TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database, bool isSystemUser, bool isStreamingMode)
+TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database, bool isSystemUser, bool isStreamingMode,
+    TMaybe<TString> userToken)
     : LogComponent(logComponent)
     , Database(std::move(database))
     , SessionId(std::move(sessionId))
     , IsSystemUser(isSystemUser)
     , IsStreamingMode(isStreamingMode)
+    , UserToken(std::move(userToken))
 {}
 
 void TQueryBase::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
@@ -154,7 +156,7 @@ void TQueryBase::RunCreateSession() const {
     using TCreateSessionRequest = TGrpcRequestOperationCall<Table::CreateSessionRequest, Table::CreateSessionResponse>;
 
     Table::CreateSessionRequest request;
-    Subscribe<Table::CreateSessionResponse, TEvQueryBasePrivate::TEvCreateSessionResult>(DoLocalRpc<TCreateSessionRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
+    Subscribe<Table::CreateSessionResponse, TEvQueryBasePrivate::TEvCreateSessionResult>(DoLocalRpc<TCreateSessionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
@@ -187,7 +189,7 @@ void TQueryBase::RunDeleteSession() const {
 
     Table::DeleteSessionRequest request;
     request.set_session_id(SessionId);
-    Subscribe<Table::DeleteSessionResponse, TEvQueryBasePrivate::TEvDeleteSessionResponse>(DoLocalRpc<TDeleteSessionRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
+    Subscribe<Table::DeleteSessionResponse, TEvQueryBasePrivate::TEvDeleteSessionResponse>(DoLocalRpc<TDeleteSessionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvDeleteSessionResponse::TPtr& ev) {
@@ -248,7 +250,7 @@ void TQueryBase::RunDataQuery(TString sql, NYdb::TParamsBuilder* params, TTxCont
         txControlProto->set_commit_tx(true);
     }
 
-    TMaybe<TString> token = Nothing();
+    TMaybe<TString> token = UserToken;
     if (IsSystemUser) {
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
@@ -310,7 +312,7 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());
     }
 
-    TMaybe<TString> token = Nothing();
+    TMaybe<TString> token = UserToken;
     if (IsSystemUser) {
         token = NACLib::TSystemUsers::Metadata().SerializeAsString();
     }
@@ -483,7 +485,7 @@ void TQueryBase::CommitTransaction() {
     Table::CommitTransactionRequest request;
     request.set_session_id(SessionId);
     request.set_tx_id(TxId);
-    Subscribe<Table::CommitTransactionResponse, TEvQueryBasePrivate::TEvCommitTransactionResponse>(DoLocalRpc<TCommitTransactionRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
+    Subscribe<Table::CommitTransactionResponse, TEvQueryBasePrivate::TEvCommitTransactionResponse>(DoLocalRpc<TCommitTransactionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvCommitTransactionResponse::TPtr& ev) {
@@ -515,7 +517,7 @@ void TQueryBase::RollbackTransaction() const {
     Table::RollbackTransactionRequest request;
     request.set_session_id(SessionId);
     request.set_tx_id(TxId);
-    Subscribe<Table::RollbackTransactionResponse, TEvQueryBasePrivate::TEvRollbackTransactionResponse>(DoLocalRpc<TRollbackTransactionRequest>(std::move(request), Database, Nothing(), TActivationContext::ActorSystem(), true));
+    Subscribe<Table::RollbackTransactionResponse, TEvQueryBasePrivate::TEvRollbackTransactionResponse>(DoLocalRpc<TRollbackTransactionRequest>(std::move(request), Database, UserToken, TActivationContext::ActorSystem(), true));
 }
 
 void TQueryBase::Handle(TEvQueryBasePrivate::TEvRollbackTransactionResponse::TPtr& ev) {

@@ -4113,6 +4113,45 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         UNIT_ASSERT_GT(dataBytes->Val(), 0);
         UNIT_ASSERT_GT(indexBytes->Val(), 0);
     }
+
+    Y_UNIT_TEST(DropColumnTableWithLocalIndexesViaDropTable, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        if (!LocalIndexAsSchemeObject) {
+            return;
+        }
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
+        TKikimrRunner kikimr(settings);
+
+        const TString createTableQuery = R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/olapTableWithIndexes`
+            (
+                timestamp Timestamp NOT NULL,
+                resource_id Utf8,
+                uid Utf8 NOT NULL,
+                PRIMARY KEY (timestamp, uid),
+                INDEX idx_bloom LOCAL USING bloom_filter ON (resource_id)
+                    WITH (false_positive_probability = 0.01)
+            )
+            PARTITION BY HASH(timestamp, uid)
+            WITH (STORE = COLUMN, PARTITION_COUNT = 1))";
+
+        ExecQuery(kikimr, false, createTableQuery);
+
+        ExecQuery(kikimr, false, "DROP TABLE `/Root/olapTableWithIndexes`;");
+
+        // After DROP TABLE, the local index children must be gone.
+        auto& client = kikimr.GetTestClient();
+        auto bloomDesc = client.Ls("/Root/olapTableWithIndexes/idx_bloom");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            bloomDesc->Record.GetSchemeStatus(),
+            NKikimrScheme::StatusPathDoesNotExist,
+            "idx_bloom should not exist after DROP TABLE, but got status: "
+                << static_cast<int>(bloomDesc->Record.GetSchemeStatus()));
+    }
 }
 
 }   // namespace NKikimr::NKqp

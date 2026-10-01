@@ -245,7 +245,7 @@ IGraphTransformer::TStatus CompileGeneratedLambdas(const TKikimrTableDescription
             continue;
         }
 
-        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->Context, col.DefaultExpression->ExprText);
+        const TString generatedQuery = AssembleGeneratedQuery(col.DefaultExpression->ExprText);
         NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
             sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
         settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -708,6 +708,11 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
+        if (!sessionCtx.Config().GetEnableIndexStreamWrite()) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()), "Generated columns require EnableIndexStreamWrite"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         THashSet<TString> keyColumns(meta.KeyColumnNames.begin(), meta.KeyColumnNames.end());
 
         // Row struct type used to type-check every generated expression
@@ -757,7 +762,7 @@ namespace {
             }
 
             // Recompile the stored SQL text into (lambda '(row) <expr>)
-            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->Context, columnMeta.DefaultExpression->ExprText);
+            const TString generatedQuery = AssembleGeneratedQuery(columnMeta.DefaultExpression->ExprText);
             NKikimr::NKqp::TKqpTranslationSettingsBuilder settingsBuilder(
                 sessionCtx.Query().Type, cluster, generatedQuery, sessionCtx.Config().GetYqlBindingsMode(), nullptr);
             settingsBuilder.SetFromConfig(sessionCtx.Config());
@@ -914,7 +919,6 @@ namespace {
             YQL_ENSURE(generatedValue.ChildrenSize() >= 3);
 
             columnMeta.DefaultExpression = TDefaultExpressionColumnInfo{};
-            columnMeta.DefaultExpression->Context = TString(generatedValue.Child(0)->Content());
             columnMeta.DefaultExpression->ExprText = TString(generatedValue.Child(1)->Content());
             columnMeta.DefaultExpression->Stored = generatedValue.Child(2)->Content() == "stored";
             columnMeta.SetDefaultFromExpression();
@@ -1414,6 +1418,12 @@ private:
 
         if (!CheckDocApiModifiation(*table->Metadata, node.Pos(), ctx)) {
             return TStatus::Error;
+        }
+
+        if (auto status = CompileGeneratedLambdas(*table, TString(node.DataSink().Cluster()), *SessionCtx, Types, ctx);
+            status != TStatus::Ok)
+        {
+            return status;
         }
 
         auto rowType = table->SchemeNode;
@@ -2197,12 +2207,37 @@ private:
                 meta->TableSettings.ExternalDataChannelsCount = FromString<ui32>(
                     setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value()
                 );
+            } else if (name == "setMetricsLevel") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                auto raw = TString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                Ydb::Table::MetricsSettings::MetricsLevel level;
+                TString error;
+                if (!ParseTablesMetricsLevel(raw, level, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
+                    return TStatus::Error;
+                }
+                meta->TableSettings.MetricsLevel = level;
+            } else if (name == "resetMetricsLevel") {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    "Can't reset METRICS_LEVEL"));
+                return TStatus::Error;
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                     TStringBuilder() << "Unknown table profile setting: " << name));
                 return TStatus::Error;
             }
         }
+
+        if (meta->StoreType == EStoreType::Column && meta->TableSettings.MetricsLevel) {
+            ctx.AddError(TIssue(ctx.GetPosition(create.Pos()),
+                "METRICS_LEVEL is not supported for column tables"));
+            return TStatus::Error;
+        }
+
         return TStatus::Ok;
     }
 
@@ -2628,6 +2663,16 @@ private:
                             columnNames, table->Metadata->Columns, columnsPos, ctx)) {
                     return TStatus::Error;
                 }
+            } else if (name == "setTableSettings" && table->Metadata->IsOlap()) {
+                auto listNode = action.Value().Cast<TCoNameValueTupleList>();
+                for (const auto& setting : listNode) {
+                    auto settingName = setting.Name().Value();
+                    if (settingName == "setMetricsLevel" || settingName == "resetMetricsLevel") {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                            "METRICS_LEVEL is not supported for column tables"));
+                        return TStatus::Error;
+                    }
+                }
             } else if (name != "setTableSettings"
                     && name != "addChangefeed"
                     && name != "dropChangefeed"
@@ -2653,36 +2698,43 @@ private:
         for (const auto& setting : settings) {
             auto name = setting.Name().Value();
             if (name == "setMeteringMode") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
-                    return false;
-                }
-                auto val = to_lower(TString(setting.Value().template Cast<TCoAtom>().Value()));
+                const auto val = to_lower(TString(
+                    setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()));
                 Ydb::Topic::MeteringMode meteringMode;
-                auto result = GetTopicMeteringModeFromString(val, meteringMode);
-                if (!result) {
+                if (!GetTopicMeteringModeFromString(val, meteringMode)) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                                         TStringBuilder() << "unknown metering_mode: " << val));
-                }
-
-            } else if (name == "setMinPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                minParts = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setMaxPartitions") {
-                ui32 value = FromString<ui32>(
-                        setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value()
-                );
-                maxPartitions = value;
-                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
-            } else if (name == "setContentBasedDeduplication") {
-                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return false;
                 }
+            } else if (name == "setMinPartitions" || name == "setMaxPartitions") {
+                const auto literal = setting.Value().Cast<TCoDataCtor>().Literal().template Cast<TCoAtom>().Value();
+                ui32 value = 0;
+                if (!TryFromString<ui32>(literal, value)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
+                        TStringBuilder() << (name == "setMinPartitions" ? "min_active_partitions" : "max_active_partitions")
+                            << " value is out of Uint32 range: " << literal));
+                    return false;
+                }
+                if (name == "setMinPartitions") {
+                    minParts = value;
+                } else {
+                    maxPartitions = value;
+                }
+                errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
+            } else if (name == "resetMetricsLevel"
+                    || name == "resetRetentionPeriod"
+                    || name == "resetRetentionStorage"
+                    || name == "resetPartitionWriteSpeed"
+                    || name == "resetPartitionWriteBurstSpeed"
+                    || name == "resetSupportedCodecs"
+                    || name == "resetContentBasedDeduplication"
+                    || name == "resetAutoPartitioningStabilizationWindow"
+                    || name == "resetAutoPartitioningUpUtilizationPercent"
+                    || name == "resetAutoPartitioningDownUtilizationPercent") {
+                // Applied in execution: native Topic API reset or SET of the default value.
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
-                        errorPos,
+                        ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << "RESET is currently not supported for topic options")
                 );
                 return false;
@@ -2728,7 +2780,7 @@ private:
     }
 
     virtual TStatus HandleCreateTopic(TKiCreateTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
 
@@ -2804,7 +2856,7 @@ private:
     }
 
     virtual TStatus HandleAlterTopic(TKiAlterTopic node, TExprContext& ctx) override {
-        if (!CheckTopicSettings(node.Settings(), ctx)) {
+        if (!CheckTopicSettings(node.TopicSettings(), ctx) || !CheckTopicSettings(node.Settings(), ctx)) {
             return TStatus::Error;
         }
        THashSet<TString> allConsumers;
@@ -3047,7 +3099,7 @@ private:
         }
 
         static const THashSet<TString> supportedSettings = {
-            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR"
+            "owner", "MAX_SHARDS", "MAX_SHARDS_IN_PATH", "MAX_PATHS", "MAX_CHILDREN_IN_DIR", "TABLES_METRICS_LEVEL"
         };
 
         for (const auto& setting : node.Settings()) {
@@ -3080,6 +3132,24 @@ private:
             }
             if (name == "MAX_CHILDREN_IN_DIR") {
                 if (!ValidateInteger(ctx, value, name)) {
+                    return TStatus::Error;
+                }
+            }
+            if (name == "TABLES_METRICS_LEVEL") {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDataShardDetailedMetrics()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "TABLES_METRICS_LEVEL is not supported: EnableDataShardDetailedMetrics is off"));
+                    return TStatus::Error;
+                }
+                if (!value.Maybe<TCoDataCtor>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << "Value of the TABLES_METRICS_LEVEL must be a string or an integer."));
+                    return TStatus::Error;
+                }
+                NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel metricsLevel;
+                TString error;
+                if (!ParseDatabaseTablesMetricsLevel(value.Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value(), metricsLevel, error)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()), error));
                     return TStatus::Error;
                 }
             }
@@ -3438,6 +3508,19 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
+        if (auto sampleRate = node.SampleRate(); sampleRate) {
+            if (!sampleRate.Maybe<TCoDouble>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE SAMPLE rate must evaluate to Double"));
+                return TStatus::Error;
+            }
+            if (!SessionCtx->Config().FeatureFlags.GetEnableAnalyzeSampling()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE sampling is disabled"));
+                return TStatus::Error;
+            }
+        }
+
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);
         if (!table) {
             return TStatus::Error;

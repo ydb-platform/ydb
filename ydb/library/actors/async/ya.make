@@ -15,6 +15,7 @@ SRCS(
     decorator.h
     event.cpp
     event.h
+    frame_cache.h
     low_priority.cpp
     low_priority.h
     result.cpp

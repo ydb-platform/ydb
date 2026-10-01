@@ -1,6 +1,7 @@
 #include "test_client.h"
 
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/services/scheme_secret/service.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/base/path.h>
@@ -31,6 +32,7 @@
 #include <ydb/services/ydb/ydb_object_storage.h>
 #include <ydb/services/ydb/ydb_query.h>
 #include <ydb/services/ydb/ydb_scheme.h>
+#include <ydb/services/ydb/ydb_udf.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
 #include <ydb/services/ydb/ydb_logstore.h>
@@ -122,6 +124,7 @@
 #include <ydb/core/sys_view/processor/processor.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/services/udf_store/compile_controller/compile_controller.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/test_tablet/test_tablet.h>
@@ -546,6 +549,11 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
+            const auto& pathMapping = Settings->AppConfig->GetResourcePathPrefixMapping();
+            if (pathMapping.RulesSize()) {
+                appData.PathNormalizer = std::make_shared<NPathAliasing::TPathNormalizer>(pathMapping);
+            }
+
 #define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
 #define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
 #define MERGE_CFG_FROM_SETTINGS(cfg) MERGE_APP_CFG_FROM(cfg, Settings->cfg)
@@ -694,7 +702,8 @@ namespace Tests {
             .MonitorStuckActors = actorSystemConfig.GetMonitorStuckActors()
         }, TTestActorRuntime::TActorSystemPools{
             pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
-            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig)
+            NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig),
+            NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(actorSystemConfig)
         });
     }
 
@@ -724,7 +733,9 @@ namespace Tests {
 
         auto& appData = Runtime->GetAppData(grpcServiceNodeId);
         for (size_t i = 0; i < proxyCount; ++i) {
-            auto grpcRequestProxy = NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
+            auto grpcRequestProxy = Settings->AppConfig->GetGRpcConfig().GetSkipSchemeCheck()
+                ? NGRpcService::CreateGRpcRequestProxySimple(*Settings->AppConfig)
+                : NGRpcService::CreateGRpcRequestProxy(*Settings->AppConfig);
             auto grpcRequestProxyId = system->Register(grpcRequestProxy, TMailboxType::ReadAsFilled, appData.UserPoolId);
             system->RegisterLocalService(NGRpcService::CreateGRpcRequestProxyId(), grpcRequestProxyId);
             grpcRequestProxies.push_back(grpcRequestProxyId);
@@ -738,12 +749,11 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
-                appData.TracingConfigurator,
-                appData.UserFacingTracingConfigurator,
-                *Settings->AppConfig)) {
-            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
-        }
+        system->Register(
+            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
+            TMailboxType::ReadAsFilled,
+            appData.UserPoolId
+        );
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -827,6 +837,7 @@ namespace Tests {
         grpcServer->AddService(new NGRpcService::TGRpcAuthService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcReplicationService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcViewService(system, counters, grpcRequestProxies[0], true));
+        grpcServer->AddService(new NGRpcService::TGRpcYdbUdfService(system, counters, grpcRequestProxies[0], true));
         grpcServer->Start();
     }
 
@@ -1213,6 +1224,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NStat::CreateStatisticsAggregator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
+        localConfig.TabletClassInfo[TTabletTypes::WasmCompileController] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NUdfStore::CreateWasmCompileController, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
     }
 
     void TServer::SetupLocalService(ui32 nodeIdx, const TString &domainName) {
@@ -1448,6 +1463,7 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
+                FederatedQuerySetupActorSystems_.push_back(actorSystemPtr);
 
                 if (FederatedQuerySetupDriver_) {
                     FederatedQuerySetupDriver_.reset();
@@ -1934,6 +1950,13 @@ namespace Tests {
         if (Settings->FederatedQuerySetupFactory) {
             Settings->FederatedQuerySetupFactory->Cleanup();
         }
+
+        for (const auto& actorSystem : FederatedQuerySetupActorSystems_) {
+            if (actorSystem) {
+                actorSystem->store(nullptr, std::memory_order_release);
+            }
+        }
+        FederatedQuerySetupActorSystems_.clear();
 
         if (Runtime) {
             WaitFinalization();

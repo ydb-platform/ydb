@@ -338,14 +338,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             }
 
             const THashSet<TString> pkColumns{baseTableColumns.Keys.begin(), baseTableColumns.Keys.end()};
+            size_t pkIncluded = 0;
             for (size_t i = 0; i < indexKeys.KeyColumns.size()-1; ++i) {
                 const auto& col = indexKeys.KeyColumns[i];
-                // Prefix columns must be disjoint from the primary key (doc-id) columns
                 if (pkColumns.contains(col)) {
-                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                    error = TStringBuilder() << typeName << " index prefix column '"
-                        << col << "' must not be a primary key column";
-                    return false;
+                    pkIncluded++;
                 }
                 // Prefix columns must have types allowed for the primary key
                 Y_ABORT_UNLESS(baseColumnTypes.contains(col));
@@ -356,6 +353,11 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
                         << " has wrong key type " << NScheme::TypeName(typeInfo);
                     return false;
                 }
+            }
+            if (pkIncluded >= pkColumns.size()) {
+                status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                error = TStringBuilder() << typeName << " index prefix must not contain all primary key columns";
+                return false;
             }
         }
 

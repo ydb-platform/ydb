@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cbo_factory.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <ydb/core/path_aliasing/path_normalizer.h>
 #include <ydb/library/yql/dq/opt/dq_opt_join_cbo_factory.h>
 #include <ydb/library/yql/providers/dq/helper/yql_dq_helper_impl.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_dq_integration.h>
@@ -1232,6 +1233,12 @@ public:
 
         SessionCtx = MakeIntrusive<TKikimrSessionContext>(FuncRegistry, config, TAppData::TimeProvider, TAppData::RandomProvider, userToken, nullptr, userRequestContext);
 
+        if (HasAppData(ActorSystem)) {
+            if (auto normalizer = AppData(ActorSystem)->PathNormalizer) {
+                config->NormalizePath = [normalizer](TStringBuf path) { return normalizer->NormalizePath(path); };
+            }
+        }
+
         TypesCtx->LangVer = config->GetDefaultLangVer();
         TypesCtx->BackportMode = config->GetYqlBackportMode();
         SessionCtx->SetDatabase(database);
@@ -1911,7 +1918,7 @@ private:
             return;
         }
 
-        auto state = MakeIntrusive<NYql::TS3State>();
+        auto state = MakeIntrusive<NYql::TS3State>(TypesCtx->StrictConfigValidation);
 
         auto& configuration = *state->Configuration;
         if (const auto requestContext = SessionCtx->GetUserRequestContext(); requestContext && requestContext->IsStreamingQuery) {
@@ -2010,7 +2017,7 @@ private:
             return;
         }
 
-        auto solomonState = MakeIntrusive<TSolomonState>();
+        auto solomonState = MakeIntrusive<TSolomonState>(TypesCtx->StrictConfigValidation);
 
         solomonState->SupportRtmrMode = false;
         solomonState->WriteThroughDqIntegration = true;
@@ -2026,12 +2033,13 @@ private:
     }
 
     void InitPqProvider(TVector<std::function<TFuture<void>()>>& finalizers) {
-        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+        if (!ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))
+            && !AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations()) {
             return;
         }
 
         TString sessionId = CreateGuidAsString();
-        auto state = MakeIntrusive<TPqState>(sessionId);
+        auto state = MakeIntrusive<TPqState>(sessionId, TypesCtx->StrictConfigValidation);
         state->SupportRtmrMode = false;
         state->AddTransparentPrefixToTransparentSystemColumns = false;
         state->EnableSettingsValidation = true;
@@ -2044,6 +2052,7 @@ private:
         state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
         state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->EnableExactlyOnceDeliveryGuaranty = Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting();
+        state->EnableConsumerRewindForDisposition = Config->FeatureFlags.GetEnableStreamingQueryReadFrom();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2114,18 +2123,21 @@ private:
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->GetEnableNewRBO();
 
-        bool addExternalDataSources = (queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
-            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
-        if (addExternalDataSources && FederatedQuerySetup) {
-            InitS3Provider(queryType);
-            InitGenericProvider();
-            InitSolomonProvider();
-
+        bool isSupportedQueryType = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
+            || queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming;
+        if (isSupportedQueryType && FederatedQuerySetup) {
             TVector<std::function<TFuture<void>()>> finalizers;
-            if (FederatedQuerySetup->YtGateway) {
-                InitYtProvider(finalizers);
+            if (AppData()->FeatureFlags.GetEnableExternalDataSources()) {
+                InitS3Provider(queryType);
+                InitGenericProvider();
+                InitSolomonProvider();
+
+                if (FederatedQuerySetup->YtGateway) {
+                    InitYtProvider(finalizers);
+                }
             }
-            if (FederatedQuerySetup->PqGatewayFactory) {
+            if (FederatedQuerySetup->PqGatewayFactory
+                && (AppData()->FeatureFlags.GetEnableExternalDataSources() || AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations())) {
                 InitPqProvider(finalizers);
             }
 
@@ -2168,6 +2180,7 @@ private:
                 || settingName == "Warning"
                 || settingName == "UseBlocks"
                 || settingName == "BlockEngine"
+                || settingName == "DecimalCommonTypeConversionMode"
                 || settingName == "FilterPushdownOverJoinOptionalSide"
                 || settingName == "DisableFilterPushdownOverJoinOptionalSide"
                 || settingName == "RotateJoinTree"

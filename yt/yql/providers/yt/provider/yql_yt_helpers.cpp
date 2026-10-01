@@ -223,7 +223,8 @@ IGraphTransformer::TStatus EstimateDataSize(IYtGateway::TPathStatResult& result,
             }
         }
 
-        if (useColumnarStat) {
+        const bool hasRLS = pathInfo->Table->Meta && pathInfo->Table->Meta->HasRLS;
+        if (useColumnarStat && !hasRLS) {
             TMaybe<TVector<TString>> overrideColumns;
             if (columns && pathInfo->Table->RowSpec && (pathInfo->Table->RowSpec->StrictSchema || nullptr == FindPtr(*columns, YqlOthersColumnName))) {
                 overrideColumns = columns;
@@ -442,6 +443,22 @@ TExprNode::TListType GetNodesToCalculateImpl(const TExprNode::TPtr& input, bool 
                                     }
                                 }
                             }
+                        }
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+        else if (auto maybePublish = TMaybeNode<TYtPublish>(node)) {
+            TYtPublish publish = maybePublish.Cast();
+            for (auto setting: publish.Settings()) {
+                switch (FromString<EYtSettingType>(setting.Name().Value())) {
+                case EYtSettingType::UserAttrs:
+                    if (uniqNodes.insert(setting.Value().Cast().Raw()).second) {
+                        if (NeedCalc(setting.Value().Cast())) {
+                            needCalc.push_back(setting.Value().Cast().Ptr());
                         }
                     }
                     break;

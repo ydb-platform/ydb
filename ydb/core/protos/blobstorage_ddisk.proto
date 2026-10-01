@@ -24,6 +24,7 @@ message TReplyStatus {
         // The request cannot be served because the session context is no longer valid. Causes:
         // - tablet restarted (generation changed)
         // - DDisk or persistent buffer actor restarted
+        // - DDisk or persistent buffer actor is stopping and cannot finish the request
         // - interconnect session was re-established
         // - DDiskInstanceGuid mismatch (DDisk lost its data and was re-initialized)
         SESSION_MISMATCH = 5;
@@ -242,6 +243,43 @@ message TEvWritePersistentBuffer {
     // transport-level checksum, distinct from the on-disk integrity checksums DDisk itself computes
     // and stores). Mandatory: writes without exactly one checksum per aligned block are rejected.
     repeated fixed64 Checksums = 5;
+}
+
+// Issues an ephemeral, single-use token bound to the tablet, generation and DBG.
+// Its lifetime is measured only by the persistent buffer's local monotonic clock.
+message TEvGetPersistentBufferRegistrationToken {
+    TRequestCredentials Credentials = 1;
+}
+
+message TEvGetPersistentBufferRegistrationTokenResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+    uint64 Token = 3;
+}
+
+// A durable registration of (TabletId, DirectBlockGroupIndex), independent of connections.
+// Token is consumed when the ready buffer processes the registration. Queue overload
+// does not consume it; retries must reuse the token without extending its lifetime.
+message TEvRegisterPersistentBuffer {
+    TRequestCredentials Credentials = 1;
+    reserved 2; // former TimestampMicroseconds
+    reserved "TimestampMicroseconds";
+    uint64 Token = 3;
+}
+
+message TEvRegisterPersistentBufferResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
+}
+
+// Permanently retire a registration. OK follows durable removal of its closed barrier.
+message TEvUnregisterPersistentBuffer {
+    TRequestCredentials Credentials = 1;
+}
+
+message TEvUnregisterPersistentBufferResult {
+    TReplyStatus.E Status = 1;
+    optional string ErrorReason = 2;
 }
 
 message TEvWritePersistentBufferResult {

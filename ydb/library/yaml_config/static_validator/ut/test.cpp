@@ -445,7 +445,7 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         }}));
     }
 
-    Y_UNIT_TEST(ExecutorPlacement) {
+    Y_UNIT_TEST(ExecutorPlacementAndBlobStorageSelection) {
         auto validator = TMapBuilder()
             .Field("actor_system_config", ActorSystemConfigBuilder())
             .CreateValidator();
@@ -466,7 +466,8 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "BS0",
             "    threads: 3\n"
             "    placement: 1\n"
-            "    type: BASIC\n"))));
+            "    type: BASIC\n",
+            "  blob_storage_executor: [0]\n"))));
 
         UNIT_ASSERT(Valid(validator.Validate(makeConfig(
             "BS",
@@ -475,6 +476,30 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "      cpu_list: 0-1\n"
             "      exclude_cpu_list: 1\n"
             "    type: BASIC\n"))));
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "IO",
+            "    threads: 1\n"
+            "    type: IO\n",
+            "  blob_storage_executor: [0]\n"))));
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    type: BASIC\n",
+            "  blob_storage_executor: 0\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    type: BASIC\n",
+            "  blob_storage_executor: [1]\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    type: BASIC\n",
+            "  blob_storage_executor: [0, 0]\n")).Ok());
 
         UNIT_ASSERT(!validator.Validate(makeConfig(
             "IO",

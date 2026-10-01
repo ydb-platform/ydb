@@ -12,7 +12,8 @@ from ydb.tests.olap.lib.tpcc_deviation import (
 )
 from ydb.tests.olap.lib.allure_utils import time_interval_str
 from ydb.tests.olap.lib.utils import get_external_param
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode, ErrorArea
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, TxMode
+from ydb.tests.olap.lib.workload_result import ErrorArea
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.compaction import force_datashard_compact_legacy

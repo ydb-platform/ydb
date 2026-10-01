@@ -1,9 +1,7 @@
 from __future__ import annotations
 from collections import Counter, defaultdict
 import allure
-import fcntl
 import json
-import yaml
 import logging
 import re as regex
 import os
@@ -17,9 +15,11 @@ from datetime import datetime
 from pytz import timezone
 from time import time
 from typing import Optional, Union, Any
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy, ErrorArea, WorkloadError, ErrorPriority
+from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, WorkloadType, CheckCanonicalPolicy
+from ydb.tests.olap.lib.workload_result import ErrorArea, ErrorPriority, QueryPlan, WorkloadError, WorkloadRunResult
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
-from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors, get_environment_info, get_test_info
+from ydb.tests.olap.lib.allure_utils import allure_test_description, NodeErrors
+from ydb.tests.olap.lib.errors_report import write_errors_yaml
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
@@ -417,7 +417,7 @@ class LoadSuiteBase:
         return ooms
 
     @classmethod
-    def __get_key_measurements_block(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str) -> str:
+    def __get_key_measurements_block(cls, result: WorkloadRunResult, query_name: str) -> str:
         stats = result.get_stats(query_name)
         empty = True
         result = '''<h3>Key Measurements</h3>
@@ -437,7 +437,7 @@ class LoadSuiteBase:
         return '' if empty else result
 
     @classmethod
-    def check_nodes(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
+    def check_nodes(cls, result: WorkloadRunResult, end_time: float) -> list[NodeErrors]:
         if cls.__nodes_state is None:
             return []
         node_errors = []
@@ -467,7 +467,7 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool,
+    def process_query_result(cls, result: WorkloadRunResult, query_name: str, upload: bool,
                              allure_table_strings: Optional[dict[str, Any]] = None,
                              node_errors: Optional[list] = None, verify_errors: Optional[dict] = None):
         def _get_duraton(stats, field):
@@ -478,7 +478,7 @@ class LoadSuiteBase:
             s = f'{int(duration)}s ' if duration >= 1 else ''
             return f'{s}{int(duration * 1000) % 1000}ms'
 
-        def _attach_plans(plan: YdbCliHelper.QueryPlan, name: str) -> None:
+        def _attach_plans(plan: QueryPlan, name: str) -> None:
             if plan is None:
                 return
             if plan.plan is not None:
@@ -568,38 +568,10 @@ class LoadSuiteBase:
         rp = os.getenv('RESULT_RESOURCES_PATH')
         if rp and errors:
             fn = os.path.join(rp, 'errors.yaml')
-            tmp_fn = fn + '_'
             try:
-                # Файл может обновляться несколькими процессами, поэтому
-                # read-modify-write целиком делается под блокировкой
-                with open(f'{fn}.lock', 'w') as lock_file:
-                    fcntl.flock(lock_file, fcntl.LOCK_EX)
-                    try:
-                        data = {}
-                        if os.path.exists(fn):
-                            with open(fn, 'r') as f:
-                                data = yaml.safe_load(f)
-                                if not isinstance(data, dict):
-                                    data = {}
-                        errors_by_tests = data.get('errors_by_tests')
-                        if not isinstance(errors_by_tests, dict):
-                            errors_by_tests = {}
-                        errors_by_tests[f'{cls.suite()}.{query_name}'] = {
-                            **get_test_info(cls.suite(), query_name, result.start_time, end_time),
-                            'errors': [e.serialize() for e in errors],
-                        }
-                        data['environment'] = get_environment_info()
-                        data['errors_by_tests'] = errors_by_tests
-                        with open(tmp_fn, 'w') as f:
-                            yaml.safe_dump(data, f, allow_unicode=True)
-                        os.replace(tmp_fn, fn)
-                    except BaseException as e:
-                        result.add_warning(f'Error while write {fn}: {e}', area=ErrorArea.TEST_INFRA)
-                    finally:
-                        if os.path.exists(tmp_fn):
-                            os.remove(tmp_fn)
-            except BaseException as e:
-                result.add_warning(f'Error while lock {fn}.lock: {e}', area=ErrorArea.TEST_INFRA)
+                write_errors_yaml(fn, cls.suite(), query_name, errors, result.start_time, end_time)
+            except Exception as e:
+                result.add_warning(f'Error while write {fn}: {e}', area=ErrorArea.TEST_INFRA)
         if not result.success:
             ie = result.get_integrated_error()
             exc = pytest.fail.Exception(str(ie))
@@ -617,8 +589,8 @@ class LoadSuiteBase:
         Может быть переопределена в наследниках для изменения момента выполнения.
         """
         cls._setup_start_time = time()
-        result = YdbCliHelper.WorkloadRunResult()
-        result.iterations[0] = YdbCliHelper.Iteration()
+        result = WorkloadRunResult()
+        result.iterations[0] = Iteration()
         result.add_error(YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60))), area=ErrorArea.YDB_INFRA)
         if result.success and hasattr(cls, 'do_setup_class'):
             try:
@@ -730,7 +702,7 @@ class LoadSuiteBase:
         self.process_query_result(result, query_name, True)
 
     @classmethod
-    def check_nodes_diagnostics(cls, result: YdbCliHelper.WorkloadRunResult, end_time: float) -> list[NodeErrors]:
+    def check_nodes_diagnostics(cls, result: WorkloadRunResult, end_time: float) -> list[NodeErrors]:
         """
         Собирает диагностическую информацию о нодах без проверки перезапусков/падений.
         Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
@@ -767,7 +739,7 @@ class LoadSuiteBase:
         return cls.__get_verify_fails(all_hosts, start_time, end_time)
 
     @classmethod
-    def check_nodes_diagnostics_with_timing(cls, result: YdbCliHelper.WorkloadRunResult, start_time: float, end_time: float) -> list[NodeErrors]:
+    def check_nodes_diagnostics_with_timing(cls, result: WorkloadRunResult, start_time: float, end_time: float) -> list[NodeErrors]:
         """
         Собирает диагностическую информацию о нодах с кастомным временным интервалом.
         Проверяет coredump'ы и OOM для всех нод из сохраненного состояния.
@@ -1020,7 +992,7 @@ class LoadSuiteParallel(LoadSuiteBase):
     def get_path(cls) -> str:
         return ''
 
-    __results: dict[str, YdbCliHelper.WorkloadRunResult] = {}
+    __results: dict[str, WorkloadRunResult] = {}
 
     @classmethod
     def do_setup_class(cls):

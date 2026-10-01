@@ -3,7 +3,7 @@ from collections import defaultdict
 import allure
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
+from ydb.tests.olap.lib.workload_result import WorkloadRunResult
 from ydb.tests.olap.lib.utils import external_param_is_true, get_allure_report_url, get_ci_version, get_test_tools_version
 import os
 from urllib.parse import urlencode
@@ -199,7 +199,7 @@ def _set_logs_command(test_info: dict[str, str], start_time: float, end_time: fl
     test_info['kernel_log'] = f'<details><code>{dmesg_cmd}</code></details>'
 
 
-def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, use_node_subcols: bool = False) -> str:
+def __create_iterations_table(result: WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None, use_node_subcols: bool = False) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload
 
@@ -468,7 +468,7 @@ def __create_iterations_table(result: YdbCliHelper.WorkloadRunResult = None, nod
     return table_html
 
 
-def __create_iterations_table_with_node_subcols(result: YdbCliHelper.WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
+def __create_iterations_table_with_node_subcols(result: WorkloadRunResult = None, node_errors: list[NodeErrors] = [], workload_params: dict = None) -> str:
     """
     Создает HTML таблицу с информацией об итерациях workload с подколонками для каждой ноды
 

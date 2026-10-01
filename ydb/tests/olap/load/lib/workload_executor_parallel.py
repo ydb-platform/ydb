@@ -11,7 +11,7 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.remote_execution import (
     deploy_binaries_to_hosts,
 )
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, ErrorArea, ErrorPriority
+from ydb.tests.olap.lib.workload_result import ErrorArea, ErrorPriority, WorkloadRunResult
 from ydb.tests.olap.lib.utils import get_external_param
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -177,7 +177,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
                 total_hosts += list(map(lambda node: node['node'].host, deployed_nodes[future_workload_name]))
 
             # Инициализируем результат
-            overall_result = YdbCliHelper.WorkloadRunResult()
+            overall_result = WorkloadRunResult()
             overall_result.start_time = time_module.time()
 
             logging.info(
@@ -631,7 +631,7 @@ class ParallelWorkloadTestBase(LoadSuiteBase):
 
     def process_workload_result_with_diagnostics(
         self,
-        result: YdbCliHelper.WorkloadRunResult,
+        result: WorkloadRunResult,
         workload_name: str,
         execution_result=None
     ):

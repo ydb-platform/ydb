@@ -15,7 +15,7 @@ from ydb.tests.olap.lib.remote_execution import (
     deploy_binaries_to_hosts,
     copy_file,
 )
-from ydb.tests.olap.lib.ydb_cli import YdbCliHelper, ErrorArea, ErrorPriority
+from ydb.tests.olap.lib.workload_result import ErrorArea, ErrorPriority, Iteration, WorkloadRunResult
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 
@@ -88,8 +88,8 @@ class WorkloadTestBase(LoadSuiteBase):
             cluster_issue = cls._check_cluster_health()
 
             # Создаем результат
-            result = YdbCliHelper.WorkloadRunResult()
-            result.iterations[0] = YdbCliHelper.Iteration()
+            result = WorkloadRunResult()
+            result.iterations[0] = Iteration()
             result.start_time = verification_start_time
             result.iterations[0].time = time_module.time() - verification_start_time
 
@@ -868,7 +868,7 @@ class WorkloadTestBase(LoadSuiteBase):
         is_timeout: bool = False,
         iteration_number: int = 0,
         actual_execution_time: float = None,
-    ) -> YdbCliHelper.WorkloadRunResult:
+    ) -> WorkloadRunResult:
         """
         Создает и заполняет WorkloadRunResult с общей логикой
 
@@ -885,7 +885,7 @@ class WorkloadTestBase(LoadSuiteBase):
         Returns:
             Заполненный WorkloadRunResult
         """
-        result = YdbCliHelper.WorkloadRunResult()
+        result = WorkloadRunResult()
         result.start_time = self.__class__._setup_start_time
         result.stdout = str(stdout)
         result.stderr = str(stderr)
@@ -941,7 +941,7 @@ class WorkloadTestBase(LoadSuiteBase):
             result.add_warning(f"Warning in stderr: {stderr}", area=ErrorArea.OTHER)
 
         # Добавляем информацию о выполнении в iterations
-        iteration = YdbCliHelper.Iteration()
+        iteration = Iteration()
         # Используем фактическое время выполнения, если оно указано, иначе
         # плановое время
         execution_time = (
@@ -1303,7 +1303,7 @@ class WorkloadTestBase(LoadSuiteBase):
             )
 
             # Инициализируем результат
-            overall_result = YdbCliHelper.WorkloadRunResult()
+            overall_result = WorkloadRunResult()
             overall_result.start_time = time_module.time()
 
             logging.info(
@@ -2527,7 +2527,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
     def process_workload_result_with_diagnostics(
         self,
-        result: YdbCliHelper.WorkloadRunResult,
+        result: WorkloadRunResult,
         workload_name: str,
         check_scheme: bool = True,
         use_node_subcols: bool = False,
@@ -2729,7 +2729,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 # Логируем ошибку выгрузки, но не прерываем выполнение
                 error_msg = f"Failed to upload results: {e}"
                 logging.error(error_msg)
-                result.add_warning(error_msg, ErrorArea.TEST_INFRA)
+                result.add_warning(error_msg, area=ErrorArea.TEST_INFRA)
                 # После добавления warning нужно пересчитать summary флаги
                 # summary флаги (with_errors/with_warnings) автоматически добавляются в ydb_cli.py
 

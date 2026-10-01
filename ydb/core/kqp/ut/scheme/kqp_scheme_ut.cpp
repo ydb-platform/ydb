@@ -15313,6 +15313,7 @@ END DO)",
         // Without the column-compaction feature flag, forced compaction is rejected for column tables.
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableForcedCompactions(true);
+        featureFlags.SetEnableForcedColumnCompactions(false);
         TKikimrRunner kikimr(featureFlags);
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
         auto queryClient = kikimr.GetQueryClient();

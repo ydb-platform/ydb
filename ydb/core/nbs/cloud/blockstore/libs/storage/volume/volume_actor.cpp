@@ -222,10 +222,8 @@ void TVolumeActor::OpenPartitionPipe(const TActorContext& ctx)
 {
     NTabletPipe::TClientConfig clientConfig;
     clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-    PartitionPipeClient = ctx.Register(NTabletPipe::CreateClient(
-        ctx.SelfID,
-        PartitionTabletId,
-        clientConfig));
+    PartitionPipeClient = ctx.Register(
+        NTabletPipe::CreateClient(ctx.SelfID, PartitionTabletId, clientConfig));
 }
 
 void TVolumeActor::ResendPendingEventsToPartition(
@@ -246,9 +244,8 @@ void TVolumeActor::ResendPendingEventsToPartition(
         ctx,
         NKikimrServices::NBS_VOLUME,
         "Resending pending events after pipe failure"
-            << ", tabletId: " << TabletID()
-            << ", partitionTabletId: " << PartitionTabletId
-            << ", pendingEvents: " << PendingEvents.size()
+            << ", tabletId: " << TabletID() << ", partitionTabletId: "
+            << PartitionTabletId << ", pendingEvents: " << PendingEvents.size()
             << ", pipeClient: " << pipeClient);
 
     NTabletPipe::CloseClient(ctx, PartitionPipeClient);

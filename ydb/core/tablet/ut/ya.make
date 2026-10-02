@@ -33,6 +33,7 @@ SRCS(
     detailed_metrics/detailed_metrics_descriptor_ut.cpp
     detailed_metrics/node_database_metrics_aggregator_ut.cpp
     detailed_metrics/processor_database_metrics_aggregator_ut.cpp
+    detailed_metrics/public_metrics_bucket_ut.cpp
     detailed_metrics/ydb_metrics_aggregator_ut.cpp
     detailed_metrics/ydb_metrics_ut.cpp
 )

@@ -70,6 +70,8 @@ SRCS(
     detailed_metrics/node_database_metrics_aggregator.h
     detailed_metrics/processor_database_metrics_aggregator.cpp
     detailed_metrics/processor_database_metrics_aggregator.h
+    detailed_metrics/public_metrics_bucket.cpp
+    detailed_metrics/public_metrics_bucket.h
     detailed_metrics/ydb_metrics_aggregator.cpp
     detailed_metrics/ydb_metrics_aggregator.h
     detailed_metrics/ydb_metrics_mapper.cpp

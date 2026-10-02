@@ -28,6 +28,7 @@ RECURSE(
     scheme_shard
     scheme_tests
     script_execution
+    sdk/cpp/path_aliasing
     sdk/cpp/sdk_credprovider
     secrets
     security

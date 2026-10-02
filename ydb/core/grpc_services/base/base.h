@@ -468,6 +468,7 @@ class IRequestProxyCtx
     friend class TGRpcRequestProxyHandleMethods;
 private:
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
+    virtual const TMaybe<TString> GetDatabaseNameFromRequest() const = 0;
 public:
     virtual ~IRequestProxyCtx() = default;
 
@@ -495,6 +496,12 @@ public:
 
     // validation
     virtual bool Validate(TString& error) = 0;
+
+    void InitializePathNormalization(std::shared_ptr<const NPathAliasing::TPathNormalizer> normalizer);
+
+    const TMaybe<TString> GetDatabaseName() const final {
+        return PathNormalizationInitialized_ ? EffectiveDatabaseName_ : GetDatabaseNameFromRequest();
+    }
 
     // counters
     virtual void SetCounters(IGRpcProxyCounters::TPtr counters) = 0;
@@ -531,6 +538,10 @@ public:
     }
 
     virtual TString GetRpcMethodName() const = 0;
+
+private:
+    TMaybe<TString> EffectiveDatabaseName_;
+    bool PathNormalizationInitialized_ = false;
 };
 
 // Request context
@@ -644,7 +655,7 @@ public:
         return false;
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database_;
     }
 
@@ -885,7 +896,8 @@ public:
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
         , AuxSettings(std::move(auxSettings))
     {
-        if (!TraceId) {
+        this->EnablePathNormalization();
+        if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
     }
@@ -929,7 +941,7 @@ public:
         return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -1263,7 +1275,8 @@ public:
         : Ctx_(ctx)
         , TraceId(GetPeerMetaValues(NYdb::YDB_TRACE_ID_HEADER))
     {
-        if (!TraceId) {
+        this->EnablePathNormalization();
+        if (!TraceId || TraceId->empty()) {
             TraceId = UlidGen.Next().ToString();
         }
     }
@@ -1276,7 +1289,7 @@ public:
         return FindPtr(Ctx_->GetPeerMetaValues(NYdb::YDB_CLIENT_CAPABILITIES), capability);
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
@@ -2024,7 +2037,7 @@ public:
         return Span.GetTraceId();
     }
 
-    const TMaybe<TString> GetDatabaseName() const override {
+    const TMaybe<TString> GetDatabaseNameFromRequest() const override {
         return Database ? TMaybe<TString>(Database) : Nothing();
     }
 

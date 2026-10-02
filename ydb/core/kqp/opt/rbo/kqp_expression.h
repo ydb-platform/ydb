@@ -130,6 +130,10 @@ class TEquiJoinCondition {
     // In case this is a simple predicate that contains a single column reference on each side, return right column
     TInfoUnitId GetRightIU() const;
 
+    std::optional<TExpression> GetLeftExpression();
+
+    std::optional<TExpression> GetRightExpression();
+
     // Find all non-column reference expression in this condition and insert them into a map
     bool ExtractExpressions(TNodeOnNodeOwnedMap& map, TMappedIUs<TExprNode::TPtr>& expressions);
 
@@ -138,6 +142,10 @@ class TEquiJoinCondition {
     TUnorderedIUs RightIUs;
 
     bool IncludesExpressions = true;
+
+  private:
+    std::pair<std::optional<TExpression>, std::optional<TExpression>> GetExpressions();
+
 };
 
 // Create an expression that accesses a single column

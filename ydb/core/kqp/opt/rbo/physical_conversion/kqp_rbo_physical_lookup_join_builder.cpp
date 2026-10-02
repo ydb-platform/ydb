@@ -100,9 +100,8 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         }
     }
 
-    for (const auto& [leftKey, rightKey, equalNulls] : lookup.ResidualJoinKeys.Items()) {
-        Y_UNUSED(rightKey);
-        addLeftMember(leftKey);
+    for (const auto& key : lookup.ResidualJoinKeys.Items()) {
+        addLeftMember(key.first);
     }
 
     const auto point = Build<TCoArgument>(ctx, pos).Name("lookup_join_key_point").Done();
@@ -310,16 +309,16 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
 
         // The join keys which are not present in the right side index.
         // We have to evaluate them before apply index lookup join.
-        for (const auto& [leftKey, rightKey, equalNulls] : lookup.ResidualJoinKeys.Items()) {
+        for (const auto& key : lookup.ResidualJoinKeys.Items()) {
             // clang-format off
             equalities.push_back(Build<TCoCmpEqual>(Ctx, Pos)
                 .Left<TCoMember>()
                     .Struct(leftRow)
-                    .Name<TCoAtom>().Build(Names.Get(leftKey))
+                    .Name<TCoAtom>().Build(Names.Get(key.first))
                     .Build()
                 .Right<TCoMember>()
                     .Struct(rightArg)
-                    .Name<TCoAtom>().Build(Names.Get(rightKey))
+                    .Name<TCoAtom>().Build(Names.Get(key.second))
                     .Build()
             .Done());
             // clang-format on

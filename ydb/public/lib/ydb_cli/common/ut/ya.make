@@ -8,6 +8,10 @@ SRCS(
     duration_ut.cpp
     markdown_ut.cpp
     normalize_path_ut.cpp
+    oidc_ut.cpp
+    oidc_config_ut.cpp
+    oidc_options_ut.cpp
+    oidc_token_cache_ut.cpp
     pg_dump_parser_ut.cpp
     print_utils_ut.cpp
     recursive_remove_ut.cpp

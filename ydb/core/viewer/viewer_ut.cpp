@@ -797,7 +797,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         StorageSpaceTest("all", NKikimrWhiteboard::EFlag::Red, 10, 100, true, "Red");
     }
 
-    void CheckTenantInfoStorageLimitWithGroupSizeInUnits(bool enforcedSlotSize)
+    void CheckStorageLimitWithGroupSizeInUnits(bool enforcedSlotSize, bool cluster = false)
     {
         TPortManager tp;
         auto settings = TServerSettings(tp.GetPort(2134))
@@ -849,6 +849,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     }
                     break;
                 }
+                case NSysView::TEvSysView::EvGetStorageStatsResponse: {
+                    auto& record = ev->Get<NSysView::TEvSysView::TEvGetStorageStatsResponse>()->Record;
+                    record.ClearEntries();
+                    for (const auto& kind : poolKinds) {
+                        auto* stats = record.AddEntries();
+                        stats->SetPDiskFilter("Type:" + to_upper(kind));
+                        stats->SetErasureSpecies("mirror-3-dc");
+                    }
+                    break;
+                }
                 case NSysView::TEvSysView::EvGetPDisksResponse: {
                     auto& record = ev->Get<NSysView::TEvSysView::TEvGetPDisksResponse>()->Record;
                     record.ClearEntries();
@@ -857,6 +867,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         pdisk->MutableKey()->SetNodeId(runtime.GetNodeId(0));
                         pdisk->MutableKey()->SetPDiskId(id);
                         auto* info = pdisk->MutableInfo();
+                        info->SetType(id == 1 ? "SSD" : "HDD");
                         info->SetTotalSize(1600);
                         info->SetExpectedSlotCount(id == 3 ? 0 : 16);
                         info->SetSlotSizeInUnits(id == 1 ? 3 : id == 4 ? 0 : 2);
@@ -877,6 +888,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
                         group->MutableKey()->SetGroupId(i + 1);
                         group->MutableInfo()->SetStoragePoolId(groups[i].PoolId);
                         group->MutableInfo()->SetGroupSizeInUnits(groups[i].SizeInUnits);
+                        group->MutableInfo()->SetErasureSpeciesV2("mirror-3-dc");
                     }
                     break;
                 }
@@ -898,14 +910,31 @@ Y_UNIT_TEST_SUITE(Viewer) {
         });
 
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
+        const TString path = cluster
+            ? "/viewer/cluster?use_cache=false&use_health_check=false&offload_merge=false"
+            : "/viewer/tenantinfo?storage=true&use_cache=false";
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
-            "GET /viewer/tenantinfo?storage=true&use_cache=false HTTP/1.1\r\n\r\n", endpoint, {});
+            TStringBuilder() << "GET " << path << " HTTP/1.1\r\n\r\n", endpoint, {});
         runtime.Send(new IEventHandle(MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
         TAutoPtr<IEventHandle> handle;
         auto* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL_C(result->Response->Status, "200", result->Response->Body);
         NJson::TJsonValue json;
         NJson::ReadJsonTree(result->Response->Body, &json, true);
+        if (cluster) {
+            const auto& stats = json["StorageStats"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(stats.size(), 2);
+            for (const auto& entry : stats) {
+                const auto& type = entry["PDiskFilter"].GetString();
+                UNIT_ASSERT(type == "Type:SSD" || type == "Type:HDD");
+                UNIT_ASSERT_VALUES_EQUAL(entry["CurrentAllocatedSize"].GetString(), type == "Type:SSD" ? "20" : "30");
+                const TString expectedAvailable = type == "Type:SSD"
+                    ? (enforcedSlotSize ? "220" : "280")
+                    : (enforcedSlotSize ? "380" : "420");
+                UNIT_ASSERT_VALUES_EQUAL(entry["CurrentAvailableSize"].GetString(), expectedAvailable);
+            }
+            return;
+        }
         const auto& tenants = json["TenantInfo"].GetArray();
         UNIT_ASSERT_VALUES_EQUAL(tenants.size(), 1);
         const auto& tenant = tenants[0];
@@ -926,12 +955,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnits)
     {
-        CheckTenantInfoStorageLimitWithGroupSizeInUnits(false);
+        CheckStorageLimitWithGroupSizeInUnits(false);
     }
 
     Y_UNIT_TEST(TenantInfoStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
     {
-        CheckTenantInfoStorageLimitWithGroupSizeInUnits(true);
+        CheckStorageLimitWithGroupSizeInUnits(true);
+    }
+
+    Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnits)
+    {
+        CheckStorageLimitWithGroupSizeInUnits(false, true);
+    }
+
+    Y_UNIT_TEST(ClusterStorageLimitWithGroupSizeInUnitsAndEnforcedSlotSize)
+    {
+        CheckStorageLimitWithGroupSizeInUnits(true, true);
     }
 
     Y_UNIT_TEST(DatabaseStatsStorageLimitWithExpectedSlotSize)

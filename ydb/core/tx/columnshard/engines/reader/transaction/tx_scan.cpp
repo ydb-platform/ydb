@@ -247,7 +247,10 @@ void TTxScan::Complete(const TActorContext& ctx) {
         {"tablet", Self->TabletID()},
         {"timeout", TDuration::MilliSeconds(request.GetTimeoutMs())},
         {"cpuLimits", cpuLimits.DebugString()});
-    LOG_S_DEBUG("TTxScan prepare txId: " << request.GetTxId() << " scanId: " << request.GetScanId() << " at tablet " << Self->TabletID());
+    YDB_LOG_DEBUG_COMP(TX_COLUMNSHARD, "TTxScan prepare at tablet",
+        {"txId", request.GetTxId()},
+        {"scanId", request.GetScanId()},
+        {"tabletId", Self->TabletID()});
 
     auto accessorConclusion = MakeTableAccessor(ssPathId, snapshot);
     if (accessorConclusion.IsFail()) {

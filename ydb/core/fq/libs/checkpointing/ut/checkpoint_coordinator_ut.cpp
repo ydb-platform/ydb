@@ -6,6 +6,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
@@ -82,7 +83,7 @@ struct TTestBootstrap : public TTestActorRuntime {
 
     ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
 
-    explicit TTestBootstrap(ui64 graphFlags, ui64 snaphotRotationPeriod, const TString& sourceType)
+    explicit TTestBootstrap(ui64 graphFlags, ui64 snaphotRotationPeriod, const TString& sourceType, TMaybe<TInstant> outputStartTime = {})
         : TTestActorRuntime(true)
         , GraphState(BuildTestGraph(graphFlags, sourceType))
         , CoordinatorId("my-graph-id", 42)
@@ -118,19 +119,21 @@ struct TTestBootstrap : public TTestActorRuntime {
 
         SetLogPriority(NKikimrServices::STREAMS_CHECKPOINT_COORDINATOR, NLog::PRI_DEBUG);
 
+        TCheckpointCoordinatorSettings coordinatorSettings(Settings);
+        coordinatorSettings.OutputStartTime = outputStartTime;
         CheckpointCoordinator = Register(MakeCheckpointCoordinator(
             CoordinatorId,
             StorageProxy,
             RunActor,
-            Settings,
+            coordinatorSettings,
             Counters,
             NProto::TGraphParams(),
-            FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
+            outputStartTime ? FederatedQuery::StateLoadMode::EMPTY : FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT,
             {}
         ).Release());
         
         auto ev = BuildEvReadyState();
-        Send(new IEventHandle(CheckpointCoordinator, {}, ev.release()));
+        Send(new IEventHandle(CheckpointCoordinator, RunActor, ev.release()));
 
         EnableScheduleForActor(CheckpointCoordinator);
     }
@@ -530,6 +533,13 @@ Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
         ASSERT_THROW(
             test.GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(test.StorageProxy, TDuration::Seconds(10)),
             NActors::TEmptyEventQueueException);
+    }
+
+    Y_UNIT_TEST(ShouldRejectOutputStartTimeWithoutIngressTasks) {
+        TTestBootstrap test(ETestGraphFlags::InputWithSource, 0, "S3Source", TInstant::Seconds(1));
+        const auto error = test.GrabEdgeEvent<NYql::NDq::TEvDq::TEvAbortExecution>(test.RunActor, TDuration::Seconds(10));
+        UNIT_ASSERT(error->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::BAD_REQUEST);
+        UNIT_ASSERT_STRING_CONTAINS(NYql::IssuesFromMessageAsString(error->Get()->Record.GetIssues()), "OUTPUT_FROM requires topic inputs");
     }
 }
 

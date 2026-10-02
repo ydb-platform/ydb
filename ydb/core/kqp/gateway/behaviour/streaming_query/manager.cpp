@@ -146,6 +146,7 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
     auto& featuresExtractor = settings.GetFeaturesExtractor();
     auto& properties = *streamingQueryDesc.MutableProperties()->MutableProperties();
     const auto readFrom = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::ReadFrom);
+    const auto outputFrom = featuresExtractor.Extract(TStreamingQueryConfig::TProperties::OutputFrom);
 
     // Validation of features values will be performed on execution step
     for (const auto& property : {
@@ -167,14 +168,17 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
         return streamingDispositionStatus;
     }
 
-    if (const auto streamingDisposition = streamingDispositionStatus.DetachResult()) {
+    auto streamingDisposition = streamingDispositionStatus.DetachResult();
+    if (streamingDisposition) {
         if (readFrom) {
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "READ_FROM and STREAMING_DISPOSITION are mutually exclusive");
+        }
+        if (outputFrom) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "OUTPUT_FROM cannot be combined with STREAMING_DISPOSITION");
         }
         if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryDisposition()) {
             return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query disposition is disabled. Please contact your system administrator to enable it");
         }
-        properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
     }
 
     if (readFrom) {
@@ -187,7 +191,26 @@ TYqlConclusion<NYql::NPq::NProto::StreamingDisposition> ParseReadFrom(const TStr
             return disposition;
         }
 
-        properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, disposition.DetachResult().SerializeAsString());
+        streamingDisposition = disposition.DetachResult();
+    }
+
+    if (outputFrom) {
+        if (!AppData(actorSystem)->FeatureFlags.GetEnableStreamingQueryStateRecompute()) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Streaming query OUTPUT_FROM is disabled. Please contact your system administrator to enable state recomputation");
+        }
+
+        ui64 timestamp;
+        if (!TryFromString(*outputFrom, timestamp)) {
+            return TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_BAD_REQUEST, "OUTPUT_FROM must be an expression of type Timestamp");
+        }
+        if (!streamingDisposition) {
+            streamingDisposition.emplace();
+        }
+        *streamingDisposition->mutable_output_start_time() = NProtoInterop::CastToProto(TInstant::MicroSeconds(timestamp));
+    }
+
+    if (streamingDisposition) {
+        properties.emplace(TStreamingQueryConfig::TProperties::StreamingDisposition, streamingDisposition->SerializeAsString());
     }
 
     auto watermarkLateEventsPolicyStatus = ParseWatermarkLateEventsPolicy(featuresExtractor);

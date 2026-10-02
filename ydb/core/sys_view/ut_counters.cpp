@@ -1,6 +1,7 @@
 #include "ut_common.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 namespace NKikimr {
@@ -165,6 +166,56 @@ void CreateDetailedTable(TTestEnv& env, const TString& databaseName, const TStri
         return nullptr;
     }
     return tableGroup->FindSubgroup("tablet_id", tabletId);
+}
+
+// The table= group of the public ydb_detailed tree that publishes
+// table.datashard.used_core_percents, on whichever node currently hosts the
+// SysView Processor, and the number of tablets across its buckets. The given
+// group (one of a previous SysView Processor incarnation, which lingers until
+// it is detached) is skipped. Returns nullptr if nothing is published yet.
+std::pair<::NMonitoring::TDynamicCounterPtr, ui64> FindUsedCorePercents(
+    TTestEnv& env,
+    const TString& databasePath,
+    const TString& relativeTablePath,
+    const ::NMonitoring::TDynamicCounterPtr& skippedGroup)
+{
+    auto* runtime = env.GetServer().GetRuntime();
+    for (ui32 nodeId = 0; nodeId < runtime->GetNodeCount(); ++nodeId) {
+        auto counters = runtime->GetAppData(nodeId).Counters;
+        auto root = GetServiceCounters(counters, "ydb_detailed", false);
+
+        auto tableGroup = FindDetailedTableGroup(root, "proj1", databasePath, relativeTablePath);
+        if (!tableGroup || tableGroup == skippedGroup) {
+            continue;
+        }
+        auto histogram = tableGroup->FindNamedHistogram("name", "table.datashard.used_core_percents");
+        if (!histogram) {
+            continue;
+        }
+        auto snapshot = histogram->Snapshot();
+        ui64 total = 0;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            total += snapshot->Value(i);
+        }
+        Cerr << "node " << nodeId << ", used_core_percents total " << total << Endl;
+        return {tableGroup, total};
+    }
+    return {nullptr, 0};
+}
+
+// Kill the tablet, so that it restarts with an empty in-memory state. RebootTablet
+// needs a simulated runtime, and this environment runs real threads
+void KillTablet(TTestEnv& env, ui64 tabletId) {
+    auto* runtime = env.GetServer().GetRuntime();
+    const TActorId sender = runtime->AllocateEdgeActor();
+
+    runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
+    runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvForward(tabletId, nullptr)));
+
+    auto ev = runtime->GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
+    UNIT_ASSERT(ev && ev->Get()->Tablet);
+    runtime->Send(new IEventHandle(ev->Get()->Tablet, sender, new TEvents::TEvPoisonPill()));
+    runtime->Send(new IEventHandle(MakeTabletResolverID(), sender, new TEvTabletResolver::TEvTabletProblem(tabletId, TActorId())));
 }
 
 } // namespace
@@ -349,6 +400,53 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         }
 
         UNIT_ASSERT_C(false, "out of iterations");
+    }
+
+    // used_core_percents is a non-derivative histogram (tablets per CPU-% bucket) that
+    // goes up and down. Every node report carries its full current state, so
+    // the SysView Processor rebuilds it after a restart even though an idle
+    // tablet stays in the same bucket and its state never changes.
+    // A smoke check: it tells the fix apart only while the only tablet stays idle
+    // in one bucket; ProcessorRestartRestoresIdleTabletsFromNextReports in
+    // ydb/core/tablet/detailed_metrics covers the same case deterministically.
+    Y_UNIT_TEST(DetailedTablesUsedCorePercentsSurvivesProcessorRestart) {
+        TTestEnv env(1, 2, {.EnableSVP = true, .EnableDetailedMetrics = true});
+
+        CreateDetailedDatabase(env, "Database1");
+        UNIT_ASSERT_VALUES_EQUAL(NMsgBusProxy::MSTATUS_OK,
+            env.GetClient().AlterUserAttributes("/Root", "Database1",
+                {{"monitoring_project_id", "proj1"}}));
+        CreateDetailedTable(env, "Database1", "Table1");
+
+        const TString databasePath = "/Root/Database1";
+        const TString relativeTablePath = "Table1";
+
+        auto waitForHistogram = [&](const char* stage, const ::NMonitoring::TDynamicCounterPtr& skippedGroup) {
+            for (size_t iter = 0; iter < 30; ++iter) {
+                Cerr << stage << ", iteration " << iter << Endl;
+                auto [tableGroup, total] = FindUsedCorePercents(env, databasePath, relativeTablePath, skippedGroup);
+                // The table has a single tablet, neither lost nor counted twice
+                if (tableGroup && total == 1) {
+                    return tableGroup;
+                }
+                Sleep(TDuration::Seconds(5));
+            }
+            UNIT_ASSERT_C(false, TStringBuilder()
+                << "used_core_percents histogram does not hold the table's tablet " << stage << ", out of iterations");
+            return ::NMonitoring::TDynamicCounterPtr();
+        };
+
+        auto groupBeforeRestart = waitForHistogram("before SysView Processor restart", nullptr);
+
+        auto description = DescribePath(*env.GetServer().GetRuntime(), TString(databasePath));
+        const ui64 processorId = description.GetDomainDescription().GetProcessingParams().GetSysViewProcessor();
+        UNIT_ASSERT_C(processorId, "SysView Processor tablet id not found");
+        Cerr << "killing SysView Processor " << processorId << Endl;
+        KillTablet(env, processorId);
+
+        // The restarted SysView Processor publishes into a group of its own,
+        // rebuilt from the node reports that follow the restart alone
+        waitForHistogram("after SysView Processor restart", groupBeforeRestart);
     }
 
     // Changing the monitoring_project_id user attribute moves the whole

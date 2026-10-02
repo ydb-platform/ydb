@@ -171,20 +171,20 @@ arrow::compute::FunctionRegistry* GetCustomFunctionRegistry() {
 
 }  // namespace internal
 
-TConclusion<arrow::Datum> TInternalFunction::Call(
+TConclusion<TFunctionResult> TInternalFunction::Call(
     const TExecFunctionContext& context, const TAccessorsCollection& resources) const {
     auto funcNames = GetRegistryFunctionNames();
 
-    auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation);
+    auto argumentsReader = resources.GetArguments(TColumnChainInfo::ExtractColumnIds(context.GetColumns()), NeedConcatenation, false);
     TAccessorsCollection::TChunksMerger merger;
     while (auto arguments = argumentsReader.ReadNext()) {
         arrow::Result<arrow::Datum> result = arrow::Status::UnknownError<std::string>("unknown function");
         for (const auto& funcName : funcNames) {
             if (GetContext() && GetContext()->func_registry()->GetFunction(funcName).ok()) {
-                result = arrow::compute::CallFunction(funcName, *arguments, FunctionOptions.get(), GetContext());
+                result = arrow::compute::CallFunction(funcName, arguments->Arguments, FunctionOptions.get(), GetContext());
             } else {
                 arrow::compute::ExecContext defaultContext(arrow::default_memory_pool(), nullptr, internal::GetCustomFunctionRegistry());
-                result = arrow::compute::CallFunction(funcName, *arguments, FunctionOptions.get(), &defaultContext);
+                result = arrow::compute::CallFunction(funcName, arguments->Arguments, FunctionOptions.get(), &defaultContext);
             }
 
             if (result.ok() && funcName == "count"sv) {
@@ -205,7 +205,11 @@ TConclusion<arrow::Datum> TInternalFunction::Call(
             return TConclusionStatus::Fail(result.status().message());
         }
     }
-    return merger.Execute();
+    auto merged = merger.Execute();
+    if (merged.IsFail()) {
+        return merged.GetError();
+    }
+    return TFunctionResult::FromDatum(merged.DetachResult());
 }
 
 }   // namespace NKikimr::NArrow::NSSA

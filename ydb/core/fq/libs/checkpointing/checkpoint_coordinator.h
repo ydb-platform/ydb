@@ -3,13 +3,14 @@
 #include "checkpoint_id_generator.h"
 #include "pending_checkpoint.h"
 
+#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
-#include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
+#include <ydb/core/fq/libs/state/dq_state_load_plan.h>
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/actor.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
 namespace NFq {
@@ -31,6 +32,8 @@ public:
 
     TCheckpointCoordinatorSettings();
     TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config);
+    TMaybe<TInstant> OutputStartTime;
+    TCheckpointProviderIntegrations ProviderIntegrations;
 
 private:
     YDB_ACCESSOR(TDuration, CheckpointingPeriod, DefaultCheckpointingPeriod);
@@ -38,7 +41,7 @@ private:
     YDB_ACCESSOR(ui64, MaxInflight, 1);
 };
 
-class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator> {
+class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator>, public NActors::IActorExceptionHandler {
     struct TScheduleCheckpointContext {
         static constexpr TDuration MIN_METRICS_REPORT_GRANULARITY = TDuration::Seconds(1);
 
@@ -78,10 +81,10 @@ public:
     void Handle(NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
     void Handle(const TEvCheckpointCoordinator::TEvRunGraph::TPtr&);
-    void HandleException(const std::exception& err);
+    bool OnUnhandledException(const std::exception& err) override;
 
 
-    STRICT_STFUNC_EXC(DispatchEvent,
+    STRICT_STFUNC(DispatchEvent,
         hFunc(TEvCheckpointCoordinator::TEvReadyState, Handle)
         hFunc(TEvCheckpointCoordinator::TEvScheduleCheckpointing, Handle)
         hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle)
@@ -106,8 +109,6 @@ public:
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle)
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle)
         hFunc(NActors::TEvents::TEvUndelivered, Handle)
-
-        , ExceptionFunc(std::exception, HandleException)
     )
 
     static constexpr char ActorName[] = "YQ_CHECKPOINT_COORDINATOR";
@@ -120,7 +121,7 @@ private:
     void UpdateInProgressMetric();
     void PassAway() override;
     void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint);
-    void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint);
+    void RestoreFromStateLoadPlan(TMaybe<TCheckpointMetadata> checkpoint = {});
     void StartAllTasks();
 
     void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const NYql::TIssues& subIssues);

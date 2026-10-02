@@ -1,7 +1,10 @@
 #include "node_database_metrics_aggregator.h"
+#include "detailed_metrics_counter_set.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/sys_view/service/db_counters_codec.h>
+#include <ydb/core/tablet/private/aggregated_tablet_counters.h>
+#include <ydb/core/tablet_flat/flat_executor_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -92,6 +95,10 @@ enum EAppCumulativeCounter : ui32 {
     ENGINE_HOST_ROW_UPDATES = 0,
     ENGINE_HOST_ROW_UPDATE_BYTES = 1,
 };
+
+// The position of HIST(ConsumedCPU), the only percentile of the fixture, in the histograms
+// of the packed executor counters
+constexpr ui32 CONSUMED_CPU_HISTOGRAM = 0;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -463,6 +470,42 @@ ui64 GetPackedCumulativeDelta(const NKikimrSysView::TDbCounters& counters, ui32 
         }
     }
     return 0;
+}
+
+/**
+ * @param[in] counters The packed counters of a bucket
+ * @param[in] index The position of a non-derivative histogram
+ *
+ * @return The values of all the buckets of the histogram
+ *
+ * @note A non-derivative histogram is packed as its full current value: sparse
+ *       (bucket, value) pairs, which replace whatever the receiver holds. It is present
+ *       (possibly with no pairs at all) even when every bucket is empty.
+ */
+TVector<ui64> GetPackedNonDerivativeHistogram(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    UNIT_ASSERT_C(index < (ui32)counters.HistogramSize(), "no histogram " << index);
+    const auto& histogram = counters.GetHistogram(index);
+    UNIT_ASSERT_C(histogram.GetNonDerivative(), "the histogram " << index << " is not marked NonDerivative");
+    UNIT_ASSERT(histogram.HasBucketsCount());
+
+    TVector<ui64> values(histogram.GetBucketsCount(), 0);
+    const auto& encoded = histogram.GetBuckets();
+    UNIT_ASSERT_VALUES_EQUAL(encoded.size() % 2, 0);
+    for (int i = 0; i + 1 < encoded.size(); i += 2) {
+        UNIT_ASSERT_C(encoded.Get(i) < values.size(), "bucket " << encoded.Get(i) << " is out of range");
+        // A zero bucket is not encoded
+        UNIT_ASSERT_VALUES_UNEQUAL(encoded.Get(i + 1), 0);
+        values[encoded.Get(i)] = encoded.Get(i + 1);
+    }
+    return values;
+}
+
+ui64 GetPackedNonDerivativeHistogramTotal(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    ui64 total = 0;
+    for (ui64 value : GetPackedNonDerivativeHistogram(counters, index)) {
+        total += value;
+    }
+    return total;
 }
 
 void DumpCounters(const TString& title, NMonitoring::TDynamicCounterPtr rootGroup) {
@@ -2651,7 +2694,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT_VALUES_EQUAL(unchanged->GetCounters().GetExecutorCounters().CumulativeSize(), 0);
     }
 
-    Y_UNIT_TEST(PackHistogramDecreaseRoundTripsWhenATabletLeaves) {
+    Y_UNIT_TEST(PackHistogramShrinksWhenATabletLeaves) {
         TRoleTrees trees;
         const TInstant now = TInstant::Seconds(100);
         TFakeTablet leader1(1000, 0);
@@ -2663,9 +2706,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         auto first = PackOnce(trees.Leaders);
         const auto* firstTable = FindPackedTable(first, TDetailedMetricsSettings::MetricsLevelTable);
         UNIT_ASSERT(firstTable);
-        NKikimrSysView::TDbCounters restored;
-        NSysView::TAggregateCumulative<false>::Apply(&restored, firstTable->GetTableCounters().GetExecutorCounters());
-        UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(0), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedNonDerivativeHistogram(firstTable->GetTableCounters().GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM)[0], 2);
 
         trees.Leaders->ForgetTablet(leader2.TabletId, leader2.FollowerId);
         auto packed = PackOnce(trees.Leaders);
@@ -2673,12 +2715,12 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(table);
         const auto& counters = table->GetTableCounters().GetExecutorCounters();
         UNIT_ASSERT_VALUES_EQUAL(counters.HistogramSize(), 1);
-        // The occupied bucket shrinks from 2 to 1 using an unsigned modulo decrement.
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(0).BucketsSize(), 2);
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(0).GetBuckets(0), 0);
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(0).GetBuckets(1), ui64(1) - ui64(2));
-        NSysView::TAggregateCumulative<false>::Apply(&restored, counters);
-        UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(0), 1);
+        // The occupied bucket shrinks from 2 to 1: the report carries the new count itself,
+        // not the decrease, so it does not depend on the receiver having seen the earlier one.
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(CONSUMED_CPU_HISTOGRAM).BucketsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(CONSUMED_CPU_HISTOGRAM).GetBuckets(0), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counters.GetHistogram(CONSUMED_CPU_HISTOGRAM).GetBuckets(1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, CONSUMED_CPU_HISTOGRAM)[0], 1);
     }
 
     Y_UNIT_TEST(PackEmitsBothShapesWhileTheLevelConverges) {
@@ -2749,7 +2791,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         }
     }
 
-    Y_UNIT_TEST(PackRecreatedBucketDoesNotRepeatHistogramState) {
+    Y_UNIT_TEST(PackRecreatedBucketReportsTheCurrentHistogramSnapshot) {
         for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
             TRoleTrees trees;
             TFakeTablet leader(1000, 0);
@@ -2759,7 +2801,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             auto first = PackOnce(trees.Leaders);
             NKikimrSysView::TDbCounters restored;
             NSysView::TAggregateCumulative<false>::Apply(&restored, GetSinglePackedCounters(first, level).GetExecutorCounters());
-            UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(0), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetPackedNonDerivativeHistogram(GetSinglePackedCounters(first, level).GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM)[0], 1);
 
             trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
             UNIT_ASSERT(!FindTableGroup(trees.Root));
@@ -2771,7 +2814,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU), 0);
                 NSysView::TAggregateCumulative<false>::Apply(&restored, counters);
                 UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(CONSUMED_CPU), 100);
-                UNIT_ASSERT_VALUES_EQUAL(restored.GetHistogram(0).GetBuckets(0), 1);
+                // The cumulative history is not repeated, but the non-derivative histogram is reported
+                // in full every time: the tablet is still there, and the retirement report is superseded
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, CONSUMED_CPU_HISTOGRAM)[0], 1);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, CONSUMED_CPU_HISTOGRAM), 1);
             }
         }
     }
@@ -2811,8 +2857,11 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
                 NSysView::TAggregateCumulative<false>::Apply(&app, counters.GetAppCounters());
                 UNIT_ASSERT_VALUES_EQUAL(executor.GetCumulative(CONSUMED_CPU), 136);
                 UNIT_ASSERT_VALUES_EQUAL(app.GetCumulative(ENGINE_HOST_ROW_UPDATES), 1360);
-                UNIT_ASSERT_VALUES_EQUAL(executor.GetHistogram(0).GetBuckets(0), 0);
-                UNIT_ASSERT_VALUES_EQUAL(executor.GetHistogram(0).GetBuckets(1), 1);
+                // Only the state of the last incarnation of the bucket is reported
+                const auto histogram = GetPackedNonDerivativeHistogram(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM);
+                UNIT_ASSERT_VALUES_EQUAL(histogram[0], 0);
+                UNIT_ASSERT_VALUES_EQUAL(histogram[1], 1);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 1);
             }
         }
     }
@@ -2842,9 +2891,8 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetMaxExecutorCounters(), CONSUMED_CPU), 0);
             NSysView::TAggregateCumulative<false>::Apply(&restored, counters.GetExecutorCounters());
             UNIT_ASSERT_VALUES_EQUAL(restored.GetCumulative(CONSUMED_CPU), 125);
-            for (ui64 value : restored.GetHistogram(0).GetBuckets()) {
-                UNIT_ASSERT_VALUES_EQUAL(value, 0);
-            }
+            // The retired bucket reports its non-derivative histogram empty
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 0);
             UNIT_ASSERT(PackOnce(trees.Leaders).empty());
             UNIT_ASSERT(!trees.Root->FindSubgroup("database", DATABASE_PATH));
         }
@@ -2872,5 +2920,124 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const auto& counters = packed.Get(1).GetTableCounters().GetExecutorCounters();
         UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU), 25);
         UNIT_ASSERT_VALUES_EQUAL(counters.GetSimple(DB_UNIQUE_ROWS_TOTAL), 17);
+    }
+
+    Y_UNIT_TEST(PackMarksNonDerivativeHistogramsAndReemitsThemWhenUnchanged) {
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            TRoleTrees trees;
+            TFakeTablet leader(1000, 0);
+            leader.AddCumulative(CONSUMED_CPU, 100).AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 1000);
+            leader.Report(trees.Leaders, level, TInstant::Seconds(100));
+
+            auto first = PackOnce(trees.Leaders);
+            const auto& firstCounters = GetSinglePackedCounters(first, level);
+            UNIT_ASSERT_VALUES_EQUAL(firstCounters.GetExecutorCounters().HistogramSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(firstCounters.GetExecutorCounters(), CONSUMED_CPU), 100);
+            const auto snapshot = GetPackedNonDerivativeHistogram(firstCounters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM);
+            UNIT_ASSERT_VALUES_EQUAL(snapshot[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(firstCounters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 1);
+            UNIT_ASSERT_VALUES_EQUAL(firstCounters.GetAppCounters().HistogramSize(), 0);
+
+            // Nothing changed, yet the whole non-derivative histogram is reported again, so that a receiver,
+            // which lost its copy in the meantime, is up to date after this very report
+            for (int report = 0; report < 2; ++report) {
+                auto next = PackOnce(trees.Leaders);
+                const auto& counters = GetSinglePackedCounters(next, level);
+                UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters.GetExecutorCounters(), CONSUMED_CPU), 0);
+                UNIT_ASSERT_VALUES_EQUAL(counters.GetExecutorCounters().CumulativeSize(), 0);
+                UNIT_ASSERT_VALUES_EQUAL(counters.GetExecutorCounters().HistogramSize(), 1);
+                UNIT_ASSERT(GetPackedNonDerivativeHistogram(counters.GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM) == snapshot);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(PackRetirementReportsEmptyNonDerivativeHistogram) {
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            TRoleTrees trees;
+            TFakeTablet leader(1000, 0);
+            leader.AddCumulative(CONSUMED_CPU, 100);
+            leader.Report(trees.Leaders, level, TInstant::Seconds(100));
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetPackedNonDerivativeHistogramTotal(GetSinglePackedCounters(PackOnce(trees.Leaders), level).GetExecutorCounters(),
+                                                CONSUMED_CPU_HISTOGRAM), 1);
+
+            trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
+            auto final = PackOnce(trees.Leaders);
+            UNIT_ASSERT_VALUES_EQUAL(final.size(), 1);
+            const auto& histogram = GetSinglePackedCounters(final, level).GetExecutorCounters().GetHistogram(CONSUMED_CPU_HISTOGRAM);
+            // The entry is there although it is empty: it is what tells the receiver to forget the tablet
+            UNIT_ASSERT(histogram.GetNonDerivative());
+            UNIT_ASSERT_VALUES_UNEQUAL(histogram.GetBucketsCount(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(histogram.BucketsSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetPackedNonDerivativeHistogramTotal(GetSinglePackedCounters(final, level).GetExecutorCounters(), CONSUMED_CPU_HISTOGRAM), 0);
+        }
+    }
+
+    Y_UNIT_TEST(PackRetiredAndRecreatedBucketReportsTheNewHistogramSnapshot) {
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            TRoleTrees trees;
+            TFakeTablet leader(1000, 0);
+            TInstant now = TInstant::Seconds(100);
+            leader.AddCumulative(CONSUMED_CPU, 100);
+            leader.Report(trees.Leaders, level, now);
+
+            // No Pack in between: the retirement report (empty) is still pending when
+            // the very same bucket is created again, and must not win over the new one
+            trees.Leaders->ForgetTablet(leader.TabletId, leader.FollowerId);
+            leader.Report(trees.Leaders, level, now += TDuration::Seconds(5));
+
+            auto packed = PackOnce(trees.Leaders);
+            UNIT_ASSERT_VALUES_EQUAL(packed.size(), 1);
+            const auto& counters = GetSinglePackedCounters(packed, level).GetExecutorCounters();
+            UNIT_ASSERT_VALUES_EQUAL(counters.HistogramSize(), 1);
+            // Neither 0 (the retirement) nor 2 (both added up)
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogram(counters, CONSUMED_CPU_HISTOGRAM)[0], 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedNonDerivativeHistogramTotal(counters, CONSUMED_CPU_HISTOGRAM), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(counters, CONSUMED_CPU), 100);
+        }
+    }
+
+    Y_UNIT_TEST(NonDerivativeHistogramsOfDataShardAreConsumedCpuOnly) {
+        // Of the published executor histograms only HIST(ConsumedCPU) is non-derivative
+        // (the current state rather than increments), so it alone travels as its full value
+        NTabletFlatExecutor::TExecutorCounters executorCounters;
+        const auto* names = GetDetailedMetricsCounterNames(TTabletTypes::DataShard);
+        UNIT_ASSERT(names);
+
+        ::NKikimr::NPrivate::TAggregatedTabletCounters aggregated(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        aggregated.Initialize(&executorCounters, &names->ExecutorNames);
+        const auto& indices = aggregated.GetNonDerivativeHistogramIndices();
+        UNIT_ASSERT_VALUES_EQUAL(indices.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(indices[0], (ui32)NTabletFlatExecutor::TExecutorCounters::TX_PERCENTILE_CONSUMED_CPU);
+    }
+
+    Y_UNIT_TEST(NonDerivativeHistogramIndicesFollowTheDerivativeRule) {
+        // A percentile counter is non-derivative when it is Integral or a HIST(x) aggregate,
+        // whatever its Integral flag; an unpublished one is skipped and keeps no index
+        constexpr const char* simpleNames[] = {"Gauge"};
+        constexpr const char* percentileNames[] = {
+            "Increments",
+            "UnpublishedState",
+            "State",
+            "HIST(Gauge)",
+            "Increments2",
+        };
+        TTabletCountersBase counters(
+            Y_ARRAY_SIZE(simpleNames), 0, Y_ARRAY_SIZE(percentileNames),
+            simpleNames, nullptr, percentileNames);
+        counters.Percentile()[0].Initialize(PERCENTILE_RANGES, false /* integral */);
+        counters.Percentile()[1].Initialize(PERCENTILE_RANGES, true /* integral */);
+        counters.Percentile()[2].Initialize(PERCENTILE_RANGES, true /* integral */);
+        counters.Percentile()[3].Initialize(PERCENTILE_RANGES, false /* integral */);
+        counters.Percentile()[4].Initialize(PERCENTILE_RANGES, false /* integral */);
+
+        const THashSet<TString> published = {"Gauge", "Increments", "State", "HIST(Gauge)", "Increments2"};
+        ::NKikimr::NPrivate::TAggregatedTabletCounters aggregated(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        aggregated.Initialize(&counters, &published);
+
+        // Indices into the full-size histogram list of ToProto ({2, 3}), not into
+        // the published ones, where the unpublished counter leaves no gap ({1, 2})
+        UNIT_ASSERT_VALUES_EQUAL(aggregated.GetNonDerivativeHistogramIndices(), TVector<ui32>({2, 3}));
     }
 }

@@ -289,8 +289,11 @@ public:
                 continue;
             }
 
-            target->Shutdown(ctx);
-            target->SetDstState(TReplication::EDstState::Alter);
+            // An attachment may already be submitted to SchemeShard; let it finish before DONE.
+            if (target->GetDstState() != TReplication::EDstState::Attaching) {
+                target->Shutdown(ctx);
+                target->SetDstState(TReplication::EDstState::Alter);
+            }
             if (target->GetStreamState() == TReplication::EStreamState::Error && desiredState == TReplication::EState::Ready) {
                 target->SetStreamState(TReplication::EStreamState::Creating);
             }
@@ -299,6 +302,13 @@ public:
             );
 
             alter = true;
+        }
+
+        if (Replication->CheckAlterDone()) {
+            Replication->SetState(desiredState);
+            db.Table<Schema::Replications>().Key(Replication->GetId()).Update(
+                NIceDb::TUpdate<Schema::Replications::State>(desiredState)
+            );
         }
 
         if (alter) {

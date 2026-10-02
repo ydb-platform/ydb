@@ -244,6 +244,9 @@ namespace NKikimr {
                     if (Hull) {
                         Hull->ApplyHugeBlobSize(MinHugeBlobInBytes, ctx);
                     }
+                    if (VDiskSpaceReportManagerId) {
+                        ctx.Send(VDiskSpaceReportManagerId, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
+                    }
                     ctx.Send(*SkeletonFrontIDPtr, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
                 }
             }
@@ -1465,6 +1468,24 @@ namespace NKikimr {
             }
         }
 
+        void Handle(TEvGetVDiskSpaceReportRequest::TPtr& ev, const TActorContext& ctx) {
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_VDISK_OTHER, "TEvGetVDiskSpaceReportRequest",
+                {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                {"marker", "BSVS46"});
+
+            if (!VDiskSpaceReportManagerId) {
+                auto response = std::make_unique<TEvGetVDiskSpaceReportResponse>(
+                    NKikimrProto::NOTREADY,
+                    "VDisk space report manager is not ready",
+                    ctx.Now(),
+                    nullptr,
+                    nullptr);
+                SendVDiskResponse(ctx, ev->Sender, response.release(), ev->Cookie, VCtx, {});
+                return;
+            }
+            ctx.Send(ev->Forward(VDiskSpaceReportManagerId));
+        }
+
         ////////////////////////////////////////////////////////////////////////
         // STREAM QUERIES
         ////////////////////////////////////////////////////////////////////////
@@ -2031,6 +2052,23 @@ namespace NKikimr {
                     SelfVDiskId, ctx.SelfID, Db->SyncLogID, Hull, IFaceMonGroup, FullSyncGroup, *DbBirthLsn)));
                 ActiveActors.Insert(Db->SyncFullHandlerID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
             }
+
+            Y_ABORT_UNLESS(!VDiskSpaceReportManagerId);
+            VDiskSpaceReportManagerId = ctx.RegisterWithSameMailbox(CreateVDiskSpaceReportManager(
+                HullCtx,
+                HugeBlobCtx,
+                PDiskCtx,
+                ctx.SelfID,
+                Db->HugeKeeperID,
+                Db->SyncLogID,
+                Db->ChunkKeeperActorID,
+                Config->EnableChunkKeeper,
+                MinHugeBlobInBytes,
+                Config->SpaceReportPeriodSeconds,
+                Config->BaseInfo.PDiskId,
+                Config->BaseInfo.VDiskSlotId));
+            ActiveActors.Insert(VDiskSpaceReportManagerId, __FILE__, __LINE__, ctx,
+                NKikimrServices::BLOBSTORAGE);
 
             Become(&TThis::StateNormal);
             VDiskMonGroup.VDiskState(NKikimrWhiteboard::EVDiskState::OK);
@@ -2802,6 +2840,9 @@ namespace NKikimr {
             if (ev->Sender == ShredActorId) {
                 ShredActorId = {};
             }
+            if (ev->Sender == VDiskSpaceReportManagerId) {
+                VDiskSpaceReportManagerId = {};
+            }
             ActiveActors.Erase(ev->Sender);
         }
 
@@ -3259,6 +3300,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVAssimilate, Handle)
             HFunc(TEvBlobStorage::TEvVDbStat, Handle)
             HFunc(TEvGetLogoBlobIndexStatRequest, Handle)
+            HFunc(TEvGetVDiskSpaceReportRequest, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamActorDeathNote, Handle)
             HFunc(TEvBlobStorage::TEvVCompact, Handle)
@@ -3430,6 +3472,7 @@ namespace NKikimr {
         TActorId DefragId;
         TActorId BalancingId;
         TActorId MetadataActorId;
+        TActorId VDiskSpaceReportManagerId;
         bool HasUnreadableBlobs = false;
         std::unique_ptr<TVDiskCompactionState> VDiskCompactionState;
         TMemorizableControlWrapper EnableVPatch;

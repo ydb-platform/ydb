@@ -2130,6 +2130,33 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         });
     }
 
+    Y_UNIT_TEST_TWIN(JsonPassingEmptyContainersAreNotComparable, IsJsonDocument) {
+        const TString jsonType = IsJsonDocument ? "JsonDocument" : "Json";
+        TestSelectJsonWithIndex(jsonType, std::nullopt, [&](TQueryClient& db, const auto&) {
+            ExecuteJsonStatement(db, TStringBuilder()
+                << "UPSERT INTO TestTable (Key, Text) VALUES "
+                << "(100u, " << jsonType << "('[[], {}]')), "
+                << "(101u, " << jsonType << "('{\"k1\": []}')), "
+                << "(102u, " << jsonType << "('{\"k1\": {}}'))");
+
+            const TVector<TString> predicates = {
+                R"(JSON_EXISTS(Text, 'lax $[*] ? (@ == $value)' PASSING $p AS value))",
+                R"(JSON_VALUE(Text, 'lax exists($[*] ? (@ == $value))' PASSING $p AS value RETURNING Bool))",
+                R"(JSON_EXISTS(Text, 'lax $.k1 ? (@ == $value)' PASSING $p AS value))",
+                R"(JSON_VALUE(Text, 'lax exists($.k1 ? (@ == $value))' PASSING $p AS value RETURNING Bool))",
+            };
+
+            for (TStringBuf json : {TStringBuf("[]"), TStringBuf("{}")}) {
+                const auto params = TParamsBuilder()
+                    .AddParam("$p").Json(TString(json)).Build()
+                    .Build();
+                for (const auto& predicate : predicates) {
+                    ValidatePredicateKeys(db, predicate, "[]", params);
+                }
+            }
+        });
+    }
+
     Y_UNIT_TEST_TWIN(JsonPassingParameterErrors, IsJsonDocument) {
         TestSelectJsonWithIndex(IsJsonDocument ? "JsonDocument" : "Json", std::nullopt, [](TQueryClient& db, const auto&) {
             const auto invalidJson = TParamsBuilder()

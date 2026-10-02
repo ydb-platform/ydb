@@ -229,6 +229,11 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
         if (elem) {
             ss->PathsById[id] = elem;
         } else {
+            // Paths snapshots already own the reference-count rollback.
+            if (auto it = ss->OwnDbRefs.find(id); it != ss->OwnDbRefs.end()) {
+                it->second.DetachWithoutRelease();
+                ss->OwnDbRefs.erase(it);
+            }
             ss->PathsById.erase(id);
         }
         Paths.pop();
@@ -236,31 +241,19 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (Indexes) {
         const auto& [id, elem] = Indexes.top();
-        if (elem) {
-            ss->Indexes[id] = elem;
-        } else {
-            ss->Indexes.erase(id);
-        }
+        ss->Indexes.RestoreMembershipWithoutRefcount(id, elem);
         Indexes.pop();
     }
 
     while (Sequences) {
         const auto& [id, elem] = Sequences.top();
-        if (elem) {
-            ss->Sequences[id] = elem;
-        } else {
-            ss->Sequences.erase(id);
-        }
+        ss->Sequences.RestoreMembershipWithoutRefcount(id, elem);
         Sequences.pop();
     }
 
     while (CdcStreams) {
         const auto& [id, elem] = CdcStreams.top();
-        if (elem) {
-            ss->CdcStreams[id] = elem;
-        } else {
-            ss->CdcStreams.erase(id);
-        }
+        ss->CdcStreams.RestoreMembershipWithoutRefcount(id, elem);
         CdcStreams.pop();
     }
 
@@ -291,11 +284,7 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (Tables) {
         const auto& [id, elem] = Tables.top();
-        if (elem) {
-            ss->Tables[id] = elem;
-        } else {
-            ss->Tables.erase(id);
-        }
+        ss->Tables.RestoreMembershipWithoutRefcount(id, elem);
         Tables.pop();
     }
 
@@ -323,8 +312,8 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     // Restore ss->SubDomains entries to saved copies of TSubDomainInfo objects.
     // No copy, simple pointer replacement.
     for (const auto& [id, savedState] : SubDomains) {
-        auto& subdomain = ss->SubDomains[id];
-        subdomain = savedState;
+        ss->SubDomains.RestoreMembershipWithoutRefcount(id, savedState);
+        const auto& subdomain = ss->SubDomains.at(id);
         if (ss->GetCurrentSubDomainPathId() == id) {
             subdomain->UpdateCounters(ss);
         }
@@ -334,6 +323,10 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
     while (TxStates) {
         const auto& [id, elem] = TxStates.top();
         if (!elem) {
+            // The path counters have already been restored above.
+            if (auto* txState = ss->TxInFlight.FindPtr(id)) {
+                txState->DisarmPathRefs();
+            }
             ss->TxInFlight.erase(id);
         } else {
             Y_ABORT("No such cases are exist");
@@ -343,61 +336,37 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (ExternalTables) {
         const auto& [id, elem] = ExternalTables.top();
-        if (elem) {
-            ss->ExternalTables[id] = elem;
-        } else {
-            ss->ExternalTables.erase(id);
-        }
+        ss->ExternalTables.RestoreMembershipWithoutRefcount(id, elem);
         ExternalTables.pop();
     }
 
     while (ExternalDataSources) {
         const auto& [id, elem] = ExternalDataSources.top();
-        if (elem) {
-            ss->ExternalDataSources[id] = elem;
-        } else {
-            ss->ExternalDataSources.erase(id);
-        }
+        ss->ExternalDataSources.RestoreMembershipWithoutRefcount(id, elem);
         ExternalDataSources.pop();
     }
 
     while (Views) {
         const auto& [id, elem] = Views.top();
-        if (elem) {
-            ss->Views[id] = elem;
-        } else {
-            ss->Views.erase(id);
-        }
+        ss->Views.RestoreMembershipWithoutRefcount(id, elem);
         Views.pop();
     }
 
     while (ResourcePools) {
         const auto& [id, elem] = ResourcePools.top();
-        if (elem) {
-            ss->ResourcePools[id] = elem;
-        } else {
-            ss->ResourcePools.erase(id);
-        }
+        ss->ResourcePools.RestoreMembershipWithoutRefcount(id, elem);
         ResourcePools.pop();
     }
 
     while (BackupCollections) {
         const auto& [id, elem] = BackupCollections.top();
-        if (elem) {
-            ss->BackupCollections[id] = elem;
-        } else {
-            ss->BackupCollections.erase(id);
-        }
+        ss->BackupCollections.RestoreMembershipWithoutRefcount(id, elem);
         BackupCollections.pop();
     }
 
     while (SysViews) {
         const auto& [id, elem] = SysViews.top();
-        if (elem) {
-            ss->SysViews[id] = elem;
-        } else {
-            ss->SysViews.erase(id);
-        }
+        ss->SysViews.RestoreMembershipWithoutRefcount(id, elem);
         SysViews.pop();
     }
 
@@ -443,21 +412,13 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (Secrets) {
         const auto& [id, elem] = Secrets.top();
-        if (elem) {
-            ss->Secrets[id] = elem;
-        } else {
-            ss->Secrets.erase(id);
-        }
+        ss->Secrets.RestoreMembershipWithoutRefcount(id, elem);
         Secrets.pop();
     }
 
     while (StreamingQueries) {
         const auto& [id, elem] = StreamingQueries.top();
-        if (elem) {
-            ss->StreamingQueries[id] = elem;
-        } else {
-            ss->StreamingQueries.erase(id);
-        }
+        ss->StreamingQueries.RestoreMembershipWithoutRefcount(id, elem);
         StreamingQueries.pop();
     }
 
@@ -479,13 +440,13 @@ void TMemoryChanges::UnDo(TSchemeShard* ss) {
 
     while (TestShardSets) {
         const auto& [id, elem] = TestShardSets.top();
-        if (elem) {
-            ss->TestShardSets[id] = elem;
-        } else {
-            ss->TestShardSets.erase(id);
-        }
+        ss->TestShardSets.RestoreMembershipWithoutRefcount(id, elem);
         TestShardSets.pop();
     }
+
+#ifndef NDEBUG
+    ss->DebugCheckDbRefIntegrity();
+#endif
 }
 
 }

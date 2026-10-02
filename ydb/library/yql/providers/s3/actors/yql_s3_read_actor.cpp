@@ -54,6 +54,7 @@
 #include <util/system/fstat.h>
 
 #include <algorithm>
+#include <atomic>
 #include <queue>
 
 #undef THROW
@@ -773,10 +774,11 @@ public:
             ThrowParquetNotOk(readers[0]->GetSchema(&schema));
             std::vector<int> columnIndices;
             std::vector<TColumnConverter> columnConverters;
+            TMissingColumns missingColumns;
 
-            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+            BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
-            // select count(*) case - single reader is enough
+            // no columns to read (select count(*) or all requested columns are absent in file) - single reader is enough
             if (!columnIndices.empty()) {
                 if (ReadSpec->ParallelRowGroupCount) {
                     readerCount = ReadSpec->ParallelRowGroupCount;
@@ -849,7 +851,7 @@ public:
                     readyGroupIndex = ReadyRowGroups.top();
                     ReadyRowGroups.pop();
                 } else {
-                    // select count(*) case - no columns, no download, just fetch meta info instantly
+                    // no columns to read (select count(*) or all requested columns are absent in file) - no download, just fetch meta info instantly
                     readyGroupIndex = readyGroupCount;
                 }
                 SourceContext->DecChunkCount();
@@ -882,7 +884,7 @@ public:
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
                     StartUnit();
                     Y_DEFER { StopUnit(); };
-                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                    auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
                     if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
@@ -944,8 +946,9 @@ public:
         ThrowParquetNotOk(fileReader->GetSchema(&schema));
         std::vector<int> columnIndices;
         std::vector<TColumnConverter> columnConverters;
+        TMissingColumns missingColumns;
 
-        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, ReadSpec->RowSpec, ReadSpec->Settings);
+        BuildColumnConverters(ReadSpec->ArrowSchema, schema, columnIndices, columnConverters, missingColumns, ReadSpec->RowSpec, ReadSpec->Settings);
 
         for (int group = 0; group < fileReader->num_row_groups(); group++) {
 
@@ -970,7 +973,7 @@ public:
             bool isCancelled = false;
             ui64 numRows = 0;
             while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
+                auto convertedBatch = ConvertArrowColumns(batch, columnConverters, missingColumns);
                 auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                 decodedBytes += size;
                 if (SourceContext->Add(size, SelfActorId, DownstreamPaused)) {
@@ -1579,7 +1582,7 @@ public:
 
         // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
         // After exact mem control implementation, this allocation should be deleted
-        if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight)) {
+        if (!MemoryQuotaManager->AllocateQuota(ReadActorFactoryCfg.DataInflight, /* isOptional = */ false)) {
             TIssues issues;
             issues.AddIssue(TIssue{TStringBuilder() << "OutOfMemory - can't allocate " << ReadActorFactoryCfg.DataInflight << "b read buffer"});
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::OVERLOADED);
@@ -1624,7 +1627,7 @@ public:
                 AllowLocalFiles,
                 WorkFactory));
         }
-        FileQueueEvents.Init(TxId, SelfId(), SelfId());
+        FileQueueEvents.Init(TxId, SelfId(), SelfId(), /* eventQueueId */ 0, /* keepAlive */ true, /* useConnect */ true, /* ordered */ false);
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
         if (UseRuntimeListing && FileQueueConsumersCountDelta > 0) {
             FileQueueEvents.Send(new TEvS3Provider::TEvUpdateConsumersCount(FileQueueConsumersCountDelta));
@@ -1843,7 +1846,7 @@ private:
             TryRegisterCoro();
         } while (!Blocks.empty() && free > 0LL && GetBlockSize(Blocks.front()) <= size_t(free));
 
-        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !FileQueueEvents.RemoveConfirmedEvents();
+        finished = (ConsumedEnoughRows() || LastFileWasProcessed()) && !IsWaitingFileQueueResponse;
         if (finished) {
             ContainerCache.Clear();
             ArrowTupleContainerCache.Clear();
@@ -1871,7 +1874,7 @@ private:
             for (const auto actorId : CoroActors) {
                 Send(actorId, new TEvents::TEvPoison());
             }
-            LOG_T("TS3StreamReadActor", "PassAway FileQueue RemoveConfirmedEvents=" << FileQueueEvents.RemoveConfirmedEvents());
+            LOG_T("TS3StreamReadActor", "PassAway FileQueue HasPendingEvents=" << FileQueueEvents.HasPendingEvents());
             FileQueueEvents.Unsubscribe();
 
             ClearMkqlData();
@@ -1894,6 +1897,7 @@ private:
         hFunc(TEvS3Provider::TEvObjectPathBatch, HandleObjectPathBatch);
         hFunc(TEvS3Provider::TEvObjectPathReadError, HandleObjectPathReadError);
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
         hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
         hFunc(TEvInterconnect::TEvNodeConnected, Handle);
         hFunc(TEvents::TEvUndelivered, Handle);
@@ -2033,6 +2037,12 @@ private:
         FileQueueEvents.OnEventReceived(ev);
     }
 
+    void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr&) {
+        if (FileQueueEvents.Heartbeat()) {
+            FileQueueEvents.Send(new TEvS3Provider::TEvAck());
+        }
+    }
+
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr&) {
         FileQueueEvents.Retry();
     }
@@ -2049,7 +2059,11 @@ private:
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
         LOG_T("TS3StreamReadActor", "Handle undelivered FileQueue ");
-        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::WrongSession) {
+        if (FileQueueEvents.HandleUndelivered(ev) != NYql::NDq::TRetryEventsQueue::ESessionState::SessionClosed) {
+            return;
+        }
+        FileQueueEvents.Unsubscribe();
+        if (!(IsFileQueueEmpty && IsConfirmedFileQueueFinish && !IsWaitingFileQueueResponse)) {
             TIssues issues{TIssue{TStringBuilder() << "FileQueue was lost"}};
             OnFatalError(std::move(issues), NYql::NDqProto::StatusIds::UNAVAILABLE);
         }

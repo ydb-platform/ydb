@@ -1,4 +1,6 @@
 import json
+import gzip
+import io
 import shutil
 import subprocess
 import tempfile
@@ -6,12 +8,132 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from ydb.tools.ydb_bench.lib import web, ydb_telemetry
+from ydb.tools.ydb_bench.lib import web, ydb_telemetry, distributed_artifacts
 from ydb.tools.ydb_bench.lib.common import BenchmarkError
 from ydb.tools.ydb_bench.lib.results import SCHEMA_VERSION
 
 
 class YdbTelemetryTest(unittest.TestCase):
+    def test_archive_delta_roundtrip(self):
+        def sensor(value):
+            return {"kind": "RATE", "labels": {"sensor": "a"}, "value": value}
+
+        meta = {"host": "host", "role": "static", "index": 1, "port": 1234, "context": {"attempt": 1}}
+        payloads = [
+            [sensor(0), sensor(7), {"kind": "HIST", "hist": {"buckets": [0, 3]}}],
+            [sensor(0), sensor(7), {"kind": "HIST", "hist": {"buckets": [0, 3]}}],
+            [sensor(2), sensor(0)],
+            [],
+            [sensor(0)],
+            [sensor(-1.5)],
+            [sensor(0.0)],
+        ]
+        records = [dict(meta, timestamp_unix=i, counters={"sensors": s, "extra": i}) for i, s in enumerate(payloads)]
+        records.insert(2, dict(meta, timestamp_unix=1.5, error="offline"))
+        records.insert(1, dict(records[0], role="dynamic"))
+        encoder = ydb_telemetry.CountersArchiveEncoder()
+        encoded = [encoder.encode(r) for r in records]
+        self.assertEqual(encoded[2]["changes"], [])
+        self.assertNotIn("present", encoded[2])
+        self.assertNotIn("counters", encoded[3])
+        self.assertTrue(any(value == {"value": 0} for _, value in encoded[4]["changes"]))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "part.gz"
+            path.write_bytes(gzip.compress("".join(json.dumps(r) + "\n" for r in encoded).encode()))
+            self.assertEqual(list(ydb_telemetry.read_counters_archive(path)), records)
+            encoded.pop(2)
+            path.write_bytes(gzip.compress("".join(json.dumps(r) + "\n" for r in encoded).encode()))
+            with self.assertRaisesRegex(ValueError, "missing or reordered"):
+                list(ydb_telemetry.read_counters_archive(path))
+            path.write_bytes(gzip.compress((json.dumps(records[0]) + "\n").encode()))
+            self.assertEqual(list(ydb_telemetry.read_counters_archive(path)), records[:1])
+
+    def test_full_archives_preserve_all_sensors_and_rotate(self):
+        payload = {
+            "sensors": [
+                {
+                    "labels": {"counters": "tablets", "sensor": "Histogram", "tablet": "42"},
+                    "hist": {"bounds": [1, 10], "buckets": [2, 3], "inf": 4},
+                },
+                {"labels": {"counters": "private", "sensor": "Gauge"}, "value": -7},
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            archive = ydb_telemetry.YdbCountersArchive(
+                Path(directory),
+                lambda: [("static", 1, 1234), ("dynamic", 2, 1235)],
+                {"attempt": 3, "repetition": 2},
+                interval=5,
+            )
+            with mock.patch.object(
+                archive, "_fetch_payload", return_value=json.dumps(payload).encode()
+            ) as fetch, mock.patch.object(archive._stop, "wait", return_value=True) as wait, mock.patch.object(
+                ydb_telemetry, "ARCHIVE_PART_BYTES", 1
+            ):
+                archive._run()
+            self.assertIsNone(archive.error)
+            files = sorted(Path(directory).glob("*.jsonl.gz"))
+            self.assertEqual(len(files), 2)
+            records = [next(ydb_telemetry.read_counters_archive(path)) for path in files]
+            self.assertEqual([row["role"] for row in records], ["static", "dynamic"])
+            self.assertTrue(all(row["counters"] == payload for row in records))
+            self.assertEqual(records[0]["context"], {"attempt": 3, "repetition": 2})
+            self.assertEqual(fetch.call_args_list[0].args[1], "/counters/json?@private=1")
+            self.assertLessEqual(wait.call_args.args[0], 5)
+            self.assertEqual(list(Path(directory).glob("*.jsonl")), [])
+
+    def test_archive_checkpoints_after_rotation(self):
+        payload = {"sensors": [{"labels": {"sensor": "x"}, "value": 9}]}
+        for limit in ("ARCHIVE_PART_BYTES", "ARCHIVE_STATE_BYTES"):
+            with self.subTest(limit=limit), tempfile.TemporaryDirectory() as directory:
+                archive = ydb_telemetry.YdbCountersArchive(Path(directory), lambda: [("static", 1, 1234)], {})
+                with mock.patch.object(
+                    archive, "_fetch_payload", return_value=json.dumps(payload).encode()
+                ), mock.patch.object(archive._stop, "wait", side_effect=[False, True]), mock.patch.object(
+                    ydb_telemetry, limit, 1
+                ):
+                    archive._run()
+                self.assertIsNone(archive.error)
+                files = sorted(Path(directory).glob("*.gz"))
+                self.assertEqual(len(files), 2)
+                for path in files:
+                    self.assertEqual(next(ydb_telemetry.read_counters_archive(path))["counters"], payload)
+
+    def test_archive_errors_and_response_bound(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = ydb_telemetry.YdbCountersArchive(Path(directory), lambda: [("static", 1, 1234)], {})
+            with mock.patch.object(archive, "_fetch_payload", side_effect=OSError("offline")), mock.patch.object(
+                archive._stop, "wait", return_value=True
+            ):
+                archive._run()
+            record = json.loads(gzip.decompress(next(Path(directory).glob("*.gz")).read_bytes()))
+            self.assertEqual(record["error"], "offline")
+            self.assertNotIn("counters", record)
+            with mock.patch.object(archive._opener, "open", return_value=io.BytesIO(b"12345")):
+                with self.assertRaisesRegex(ValueError, "too large"):
+                    archive._fetch_payload(1234, "/counters/json", 4)
+
+    def test_archive_transfer_budget_does_not_change_regular_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "telemetry" / "sample" / "ydb-counters"
+            source.mkdir(parents=True)
+            data = gzip.compress(b'{"counters":{}}\n')
+            (source / "part.jsonl.gz").write_bytes(data)
+            with mock.patch.object(distributed_artifacts, "MAX_RESULT_BYTES", 1):
+                with self.assertRaises(BenchmarkError):
+                    distributed_artifacts.snapshot_results(root, source.parent)
+                artifacts = distributed_artifacts.snapshot_results(root, source.parent, telemetry=True)
+                import base64
+
+                def read(operation, request):
+                    return {"data": base64.b64encode(data[request["offset"] :]).decode()}
+
+                distributed_artifacts.copy_results(
+                    read, {}, "job", artifacts, "telemetry/sample", root / "copy", telemetry=True
+                )
+            self.assertEqual((root / "copy" / "ydb-counters" / "part.jsonl.gz").read_bytes(), data)
+
     def test_parse_exact_executor_counters(self):
         sensors = [
             {"labels": {"execpool": "User", "sensor": "CurrentThreadCountPercent"}, "value": 250},

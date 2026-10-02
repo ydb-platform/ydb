@@ -23,7 +23,7 @@ For random load, the initial worker count is `ceil(MaxInFlight / 512)`, with a m
 
 The persistent `TNbsDbgLikeLoadTablet` is a KeyValue-flat-derived tablet. It stores allocation metadata, creates the per-DBG actors, and routes I/O by flat address. Each `TNbsDbgLikeActor` owns one DBG's peer tokens, LSN map, queues, and request/response state. The per-DBG actors survive individual runs but are recreated when their tablet restarts.
 
-The tablet forwards I/O while preserving the original sender, cookie, and payload. The per-DBG actor replies directly to that sender. `TEvNbsWrite`, `TEvNbsRead`, and their results support serialization and can cross nodes. The `Payload` rope on `TEvNbsWrite` is the sender-facing interface; the wrapper supplies `PayloadId` during serialization.
+The tablet forwards I/O while preserving the original sender, cookie, payload, and payload checksums. The per-DBG actor replies directly to that sender. `TEvNbsWrite`, `TEvNbsRead`, and their results support serialization and can cross nodes. The `Payload` rope on `TEvNbsWrite` is the sender-facing interface; the wrapper supplies `PayloadId` during serialization. `Checksums` is populated only when the run's checksum mode is enabled.
 
 ## Allocation and Identity
 

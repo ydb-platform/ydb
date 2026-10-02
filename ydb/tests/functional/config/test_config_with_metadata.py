@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
+import copy
+import grpc
 import logging
+import pytest
 import yaml
 import time
 from hamcrest import assert_that
 
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.wait_for import retry_assertions
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
@@ -28,6 +32,87 @@ def value_for(key, tablet_id):
 def get_config_version(yaml_config):
     config = yaml.safe_load(yaml_config)
     return config.get('metadata', {}).get('version', 0)
+
+
+def fetch_config(config_client):
+    try:
+        response = config_client.fetch_all_configs()
+    except grpc.RpcError as error:
+        raise AssertionError(str(error)) from error
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+    result = config.FetchConfigResult()
+    assert response.operation.result.Unpack(result)
+    assert len(result.config) == 1, result
+    return result.config[0].config
+
+
+def check_replace_config_unknown_fields(cluster, config_client, location):
+    def assert_config(expected):
+        actual = yaml.safe_load(fetch_config(config_client))
+        assert actual == expected
+
+    original = yaml.safe_load(fetch_config(config_client))
+    updated = copy.deepcopy(original)
+    updated['metadata']['version'] += 1
+    if location == 'root':
+        target = updated['config']
+    elif location == 'nested':
+        target = updated['config'].setdefault('feature_flags', {})
+    elif location == 'array':
+        target = {'component': 'BS_NODE', 'level': 3}
+        updated['config'].setdefault('log_config', {}).setdefault('entry', []).append(target)
+    elif location == 'host_config':
+        target = updated['config']['host_configs'][0]
+    else:
+        target = {}
+        updated.setdefault('selector_config', []).append({
+            'description': 'Unknown fields in a selector',
+            'selector': {},
+            'config': target,
+        })
+    target['unknown_field_for_test'] = True
+    config_yaml = '# Preserve the submitted YAML\n' + yaml.safe_dump(updated, sort_keys=False)
+
+    for dry_run, allow_unknown_fields in [(True, False), (True, True), (False, False)]:
+        response = config_client.replace_config(config_yaml, dry_run=dry_run, allow_unknown_fields=allow_unknown_fields)
+        if allow_unknown_fields:
+            assert response.operation.status == StatusIds.SUCCESS, response.operation
+        else:
+            assert response.operation.status != StatusIds.SUCCESS, response.operation
+            assert 'unknown' in str(response.operation.issues).lower(), response.operation
+        assert_config(original)
+
+    response = config_client.replace_config(config_yaml, allow_unknown_fields=True)
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+    assert_config(updated)
+    assert fetch_config(config_client) == config_yaml
+
+    invalid = copy.deepcopy(updated)
+    invalid['metadata']['version'] += 1
+    invalid['config'].setdefault('log_config', {}).setdefault('entry', []).append('not-a-map')
+    response = config_client.replace_config(yaml.safe_dump(invalid), dry_run=True, allow_unknown_fields=True)
+    assert response.operation.status != StatusIds.SUCCESS, response.operation
+    assert 'expected json map' in str(response.operation.issues), response.operation
+    assert_config(updated)
+
+    def assert_saved_config():
+        for node in cluster.nodes.values():
+            try:
+                assert node.read_node_config() == updated
+            except OSError as error:
+                raise AssertionError(str(error)) from error
+
+    retry_assertions(assert_saved_config, timeout_seconds=60)
+    cluster.restart_nodes()
+    config_client = cluster.config_client
+    config_client.set_auth_token('root@builtin')
+    retry_assertions(lambda: assert_config(updated), timeout_seconds=60)
+    assert fetch_config(config_client) == config_yaml
+
+    original['metadata']['version'] = updated['metadata']['version'] + 1
+    response = config_client.replace_config(yaml.safe_dump(original))
+    assert response.operation.status == StatusIds.SUCCESS, response.operation
+    assert_config(original)
 
 
 class AbstractKiKiMRTest(object):
@@ -174,7 +259,8 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         )
         self.check_kikimr_is_operational(table_path, tablet_ids)
 
-    def test_config_stored_in_config_store(self):
+    @pytest.mark.parametrize('unknown_field_location', ['root', 'nested', 'selector', 'array'])
+    def test_config_stored_in_config_store(self, unknown_field_location):
         node = self.cluster.nodes[1]
         initial_config = node.read_node_config()
         initial_version = get_config_version(yaml.dump(initial_config))
@@ -186,15 +272,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         logger.debug(f"Replace config response: {replace_config_response}")
         assert_that(replace_config_response.operation.status == StatusIds.SUCCESS)
 
-        fetch_config_response = self.config_client.fetch_all_configs()
-        assert_that(fetch_config_response.operation.status == StatusIds.SUCCESS)
-
-        result = config.FetchConfigResult()
-        fetch_config_response.operation.result.Unpack(result)
-
-        assert_that(result.config is not None)
-        assert_that(len(result.config) == 1)
-        fetched_config = result.config[0].config
+        fetched_config = fetch_config(self.config_client)
         parsed_fetched_config = yaml.safe_load(fetched_config)
         assert_that(parsed_fetched_config is not None)
         assert_that(parsed_fetched_config.get('metadata') is not None)
@@ -206,3 +284,5 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
                 yaml.dump(yaml.safe_load(fetched_config), sort_keys=True) ==
                 yaml.dump(yaml.safe_load(yaml.dump(node_config)), sort_keys=True)
             )
+
+        check_replace_config_unknown_fields(self.cluster, self.config_client, unknown_field_location)

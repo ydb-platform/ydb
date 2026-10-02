@@ -233,9 +233,14 @@ void WriteBinaryProducerIdWithDirectTabletWrite(TTopicSdkTestSetup& setup,
 }
 
 static std::string FindKeyForBucket(size_t bucket, size_t bucketsCount) {
+    // Must match THashPartitionChooser / Kafka DefaultPartitioner:
+    // murmur2-32 with seed 0x9747b28c, then toPositive (& 0x7fffffff).
+    constexpr ui32 mask = 0x7FFFFFFF;
+    constexpr ui32 seed = 0x9747b28c;
     for (size_t i = 0; i < 1'000'000; ++i) {
         std::string key = "key-" + ToString(i);
-        if (MurmurHash<ui64>(key.data(), key.size()) % bucketsCount == bucket) {
+        const ui32 hash = MurmurHash<ui32>(key.data(), key.size(), seed) & mask;
+        if (hash % bucketsCount == bucket) {
             return key;
         }
     }

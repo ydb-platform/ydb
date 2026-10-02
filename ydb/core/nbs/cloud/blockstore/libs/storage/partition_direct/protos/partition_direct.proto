@@ -11,7 +11,9 @@ message TDirectBlockGroupConnections {
     message TConnection {
         NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 1;
         NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 2;
+        bool RemovedFromBSC = 3;
     }
+
     repeated TConnection Connections = 1;
 
     // The generation of the DirectBlockGroup connections config stored in the
@@ -29,16 +31,10 @@ message TDirectBlockGroupsConnections {
 
 // TODO. Make inner message THostConfig
 message TVChunkConfig {
-    message Watermark {
-        uint32 HostIndex = 1;
-        uint64 Value = 2;
-    }
-
     uint32 VChunkIndex = 1;
     repeated uint32 PBufferHostRoles = 2;
     repeated uint32 DDiskHostRoles = 3;
     repeated uint32 EnabledHosts = 4;
-    repeated Watermark Watermarks = 5;
 }
 
 message TTabletInfo {
@@ -50,6 +46,15 @@ message TTabletInfo {
 // An in-flight AddHost, persisted so it can be finished (replayed) on restart.
 message TAddHostInProgress {
     uint32 DirectBlockGroupId = 1;
-    uint32 NewHostIndex = 2;
+    uint32 LiveHostCount = 2;
     uint32 DBGConnectionsConfigGeneration = 3;
+}
+
+// An in-flight RemoveHost, persisted so it can be finished (replayed) on
+// restart.
+message TRemoveHostInProgress {
+    uint32 DirectBlockGroupId = 1;
+    NKikimrBlobStorage.NDDisk.TDDiskId DDiskId = 2;
+    NKikimrBlobStorage.NDDisk.TDDiskId PersistentBufferDDiskId = 3;
+    uint32 DBGConnectionsConfigGeneration = 4;
 }

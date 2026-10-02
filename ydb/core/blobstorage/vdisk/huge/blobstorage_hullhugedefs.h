@@ -77,6 +77,36 @@ namespace NKikimr {
         };
 
         ////////////////////////////////////////////////////////////////////////////
+        // Compact statistics used for space accounting. These structures contain
+        // no chunk or slot identifiers, so their size depends only on the number
+        // of configured Huge slot classes.
+        ////////////////////////////////////////////////////////////////////////////
+        struct TSizeClassSpaceStat {
+            ui64 SlotSize = 0;
+            ui64 SlotsPerChunk = 0;
+            ui64 ChunkCount = 0;
+            ui64 AllocatedSlots = 0;
+            ui64 FreeSlots = 0;
+            ui64 LockedChunkCount = 0;
+            ui64 LockedFreeSlots = 0;
+        };
+
+        struct TStripeHeapSpaceStat {
+            ui64 ChunkCount = 0;
+            ui64 UsedBytes = 0;
+            ui64 FreeBytes = 0;
+            ui64 LockedFreeBytes = 0;
+        };
+
+        struct THeapSpaceStat {
+            std::vector<TSizeClassSpaceStat> SizeClasses;
+            ui64 FreeChunkCount = 0;
+            ui64 FreeChunkReservation = 0;
+            ui64 ForbiddenChunkCount = 0;
+            TStripeHeapSpaceStat StripeHeap;
+        };
+
+        ////////////////////////////////////////////////////////////////////////////
         // THugeSlot
         ////////////////////////////////////////////////////////////////////////////
         class THugeSlot {
@@ -218,4 +248,3 @@ struct THash<NKikimr::NHuge::THugeSlot> {
         return x.Hash();
     }
 };
-

@@ -4,6 +4,8 @@
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 #include <yql/essentials/tools/yql_facade_run/yql_facade_run.h>
 
+#include "yqlrun_lib_spark.h"
+
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 
@@ -15,6 +17,7 @@ public:
 
 protected:
     virtual IOptimizerFactory::TPtr CreateCboFactory();
+    int DoRun(TProgramFactory& factory) override;
 
     virtual IYtGateway::TPtr CreateYtGateway();
 
@@ -23,6 +26,7 @@ private:
     THashMap<TString, TString> TablesDirMapping_;
     bool KeepTemp_ = false;
     TString TmpDir_;
+    std::shared_ptr<NSparkTool::TSparkSettings> SparkSettings_;
 };
 
 } // NYql

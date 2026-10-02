@@ -147,6 +147,7 @@ class TGraph {
 private:
     ui32 NextResourceId = 0;
     THashSet<ui32> FetchersMerged;
+    bool ReserveIndexMemory = false;
     const IColumnResolver& Resolver;
     std::map<ui64, std::shared_ptr<TGraphNode>> Nodes;
     THashMap<TResourceAddress, TGraphNode*> Producers;
@@ -169,6 +170,12 @@ private:
     TConclusion<bool> OptimizeFilterWithAnd(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
     TConclusion<bool> OptimizeMergeFetching(TGraphNode* baseNode);
     TConclusion<bool> OptimizeForFetchDictionaryOnly(TGraphNode* node, const THashSet<ui32>& requiredDataColumnIds);
+    /** The DISTINCT marker key is `JsonValue(dataColumnId, const path)` computed over the dedicated single sub-column
+     *  fetch of `dataColumnId` (built by OptimizeForFetchSubColumns), and no other fetch of `dataColumnId` exists.
+     *  Returns that FetchOriginalData node, nullptr otherwise. Walks edges only: `Producers` is stale for sub-columns. */
+    TGraphNode* FindSingleSubColumnJsonKeyFetch(TGraphNode* markerNode, const ui32 dataColumnId) const;
+    /** Marks the FetchOriginalData node that feeds the producer of `columnId` as dictionary-only. */
+    bool SetDictionaryOnlyOnFetch(const ui32 columnId);
 
 
     bool HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const;
@@ -212,7 +219,7 @@ private:
         return ++NextResourceId;
     }
 
-    TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver);
+    TGraph(std::vector<std::shared_ptr<IResourceProcessor>>&& processors, const IColumnResolver& resolver, const bool reserveIndexMemory);
 
 public:
     const std::map<ui64, std::shared_ptr<TGraphNode>>& GetNodes() const {
@@ -224,6 +231,7 @@ public:
         std::vector<std::shared_ptr<IResourceProcessor>> Processors;
         const IColumnResolver& Resolver;
         bool Finished = false;
+        bool ReserveIndexMemory = false;
 
     public:
         TBuilder(const IColumnResolver& resolver)
@@ -235,10 +243,15 @@ public:
             Processors.emplace_back(processor);
         }
 
+        void EnableIndexMemoryReserve() {
+            AFL_VERIFY(!Finished);
+            ReserveIndexMemory = true;
+        }
+
         TConclusion<std::shared_ptr<NExecution::TCompiledGraph>> Finish() {
             AFL_VERIFY(!Finished);
             Finished = true;
-            TGraph graph(std::move(Processors), Resolver);
+            TGraph graph(std::move(Processors), Resolver, ReserveIndexMemory);
             graph.Collapse();
             return graph.Compile();
         }

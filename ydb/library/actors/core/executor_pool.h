@@ -1,5 +1,6 @@
 #pragma once
 
+#include "async_frame_cache.h"
 #include "event.h"
 #include "executor_pool_jail.h"
 #include "scheduler_queue.h"
@@ -117,6 +118,12 @@ namespace NActors {
             // TODO: make pure virtual and override everywhere
             Y_UNUSED(poolStats);
             Y_UNUSED(statsCopy);
+        }
+
+        // Adds idle coroutine frames retained by the worker threads of this pool.
+        // Safe from any thread; approximate while the workers are running.
+        virtual void CollectAsyncFrameCacheStats(TAsyncFrameCache::TProcessStats& stats) const {
+            Y_UNUSED(stats);
         }
 
         virtual void GetExecutorPoolState(TExecutorPoolState &poolState) const {

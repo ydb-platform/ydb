@@ -52,6 +52,7 @@ public:
                     Col("stat_type", NScheme::NTypeIds::Uint32),
                     Col("column_tags", NScheme::NTypeIds::String),
                     Col("data", NScheme::NTypeIds::String),
+                    Col("sampled_data", NScheme::NTypeIds::String),
                 },
                 { "owner_id", "local_path_id", "stat_type", "column_tags"},
                 NKikimrServices::STATISTICS,
@@ -98,78 +99,99 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 class TSaveStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
 private:
     const TPathId PathId;
-    const std::vector<TStatisticsItem> Items;
+    std::vector<TStatisticsItem> SampledItems;
+    std::vector<TStatisticsItem> FullItems;
+    bool SavingSampledRows = true;
 
 public:
     TSaveStatisticsQuery(
         const TString& database, const TPathId& pathId, std::vector<TStatisticsItem> items)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
-        , Items(std::move(items))
-    {}
+    {
+        for (auto& item : items) {
+            if (item.Sampling) {
+                SampledItems.push_back(std::move(item));
+            } else {
+                FullItems.push_back(std::move(item));
+            }
+        }
+    }
 
     void OnRunQuery() override {
+        if (SavingSampledRows && SampledItems.empty()) {
+            SavingSampledRows = false;
+        }
+        const auto& items = SavingSampledRows ? SampledItems : FullItems;
+        if (items.empty()) {
+            Finish();
+            return;
+        }
+
         TStringBuilder sql;
         sql << R"(
-            DECLARE $owner_id AS Uint64;
-            DECLARE $local_path_id AS Uint64;
-            DECLARE $stat_types AS List<Uint32>;
-            DECLARE $column_tags AS List<String>;
-            DECLARE $data AS List<String>;
-
-            $to_struct = ($t) -> {
-                RETURN <|
-                    owner_id:$owner_id,
-                    local_path_id:$local_path_id,
-                    stat_type:$t.0,
-                    column_tags:$t.1,
-                    data:$t.2,
-                |>;
-            };
+            DECLARE $rows AS List<Struct<
+                column_tags: String,
+                data: String,
+                local_path_id: Uint64,
+                owner_id: Uint64,
+                stat_type: Uint32
+            >>;
 
             UPSERT INTO `)" << StatisticsTablePath << R"(`
-                (owner_id, local_path_id, stat_type, column_tags, data)
-            SELECT owner_id, local_path_id, stat_type, column_tags, data FROM
-            AS_TABLE(ListMap(ListZip($stat_types, $column_tags, $data), $to_struct));
         )";
+        if (SavingSampledRows) {
+            sql << R"(
+                (column_tags, local_path_id, owner_id, sampled_data, stat_type)
+            SELECT column_tags, local_path_id, owner_id, data AS sampled_data, stat_type
+            FROM AS_TABLE($rows);
+            )";
+        } else {
+            sql << R"(
+                (column_tags, data, local_path_id, owner_id, sampled_data, stat_type)
+            SELECT column_tags, data, local_path_id, owner_id, NULL AS sampled_data, stat_type
+            FROM AS_TABLE($rows);
+            )";
+        }
 
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$owner_id")
-                .Uint64(PathId.OwnerId)
-                .Build()
-            .AddParam("$local_path_id")
-                .Uint64(PathId.LocalPathId)
-                .Build();
-
-        auto& statTypes = params.AddParam("$stat_types").BeginList();
-        for (const auto& item : Items) {
-            statTypes
-                .AddListItem()
-                .Uint32(static_cast<ui32>(item.Type));
+        auto& rows = params.AddParam("$rows").BeginList();
+        for (const auto& item : items) {
+            auto& row = rows.AddListItem().BeginStruct();
+            row.AddMember("column_tags").String(SerializeColumnTags(item.ColumnTags));
+            row.AddMember("local_path_id").Uint64(PathId.LocalPathId);
+            row.AddMember("owner_id").Uint64(PathId.OwnerId);
+            row.AddMember("stat_type").Uint32(static_cast<ui32>(item.Type));
+            if (item.Sampling) {
+                NKikimrStat::TSampledStatistic payload;
+                *payload.MutableSampling() = *item.Sampling;
+                payload.SetData(item.Data);
+                row.AddMember("data").String(payload.SerializeAsString());
+            } else {
+                row.AddMember("data").String(item.Data);
+            }
+            row.EndStruct();
         }
-        statTypes.EndList().Build();
+        rows.EndList().Build();
 
-        auto& columnTags = params.AddParam("$column_tags").BeginList();
-        for (const auto& item : Items) {
-            columnTags
-                .AddListItem()
-                .String(SerializeColumnTags(item.ColumnTags));
+        // Separate statements avoid multiple write effects in RBO; one transaction keeps the batch atomic.
+        TTxControl txControl = TTxControl::BeginAndCommitTx();
+        if (SavingSampledRows && !FullItems.empty()) {
+            txControl = TTxControl::BeginTx();
+        } else if (!SavingSampledRows && !SampledItems.empty()) {
+            txControl = TTxControl::ContinueAndCommitTx();
         }
-        columnTags.EndList().Build();
-
-        auto& data = params.AddParam("$data").BeginList();
-        for (const auto& item : Items) {
-            data
-                .AddListItem()
-                .String(item.Data);
-        }
-        data.EndList().Build();
-
-        RunDataQuery(sql, &params);
+        RunDataQuery(sql, &params, txControl);
     }
 
     void OnQueryResult() override {
+        if (SavingSampledRows) {
+            SavingSampledRows = false;
+            if (!FullItems.empty()) {
+                OnRunQuery();
+                return;
+            }
+        }
         Finish();
     }
 
@@ -227,7 +249,8 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
-        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags) {
+        const TString& database, const TPathId& pathId, EStatType statType, const TColumnTags& columnTags,
+        bool acceptSampledStatistics) {
     const TString serializedColumnTags = SerializeColumnTags(columnTags);
     YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery]",
         {"queryId", queryId},
@@ -240,6 +263,10 @@ void DispatchLoadStatisticsQuery(
 
     auto readRowsRequest = Ydb::Table::ReadRowsRequest();
     readRowsRequest.set_path(statisticsTablePath);
+    readRowsRequest.add_columns("data");
+    if (acceptSampledStatistics) {
+        readRowsRequest.add_columns("sampled_data");
+    }
 
     NYdb::TValueBuilder keys_builder;
     keys_builder.BeginList()
@@ -262,9 +289,11 @@ void DispatchLoadStatisticsQuery(
     auto rpcFuture = NRpcService::DoLocalRpc<TEvReadRowsRequest>(
         std::move(readRowsRequest), database, Nothing(), TActivationContext::ActorSystem(), true
     );
-    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
+    rpcFuture.Subscribe([replyTo = replyToActor, queryId, actorSystem, acceptSampledStatistics](const NThreading::TFuture<Ydb::Table::ReadRowsResponse>& future) mutable {
         const auto& response = future.GetValueSync();
         auto query_response = std::make_unique<TEvStatistics::TEvLoadStatisticsQueryResponse>();
+        query_response->Status = response.status();
+        NYql::IssuesFromMessage(response.issues(), query_response->Issues);
 
         if (response.status() == Ydb::StatusIds::SUCCESS) {
             NYdb::TResultSetParser parser(response.result_set());
@@ -277,19 +306,29 @@ void DispatchLoadStatisticsQuery(
                     {"rowsCount", 0});
             }
 
-            query_response->Success = rowsCount > 0;
-
-            while(parser.TryNextRow()) {
+            if (parser.TryNextRow()) {
                 auto& col = parser.ColumnParser("data");
                 // may be not optional from versions before fix of bug https://github.com/ydb-platform/ydb/issues/15701
                 query_response->Data = col.GetKind() == NYdb::TTypeParser::ETypeKind::Optional
                     ? col.GetOptionalString()
                     : col.GetString();
+                if (acceptSampledStatistics) {
+                    const auto sampledData = parser.ColumnParser("sampled_data").GetOptionalString();
+                    NKikimrStat::TSampledStatistic payload;
+                    if (sampledData && payload.ParseFromString(*sampledData) && payload.HasData() && payload.HasSampling()
+                            && payload.GetSampling().HasRequestedRate() && payload.GetSampling().HasEligibleUnits()
+                            && payload.GetSampling().HasSelectedUnits() && payload.GetSampling().HasSampleRows()) {
+                        query_response->Data = std::move(*payload.MutableData());
+                        query_response->Sampling = std::move(*payload.MutableSampling());
+                    }
                 }
+            }
+            query_response->Success = query_response->Data.has_value();
         } else {
             YDB_LOG_ERROR("[ReadRowsResponse]",
                 {"queryId", queryId},
-                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
+                {"status", response.status()},
+                {"issues", query_response->Issues.ToOneLineString()});
             query_response->Success = false;
         }
 

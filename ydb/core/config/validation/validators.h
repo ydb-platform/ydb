@@ -50,6 +50,10 @@ EValidationResult ValidateColumnShardConfig(
     const NKikimrConfig::TColumnShardConfig& columnShardConfig,
     std::vector<TString>& msg);
 
+EValidationResult ValidateCompositeConveyorConfig(
+    const NKikimrConfig::TCompositeConveyorConfig& compositeConveyorConfig,
+    std::vector<TString>& msg);
+
 EValidationResult ValidateMonitoringConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);

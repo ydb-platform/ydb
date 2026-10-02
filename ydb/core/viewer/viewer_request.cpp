@@ -190,6 +190,11 @@ template<>
 void TViewerWhiteboardRequest<TEvWhiteboard::TEvPDiskStateRequest, TEvWhiteboard::TEvPDiskStateResponse>::Merge(
         NKikimrViewer::TEvViewerResponse& viewerResponse, TNodeId nodeId, NKikimrWhiteboard::TEvPDiskStateResponse& nodeResponse) {
     auto& target = *viewerResponse.MutablePDiskResponse();
+    for (const auto& info : nodeResponse.GetDDiskStateInfo()) {
+        auto* ddisk = target.AddDDiskStateInfo();
+        ddisk->CopyFrom(info);
+        ddisk->SetNodeId(nodeId);
+    }
     for (auto& info : *nodeResponse.MutablePDiskStateInfo()) {
         auto& i = *target.AddPDiskStateInfo();
         i.MergeFrom(info);

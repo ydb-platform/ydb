@@ -13,12 +13,14 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "database_space.h"
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_console_events.h>
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
@@ -146,6 +148,7 @@ public:
         mutable NKikimrBlobStorage::TVDiskMetrics PersistedMetrics;
         mutable NKikimrBlobStorage::TVDiskMetrics Metrics;
         mutable bool MetricsCommitted = false; // at least once since restart
+        mutable ui64 LastMetricsSequence = 0; // MetricsSequence of the last applied report from the node's warden
         mutable TResourceRawValues DiskResourceValues;
         mutable TResourceRawValues MaximumResourceValues{
             1ULL << 40, // 1 TB
@@ -386,7 +389,7 @@ public:
         ui64 ExpectedSlotSize = 0;
         bool HasExpectedSlotSize = false;
         ui32 MaxSlots = 0;
-        ui32 NumActiveSlots = 0; // sum of owners weights allocated on this PDisk
+        ui32 NumActiveDynamicSlots = 0; // sum of active dynamic VDisk weights; excludes StaticSlotUsage
         ui32 SlotSizeInUnits = 0;
         TMap<Schema::VSlot::VSlotID::Type, TIndirectReferable<TVSlotInfo>::TPtr> VSlotsOnPDisk; // vslots over this PDisk
 
@@ -603,21 +606,21 @@ public:
             Y_ABORT("unexpected EDriveStatus");
         }
 
-        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
-            if (Metrics.HasSlotCount()) {
-                slotCount = Metrics.GetSlotCount();
+        void ExtractInferredPDiskSettings(ui32& expectedSlotCount, ui32& slotSizeInUnits) const {
+            if (Metrics.HasExpectedSlotCount()) {
+                expectedSlotCount = Metrics.GetExpectedSlotCount();
                 slotSizeInUnits = Metrics.GetSlotSizeInUnits();
             } else {
-                slotCount = ExpectedSlotCount;
+                expectedSlotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
         }
 
         ui32 GetEffectiveExpectedSlotCount() const {
-            ui32 slotCount = 0;
+            ui32 expectedSlotCount = 0;
             ui32 slotSizeInUnits = 0;
-            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
-            return slotCount;
+            ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
+            return expectedSlotCount;
         }
 
         ui64 GetEffectiveExpectedSlotSize() const {
@@ -628,25 +631,25 @@ public:
             // NOTE: uses the config-side SlotSizeInUnits, not the effective (metrics-preferred)
             // one: for unit-size-inferred disks this over-counts occupancy of multi-unit groups
             // (conservative). Switching to the effective value would change legacy accounting
-            // and requires extending the NumActiveSlots recompute triggers to units changes
+            // and requires extending the NumActiveDynamicSlots recompute triggers to units changes
             return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, GetEffectiveExpectedSlotSize());
         }
 
         // sum of owner weights over the live vslots with the current weight inputs; must be
-        // used to refresh NumActiveSlots whenever the weight inputs change (see GetOwnerWeight).
+        // used to refresh NumActiveDynamicSlots whenever the weight inputs change (see GetOwnerWeight).
         // The group resolver is a parameter because the authoritative group set differs by
         // caller: committed controller state vs an in-flight TConfigState overlay
         template<typename TGroupResolver>
-        ui32 ComputeNumActiveSlots(TGroupResolver&& findGroup) const {
-            ui32 numActiveSlots = 0;
+        ui32 ComputeNumActiveDynamicSlots(TGroupResolver&& findGroup) const {
+            ui32 numActiveDynamicSlots = 0;
             for (const auto& [vslotId, vslot] : VSlotsOnPDisk) {
                 if (!vslot->IsBeingDeleted()) {
                     const auto *group = findGroup(vslot->GroupId);
                     Y_ABORT_UNLESS(group);
-                    numActiveSlots += GetOwnerWeight(group->GroupSizeInUnits);
+                    numActiveDynamicSlots += GetOwnerWeight(group->GroupSizeInUnits);
                 }
             }
-            return numActiveSlots;
+            return numActiveDynamicSlots;
         }
 
         TString PathOrSerial() const {
@@ -905,7 +908,7 @@ public:
 
         bool FillInGroupParameters(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *params,
             TBlobStorageController *self) const;
-        bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool countMaxSlots) const;
+        bool FillInResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources *pb, bool useExpectedSlotCount) const;
         bool FillInVDiskResources(NKikimrBlobStorage::TGroupMetrics::TGroupParameters *pb) const;
 
         void UpdateSeenOperational() {
@@ -1608,6 +1611,8 @@ private:
     NKikimrBlobStorage::TPDiskSpaceColor::E PDiskSpaceColorBorder
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
+    TDatabaseSpaceTracker DatabaseSpace; // also keeps the space color thresholds for blocking writes to databases
+
     TSelfHealSettings SelfHealSettings;
 
     TClusterBalancingSettings ClusterBalancingSettings;
@@ -1690,6 +1695,7 @@ private:
     void CommitSelfHealUpdates(TConfigState& state);
     void CommitScrubUpdates(TConfigState& state, TTransactionContext& txc);
     void CommitStoragePoolStatUpdates(TConfigState& state);
+    void CommitDatabaseSpaceUpdates(TConfigState& state, NIceDb::TNiceDb& db);
     void CommitSysViewUpdates(TConfigState& state);
     void CommitShredUpdates(TConfigState& state);
     void CommitSyncerUpdates(TConfigState& state, TTransactionContext& txc);
@@ -1856,7 +1862,7 @@ private:
     std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode=false);
 
-    void RecomputePDiskNumActiveSlots(TPDiskInfo *pdisk);
+    void RecomputePDiskNumActiveDynamicSlots(TPDiskInfo *pdisk);
 
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
@@ -2076,7 +2082,7 @@ private:
     void FitPDisksForUserConfig(TConfigState &state);
     void FitGroupsForUserConfig(TConfigState &state, ui32 availabilityDomainId,
         const NKikimrBlobStorage::TConfigRequest& cmd, std::deque<ui64> expectedSlotSize,
-        NKikimrBlobStorage::TConfigResponse::TStatus& status);
+        NKikimrBlobStorage::TConfigResponse::TStatus& status, bool requireCorrectLayout);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Bridge operation
@@ -2137,6 +2143,23 @@ private:
         TSet<TGroupId>& groupIdsToRead);
 
     void Handle(TEvBlobStorage::TEvControllerUpdateSyncerState::TPtr ev);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Database space state
+
+    void Handle(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace::TPtr ev);
+    // To be called after changes to DatabaseSpace: marks changed pools for system views, notifies subscribers and
+    // returns changed pool latches. These must be persisted (PersistDatabaseSpaceLatches) in the same transaction as the
+    // state they follow from (metrics, configuration); otherwise a restart could find a latch next to the state from
+    // before its change, and evaluate it differently.
+    [[nodiscard]] std::map<TBoxStoragePoolId, bool> PublishDatabaseSpaceChanges();
+    // the same inside a transaction that persists the state the changes follow from
+    void CommitDatabaseSpaceChanges(NIceDb::TNiceDb& db);
+    void PersistDatabaseSpaceLatches(NIceDb::TNiceDb& db, const std::map<TBoxStoragePoolId, bool>& latches);
+    void SendDatabaseSpaceState(TNodeId nodeId, TDatabaseSpaceTracker::TScope scope);
+    void UpdateDatabaseSpaceGroup(const TGroupInfo& group);
+    void UpdateDatabaseSpacePool(const TBoxStoragePoolId& poolId, const TStoragePoolInfo& pool);
+    void RenderDatabaseSpace(IOutputStream& out);
 
     void ApplyStaticGroupUpdateForSyncers(std::map<TGroupId, TStaticGroupInfo>& prevStaticGroups);
 
@@ -2250,6 +2273,7 @@ public:
             case TEvBlobStorage::EvControllerScrubQuantumFinished:
             case TEvBlobStorage::EvControllerScrubReportQuantumInProgress:
             case TEvBlobStorage::EvControllerUpdateNodeDrives:
+            case TEvBlobStorage::EvControllerSubscribeDatabaseSpace:
             case TEvBlobStorage::EvControllerNodeReport: {
                 if (const auto pipeIt = PipeServerToNode.find(ev.Recipient); pipeIt == PipeServerToNode.end()) {
                     return makeError("incorrect pipe server");
@@ -2302,6 +2326,7 @@ public:
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
             hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
+            hFunc(TEvBlobStorage::TEvControllerSubscribeDatabaseSpace, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
@@ -2362,8 +2387,8 @@ public:
         ui32 numVDisksTooSmall = 0;
         ui32 numVDisksTooLarge = 0;
         for (const auto& [id, pdisk] : PDisks) {
-            ui32 effectiveSlotCount, effectiveSlotSizeInUnits;
-            pdisk->ExtractInferredPDiskSettings(effectiveSlotCount, effectiveSlotSizeInUnits);
+            ui32 effectiveExpectedSlotCount, effectiveSlotSizeInUnits;
+            pdisk->ExtractInferredPDiskSettings(effectiveExpectedSlotCount, effectiveSlotSizeInUnits);
             // Check if we should infer PDisk slot count based on global settings
             bool settingsShouldBeInferred = !pdisk->HasExpectedSlotCount &&
                 !pdisk->HasExpectedSlotSize &&
@@ -2373,12 +2398,12 @@ public:
                     StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasRot() :
                     StorageConfig->GetBlobStorageConfig().GetInferPDiskSlotCountSettings().HasSsd());
 
-            numWithoutExpectedSlotCount += !effectiveSlotCount;
+            numWithoutExpectedSlotCount += !effectiveExpectedSlotCount;
             numWithoutSerial += !pdisk->ExpectedSerial;
             numWithoutInferredSettings += !settingsShouldBeInferred;
-            numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveSlotCount;
+            numWithInferredSettingsUnknown += settingsShouldBeInferred && !effectiveExpectedSlotCount;
 
-            if (!effectiveSlotCount) {
+            if (!effectiveExpectedSlotCount) {
                 continue;
             }
             if (pdisk->GetEffectiveExpectedSlotSize()) {
@@ -2649,21 +2674,21 @@ public:
             }
         }
 
-        void ExtractInferredPDiskSettings(ui32& slotCount, ui32& slotSizeInUnits) const {
-            if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
-                slotCount = PDiskMetrics->GetSlotCount();
+        void ExtractInferredPDiskSettings(ui32& expectedSlotCount, ui32& slotSizeInUnits) const {
+            if (PDiskMetrics && PDiskMetrics->HasExpectedSlotCount()) {
+                expectedSlotCount = PDiskMetrics->GetExpectedSlotCount();
                 slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
             } else {
-                slotCount = ExpectedSlotCount;
+                expectedSlotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
             }
         }
 
         ui32 GetEffectiveExpectedSlotCount() const {
-            ui32 slotCount = 0;
+            ui32 expectedSlotCount = 0;
             ui32 slotSizeInUnits = 0;
-            ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
-            return slotCount;
+            ExtractInferredPDiskSettings(expectedSlotCount, slotSizeInUnits);
+            return expectedSlotCount;
         }
 
         ui64 GetEffectiveExpectedSlotSize() const {

@@ -33,7 +33,7 @@ void EnumFolderContent(DataMapType& data, const TString& folderPath, ui32 maxFil
     }
 }
 
-}
+} // namespace
 
 namespace NYql {
 
@@ -54,8 +54,9 @@ void TUserDataStorage::SetUrlPreprocessor(IUrlPreprocessing::TPtr urlPreprocessi
 }
 
 void TUserDataStorage::SetUserDataTable(TUserDataTable data) {
-     UserData_ = std::move(data);
-     FillUserDataUrls();
+    UserData_ = std::move(data);
+    UrlAliases_.clear();
+    FillUserDataUrls();
 }
 
 void TUserDataStorage::AddUserDataBlock(const TStringBuf& name, const TUserDataBlock& block) {
@@ -68,7 +69,7 @@ void TUserDataStorage::AddUserDataBlock(const TUserDataKey& key, const TUserData
     if (!res.second) {
         throw yexception() << "Failed to add user data block, key " << key << " already registered";
     }
-    TryFillUserDataUrl(res.first->second);
+    TryFillUserDataUrl(res.first->first, res.first->second);
 }
 
 bool TUserDataStorage::ContainsUserDataBlock(const TStringBuf& name) const {
@@ -81,6 +82,15 @@ bool TUserDataStorage::ContainsUserDataBlock(const TUserDataKey& key) const {
 }
 
 TUserDataBlock& TUserDataStorage::GetUserDataBlock(const TUserDataKey& key) {
+    auto block = FindUserDataBlock(key);
+    if (!block) {
+        ythrow yexception() << "Failed to find user data block by key " << key;
+    }
+
+    return *block;
+}
+
+const TUserDataBlock& TUserDataStorage::GetUserDataBlock(const TUserDataKey& key) const {
     auto block = FindUserDataBlock(key);
     if (!block) {
         ythrow yexception() << "Failed to find user data block by key " << key;
@@ -120,6 +130,17 @@ TUserDataBlock* TUserDataStorage::FindUserDataBlock(TUserDataTable& userData, co
     return userData.FindPtr(key);
 }
 
+TUserDataBlock TUserDataStorage::GetUserDataBlockForDownload(const TUserDataKey& key) const {
+    auto block = GetUserDataBlock(key);
+    if (block.Type == EUserDataType::URL && !block.UrlToken && TokenResolver_) {
+        if (const auto* alias = UrlAliases_.FindPtr(key); alias) {
+            block.UrlToken = TokenResolver_(block.Data, *alias);
+        }
+    }
+
+    return block;
+}
+
 TString TUserDataStorage::MakeFullName(const TStringBuf& name) {
     return name.StartsWith(Sep) ? TString(name) : HomePath + name;
 }
@@ -150,7 +171,7 @@ bool TUserDataStorage::ContainsUserDataFolder(const TStringBuf& name) const {
 }
 
 TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUserDataFolder(const TStringBuf& name, ui32 maxFileCount) const {
-    return FindUserDataFolder(UserData_,name,maxFileCount);
+    return FindUserDataFolder(UserData_, name, maxFileCount);
 }
 
 TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUserDataFolder(const TUserDataTable& userData, const TStringBuf& name, ui32 maxFileCount) {
@@ -168,12 +189,12 @@ TMaybe<std::map<TUserDataKey, const TUserDataBlock*>> TUserDataStorage::FindUser
 }
 
 void TUserDataStorage::FillUserDataUrls() {
-    for (auto& p : UserData_) {
-        TryFillUserDataUrl(p.second);
+    for (auto& [key, block] : UserData_) {
+        TryFillUserDataUrl(key, block);
     }
 }
 
-void TUserDataStorage::TryFillUserDataUrl(TUserDataBlock& block) const {
+void TUserDataStorage::TryFillUserDataUrl(const TUserDataKey& key, TUserDataBlock& block) {
     if (block.Type != EUserDataType::URL) {
         return;
     }
@@ -182,9 +203,7 @@ void TUserDataStorage::TryFillUserDataUrl(TUserDataBlock& block) const {
     if (UrlPreprocessing_) {
         std::tie(block.Data, alias) = UrlPreprocessing_->Preprocess(block.Data);
     }
-    if (!block.UrlToken && TokenResolver_) {
-        block.UrlToken = TokenResolver_(block.Data, alias);
-    }
+    UrlAliases_[key] = std::move(alias);
 }
 
 std::map<TString, const TUserDataBlock*> TUserDataStorage::GetDirectoryContent(const TStringBuf& path, ui32 maxFileCount) const {
@@ -211,7 +230,7 @@ TUserDataBlock& TUserDataStorage::Freeze(const TUserDataKey& key) {
     }
 
     // do it outside of the lock
-    auto link = FileStorage_.FreezeFile(block);
+    auto link = FileStorage_.FreezeFile(GetUserDataBlockForDownload(key));
     return RegisterLink(key, link);
 }
 
@@ -229,8 +248,8 @@ THoldingFileStorage& TUserDataStorage::GetHoldingFileStorage() {
 }
 
 TUserDataBlock* TUserDataStorage::FreezeUdfNoThrow(const TUserDataKey& key,
-                                                    TString& errorMessage,const TString& customUdfPrefix,
-                                                    NUdf::ELogLevel logLevel, const TStringBuf& alias) {
+                                                   TString& errorMessage, const TString& customUdfPrefix,
+                                                   NUdf::ELogLevel logLevel, const TStringBuf& alias) {
     TUserDataBlock* block = FreezeNoThrow(key, errorMessage);
     if (!block) {
         return nullptr;
@@ -266,7 +285,7 @@ NThreading::TFuture<std::function<TUserDataBlock()>> TUserDataStorage::FreezeAsy
         return MakeFutureWithConstantAction(block);
     }
 
-    return MapFutureAction(FileStorage_.FreezeFileAsync(block), [this, key](TFileLinkPtr link) {
+    return MapFutureAction(FileStorage_.FreezeFileAsync(GetUserDataBlockForDownload(key)), [this, key](TFileLinkPtr link) {
         return this->RegisterLink(key, link);
     });
 }
@@ -396,4 +415,4 @@ TVector<TString> TUserDataStorage::GetLibraries() const {
     return result;
 }
 
-}
+} // namespace NYql

@@ -71,7 +71,7 @@ def check_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> None:
 
     if fill_type == FillType.OuterCode:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_OuterCode, filled)
+            filled = cast("cpy.FillReturn_OuterCode", filled)
         _check_tuple_of_lists_with_same_length(filled, 2)
         for i, (points, codes) in enumerate(zip(*filled)):
             check_point_array(points)
@@ -80,7 +80,7 @@ def check_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> None:
                 raise ValueError(f"Points and codes have different lengths in polygon {i}")
     elif fill_type == FillType.OuterOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_OuterOffset, filled)
+            filled = cast("cpy.FillReturn_OuterOffset", filled)
         _check_tuple_of_lists_with_same_length(filled, 2)
         for i, (points, offsets) in enumerate(zip(*filled)):
             check_point_array(points)
@@ -89,7 +89,7 @@ def check_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> None:
                 raise ValueError(f"Inconsistent points and offsets in polygon {i}")
     elif fill_type == FillType.ChunkCombinedCode:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedCode, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedCode", filled)
         _check_tuple_of_lists_with_same_length(filled, 2, allow_empty_lists=False)
         for chunk, (points_or_none, codes_or_none) in enumerate(zip(*filled)):
             if points_or_none is not None and codes_or_none is not None:
@@ -101,7 +101,7 @@ def check_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> None:
                 raise ValueError(f"Inconsistent Nones in chunk {chunk}")
     elif fill_type == FillType.ChunkCombinedOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedOffset", filled)
         _check_tuple_of_lists_with_same_length(filled, 2, allow_empty_lists=False)
         for chunk, (points_or_none, offsets_or_none) in enumerate(zip(*filled)):
             if points_or_none is not None and offsets_or_none is not None:
@@ -113,7 +113,7 @@ def check_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> None:
                 raise ValueError(f"Inconsistent Nones in chunk {chunk}")
     elif fill_type == FillType.ChunkCombinedCodeOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedCodeOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedCodeOffset", filled)
         _check_tuple_of_lists_with_same_length(filled, 3, allow_empty_lists=False)
         for i, (points_or_none, codes_or_none, outer_offsets_or_none) in enumerate(zip(*filled)):
             if (points_or_none is not None and codes_or_none is not None and
@@ -130,7 +130,7 @@ def check_filled(filled: cpy.FillReturn, fill_type: FillType | str) -> None:
                 raise ValueError(f"Inconsistent Nones in chunk {i}")
     elif fill_type == FillType.ChunkCombinedOffsetOffset:
         if TYPE_CHECKING:
-            filled = cast(cpy.FillReturn_ChunkCombinedOffsetOffset, filled)
+            filled = cast("cpy.FillReturn_ChunkCombinedOffsetOffset", filled)
         _check_tuple_of_lists_with_same_length(filled, 3, allow_empty_lists=False)
         for i, (points_or_none, offsets_or_none, outer_offsets_or_none) in enumerate(zip(*filled)):
             if (points_or_none is not None and offsets_or_none is not None and
@@ -154,14 +154,14 @@ def check_lines(lines: cpy.LineReturn, line_type: LineType | str) -> None:
 
     if line_type == LineType.Separate:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_Separate, lines)
+            lines = cast("cpy.LineReturn_Separate", lines)
         if not isinstance(lines, list):
             raise TypeError(f"Expected list not {type(lines)}")
         for points in lines:
             check_point_array(points)
     elif line_type == LineType.SeparateCode:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_SeparateCode, lines)
+            lines = cast("cpy.LineReturn_SeparateCode", lines)
         _check_tuple_of_lists_with_same_length(lines, 2)
         for i, (points, codes) in enumerate(zip(*lines)):
             check_point_array(points)
@@ -170,7 +170,7 @@ def check_lines(lines: cpy.LineReturn, line_type: LineType | str) -> None:
                 raise ValueError(f"Points and codes have different lengths in line {i}")
     elif line_type == LineType.ChunkCombinedCode:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedCode, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedCode", lines)
         _check_tuple_of_lists_with_same_length(lines, 2, allow_empty_lists=False)
         for chunk, (points_or_none, codes_or_none) in enumerate(zip(*lines)):
             if points_or_none is not None and codes_or_none is not None:
@@ -182,7 +182,7 @@ def check_lines(lines: cpy.LineReturn, line_type: LineType | str) -> None:
                 raise ValueError(f"Inconsistent Nones in chunk {chunk}")
     elif line_type == LineType.ChunkCombinedOffset:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedOffset, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedOffset", lines)
         _check_tuple_of_lists_with_same_length(lines, 2, allow_empty_lists=False)
         for chunk, (points_or_none, offsets_or_none) in enumerate(zip(*lines)):
             if points_or_none is not None and offsets_or_none is not None:
@@ -194,7 +194,7 @@ def check_lines(lines: cpy.LineReturn, line_type: LineType | str) -> None:
                 raise ValueError(f"Inconsistent Nones in chunk {chunk}")
     elif line_type == LineType.ChunkCombinedNan:
         if TYPE_CHECKING:
-            lines = cast(cpy.LineReturn_ChunkCombinedNan, lines)
+            lines = cast("cpy.LineReturn_ChunkCombinedNan", lines)
         _check_tuple_of_lists_with_same_length(lines, 1, allow_empty_lists=False)
         for _chunk, points_or_none in enumerate(lines[0]):
             if points_or_none is not None:

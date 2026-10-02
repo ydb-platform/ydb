@@ -75,6 +75,7 @@ public:
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
         , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig))
         , QueryServiceConfig(std::move(queryServiceConfig))
+        , TraceId(std::move(settings.TraceId))
     {}
 
     void Bootstrap() {
@@ -145,6 +146,8 @@ private:
     )
 
     void HandleCreatingFinished() {
+        CreationFinished = true;
+
         if (FinishInfo.IsFinished()) {
             YDB_LOG_NOTICE_CTX(TActivationContext::AsActorContext(), "Script execution metadata saved after failure, continue finishing",
                 {"logPrefix", LogPrefix()});
@@ -169,7 +172,14 @@ private:
     }
 
     void HandleCreatingFailed() {
-        Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
+        if (!CreationFinished) {
+            // Failed to save script execution entry into database
+            YDB_LOG_WARN_CTX(TActivationContext::AsActorContext(), "Failed to save script execution entry",
+                {"logPrefix", LogPrefix()});
+            PassAway();
+        } else {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
+        }
     }
 
     void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
@@ -253,7 +263,7 @@ private:
         Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
         QueryRequest->SetUserRequestContext(MakeIntrusive<TUserRequestContext>(*Ctx->UserRequestContext)); // Make copy of context, because it may be changed
         ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
-        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
+        Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release(), 0, 0, NWilson::TTraceId(TraceId));
     }
 
     void HandleLeaseWatcherFinished(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished::TPtr& ev) {
@@ -468,12 +478,14 @@ private:
     const TScriptExecutionContext::TPtr Ctx;
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
+    const NWilson::TTraceId TraceId;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
     TSessionState SessionState;
     TActorState ScriptLeaseWatcherActor;
     TActorState ScriptResultHandlerActor;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;
+    bool CreationFinished = false;
     bool WaitFinalizationRequest = false;
 };
 

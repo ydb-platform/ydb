@@ -9,14 +9,19 @@
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/settings/translator.h>
 
+#include <functional>
+
 namespace NSQLTranslation {
+
+using TTranslatorsRegistry = THashMap<TString, std::function<TTranslatorPtr()>>;
 
 struct TTranslators {
     TTranslatorPtr const V0;
     TTranslatorPtr const V1;
     TTranslatorPtr const PG;
+    TTranslatorsRegistry const Registry;
 
-    TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg);
+    TTranslators(TTranslatorPtr v0, TTranslatorPtr v1, TTranslatorPtr pg, TTranslatorsRegistry registry = {});
 };
 
 NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& query, const TTranslationSettings& settings,

@@ -1,14 +1,10 @@
 #include "exception_helpers.h"
-#include "attributes.h"
+
 #include "node.h"
 
 #include <yt/yt/core/misc/error.h>
 
-#include <yt/yt/core/rpc/public.h>
-
 #include <yt/yt/core/ypath/token.h>
-
-#include <yt/yt/core/ytree/helpers.h>
 
 namespace NYT::NYTree {
 
@@ -102,7 +98,7 @@ void ThrowNoSuchBuiltinAttribute(TStringBuf key)
 void ThrowMethodNotSupported(TStringBuf method, const std::optional<std::string>& resolveType)
 {
     auto error = TError(
-        NRpc::EErrorCode::NoSuchMethod,
+        NYTree::EErrorCode::NoSuchYPathMethod,
         "%Qv method is not supported",
         method);
     if (resolveType) {
@@ -115,7 +111,7 @@ void ThrowMethodNotSupported(TStringBuf method, const std::optional<std::string>
 void ThrowMethodNotSupportedForAttributes(TStringBuf method)
 {
     THROW_ERROR_EXCEPTION(
-        NRpc::EErrorCode::NoSuchMethod,
+        NYTree::EErrorCode::NoSuchYPathMethod,
         "%Qv method is not supported for attributes",
         method);
 }

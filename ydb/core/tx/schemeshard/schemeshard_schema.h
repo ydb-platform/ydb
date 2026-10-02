@@ -842,6 +842,7 @@ struct Schema : NIceDb::Schema {
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
         struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
         struct TablesMetricsLevel : Column<34, NScheme::NTypeIds::Uint32> { using Type = ETablesMetricsLevel; };
+        struct StorageSpaceExhausted : Column<35, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -878,7 +879,8 @@ struct Schema : NIceDb::Schema {
             ServerlessComputeResourcesMode,
             ColumnTableColumnsLimit,
             SmallBlobsQuotaExceeded,
-            TablesMetricsLevel
+            TablesMetricsLevel,
+            StorageSpaceExhausted
         >;
     };
 
@@ -1499,6 +1501,7 @@ struct Schema : NIceDb::Schema {
         struct RowIdUniqueBuildId : Column<57, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct ParentBuildId : Column<58, NScheme::NTypeIds::Uint64> { using Type = TIndexBuildId; };
         struct IsRebuild : Column<59, NScheme::NTypeIds::Bool> {};
+        struct RebuildIndexName : Column<60, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
@@ -1560,7 +1563,8 @@ struct Schema : NIceDb::Schema {
             RowIdColumnBuildId,
             RowIdUniqueBuildId,
             ParentBuildId,
-            IsRebuild
+            IsRebuild,
+            RebuildIndexName
         >;
     };
 
@@ -2389,9 +2393,10 @@ struct Schema : NIceDb::Schema {
         struct LocalPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
         struct Properties : Column<4, NScheme::NTypeIds::String> {};
+        struct OperationOwnerActorId : Column<5, NScheme::NTypeIds::ActorId> {};
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, Properties, OperationOwnerActorId>;
     };
 
     struct ForcedCompactions : Table<130> {
@@ -2664,6 +2669,9 @@ struct Schema : NIceDb::Schema {
         struct IsCancelled :            Column<14, NScheme::NTypeIds::Bool>   { static constexpr bool Default = false; };
         struct CancellationReason :     Column<15, NScheme::NTypeIds::Utf8>   {};
 
+        struct DomainOwnerId :          Column<16, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct DomainLocalId :          Column<17, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2680,7 +2688,9 @@ struct Schema : NIceDb::Schema {
             StartTime,
             EndTime,
             IsCancelled,
-            CancellationReason
+            CancellationReason,
+            DomainOwnerId,
+            DomainLocalId
         >;
     };
 

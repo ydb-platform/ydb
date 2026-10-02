@@ -1610,6 +1610,9 @@ public:
                 GroupData.reserve(GetGroupsResponse->Get()->Record.EntriesSize());
                 for (const NKikimrSysView::TGroupEntry& entry : GetGroupsResponse->Get()->Record.GetEntries()) {
                     const NKikimrSysView::TGroupInfo& info = entry.GetInfo();
+                    if (info.GetDDisk()) {
+                        continue;
+                    }
                     TGroup& group = GroupData.emplace_back();
                     group.GroupId = entry.GetKey().GetGroupId();
                     group.GroupGeneration = info.GetGeneration();
@@ -2208,6 +2211,7 @@ public:
             vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kVDiskRawUsageFieldNumber);
             vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertFieldNumber);
             vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kGroupSizeInUnitsFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kDetailedReplicationStatusFieldNumber);
             VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, vdiskRequest));
             ++VDiskStateRequestsInFlight;
         }
@@ -2373,6 +2377,7 @@ public:
             jsonVDisk.SetDiskSpace(vdisk.DiskSpace);
         }
         auto itVDiskByVSlotId = VDisksByVSlotId.find(vdisk.VSlotId);
+        jsonVDisk.SetHasWhiteboardData(itVDiskByVSlotId != VDisksByVSlotId.end());
         if (itVDiskByVSlotId != VDisksByVSlotId.end()) {
             auto& whiteboard = *jsonVDisk.MutableWhiteboard();
             whiteboard.CopyFrom(*(itVDiskByVSlotId->second));
@@ -2403,6 +2408,7 @@ public:
                     jsonPDisk.SetDiskSpace(pdisk.DiskSpace);
                 }
                 auto itPDiskByPDiskId = PDisksByPDiskId.find(vdisk.VSlotId);
+                jsonPDisk.SetHasWhiteboardData(itPDiskByPDiskId != PDisksByPDiskId.end());
                 if (itPDiskByPDiskId != PDisksByPDiskId.end()) {
                     jsonPDisk.MutableWhiteboard()->CopyFrom(*(itPDiskByPDiskId->second));
                 }
@@ -2412,6 +2418,7 @@ public:
             for (const TVSlotId& donorId : vdisk.Donors) {
                 NKikimrViewer::TStorageVDisk& jsonDonor = *jsonVDisk.AddDonors();
                 TVDisk donor;
+                donor.VSlotId = donorId;
                 auto itVSlotInfo = VSlotsByVSlotId.find(donorId);
                 if (itVSlotInfo != VSlotsByVSlotId.end()) {
                     FillVDiskFromVSlotInfo(donor, donorId, *(itVSlotInfo->second));

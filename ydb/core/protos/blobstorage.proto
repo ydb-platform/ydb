@@ -9,6 +9,7 @@ import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_ddisk.proto";
 import "ydb/core/protos/node_whiteboard.proto";
+import "ydb/core/scheme/protos/pathid.proto";
 import "google/protobuf/any.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 
@@ -1278,6 +1279,16 @@ message TEvControllerUpdateDiskStatus {
     repeated NKikimrBlobStorage.TVDiskMetrics VDisksMetrics = 1;
     repeated NKikimrBlobStorage.TPDiskMetrics PDisksMetrics = 2;
     repeated TVDiskStatus VDiskStatus = 3;
+
+    // Set by NodeWarden, increases with every report it sends. BS_CONTROLLER may process reports out of order (by
+    // priority), so it ignores VDisk metrics older than the ones it has already applied.
+    optional uint64 MetricsSequence = 4;
+
+    // Set by VDisk reporting a change of its chunk space color (StatusFlags of its metrics). It increases with every
+    // report of any VDisk of the process, so reports reordered on their way (they are sent from different threads)
+    // can be told apart. Once VDisk has reported its color, NodeWarden ignores the color in PDisk metrics for it, as
+    // those are periodic snapshots that may be outdated by the time they arrive.
+    optional uint64 VDiskSpaceSequence = 5;
 }
 
 message TEvGroupStatReport {
@@ -1399,6 +1410,23 @@ message TEvControllerGroupMetricsExchange {
     repeated NKikimrBlobStorage.TGroupMetrics GroupMetrics = 1;
     repeated fixed32 GroupsToQuery = 2; // filled in by entities asking BSC to report some metrics in return
     optional NKikimrWhiteboard.TBSGroupStateInfo WhiteboardUpdate = 3;
+}
+
+// database scope as it is written into storage pool's ScopeId (i.e. the database's domain key)
+// NodeWarden -> BSC: change the set of databases this node is interested in; subscriptions are dropped when the
+// node (re)registers, so NodeWarden sends the full set once the registration is confirmed.
+// Also used by local actors to subscribe to database space state through their node's NodeWarden.
+// A database is identified by its domain key, the same as ScopeId of its storage pools.
+message TEvControllerSubscribeDatabaseSpace {
+    repeated NKikimrProto.TPathID Subscribe = 1;
+    repeated NKikimrProto.TPathID Unsubscribe = 2;
+}
+
+// BSC -> NodeWarden (-> local subscribers): space state of the database; sent in response to subscription and
+// whenever the state changes (per-pool details are shown in BSC monitoring and system views)
+message TEvControllerDatabaseSpaceState {
+    optional NKikimrProto.TPathID Scope = 1;
+    optional bool Exhausted = 2; // any of database's storage pools is exhausted
 }
 
 message TEvNodeWardenQueryGroupInfo {

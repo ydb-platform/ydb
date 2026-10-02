@@ -7,7 +7,7 @@ namespace NKikimr::NKqp {
 
 namespace {
 
-bool IsSuitableToDisableOlapBlocks(const TIntrusivePtr<IOperator>& input, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
+bool IsSuitableToDisableOlapBlocks(IOperator* input, TTypeAnnotationContext& typesCtx, ui32 columnsLimit) {
     if (columnsLimit == 0 || input->GetKind() != EOperator::Limit || typesCtx.BlockEngineMode == NYql::EBlockEngineMode::Disable) {
         return false;
     }
@@ -17,19 +17,26 @@ bool IsSuitableToDisableOlapBlocks(const TIntrusivePtr<IOperator>& input, TTypeA
 } // anonymous namespace
 
 bool TDisableBlocksOnColumnsLimitRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
-    return input->Kind == EOperator::Limit;
+    return input->Kind == EOperator::Limit || input->Kind == EOperator::Window;
 }
 
 TIntrusivePtr<IOperator> TDisableBlocksOnColumnsLimitRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
     auto& typesCtx = rboCtx.TypeCtx;
-    const ui32 columnsLimit = rboCtx.KqpCtx.Config->GetDisableOlapBlocksOnColumnsLimit();
-
-    if (!IsSuitableToDisableOlapBlocks(input, typesCtx, columnsLimit)) {
+    if (input->GetKind() == EOperator::Window) {
+        if (rboCtx.KqpCtx.Config->GetWindowFunctionsV2()) {
+            typesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
+        }
         return input;
     }
 
-    if (input->GetOutputIUs().size() >= static_cast<size_t>(columnsLimit)) {
+    const ui32 columnsLimit = rboCtx.KqpCtx.Config->GetDisableOlapBlocksOnColumnsLimit();
+
+    if (!IsSuitableToDisableOlapBlocks(input.get(), typesCtx, columnsLimit)) {
+        return input;
+    }
+
+    if (input->GetOutputIUs().Size() >= static_cast<size_t>(columnsLimit)) {
         typesCtx.BlockEngineMode = NYql::EBlockEngineMode::Disable;
     }
     return input;

@@ -23,7 +23,7 @@ private:
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override;
     virtual TConclusionStatus DoOnFinished() override;
-    virtual void DoOnError(const TString& errorMessage) override;
+    virtual void DoOnError(const Ydb::StatusIds::StatusCode status, const TString& errorMessage) override;
     void OnError(const TString& errorMessage, const EErrorClass errorClass);
     void SendErrorMessage(const TString& errorMessage, const EErrorClass errorClass);
 

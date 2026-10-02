@@ -184,7 +184,7 @@ struct aws_json_value *aws_json_value_get_from_object(const struct aws_json_valu
 /**
  * Returns the aws_json_value at the given key.
  * Note: same as aws_json_value_get_from_object but with key as const char *.
- * Prefer this method is you have a key thats already a valid char * as it is likely to be faster.
+ * Prefer this method if you have a key that's already a valid char * as it is likely to be faster.
  * @param object The object aws_json_value you want to get the value from.
  * @param key The key that the aws_json_value is at. Is case sensitive.
  * @return The aws_json_value at the given key, otherwise NULL.
@@ -205,7 +205,7 @@ bool aws_json_value_has_key(const struct aws_json_value *object, struct aws_byte
 /**
  * Checks if there is a aws_json_value at the given key.
  * Note: same as aws_json_value_has_key but with key as const char *.
- * Prefer this method is you have a key thats already a valid char * as it is likely to be faster.
+ * Prefer this method if you have a key that's already a valid char * as it is likely to be faster.
  * @param object The value aws_json_value you want to check a key in.
  * @param key The key that you want to check. Is case sensitive.
  * @return True if a aws_json_value is found.
@@ -228,7 +228,7 @@ int aws_json_value_remove_from_object(struct aws_json_value *object, struct aws_
 /**
  * Removes the aws_json_value at the given key.
  * Note: same as aws_json_value_remove_from_object but with key as const char *.
- * Prefer this method is you have a key thats already a valid char * as it is likely to be faster.
+ * Prefer this method if you have a key that's already a valid char * as it is likely to be faster.
  * @param object The object aws_json_value you want to remove a aws_json_value in.
  * @param key The key that the aws_json_value is at. Is case sensitive.
  * @return AWS_OP_SUCCESS if the aws_json_value was removed.

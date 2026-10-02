@@ -5,16 +5,6 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-#if defined(LOG_PREFIX)
-#error "Already defined LOG_PREFIX"
-#endif
-
-
-#define LOG_PREFIX TStringBuilder() << "TPartitionChooser " << SelfId()                         \
-                    << " (SourceId=" << TThis::SourceId                     \
-                    << ", PreferedPartition=" << TThis::PreferedPartition   \
-                    << ") "
-
 template<typename TPipeCreator>
 class TPartitionChooserActor: public TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator> {
 public:
@@ -62,8 +52,9 @@ public:
 
 private:
     void RequestPQRB(const NActors::TActorContext& ctx) {
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "RequestPQRB",
-            {"logPrefix", LOG_PREFIX});
+        LOG_D(
+            "RequestPQRB"
+        );
         TThis::Become(&TThis::StatePQRB);
 
         if (PQRBHelper.PartitionId()) {
@@ -76,10 +67,11 @@ private:
 
     void Handle(TEvPersQueue::TEvGetPartitionIdForWriteResponse::TPtr& ev, const TActorContext& ctx) {
         PartitionId = PQRBHelper.Handle(ev, ctx);
-        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Received partition from PQRB",
-            {"logPrefix", LOG_PREFIX},
+        LOG_D(
+            "Received partition from PQRB",
             {"partitionId", PartitionId},
-            {"sourceId", TThis::SourceId});
+            {"sourceId", TThis::SourceId}
+        );
         TThis::Partition = TThis::Chooser->GetPartition(PQRBHelper.PartitionId().value());
 
         PQRBHelper.Close(ctx);
@@ -112,8 +104,9 @@ private:
 
 private:
     void OnPartitionChosen(const TActorContext& ctx) {
-        YDB_LOG_TRACE_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "OnPartitionChosen",
-            {"logPrefix", LOG_PREFIX});
+        LOG_T(
+            "OnPartitionChosen"
+        );
 
         if (!TThis::Partition && TThis::PreferedPartition) {
             return TThis::ReplyError(ErrorCode::BAD_REQUEST,
@@ -155,7 +148,5 @@ private:
 
     TPQRBHelper<TPipeCreator> PQRBHelper;
 };
-
-#undef LOG_PREFIX
 
 } // namespace NKikimr::NPQ::NPartitionChooser

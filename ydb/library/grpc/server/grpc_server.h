@@ -402,6 +402,8 @@ private:
 
     TVector<IGRpcServicePtr> Services_;
     TGlobalLimiter Limiter_;
+
+    std::atomic<bool> Stopped_{ false };
 };
 
 } // namespace NYdbGrpc

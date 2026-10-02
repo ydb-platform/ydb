@@ -15,6 +15,7 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <queue>
+#include <util/generic/ylimits.h>
 
 namespace NKikimr::NConveyorComposite {
 
@@ -44,28 +45,6 @@ public:
     }
 };
 
-class TProcessOrdered {
-private:
-    YDB_READONLY(ui64, ProcessId, 0);
-    YDB_READONLY(ui64, CPUTime, 0);
-
-public:
-    TProcessOrdered(const ui64 processId, const ui64 cpuTime)
-        : ProcessId(processId)
-        , CPUTime(cpuTime) {
-    }
-
-    bool operator<(const TProcessOrdered& item) const {
-        if (CPUTime < item.CPUTime) {
-            return true;
-        }
-        if (item.CPUTime < CPUTime) {
-            return false;
-        }
-        return ProcessId < item.ProcessId;
-    }
-};
-
 class TProcess: public TNonCopyable, public NColumnShard::TMonitoringObjectsCounter<TProcess> {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
@@ -76,12 +55,30 @@ private:
     std::shared_ptr<TPositiveControlInteger> WaitingTasksCount;
     TPositiveControlInteger InProgressTasksCount;
     TAverageCalcer<TDuration> AverageTaskDuration;
-    ui32 LinksCount = 0;
     TDuration BaseWeight = TDuration::Zero();
+    // Cumulative wall-clock time of finished tasks on this process (not OS CPU time). Never decays.
+    // Applied only to query-scoped processes (ProcessId != 0). Process 0 is the category default
+    // (accessor parsing, compaction/insert/...) and is never pinned by heavy_limits.
+    TDuration TotalCPU = TDuration::Zero();
 
 public:
     ui32 GetInProgressTasksCount() const {
         return InProgressTasksCount.Val();
+    }
+
+    bool CanRunOnWorker(const ui64 workerIdx, const std::vector<NConfig::THeavyLimit>& limits) const {
+        if (limits.empty() || ProcessId == 0) {
+            return true;
+        }
+        ui32 threadLimit = Max<ui32>();
+        for (const auto& limit : limits) {
+            if (TotalCPU >= limit.GetCpuLimit()) {
+                threadLimit = limit.GetThreadLimit();
+            } else {
+                break;
+            }
+        }
+        return workerIdx < threadLimit;
     }
 
     void SetBaseWeight(const TDuration d) {
@@ -97,10 +94,6 @@ public:
 
     ~TProcess() {
         WaitingTasksCount->Sub(Tasks.size());
-    }
-
-    bool HasTasks() const {
-        return Tasks.size();
     }
 
     ui32 GetTasksCount() const {
@@ -120,20 +113,12 @@ public:
         CPUUsage->Exchange(result.GetPredictedDuration(), result.GetStart(), result.GetFinish());
         AverageTaskDuration.Add(result.GetDuration());
         InProgressTasksCount.Dec();
-    }
-
-    [[nodiscard]] bool DecRegistration() {
-        AFL_VERIFY(LinksCount);
-        --LinksCount;
-        return LinksCount == 0;
+        TotalCPU += result.GetDuration();
+        result.NotifyAccounted();
     }
 
     double GetWeight() const {
         return 1.0;
-    }
-
-    void IncRegistration() {
-        ++LinksCount;
     }
 
     TProcess(
@@ -143,7 +128,6 @@ public:
         , WaitingTasksCount(waitingTasksCount) {
         AFL_VERIFY(WaitingTasksCount);
         CPUUsage = std::make_shared<TCPUUsage>(Scope->GetCPUUsage());
-        IncRegistration();
     }
 
     void RegisterTask(std::shared_ptr<ITask>&& task, const ESpecialTaskCategory category) {

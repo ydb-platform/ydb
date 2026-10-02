@@ -410,11 +410,6 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     class TTransactionFailsAsSoonAsItIsClearItCannotCommit : public TTableDataModificationTester {
     protected:
         void DoExecute() override {
-            if (GetIsOlap()) {
-                // will be fixed in https://github.com/ydb-platform/ydb/issues/25661
-                return;
-            }
-
             auto client = Kikimr->GetQueryClient();
 
             auto session1 = client.GetSession().GetValueSync().GetSession();
@@ -456,6 +451,112 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
 
     Y_UNIT_TEST_TWIN(TransactionFailsAsSoonAsItIsClearItCannotCommit, IsOlap) {
         TTransactionFailsAsSoonAsItIsClearItCannotCommit tester;
+        tester.SetIsOlap(IsOlap);
+        tester.Execute();
+    }
+
+    class TReadFailsIfWriteLockIsBroken : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // Everything below stays on one key, so the read set, tx1's write and tx2's write all land on
+            // the same shard: a lock has writes, or is broken, only on the shard that saw them.
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2 where Key = 1u;
+                )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+            auto tx1 = result.GetTransaction();
+
+            // tx1 writes, so from now on its lock has writes
+            result = session1.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (1u, "1");
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            tx1 = result.GetTransaction();
+
+            // tx2 writes the same key and commits, so tx1 can no longer commit
+            result = session2.ExecuteQuery(Q1_(R"(
+                upsert into KV2 (Key, Value) values (1u, "2");
+                )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // a broken write lock means the rows tx1 would read are inconsistent, so the read must abort
+            // right away rather than return them and wait for the commit to fail
+            result = session1.ExecuteQuery(Q1_(R"(
+                select * from KV2 where Key = 1u;
+                )"), TTxControl::Tx(*tx1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(ReadFailsIfWriteLockIsBroken, IsOlap) {
+        TReadFailsIfWriteLockIsBroken tester;
+        tester.SetIsOlap(IsOlap);
+        tester.Execute();
+    }
+
+    class TInsertExistingKeyOnBrokenLock : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session1 = client.GetSession().GetValueSync().GetSession();
+            auto session2 = client.GetSession().GetValueSync().GetSession();
+
+            // tx1 reads the very row it will insert later, so the write below really does break its lock
+            auto result = session1.ExecuteQuery(Q1_(R"(
+                SELECT * FROM `/Root/Test` WHERE Group = 1u AND Name = "Paul";
+            )"), TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            auto tx1 = result.GetTransaction();
+
+            // tx2 writes that row and commits: tx1's lock is broken from here on
+            result = session2.ExecuteQuery(Q1_(R"(
+                UPSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Changed Other");
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            // tx1 inserts a key that already exists at its own snapshot: both a constraint violation and a
+            // broken lock apply. Which one is reported is what this test pins.
+            result = session1.ExecuteQuery(Q1_(R"(
+                INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Changed");
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
+            // Both engines report the broken lock rather than the constraint violation: the transaction is
+            // finished either way, and the lock is the reason it cannot go on.
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(InsertExistingKeyOnBrokenLock, IsOlap) {
+        TInsertExistingKeyOnBrokenLock tester;
+        tester.SetIsOlap(IsOlap);
+        tester.Execute();
+    }
+
+    class TInsertExistingKeyWithoutConflict : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            auto session = client.GetSession().GetValueSync().GetSession();
+
+            // The row was written long before and nobody else touches it, so the duplicate key is the only
+            // thing wrong. This is the counterpart of TInsertExistingKeyOnBrokenLock: without a conflict the
+            // answer is the constraint violation, not a broken lock.
+            auto result = session.ExecuteQuery(Q1_(R"(
+                INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Paul", "Changed");
+            )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    };
+
+    Y_UNIT_TEST_TWIN(InsertExistingKeyWithoutConflict, IsOlap) {
+        TInsertExistingKeyWithoutConflict tester;
         tester.SetIsOlap(IsOlap);
         tester.Execute();
     }

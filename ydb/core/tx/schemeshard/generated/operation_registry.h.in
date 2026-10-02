@@ -1,0 +1,32 @@
+// Generated from EOperationType; do not edit.
+#pragma once
+
+#include <ydb/core/protos/schemeshard/operations.pb.h>
+
+#include <cstddef>
+#include <type_traits>
+
+namespace NKikimr::NSchemeShard {
+
+inline constexpr size_t SchemeOperationCount = {{ opTypes | length }};
+
+template <auto CountEntries>
+consteval bool CheckSchemeOperationRegistry() {
+{% for opType in opTypes %}
+    static_assert(CountEntries({{ opType }}) == 1,
+        "Missing or duplicate operation registry entry: {{ opType }}");
+{% endfor %}
+    return true;
+}
+
+template <typename TFn>
+void DispatchSchemeOperation(NKikimrSchemeOp::EOperationType type, TFn&& fn) {
+    switch (type) {
+{% for opType in opTypes %}
+    case {{ opType }}:
+        return fn(std::integral_constant<NKikimrSchemeOp::EOperationType, {{ opType }}>{});
+{% endfor %}
+    }
+}
+
+} // namespace NKikimr::NSchemeShard

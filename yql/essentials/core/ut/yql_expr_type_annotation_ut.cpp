@@ -74,7 +74,6 @@ void CheckCommonTypeBothCastable(TCommonTypeFn commonTypeFn, const TString& pipe
 
     TExprContext ctx;
     TTypeAnnotationContext typesCtx;
-    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithCommonTypeFixup);
 
     for (int i = minDecimalTypePart; i <= maxDecimalTypePart; ++i) {
         for (int j = minDecimalTypePart; j <= maxDecimalTypePart; ++j) {
@@ -123,7 +122,6 @@ Y_UNIT_TEST(CommonTypeBothCastable) {
 Y_UNIT_TEST(CommonTypeExpectedResults) {
     TExprContext ctx;
     TTypeAnnotationContext typesCtx;
-    typesCtx.UpdateDecimalConversionMode(EDecimalConversionMode::WithCommonTypeFixup);
 
     auto dec = [&](int precision, int scale) {
         return MakeDecimalNode(precision, scale, ctx, typesCtx);
@@ -201,5 +199,28 @@ Y_UNIT_TEST(AfterCutoffAlwaysUsesFixup) {
 }
 
 } // Y_UNIT_TEST_SUITE(TDecimalConversionMode)
+
+Y_UNIT_TEST_SUITE(TMatchRecognizeParamsTypeAnnotation) {
+
+Y_UNIT_TEST(StructWithFuzzingAndColumnOrder) {
+    TExprContext ctx;
+    TTypeAnnotationContext typesCtx;
+    typesCtx.DeriveColumnOrder = true;
+    typesCtx.FuzzUntypedLambda = true;
+    typesCtx.FuzzUniversal = true;
+    const TPositionHandle pos;
+    auto expr = ctx.NewCallable(pos, "MatchRecognizeParams", {
+                                                                 ctx.NewCallable(pos, "AsStruct", {}),
+                                                                 ctx.NewAtom(pos, "RowsPerMatch_OneRow"),
+                                                                 ctx.NewList(pos, {}),
+                                                                 ctx.NewList(pos, {}),
+                                                                 ctx.NewList(pos, {}),
+                                                             });
+
+    UNIT_ASSERT_C(InstantAnnotateTypes(expr, ctx, false, typesCtx), ctx.IssueManager.GetIssues().ToString());
+    UNIT_ASSERT(expr->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct);
+}
+
+} // Y_UNIT_TEST_SUITE(TMatchRecognizeParamsTypeAnnotation)
 
 } // namespace NYql

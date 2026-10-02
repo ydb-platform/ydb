@@ -1,4 +1,5 @@
 #include "format_handler.h"
+#include "data_packer.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/consumer.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/purecalc_filter.h>
@@ -10,8 +11,6 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
-
-#include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
@@ -78,6 +77,10 @@ private:
         }
 
         void OnParsedData(ui64 numberRows) override {
+            if (Self.FatalErrorStatus) {
+                return;
+            }
+
             YDB_LOG_TRACE("Got parsed data",
                 {"logPrefix", LogPrefix},
                 {"numberRows", numberRows});
@@ -92,7 +95,7 @@ private:
                 }
             }
 
-            Self.Offsets = &Self.Parser->GetOffsets();
+            Self.Offsets = Self.Parser->GetOffsets();
             Self.ProcessData(numberRows);
         }
 
@@ -134,12 +137,22 @@ private:
             , Columns(Client->GetColumns())
             , LogPrefix(TStringBuilder() << Self.LogPrefix << "TClientHandler " << Client->GetClientId() << ": ")
             , FilteredRow(Columns.size())
+            , DataPacker(Self.Config.MemoryQuotaManager, sizeof(ui64), Self.Counters.Desc.ReadGroupSubgroup)
+            , ClientDataMemory(Self.Config.MemoryQuotaManager, "ClientDataMemory", Self.Counters.Desc.ReadGroupSubgroup)
         {
             ColumnsIds.reserve(Columns.size());
         }
 
         IClientDataConsumer::TPtr GetClient() const {
             return Client;
+        }
+
+        void Accept() {
+            Accepted = true;
+        }
+
+        bool IsAccepted() const {
+            return Accepted;
         }
 
         bool IsStarted() const override {
@@ -176,10 +189,29 @@ private:
             return SetupPacker();
         }
 
-        TQueue<TDataBatch> ExtractClientData() {
+        bool HasData() const {
+            return NumberRows || Watermark || !ClientData.empty();
+        }
+
+        TQueue<TDataBatch> ExtractClientData(ui64 maxBatchSize) {
             FinishPacking();
+
             TQueue<TDataBatch> result;
-            result.swap(ClientData);
+
+            if (ClientDataMemory.GetSize() <= maxBatchSize) {
+                result.swap(ClientData);
+                ClientDataMemory.Resize(0);
+            } else {
+                ui64 extractedSize = 0;
+                while (!ClientData.empty() && (result.empty() || extractedSize + ClientData.front().TotalSize <= maxBatchSize)) {
+                    extractedSize += ClientData.front().TotalSize;
+                    result.emplace(std::move(ClientData.front()));
+                    ClientData.pop();
+                }
+
+                ClientDataMemory.Resize(ClientDataMemory.GetSize() - extractedSize);
+            }
+
             YDB_LOG_TRACE("ExtractClientData",
                 {"logPrefix", LogPrefix},
                 {"numberBatches", result.size()});
@@ -267,7 +299,8 @@ private:
                 Y_ENSURE(false, "Expected embedded or list from purecalc");
             }
 
-            Offset = Self.Offsets->at(rowId);
+            Y_ENSURE(rowId < Self.Offsets.size());
+            Offset = Self.Offsets[rowId];
             if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
                 YDB_LOG_TRACE("OnData, skip due to next message offset",
                     {"logPrefix", LogPrefix},
@@ -294,11 +327,11 @@ private:
                     FilteredRow[i++] = parsedData[rowId];
                 }
                 with_lock(Self.Alloc) {
-                    DataPacker->AddWideItem(FilteredRow.data(), FilteredRow.size());
+                    DataPacker.AddWideItem(FilteredRow.data(), FilteredRow.size());
                 }
 
                 ++newNumberRows;
-                newDataPackerSize = DataPacker->PackedSizeEstimate();
+                newDataPackerSize = DataPacker.PackedSizeEstimate();
             }
 
             OnWatermark(Offset, maybeWatermark);
@@ -339,14 +372,14 @@ private:
             }
 
             with_lock(Self.Alloc) {
-                const auto rowType = Self.ProgramBuilder->NewMultiType(columnTypes);
-                DataPacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(rowType, NKikimr::NMiniKQL::EValuePackerVersion::V0, NYql::DefaultDatumValidationMode);
+                DataPacker.SetPackerType(Self.ProgramBuilder->NewMultiType(columnTypes));
             }
             return TStatus::Success();
         }
 
         void FinishPacking() {
-            if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
+            if (!DataPacker.IsEmpty() || !Watermark.Empty()) {
+                const TGuard<NKikimr::NMiniKQL::TScopedAlloc> guard(Self.Alloc);
                 YDB_LOG_TRACE("FinishPacking",
                     {"logPrefix", LogPrefix},
                     {"size", DataPackerSize},
@@ -354,7 +387,11 @@ private:
                 if (FilteredOffsets.empty()) {
                     FilteredOffsets.push_back(Offset);
                 }
-                ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), std::move(FilteredOffsets), Watermark);
+
+                auto [data, size] = DataPacker.Finish();
+                ClientDataMemory.Add(size);
+                ClientData.emplace(NYql::MakeReadOnlyRope(std::move(data)), std::move(FilteredOffsets), Watermark, size, NumberRows, DataPackerSize);
+
                 NumberRows = 0;
                 DataPackerSize = 0;
                 FilteredOffsets.clear();
@@ -369,6 +406,7 @@ private:
         const TString LogPrefix;
 
         TVector<ui64> ColumnsIds;
+        bool Accepted = false;
         bool ClientStarted = false;
 
         // Filtered data
@@ -376,16 +414,17 @@ private:
         ui64 NumberRows = 0;
         ui64 DataPackerSize = 0;
         TVector<NYql::NUdf::TUnboxedValue> FilteredRow;  // Temporary value holder for DataPacket
-        std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataPacker;
+        TMemoryLimitedDataPacker DataPacker;
         TVector<ui64> FilteredOffsets;  // Offsets of current batch in DataPacker
         TMaybe<TInstant> Watermark;
         TQueue<TDataBatch> ClientData;
+        TMemoryQuota ClientDataMemory;
     };
 
 public:
     TTopicFormatHandler(const TFormatHandlerConfig& config, const TSettings& settings, const TCountersDesc& counters)
         : TBase(&TTopicFormatHandler::StateFunc)
-        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"))
+        , TTypeParser(__LOCATION__, config.FunctionRegistry, counters.CopyWithNewMkqlCountersName("row_dispatcher"), config.MemoryQuotaManager, "FormatHandlerAlloc")
         , Config(config)
         , Settings(settings)
         , LogPrefix(TStringBuilder() << "TTopicFormatHandler [" << Settings.ParsingFormat << "]: ")
@@ -407,13 +446,18 @@ public:
         hFunc(TEvRowDispatcher::TEvPurecalcCompileResponse, Handle);
         hFunc(NActors::TEvents::TEvWakeup, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);,
+        ExceptionFunc(NKikimr::TMemoryLimitExceededException, HandleMemoryLimitException)
         ExceptionFunc(std::exception, HandleException)
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
+        if (FatalErrorStatus) {
+            return;
+        }
+
         ForceRefresh(); // Clear parser before client is started (otherwise the client may receive too many new messages).
 
-        if (Filters) {
+        if (Filters && !FatalErrorStatus) {
             Filters->OnCompileResponse(ev);
         }
     }
@@ -421,7 +465,7 @@ public:
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         RefreshScheduled = false;
 
-        if (Parser) {
+        if (Parser && !FatalErrorStatus) {
             YDB_LOG_TRACE("Refresh parser",
                 {"logPrefix", LogPrefix});
             Parser->Refresh();
@@ -439,6 +483,10 @@ public:
         PassAway();
     }
 
+    void HandleMemoryLimitException(const NKikimr::TMemoryLimitExceededException& error) {
+        FatalError(TStatus::Fail(EStatusId::OVERLOADED, GetMemoryLimitExceededMessage(error)));
+    }
+
     void HandleException(const std::exception& error) {
         YDB_LOG_ERROR("Got unexpected exception",
             {"logPrefix", LogPrefix},
@@ -448,6 +496,10 @@ public:
 
 public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
+        if (FatalErrorStatus) {
+            return;
+        }
+
         YDB_LOG_TRACE("Send messages to parser",
             {"logPrefix", LogPrefix},
             {"messages", messages.size()});
@@ -464,15 +516,29 @@ public:
         }
     }
 
-    TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId) override {
+    TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId, ui64 maxBatchSize) override {
+        if (FatalErrorStatus) {
+            return {};
+        }
+
         const auto it = Clients.find(clientId);
         if (it == Clients.end()) {
             return {};
         }
-        return it->second->ExtractClientData();
+
+        return it->second->ExtractClientData(maxBatchSize);
+    }
+
+    bool HasClientData(NActors::TActorId clientId) const override {
+        const auto it = Clients.find(clientId);
+        return !FatalErrorStatus && it != Clients.end() && it->second->HasData();
     }
 
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
+        if (FatalErrorStatus) {
+            return *FatalErrorStatus;
+        }
+
         YDB_LOG_DEBUG("Add client",
             {"logPrefix", LogPrefix},
             {"clientId", client->GetClientId()});
@@ -484,6 +550,9 @@ public:
                     {"clientOffset", *clientOffset},
                     {"currentOffset", *CurrentOffset});
                 Parser->Refresh(true);
+                if (FatalErrorStatus) {
+                    return *FatalErrorStatus;
+                }
             }
         }
 
@@ -505,12 +574,13 @@ public:
 
         CreateFilters();
 
-        auto programHolder = CreateProgramHolder(clientHandler);
+        auto programHolder = CreateProgramHolder(clientHandler, Config.MemoryQuotaManager, Counters.Desc.ReadGroupSubgroup);
         if (auto status = Filters->AddPrograms(clientHandler, std::move(programHolder)); status.IsFail()) {
             RemoveClient(client->GetClientId());
             return status.AddParentIssue("Failed to create filter for new client");
         }
 
+        clientHandler->Accept();
         return TStatus::Success();
     }
 
@@ -531,6 +601,10 @@ public:
         const auto client = it->second->GetClient();
         Counters.ActiveClients->Dec();
         Clients.erase(it);
+
+        if (FatalErrorStatus) {
+            return;
+        }
 
         for (const auto& column : client->GetColumns()) {
             const auto columnIt = ColumnsDesc.find(column.Name);
@@ -556,6 +630,9 @@ public:
 
     TFormatHandlerStatistic GetStatistics() override {
         TFormatHandlerStatistic statistics;
+        if (FatalErrorStatus) {
+            return statistics;
+        }
         if (Parser) {
             Parser->FillStatistics(statistics);
         }
@@ -566,7 +643,7 @@ public:
     }
 
     void ForceRefresh() override {
-        if (Parser) {
+        if (Parser && !FatalErrorStatus) {
             Parser->Refresh(true);
         }
     }
@@ -578,6 +655,10 @@ protected:
 
 private:
     void ScheduleRefresh() {
+        if (FatalErrorStatus) {
+            return;
+        }
+
         if (const auto refreshPeriod = Config.JsonParserConfig.LatencyLimit; !RefreshScheduled && refreshPeriod) {
             RefreshScheduled = true;
             Schedule(refreshPeriod, new NActors::TEvents::TEvWakeup());
@@ -597,6 +678,9 @@ private:
 
         if (Parser) {
             Parser->Refresh(true);
+            if (FatalErrorStatus) {
+                return *FatalErrorStatus;
+            }
         }
 
         YDB_LOG_DEBUG("UpdateParser to new schema",
@@ -641,10 +725,12 @@ private:
     TValueStatus<ITopicParser::TPtr> CreateParserForFormat() const {
         const auto& counters = Counters.Desc.CopyWithNewMkqlCountersName("row_dispatcher_parser");
         if (Settings.ParsingFormat == "raw") {
-            return CreateRawParser(ParserHandler, Config.FunctionRegistry, counters);
+            return CreateRawParser(ParserHandler, Config.FunctionRegistry, counters, Config.MemoryQuotaManager);
         }
         if (Settings.ParsingFormat == "json_each_row") {
-            return CreateJsonParser(ParserHandler, Config.JsonParserConfig, counters);
+            auto config = Config.JsonParserConfig;
+            config.MemoryQuotaManager = Config.MemoryQuotaManager;
+            return CreateJsonParser(ParserHandler, config, counters);
         }
         return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Unsupported parsing format: " << Settings.ParsingFormat);
     }
@@ -660,15 +746,16 @@ private:
             return;
         }
 
-        const ui64 lastOffset = Offsets->at(numberRows - 1);
+        Y_ENSURE(numberRows <= Offsets.size());
+        const ui64 lastOffset = Offsets[numberRows - 1];
         YDB_LOG_TRACE("Send messages to programs",
             {"logPrefix", LogPrefix},
             {"numberRows", numberRows},
-            {"firstOffset", Offsets->front()},
+            {"firstOffset", Offsets.front()},
             {"lastOffset", lastOffset});
 
         if (Filters) {
-            Filters->ProcessData(ParserSchemaIndex, *Offsets, ParsedData, numberRows);
+            Filters->ProcessData(ParserSchemaIndex, Offsets, ParsedData, numberRows);
         }
 
         for (const auto& [_, client] : Clients) {
@@ -682,12 +769,20 @@ private:
         }
     }
 
-    void FatalError(TStatus status) const {
+    void FatalError(TStatus status) {
+        if (FatalErrorStatus) {
+            return;
+        }
+
+        FatalErrorStatus = std::move(status);
         YDB_LOG_ERROR("Got fatal error",
             {"logPrefix", LogPrefix},
-            {"error", status.GetErrorMessage()});
+            {"error", FatalErrorStatus->GetErrorMessage()});
+
         for (const auto& [_, client] : Clients) {
-            client->OnClientError(status);
+            if (client->IsAccepted()) {
+                client->OnClientError(*FatalErrorStatus);
+            }
         }
     }
 
@@ -710,9 +805,10 @@ private:
     std::optional<ui64> CurrentOffset;
 
     // Parsed data
-    const TVector<ui64>* Offsets;
+    std::span<const ui64> Offsets;
     TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedData;
     bool RefreshScheduled = false;
+    std::optional<TStatus> FatalErrorStatus;
 
     // Metrics
     const TCounters Counters;
@@ -742,14 +838,15 @@ TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& row
         .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry, skipJsonErrors),
         .FiltersConfig = {
             .CompileServiceId = compileServiceId
-        }
+        },
+        .MemoryQuotaManager = rowDispatcherConfig.GetMemoryQuotaManager(),
     };
 }
 
 namespace NTests {
 
-ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings) {
-    const auto handler = new TTopicFormatHandler(config, settings, {});
+ITopicFormatHandler::TPtr CreateTestFormatHandler(const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters) {
+    const auto handler = new TTopicFormatHandler(config, settings, counters);
     NActors::TActivationContext::ActorSystem()->Register(handler);
     return ITopicFormatHandler::TPtr(handler);
 }

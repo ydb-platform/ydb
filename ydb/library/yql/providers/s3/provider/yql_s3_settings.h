@@ -101,7 +101,7 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     using TPtr = TIntrusivePtr<TS3Configuration>;
     using TSetupper = std::function<void(TS3Configuration& configuration)>;
 
-    TS3Configuration();
+    explicit TS3Configuration(bool strictConfigValidation = false);
     TS3Configuration(const TS3Configuration&) = delete;
 
     void Init(const TS3GatewayConfig& config, TIntrusivePtr<TTypeAnnotationContext> typeCtx);

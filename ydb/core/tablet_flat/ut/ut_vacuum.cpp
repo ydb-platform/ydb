@@ -781,12 +781,19 @@ Y_UNIT_TEST_SUITE(Vacuum) {
         };
 
         TMyEnvBase env;
-        env->GetAppData().FeatureFlags.SetEnableCutHistory(false);
         auto fire = [&] {
+            // Enable history tracking at boot, then pause cutting until S2.
+            env->GetAppData().FeatureFlags.SetEnableCutHistory(true);
+            auto bootCommits = env->AddObserver<TEvTablet::TEvCommit>([&](auto& ev) {
+                if (ev->Get()->IsSnapshot) {
+                    env->GetAppData().FeatureFlags.SetEnableCutHistory(false);
+                }
+            });
             env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId& tablet, TTabletStorageInfo* info) {
                 return new NFake::TDummy(tablet, info, env.Edge, TestTabletFlags);
             }, 0, &starter);
             env.WaitFor<NFake::TEvReady>();
+            env->GetAppData().FeatureFlags.SetEnableCutHistory(false);
         };
         fire();
         env.SendSync(new NFake::TEvExecute{new TTxInitSchema({101}, true)});

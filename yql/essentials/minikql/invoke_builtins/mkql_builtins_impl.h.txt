@@ -857,6 +857,7 @@ void RegisterCountBits(IBuiltinFunctionRegistry& registry);
 void RegisterAbs(IBuiltinFunctionRegistry& registry);
 void RegisterAbs(TKernelFamilyMap& kernelFamilyMap);
 void RegisterConvert(IBuiltinFunctionRegistry& registry);
+void RegisterToString(TKernelFamilyMap& kernelFamilyMap);
 void RegisterConcat(IBuiltinFunctionRegistry& registry);
 void RegisterSubstring(IBuiltinFunctionRegistry& registry);
 void RegisterFind(IBuiltinFunctionRegistry& registry);

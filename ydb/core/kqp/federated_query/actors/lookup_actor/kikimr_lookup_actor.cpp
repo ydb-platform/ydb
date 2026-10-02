@@ -88,6 +88,22 @@ namespace {
         return resultTypeBuilder.Build();
     }
 
+    const NKikimr::NMiniKQL::TType* MakePickleType(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* keyType) {
+        NKikimr::NMiniKQL::TType* rowType;
+        auto membersCount = keyType->GetMembersCount();
+        Y_ENSURE(membersCount > 0);
+        if (membersCount > 1) {
+            TSmallVec<NKikimr::NMiniKQL::TType*> types(membersCount);
+            for (ui32 i = 0; i != membersCount; ++i) {
+                types[i] = keyType->GetMemberType(i);
+            }
+            rowType = NKikimr::NMiniKQL::TTupleType::Create(membersCount, types.data(), env);
+        } else {
+            rowType = keyType->GetMemberType(0);
+        }
+        return NKikimr::NMiniKQL::TListType::Create(rowType, env);
+    }
+
     class TDqSourceKikimrLookupActor
         : public NYql::NDq::IDqAsyncLookupSource,
           public NActors::TActorBootstrapped<TDqSourceKikimrLookupActor> {
@@ -97,6 +113,7 @@ namespace {
 
         struct TLookupState {
             using TPtr = std::shared_ptr<TLookupState>;
+            using TWeakPtr = std::weak_ptr<TLookupState>;
             std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
             // ^^^ must not be lock()ed without bound mkql allocator
             // ^^^ (and allocator must not be bound outside actor context)
@@ -114,7 +131,7 @@ namespace {
             using TPtr = std::shared_ptr<TSessionState>;
             TString SessionId;
             NRpcService::TStreamReadProcessorPtr<Ydb::Query::SessionState> StreamProcessor;
-            TLookupState::TPtr PendingLookup; // avoid circular ownership, either PendingLookup or PendingLookup->SessionState must be nullptr
+            TLookupState::TWeakPtr PendingLookup;
         };
 
         // Event ids
@@ -177,35 +194,40 @@ namespace {
 
     public:
         TDqSourceKikimrLookupActor(
-            NActors::TActorId&& parentId,
-            ::NMonitoring::TDynamicCounterPtr taskCounters,
-            std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-            std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
             NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
-            const NKikimr::NMiniKQL::TStructType* keyType,
-            const NKikimr::NMiniKQL::TStructType* payloadType,
-            const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-            const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-            const size_t maxKeysInRequest,
-            bool isMultiMatches = false)
-            : ParentId(std::move(parentId))
-            , Alloc(alloc)
-            , KeyTypeHelper(keyTypeHelper)
+            IDqAsyncIoFactory::TLookupSourceArguments&& args)
+            : ParentId(std::move(args.ParentId))
+            , Alloc(std::move(args.Alloc))
+            , KeyTypeHelper(std::move(args.KeyTypeHelper))
             , LookupSource(std::move(lookupSource))
-            , KeyType(keyType)
-            , PayloadType(payloadType)
-            , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
-            , HolderFactory(holderFactory)
+            , KeyType(args.KeyType)
+            , PayloadType(args.PayloadType)
+            , SelectResultType(MergeStructTypes(args.TypeEnv, args.KeyType, args.PayloadType))
+            , HolderFactory(args.HolderFactory)
             , ColumnDestinations(CreateColumnDestination())
-            , MaxKeysInRequest(maxKeysInRequest)
-            , IsMultiMatches(isMultiMatches)
+            , MaxKeysInRequest(args.MaxKeysInRequest)
+            , IsMultiMatches(args.IsMultiMatches)
             , SelectBody(MakeSelect())
             , SelectWithKeys(MakeSelectWithKeys())
         {
+            switch(args.StatsLevel) {
+                // Shift priorities by one level (minimum level is Basic)
+#define TRANSLATE(DQ, PROTO) \
+                case TCollectStatsLevel::DQ: \
+                    StatsMode = Ydb::Query::STATS_MODE_##PROTO; \
+                    break
+                TRANSLATE(None, NONE);
+                TRANSLATE(Basic, NONE);
+                TRANSLATE(Full, BASIC);
+                TRANSLATE(Profile, FULL); // TRACE logging will remap to `STATS_MODE_PROFILE` (see below)
+#undef TRANSLATE
+            }
             if (auto token = LookupSource.GetToken(); !token.empty()) {
                 Token.emplace(token);
             }
-            InitMonCounters(taskCounters);
+            InitMonCounters(args.TaskCounters);
+            auto guard = Guard(*Alloc);
+            Pickle.emplace(/*stable=*/false, MakePickleType(args.TypeEnv, KeyType));
         }
 
         ~TDqSourceKikimrLookupActor() {
@@ -216,6 +238,7 @@ namespace {
         void Free() {
             auto guard = Guard(*Alloc);
             KeyTypeHelper.reset();
+            Pickle.reset();
         }
         void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
             if (!taskCounters) {
@@ -345,7 +368,7 @@ namespace {
         }
 
         void Handle(IDqAsyncLookupSource::TEvLookupRequest::TPtr ev) {
-            if (PendingPassAway) {
+            if (Y_UNLIKELY(PendingPassAway)) {
                 YDB_LOG_DEBUG("TEvLookupRequest after PassAway", COMMON_LOG);
                 SendError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Request received after PassAway");
                 return;
@@ -421,7 +444,7 @@ namespace {
         }
 
         void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit) {
-            if (!request) {
+            if (Y_UNLIKELY(!request)) {
                 YDB_LOG_DEBUG("CreateRequest: parent MIA", COMMON_LOG);
                 return;
             }
@@ -484,17 +507,27 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
-            state->StreamProcessor->Read([actorSystem, selfId, state = std::move(state)](Ydb::Query::ExecuteQueryResponsePart&& response) mutable {
+            state->StreamProcessor->Read([actorSystem, selfId, weakState = std::weak_ptr(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
+                auto state = weakState.lock();
+                if (!state) {
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakState is dead",
+                            {"actorId", selfId});
+                    return;
+                }
                 actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
             });
         }
 
         void Handle(TEvQueryExecuteQueryResponsePart::TPtr ev) {
-            if (PendingPassAway) { // already passed away
+            if (Y_UNLIKELY(PendingPassAway)) { // already passed away
                 YDB_LOG_DEBUG("TEvQueryExecuteQueryResponsePart after PassAway", COMMON_LOG);
                 return;
             }
             auto state = std::move(ev->Get()->State);
+            if (Y_UNLIKELY(!state->StreamProcessor)) {
+                YDB_LOG_ERROR("TEvQueryExecuteQueryResponsePart called ater CleanupStreamProcessor, should be impossible", COMMON_LOG);
+                return;
+            }
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
                     COMMON_LOG,
@@ -539,30 +572,36 @@ namespace {
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
-            session->StreamProcessor->Read([actorSystem, selfId, session = std::move(session)](Ydb::Query::SessionState&& response) mutable {
+            session->StreamProcessor->Read([actorSystem, selfId, weakSession = std::weak_ptr(session)](Ydb::Query::SessionState&& response) {
+                auto session = weakSession.lock();
+                if (!session) {
+                    YDB_LOG_ERROR_CTX(*actorSystem, "Read callback: weakSession is dead",
+                            {"actorId", selfId});
+                    return;
+                }
                 actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
             });
         }
 
         void Handle(TEvQuerySessionState::TPtr ev) {
-            auto session = std::move(ev->Get()->State);
-            if (session->PendingLookup) {
-                --InflightCreateSession;
-                if (Y_UNLIKELY(PendingPassAway)) {
-                    SendDeleteSession(session->SessionId);
-                    CleanupStreamProcessor(session);
-                    PassAway();
-                    return;
-                }
-            }
             if (Y_UNLIKELY(PendingPassAway)) {
                 return;
             }
+            auto session = std::move(ev->Get()->State);
+            auto pendingLookup = session->PendingLookup.lock();
+            session->PendingLookup.reset();
             auto& response = ev->Get()->Response;
             YDB_LOG_TRACE("TEvQuerySessionState",
                     COMMON_LOG,
                     {"sessionId", session->SessionId},
                     {"response", response.DebugString()});
+            if (Y_UNLIKELY(!session->StreamProcessor)) {
+                YDB_LOG_DEBUG("TEvQuerySessionState called after CleanupStreamProcessor", COMMON_LOG);
+                // possible; TEvQuerySessionState is sent, but in queue; FinalizeRequest calls CleanupStreamProcessor, then handler for TEvQuerySessionState invoked
+                Y_ENSURE(session->SessionId.empty());
+                Y_ENSURE(!pendingLookup);
+                return;
+            }
             auto status = response.status();
             if (response.has_session_shutdown()) {
                 status = Ydb::StatusIds::SESSION_EXPIRED;
@@ -572,10 +611,9 @@ namespace {
             }
             switch(status) {
                 case Ydb::StatusIds::SUCCESS:
-                    if (auto& lookup = session->PendingLookup) {
+                    if (pendingLookup) {
                         // send request (once) upon successful attach
-                        lookup->SessionState = session;
-                        SendRequest(std::exchange(lookup, {}));
+                        SendRequest(std::move(pendingLookup));
                     }
                     break;
 
@@ -589,8 +627,8 @@ namespace {
                         session->SessionId.clear();
                     }
                     CleanupStreamProcessor(session);
-                    if (auto& lookup = session->PendingLookup) {
-                        SendRetryOrError(std::exchange(lookup, {}), status, IssuesFromProtoMessage(response));
+                    if (pendingLookup) {
+                        SendRetryOrError(std::move(pendingLookup), status, IssuesFromProtoMessage(response));
                     }
                     return;
             }
@@ -651,24 +689,22 @@ namespace {
             YDB_LOG_DEBUG("TEvQueryCreateSessionResponse",
                     COMMON_LOG,
                     {"response", response.DebugString()});
-            if (response.status() != Ydb::StatusIds::SUCCESS) {
-                --InflightCreateSession;
-                if (PendingPassAway) {
-                    PassAway();
-                    return;
+            --InflightCreateSession;
+            if (Y_UNLIKELY(PendingPassAway)) {
+                if (response.status() == Ydb::StatusIds::SUCCESS) {
+                    SendDeleteSession(response.session_id());
                 }
-                SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
+                PassAway();
                 return;
             }
-            if (Y_UNLIKELY(PendingPassAway)) {
-                SendDeleteSession(response.session_id());
-                --InflightCreateSession;
-                PassAway();
+            if (response.status() != Ydb::StatusIds::SUCCESS) {
+                SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
                 return;
             }
             auto sessionState = std::make_shared<TSessionState>();
             sessionState->SessionId = std::move(*response.mutable_session_id());
-            sessionState->PendingLookup = std::move(state);
+            sessionState->PendingLookup = state;
+            state->SessionState = sessionState;
             SendAttachSession(std::move(sessionState));
         }
 
@@ -712,7 +748,7 @@ namespace {
             auto startCycleCount = GetCycleCountFast();
             auto guard = Guard(*Alloc);
             auto request = state->Request.lock();
-            if (!request) {
+            if (Y_UNLIKELY(!request)) {
                 YDB_LOG_DEBUG("ProcessReceivedData: parent MIA", COMMON_LOG);
                 return;
             }
@@ -865,7 +901,8 @@ namespace {
             auto columnsCount = KeyType->GetMembersCount();
             Y_ENSURE(columnsCount > 0);
             out << "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n";
-            out << "DECLARE "<< KeyTupleListName << " AS List<";
+            out << "DECLARE "<< KeyTupleListName << " AS String;\n";
+            out << KeyTupleListName << " = Unpickle(List<";
             if (columnsCount != 1) {
                 out << "Tuple<";
             }
@@ -879,7 +916,7 @@ namespace {
             if (columnsCount != 1) {
                 out << '>';
             }
-            out << ">;\n";
+            out << ">, " << KeyTupleListName << ");\n";
             out << SelectBody;
             out << "\n WHERE ";
             if (columnsCount != 1) {
@@ -915,27 +952,23 @@ namespace {
             auto guard = Guard(*Alloc);
 
             auto keyColumnsCount = KeyType->GetMembersCount();
-            if (keyColumnsCount != 1) {
-                auto& keyTupleTypes = *keyTupleList.mutable_type()->mutable_list_type()->mutable_item()->mutable_tuple_type();
-                for (ui32 c = 0; c != keyColumnsCount; ++c) {
-                    ExportTypeToProto(KeyType->GetMemberType(c), *keyTupleTypes.add_elements());
-                }
-            } else {
-                auto& keyListType = *keyTupleList.mutable_type()->mutable_list_type()->mutable_item();
-                ExportTypeToProto(KeyType->GetMemberType(0), keyListType);
-            }
-            auto& list = *keyTupleList.mutable_value();
+            keyTupleList.mutable_type()->set_type_id(Ydb::Type_PrimitiveTypeId_STRING);
             auto locked = state->Request.lock();
             if (!locked) {
                 throw yexception() << "Actor died";
             }
-            for (const auto& [keys, _]: *locked) {
-                auto& row = *list.add_items();
-                for (ui32 c = 0; c != keyColumnsCount; ++c) {
-                    auto& value = keyColumnsCount != 1 ? *row.add_items() : row;
-                    ExportValueToProto(KeyType->GetMemberType(c), keys.GetElement(c), value);
+            NUdf::TUnboxedValue* listItems;
+            NUdf::TUnboxedValue list = HolderFactory.CreateDirectArrayHolder(locked->size(), listItems);
+            if (keyColumnsCount != 1) {
+                for (const auto& [keys, _]: *locked) {
+                    *listItems++ = keys;
+                }
+            } else {
+                for (const auto& [keys, _]: *locked) {
+                    *listItems++ = keys.GetElement(0);
                 }
             }
+            keyTupleList.mutable_value()->set_bytes_value(TString(Pickle->Pack(list)));
         }
 
         // must be called only in actor context
@@ -961,11 +994,10 @@ namespace {
                 tx_control.mutable_begin_tx()->mutable_snapshot_read_only();
                 tx_control.set_commit_tx(true);
             }
-            YDB_LOG_DEBUG("QueryStatsMode",
-                    COMMON_LOG,
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_BASIC), "BASIC")}); // intentional side effects, order important
-            YDB_LOG_TRACE("QueryStatsMode",
-                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_FULL), "FULL")}); // intentional side effects, order important
+            if (IS_DEBUG_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT)) {
+                // unless debug log enabled, stats collection is useless
+                request.set_stats_mode(StatsMode == Ydb::Query::STATS_MODE_FULL && IS_TRACE_LOG_ENABLED(YDB_LOG_THIS_FILE_COMPONENT) ? Ydb::Query::STATS_MODE_PROFILE : StatsMode);
+            }
             YDB_LOG_TRACE("Query",
                     COMMON_LOG,
                     {"query", request.DebugString()});
@@ -982,10 +1014,12 @@ namespace {
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; // columns from KeyType + PayloadType
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        std::optional<NKikimr::NMiniKQL::TValuePacker> Pickle;
         const std::vector<std::pair<EColumnDestination, size_t>> ColumnDestinations;
         const size_t MaxKeysInRequest;
         const bool IsMultiMatches;
         TMaybe<TString> Token;
+        Ydb::Query::StatsMode StatsMode;
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
         const TString SelectBody;
@@ -1011,32 +1045,11 @@ namespace {
     } // namespace
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateDqSourceKikimrLookupActor(
-        NActors::TActorId parentId,
-        ::NMonitoring::TDynamicCounterPtr taskCounters,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
-        std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
         NKqpProto::TDqSourceKikimrLookupSource&& lookupSource,
-        const NKikimr::NMiniKQL::TStructType* keyType,
-        const NKikimr::NMiniKQL::TStructType* payloadType,
-        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
-        const size_t maxKeysInRequest,
-        const bool isMultiMatches
-    )
+        IDqAsyncIoFactory::TLookupSourceArguments&& args)
     {
-        auto guard = Guard(*alloc);
-        const auto actor = new TDqSourceKikimrLookupActor(
-            std::move(parentId),
-            taskCounters,
-            alloc,
-            keyTypeHelper,
-            std::move(lookupSource),
-            keyType,
-            payloadType,
-            typeEnv,
-            holderFactory,
-            maxKeysInRequest,
-            isMultiMatches);
+        auto guard = Guard(*args.Alloc);
+        const auto actor = new TDqSourceKikimrLookupActor(std::move(lookupSource), std::move(args));
         return {actor, actor};
     }
 

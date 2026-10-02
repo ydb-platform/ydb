@@ -105,7 +105,7 @@ std::optional<TError> TError::FindMatching(const TFilter& filter) const
     return FindMatching([&] (const TError& error) { return filter(error.GetCode()); });
 }
 
-//! NB: wrapping an OK error yields a bare wrapper; since #AddInnerError drops OK operands.
+//! NB: wrapping an OK error yields a bare wrapper, since #AddInnerError drops OK operands.
 #define IMPLEMENT_COPY_WRAP(...) \
     return TError(__VA_ARGS__).With(*this); \
     static_assert(true)
@@ -226,7 +226,7 @@ template <class... TArgs>
 TError TError::WithIf(bool condition, TArgs&&... args) const &
 {
     return condition
-        ? With(std::forward<TArgs>(args)...)
+        ? With(Force(std::forward<TArgs>(args))...)
         : *this;
 }
 
@@ -234,7 +234,7 @@ template <class... TArgs>
 TError&& TError::WithIf(bool condition, TArgs&&... args) &&
 {
     return condition
-        ? std::move(*this).With(std::forward<TArgs>(args)...)
+        ? std::move(*this).With(Force(std::forward<TArgs>(args))...)
         : std::move(*this);
 }
 

@@ -88,6 +88,9 @@ sql_stmt_core:
   | drop_secret_stmt
   | truncate_table_stmt
   | materialize_stmt
+  | create_symlink_stmt
+  | drop_symlink_stmt
+  | kill_session_stmt
 ;
 
 expr:
@@ -683,13 +686,7 @@ alter_streaming_query_action:
 alter_streaming_query_set_settings: SET streaming_query_settings;
 
 streaming_query_settings: LPAREN streaming_query_setting (COMMA streaming_query_setting)* COMMA? RPAREN;
-streaming_query_setting: an_id_or_type EQUALS streaming_query_setting_value;
-streaming_query_setting_value:
-    id_or_type
-  | STRING_VALUE
-  | bool_value
-  | streaming_query_settings
-;
+streaming_query_setting: an_id_or_type EQUALS expr;
 
 streaming_query_definition: AS DO inline_action;
 
@@ -790,7 +787,9 @@ database_setting_value:
 ;
 
 truncate_table_stmt: TRUNCATE TABLE simple_table_ref with_truncate_table_settings?;
-with_truncate_table_settings: WITH LPAREN RPAREN;
+with_truncate_table_settings: WITH LPAREN truncate_table_settings? RPAREN;
+truncate_table_settings: truncate_table_setting_is_unsafe (COMMA truncate_table_setting_is_unsafe)*;
+truncate_table_setting_is_unsafe: an_id EQUALS bool_value;
 
 table_inherits: INHERITS LPAREN simple_table_ref_core (COMMA simple_table_ref_core)* RPAREN;
 table_partition_by: PARTITION BY HASH pure_column_list;
@@ -967,8 +966,9 @@ table_setting_value:
 ;
 
 ttl_tier_list: expr (ttl_tier_action (COMMA expr ttl_tier_action)*)?;
+// The optional suffix is an object key prefix, not a cluster-qualified object_ref.
 ttl_tier_action:
-      TO EXTERNAL DATA SOURCE an_id
+      TO EXTERNAL DATA SOURCE an_id (DOT an_id)?
     | DELETE
 ;
 
@@ -994,6 +994,13 @@ alter_table_alter_index_action:
 ;
 
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
+
+symlink_path: an_id_or_type | bind_parameter;
+symlink_ref: (cluster_expr DOT)? symlink_path;
+create_symlink_stmt: CREATE SYMLINK (IF NOT EXISTS)? symlink_ref TO symlink_path;
+drop_symlink_stmt: DROP SYMLINK (IF EXISTS)? symlink_ref;
+
+kill_session_stmt: KILL SESSION (id | bind_parameter);
 
 create_user_stmt: CREATE USER role_name user_option*;
 alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
@@ -1251,7 +1258,7 @@ commit_stmt: COMMIT;
 
 rollback_stmt: ROLLBACK;
 
-analyze_table: simple_table_ref (LPAREN column_list RPAREN)?;
+analyze_table: simple_table_ref (LPAREN column_list RPAREN)? sample_clause?;
 analyze_table_list: analyze_table (COMMA analyze_table)* COMMA?;
 analyze_stmt: ANALYZE analyze_table_list;
 
@@ -1269,7 +1276,7 @@ create_secret_stmt: CREATE (OR REPLACE)? SECRET (IF NOT EXISTS)? object_ref
     with_secret_settings
 ;
 with_secret_settings: WITH LPAREN secret_setting_entry (COMMA secret_setting_entry)* COMMA? RPAREN;
-secret_setting_entry: an_id EQUALS secret_setting_value;
+secret_setting_entry: an_id_or_type EQUALS secret_setting_value;
 secret_setting_value: expr;
 
 alter_secret_stmt: ALTER SECRET (IF EXISTS)? object_ref
@@ -1585,6 +1592,7 @@ keyword_as_compat:
   // | ISNULL
   // | JOIN
   // | KEY
+  | KILL
   | LAST
   // | LEFT
   | LEGACY
@@ -1674,6 +1682,7 @@ keyword_as_compat:
   | SHOW
   | TSKIP
   | SEQUENCE
+  | SESSION
   | SOURCE
   | START
   | STATISTICS
@@ -1682,6 +1691,7 @@ keyword_as_compat:
   | SUBQUERY
   | SUBSET
   | SYMBOLS
+  | SYMLINK
   | SYNC
   | SYSTEM
   | TABLE
@@ -1830,6 +1840,7 @@ keyword_compat: (
   | ISNULL
   | JOIN
   | KEY
+  | KILL
   | LAST
   | LEFT
   | LEGACY
@@ -1919,6 +1930,7 @@ keyword_compat: (
   | TSKIP
   | SECRET
   | SEQUENCE
+  | SESSION
   | SOURCE
   | START
   | STATISTICS
@@ -1927,6 +1939,7 @@ keyword_compat: (
   | SUBQUERY
   | SUBSET
   | SYMBOLS
+  | SYMLINK
   | SYNC
   | SYSTEM
   | TABLE
@@ -2208,6 +2221,7 @@ JSON_EXISTS: J S O N '_' E X I S T S;
 JSON_QUERY: J S O N '_' Q U E R Y;
 JSON_VALUE: J S O N '_' V A L U E;
 KEY: K E Y;
+KILL: K I L L;
 LAST: L A S T;
 LEFT: L E F T;
 LEGACY: L E G A C Y;
@@ -2314,6 +2328,7 @@ SHOW: S H O W;
 TSKIP: S K I P;
 SECRET: S E C R E T;
 SEQUENCE: S E Q U E N C E;
+SESSION: S E S S I O N;
 SOURCE: S O U R C E;
 START: S T A R T;
 STORED: S T O R E D;
@@ -2324,6 +2339,7 @@ STRUCT: S T R U C T;
 SUBQUERY: S U B Q U E R Y;
 SUBSET: S U B S E T;
 SYMBOLS: S Y M B O L S;
+SYMLINK: S Y M L I N K;
 SYMMETRIC: S Y M M E T R I C;
 SYNC: S Y N C;
 SYSTEM: S Y S T E M;

@@ -1,6 +1,7 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
+#include <ydb/core/kqp/opt/kqp_opt_generated_columns.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -57,6 +58,20 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     }
 
     auto returning = maybeReturning.Cast();
+    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returning.Table().Path());
+
+    const auto logicalColumns = returning.Columns();
+    const auto physicalColumns = BuildPhysicalColumnsForVirtualGeneratedColumns(logicalColumns, tableDesc, returning.Pos(), ctx);
+
+    if (physicalColumns.Raw() != logicalColumns.Raw()) {
+        auto physicalReturning = Build<TKqlReturningList>(ctx, returning.Pos())
+            .Update(returning.Update())
+            .Columns(physicalColumns)
+            .Table(returning.Table())
+            .Done();
+
+        return BuildVirtualGeneratedColumnProjection(physicalReturning, logicalColumns, tableDesc, returning.Pos(), ctx);
+    }
 
     if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
         if (auto maybeList = returning.Update().Maybe<TExprList>()) {
@@ -79,12 +94,18 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
                     }
                 }
             }
-            AFL_ENSURE(false); // Must have returning effect
+        } else if (auto upsert = returning.Update().Maybe<TKqlUpsertRows>()) {
+            if (!upsert.Cast().ReturningColumns().Empty()) {
+                return node;
+            }
+        } else if (auto del = returning.Update().Maybe<TKqlDeleteRows>()) {
+            if (!del.Cast().ReturningColumns().Empty()) {
+                return node;
+            }
+        } else if (returning.Update().Maybe<TKqlTableEffect>()) {
+            return node;
         }
-        return node;
     }
-
-    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returning.Table().Path());
 
     auto buildReturningRows = [&](TExprBase rows, TCoAtomList columns, TCoAtomList returningColumns, const bool needToCheckIfExists) -> TExprBase {
         auto pos = rows.Pos();
@@ -204,24 +225,84 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
         return TExprBase(ctx.ChangeChild(*returning.Raw(), TKqlReturningList::idx_Update, inputExpr.Ptr()));
     };
 
+    auto buildUpsertReturningRows = [&](const TKqlUpsertRows& upsert) -> TExprBase {
+        const auto* inputItemType = GetSeqItemType(upsert.Input().Ref().GetTypeAnn());
+        const auto* inputStructType = inputItemType->GetKind() == ETypeAnnotationKind::Struct
+            ? inputItemType->Cast<TStructExprType>()
+            : nullptr;
+
+        bool isStructOfNewAndOldValues = false;
+        if (inputStructType) {
+            const auto newItem = inputStructType->FindItem("new");
+            const auto oldItem = inputStructType->FindItem("old");
+
+            isStructOfNewAndOldValues = newItem
+                && inputStructType->GetItems()[*newItem]->GetItemType()->GetKind() == ETypeAnnotationKind::Struct
+                && oldItem
+                && inputStructType->GetItems()[*oldItem]->GetItemType()->GetKind() == ETypeAnnotationKind::Struct;
+        }
+
+        if (!isStructOfNewAndOldValues) {
+            const auto modeSetting = upsert.Settings().IsValid() ? GetSetting(upsert.Settings().Ref(), "Mode") : nullptr;
+
+            return buildReturningRows(
+                upsert.Input(),
+                upsert.Columns(),
+                returning.Columns(),
+                modeSetting && TCoNameValueTuple(modeSetting).Value().Cast<TCoAtom>().StringValue() == "update");
+        }
+
+        THashSet<TStringBuf> updatedColumns;
+        for (const auto& column : upsert.Columns()) {
+            updatedColumns.insert(column.Value());
+        }
+
+        auto row = Build<TCoArgument>(ctx, upsert.Pos())
+            .Name("returning_row")
+            .Done();
+
+        TVector<TExprBase> members;
+        members.reserve(returning.Columns().Size());
+
+        for (const auto& column : returning.Columns()) {
+            members.push_back(
+                Build<TCoNameValueTuple>(ctx, upsert.Pos())
+                    .Name(column)
+                    .Value<TCoMember>()
+                        .Struct<TCoMember>()
+                            .Struct(row)
+                            .Name().Build(updatedColumns.contains(column.Value()) ? "new" : "old")
+                            .Build()
+                        .Name(column)
+                        .Build()
+                    .Done());
+        }
+
+        auto returningRows = Build<TCoMap>(ctx, upsert.Pos())
+            .Input(upsert.Input())
+            .Lambda()
+                .Args({row})
+                .Body<TCoAsStruct>()
+                    .Add(members)
+                    .Build()
+                .Build()
+            .Done();
+
+        return buildReturningRows(returningRows, returning.Columns(), returning.Columns(), false);
+    };
 
     if (auto maybeList = returning.Update().Maybe<TExprList>()) {
         for (auto item : maybeList.Cast()) {
             if (auto upsert = item.Maybe<TKqlUpsertRows>()) {
                 if (upsert.Cast().Table().Raw() == returning.Table().Raw()) {
-                    const auto modeSetting = upsert.Cast().Settings().IsValid() ? GetSetting(upsert.Cast().Settings().Ref(), "Mode") : nullptr;
-                    return buildReturningRows(
-                            upsert.Input().Cast(),
-                            upsert.Columns().Cast(),
-                            returning.Columns(),
-                            modeSetting && TCoNameValueTuple(modeSetting).Value().Cast<TCoAtom>().StringValue() == "update");
+                    return buildUpsertReturningRows(upsert.Cast());
                 }
             }
             if (auto del = item.Maybe<TKqlDeleteRows>()) {
                 if (del.Cast().Table().Raw() == returning.Table().Raw()) {
                     return buildReturningRows(
                         del.Input().Cast(),
-                        MakeColumnsList(tableDesc.Metadata->KeyColumnNames, ctx, node.Pos()), 
+                        MakeColumnsList(tableDesc.Metadata->KeyColumnNames, ctx, node.Pos()),
                         returning.Columns(),
                         true);
                 }
@@ -234,12 +315,7 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnota
     }
 
     if (auto upsert = returning.Update().Maybe<TKqlUpsertRows>()) {
-        const auto modeSetting = upsert.Cast().Settings().IsValid() ? GetSetting(upsert.Cast().Settings().Ref(), "Mode") : nullptr;
-        return buildReturningRows(
-            upsert.Input().Cast(),
-            upsert.Columns().Cast(),
-            returning.Columns(),
-            modeSetting && TCoNameValueTuple(modeSetting).Value().Cast<TCoAtom>().StringValue() == "update");
+        return buildUpsertReturningRows(upsert.Cast());
     }
     if (auto del = returning.Update().Maybe<TKqlDeleteRows>()) {
         return buildReturningRows(

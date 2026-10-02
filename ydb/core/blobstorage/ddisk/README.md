@@ -19,4 +19,11 @@ The canonical developer contracts are in the [DDisk](../../../docs/en/core/contr
 
 `ut/` contains focused actor, integrity, sync, batching, barrier, and allocator tests. `ut_large/` contains longer PDisk-backed scenarios. Cross-component allocation and load-actor scenarios live in `../ut_blobstorage/` and `../ut_blobstorage/ut_ddisk/`.
 
+Shutdown tests must distinguish the indefinite normal actor drain from the
+60-second `io_stalled` diagnostic and the 10-second forced-destructor deadline.
+Use explicit callback and mailbox barriers to check intermediate ordering;
+wall-clock deadlines are hang watchdogs. Router callbacks retain actor state
+until retirement, while canceled fallback operations must publish one result
+per request before Gone. Validate native io_uring and PDisk fallback separately.
+
 Review session identity, delayed replies, physical ownership, and replay together when changing a persistent operation. NBS quorum, role rotation, dirty-map routing, and flush scheduling are owned by the [partition implementation](../../nbs/cloud/blockstore/libs/storage/partition_direct/README.md); the [load actor](../../load_test/rfc/nbs_dbg_like/README.md) has its own workload policy.

@@ -76,12 +76,13 @@ public:
             }));
     }
 
-    TString BuildLogPrefix() const override {
-        return TStringBuilder() << "[" << Strategy->GetName() << "]";
+    TStructuredMessage BuildLogPrefix() const override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"strategy", Strategy->GetName()});
     }
 
     bool OnUnhandledException(const std::exception& exc) override {
-        DoLogUnhandledException(Service, NPQ_LOG_PREFIX, exc);
+        DoLogUnhandledException(Service, *this, exc);
         ReplyWithError(
             Ydb::StatusIds::INTERNAL_ERROR,
             TStringBuilder() << "Unhandled exception: " << exc.what(),

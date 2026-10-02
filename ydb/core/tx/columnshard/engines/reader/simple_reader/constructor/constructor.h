@@ -9,6 +9,10 @@ public:
         return "SIMPLE";
     }
 
+    virtual EReaderClass GetReaderClass() const override {
+        return EReaderClass::Simple;
+    }
+
 private:
     using TBase = IScannerConstructor;
     static const inline TFactory::TRegistrator<TIndexScannerConstructor> Registrator =

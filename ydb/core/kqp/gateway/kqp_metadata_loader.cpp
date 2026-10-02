@@ -19,6 +19,7 @@
 
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <algorithm>
 #include <memory>
 #include <type_traits>
 
@@ -549,6 +550,42 @@ TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNa
     return result;
 }
 
+enum class EYdbDataSourceRouting {
+    Unknown,
+    Connector,
+    Ydb,
+};
+
+EYdbDataSourceRouting GetYdbDataSourceRouting(const NYql::TExternalDataSource& externalSource,
+    const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup)
+{
+    if (!federatedQuerySetup) {
+        return EYdbDataSourceRouting::Unknown;
+    }
+
+    const TString databaseName = externalSource.GetDatabaseName();
+    if (databaseName.empty()) {
+        return EYdbDataSourceRouting::Unknown;
+    }
+
+    bool hasDatabaseNames = false;
+    const auto checkConnector = [&](const auto& connector) {
+        const auto& names = connector.GetDatabaseNames();
+        hasDatabaseNames |= !names.empty();
+        return std::find(names.begin(), names.end(), databaseName) != names.end();
+    };
+    const auto& gatewayConfig = federatedQuerySetup->GenericGatewayConfig;
+    if (gatewayConfig.HasConnector() && checkConnector(gatewayConfig.GetConnector())) {
+        return EYdbDataSourceRouting::Connector;
+    }
+    for (const auto& connector : gatewayConfig.GetConnectors()) {
+        if (checkConnector(connector)) {
+            return EYdbDataSourceRouting::Connector;
+        }
+    }
+    return hasDatabaseNames ? EYdbDataSourceRouting::Ydb : EYdbDataSourceRouting::Unknown;
+}
+
 TTableMetadataResult GetTopicMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TString& cluster,
     const TString& database, const TString& topicName, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
 {
@@ -1055,7 +1092,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             return;
                         }
                         LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, ptr, federatedQuerySetup = locked->FederatedQuerySetup, resolveEntityInsideDataSource](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             const auto& objectDescription = result.GetValue();
                             if (objectDescription.Status != Ydb::StatusIds::SUCCESS) {
@@ -1130,8 +1167,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 }
                             };
 
-                            if (externalDataSourceMetadata.Metadata->ExternalDataSource().IsYdb() && externalPath &&
-                                settings.ExternalSourceFactory && settings.ExternalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+                            const auto& dataSource = externalDataSourceMetadata.Metadata->ExternalDataSource();
+                            const auto routing = resolveEntityInsideDataSource && dataSource.IsYdb()
+                                ? GetYdbDataSourceRouting(dataSource, federatedQuerySetup)
+                                : EYdbDataSourceRouting::Unknown;
+                            const bool needToDescribe = routing != EYdbDataSourceRouting::Connector &&
+                                dataSource.IsYdb() && externalPath && !dataSource.GetDatabaseName().empty();
+                            if (needToDescribe) {
                                 const auto& source = externalDataSourceMetadata.Metadata->ExternalDataSource();
                                 auto structuredTokenJson = source.ComposeStructuredTokenJson();
                                 auto databaseName = source.GetDatabaseName();
@@ -1145,13 +1187,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 }
 
                                 GetSchemeEntryType(
-                                    locked->FederatedQuerySetup,
+                                    federatedQuerySetup,
                                     source.GetLocation(),
                                     databaseName,
                                     useTls,
                                     structuredTokenJson,
                                     path)
-                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                    .Subscribe([externalDataSourceMetadata, externalSourceFactory = settings.ExternalSourceFactory, routing, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
                                         TGetSchemeEntryResult value = result.GetValue();
                                         if (!value.EntryType) {
                                             NYql::TIssue rootIssue("Couldn't determine external YDB entity type");
@@ -1167,7 +1209,20 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                         }
 
                                         if (*value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
+                                            if (!externalSourceFactory || !externalSourceFactory->IsAvailableProvider(TString(NYql::PqProviderName))) {
+                                                TTableMetadataResult result;
+                                                result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                                result.AddIssue(NYql::TIssue("External source with type YdbTopics is disabled"));
+                                                promise.SetValue(result);
+                                                return;
+                                            }
                                             externalDataSourceMetadata.Metadata->ExternalDataSource().SetYdbTopicType();
+                                        } else if (routing == EYdbDataSourceRouting::Ydb) {
+                                            TTableMetadataResult result;
+                                            result.SetStatus(NYql::TIssuesIds::KIKIMR_BAD_REQUEST);
+                                            result.AddIssue(NYql::TIssue("External YDB entity is not a topic, and its database is not configured for connector table access"));
+                                            promise.SetValue(result);
+                                            return;
                                         }
                                         f(externalDataSourceMetadata);
                                     });

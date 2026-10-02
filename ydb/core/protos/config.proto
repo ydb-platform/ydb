@@ -2298,6 +2298,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 86400,
             DefaultValue: 0 }];
+        optional uint64 UseFixedVDiskSlotSize = 14 [(ControlOptions) = {
+            Description: "Use inferred unit_size as PDisk ExpectedSlotSize instead of deriving slot count and slot size in units",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {

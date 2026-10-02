@@ -157,6 +157,8 @@ namespace NKikimr {
                 TString WhyUnusable;
                 TBridgePileId BridgePileId;
                 std::optional<TString> DiskScope;
+                // SpaceAvailable is a per-slot-size limit rather than free PDisk bytes.
+                bool SpaceAvailablePerUnit = false;
             };
 
             struct TPDiskSpaceState {

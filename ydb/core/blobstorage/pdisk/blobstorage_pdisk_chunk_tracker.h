@@ -33,6 +33,7 @@ class TPerOwnerQuotaTracker {
     std::array<TQuotaRecord, 256> QuotaForOwner; // Always allocated, can be read from anywhere
     static_assert(sizeof(TOwner) == 1, "Make sure to use large enough QuotaForOwner buffer");
 
+    // With an explicit slot size, each owner occupies one slot regardless of its quota.
     ui32 NormalizeOwnerWeight(ui32 weight) const {
         return ExpectedOwnerSize ? 1 : weight;
     }
@@ -99,7 +100,7 @@ public:
     void RedistributeQuotas() {
         if (ExpectedOwnerSize) {
             for (TOwner id : ActiveOwnerIds) {
-                ForceHardLimit(id, ExpectedOwnerSize);
+                ForceHardLimit(id, Min(Total, ExpectedOwnerSize * Max(1u, QuotaForOwner[id].GetGroupSizeInUnits())));
             }
         } else {
             size_t parts = Max(ExpectedOwnerCount, GetNumActiveSlots());
@@ -115,29 +116,43 @@ public:
         }
     }
 
-    void AddOwner(TOwner id, TVDiskID vdiskId, ui32 weight) {
+    void AddOwner(TOwner id, TVDiskID vdiskId, ui32 weight, ui32 groupSizeInUnits = 0) {
         TQuotaRecord &record = QuotaForOwner[id];
         Y_VERIFY(record.GetHardLimit() == 0);
         Y_VERIFY(record.GetFree() == 0);
         record.SetName(TStringBuilder() << "Owner# " << id);
         record.SetVDiskId(vdiskId);
         record.SetWeight(NormalizeOwnerWeight(weight));
+        record.SetGroupSizeInUnits(groupSizeInUnits);
 
         ActiveOwnerIds.push_back(id);
         RedistributeQuotas();
     }
 
     void SetOwnerWeight(TOwner id, ui32 weight) {
+        SetOwnerSettings(id, weight, QuotaForOwner[id].GetGroupSizeInUnits());
+    }
+
+    void SetOwnerGroupSizeInUnits(TOwner id, ui32 groupSizeInUnits) {
+        SetOwnerSettings(id, QuotaForOwner[id].GetWeight(), groupSizeInUnits);
+    }
+
+    void SetOwnerSettings(TOwner id, ui32 weight, ui32 groupSizeInUnits) {
         auto it = std::find(ActiveOwnerIds.begin(), ActiveOwnerIds.end(), id);
         Y_VERIFY(it != ActiveOwnerIds.end());
 
         TQuotaRecord &record = QuotaForOwner[id];
         record.SetWeight(NormalizeOwnerWeight(weight));
+        record.SetGroupSizeInUnits(groupSizeInUnits);
         RedistributeQuotas();
     }
 
     ui32 GetOwnerWeight(TOwner id) {
         return QuotaForOwner[id].GetWeight();
+    }
+
+    ui32 GetOwnerGroupSizeInUnits(TOwner id) const {
+        return QuotaForOwner[id].GetGroupSizeInUnits();
     }
 
     void RemoveOwner(TOwner id) {
@@ -423,7 +438,7 @@ public:
 
         for (auto& [ownerId, ownerInfo] : params.OwnersInfo) {
             i64 chunks = ownerInfo.ChunksOwned;
-            AddOwner(ownerId, ownerInfo.VDiskId, ownerInfo.Weight);
+            AddOwner(ownerId, ownerInfo.VDiskId, ownerInfo.Weight, ownerInfo.GroupSizeInUnits);
             if (chunks) {
                 OwnerQuota->InitialAllocate(ownerId, chunks);
                 bool isOk = SharedQuota->InitialAllocate(chunks);
@@ -457,9 +472,9 @@ public:
         return true;
     }
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1) {
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1, ui32 groupSizeInUnits = 0) {
         Y_VERIFY(IsOwnerUser(owner));
-        OwnerQuota->AddOwner(owner, vdiskId, weight);
+        OwnerQuota->AddOwner(owner, vdiskId, weight, groupSizeInUnits);
         if (IsStaticGroupVDisk(vdiskId)) {
             StaticOwners.push_back(owner);
         } else {
@@ -472,6 +487,18 @@ public:
     void SetOwnerWeight(TOwner owner, ui32 weight) {
         Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->SetOwnerWeight(owner, weight);
+        RecomputeStaticReserve();
+    }
+
+    void SetOwnerGroupSizeInUnits(TOwner owner, ui32 groupSizeInUnits) {
+        Y_VERIFY(IsOwnerUser(owner));
+        OwnerQuota->SetOwnerGroupSizeInUnits(owner, groupSizeInUnits);
+        RecomputeStaticReserve();
+    }
+
+    void SetOwnerSettings(TOwner owner, ui32 weight, ui32 groupSizeInUnits) {
+        Y_VERIFY(IsOwnerUser(owner));
+        OwnerQuota->SetOwnerSettings(owner, weight, groupSizeInUnits);
         RecomputeStaticReserve();
     }
 
@@ -496,6 +523,11 @@ public:
     ui32 GetOwnerWeight(TOwner owner) {
         Y_VERIFY(IsOwnerUser(owner));
         return OwnerQuota->GetOwnerWeight(owner);
+    }
+
+    ui32 GetOwnerGroupSizeInUnits(TOwner owner) const {
+        Y_VERIFY(IsOwnerUser(owner));
+        return OwnerQuota->GetOwnerGroupSizeInUnits(owner);
     }
 
     ui32 GetNumActiveSlots() const {

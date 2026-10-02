@@ -191,15 +191,16 @@ namespace NKikimr::NBsController {
                 if (Self.IgnoreVSlotQuotaCheck) {
                     return true;
                 }
-                if (pdisk.SpaceAvailable < RequiredSpace) {
+                const i64 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(GroupSizeInUnits,
+                    pdisk.SlotSizeInUnits, pdisk.SlotSizeInBytes);
+                const i64 requiredPerUnit = RequiredSpace > 0
+                    ? RequiredSpace / quotaMultiplier + (RequiredSpace % quotaMultiplier != 0)
+                    : RequiredSpace;
+                if (pdisk.SpaceAvailable < (pdisk.SpaceAvailablePerUnit ? requiredPerUnit : RequiredSpace)) {
                     return false;
                 }
                 if (pdisk.SlotSizeInBytes && RequiredSpace > 0) {
-                    const ui64 slotsNeeded = GetSlotsNeeded(pdisk);
-                    if (slotsNeeded > Max<ui64>() / pdisk.SlotSizeInBytes) {
-                        return false;
-                    }
-                    if (pdisk.SlotSizeInBytes * slotsNeeded < static_cast<ui64>(RequiredSpace)) {
+                    if (pdisk.SlotSizeInBytes < static_cast<ui64>(requiredPerUnit)) {
                         return false;
                     }
                 }
@@ -1604,6 +1605,8 @@ namespace NKikimr::NBsController {
                 .WhyUnusable = std::move(disk.WhyUnusable),
                 .BridgePileId = disk.BridgePileId,
                 .DiskScope = std::move(disk.DiskScope),
+                .SpaceAvailablePerUnit = disk.SlotSizeInBytes && disk.Space
+                    && SlotSpaceEnforced(*disk.Space, State->Mapper.Options.SpaceColorBorder),
             });
             Y_ABORT_UNLESS(registered);
             if (populateSlotTracker && disk.Usable) {

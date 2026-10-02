@@ -57,6 +57,13 @@ Y_UNIT_TEST_SUITE(TPDiskConfig) {
         pdiskConfigFixedSize.ExpectedSlotSize = 100ull << 30;
         UNIT_ASSERT_VALUES_EQUAL(pdiskConfigFixedSize.GetOwnerWeight(10), 1);
 
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(4, 0, 100), 1);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerWeight(4, 2, 0), 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 100), 4);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(4, 2, 0), 2);
+        UNIT_ASSERT_VALUES_EQUAL(TPDiskConfig::GetOwnerQuotaMultiplier(0, 2, 100), 1);
+
         // TODO(ydynnikov): test the case of groupSizeInUnits > UI8_MAX (255)
     }
 

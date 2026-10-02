@@ -843,7 +843,48 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
         TGroupMapper::TGroupDefinition group;
         TGroupMapperError error;
-        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 1, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 201, false, TBridgePileId(), error), error.ErrorMessage);
+        UNIT_ASSERT_C(mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        TGroupMapper::TGroupDefinition second;
+        UNIT_ASSERT_C(mapper.AllocateGroup(2, second, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        TGroupMapper::TGroupDefinition third;
+        UNIT_ASSERT_C(!mapper.AllocateGroup(3, third, {}, {}, 1, 50, false, TBridgePileId(), error), error.ErrorMessage);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeEnforcedSpaceScalesByGroupSize) {
+        auto canAllocate = [](bool enforced, ui64 freeBytes, ui32 groupSize, i64 requiredBytes) {
+            NKikimrBlobStorage::TPDiskMetrics metrics;
+            metrics.SetTotalSize(1000);
+            metrics.SetAvailableSize(freeBytes);
+            metrics.SetEnforcedDynamicSlotSize(100);
+            TGroupMapper::TPlacementSnapshot state;
+            state.PDisks.push_back({
+                .PDiskId = TPDiskId(1, 1),
+                .Location = MakeTestLocation(1),
+                .ExpectedSlotCount = 2,
+                .SlotSizeInBytes = 100,
+                .Space = TGroupMapper::CapturePDiskSpace(metrics),
+                .Operational = true,
+            });
+            TGroupMapper::TReassignmentRequest request;
+            request.GroupId = 1;
+            request.GroupSizeInUnits = groupSize;
+            request.MinimumRequiredSpace = requiredBytes;
+            request.ExistingGroup = false;
+            TGroupMapper::TOptions options;
+            options.SpaceColorBorder = enforced ? NKikimrBlobStorage::TPDiskSpaceColor::YELLOW
+                                                : NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+            options.SpaceMarginPromille = 0;
+            auto geometry = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1);
+            return TGroupMapper::PlanGroupReassignment(std::move(geometry), options,
+                std::move(state), std::move(request)).Success;
+        };
+        UNIT_ASSERT(canAllocate(true, 1000, 2, 150));
+        UNIT_ASSERT(!canAllocate(true, 1000, 1, 150));
+        UNIT_ASSERT(!canAllocate(true, 1000, 2, 201));
+        UNIT_ASSERT(canAllocate(false, 150, 2, 150));
+        UNIT_ASSERT(!canAllocate(false, 120, 2, 150));
     }
 
     Y_UNIT_TEST(PlacementSnapshotAppliesPDiskEligibilityAndSpacePolicies) {

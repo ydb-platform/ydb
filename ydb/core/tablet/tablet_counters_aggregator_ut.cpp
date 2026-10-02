@@ -1447,10 +1447,10 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
     }
 
     /**
-     * @note There is no role= node: both actors of the node build ONE shared tree,
-     *       exactly the shape the specification defines. At the partition level the
-     *       role is carried by follower_id (follower_id=0 IS the leader) and at the
-     *       table level the bucket belongs to the actor of the leaders alone.
+     * @note There is no role= node: both actors of the node are handed ONE shared tree,
+     *       which only the TABLE buckets fill, and the TABLE bucket belongs to the actor
+     *       of the leaders alone. A PARTITION leaf, of either role, owns no group at all:
+     *       a partition level table has no table= group ever.
      */
     ::NMonitoring::TDynamicCounterPtr FindTableGroup(TEnv& env) {
         auto rawGroup = FindRawGroup(env);
@@ -1557,9 +1557,9 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
     }
 
     /**
-     * Verify that at the partition level both aggregator actors of the node fill their
-     * own leaves of one and the same private counter tree, told apart by follower_id
-     * alone and sharing the tablet_id= node above them.
+     * Verify that at the partition level both aggregator actors of the node report their
+     * own leaves, told apart by follower_id alone, and that neither of them creates
+     * a group in the private counter tree.
      */
     Y_UNIT_TEST(PartitionLevelLeavesOfBothRoles) {
         TEnv env(true /* detailedMetricsEnabled */);
@@ -1592,15 +1592,10 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         UNIT_ASSERT_VALUES_EQUAL(followers.Rate(Leaf(1000, 1), CONSUMED_CPU_MICROSECONDS), 20u);
         UNIT_ASSERT_VALUES_EQUAL(followers.HistTotal(Leaf(1000, 1), USED_CORE_PERCENTS), 1u);
 
-        // The two leaves hang off ONE shared tablet_id= node, written by the two
-        // different actors, and no invented label appears anywhere
-        auto tabletGroup = FindTableGroup(env)
-            ->FindSubgroup("detailed_metrics", "per_partition")
-            ->FindSubgroup("tablet_id", "1000");
-        UNIT_ASSERT(tabletGroup);
-        UNIT_ASSERT(tabletGroup->FindSubgroup("follower_id", "0"));
-        UNIT_ASSERT(tabletGroup->FindSubgroup("follower_id", "1"));
-
+        // The leaves own no group of the private tree, of either role: no table group ever,
+        // and no invented label anywhere
+        UNIT_ASSERT(!FindTableGroup(env));
+        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("database", DATABASE_PATH));
         UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("role", "leader"));
         UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("role", "follower"));
     }
@@ -1658,12 +1653,12 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
     /**
      * Verify that forgetting a tablet drops its own leaf and ONLY its own leaf while the
-     * other role of the very same tablet is still on the node, and that the shared nodes
-     * above it are reclaimed once that role goes too.
+     * other role of the very same tablet is still on the node, and that nothing of the
+     * tablet is left once that role goes too.
      *
-     * The leader and its follower share the tablet_id= node and are reported by two
-     * different actors, so a cleanup that reached above the leaf too eagerly would detach
-     * the other actor's live counters for good.
+     * The leader and its follower share the tablet ID and are reported by two different
+     * actors, so a cleanup that reached beyond the leaf would drop the other actor's live
+     * leaf for good.
      */
     Y_UNIT_TEST(ForgetTabletKeepsTheOtherRole) {
         TEnv env(true /* detailedMetricsEnabled */);
@@ -1691,17 +1686,16 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         // The leader's own leaf is gone ...
         UNIT_ASSERT(!PackRole(env, false /* follower */).Exists(Leaf(1000, 0)));
 
-        // ... the shared spine above it stays, because the follower is still there ...
-        UNIT_ASSERT(FindTableGroup(env));
+        // ... no table group ever, a partition level table has none ...
+        UNIT_ASSERT(!FindTableGroup(env));
 
         // ... and the follower's leaf is still reported
         const auto& followers = PackRole(env, true /* follower */);
         UNIT_ASSERT(followers.Exists(Leaf(1000, 1)));
         UNIT_ASSERT_VALUES_EQUAL(followers.Rate(Leaf(1000, 1), CONSUMED_CPU_MICROSECONDS), 2u);
 
-        // The follower goes too, so nothing of this tablet is left on the node: the
-        // tablet_id=, detailed_metrics=, table= and database= nodes are all reclaimed,
-        // which is what a rebalanced away tablet must leave behind — nothing
+        // The follower goes too, so nothing of this tablet is left on the node, which
+        // is what a rebalanced away tablet must leave behind
         follower.SendForget(env);
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
@@ -2183,7 +2177,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
     /**
      * Verify the rename cleanup (PR review Part 3): once a tablet's identity event
-     * moves it to a new path, the OLD path's group is dropped right away, driven by
+     * moves it to a new path, the OLD path's leaf is retired right away, driven by
      * the identity event alone — not left to leak until the database is torn down,
      * and not waiting on a counters tick that will never come again at the old path.
      */
@@ -2198,7 +2192,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         tablet.SendUpdate(env);
         ReportCounters(env, {&tablet});
 
-        UNIT_ASSERT(FindTableGroup(env));
+        // A partition level table has no table group ever: the leaf is only reported
+        UNIT_ASSERT(!FindTableGroup(env));
         UNIT_ASSERT(PackRole(env, false /* follower */).Exists(Leaf(1000, 0)));
 
         // The tablet reports a new identity at another path — an ESchemeOpMoveTable
@@ -2210,20 +2205,16 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
                 RENAMED_TABLE_PATH, tablet.SchemaVersion, tablet.MetricsLevel)));
         env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
 
-        // The old table= group is gone immediately: the identity event alone drives
-        // the cleanup, no further counters tick is needed
+        // Still no table group, of either path: a partition level table creates none
         UNIT_ASSERT(!FindTableGroup(env));
 
-        // Nothing of the new path exists yet either: an identity event alone builds
-        // no counter group, only a report does. Guarded at every step, the same shape
-        // as FindTableGroup: this tablet was the database's only one, so ForgetLeaf's
-        // pruning may well have taken database= (and even the raw group) with it too
         auto rawGroup = FindRawGroup(env);
         auto databaseGroup = rawGroup ? rawGroup->FindSubgroup("database", DATABASE_PATH) : nullptr;
         UNIT_ASSERT(!databaseGroup || !databaseGroup->FindSubgroup("table", RENAMED_RELATIVE_TABLE_PATH));
 
-        // The same holds for the reports: the leaf of the old path is retired, and the new
-        // path has no leaf yet
+        // The leaf of the old path is retired right away: the identity event alone drives
+        // the cleanup, no further counters tick is needed. The new path has no leaf yet:
+        // an identity event alone builds nothing, only a report does
         const auto& leaders = PackRole(env, false /* follower */);
         UNIT_ASSERT(!leaders.Exists(Leaf(1000, 0)));
         UNIT_ASSERT(!leaders.Exists(TPackedBucketId::Leaf(RENAMED_TABLE_PATH, 1000, 0)));

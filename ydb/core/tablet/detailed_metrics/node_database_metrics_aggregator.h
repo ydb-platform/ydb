@@ -53,33 +53,40 @@ struct TDetailedMetricsTableInfo {
 };
 
 /**
- * The per-node, per-database, per-role builder of the detailed metrics counter tree.
+ * The per-node, per-database, per-role aggregator of the detailed metrics.
  *
- * The instance fills the counter group it is handed, which the caller has already
- * scoped to the role of its Tablet Counters Aggregator actor:
+ * The instance keeps the public metric values (see TDetailedMetricsDescriptor) of every bucket
+ * of its role, which Pack() reports to the SysView Processor:
+ * - Table level: a TABLE bucket per table, all the same-node leaders of the table collapsed
+ *   (the followers of a table level table are not collected on the node);
+ * - Partition level: a PARTITION leaf per tablet of either role, which is kept as its public
+ *   metric values only (a few hundred bytes) and owns no counter group.
+ *
+ * The TABLE buckets also publish their low level counter aggregates, a debug view refreshed
+ * by RecalculateAllCounters() only, in the counter group the instance is handed. Both instances
+ * of a node are handed the very same group, which only the instance of the leaders fills:
  *
  *     ydb_detailed_raw                        (private, created by the caller)
  *       |
  *       +-- the target group of BOTH instances
  *           database=<database path>
  *             table=<table path relative to the database>
- *               Table level:     the collapsed counters of the table (leaders only)
- *               Partition level: detailed_metrics=per_partition
- *                                  tablet_id=<id>
- *                                    follower_id=<n>
+ *               type=<tablet type>
+ *                 category=executor|app       the collapsed counters of the table (leaders only)
  *
- * Every group, which holds counters above, holds them as a
- * type=<tablet type>/category=executor|app subtree of low level counter aggregates,
- * the very same layout as the node wide "tablets" group.
- *
+ * The type=/category= subtree is the very same layout as the node wide "tablets" group.
+ * The groups of a table exist only while its TABLE bucket does, so a partition level table
+ * creates no counter group at all.
  */
 class TNodeDatabaseMetricsAggregator : public NSysView::IDbDetailedCounters {
 public:
     /**
      * @param[in] now Used to differentiate the cumulative counters into per second rates
      *
-     * @warning Every named counter of the two counter sets is published as its own
-     *          series in every bucket, so the caller decides the cardinality
+     * @note The public metrics of the tablet type (see TDetailedMetricsDescriptor) define what
+     *       every bucket reports, so the cardinality does not depend on the counter sets. Only
+     *       a TABLE bucket publishes series of its own: an allow-listed set of low level counters
+     *       in the counter tree
      */
     virtual void AddCounters(
         const TString& tablePath,
@@ -93,8 +100,8 @@ public:
     ) = 0;
 
     /**
-     * Drop everything this tablet contributed to the tree, removing the groups,
-     * which are left empty.
+     * Drop everything this tablet contributed, removing the counter groups, which are
+     * left empty.
      *
      * @param[in] tabletId The tablet ID and its role are sufficient: this class owns
      *                      the reverse map from (tabletId, followerId) -> the table's
@@ -118,7 +125,7 @@ public:
 using TNodeDatabaseMetricsAggregatorPtr = TIntrusivePtr<TNodeDatabaseMetricsAggregator>;
 
 /**
- * @param[in] targetCounterGroup The group to fill, already scoped to the role
+ * @param[in] targetCounterGroup The group to fill with the low level counters of the TABLE buckets
  * @param[in] isFollowerRole The role of the tablets this instance is fed
  */
 TNodeDatabaseMetricsAggregatorPtr CreateNodeDatabaseMetricsAggregator(

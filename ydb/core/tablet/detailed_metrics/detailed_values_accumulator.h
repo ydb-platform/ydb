@@ -139,6 +139,13 @@ public:
     void Pack(NKikimrSysView::TDbCounters& out);
 
     /**
+     * @return The binding, which every report applied to the accumulator must match
+     */
+    const TDetailedMetricsBinding* GetBinding() const {
+        return Binding;
+    }
+
+    /**
      * @return The number of live sources
      */
     size_t GetSourceCount() const {

@@ -16478,7 +16478,7 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     Functions["FormatTypeDiff"] = &FormatTypeDiffWrapper;
     Functions["CastStruct"] = &CastStructWrapper;
     ExtFunctions["AggregationTraits"] = &AggregationTraitsWrapper;
-    Functions["MultiAggregate"] = &MultiAggregateWrapper;
+    ExtFunctions["MultiAggregate"] = &MultiAggregateWrapper;
     Functions["AggOverState"] = &AggOverStateWrapper;
     Functions["SqlAggregateAll"] = &SqlAggregateAllWrapper;
     Functions["CountedAggregateAll"] = &CountedAggregateAllWrapper;
@@ -16892,11 +16892,11 @@ TSyncFunctionsMap::TSyncFunctionsMap() {
     ExtFunctions["AggregateMergeFinalize"] = &AggregateWrapper;
     ExtFunctions["AggregateMergeManyFinalize"] = &AggregateWrapper;
 
-    ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
+    ColumnOrderFunctions["PgSetItem"] = &OrderForSqlSetItem;
     ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
     ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
 
-    ColumnOrderFunctions["YqlSetItem"] = &OrderForPgSetItem;
+    ColumnOrderFunctions["YqlSetItem"] = &OrderForSqlSetItem;
     ColumnOrderFunctions["YqlIterate"] = &OrderFromFirst;
     ColumnOrderFunctions["YqlIterateAll"] = &OrderFromFirst;
 

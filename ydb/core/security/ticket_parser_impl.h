@@ -376,6 +376,7 @@ private:
         return static_cast<TDerived*>(this);
     }
 
+protected:
     static TString GetKey(TEvTicketParser::TEvAuthorizeTicket* request) {
         TStringStream key;
         if (request->Signature.AccessKeyId) {
@@ -408,6 +409,7 @@ private:
         return key.Str();
     }
 
+private:
     TInstant GetAsSignatureExpireTime(TInstant now) const {
         return now + AsSignatureExpireTime;
     }
@@ -1904,6 +1906,12 @@ private:
     }
 
 protected:
+    // When true, Access Service is asked only to authenticate the token.
+    // Request permissions are stored on the record but are not authorized.
+    bool UseAccessServiceAuthenticationOnly() const {
+        return false;
+    }
+
     auto ParseTokenType(const TStringBuf tokenType) const {
         if (tokenType == "Login") {
             if (UseLoginProvider) {
@@ -1991,7 +1999,7 @@ protected:
     void InitTokenRecord(const TString& key, TTokenRecord& record, TInstant) {
         if (GetDerived()->CanInitAccessServiceToken(record)) {
             if (AccessServiceEnabled()) {
-                if (record.Permissions) {
+                if (record.Permissions && !GetDerived()->UseAccessServiceAuthenticationOnly()) {
                     RequestAccessServiceAuthorization(key, record);
                 } else {
                     RequestAccessServiceAuthentication(key, record);
@@ -2275,7 +2283,7 @@ protected:
         }
         if (CanRefreshAccessServiceTicket(record)) {
             GetDerived()->ResetTokenRecord(record);
-            if (record.Permissions) {
+            if (record.Permissions && !GetDerived()->UseAccessServiceAuthenticationOnly()) {
                 RequestAccessServiceAuthorization(key, record);
             } else {
                 RequestAccessServiceAuthentication(key, record);

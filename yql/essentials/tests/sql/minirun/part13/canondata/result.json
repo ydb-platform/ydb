@@ -1546,6 +1546,9 @@
             "checksum": "7b1bb27bb04047ff72632c1212564fe1",
             "size": 1406,
             "uri": "https://{canondata_backend}/1871002/12af85b5b27eccd0e3391513f34ad8082ac84843/resource.tar.gz#test.test_select_yql-uncorrelated_projection_in-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_select_yql-uncorrelated_projection_in-default.txt-Results_/extracted"
         }
     ],
     "test.test[select_yql-window_fn_rank_0-default.txt-Debug]": [

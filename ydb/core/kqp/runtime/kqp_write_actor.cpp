@@ -311,7 +311,7 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
@@ -332,7 +332,9 @@ struct TKqpTableWriterStatistics {
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
             EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
-            AffectedRows += tableAccessStats.GetAffectedRows();
+            if (tableAccessStats.HasAffectedRows()) {
+                AffectedRows = AffectedRows.value_or(0) + tableAccessStats.GetAffectedRows();
+            }
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -410,7 +412,9 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-        tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
+        if (AffectedRows) {
+            tableStats->SetAffectedRows(tableStats->GetAffectedRows() + *AffectedRows);
+        }
 
         ReadRows = 0;
         ReadBytes = 0;
@@ -418,7 +422,7 @@ struct TKqpTableWriterStatistics {
         WriteBytes = 0;
         EraseRows = 0;
         EraseBytes = 0;
-        AffectedRows = 0;
+        AffectedRows.reset();
 
         tableStats->SetAffectedPartitions(
             tableStats->GetAffectedPartitions() + AffectedPartitions.size());
@@ -1005,6 +1009,9 @@ public:
             {"locks", txLocks},
             {"cookie", ev->Cookie});
 
+        // All EvWrites in TKqpTableWriteActor are sent with Cookie >= 1
+        AFL_ENSURE(ev->Cookie != 0);
+
         if (!ShardedWriteController->HasShard(ev->Get()->Record.GetOrigin())) {
             // TODO: in future don't ignore non-retryable errors and fail immediately
             YDB_LOG_INFO("Ignoring a late TEvWriteResult for a shard removed by a reroute.",
@@ -1014,6 +1021,10 @@ public:
             return;
         }
 
+        // Only results of the last sent message are processed (see IsSupersededWriteResult).
+
+        const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
+
         TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         if (ev->Sender.NodeId() == SelfId().NodeId()) {
@@ -1021,6 +1032,19 @@ public:
         } else {
             Counters->WriteActorRemoteShardWrites->Inc();
         }
+
+        AFL_ENSURE(!TxId || !ev->Get()->Record.HasTxId() || ev->Get()->Record.GetTxId() == *TxId);
+        if (!(Mode == EMode::COMMIT && ev->Get()->Record.GetTxId() == *TxId) // not commit response
+                && IsSupersededWriteResult(ev->Cookie, metadata)
+                && IsIgnorableSupersededStatus(ev->Get()->GetStatus())) {
+            YDB_LOG_DEBUG("Ignored a result of a superseded or unknown message.",
+                {"logPrefix", this->LogPrefix},
+                {"shardID", ev->Get()->Record.GetOrigin()},
+                {"status", NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus())},
+                {"cookie", ev->Cookie});
+            return;
+        }
+
         const bool handleOverload = ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_DISK_GROUP_OUT_OF_SPACE
                     || ev->Get()->GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED;
 
@@ -1032,7 +1056,6 @@ public:
                 {"sink", this->SelfId()},
                 {"issues", getIssues().ToOneLineString()});
 
-            const auto metadata = ShardedWriteController->GetMessageMetadata(ev->Get()->Record.GetOrigin());
             if (metadata && ev->Get()->Record.GetOverloadSubscribed() + 1 == metadata->NextOverloadSeqNo) {
                 YDB_LOG_INFO("Waiting for overloaded shard.",
                     {"logPrefix", this->LogPrefix},
@@ -1103,7 +1126,7 @@ public:
             } else if (AttachWriteSeqNum && Mode == EMode::WRITE) {
                 // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs.
                 // Retries are bounded in RetryShard before the write re-resolves and then fails.
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             } else {
                 UpdateStats(ev->Get()->Record.GetTxStats());
                 TxManager->SetError(ev->Get()->Record.GetOrigin());
@@ -1165,7 +1188,7 @@ public:
                         << TablePath << "`.",
                     getIssues());
             } else {
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }
@@ -1187,7 +1210,7 @@ public:
                         << TablePath << "`.",
                     getIssues());
             } else {
-                RetryShard(ev->Get()->Record.GetOrigin(), ev->Cookie);
+                RetryShard(ev->Get()->Record.GetOrigin());
             }
             return;
         }
@@ -1304,11 +1327,9 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (result) {
-            YQL_ENSURE(result->IsShardEmpty);
-            RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
-            Callbacks->OnPrepared(std::move(preparedInfo), result->DataSize);
-        }
+        AFL_ENSURE(result.IsShardEmpty);
+        RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
+        Callbacks->OnPrepared(std::move(preparedInfo), result.DataSize);
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
@@ -1336,14 +1357,6 @@ public:
         OnMessageReceived(ev->Get()->Record.GetOrigin());
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
-        if (!result) {
-            // A resent batch is answered twice, only the first result is taken
-            YDB_LOG_DEBUG("Ignored an already acknowledged result",
-                {"logPrefix", this->LogPrefix},
-                {"tabletId", ev->Get()->Record.GetOrigin()},
-                {"cookie", ev->Cookie});
-            return;
-        }
 
         RetryResolveByShard.erase(ev->Get()->Record.GetOrigin());
 
@@ -1360,13 +1373,13 @@ public:
             }
         }
 
-        if (result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
+        if (result.IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize, ExtractCommitTimestamp(ev->Get()->Record));
+            Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result.DataSize, ExtractCommitTimestamp(ev->Get()->Record));
         } else {
             AFL_ENSURE(Mode == EMode::WRITE);
             UpdateStats(ev->Get()->Record.GetTxStats());
-            Callbacks->OnMessageAcknowledged(result->DataSize);
+            Callbacks->OnMessageAcknowledged(result.DataSize);
         }
     }
 
@@ -1446,13 +1459,12 @@ public:
     bool SendDataToShard(const ui64 shardId) {
         YQL_ENSURE(Mode != EMode::COMMIT);
 
-        const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        YQL_ENSURE(metadata);
+        const auto metadata = ShardedWriteController->PrepareMessageMetadata(shardId);
         // A resend is safe when the shard deduplicates by uncommitted write seq num
         // (AttachWriteSeqNum) or when the write is inconsistent: for a consistent tx
         // without the flag a resend would break the write order, so fail loudly.
-        AFL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
-        if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
+        AFL_ENSURE(metadata.SendAttempts == 0 || InconsistentTx || AttachWriteSeqNum);
+        if (metadata.SendAttempts >= MessageSettings.MaxWriteAttempts) {
             // The resend budget for this shard is exhausted: re-resolve through RetryShard
             // so the number of consecutive re-resolves per shard stays bounded before
             // failing with UNAVAILABLE (the per-shard counter is cleared on a successful ack).
@@ -1461,14 +1473,14 @@ public:
                 {"shardId", shardId},
                 {"tablePath", TablePath},
                 {"sink", this->SelfId()});
-            RetryShard(shardId, metadata->Cookie);
+            RetryShard(shardId);
             return false;
         }
 
         // BreakerQuerySpanId is set in AddAction during write phase, not here
 
-        const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
-        const bool isImmediateCommit = metadata->IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
+        const bool isPrepare = metadata.IsFinal && Mode == EMode::PREPARE;
+        const bool isImmediateCommit = metadata.IsFinal && Mode == EMode::IMMEDIATE_COMMIT;
 
         // In-flight data batches carry the snapshot of the operation that produced
         // them, and all batches of one message must share it (enforced by
@@ -1514,19 +1526,19 @@ public:
 
         evWrite->Record.SetCollectAffectedRows(CollectAffectedRows);
 
-        evWrite->Record.SetOverloadSubscribe(metadata->NextOverloadSeqNo);
+        evWrite->Record.SetOverloadSubscribe(metadata.NextOverloadSeqNo);
 
         const auto serializationResult = ShardedWriteController->SerializeMessageToPayload(shardId, *evWrite, isPrepare || isImmediateCommit);
         YQL_ENSURE(isPrepare || isImmediateCommit || serializationResult.TotalDataSize > 0);
 
-        if (metadata->SendAttempts == 0) {
+        if (metadata.SendAttempts == 0) {
             if (!isPrepare) {
                 Counters->WriteActorImmediateWrites->Inc();
             } else {
                 Counters->WriteActorPrepareWrites->Inc();
             }
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
-            Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
+            Counters->WriteActorWritesOperationsHistogram->Collect(metadata.OperationsCount);
 
             for (const auto& operation : evWrite->Record.GetOperations()) {
                 if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
@@ -1563,6 +1575,8 @@ public:
 
         NDataIntegrity::LogIntegrityTrails("EvWriteTx", evWrite->Record.GetTxId(), shardId, TlsActivationContext->AsActorContext(), "WriteActor");
 
+        const ui64 cookie = ShardedWriteController->AllocateMessageCookie(shardId);
+
         TStringBuilder locks;
         for (const auto& lock : evWrite->Record.GetLocks().GetLocks()) {
             locks << lock.ShortDebugString();
@@ -1577,29 +1591,29 @@ public:
             {"lockNodeId", evWrite->Record.GetLockNodeId()},
             {"locks", locks},
             {"size", serializationResult.TotalDataSize},
-            {"cookie", metadata->Cookie},
+            {"cookie", cookie},
             {"operationsCount", evWrite->Record.OperationsSize()},
-            {"isFinal", metadata->IsFinal},
-            {"attempts", metadata->SendAttempts},
+            {"isFinal", metadata.IsFinal},
+            {"attempts", metadata.SendAttempts},
             {"mode", static_cast<int>(Mode)},
             {"bufferMemory", GetMemory()});
 
-        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+        AFL_ENSURE(Mode == EMode::WRITE || metadata.IsFinal);
 
         LinkedPipeCache = true;
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
-            metadata->Cookie,
+            cookie,
             NWilson::TTraceId(ParentTraceId));
 
-        ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
+        ShardedWriteController->OnMessageSent(shardId, cookie);
 
         return true;
     }
 
-    void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
+    void RetryShard(const ui64 shardId) {
         if (Mode != EMode::WRITE) {
             // At current time retries are only supported for WRITE mode.
             RuntimeError(
@@ -1613,11 +1627,10 @@ public:
 
         AFL_ENSURE(InconsistentTx || AttachWriteSeqNum);
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
-        if (!metadata || (ifCookieEqual && metadata->Cookie != ifCookieEqual)) {
-            YDB_LOG_INFO("Shard retry skipped because metadata was not found for the given cookie.",
+        if (!metadata) {
+            YDB_LOG_INFO("Shard retry skipped because metadata was not found.",
                 {"logPrefix", this->LogPrefix},
-                {"shardID", shardId},
-                {"cookie", ifCookieEqual.value_or(0)});
+                {"shardID", shardId});
             return;
         }
 
@@ -1661,7 +1674,7 @@ public:
         YDB_LOG_DEBUG("Retry Next",
             {"logPrefix", this->LogPrefix},
             {"shardID", shardId},
-            {"cookie", ifCookieEqual.value_or(0)},
+            {"cookie", metadata->Cookie},
             {"attempt", metadata->SendAttempts},
             {"delay", CalculateNextAttemptDelay(MessageSettings, metadata->SendAttempts)});
 
@@ -1721,7 +1734,7 @@ public:
         }
 
         if (InconsistentTx) {
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 
@@ -1733,7 +1746,7 @@ public:
         // tablet generation restores the writer chain and answers once.
         if (AttachWriteSeqNum && Mode == EMode::WRITE) {
             // TODO: Mode == EMode::WRITE can miss some cases in case of not Read Committed txs
-            RetryShard(ev->Get()->TabletId, std::nullopt);
+            RetryShard(ev->Get()->TabletId);
             return;
         }
 
@@ -1835,7 +1848,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, NWilson::TTraceId(ParentTraceId));
     }
 
     void Prepare() {
@@ -4177,48 +4190,24 @@ public:
             const bool isRelevance = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
 
             // Ensure write actor exists for this index table
-            if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
-                    return false;
-                }
-            } else {
-                if (!CheckSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return false;
-                }
+            if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
+                return false;
             }
 
             // Fulltext relevance: ensure docs/dict/stats tables
             if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
-                if (!writeInfo.Actors.contains(indexSettings.DocsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
-                            indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor,
-                    indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
+                        indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
                     return false;
                 }
                 if (indexSettings.DictTableId.PathId != TPathId()) {
-                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
-                            return false;
-                        }
-                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
                         return false;
                     }
                 }
-                if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
-                            indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
-                    indexSettings.StatsTableId, indexSettings.StatsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
+                        indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
                     return false;
                 }
             }
@@ -5717,7 +5706,7 @@ public:
         YQL_ENSURE(TxId);
         Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvForward(
             new TEvDataShard::TEvProposeTransactionAttach(tabletId, *TxId),
-            tabletId, /* subscribe */ true), 0, ++state.Cookie);
+            tabletId, /* subscribe */ true), 0, ++state.Cookie, BufferWriteActorStateSpan.GetTraceId());
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {

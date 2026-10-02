@@ -1,0 +1,16 @@
+<tmp_path>/program.sql:<main>: Warning: Type annotation
+
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: YqlSelect, At tuple, At tuple, At tuple, At function: YqlSetItem, At tuple
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>: Warning: At tuple
+        
+            <tmp_path>/program.sql:<main>:3:1: Warning: At tuple, At function: YqlResultItem, At lambda
+            	SELECT
+	^
+                <tmp_path>/program.sql:<main>:7:19: Warning: At function: YqlSubLink
+                	            y.b / 10,
+	                  ^
+                    <tmp_path>/program.sql:<main>:7:19: Warning: IN may produce unexpected result when used with nullable arguments. Consider adding 'PRAGMA AnsiInForEmptyOrNullableItemsCollections;'
+                    	            y.b / 10,
+	                  ^

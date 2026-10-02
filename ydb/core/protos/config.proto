@@ -147,6 +147,9 @@ message TActorSystemConfig {
     optional bool UseRingQueue = 19 [default = true];
     optional bool UseWaker = 25 [default = false]; // Experimental, enables wakers for auto-configured BASIC executors.
 
+    // Maximum idle coroutine allocation bytes per actor-system worker. Zero disables caching.
+    optional uint64 AsyncFrameCacheSizeBytes = 26 [default = 4194304];
+
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
 
@@ -2289,6 +2292,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1000000,
             DefaultValue: 0 }];
+        optional uint64 IdleDeviceProbeIntervalSeconds = 13 [(ControlOptions) = {
+            Description: "Issue a one-sector PDisk health read after this many seconds without successful physical I/O. "
+                         "Successful DDisk/PersistentBuffer direct I/O also resets the idle interval. 0 disables probes",
+            MinValue: 0,
+            MaxValue: 86400,
+            DefaultValue: 0 }];
     }
 
     message TBlobStorageControllerControls {
@@ -2367,6 +2376,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 1,
             DefaultValue: 0
+        }];
+        optional uint64 RequestsInFlightLimit = 6 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous KeyValue data requests per tablet",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 10000
         }];
     }
 
@@ -3045,6 +3060,7 @@ message TColumnShardConfig {
     optional string ScanDefaultPool = 75;
     // Actor-system pool for compaction conveyor tasks: "User" or "Batch". Unset is User.
     optional string CompactionDefaultPool = 76;
+    optional bool EnableWeightedDataChannelSelection = 77 [default = false];
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

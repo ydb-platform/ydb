@@ -256,6 +256,9 @@ public:
         }
         Self->ProcessVDiskStatus(record.GetVDiskStatus());
 
+        // the node resubscribes to database space state after every registration
+        Self->DatabaseSpace.UnsubscribeNode(nodeId);
+
         Response = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
 
         TSet<TGroupId> groupIDsToRead;
@@ -610,6 +613,12 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
         SysViewChangedPDisks.insert(it->first);
     }
 
+    // the warden (possibly restarted) numbers its metrics reports anew
+    const TVSlotId startingId(nodeId, Min<Schema::VSlot::PDiskID::Type>(), Min<Schema::VSlot::VSlotID::Type>());
+    for (auto it = VSlots.lower_bound(startingId); it != VSlots.end() && it->first.NodeId == nodeId; ++it) {
+        it->second->LastMetricsSequence = 0;
+    }
+
     node.LastConnectTimestamp = TInstant::Now();
     node.DisconnectedTimestampMono = TMonotonic::Max();
 
@@ -624,6 +633,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     node.ConnectedServerId = {};
     node.InterconnectSessionId = {};
     node.Registered = false;
+    DatabaseSpace.UnsubscribeNode(nodeId);
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {

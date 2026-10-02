@@ -19,6 +19,7 @@
 #include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/yql_type_helpers.h>
+#include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
@@ -28,6 +29,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
 
+#include <algorithm>
 #include <utility>
 
 namespace NYql {
@@ -71,6 +73,9 @@ public:
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
         AddHandler(0, &TResPull::Match, HNDL(TrimResPullWorld));
         AddHandler(0, &TYtPublish::Match, HNDL(TrimPublishWorld));
+        if (State_->Configuration->_PruneSync.Get().GetOrElse(false)) {
+            AddHandler(0, &TCoSync::Match, HNDL(PruneSync));
+        }
 
         AddHandler(1, &TCoFilterNullMembers::Match, HNDL(FilterNullMemebers<TCoFilterNullMembers>));
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(FilterNullMemebers<TCoSkipNullMembers>));
@@ -102,6 +107,170 @@ public:
     }
 
 protected:
+
+    static bool IsYtOperationDependency(const TExprNode& dependency) {
+        return TMaybeNode<TCoLeft>(&dependency)
+            .Input()
+            .Maybe<TYtOpBase>()
+            .IsValid();
+    }
+
+    static void CollectDataProducers(const TExprNode& node, const TNodeSet& inputs,
+        TExprNode::TListType& dependencies, TNodeSet& dataConsumers) {
+        // Adds row-data producers to the traversal and records consumers of candidate Sync inputs.
+        const auto addProducer = [&inputs, &dependencies](TYtOutput output) {
+            const auto producer = GetOutputOp(output);
+            dependencies.push_back(producer.Ptr());
+            return inputs.contains(producer.Raw());
+        };
+
+        if (const auto maybeOp = TMaybeNode<TYtTransientOpBase>(&node)) {
+            for (const auto section : maybeOp.Cast().Input()) {
+                for (const auto path : section.Paths()) {
+                    if (const auto output = path.Table().Maybe<TYtOutput>()) {
+                        if (addProducer(output.Cast())) {
+                            dataConsumers.insert(path.Raw());
+                        }
+                    }
+                }
+            }
+        } else if (const auto maybePublish = TMaybeNode<TYtPublish>(&node)) {
+            const auto publishInput = maybePublish.Cast().Input();
+            bool hasInputProducer = false;
+            for (const auto output : publishInput) {
+                if (addProducer(output)) {
+                    hasInputProducer = true;
+                }
+            }
+            if (hasInputProducer) {
+                dataConsumers.insert(publishInput.Raw());
+            }
+        } else if (const auto maybeStatOut = TMaybeNode<TYtStatOut>(&node)) {
+            if (addProducer(maybeStatOut.Cast().Input())) {
+                dataConsumers.insert(&node);
+            }
+        }
+    }
+
+    static void CollectWorldDependencies(const TExprNode& node, TExprNode::TListType& dependencies,
+        TNodeOnNodeOwnedMap& worldMap) {
+        if (!node.ChildrenSize()) {
+            return;
+        }
+        if (node.IsCallable(TCoSync::CallableName())) {
+            for (const auto& child : node.Children()) {
+                dependencies.push_back(child);
+            }
+        } else if (node.Content() == SeqName) {
+            auto world = node.HeadPtr();
+            for (size_t i = 1; i < node.ChildrenSize(); ++i) {
+                if (node.Child(i)->IsLambda()) {
+                    worldMap[&node.Child(i)->Head().Head()] = world;
+                    world = node.Child(i)->TailPtr();
+                }
+            }
+            dependencies.push_back(world);
+        } else {
+            dependencies.push_back(node.HeadPtr());
+        }
+    }
+
+    static TNodeSet VisitYtDependencies(TExprNode::TListType dependencies, const TNodeSet& inputs,
+        TNodeSet& dataConsumers) {
+        // Traverses YT world and row-data dependencies and finds candidate inputs reachable from them.
+        TNodeSet visited;
+        TNodeSet coveredInputs;
+        TNodeOnNodeOwnedMap worldMap;
+        while (!dependencies.empty()) {
+            auto node = std::move(dependencies.back());
+            dependencies.pop_back();
+            if (!visited.insert(node.Get()).second) {
+                continue;
+            }
+            if (node->IsArgument()) {
+                if (const auto it = worldMap.find(node.Get()); it != worldMap.end()) {
+                    dependencies.push_back(it->second);
+                    continue;
+                }
+            }
+            if (inputs.contains(node.Get())) {
+                coveredInputs.insert(node.Get());
+            }
+            CollectDataProducers(*node, inputs, dependencies, dataConsumers);
+            CollectWorldDependencies(*node, dependencies, worldMap);
+        }
+        return coveredInputs;
+    }
+
+    static TNodeSet FindCoveredInputs(const TNodeSet& inputs, TNodeSet& dataConsumers) {
+        // Starts traversal upstream of each input, so an input is covered only through another input.
+        TExprNode::TListType dependencies;
+        for (const auto* input : inputs) {
+            dependencies.push_back(input->HeadPtr());
+            CollectDataProducers(*input, inputs, dependencies, dataConsumers);
+        }
+        return VisitYtDependencies(std::move(dependencies), inputs, dataConsumers);
+    }
+
+    static bool HasUncoveredOutputConsumers(const TExprNode& operation, const TParentsMap& parents,
+        const TNodeSet& coveredDataConsumers) {
+        // Checks whether an operation has a data-output consumer outside the discovered dependency closure.
+        const auto operationParents = parents.find(&operation);
+        if (operationParents == parents.end()) {
+            return true;
+        }
+        for (const auto* output : operationParents->second) {
+            if (!TYtOutput::Match(output)) {
+                continue;
+            }
+            const auto outputParents = parents.find(output);
+            if (outputParents == parents.end()) {
+                return true;
+            }
+            // Pruning is unsafe if any consumer of this output was not reached by dependency traversal.
+            if (AnyOf(outputParents->second, [&coveredDataConsumers](const auto* consumer) {
+                return !coveredDataConsumers.contains(consumer);
+            })) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    TMaybeNode<TExprBase> PruneSync(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+        // Removes Sync inputs already implied by another input when all of their data consumers are covered.
+        auto dependencies = node.Ref().ChildrenList();
+        TNodeSet inputs;
+        for (const auto& dependency : dependencies) {
+            if (IsYtOperationDependency(*dependency)) {
+                inputs.insert(&dependency->Head());
+            }
+        }
+        if (inputs.size() < 2) {
+            return node;
+        }
+
+        TNodeSet dataConsumers;
+        const auto coveredInputs = FindCoveredInputs(inputs, dataConsumers);
+        if (coveredInputs.empty()) {
+            return node;
+        }
+        const auto* parents = getParents();
+        const auto [first, last] = std::ranges::remove_if(dependencies, [&](const TExprNode::TPtr& dependency) {
+            if (!IsYtOperationDependency(*dependency)) {
+                return false;
+            }
+            const auto& input = dependency->Head();
+            const bool covered = coveredInputs.contains(&input)
+                && !HasUncoveredOutputConsumers(input, *parents, dataConsumers);
+            return covered;
+        });
+        if (first == last) {
+            return node;
+        }
+        dependencies.erase(first, last);
+        return TExprBase(dependencies.size() == 1 ? dependencies.front() : ctx.ChangeChildren(node.Ref(), std::move(dependencies)));
+    }
 
     TYtSection PushdownSectionColumns(TYtSection section, TExprContext& ctx, const TGetParents& getParents) const {
         if (HasNonEmptyKeyFilter(section)) {

@@ -73,8 +73,8 @@ inputs:
     description: "Telegram alert chat"
   collect_coredumps:
     type: boolean
-    default: false
-    description: "Collect coredumps via enabling ulimit -c unlimited"
+    default: true
+    description: "Collect coredumps to a 100G loop volume at /coredumps (for ya test recovery)"
   pull_number:
     type: string
     required: false
@@ -112,9 +112,32 @@ runs:
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
         fi
 
-    - name: Clean ya cache
+    - name: Resolve analytics job name
       shell: bash
-      run: rm -rf ~/.ya
+      env:
+        WORKFLOW_NAME: ${{ github.workflow }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+        EVENT_NAME: ${{ github.event_name }}
+        GITHUB_NUMERIC_JOB_ID: ${{ job.check_run_id }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
+        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        echo "PR_NUMBER=${{ github.event.number || inputs.pull_number }}" >> "$GITHUB_ENV"
+        if [ -n "$GITHUB_NUMERIC_JOB_ID" ]; then
+          echo "GITHUB_NUMERIC_JOB_ID=$GITHUB_NUMERIC_JOB_ID" >> "$GITHUB_ENV"
+          job_name=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail -sS \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/jobs/${GITHUB_NUMERIC_JOB_ID}" \
+            | jq -r '.name // empty' || true)
+          if [ -n "$job_name" ]; then
+            echo "GITHUB_JOB_NAME=$job_name" >> "$GITHUB_ENV"
+          fi
+        else
+          echo "job.check_run_id is empty; analytics rows of this job will be dropped" >&2
+        fi
 
     - name: Init
       id: init
@@ -139,22 +162,30 @@ runs:
         echo "LAST_BUILD_RESULTS_REPORT=$PUBLIC_DIR/last_report.json" >> $GITHUB_ENV
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
+        ANALYTICS_FILE=$TMP_DIR/analytics.jsonl
+        export ANALYTICS_FILE
+        echo "ANALYTICS_FILE=$ANALYTICS_FILE" >> $GITHUB_ENV
+        mkdir -p "$(dirname "$ANALYTICS_FILE")"
+        touch "$ANALYTICS_FILE"
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        analytics start init
 
         python3 -m pip install ydb ydb[yc] codeowners humanize plotly
+        analytics end init --conclusion success
 
-    - name: Resolve analytics job name
+    - name: Clean ya cache
+      id: clean_ya_cache
       shell: bash
-      env:
-        WORKFLOW_NAME: ${{ github.workflow }}
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        EVENT_NAME: ${{ github.event_name }}
       run: |
-        ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "$WORKFLOW_NAME" "$BUILD_PRESET" "$EVENT_NAME")
-        echo "ANALYTICS_JOB_NAME=$ANALYTICS_JOB_NAME" >> "$GITHUB_ENV"
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        analytics_run clean_ya_cache rm -rf ~/.ya
 
     - name: Setup cache
+      id: setup_cache
       shell: bash
       run: |
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        analytics start setup_cache
         export BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
@@ -162,24 +193,64 @@ runs:
         export TELEGRAM_BOT_TOKEN_FILE=$(mktemp)
         echo -n "${{ inputs.telegram_ydbot_token }}" > $TELEGRAM_BOT_TOKEN_FILE
         echo "TELEGRAM_BOT_TOKEN_FILE=$TELEGRAM_BOT_TOKEN_FILE" >> $GITHUB_ENV
+        analytics end setup_cache --conclusion success
 
     - name: ya build and test
       id: build
       shell: bash
       env:
-        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
-        PR_NUMBER: ${{ inputs.pull_number }}
+        GITHUB_TOKEN: ${{ github.token }}
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
+        PR_NUMBER: ${{ github.event.number || inputs.pull_number }}
         GITHUB_REF_NAME: ${{ github.ref_name }}
         GITHUB_BASE_REF: ${{ github.base_ref }}
         GITHUB_EVENT_NAME: ${{ github.event_name }}
       run: |
         set -ex
-        
-        if [ "$COLLECT_COREDUMPS" = "true" ]; then
-          sudo mkdir -p /coredumps
-          sudo chmod 1777 /coredumps
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        trap 'trap - EXIT; analytics send --conclusion cancelled' TERM INT
+        trap 'rc=$?; trap - EXIT; analytics send --rc "$rc"; exit $rc' EXIT
+
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+          # Bounded loop volume so a flaky suite cannot fill the runner root FS.
+          # File pattern (not a pipe): ya recovers via core_pattern and /coredumps/%p.%s.
+          # %e is the crashing thread's comm, which actor pools rename (ydbd.System),
+          # so a name-based pattern does not match the core ya looks up.
+          COREDUMP_SIZE_GB=100
+          COREDUMP_IMG=/var/lib/ydb-ci-coredumps.img
+          COREDUMP_MNT=/coredumps
+
+          if mountpoint -q "$COREDUMP_MNT"; then
+            sudo umount "$COREDUMP_MNT" || true
+          fi
+          sudo rm -f "$COREDUMP_IMG"
+          sudo mkdir -p "$COREDUMP_MNT"
+
+          avail_kb=$(df -Pk "$(dirname "$COREDUMP_IMG")" | awk 'NR==2 {print $4}')
+          need_kb=$((COREDUMP_SIZE_GB * 1024 * 1024))
+          if [ "$avail_kb" -lt "$need_kb" ]; then
+            echo "Not enough space for ${COREDUMP_SIZE_GB}G coredump volume (available ${avail_kb} KiB)"
+            exit 1
+          fi
+
+          if ! sudo fallocate -l "${COREDUMP_SIZE_GB}G" "$COREDUMP_IMG"; then
+            sudo dd if=/dev/zero of="$COREDUMP_IMG" bs=1M count=$((COREDUMP_SIZE_GB * 1024)) status=none
+          fi
+          sudo mkfs.ext4 -q -F "$COREDUMP_IMG"
+          sudo mount -o loop,rw,nosuid,nodev "$COREDUMP_IMG" "$COREDUMP_MNT"
+          sudo chmod 1777 "$COREDUMP_MNT"
+
           echo "/coredumps/%p.%s" | sudo tee /proc/sys/kernel/core_pattern
-          ulimit -c unlimited
+
+          echo "COREDUMP_IMG=$COREDUMP_IMG" >> "$GITHUB_ENV"
+          echo "COREDUMP_MNT=$COREDUMP_MNT" >> "$GITHUB_ENV"
+
+          echo "::group::coredump diagnostics"
+          echo "core_pattern=$(cat /proc/sys/kernel/core_pattern)"
+          echo "coredump_img=$COREDUMP_IMG (${COREDUMP_SIZE_GB}G)"
+          ls -la "$COREDUMP_MNT"
+          df -h "$COREDUMP_MNT" /
+          echo "::endgroup::"
         else
           ulimit -c 0
         fi
@@ -306,10 +377,13 @@ runs:
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
+          analytics start graph_compare
           set +e
           ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAND" --result-graph-path=$GRAPH_PATH --result-context-path=$CONTEXT_PATH $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
+          analytics end graph_compare --rc "$RC"
+          analytics flush
 
           if [ $RC -ne 0 ]; then
             echo "graph_compare.py returned $RC, build failed"
@@ -319,7 +393,9 @@ runs:
             exit $RC
           fi
 
+          analytics start checkout_head
           git checkout $ORIGINAL_HEAD
+          analytics end checkout_head
           YA_MAKE_TARGET="ydb"
         else
           YA_MAKE_TARGET=""
@@ -336,6 +412,8 @@ runs:
             $YA_MAKE_TARGET
         fi
 
+        export CI_YA_ATTEMPT=1
+        analytics start prepare_ya_make
         export MUTED_YA_FILE="$(python3 .github/scripts/tests/mute/mute_helper.py resolve-path --preset "${{ inputs.build_preset }}")"
         echo "Mute list: MUTED_YA_FILE=$MUTED_YA_FILE"
 
@@ -349,6 +427,9 @@ runs:
           params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
           params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
         fi
+
+        analytics track runner_info --kind info --runner
+        analytics flush
 
         if [ true = ${{ inputs.run_tests }} ]; then
           params+=(-A)
@@ -365,8 +446,10 @@ runs:
 
         for RETRY in $(seq 1 $TEST_RETRY_COUNT)
         do
+          export CI_YA_ATTEMPT=$RETRY
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
+            analytics start prepare_ya_make
           else
             IS_RETRY=0
           fi
@@ -433,21 +516,52 @@ runs:
             --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"
           )
 
+          # systemd-run --scope ignores shell ulimit; LimitCORE= is rejected for scopes;
+          # sudo -u resets RLIMIT_CORE. Raise both limits as root, then drop to runner.
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+            YA_MAKE_RUN_CMD=(
+              prlimit --core=unlimited:unlimited
+              setpriv --reuid="$(id -u)" --regid="$(id -g)" --init-groups --
+              "${YA_MAKE_CMD[@]}"
+            )
+          else
+            YA_MAKE_RUN_CMD=(
+              sudo -n -E -u "$(id -un)" -- "${YA_MAKE_CMD[@]}"
+            )
+          fi
+
           # Timestamp for filtering dmesg to this try only.
           DMESG_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
+          analytics end prepare_ya_make
+          YA_MAKE_NAME="ya_make_try_${RETRY}"
+          analytics start "ya_make_try_${RETRY}"
 
           set +e
-          # sudo -u restores supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
+          # sudo -u / setpriv restore supplementary groups (e.g. docker); --uid/--gid on systemd-run does not.
           # Inner sudo -E keeps job env (needs SETENV in sudoers; standard on self-hosted runners).
           (sudo -n -E systemd-run --scope \
              --unit="${YA_MAKE_SCOPE_NAME}" \
              -p MemoryMax="${YA_MAKE_MEM_MAX}" \
              -p MemorySwapMax=0 \
-             -- sudo -n -E -u "$(id -un)" -- \
-             "${YA_MAKE_CMD[@]}"
+             -- "${YA_MAKE_RUN_CMD[@]}"
            echo $? > exit_code) </dev/null >> $YA_MAKE_OUTPUT 2>&1
           set -e
           RC=`cat exit_code`
+          if [ $RC -eq 0 ]; then
+            analytics end "$YA_MAKE_NAME"
+          else
+            analytics end "$YA_MAKE_NAME" --rc "$RC" --error "ya make rc=${RC}"
+          fi
+          analytics start postprocess_try
+          # Optional sub-steps use || true so they don't abort the step.
+          # Remember if any failed so we don't write conclusion=success.
+          POSTPROCESS_RC=0
+          if [ -f "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" ]; then
+            python3 .github/scripts/utils/analytics/github_actions/ya_evlog_phases.py \
+              --evlog "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
+              --parent "$YA_MAKE_NAME" \
+              --ya-attempt "$RETRY" || POSTPROCESS_RC=$?
+          fi
 
           # Per-try dmesg OOM dump (--since avoids stale events from previous tries/jobs).
           OOM_DMESG_LOG="$CURRENT_PUBLIC_DIR/oom_dmesg.txt"
@@ -459,7 +573,7 @@ runs:
 
           kill $MONITOR_PID
 
-          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
+          .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || POSTPROCESS_RC=$?
 
           GH_ALERTS_TG_LOGINS='${{ inputs.telegram_alert_logins }}' \
           .github/scripts/report_ram_analyzer.py \
@@ -469,7 +583,7 @@ runs:
             --ram-usage-file ram_usage.txt \
             --bot-token-file "$TELEGRAM_BOT_TOKEN_FILE" \
             --chat-id '${{ inputs.telegram_alert_chat }}' \
-            --memory-threshold 97 || true
+            --memory-threshold 97 || POSTPROCESS_RC=$?
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd
@@ -477,8 +591,9 @@ runs:
           (cd $CURRENT_PUBLIC_DIR && $ya_dir/ya analyze-make timeline --evlog ya_evlog.jsonl)
 
           # generate test_bloat
-          ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || true
+          ./ydb/ci/build_bloat/test_bloat.py --build-results-report $CURRENT_REPORT --output_dir $CURRENT_PUBLIC_DIR/test_bloat || POSTPROCESS_RC=$?
           echo "30 [Test bloat](${CURRENT_PUBLIC_DIR_URL}/test_bloat/tree_map.html)" >> $SUMMARY_LINKS
+          analytics end postprocess_try --rc "$POSTPROCESS_RC"
 
           if [ $RC -ne 0 ]; then
             echo "ya make returned $RC, build failed"
@@ -491,6 +606,11 @@ runs:
               | sed 's/\[\[[^]]*]\]//g' \
             ) || true) > $CURRENT_PUBLIC_DIR/fail_summary.txt
             echo "Build failed, see the [logs]($YA_MAKE_OUTPUT_URL). Also see [fail summary]($CURRENT_PUBLIC_DIR_URL/fail_summary.txt)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
+            analytics enrich "$YA_MAKE_NAME" \
+              --label "error=ya make rc=${RC}" \
+              --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
+              --label "fail_summary_url=${CURRENT_PUBLIC_DIR_URL}/fail_summary.txt"
+            analytics flush
             break
           fi
 
@@ -498,6 +618,8 @@ runs:
           gzip -c $CURRENT_REPORT > $CURRENT_PUBLIC_DIR/orig_report.json.gz
 
           # postprocess build results report (add links, logs, mute tests etc)
+          analytics start transform_build_results
+          TRANSFORM_RC=0
           .github/scripts/tests/transform_build_results.py \
             --build-results-report "$CURRENT_REPORT" \
             --test_dir="$TEST_META_INFO" \
@@ -506,12 +628,22 @@ runs:
             --public_dir "$PUBLIC_DIR" \
             --public_dir_url "$PUBLIC_DIR_URL" \
             --log_out_dir "$CURRENT_PUBLIC_DIR_RELATIVE/artifacts/logs/" \
-            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || true
+            --test_stuff_out "$CURRENT_PUBLIC_DIR_RELATIVE/test_artifacts/" || TRANSFORM_RC=$?
+          analytics end transform_build_results --rc "$TRANSFORM_RC"
           cp $CURRENT_REPORT $LAST_BUILD_RESULTS_REPORT
 
           TESTS_RESULT=0
+          analytics start fail_checker
           .github/scripts/tests/fail-checker.py "$CURRENT_REPORT" --output_path $CURRENT_PUBLIC_DIR/failed_count.txt || TESTS_RESULT=$?
           FAILED_TESTS_COUNT=$(cat $CURRENT_PUBLIC_DIR/failed_count.txt)
+          analytics enrich "$YA_MAKE_NAME" --report "$CURRENT_REPORT"
+          if [ $TESTS_RESULT = 0 ]; then
+            analytics end fail_checker
+            analytics enrich "$YA_MAKE_NAME" --label "tests_status=passed"
+          else
+            analytics end fail_checker --rc "$TESTS_RESULT" --error "failed_tests=${FAILED_TESTS_COUNT}"
+            analytics enrich "$YA_MAKE_NAME" --label "tests_status=failed" --label "failed_tests=${FAILED_TESTS_COUNT}"
+          fi
 
           IS_LAST_RETRY=0
 
@@ -535,6 +667,7 @@ runs:
             # Set the correct commit SHA - use original head for accurate version tracking
             export GITHUB_HEAD_SHA="$ORIGINAL_HEAD"
             
+            analytics start generate_summary
             GITHUB_TOKEN=${{ github.token }} .github/scripts/tests/generate-summary.py \
               --summary_links "$SUMMARY_LINKS" \
               --public_dir "$PUBLIC_DIR" \
@@ -551,9 +684,17 @@ runs:
               --workflow_run_id "${{ github.run_id }}" \
               --oom_dmesg_log "$OOM_DMESG_LOG" \
               "Tests" $CURRENT_PUBLIC_DIR/ya-test.html "$CURRENT_REPORT"
+            analytics end generate_summary
           fi
 
+          analytics start s3_sync_try
           s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic --guess-mime-type --no-check-md5 "$PUBLIC_DIR/" "$S3_BUCKET_PATH/"
+          analytics end s3_sync_try
+          analytics enrich "$YA_MAKE_NAME" \
+            --label "report_url=${CURRENT_PUBLIC_DIR_URL}/ya-test.html" \
+            --label "ya_make_log_url=${YA_MAKE_OUTPUT_URL}" \
+            --label "artifacts_url=${CURRENT_PUBLIC_DIR_URL}/"
+          analytics flush
 
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
@@ -584,16 +725,33 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
+          analytics start upload_tests_results
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          analytics end upload_tests_results
+          analytics flush
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
           fi
+
+          # Free the bounded coredump volume for the next try (ya already postprocessed dumps).
+          if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+            echo "Cleaning /coredumps before retry $((RETRY + 1))"
+            sudo find /coredumps -mindepth 1 -delete || true
+            df -h /coredumps || true
+          fi
+
           if [ -n "$GRAPH_PATH" ] && [ -n "$CONTEXT_PATH" ]; then
               GRAPH_PATH=""
               CONTEXT_PATH=""
           fi
         done;
+
+        # Drop dump files after the last try; volume teardown is in a dedicated always() step.
+        if [ "${COLLECT_COREDUMPS}" = "true" ]; then
+          echo "Cleaning /coredumps after all test tries"
+          sudo find /coredumps -mindepth 1 -delete || true
+        fi
 
         if [ $BUILD_FAILED = 0 ]; then
           echo "status=true" >> $GITHUB_OUTPUT
@@ -669,10 +827,47 @@ runs:
         cat $SUMMARY_LINKS | python3 -c 'import sys; print(" | ".join([v for _, v in sorted([l.strip().split(" ", 1) for l in sys.stdin], key=lambda a: (int(a[0]), a))]))' >> $GITHUB_STEP_SUMMARY
         echo "::endgroup::"
 
+    - name: Flush analytics JSONL
+      if: always()
+      continue-on-error: true
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      run: |
+        # In-job phases from this runner. Job/step timings come from
+        # collect_analytics_fast.yml after the run, not from here.
+        . .github/scripts/utils/analytics/github_actions/analytics.sh
+        conclusion="${{ job.status }}"
+        if [ -z "$conclusion" ]; then
+          conclusion=failure
+        fi
+        analytics send --conclusion "$conclusion"
+
     - name: show free space
       if: always()
       shell: bash
       run: df -h
+
+    - name: cleanup coredump volume
+      if: always()
+      shell: bash
+      env:
+        COLLECT_COREDUMPS: ${{ inputs.collect_coredumps != 'false' }}
+      run: |
+        if [ "${COLLECT_COREDUMPS}" != "true" ]; then
+          exit 0
+        fi
+        set -x
+        COREDUMP_MNT="${COREDUMP_MNT:-/coredumps}"
+        COREDUMP_IMG="${COREDUMP_IMG:-/var/lib/ydb-ci-coredumps.img}"
+
+        # No-op if volume was never created (collect disabled or setup failed early).
+        if mountpoint -q "$COREDUMP_MNT"; then
+          sudo find "$COREDUMP_MNT" -mindepth 1 -delete || true
+          sudo umount "$COREDUMP_MNT" || true
+        fi
+        sudo rm -f "$COREDUMP_IMG" || true
+        df -h / || true
 
     - name: build_stats
       shell: bash

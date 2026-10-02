@@ -220,9 +220,11 @@ TDatabasePtr TRoot::GetDatabase(const TDatabaseId& databaseId) const {
 NSnapshot::TRoot* TRoot::TakeSnapshot() {
     auto* newRoot = new NSnapshot::TRoot();
 
-    Counters.TotalLimit->Set(TotalLimit * 1'000'000);
+    const ui64 totalLimit = TotalLimit.load();
 
-    newRoot->TotalLimit = TotalLimit;
+    Counters.TotalLimit->Set(totalLimit * 1'000'000);
+
+    newRoot->TotalLimit = totalLimit;
     ForEachChild<TDatabase>([&](TDatabase* database, size_t) {
         newRoot->AddDatabase(NSnapshot::TDatabasePtr(database->TakeSnapshot()));
     });

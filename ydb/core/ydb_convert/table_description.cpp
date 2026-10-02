@@ -2491,7 +2491,15 @@ void FillTableStats(Ydb::Table::DescribeTableResult& out,
     }
 
     stats->set_rows_estimate(in.GetTableStats().GetRowCount());
-    stats->set_partitions(in.GetTableStats().GetPartCount());
+    if (in.GetTable().HasPartitionCount()) {
+        stats->set_partitions(in.GetTable().GetPartitionCount());
+    } else {
+        // Fallback for an older schemeshard. Semantically PartCount is the
+        // number of LSM parts, but at the table level schemeshard repurposed
+        // the aggregated value to hold the partition (shard) count, so it is
+        // the only compatible source here.
+        stats->set_partitions(in.GetTableStats().GetPartCount());
+    }
 
     stats->set_store_size(in.GetTableStats().GetDataSize() + in.GetTableStats().GetIndexSize());
     for (const auto& index : in.GetTable().GetTableIndexes()) {
@@ -3138,7 +3146,9 @@ bool FillSysViewDescription(Ydb::Table::DescribeSystemViewResult& out, const NKi
 
     const auto sysViewType = in.GetSysViewDescription().GetType();
     out.set_sys_view_id(sysViewType);
-    TString sysViewTypeName = NKikimrSysView::ESysViewType_Name(sysViewType).substr(1);
+    TString sysViewTypeName = NKikimrSysView::ESysViewType_IsValid(sysViewType)
+        ? NKikimrSysView::ESysViewType_Name(static_cast<NKikimrSysView::ESysViewType>(sysViewType)).substr(1)
+        : "UnknownType";
     NProtobufJson::ToSnakeCase(&sysViewTypeName);
     out.set_sys_view_name(std::move(sysViewTypeName));
 

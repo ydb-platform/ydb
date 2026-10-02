@@ -3300,6 +3300,22 @@ private:
         return TStatus::Ok;
     }
 
+    TStatus HandleKillSession(TKiKillSession node, TExprContext& ctx) override {
+        if (!EnsureWorldType(node.World().Ref(), ctx)
+            || !EnsureSpecificDataSink(node.DataSink().Ref(), KikimrProviderName, ctx)
+            || !EnsureSpecificDataType(node.SessionId().Ref(), EDataSlot::Utf8, ctx))
+        {
+            return TStatus::Error;
+        }
+        if (!node.SessionId().Maybe<TCoUtf8>() && !node.SessionId().Maybe<TCoParameter>()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.SessionId().Pos()),
+                "KILL SESSION expects a session identifier or an Utf8 parameter"));
+            return TStatus::Error;
+        }
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
         Y_UNUSED(ctx);
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
@@ -3508,10 +3524,17 @@ private:
     }
 
     virtual TStatus HandleAnalyze(NNodes::TKiAnalyzeTable node, TExprContext& ctx) override {
-        if (auto sampleRate = node.SampleRate(); sampleRate && !sampleRate.Maybe<TCoDouble>()) {
-            ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
-                "ANALYZE SAMPLE rate must evaluate to Double"));
-            return TStatus::Error;
+        if (auto sampleRate = node.SampleRate(); sampleRate) {
+            if (!sampleRate.Maybe<TCoDouble>()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE SAMPLE rate must evaluate to Double"));
+                return TStatus::Error;
+            }
+            if (!SessionCtx->Config().FeatureFlags.GetEnableAnalyzeSampling()) {
+                ctx.AddError(TIssue(ctx.GetPosition(sampleRate.Cast().Pos()),
+                    "ANALYZE sampling is disabled"));
+                return TStatus::Error;
+            }
         }
 
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()), TString(node.Table().Value()), node.Pos(), ctx);

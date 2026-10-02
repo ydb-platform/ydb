@@ -156,7 +156,7 @@ public:
     using TSubOperation::TSubOperation;
 
     THolder<TProposeResponse> Propose(const TString& owner,
-                                      TOperationContext& context) override {
+                                      TProposeContext& context) override {
         Y_UNUSED(owner);
         const auto ssId = context.SS->SelfTabletId();
         const TString& parentPathStr = Transaction.GetWorkingDir();
@@ -188,11 +188,7 @@ public:
         RETURN_RESULT_UNLESS(IsDescriptionValid(result, externalDataSourceDescription, context.SS->ExternalSourceFactory));
 
         const auto oldExternalDataSourceInfo = context.SS->ExternalDataSources.Value(dstPath->PathId, nullptr);
-        if (!oldExternalDataSourceInfo) {
-            result->SetError(NKikimrScheme::StatusPathDoesNotExist, TStringBuilder()
-                << "External data source info not found for path " << dstPath.PathString());
-            return result;
-        }
+        AFL_ENSURE(oldExternalDataSourceInfo)("path", dstPath.PathString())("path_id", dstPath->PathId);
         const TExternalDataSourceInfo::TPtr externalDataSourceInfo = NExternalDataSource::CreateExternalDataSource(
             externalDataSourceDescription,
             oldExternalDataSourceInfo->AlterVersion + 1
@@ -256,7 +252,7 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext& context) override {
+    void AbortPropose(TProposeContext& context) override {
         YDB_LOG_NOTICE_CTX(context.Ctx, "");
     }
 

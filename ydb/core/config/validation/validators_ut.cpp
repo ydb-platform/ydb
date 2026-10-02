@@ -664,6 +664,21 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         UNIT_ASSERT_EQUAL(res, EValidationResult::Error);
     }
 
+    Y_UNIT_TEST(ValidateConfigRejectsPathAliasChains) {
+        NKikimrConfig::TAppConfig config;
+        auto* first = config.MutableResourcePathPrefixMapping()->AddRules();
+        first->SetSrc("/alias");
+        first->SetDst("/local");
+        auto* second = config.MutableResourcePathPrefixMapping()->AddRules();
+        second->SetSrc("/local/nested");
+        second->SetDst("/other");
+        std::vector<TString> errors = {"prior validation warning"};
+        UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Error);
+        UNIT_ASSERT_VALUES_EQUAL(errors.size(), 1);
+        UNIT_ASSERT_STRING_CONTAINS(errors.front(), "resource_path_prefix_mapping rule 1");
+        UNIT_ASSERT_STRING_CONTAINS(errors.front(), "of rule 2");
+    }
+
     Y_UNIT_TEST(ValidateConfigGood) {
         NKikimrConfig::TAppConfig proposed;
         auto* domains = proposed.MutableDomainsConfig();
@@ -675,6 +690,21 @@ Y_UNIT_TEST_SUITE(StateStorageConfigValidation) {
         auto res = ValidateConfig(proposed, err);
         UNIT_ASSERT_VALUES_EQUAL(err.size(), 0);
         UNIT_ASSERT_EQUAL(res, EValidationResult::Ok);
+    }
+
+    Y_UNIT_TEST(ValidateConfigAcceptsIndependentPathAliases) {
+        NKikimrConfig::TAppConfig config;
+        auto* domains = config.MutableDomainsConfig();
+        domains->AddDomain()->AddSSId(1);
+        auto* ss = domains->AddStateStorage();
+        ss->SetSSId(1);
+        FillRing(ss->MutableRing());
+        auto* rule = config.MutableResourcePathPrefixMapping()->AddRules();
+        rule->SetSrc("/alias");
+        rule->SetDst("/local");
+        std::vector<TString> errors;
+        UNIT_ASSERT_EQUAL(ValidateConfig(config, errors), EValidationResult::Ok);
+        UNIT_ASSERT(errors.empty());
     }
 
     Y_UNIT_TEST(ValidateConfigExplicitGood) {

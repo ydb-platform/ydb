@@ -1,110 +1,170 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
-#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+
+#include <util/generic/scope.h>
 
 namespace NKikimr {
 namespace NKqp {
 
 namespace {
 
+// Local mode propagates over the whole plan, subplans included, in one pass.
+// Global mode analyzes each subplan on its first call from a needed definition;
+// the caller then demands the outer IDs the subplan captures.
 class TLogicalLiveness: public ILivenessContext {
 public:
-    explicit TLogicalLiveness(TPlanProps& props)
-        : Props(props) {
+    TLogicalLiveness(TPlanProps& props, ELivenessMode mode, bool pruneKeyColumns, EPruningScope scope)
+        : ILivenessContext(mode, scope)
+        , Props(props)
+        , PruneKeyColumns(pruneKeyColumns)
+    {
+        Y_ENSURE(pruneKeyColumns || IsGlobal(), "Key-preserving demand is a global pruning policy");
     }
 
     void Run(TOpRoot& root) {
-        for (const auto& iter : root) {
+        const TOpTraversal traversal(IterateSubtreeWithSubplans(&root, Props).begin());
+        for (const auto& iter : traversal) {
             iter.Current->Props.Analysis.LiveInByChild.reset();
             iter.Current->Props.Analysis.LiveOut.reset();
         }
 
-        TVector<TInfoUnit> rootColumns;
-        rootColumns.reserve(root.ColumnOrder.size());
-        for (const auto& column : root.ColumnOrder) {
-            rootColumns.emplace_back(column);
+        const auto& rootColumns = root.GetColumns().Unordered();
+        if (!IsGlobal()) {
+            Propagate(traversal, root, rootColumns);
+            return;
         }
 
-        AddLiveColumns(root.GetInput(), rootColumns);
-        SeedStageConnectionLiveness(root);
-        Propagate();
+        // Entries no longer referenced by the plan may retain analysis from
+        // a previous run. An engaged root LiveOut marks an evaluated call,
+        // including EXISTS with no demanded columns.
+        for (const auto& [id, subplan] : Props.Subplans) {
+            subplan.Plan->Props.Analysis.LiveOut.reset();
+        }
+        Y_ENSURE(AnalyzeScope(root, rootColumns).Empty(), "Unbound live captures in root plan");
     }
 
-    const TInfoUnitSet& GetLiveOut(IOperator* op) const override {
-        Y_ENSURE(op);
-        Y_ENSURE(
-            op->Props.Analysis.LiveOut.has_value(),
-            "Liveness requested for an operator without computed liveness, kind: " << static_cast<ui32>(op->Kind));
-        return *op->Props.Analysis.LiveOut;
+    const TUnorderedIUs& GetLiveOut(const IOperator* op) const override {
+        return NKikimr::NKqp::GetLiveOut(op);
     }
 
-    void AddLiveInput(IOperator* op, ui32 childIndex, const TInfoUnitSet& columns) override {
-        Y_ENSURE(op);
-        Y_ENSURE(childIndex < op->Children.size());
-
-        if (!op->Props.Analysis.LiveInByChild) {
-            op->Props.Analysis.LiveInByChild.emplace(op->Children.size());
-        }
-
-        auto& liveInByChild = *op->Props.Analysis.LiveInByChild;
-        Y_ENSURE(liveInByChild.size() == op->Children.size());
-
-        AddInfoUnits(liveInByChild[childIndex], columns);
-
-        AddLiveColumns(op->Children[childIndex], columns);
+    void AddLiveInput(IOperator* op, ui32 childIndex, const TUnorderedIUs& columns) override {
+        auto& child = *op->GetChild(childIndex);
+        Y_ENSURE(columns.IsSubsetOf(child.GetOutputIUs()), "Liveness references an unavailable input ID");
+        op->Props.Analysis.LiveInByChild->at(childIndex).UnionWith(columns);
+        child.Props.Analysis.LiveOut->UnionWith(columns);
     }
 
-    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) {
-        const bool firstVisit = !op->Props.Analysis.LiveOut;
-        bool changed = false;
-        if (firstVisit) {
-            op->Props.Analysis.LiveOut.emplace();
-        }
-        auto& live = *op->Props.Analysis.LiveOut;
-        for (const auto& column : columns) {
-            changed |= AddInfoUnit(live, column);
-        }
-        if (firstVisit || changed) {
-            Enqueue(op);
-        }
-        return firstVisit || changed;
-    }
-
-    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) {
-        const bool firstVisit = !op->Props.Analysis.LiveOut;
-        bool changed = false;
-        if (firstVisit) {
-            op->Props.Analysis.LiveOut.emplace();
-        }
-        auto& live = *op->Props.Analysis.LiveOut;
-        for (const auto& column : columns) {
-            changed |= AddInfoUnit(live, column);
-        }
-        if (firstVisit || changed) {
-            Enqueue(op);
-        }
-        return firstVisit || changed;
-    }
-
-    void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) override {
-        const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
-        AddInfoUnits(target, expression.GetInputIUs(false, true));
-
-        for (const auto& iu : expression.GetRawInputIUs()) {
-            const auto* subplanEntry = Props.Subplans.Find(iu);
-            if (!subplanEntry) {
-                continue;
+    void AddExpressionDeps(const TExpression& expr, TUnorderedIUs& target) override {
+        expr.BindPlanProps(&Props);
+        const auto& raw = expr.GetRawInputIUs();
+        const auto calls = Props.Subplans.CallsIn(raw);
+        if (!IsGlobal()) {
+            // Correlated deps are the callers' sources (DependentIUs), not the
+            // subplans' captured locals.
+            target.UnionWith(expr.GetInputIUs(false, true));
+            for (const auto call : calls) {
+                // EXISTS has no result, but its plan is still visited with empty
+                // demand: rows, predicates, grouping and retained definitions
+                // remain significant.
+                const auto& subplan = Props.Subplans.At(call);
+                if (subplan.ResultIU) {
+                    subplan.Plan->Props.Analysis.LiveOut->Add(*subplan.ResultIU);
+                }
             }
+            return;
+        }
 
-            auto subplan = CastOperator<IOperator>(subplanEntry->Plan);
-            AddLiveColumns(subplan, subplan->GetOutputIUs());
+        auto columns = raw;
+        columns.Subtract(calls);
+        target.UnionWith(columns);
+        for (const auto call : calls) {
+            const auto& subplan = Props.Subplans.At(call);
+            target.UnionWith(subplan.Tuple.Unordered());
+            target.UnionWith(AnalyzeSubplan(call, subplan));
+        }
+    }
+
+    void AddCaptureDeps(const TUnorderedIUs& outer) override {
+        if (IsGlobal()) {
+            OuterDemand->UnionWith(outer);
         }
     }
 
 private:
-    void SeedStageConnectionLiveness(TOpRoot& root) {
-        for (const auto& iter : root) {
+    // In a postorder of the plan DAG every operator follows its inputs and
+    // subplans precede their callers. Reversed, all consumers of an operator,
+    // including every Replicate port, run before it: one visit sees all demand.
+    void Propagate(const TOpTraversal& traversal, IOperator& root, const TUnorderedIUs& output) {
+        Initialize(traversal);
+        // A subplan root may itself be a Map/Read with protected keys.
+        root.Props.Analysis.LiveOut->UnionWith(output);
+        SeedStageConnectionLiveness(traversal);
+        for (auto it = traversal.rbegin(); it != traversal.rend(); ++it) {
+            it->Current->PropagateLiveness(*this);
+        }
+    }
+
+    void Initialize(const TOpTraversal& traversal) {
+        for (const auto& iter : traversal) {
+            auto& op = *iter.Current;
+            // Capture-free producers can be shared by different subplans.
+            // Their demands accumulate across scopes during this analysis run.
+            if (IsGlobal() && op.Props.Analysis.LiveOut) {
+                continue;
+            }
+            op.Props.Analysis.LiveInByChild.emplace(op.GetChildCount());
+            auto& live = op.Props.Analysis.LiveOut.emplace();
+            // Only Map/Read protect metadata keys.
+            // Seed before propagation so retained definitions keep their inputs.
+            if (!PruneKeyColumns && (op.Kind == EOperator::Map || op.Kind == EOperator::Source)) {
+                Y_ENSURE(op.Props.Metadata, "Key-preserving liveness requires metadata");
+                live = op.Props.Metadata->KeyColumns.Unordered();
+            }
+        }
+    }
+
+    // Global mode: returns the outer IDs a plan scope demands from its caller.
+    TUnorderedIUs AnalyzeScope(IOperator& root, const TUnorderedIUs& output) {
+        TUnorderedIUs outer;
+        auto* previous = OuterDemand;
+        OuterDemand = &outer;
+        Y_DEFER { OuterDemand = previous; };
+
+        // A call is analyzed before its caller's input, so live capture sources
+        // flow outward immediately. Each scope still needs only one DAG pass.
+        const TOpTraversal traversal(IterateSubtree(&root).begin());
+        Propagate(traversal, root, output);
+
+        for (const auto& iter : traversal) {
+            if (iter.Current->Kind == EOperator::DependentJoin) {
+                // Inlined correlations are supplied by a domain in this scope,
+                // not by its caller.
+                outer.Subtract(CastOperator<TOpDependentJoin>(*iter.Current).Dependencies);
+            }
+        }
+        return outer;
+    }
+
+    const TUnorderedIUs& AnalyzeSubplan(TInfoUnitId id, const TSubplanEntry& subplan) {
+        if (const auto* demand = SubplanDemand.Find(id)) {
+            Y_ENSURE(*demand, "Cyclic subplan reference");
+            return **demand;
+        }
+        SubplanDemand.Add(id, std::nullopt);
+        TUnorderedIUs output;
+        if (subplan.ResultIU) {
+            output.Add(*subplan.ResultIU);
+        }
+        auto outer = AnalyzeScope(*subplan.Plan, output);
+        // Nested calls can grow the cache; do not retain an iterator across them.
+        auto& result = SubplanDemand.At(id);
+        result.emplace(std::move(outer));
+        return *result;
+    }
+
+    void SeedStageConnectionLiveness(const TOpTraversal& traversal) {
+        for (const auto& iter : traversal) {
             const auto& parent = iter.Current;
-            for (const auto& child : parent->Children) {
+            for (auto* child : parent->GetChildren()) {
                 if (!parent->Props.StageId || !child->Props.StageId
                     || *parent->Props.StageId == *child->Props.StageId)
                 {
@@ -115,209 +175,133 @@ private:
                 const auto consumerStageId = static_cast<ui32>(*parent->Props.StageId);
                 const auto& connections = Props.StageGraph.GetConnections(producerStageId, consumerStageId);
 
-                TInfoUnitSet required;
                 for (const auto& connection : connections) {
-                    AddInfoUnits(required, connection->GetUsedIUs());
+                    // A Replicate port produces only its own stage output.
+                    if (child->Props.StageOutputIndex && connection->GetOutputIndex() != *child->Props.StageOutputIndex) {
+                        continue;
+                    }
+                    // Stage connections seed the producer's LiveOut directly.
+                    child->Props.Analysis.LiveOut->UnionWith(connection->GetUsedIUs());
                 }
-                if (required.empty()) {
-                    continue;
-                }
-
-                // Stage connections seed the producer's LiveOut directly.
-                AddLiveColumns(child, required);
             }
         }
     }
 
-    void Enqueue(const TIntrusivePtr<IOperator>& op) {
-        if (op && Queued.insert(op.get()).second) {
-            Queue.push_back(op);
-        }
-    }
-
-    void Propagate() {
-        for (size_t index = 0; index < Queue.size(); ++index) {
-            auto op = Queue[index];
-            Queued.erase(op.get());
-            op->PropagateLiveness(*this);
-        }
-        Queue.clear();
-    }
-
     TPlanProps& Props;
-    THashSet<IOperator*> Queued;
-    TVector<TIntrusivePtr<IOperator>> Queue;
+    const bool PruneKeyColumns;
+    TUnorderedIUs* OuterDemand = nullptr; // Borrowed from the active AnalyzeScope.
+    // Outer demand of each analyzed subplan; std::nullopt while in progress.
+    TMappedIUs<std::optional<TUnorderedIUs>> SubplanDemand;
 };
 
+// The live outputs of `op` that it passes through from the given child.
+TUnorderedIUs LivePassthrough(IOperator* op, ui32 childIndex, const ILivenessContext& ctx) {
+    auto live = ctx.GetLiveOut(op);
+    live.IntersectWith(op->GetChild(childIndex)->GetOutputIUs());
+    return live;
+}
+
 } // anonymous namespace
+
+bool ILivenessContext::PrunesDefinitionsOf(const IOperator* op) const {
+    return Scope == EPruningScope::AllDefinitions || op->Kind == EOperator::Map;
+}
 
 void IOperator::PropagateLiveness(ILivenessContext& ctx) {
     Y_UNUSED(ctx);
 }
 
 void IUnaryOperator::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
-    TInfoUnitSet inputLive;
-    for (const auto& iu : GetInput()->GetOutputIUs()) {
-        if (liveOut.contains(iu)) {
-            AddInfoUnit(inputLive, iu);
-        }
-    }
-    ctx.AddLiveInput(this, 0, inputLive);
+    ctx.AddLiveInput(this, 0, LivePassthrough(this, 0, ctx));
 }
 
 void TOpRead::PropagateLiveness(ILivenessContext& ctx) {
     Y_UNUSED(ctx);
 }
 
+void TOpReplicate::PropagateLiveness(ILivenessContext& ctx) {
+    ctx.AddLiveInput(this, 0, MapToInput(ctx.GetLiveOut(this)));
+}
+
 void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
-    auto input = GetInput();
-    TInfoUnitSet inputLive;
-    TInfoUnitSet renameSources;
-
-    for (const auto& mapElement : MapElements) {
-        if (mapElement.IsRename()) {
-            renameSources.insert(mapElement.GetRename());
-        }
-        // Keep dependencies of every current map expression live so local pruning
-        // cannot remove producer columns before the dead consumer expression is gone.
-        ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
-    }
-
-    for (const auto& iu : input->GetOutputIUs()) {
-        if (!renameSources.contains(iu) && liveOut.contains(iu)) {
-            AddInfoUnit(inputLive, iu);
+    auto inputLive = LivePassthrough(this, 0, ctx);
+    for (const auto& [output, element] : MapElements.Items()) {
+        if (ctx.NeedsDefinition(this, output)) {
+            ctx.AddExpressionDeps(element.GetExpression(), inputLive);
         }
     }
-
     ctx.AddLiveInput(this, 0, inputLive);
 }
 
+void TOpAddDependencies::PropagateLiveness(ILivenessContext& ctx) {
+    // Captures are never pruned: every captured outer source stays live
+    // while the subplan is evaluated.
+    ctx.AddCaptureDeps(Dependencies.MappedIUs());
+    IUnaryOperator::PropagateLiveness(ctx);
+}
+
 void TOpFilter::PropagateLiveness(ILivenessContext& ctx) {
-    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    auto inputLive = ctx.GetLiveOut(this);
     ctx.AddExpressionDeps(FilterExpr, inputLive);
     ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
-    const auto leftInput = GetLeftInput();
-    const auto rightInput = GetRightInput();
-    const auto leftOutput = MakeInfoUnitSet(leftInput->GetOutputIUs());
-    const auto rightOutput = MakeInfoUnitSet(rightInput->GetOutputIUs());
-
-    TInfoUnitSet leftLive;
-    TInfoUnitSet rightLive;
-
-    const bool outputsLeft = JoinOutputsLeft(JoinKind);
-    const bool outputsRight = JoinOutputsRight(JoinKind);
-
-    if (outputsLeft) {
-        for (const auto& iu : leftOutput) {
-            if (liveOut.contains(iu)) {
-                AddInfoUnit(leftLive, iu);
-            }
-        }
-    }
-
-    if (outputsRight) {
-        for (const auto& iu : rightOutput) {
-            if (liveOut.contains(iu)) {
-                AddInfoUnit(rightLive, iu);
-            }
-        }
-    }
-
-    for (const auto& joinKey : JoinKeys) {
-        const auto& leftKey = joinKey.Left;
-        const auto& rightKey = joinKey.Right;
-        AddInfoUnit(leftLive, leftKey);
-        AddInfoUnit(rightLive, rightKey);
-    }
-
+    auto required = ctx.GetLiveOut(this);
+    required.UnionWith(JoinKeys.Left());
+    required.UnionWith(JoinKeys.Right());
     for (const auto& filter : JoinFilters) {
-        TInfoUnitSet filterDeps;
-        ctx.AddExpressionDeps(filter, filterDeps);
-        for (const auto& iu : filterDeps) {
-            if (leftOutput.contains(iu)) {
-                AddInfoUnit(leftLive, iu);
-            }
-            if (rightOutput.contains(iu)) {
-                AddInfoUnit(rightLive, iu);
-            }
-        }
+        ctx.AddExpressionDeps(filter, required);
     }
+
+    auto leftLive = required;
+    leftLive.IntersectWith(GetLeftInput()->GetOutputIUs());
+    auto rightLive = std::move(required);
+    rightLive.IntersectWith(GetRightInput()->GetOutputIUs());
 
     ctx.AddLiveInput(this, 0, leftLive);
     ctx.AddLiveInput(this, 1, rightLive);
 }
 
 void TOpDependentJoin::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
-    const auto domainOutput = MakeInfoUnitSet(GetDomain()->GetOutputIUs());
-    const auto inputOutput = MakeInfoUnitSet(GetInput()->GetOutputIUs());
-
-    TInfoUnitSet domainLive;
-    TInfoUnitSet inputLive;
-
-    for (const auto& iu : liveOut) {
-        if (domainOutput.contains(iu)) {
-            AddInfoUnit(domainLive, iu);
-        }
-        if (inputOutput.contains(iu)) {
-            AddInfoUnit(inputLive, iu);
-        }
-    }
-
+    auto domainLive = LivePassthrough(this, 0, ctx);
     // Keep domain.
-    for (const auto& iu : Dependencies) {
-        AddInfoUnit(domainLive, iu);
-        if (inputOutput.contains(iu)) {
-            AddInfoUnit(inputLive, iu);
-        }
-    }
+    domainLive.UnionWith(GetDomainColumns());
+    // Captured locals belong to the body; domain IDs must not be injected into
+    // its requirements merely because the corresponding value is equal.
+    const auto inputLive = LivePassthrough(this, 1, ctx);
 
     ctx.AddLiveInput(this, 0, domainLive);
     ctx.AddLiveInput(this, 1, inputLive);
 }
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
-    const auto& liveOut = ctx.GetLiveOut(this);
-    TInfoUnitSet inputLive;
-    for (const auto& column : Columns) {
-        if (!liveOut.contains(column)) {
-            continue;
+    // Each retained row reads one input from every child.
+    TVector<TUnorderedIUs> inputLive(GetChildCount());
+    for (const auto& [output, row] : Columns.Items()) {
+        if (ctx.NeedsDefinition(this, output)) {
+            for (ui32 childIndex = 0; childIndex < GetChildCount(); ++childIndex) {
+                inputLive[childIndex].Add(row.Inputs[childIndex]);
+            }
         }
-        AddInfoUnit(inputLive, column);
     }
-
-    // The union must keep at least one column; TPruneDeadUnionAllColumnsRule
-    // retains the first declared column in the same case.
-    if (inputLive.empty() && !Columns.empty()) {
-        AddInfoUnit(inputLive, Columns.front());
-    }
-
-    // Every input of the union sees the same set of live columns.
-    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
-        ctx.AddLiveInput(this, childIndex, inputLive);
+    for (ui32 childIndex = 0; childIndex < GetChildCount(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, inputLive[childIndex]);
     }
 }
 
 void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {
-    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    auto inputLive = ctx.GetLiveOut(this);
     ctx.AddExpressionDeps(LimitCond, inputLive);
-    if (auto offsetCond = GetOffsetCond()) {
-        ctx.AddExpressionDeps(*offsetCond, inputLive);
+    if (OffsetCond) {
+        ctx.AddExpressionDeps(*OffsetCond, inputLive);
     }
     ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
-    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
-    for (const auto& sortElement : SortElements) {
-        AddInfoUnit(inputLive, sortElement.SortColumn);
-    }
+    auto inputLive = ctx.GetLiveOut(this);
+    inputLive.UnionWith(SortElements.Unordered());
     if (LimitCond) {
         ctx.AddExpressionDeps(*LimitCond, inputLive);
     }
@@ -325,73 +309,84 @@ void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
 }
 
 void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
-    TInfoUnitSet inputLive;
-    AddInfoUnits(inputLive, LookupKeys);
+    TUnorderedIUs inputLive = LookupKeys.Unordered();
     if (Prefix) {
         // The prefix equalities are checked on the left row before the lookup.
-        for (const auto& [column, iu] : Prefix->Equalities) {
-            Y_UNUSED(column);
-            AddInfoUnit(inputLive, iu);
-        }
+        inputLive.UnionWith(Prefix->Equalities.Unordered());
     }
     if (IsJoin()) {
-        const auto& liveOut = ctx.GetLiveOut(this);
-        for (const auto& iu : GetInput()->GetOutputIUs()) {
-            if (liveOut.contains(iu)) {
-                AddInfoUnit(inputLive, iu);
-            }
-        }
-        for (const auto& joinKey : ResidualJoinKeys) {
-            const auto& leftKey = joinKey.Left;
-            const auto& rightKey = joinKey.Right;
-            Y_UNUSED(rightKey);
-            AddInfoUnit(inputLive, leftKey);
+        inputLive.UnionWith(LivePassthrough(this, 0, ctx));
+        inputLive.UnionWith(ResidualJoinKeys.Left());
+    }
+    if (FetchedRowFilter) {
+        // The filter also reads fetched columns, which are not inputs.
+        TUnorderedIUs filterDeps;
+        ctx.AddExpressionDeps(*FetchedRowFilter, filterDeps);
+        filterDeps.IntersectWith(GetInput()->GetOutputIUs());
+        inputLive.UnionWith(filterDeps);
+    }
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpIndexLookupJoin::PropagateLiveness(ILivenessContext& ctx) {
+    auto inputLive = ctx.GetLiveOut(this);
+    inputLive.UnionWith(JoinKeys.Left());
+    inputLive.UnionWith(JoinKeys.Right());
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
+    TUnorderedIUs inputLive = KeyColumns.Unordered();
+    for (const auto& [output, traits] : Aggregations.Items()) {
+        // A DistinctAll never loses aggregations; see PruneOutputs.
+        if (IsDistinctAll() || ctx.NeedsDefinition(this, output)) {
+            inputLive.Add(traits.Input);
         }
     }
     ctx.AddLiveInput(this, 0, inputLive);
 }
 
-void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
-    TInfoUnitSet inputLive;
-    AddInfoUnits(inputLive, KeyColumns);
-    for (const auto& traits : AggregationTraitsList) {
-        AddInfoUnit(inputLive, traits.OriginalColName);
+void TOpGroupingSets::PropagateLiveness(ILivenessContext& ctx) {
+    TUnorderedIUs inputLive;
+    for (const auto& [output, input] : Columns.Items()) {
+        if (ctx.NeedsDefinition(this, output)) {
+            inputLive.Add(input);
+        }
+    }
+    for (const auto& [output, input] : GroupingIndicators.Items()) {
+        if (ctx.NeedsDefinition(this, output)) {
+            inputLive.Add(input);
+        }
     }
     ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpWindow::PropagateLiveness(ILivenessContext& ctx) {
-    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
-    for (const auto& func : WindowFuncs) {
-        inputLive.erase(func.ResultColName);
-    }
-    AddInfoUnits(inputLive, PartitionKeys);
-    for (const auto& sortElement : SortElements) {
-        AddInfoUnit(inputLive, sortElement.SortColumn);
-    }
-    for (const auto& func : WindowFuncs) {
-        AddInfoUnits(inputLive, func.Arguments);
-    }
+    // Window functions are never pruned, so every function keeps its inputs
+    // live in both modes.
+    auto inputLive = LivePassthrough(this, 0, ctx);
+    inputLive.UnionWith(PartitionKeys.Unordered());
+    inputLive.UnionWith(SortElements.Unordered());
+    inputLive.UnionWith(WindowFuncs.MappedIUs());
     ctx.AddLiveInput(this, 0, inputLive);
 }
 
 void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
-    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
-        ctx.AddLiveInput(this, childIndex, MakeInfoUnitSet(Children[childIndex]->GetOutputIUs()));
+    // CBO's packed tree is opaque to this analysis: all boundary columns stay live.
+    for (ui32 childIndex = 0; childIndex < GetChildCount(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, GetChild(childIndex)->GetOutputIUs());
     }
 }
 
 void TOpTableEffect::PropagateLiveness(ILivenessContext& ctx) {
-    TInfoUnitSet inputLive;
-    AddInfoUnits(inputLive, UsedIUs);
-    ctx.AddLiveInput(this, 0, inputLive);
+    ctx.AddLiveInput(this, 0, GetColumns().Unordered());
 }
 
-void ComputePlanLiveness(TOpRoot& root) {
-    TLogicalLiveness(root.PlanProps).Run(root);
+void ComputePlanLiveness(TOpRoot& root, ELivenessMode mode, bool pruneKeyColumns, EPruningScope scope) {
+    TLogicalLiveness(root.PlanProps, mode, pruneKeyColumns, scope).Run(root);
 }
 
-const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex) {
+const TUnorderedIUs& GetLiveIn(const IOperator* op, ui32 childIndex) {
     Y_ENSURE(op);
     Y_ENSURE(
         op->Props.Analysis.LiveInByChild.has_value(),
@@ -401,7 +396,7 @@ const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex) {
     return liveInByChild[childIndex];
 }
 
-const TInfoUnitSet& GetLiveOut(IOperator* op) {
+const TUnorderedIUs& GetLiveOut(const IOperator* op) {
     Y_ENSURE(op);
     Y_ENSURE(
         op->Props.Analysis.LiveOut.has_value(),

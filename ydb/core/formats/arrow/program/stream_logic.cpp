@@ -77,10 +77,10 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             if (result.IsFail()) {
                 return result;
             }
-            auto datum = result.DetachResult();
+            const auto accessor = result.DetachResult().GetAccessorVerified();
             context.MutableResources().Remove(GetOutputColumnIdOnce());
-            context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), datum);
-            if (IsFinishDatum(datum)) {
+            context.MutableResources().AddVerified(GetOutputColumnIdOnce(), accessor, false);
+            if (IsFinishAccessor(accessor)) {
                 return true;
             }
         }
@@ -161,7 +161,7 @@ NJson::TJsonValue TStreamLogicProcessor::DoDebugJson() const {
     return result;
 }
 
-bool TStreamLogicProcessor::IsFinishDatum(const arrow::Datum& datum) const {
+bool TStreamLogicProcessor::IsFinishAccessor(const std::shared_ptr<IChunkedArray>& accessor) const {
     const auto arrChecker = [&](const arrow::Array& arr) {
         AFL_VERIFY(arr.type()->id() == arrow::uint8()->id());
         const arrow::UInt8Array& ui8Arr = static_cast<const arrow::UInt8Array&>(arr);
@@ -183,22 +183,13 @@ bool TStreamLogicProcessor::IsFinishDatum(const arrow::Datum& datum) const {
         }
         return true;
     };
-    if (datum.is_array()) {
-        auto arr = datum.make_array();
-        return arrChecker(*arr);
-    } else if (datum.is_arraylike()) {
-        auto arr = datum.chunked_array();
-        AFL_VERIFY(arr->type()->id() == arrow::uint8()->id());
-        for (auto&& chunk : arr->chunks()) {
-            if (!arrChecker(*chunk)) {
-                return false;
-            }
+    bool result = true;
+    accessor->VisitValues([&](const std::shared_ptr<arrow::Array>& array) {
+        if (!arrChecker(*array)) {
+            result = false;
         }
-        return true;
-    } else {
-        AFL_VERIFY(false)("kind", (ui32)datum.kind());
-        return false;
-    }
+    });
+    return result;
 }
 
 TConclusion<std::optional<bool>> TStreamLogicProcessor::GetMonoInput(const std::shared_ptr<IChunkedArray>& inputArray) const {

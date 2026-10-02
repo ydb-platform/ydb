@@ -59,8 +59,6 @@ Y_UNIT_TEST_TWIN(AnalyzeScansWithNewRboWithoutFallback, PerShard) {
         }
     });
     const auto failedBefore = FailedNewRboCompilations(runtime);
-    // Exercise generated scans with fallback disabled. Persistence uses a
-    // separate query that still needs the normal optimizer fallback.
     TAnalyzeActor::TConfig config;
     config.ColumnTableWholeTableScanMaxBytes = PerShard ? 0 : (1ULL << 30);
     config.TableBytesSize = 1; // The fixture fits in the whole-table threshold.
@@ -189,9 +187,10 @@ Y_UNIT_TEST_TWIN(AnalyzeOptimizerCache, AnalyzeFirst) {
 
 Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     TTestEnv env(1, 1, true, [](Tests::TServerSettings& settings) {
+        settings.AppConfig->MutableStatisticsConfig()->SetAnalyzeCollectPrimaryKeyHistogram(true);
         auto* tableService = settings.AppConfig->MutableTableServiceConfig();
         tableService->SetEnableNewRBO(true);
-        tableService->SetEnableFallbackToYqlOptimizer(true);
+        tableService->SetEnableFallbackToYqlOptimizer(false);
     });
 
     CreateDatabase(env, "Database");
@@ -243,8 +242,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
         Sprintf(R"(ANALYZE `Root/%s/%s`)", "Database", "Table")
     ).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-    // Statistics-save queries retain the normal new-RBO fallback path.
-    UNIT_ASSERT_GT(FailedNewRboCompilations(runtime), failedBefore);
+    UNIT_ASSERT_VALUES_EQUAL(FailedNewRboCompilations(runtime), failedBefore);
 
     ui64 saTabletId;
     auto pathId = ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
@@ -252,6 +250,7 @@ Y_UNIT_TEST_TWIN(AnalyzeTable, ColumnStore) {
     CheckCountMinSketch(runtime, pathId, {
         {.Tag = 2, .Probes = {{{"Hello,world!", 1500}}}},
     });
+    CheckEqHeightHistogram(runtime, pathId, {1}, 1500, 1);
 }
 
 Y_UNIT_TEST_TWIN(AnalyzeServerlessTable, ColumnStore) {
@@ -439,6 +438,24 @@ Y_UNIT_TEST(AnalyzeSamplingRequiresColumnTable) {
     UNIT_ASSERT(!result.IsSuccess());
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ANALYZE SAMPLE is supported only for column tables");
     const auto full = execute("ANALYZE `Root/Database/Table` SAMPLE 1;");
+    UNIT_ASSERT_C(full.IsSuccess(), full.GetIssues().ToString());
+}
+
+Y_UNIT_TEST(AnalyzeSamplingDisabled) {
+    TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+        settings.FeatureFlags.SetEnableAnalyzeSampling(false);
+    });
+    CreateDatabase(env, "Database");
+    CreateEmptyTable(env, "Database", "Table", true);
+    TTableClient client(env.GetDriver());
+    auto session = env.RunInThreadPool([&] { return client.CreateSession().GetValueSync().GetSession(); });
+    const auto execute = [&](const TString& query) {
+        return env.RunInThreadPool([&] { return session.ExecuteSchemeQuery(query).GetValueSync(); });
+    };
+    const auto sampled = execute("ANALYZE `Root/Database/Table` SAMPLE 0.5;");
+    UNIT_ASSERT(!sampled.IsSuccess());
+    UNIT_ASSERT_STRING_CONTAINS(sampled.GetIssues().ToString(), "ANALYZE sampling is disabled");
+    const auto full = execute("ANALYZE `Root/Database/Table`;");
     UNIT_ASSERT_C(full.IsSuccess(), full.GetIssues().ToString());
 }
 

@@ -32,7 +32,6 @@ ENDIF()
     )
     DATA(
         arcadia/yql/essentials/tests/sql/suites
-        arcadia/yql/essentials/mount
         arcadia/yql/essentials/cfg/tests
     )
     PEERDIR(

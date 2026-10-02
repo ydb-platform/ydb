@@ -99,16 +99,16 @@
     ],
     "test.test[File-FilePath-default.txt-Debug]": [
         {
-            "checksum": "34ed38805bea73f4c1097aa84874ae05",
-            "size": 123,
-            "uri": "https://{canondata_backend}/1599023/61a5454a6ceb642e6cea12d84ee4fe3a648ff15e/resource.tar.gz#test.test_File-FilePath-default.txt-Debug_/opt.yql"
+            "checksum": "d9a984e4e62e3e9719dca89580d83ab0",
+            "size": 215,
+            "uri": "https://{canondata_backend}/1923547/a205063e035ce2e63671d6219702bdc9045b7513/resource.tar.gz#test.test_File-FilePath-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[File-FilePath-default.txt-Results]": [
         {
-            "checksum": "ecbcc1d6719333bb4260332482b8841c",
-            "size": 110,
-            "uri": "https://{canondata_backend}/1599023/61a5454a6ceb642e6cea12d84ee4fe3a648ff15e/resource.tar.gz#test.test_File-FilePath-default.txt-Results_/results.txt"
+            "checksum": "82d46f961a4cc3a73ff9984ef9638592",
+            "size": 171,
+            "uri": "https://{canondata_backend}/1923547/a205063e035ce2e63671d6219702bdc9045b7513/resource.tar.gz#test.test_File-FilePath-default.txt-Results_/results.txt"
         }
     ],
     "test.test[File-RootFiles-default.txt-Debug]": [
@@ -431,6 +431,20 @@
             "checksum": "34166dfa989759d49040ab61eaba7fa9",
             "size": 1750,
             "uri": "https://{canondata_backend}/1937367/d830b2d1fda4887e670f554aae360552aab48da2/resource.tar.gz#test.test_Optimizers-SkipWhileOverLiterals-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[Pure-NestedWorldDependencies-default.txt-Debug]": [
+        {
+            "checksum": "bfee180b6ac0ac1701b0ff7ee5df0326",
+            "size": 202,
+            "uri": "https://{canondata_backend}/1924537/dcb493b79d354dc9d6ce5e81ecf78cd6c426997d/resource.tar.gz#test.test_Pure-NestedWorldDependencies-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Pure-NestedWorldDependencies-default.txt-Results]": [
+        {
+            "checksum": "58f03f10ba8907d9c996b1b6910cb630",
+            "size": 481,
+            "uri": "https://{canondata_backend}/1924537/dcb493b79d354dc9d6ce5e81ecf78cd6c426997d/resource.tar.gz#test.test_Pure-NestedWorldDependencies-default.txt-Results_/results.txt"
         }
     ]
 }

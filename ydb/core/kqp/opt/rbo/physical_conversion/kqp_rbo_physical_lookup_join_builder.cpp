@@ -8,6 +8,24 @@ using namespace NKikimr::NKqp;
 
 namespace {
 
+template <class TTransform>
+TExprNode::TPtr TransformInputStage(TExprNode::TPtr input, TTransform&& transform, const IOperator& producer, TExprContext& ctx) {
+    // Special case for row tables.
+    if (TDqPhyStage::Match(input.Get())) {
+        const auto program = TDqPhyStage(input).Program().Ptr();
+        return ctx.ChangeChild(*input, TDqPhyStage::idx_Program, ctx.ChangeChild(*program, 1,
+            TransformInputStage(program->TailPtr(), transform, producer, ctx)));
+    }
+    if (producer.Kind == EOperator::Replicate && input->IsCallable("Switch")) {
+        Y_ENSURE(producer.Props.StageOutputIndex);
+        // Switch(input, buffer, [input indexes], lambda, ...).
+        const auto index = 3 + 2 * *producer.Props.StageOutputIndex;
+        const auto branch = input->ChildPtr(index);
+        return ctx.ChangeChild(*input, index, ctx.ChangeChild(*branch, 1, transform(branch->TailPtr())));
+    }
+    return transform(input);
+}
+
 TCoNameValueTuple BuildMemberTuple(const TString& name, const TString& sourceName, const TExprBase& row, TExprContext& ctx,
                                    TPositionHandle pos) {
     // clang-format off
@@ -39,40 +57,50 @@ TExprBase BuildOptionalIf(const TExprBase& predicate, const TExprBase& value, TE
 
 namespace NKikimr::NKqp::NLookupJoinBuilder {
 
-// This function builds a lookup keys, to lookup to the right side of the join.
-TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputStage, TExprContext& ctx) {
-    Y_ENSURE(lookup.IsJoin(), "Lookup keys are only built for a table lookup in join mode");
-    Y_ENSURE(lookup.LookupKeys.size() == lookup.LookupKeyColumns.size());
-
+// Translate an upstream IU row to the storage lookup-key contract. Join mode
+// additionally preserves the left payload and optional-prefix behavior.
+TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputStage, TExprContext& ctx, const TPhysicalNames& names) {
     auto& input = *lookup.GetInput();
     const auto pos = lookup.Pos;
+    if (!lookup.IsJoin()) {
+        TVector<std::pair<TString, TString>> columns;
+        TVector<const TItemExprType*> types;
+        for (const auto& [id, column] : lookup.LookupKeys.Items()) {
+            columns.emplace_back(names.Get(id), column);
+            types.push_back(ctx.MakeType<TItemExprType>(column, input.GetIUType(id, ctx)));
+        }
+        auto stage = TransformInputStage(inputStage, [&](TExprNode::TPtr body) {
+            return NPhysicalConvertionUtils::BuildRenameMap(body, columns, ctx);
+        }, input, ctx);
+        auto type = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(types));
+        return {std::move(stage), NYql::ExpandType(pos, *type, ctx)};
+    }
+
     const auto row = Build<TCoArgument>(ctx, pos).Name("lookup_join_left_row").Done();
 
     const auto& liveOut = GetLiveOut(&lookup);
     TVector<TExprBase> leftMembers;
     TVector<const TItemExprType*> leftItems;
     THashSet<TString> addedNames;
-    auto addLeftMember = [&](const TInfoUnit& iu) {
-        const auto name = iu.GetFullName();
+    auto addLeftMember = [&](TInfoUnitId iu) {
+        const auto name = names.Get(iu);
         if (!addedNames.insert(name).second) {
             return;
         }
 
-        auto type = input.GetIUType(iu);
-        Y_ENSURE(type, "Type of the lookup join input column " << iu.GetFullName() << " is not available");
+        auto type = input.GetIUType(iu, ctx);
+        Y_ENSURE(type, "Type of the lookup join input column " << names.Get(iu) << " is not available");
         leftMembers.push_back(BuildMemberTuple(name, name, row, ctx, pos));
         leftItems.push_back(ctx.MakeType<TItemExprType>(name, type));
     };
 
     for (const auto& iu : input.GetOutputIUs()) {
-        if (liveOut.contains(iu)) {
+        if (liveOut.Contains(iu)) {
             addLeftMember(iu);
         }
     }
 
-    for (const auto& joinKey : lookup.ResidualJoinKeys) {
-        const auto& leftKey = joinKey.Left;
-        const auto& rightKey = joinKey.Right;
+    for (const auto& [leftKey, rightKey, equalNulls] : lookup.ResidualJoinKeys.Items()) {
         Y_UNUSED(rightKey);
         addLeftMember(leftKey);
     }
@@ -94,7 +122,7 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         // Does we need to filter every left side prefix column with constant point?
         // We can just lookup by this constant point instead.
         // Keeping this for now, but it looks like we can optimize it out.
-        for (const auto& [column, key] : lookup.Prefix->Equalities) {
+        for (const auto& [key, column] : lookup.Prefix->Equalities.Items()) {
             // clang-format off
             equalities.push_back(Build<TCoCmpEqual>(ctx, pos)
                 .Left<TCoMember>()
@@ -103,19 +131,17 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
                 .Build()
                 .Right<TCoMember>()
                     .Struct(row)
-                    .Name().Build(key.GetFullName())
+                    .Name().Build(names.Get(key))
                 .Build()
             .Done());
             // clang-format on
         }
     }
 
-    for (size_t i = 0; i < lookup.LookupKeys.size(); ++i) {
-        const auto& key = lookup.LookupKeys[i];
-        const auto& column = lookup.LookupKeyColumns[i];
-        auto type = input.GetIUType(key);
-        Y_ENSURE(type, "Type of the lookup join key " << key.GetFullName() << " is not available");
-        keyMembers.push_back(BuildMemberTuple(column, key.GetFullName(), row, ctx, pos));
+    for (const auto& [key, column] : lookup.LookupKeys.Items()) {
+        auto type = input.GetIUType(key, ctx);
+        Y_ENSURE(type, "Type of the lookup join key " << names.Get(key) << " is not available");
+        keyMembers.push_back(BuildMemberTuple(column, names.Get(key), row, ctx, pos));
         keyItems.push_back(ctx.MakeType<TItemExprType>(column, type));
     }
 
@@ -195,22 +221,7 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
         // clang-format on
     };
 
-    TExprNode::TPtr newInputStage;
-    // Special case for row tables.
-    if (TDqPhyStage::Match(inputStage.Get())) {
-        const auto stage = TDqPhyStage(inputStage);
-        // clang-format off
-        newInputStage = Build<TDqPhyStage>(ctx, inputStage->Pos())
-            .InitFrom(stage)
-            .Program<TCoLambda>()
-                .Args(stage.Program().Args())
-                .Body(buildKeys(stage.Program().Body().Ptr()))
-            .Build()
-        .Done().Ptr();
-        // clang-format on
-    } else {
-        newInputStage = buildKeys(inputStage);
-    }
+    const auto newInputStage = TransformInputStage(inputStage, buildKeys, input, ctx);
 
     // Tuple: (left row, lookup key).
     const TTypeAnnotationNode::TListType tupleItems{
@@ -229,14 +240,12 @@ TLookupKeysResult BuildLookupKeys(TOpTableLookup& lookup, TExprNode::TPtr inputS
 
 TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::BuildRenamedRow(const TExprBase& fetchedRow, const TOpTableLookup& lookup,
                                                                 bool& needsRename) const {
-    Y_ENSURE(lookup.FetchColumns.size() == lookup.OutputIUs.size());
-
     const auto row = Build<TCoArgument>(Ctx, Pos).Name("lookup_join_right_row").Done();
     TVector<TExprBase> members;
     needsRename = false;
-    for (size_t i = 0; i < lookup.FetchColumns.size(); ++i) {
-        const auto& column = lookup.FetchColumns[i];
-        const auto name = lookup.OutputIUs[i].GetFullName();
+    for (const auto id : lookup.GetColumns()) {
+        const auto column = Registry.Get(id).GetColumnName();
+        const auto& name = Names.Get(id);
         needsRename = needsRename || name != column;
         members.push_back(BuildMemberTuple(name, column, row, Ctx, Pos));
     }
@@ -271,20 +280,24 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
     auto processedRow = TExprBase(BuildRenamedRow(fetchedRow, lookup, needsRename));
 
     if (lookup.FetchedRowFilter) {
-        const auto lambda = TCoLambda(Ctx.DeepCopyLambda(*lookup.FetchedRowFilter->GetLambda()));
-        const auto row = lambda.Args().Arg(0);
+        const auto row = Build<TCoArgument>(Ctx, Pos).Name("fetched_row").Done();
+        TMappedIUs<TExprNode::TPtr> fields;
+        for (const auto id : lookup.FetchedRowFilter->GetRawInputIUs()) {
+            fields.Add(id, Build<TCoMember>(Ctx, Pos).Struct(row).Name().Build(Names.Get(id)).Done().Ptr());
+        }
+        const auto predicate = TExprBase(NPhysicalConvertionUtils::LowerRowLambdaBody(lookup.FetchedRowFilter->Node, fields, Ctx));
         // clang-format off
         processedRow = Build<TCoFlatMap>(Ctx, Pos)
             .Input(processedRow)
             .Lambda()
                 .Args({row})
-                .Body(BuildOptionalIf(lambda.Body(), row, Ctx, Pos))
+                .Body(BuildOptionalIf(predicate, row, Ctx, Pos))
             .Build()
         .Done();
         // clang-format on
     }
 
-    if (!lookup.ResidualJoinKeys.empty()) {
+    if (!lookup.ResidualJoinKeys.Items().empty()) {
         // clang-format off
         const auto leftRow = Build<TCoNth>(Ctx, Pos)
             .Tuple(pair)
@@ -297,18 +310,16 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
 
         // The join keys which are not present in the right side index.
         // We have to evaluate them before apply index lookup join.
-        for (const auto& joinKey : lookup.ResidualJoinKeys) {
-            const auto& leftKey = joinKey.Left;
-            const auto& rightKey = joinKey.Right;
+        for (const auto& [leftKey, rightKey, equalNulls] : lookup.ResidualJoinKeys.Items()) {
             // clang-format off
             equalities.push_back(Build<TCoCmpEqual>(Ctx, Pos)
                 .Left<TCoMember>()
                     .Struct(leftRow)
-                    .Name<TCoAtom>().Build(leftKey.GetFullName())
+                    .Name<TCoAtom>().Build(Names.Get(leftKey))
                     .Build()
                 .Right<TCoMember>()
                     .Struct(rightArg)
-                    .Name<TCoAtom>().Build(rightKey.GetFullName())
+                    .Name<TCoAtom>().Build(Names.Get(rightKey))
                     .Build()
             .Done());
             // clang-format on
@@ -331,7 +342,7 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
         // clang-format on
     }
 
-    if (!lookup.FetchedRowFilter && lookup.ResidualJoinKeys.empty() && !needsRename) {
+    if (!lookup.FetchedRowFilter && lookup.ResidualJoinKeys.Items().empty() && !needsRename) {
         return input;
     }
 
@@ -358,24 +369,24 @@ TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::ProcessFetchedRows(TExprNode::T
 }
 
 TExprNode::TPtr TPhysicalIndexLookupJoinBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto lookup = LookupJoin->GetTableLookup();
+    const auto& lookup = LookupJoin.GetTableLookup();
 
     input = Build<TCoToStream>(Ctx, Pos).Input(input).Done().Ptr();
-    input = ProcessFetchedRows(input, *lookup);
+    input = ProcessFetchedRows(input, lookup);
 
     // clang-format off
     input = Build<TKqpIndexLookupJoin>(Ctx, Pos)
         .Input(input)
-        .JoinType().Build(LookupJoin->JoinKind)
+        .JoinType().Build(LookupJoin.JoinKind)
         // TODO: If needed we can also propagate labels.
         .LeftLabel().Build("")
         .RightLabel().Build("")
     .Done().Ptr();
     // clang-format on
 
-    const auto liveOutputs = NPhysicalConvertionUtils::GetLiveOutputIUs(*LookupJoin);
-    if (liveOutputs.size() != LookupJoin->GetOutputIUs().size()) {
-        input = NPhysicalConvertionUtils::ExtractMembers(input, Ctx, liveOutputs);
+    const auto liveOutputs = NPhysicalConvertionUtils::GetLiveOutputIUs(LookupJoin);
+    if (liveOutputs.size() != LookupJoin.GetOutputIUs().Size()) {
+        input = NPhysicalConvertionUtils::ExtractMembers(input, Ctx, liveOutputs, Names);
     }
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical index lookup join] " << KqpExprToPrettyString(TExprBase(input), Ctx);

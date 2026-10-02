@@ -3376,7 +3376,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         break;
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
-        GcLogic->Confirm(ctx);
+        GcLogic->Confirm(ctx, Launcher);
 
         VacuumLogic->OnSnapshotCommited(Generation(), step);
         if (NeedLogSnapshot || VacuumLogic->NeedLogSnaphot())
@@ -3427,7 +3427,7 @@ void TExecutor::Handle(TEvTablet::TEvSnapshotConfirmed::TPtr &ev, const TActorCo
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
     // GC completion may send the pending hard barriers; replies must come here.
-    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, SelfCtx(), Launcher)) {
+    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, SelfCtx())) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
     VacuumLogic->OnCollectedGarbage(OwnerCtx());

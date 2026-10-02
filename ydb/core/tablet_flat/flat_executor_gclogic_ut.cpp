@@ -127,6 +127,7 @@ struct THistoryCutEnv {
                 return TTestActorRuntime::EEventAction::DROP;
             }
             if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                UNIT_ASSERT_VALUES_EQUAL(ev->Recipient, Edge);
                 const auto& record = ev->Get<TEvTablet::TEvCutTabletHistory>()->Record;
                 UNIT_ASSERT_VALUES_EQUAL(record.GetTabletID(), TabletId);
                 UNIT_ASSERT_VALUES_EQUAL(record.GetChannel(), Channel);
@@ -147,7 +148,7 @@ struct THistoryCutEnv {
         Logic->SnapToLog(snap, ++Step);
         Execute([&](const TActorContext& ctx) {
             Logic->OnCommitLog(Step, Step, ctx);
-            Logic->Confirm(ctx);
+            Logic->Confirm(ctx, Edge);
         });
     }
 
@@ -159,7 +160,7 @@ struct THistoryCutEnv {
                 new TEvBlobStorage::TEvCollectGarbageResult(status, TabletId, Generation,
                     request.Counter, request.Channel)));
             auto result = IEventHandle::Downcast<TEvBlobStorage::TEvCollectGarbageResult>(std::move(handle));
-            retry = Logic->OnCollectGarbageResult(result, ctx, Edge);
+            retry = Logic->OnCollectGarbageResult(result, ctx);
         });
         return retry;
     }
@@ -299,19 +300,13 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorGC) {
 
 
 Y_UNIT_TEST_SUITE(THistoryCutter) {
-    Y_UNIT_TEST(UnusedChannelsWithUnprovenOwnershipAreNotCollected) {
-        for (const auto type : {TTabletTypes::KeyValue, TTabletTypes::ColumnShard,
-                TTabletTypes::BlobDepot, TTabletTypes::Dummy, TTabletTypes::Coordinator}) {
-            THistoryCutEnv env(type, false);
-            env.Snapshot();
-            env.Snapshot();
-            UNIT_ASSERT_C(env.Collects.empty(), "executor must not collect unowned channels");
-            UNIT_ASSERT_C(env.Cuts.empty(), "executor must not cut unowned channel history");
-        }
-    }
-
-    Y_UNIT_TEST(ExecutorOwnedKeyValueChannelIsCollected) {
+    Y_UNIT_TEST(UndelegatedChannelsRequireExecutorGcEvidence) {
         THistoryCutEnv env(TTabletTypes::KeyValue, false);
+        env.Snapshot();
+        env.Snapshot();
+        UNIT_ASSERT_C(env.Collects.empty(), "executor must not collect unowned channels");
+        UNIT_ASSERT_C(env.Cuts.empty(), "executor must not cut unowned channel history");
+
         TGCBlobDelta delta;
         delta.Created.push_back(HistoryCutterUtBlob(THistoryCutEnv::TabletId, 15, 1));
         TGCLogEntry entry(TGCTime(15, 0), delta);
@@ -353,42 +348,9 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         env.CheckCut();
     }
 
-    Y_UNIT_TEST(HardBarrierWithoutSoftGcCompletesCut) {
-        THistoryCutEnv env;
-        env.RestoreBarrier();
-        // Delegation during activation must preserve the recovered barrier.
-        env.Logic->InitializeChannel(THistoryCutEnv::Channel);
-        env.Snapshot();
-        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 1);
-        env.CheckHardBarrier(0);
-        UNIT_ASSERT(env.Cuts.empty());
-        env.Reply(0);
-        env.CheckCut();
-    }
-
-    Y_UNIT_TEST(UsedChannelWaitsForCollectionBeforeCut) {
-        THistoryCutEnv env;
-        TGCBlobDelta delta;
-        delta.Created.push_back(HistoryCutterUtBlob(THistoryCutEnv::TabletId, 15, THistoryCutEnv::Channel));
-        TGCLogEntry entry(TGCTime(15, 0), delta);
-        env.Logic->ApplyLogEntry(entry);
-        env.Snapshot();
-        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
-        env.Reply(0);
-        env.Snapshot();
-        UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
-        UNIT_ASSERT(env.Cuts.empty());
-        env.Reply(1);
-        env.Snapshot();
-        env.CheckHardBarrier(2);
-        env.Reply(2);
-        env.CheckCut();
-    }
-
     Y_UNIT_TEST(LiveBlobRemainsPinnedAfterSoftGc) {
         THistoryCutEnv env;
         const auto blob = HistoryCutterUtBlob(THistoryCutEnv::TabletId, 5, THistoryCutEnv::Channel);
-        env.Logic->HistoryCutter.SeenBlob(blob);
         TGCBlobDelta delta;
         delta.Created.push_back(blob);
         TGCLogEntry entry(TGCTime(5, 0), delta);
@@ -423,25 +385,6 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         env.Snapshot();
         env.CheckHardBarrier(4);
         env.Reply(4);
-        env.CheckCut();
-    }
-
-    Y_UNIT_TEST(HardBarrierRetryPreservesBackoff) {
-        THistoryCutEnv env;
-        env.RestoreBarrier();
-        env.Snapshot();
-        env.CheckHardBarrier(0);
-        UNIT_ASSERT(env.Reply(0, NKikimrProto::ERROR));
-        env.Snapshot();
-        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 1,
-            "snapshot must not send hard barriers during GC backoff");
-        UNIT_ASSERT(env.Cuts.empty());
-        env.Execute([&](const TActorContext& ctx) {
-            env.Logic->RetryGcRequests(THistoryCutEnv::Channel, ctx);
-        });
-        // The confirmed cut must resume even if the tablet stays idle.
-        env.CheckHardBarrier(1);
-        env.Reply(1);
         env.CheckCut();
     }
 
@@ -511,7 +454,7 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT(env.Cuts.empty());
 
         env.Execute([&](const TActorContext& ctx) {
-            env.Logic->Confirm(ctx);
+            env.Logic->Confirm(ctx, env.Edge);
         });
         env.CheckHardBarrier(1);
         env.Reply(1);
@@ -553,11 +496,16 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         env.Info->Channels[THistoryCutEnv::Channel].History.emplace(
             env.Info->Channels[THistoryCutEnv::Channel].History.begin() + 1, 5, 101);
         env.RestoreBarrier();
+        // Delegation during activation must preserve the recovered barrier.
+        env.Logic->InitializeChannel(THistoryCutEnv::Channel);
         env.Snapshot();
         UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 1,
             "repeated group must receive one hard barrier at the highest cut generation");
         env.CheckHardBarrier(0);
         UNIT_ASSERT(env.Reply(0, NKikimrProto::ERROR));
+        env.Snapshot();
+        UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 1,
+            "snapshot must not send hard barriers during GC backoff");
         UNIT_ASSERT(env.Cuts.empty());
 
         env.Execute([&](const TActorContext& ctx) {
@@ -565,6 +513,7 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         });
         UNIT_ASSERT_VALUES_EQUAL_C(env.Collects.size(), 2,
             "retry must also send only one hard barrier to the repeated group");
+        // The confirmed cut must resume even if the tablet stays idle.
         env.CheckHardBarrier(1);
         UNIT_ASSERT(env.Cuts.empty());
         env.Reply(1);
@@ -573,6 +522,48 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         UNIT_ASSERT_VALUES_EQUAL(env.Cuts[1].first, 5);
         UNIT_ASSERT_VALUES_EQUAL(env.Cuts[0].second, 101);
         UNIT_ASSERT_VALUES_EQUAL(env.Cuts[1].second, 101);
+    }
+
+    Y_UNIT_TEST(HistoryIsCutWithoutHardBarrier) {
+        for (bool softGcPending : {false, true}) {
+            THistoryCutEnv env;
+            env.Info->Channels[THistoryCutEnv::Channel].History.emplace(
+                env.Info->Channels[THistoryCutEnv::Channel].History.begin() + 1, 5, 101);
+            // A live blob pins [0, 5) on group 101, so the empty [5, 10)
+            // interval on that same group can be cut without a hard barrier.
+            TGCBlobDelta delta;
+            delta.Created.push_back(HistoryCutterUtBlob(THistoryCutEnv::TabletId, 2, THistoryCutEnv::Channel));
+            TGCLogEntry entry(TGCTime(2, 0), delta);
+            env.Logic->ApplyLogEntry(entry);
+            env.Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 2);
+            env.Reply(0);
+            env.Reply(1);
+            UNIT_ASSERT(env.Cuts.empty());
+
+            if (softGcPending) {
+                TGCBlobDelta nextDelta;
+                nextDelta.Created.emplace_back(THistoryCutEnv::TabletId,
+                    THistoryCutEnv::Generation, 1, THistoryCutEnv::Channel,
+                    HistoryCutterUtBlobSize, 0);
+                TGCLogEntry nextEntry(TGCTime(THistoryCutEnv::Generation, 1), nextDelta);
+                env.Logic->ApplyLogEntry(nextEntry);
+            }
+            env.Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), softGcPending ? 3 : 2);
+            if (softGcPending) {
+                UNIT_ASSERT(!env.Collects[2].Hard);
+                UNIT_ASSERT(env.Cuts.empty());
+                env.Reply(2);
+                UNIT_ASSERT_VALUES_EQUAL(env.Collects.size(), 3);
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(env.Cuts.size(), 1,
+                "a confirmed cut without hard barriers must not wait for another GC reply");
+            UNIT_ASSERT_VALUES_EQUAL(env.Cuts[0].first, 5);
+            UNIT_ASSERT_VALUES_EQUAL(env.Cuts[0].second, 101);
+            env.Snapshot();
+            UNIT_ASSERT_VALUES_EQUAL_C(env.Cuts.size(), 1, "completed cuts must not be sent again");
+        }
     }
 
     Y_UNIT_TEST(TestHistoryCutter) {

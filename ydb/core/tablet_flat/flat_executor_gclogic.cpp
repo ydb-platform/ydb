@@ -150,30 +150,14 @@ void TExecutorGCLogic::OnConfirmSnapshot(ui32 step, const TActorContext &ctx) {
     }
 }
 
-TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr, const TActorContext &ctx, TActorId launcher) {
+TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr, const TActorContext &ctx) {
     TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get();
     ui32 channelId = ev->Channel;
     TChannelInfo& channel = ChannelInfo[channelId];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
         const bool batchComplete = channel.OnCollectGarbageSuccess();
         if (batchComplete && channel.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::SentBarrier) {
-            auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
-            for (const auto* historyEntry : historyToCut) {
-                TAutoPtr<TEvTablet::TEvCutTabletHistory> request(new TEvTablet::TEvCutTabletHistory);
-                auto &record = request->Record;
-                record.SetTabletID(TabletStorageInfo->TabletID);
-                record.SetChannel(channelId);
-                record.SetFromGeneration(historyEntry->FromGeneration);
-                record.SetGroupID(historyEntry->GroupID);
-                LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
-                    "Cutting channel history after hard GC"
-                    << " tablet " << TabletStorageInfo->TabletID
-                    << " channel " << channelId
-                    << " from generation " << historyEntry->FromGeneration
-                    << " group " << historyEntry->GroupID);
-                ctx.Send(launcher, request.Release());
-            }
-            channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::Cut;
+            SendCutTabletHistory(channelId, ctx);
         } else if (batchComplete) {
             TrySendHistoryBarriers(channelId, ctx);
         }
@@ -225,12 +209,13 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     AllowGarbageCollection = true;
 }
 
-void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
+void TExecutorGCLogic::Confirm(const TActorContext &ctx, TActorId launcher) {
     // CutHistoryEnabled was latched at boot, the live flag is still honored so that turning
     // EnableCutHistory off works as an immediate kill switch.
     if (!CutHistoryEnabled || !AppData()->FeatureFlags.GetEnableCutHistory()) {
         return;
     }
+    CutHistoryRecipient = launcher;
     for (auto channelId : ChannelsToCutHistory) {
         auto& channel = ChannelInfo[channelId];
         // Remember confirmation so GC completion can resume an idle tablet's cut.
@@ -268,6 +253,10 @@ void TExecutorGCLogic::TrySendHistoryBarriers(ui32 channelId, const TActorContex
         return;
     }
     const auto hardBarriers = HistoryCutter.GetHardBarriers(channelId);
+    if (hardBarriers.empty()) {
+        SendCutTabletHistory(channelId, ctx);
+        return;
+    }
     for (const auto& [groupId, generation] : hardBarriers) {
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
             "Sending hard GC for channel history cut"
@@ -278,6 +267,26 @@ void TExecutorGCLogic::TrySendHistoryBarriers(ui32 channelId, const TActorContex
         channel.SendCollectGarbageEntry(ctx, {}, {}, TabletStorageInfo->TabletID, channelId, groupId, Generation, true, TGCTime{generation, Max<ui32>()});
     }
     channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::SentBarrier;
+}
+
+void TExecutorGCLogic::SendCutTabletHistory(ui32 channelId, const TActorContext& ctx) {
+    auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
+    for (const auto* historyEntry : historyToCut) {
+        TAutoPtr<TEvTablet::TEvCutTabletHistory> request(new TEvTablet::TEvCutTabletHistory);
+        auto &record = request->Record;
+        record.SetTabletID(TabletStorageInfo->TabletID);
+        record.SetChannel(channelId);
+        record.SetFromGeneration(historyEntry->FromGeneration);
+        record.SetGroupID(historyEntry->GroupID);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_EXECUTOR,
+            "Cutting channel history"
+            << " tablet " << TabletStorageInfo->TabletID
+            << " channel " << channelId
+            << " from generation " << historyEntry->FromGeneration
+            << " group " << historyEntry->GroupID);
+        ctx.Send(CutHistoryRecipient, request.Release());
+    }
+    ChannelInfo[channelId].CutHistoryStatus = TChannelInfo::ECutHistoryStatus::Cut;
 }
 
 void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {

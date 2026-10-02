@@ -45,7 +45,7 @@ SELECT id, name FROM users WHERE id = $userId AND status = $status;
 
 ## Смотрите также
 
-- [План выполнения запроса](plans.md)
+- [План выполнения запроса](query-plans-optimization.md)
 - [Кэш компиляции запросов](../system-views.md#compile-cache-queries)
 - [Параметризованные запросы](../../reference/ydb-sdk/parameterized_queries.md) (справка SDK)
 - [Выполнение параметризованных запросов](../../reference/ydb-cli/parameterized-query-execution.md) (справка CLI)

@@ -369,6 +369,10 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT(!config.DeserializeFromProto(protoConfig));
         UNIT_ASSERT(!config.IsUnrestrictedEnabled());
         protoConfig.SetUnrestrictedSoftLimitCoefficient(0.5);
+        protoConfig.SetMaxUnrestrictedGroupsPerScope(0);
+        UNIT_ASSERT(!config.DeserializeFromProto(protoConfig));
+        UNIT_ASSERT(!config.IsUnrestrictedEnabled());
+        protoConfig.ClearMaxUnrestrictedGroupsPerScope();
         UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         UNIT_ASSERT(config.IsUnrestrictedEnabled());
         UNIT_ASSERT_VALUES_EQUAL(config.GetMaxUnrestrictedGroupsPerScope(), 1u);

@@ -24,6 +24,9 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TGroupedMemoryLimiterCon
         if (!(coefficient >= TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient && coefficient <= 1.0)) {
             return false;
         }
+        if (MaxUnrestrictedGroupsPerScope == 0) {
+            return false;
+        }
         UnrestrictedSoftLimitCoefficient = coefficient;
     }
 

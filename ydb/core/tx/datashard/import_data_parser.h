@@ -31,10 +31,8 @@ namespace NKikimr::NDataShard {
 class IDataParser {
 public:
     using TPtr = THolder<IDataParser>;
-    // Takes a row of the file. The cells are borrowed and valid only for the
-    // duration of the call. An error rejects the row: the one that takes rows
-    // knows the table, the parser knows where the row is in the file, so the
-    // parser adds the place to the error and stops.
+    // Takes a row; the cells are valid only during the call. An error rejects the row,
+    // and the parser adds the row's place in the file and stops.
     using TAddRowFn = std::function<std::expected<void, TString>(
         const TVector<TCell>& keys, const TVector<TCell>& values)>;
 
@@ -45,25 +43,20 @@ public:
 
     virtual ~IDataParser() = default;
 
-    // Binds the parser to the destination table. For every format the column
-    // order, key positions and types come from the backup's table description
-    // (scheme.pb); the data file is only checked against it.
+    // Binds the parser to the table: columns, key and types come from the backup's scheme.
     virtual std::expected<void, TString> Configure(
         const TTableInfo& tableInfo,
         const NKikimrSchemeOp::TTableDescription& scheme) = 0;
 
-    // Parses one self-contained block and calls addRow for every row, until
-    // one of them is rejected.
+    // Parses one block, calling addRow for every row until one is rejected.
     virtual std::expected<TParsedData, TString> ParseBlock(
         TStringBuf data,
         TMemoryPool& pool,
         const TAddRowFn& addRow) = 0;
 };
 
-// Parquet cannot be consumed as a byte stream: the footer is read first and
-// row groups are then decoded one at a time from a random-access source. This
-// extends IDataParser with that lifecycle; ParseBlock remains available for a
-// file that is already fully in memory.
+// Parquet is not a byte stream: the footer is read first, then the row groups one at
+// a time from a random-access source.
 class IParquetStreamParser : public IDataParser {
 public:
     using TPtr = THolder<IParquetStreamParser>;
@@ -75,10 +68,8 @@ public:
     };
 
     struct TRowGroupInfo {
-        // The bytes of the pages of the table's columns when they are
-        // uncompressed, as the footer of the file states them. The rows
-        // decoded from the pages can take more: a page of a dictionary holds a
-        // value once, however many rows have it.
+        // Uncompressed page bytes of the table's columns, by the footer. The decoded rows
+        // can take more.
         ui64 UncompressedBytes = 0;
     };
 
@@ -88,35 +79,27 @@ public:
 
     virtual std::expected<void, TString> OpenFile(std::shared_ptr<arrow::io::RandomAccessFile> source) = 0;
 
-    // Opens the file metadata and validates the schema (column names and Arrow
-    // types) without creating a record-batch reader. The source may be
-    // populated with one row group's bytes at a time later.
+    // Opens the metadata and checks the schema; the source may get the row groups' bytes later.
     virtual std::expected<void, TString> OpenMetadata(
         std::shared_ptr<arrow::io::RandomAccessFile> source) = 0;
 
-    // The columns of the file the rows are read from, as the indices of its
-    // leaf columns. A column of the file that the table does not have is not
-    // among them: it is neither decoded nor downloaded.
+    // The leaf columns the table reads; the other columns are neither decoded nor downloaded.
     virtual const std::vector<int>& GetColumnIndices() const = 0;
 
     // The row groups of the file whose metadata is open.
     virtual TVector<TRowGroupInfo> GetRowGroups() const = 0;
 
-    // The metadata of the open file, parsed once for everyone who needs it.
+    // The metadata of the open file, parsed once.
     virtual std::shared_ptr<parquet::FileMetaData> GetFileMetadata() const = 0;
 
-    // The pool the decoding takes its memory from, with its limit. The bytes
-    // of the file that Arrow reads are to come from it as well.
+    // The pool the decoding takes its memory from, with its limit.
     virtual arrow::MemoryPool* GetMemoryPool() = 0;
 
     virtual std::expected<void, TString> OpenRowGroup(ui32 rowGroupIndex) = 0;
 
     virtual void ResetRowGroup() = 0;
 
-    // Decodes rows of the open row group until the rows emitted take
-    // maxDataBytes in an upload (0 = no limit) or the row group ends. That is
-    // the cell data and a header for every cell, a NULL as well. HasMore
-    // reports whether rows remain in the row group.
+    // Decodes rows until they take maxDataBytes in an upload (0 = no limit) or the row group ends.
     virtual std::expected<TParsedBatch, TString> ProcessNextBatch(
         TMemoryPool& pool,
         const TAddRowFn& addRow,
@@ -126,9 +109,8 @@ public:
 };
 
 IDataParser::TPtr CreateCsvDataParser();
-// bufferSizeLimit is the limit of the read buffer of the import, which the
-// engine keeps the row groups within. The memory that decoding takes is limited
-// by it as well: to twice as much. 0 = no limit.
+// bufferSizeLimit: the read buffer limit of the import; decoding may take twice as much.
+// 0 = no limit.
 IParquetStreamParser::TPtr CreateParquetDataParser(ui64 bufferSizeLimit);
 
 } // namespace NKikimr::NDataShard

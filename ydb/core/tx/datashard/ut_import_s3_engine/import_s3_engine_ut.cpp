@@ -23,8 +23,7 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/file_reader.h>
 
-// For the footers of crafted files. The header brings Arrow's logging with it,
-// which does not compile under our warnings.
+// For the footers of crafted files; the header does not compile under our warnings.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #include <parquet/thrift_internal.h>
@@ -211,8 +210,7 @@ TString BuildSmallParquet(i64 rowGroupSize = 4, size_t valueSize = 24_KB) {
     return TString(reinterpret_cast<const char*>(buffer->data()), buffer->size());
 }
 
-// Written the way the exporter does it: default writer properties (Parquet
-// format 1.0) and the Arrow schema stored in the file.
+// Written the way the exporter does it: format 1.0, the Arrow schema stored in the file.
 TString BuildUint32KeyParquet(const TVector<ui32>& keys) {
     arrow::UInt32Builder keyBuilder;
     arrow::StringBuilder valueBuilder;
@@ -362,8 +360,7 @@ NKikimrSchemeOp::TTableDescription MakeDyNumberJsonDocumentTableScheme() {
     return scheme;
 }
 
-// A row of the table above with its cells in the stored form, i.e. as a table
-// scan hands them to the exporter: DyNumber and JsonDocument are binary.
+// A row of the table above in the stored form, as a scan hands it to the exporter.
 struct TStoredRow {
     TString Key;
     TMaybe<TString> DyNumber;
@@ -383,8 +380,7 @@ TString StoredJsonDocument(TStringBuf json) {
     return TString(binaryJson.Data(), binaryJson.Size());
 }
 
-// Runs the rows through the Parquet exporter itself, so the result is exactly
-// the data file of a backup.
+// Runs the rows through the exporter itself: exactly the data file of a backup.
 TString ExportToParquet(const TVector<TStoredRow>& rows, ui64 rowGroupSize) {
     IExport::TTableColumns columns;
     columns.emplace(1, TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "key", true));
@@ -483,8 +479,7 @@ TString ValueBytes(const arrow::Array& array, i64 index) {
     }
 }
 
-// Written the way the exporter does it: default writer properties (Parquet
-// format 1.0) and the Arrow schema stored in the file.
+// Written the way the exporter does it: format 1.0, the Arrow schema stored in the file.
 TString WriteParquetLikeExporter(
     const std::shared_ptr<arrow::Table>& table,
     i64 rowGroupSize,
@@ -556,8 +551,7 @@ TString BuildKeyValueParquet(
         compression);
 }
 
-// The footer of a Parquet file as Parquet's thrift structure, and where it
-// starts. For the tests that craft a file the writer refuses to write.
+// The footer as its thrift structure, and where it starts, for crafting files.
 parquet::format::FileMetaData ReadFooter(const TString& file, size_t* footerStart) {
     UNIT_ASSERT(file.size() >= 12 && file.EndsWith("PAR1"));
     const ui32 footerLength = ReadUnaligned<ui32>(file.data() + file.size() - 8);
@@ -632,9 +626,8 @@ TVector<TString> SomeValues(TStringBuf prefix, ui32 count) {
 struct TValueCase {
     NScheme::TTypeId TypeId;
     TMaybe<ui32> PgTypeId;
-    // Four values as they are in a backup. The arrays differ in the last value
-    // only: Valid has one at the limit of what the type allows, Invalid has
-    // one that a table of this type must not hold.
+    // Four values of a backup; the last one is at the limit of the type (Valid) or beyond
+    // it (Invalid).
     std::shared_ptr<arrow::Array> Valid;
     std::shared_ptr<arrow::Array> Invalid;
 };
@@ -692,8 +685,7 @@ TVector<TValueCase> MakeValueCases() {
         };
     };
 
-    // The column is Decimal(22,9), and the file holds 128 bits whatever the
-    // precision is: the values of the type are those of 22 digits, the
+    // Decimal(22,9) is 128 bits in the file: the values are those of 22 digits, the
     // infinities and NaN.
     const TInt128 maxDecimal = GetBounds(NScheme::DECIMAL_PRECISION).second - 1;
     const i64 maxInterval = static_cast<i64>(MAX_TIMESTAMP) - 1;
@@ -812,11 +804,8 @@ struct TBatchedImport {
     ui64 PeakArrowBytes = 0;   // the most memory Arrow held while rows were emitted
 };
 
-// Imports a data file the way the downloader does: every batch the engine
-// reports as ready is one upload.
-//
-// The default buffer limit holds any row group of the tests, uncompressed: most
-// of them are about how a row group is read, not about its size.
+// Imports the way the downloader does: every ready batch is one upload. The default
+// buffer limit holds any row group of the tests.
 TBatchedImport ImportInBatches(
     const TEngineFixture& fixture,
     const TString& source,
@@ -877,9 +866,7 @@ TBatchedImport ImportInBatches(
     return result;
 }
 
-// What the batches of a row group must be: every batch takes the rows that
-// fit into the byte budget, and a row that does not fit into an empty batch is
-// taken alone.
+// The batches a row group must make: each filled to the byte budget, an oversized row alone.
 TVector<ui64> FillBatches(const TVector<ui64>& rowBytes, ui64 budget) {
     TVector<ui64> batches;
     ui64 batch = 0;
@@ -898,9 +885,8 @@ TVector<ui64> FillBatches(const TVector<ui64>& rowBytes, ui64 budget) {
     return batches;
 }
 
-// Imports the values as one row group of a table with a Utf8 key and a Utf8
-// value, and checks that its batches are filled to the byte budget. A value
-// that is not set is a NULL.
+// Imports the values as one row group of a Utf8 key and value and checks the batches
+// fill the byte budget. An unset value is NULL.
 void CheckBatchesAreFilledToTheBudget(const TVector<TMaybe<TString>>& values, ui32 budget) {
     arrow::StringBuilder builder;
     for (const auto& value : values) {
@@ -908,9 +894,8 @@ void CheckBatchesAreFilledToTheBudget(const TVector<TMaybe<TString>>& values, ui
     }
     const TString source = BuildKeyValueParquet(FinishArray(builder), /*rowGroupSize=*/values.size());
 
-    // A row takes two serialized cell vectors in an upload, the key and the
-    // value: the number of the cells and a header for every cell, a NULL as
-    // well, come on top of the cell bytes.
+    // A row in an upload: two cell vectors with a header per cell, NULL included, on top
+    // of the cell bytes.
     static constexpr ui64 RowOverhead = 2 * (sizeof(ui16) + sizeof(ui32));
 
     TVector<TString> keys;
@@ -978,10 +963,8 @@ IImportS3Engine::TAddRowFn RejectRow(TStringBuf key, TVector<TString>& taken) {
     };
 }
 
-// A file of the configured size, --test-param parquet_table_size_mib, read
-// through the sparse file and the parser the way the engine does it: the
-// footer first, then the ranges of the columns. The rows are checked one by
-// one.
+// A file of --test-param parquet_table_size_mib, read through the sparse file and the
+// parser the way the engine does; the rows are checked one by one.
 constexpr TStringBuf LargeParquetSizeParam = "parquet_table_size_mib";
 constexpr ui64 LargeParquetRowBytes = 64_KB;
 constexpr ui64 LargeParquetValueBytes = LargeParquetRowBytes - sizeof(i64);
@@ -1378,10 +1361,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(EncryptedCsvTakesAFinishedCheckpointWithoutTheDecryptionState) {
-        // The old binary stored the checkpoint of a finished direct import as
-        // ProcessedBytes = ContentLength with no download state. Nothing is
-        // left to decrypt there, so it is taken; a checkpoint inside the file
-        // still needs the state of the decryption.
+        // The old binary stored a finished direct import as ProcessedBytes = ContentLength
+        // with no state; nothing is left to decrypt there, so it is taken.
         const TString source(1024, 'x'); // never read
         const TEngineFixture fixture;
         const auto makeEngine = [&]() {
@@ -1420,12 +1401,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ZstdContinuesThroughEmptyLinesWithinAFrame) {
-        // The zstd reader gives out the lines it has decoded when its buffer
-        // is full, before the end of the frame, where there is no checkpoint
-        // yet. Empty lines give no rows either. That is not a reader that
-        // makes no progress: the import goes on to the rows that follow. Here:
-        // one frame of 256 KiB of empty lines and a row, through a buffer of
-        // 128 KiB.
+        // The zstd reader hands out lines before the end of a frame, where there is no
+        // checkpoint, and empty lines give no rows: that is still progress. One frame of
+        // 256 KiB of empty lines and a row, through a buffer of 128 KiB.
         const TString csv = TString(256_KB, '\n') + "\"k1\",\"v1\"\n";
         const TString source = ZstdCompress(csv);
 
@@ -1445,12 +1423,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ZstdDefersCountersUntilRestartableFrameBoundary) {
-        // The rows decoded from a frame are emitted as they come, but counted
-        // when the frame ends, where the import can be checkpointed. A read
-        // that fails in between is retried on the live reader, which keeps
-        // what it has decoded and hashed: the second pass fails the first
-        // read after the deferred batch and checks that nothing is lost or
-        // counted twice.
+        // Rows of a frame are emitted as they come but counted when it ends, where a checkpoint
+        // is possible. A read that fails in between is retried on the live reader: the second
+        // pass checks that nothing is lost or counted twice.
         const TString largeValue = MakePseudoRandomAscii(256_KB);
         const TString csv = TStringBuilder()
             << "\"k0\",\"v0\"\n"
@@ -1691,9 +1666,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ParquetRoundTripsDyNumberAndJsonDocument) {
-        // The exporter writes cells in their stored form, so a backup holds
-        // DyNumber and JsonDocument in binary (a CSV backup holds their text).
-        // They must be imported as they are, not parsed as text.
+        // A backup holds DyNumber and JsonDocument in binary (CSV holds their text): they
+        // are imported as they are.
         const TVector<TStoredRow> exported = {
             {"k1", StoredDyNumber("3.14"), StoredJsonDocument(R"({"key":"value"})")},
             {"k2", Nothing(), Nothing()},
@@ -1761,9 +1735,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ReportsThePlaceOfARejectedRow) {
         { // CsvReportsTheLineOfARejectedRow
-            // A row is rejected by the one that takes it, which knows the table: a key
-            // out of the range of the shard, NULL in a column that is NOT NULL. The
-            // parser knows where the row is in the file and adds the place to the error.
+            // A row is rejected by the sink, which knows the table; the parser adds its place
+            // in the file.
             const TString source = "\"k1\",\"v1\"\n\"k2\",\"v2\"\n\"k3\",\"v3\"\n";
             const TEngineFixture fixture;
             auto engine = fixture.MakeEngine(EDataFormat::YdbDump, source, /*readBatchSize=*/source.size());
@@ -1793,9 +1766,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ParquetChecksValuesAgainstTheColumnType) {
         { // ParquetRejectsValuesInvalidForTheColumnType
-            // The Arrow type of a column does not carry the value restrictions of
-            // its YDB type, so a file with a matching schema can still hold values
-            // that a table must not.
+            // The Arrow type does not carry the restrictions of the YDB type: a matching schema
+            // can still hold invalid values.
             TVector<TString> imported; // types whose invalid value was imported
             for (const auto& valueCase : MakeValueCases()) {
                 const TEngineFixture fixture(MakeValueTableScheme(valueCase.TypeId, valueCase.PgTypeId));
@@ -1841,9 +1813,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ParquetFillsBatchesToTheUploadBudget) {
         { // ParquetFillsBatchesToTheByteBudget
-            // A batch is one upload, which is one transaction of the shard, so it
-            // must stay within the byte budget whatever the file says about the
-            // size of its rows.
+            // A batch is one upload, one transaction: it stays within the budget whatever the
+            // file says.
             static constexpr ui32 Budget = 256_KB;
 
             // Repeated values are written as a dictionary: the sizes in the
@@ -1871,10 +1842,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetCountsNullsInTheByteBudget
-            // A NULL has no cell bytes, but it is a cell of the upload, with a
-            // header. So is every other cell: the rows of a batch take more in an
-            // upload than their cell bytes, many times more when they are narrow
-            // or mostly NULL. The budget is for what they take in the upload.
+            // A NULL has no cell bytes but a header in the upload, like every cell: narrow or
+            // NULL rows take many times their bytes. The budget is what they take in the upload.
             static constexpr ui32 Budget = 64_KB;
 
             CheckBatchesAreFilledToTheBudget(TVector<TMaybe<TString>>(50000, Nothing()), Budget);
@@ -1892,9 +1861,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ParquetLimitsTheMemoryOfDecoding) {
         { // ParquetBoundsTheMemoryOfDecodedRows
-            // The buffer limit of the engine covers the bytes of the file only. The
-            // rows decoded from them can take far more: here 64 MiB of rows are in
-            // a file of less than 1 MiB.
+            // The buffer limit covers the file's bytes only: here 64 MiB of rows come from a
+            // file under 1 MiB.
             static constexpr ui32 Rows = 1024;
             static constexpr ui32 Budget = 256_KB;
 
@@ -1911,12 +1879,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetDecodesWideRowsAfterNarrowOnesWithinTheMemoryLimit
-            // A batch is sized by the rows before it. After a long run of narrow
-            // rows it is thousands of rows long, and if the rows that follow are
-            // wide, it takes far more memory than the batches before it. A value
-            // that repeats is in the file once, as an entry of a dictionary, so
-            // nothing in the file tells that: here 64 MiB of rows follow the narrow
-            // ones in a file of less than 1 MiB.
+            // A batch is sized by the rows before it: after many narrow rows it is thousands long,
+            // and wide rows that follow take far more memory. A repeated value is in the file
+            // once, so nothing tells that: 64 MiB of rows in a file under 1 MiB.
             static constexpr ui32 NarrowRows = 8191; // batches of 1, 2, ... 4096 rows
             static constexpr ui32 WideRows = 1024;
             static constexpr ui32 Budget = 256_KB;
@@ -1952,11 +1917,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetFailsWhenARowCannotBeDecodedWithinTheMemoryLimit
-            // A row group within the limits by the footer can still take more
-            // memory than decoding gets, even for a single row: here the page of a
-            // dictionary with one value of 840 KB, the dictionary decoded from it
-            // and the row decoded from the dictionary. The import fails with an
-            // error that names the row.
+            // A row group within the footer's limits can take more than decoding gets, even for
+            // one row: a dictionary page with an 840 KB value, decoded twice. The error names
+            // the row.
             static constexpr ui64 BufferLimit = 1_MB;
 
             const TString source = BuildKeyValueParquet(
@@ -1974,8 +1937,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ArrowAppliesANewBatchSizeToTheNextBatch) {
-        // The parser sizes every decoded batch anew. That relies on the reader
-        // taking the batch size for each batch, not once when it is opened.
+        // Every batch is sized anew, so the reader must take the batch size per batch.
         static constexpr i64 Rows = 100;
 
         const TString source = BuildKeyValueParquet(
@@ -2641,9 +2603,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ParquetDoesNotLimitTheRowsDecodedFromARowGroup) {
-        // A value that repeats is in the file once, as an entry of a
-        // dictionary, so the footer says nothing about the rows it decodes to.
-        // They are not limited: they are decoded and released in batches.
+        // A repeated value is in the file once, so the footer says nothing about the decoded
+        // rows: they are decoded and released in batches.
         static constexpr ui64 Limit = 128_KB;
         const TEngineFixture fixture;
 
@@ -2663,9 +2624,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ParquetDoesNotDownloadTheColumnsTheTableDoesNotHave) {
-        // A file may have more columns than the table. They are not decoded,
-        // and their bytes are not downloaded or held in the buffer either, so
-        // they cannot make a row group too big for it.
+        // Extra columns of the file are neither decoded nor downloaded, so they cannot make
+        // a row group too big.
         static constexpr ui64 Limit = 128_KB;
         const TEngineFixture fixture;
 
@@ -2695,9 +2655,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ParquetChecksTheRowCountsOfTheColumns) {
         { // a row group short of column chunks
-            // Parquet throws when the chunk of a column is looked up in a row
-            // group that has fewer. The parser turns that into an error, and
-            // refuses such a footer before any lookup.
+            // Parquet throws when a column's chunk is missing from a row group; the parser
+            // refuses such a footer first.
             const TString source = PatchFooter(
                 BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
                 [](parquet::format::FileMetaData& metadata) {
@@ -2715,9 +2674,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetRejectsAFooterWhoseColumnsDisagreeOnRows
-            // Every column chunk of a row group holds a value for each of its
-            // rows. A footer that says otherwise is wrong, and the file is
-            // rejected by it, before any of its data is downloaded.
+            // Every chunk of a row group holds a value per row; a footer that says otherwise
+            // is rejected before download.
             const TString source = PatchFooter(
                 BuildKeyValueParquet(MakeStringArray(SomeValues("v", 10)), /*rowGroupSize=*/10),
                 [](parquet::format::FileMetaData& metadata) {
@@ -2735,9 +2693,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetRejectsARowGroupShorterThanItsFooterSays
-            // The pages hold six rows, the footer says ten, for the row group and
-            // for every column. Arrow reads the six and stops. The import must not
-            // take the row group as complete.
+            // The pages hold six rows, the footer says ten: Arrow reads six and stops, and the
+            // row group must not count as complete.
             const TString source = PatchFooter(
                 BuildKeyValueParquet(MakeStringArray(SomeValues("v", 6)), /*rowGroupSize=*/6),
                 [](parquet::format::FileMetaData& metadata) {
@@ -2759,12 +2716,9 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetRejectsAColumnShorterThanTheFirstOne
-            // A row group whose first column has more rows than another makes
-            // Arrow read out of bounds when it puts the columns together, so the
-            // parser puts them together and compares them. The file: the key
-            // column of ten rows, the value column of six, taken from another
-            // file, and the footer of the first file pointing at it, still
-            // claiming ten rows for it.
+            // A first column longer than another makes Arrow read out of bounds, so the parser
+            // compares the lengths: the key column of ten rows, the value column of six from
+            // another file, and the footer still claiming ten.
             const TString ten = BuildKeyValueParquet(MakeStringArray(SomeValues("v", 10)), /*rowGroupSize=*/10);
             const TString six = BuildKeyValueParquet(MakeStringArray(SomeValues("w", 6)), /*rowGroupSize=*/6);
 
@@ -2802,9 +2756,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 
     Y_UNIT_TEST(ParquetRejectsAMalformedFooter) {
-        // The tail of the file is checked before the footer is fetched, and
-        // the footer is walked under limits before Arrow parses it: a crafted
-        // file ends in an error, with nothing but the tail downloaded.
+        // The tail is checked before the footer is fetched, and the footer is walked before
+        // Arrow parses it: nothing but the tail is downloaded.
         const TString source = BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4);
         size_t footerStart = 0;
         ReadFooter(source, &footerStart);
@@ -2835,9 +2788,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
         { // a list the footer declares but does not hold: above the limit of
           // thrift, and below it
-            // In the compact protocol the list of the row groups, one struct,
-            // is 0x19 (field 4, a list) 0x1C (one element, a struct). A longer
-            // list is 0xFC and its length as a varint.
+            // the row groups: 0x19 (field 4, a list) 0x1C (one struct); a longer list is 0xFC
+            // and a varint
             const size_t header = footer.find("\x19\x1C");
             UNIT_ASSERT(header != TString::npos);
             for (const ui32 declared : {1000001u, 100000u}) {
@@ -2851,9 +2803,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ParquetLimitsTheFooter) {
         { // ParquetRejectsAFooterAboveTheLimit
-            // A footer is parsed into many times its size, so it has a limit of
-            // its own, an eighth of the buffer, checked by the length in the last
-            // bytes of the file: the footer itself is not downloaded.
+            // A footer is parsed into many times its size, so it has its own limit, an eighth
+            // of the buffer, checked before it is downloaded.
             static constexpr ui64 BufferLimit = 1_MB;
             const TString source = PatchFooter(
                 BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
@@ -2878,11 +2829,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetRejectsAFooterThatTakesTheBuffer
-            // A footer within its limit can still take most of the buffer once it
-            // is parsed, when it is made of many small entries. What it takes is
-            // estimated from its counts, and a footer that leaves nothing for the
-            // row groups is rejected. Here: 400 row groups of two columns in a
-            // footer of a few tens of KB, against a buffer of 512 KB.
+            // A footer within its limit can still take most of the buffer once parsed: 400 row
+            // groups of two columns in a few tens of KB, against a buffer of 512 KB.
             static constexpr ui64 BufferLimit = 512_KB;
             const TString source = PatchFooter(
                 BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
@@ -2911,17 +2859,12 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetChecksTheFooterBeforeParsingIt
-            // Thrift resizes a list to its declared length before it reads an
-            // entry, and a column chunk is 3 bytes in the file but hundreds in
-            // memory, so the footer is walked once before it is parsed: a list
-            // is checked against the bytes that follow it, and what the footer
-            // would take is added up as the walk goes. Here the two column
-            // chunks of the one row group are declared to be many more.
+            // Thrift resizes a list before reading it, and a chunk is 3 bytes in the file: the
+            // footer is walked before it is parsed. The two chunks of the row group are declared
+            // to be many more.
             static constexpr ui64 BufferLimit = 1_MB;
-            // Field 4 of the file's metadata, the row groups, is 0x19 (field
-            // delta 1, a list) 0x1C (one entry, a struct); field 1 of the row
-            // group, its column chunks, is 0x19 0x2C (two structs). A longer
-            // list is 0xFC and its length as a varint.
+            // the row groups: 0x19 0x1C (one struct); the row group's chunks: 0x19 0x2C (two
+            // structs); a longer list is 0xFC and a varint
             const auto declaring = [](const TString& file, const std::function<ui32(size_t)>& chunks) {
                 size_t footerStart = 0;
                 ReadFooter(file, &footerStart);
@@ -2969,9 +2912,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetCountsTheListsInsideAChunk
-            // The lists inside a column chunk are parsed into memory too: here
-            // the path of each chunk has twenty thousand parts, in a footer of
-            // 40 KB, against a buffer of 512 KB.
+            // The lists inside a chunk count too: a path of twenty thousand parts per chunk,
+            // 40 KB of footer against a buffer of 512 KB.
             static constexpr ui64 BufferLimit = 512_KB;
             const TString source = PatchFooter(
                 BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
@@ -2992,8 +2934,7 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetFooterEstimateCoversTheThriftStructs
-            // The estimate counts a few hundred bytes per entry: at least what the
-            // thrift structures take before the vectors they hold.
+            // The estimate covers at least the thrift structures.
             UNIT_ASSERT_GE(ParquetFooterBytesPerColumnChunk, sizeof(parquet::format::ColumnChunk));
             UNIT_ASSERT_GE(ParquetFooterBytesPerRowGroup, sizeof(parquet::format::RowGroup));
             UNIT_ASSERT_GE(ParquetFooterBytesPerColumn, sizeof(parquet::format::SchemaElement));
@@ -3002,10 +2943,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
 
     Y_UNIT_TEST(ParquetLimitsSchemaNesting) {
         { // ParquetRejectsASchemaNestedTooDeep
-            // Arrow builds the schema tree by recursion, so a footer with a deep
-            // chain of groups overflows the stack. The depth is checked on the
-            // footer's flat list before Arrow sees it. Here: the root, a chain of
-            // 40 groups of one child each, and a leaf.
+            // Arrow builds the schema tree by recursion; the depth is checked on the flat list
+            // first. The root, 40 groups of one child each, and a leaf.
             const TString source = PatchFooter(
                 BuildKeyValueParquet(MakeStringArray(SomeValues("v", 4)), /*rowGroupSize=*/4),
                 [](parquet::format::FileMetaData& metadata) {
@@ -3029,9 +2968,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         }
 
         { // ParquetIgnoresANestedColumnTheTableDoesNotHave
-            // The depth limit is for crafted files: a file with a nested column
-            // next to the table's columns is within it, and the column is left
-            // alone like any other column the table does not have.
+            // A nested column next to the table's is within the limit and ignored like any
+            // extra column.
             const TVector<TString> values = SomeValues("v", 4);
             auto inner = arrow::StructArray::Make(
                 {MakeNumericArray<arrow::Int32Type>(arrow::int32(), {1, 2, 3, 4})}, {"b"}).ValueOrDie();
@@ -3108,8 +3046,8 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
         UNIT_ASSERT_VALUES_EQUAL(prefixRange.Range.Offset, 0);
         AssertSuccess(engine->FailRange(prefixRange.Range));
 
-        // The checkpoint of a live engine must be the one it has committed
-        // last, the place of the checksum included.
+        // The checkpoint of a live engine must be the one it committed last, checksum place
+        // included.
         {
             NKikimrBackup::TS3DownloadState other;
             other.MutableParquet()->SetChecksumOffset(1);
@@ -3181,14 +3119,11 @@ Y_UNIT_TEST_SUITE(TImportS3EngineTest) {
     }
 }
 
-// HasBytes() and ReadBytes() are served by a single segment, so a positive
-// answer for a range that was loaded in several puts proves those puts were
-// merged.
+// A range served by one segment proves the puts that loaded it were merged.
 Y_UNIT_TEST_SUITE(TParquetSparseFileTest) {
     Y_UNIT_TEST(ReadAtCopiesIntoThePoolOnce) {
-        // What Arrow reads from the sparse file is one copy of the loaded
-        // bytes, in memory of the pool it is given, where the decoding limit
-        // counts it. It is released with the buffer.
+        // Arrow's read of the sparse file is one copy in the given pool, where the decoding
+        // limit counts it.
         const TString content = MakePseudoRandomAscii(300);
         auto file = std::make_shared<TParquetSparseFile>(content.size());
         AssertSuccess(file->PutRange(100, content.substr(100, 200)));
@@ -3200,8 +3135,7 @@ Y_UNIT_TEST_SUITE(TParquetSparseFileTest) {
         UNIT_ASSERT_C(read.ok(), read.status().ToString());
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(reinterpret_cast<const char*>((*read)->data()), (*read)->size()),
             TStringBuf(content).SubStr(150, 100));
-        // Arrow rounds an allocation up to 64 bytes: what the pool holds is
-        // the capacity of the buffer, and nothing else.
+        // Arrow rounds allocations up to 64 bytes: the pool holds the buffer's capacity.
         UNIT_ASSERT_VALUES_EQUAL(pool.bytes_allocated(), (*read)->capacity());
         UNIT_ASSERT_GE((*read)->capacity(), 100);
         UNIT_ASSERT_LT((*read)->capacity(), 100 + 64);

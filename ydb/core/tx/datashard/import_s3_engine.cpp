@@ -582,9 +582,8 @@ public:
             return std::unexpected(TStringBuilder() << "processed byte position " << processedBytes
                 << " exceeds source size " << ContentLength);
         }
-        // A checkpoint at the end of the file has nothing left to decrypt, and
-        // the old binary stored one without a state when a direct import
-        // finished.
+        // A checkpoint at the end of the file has nothing left to decrypt; the old binary
+        // stored it without a state.
         if (Encrypted && processedBytes > 0 && processedBytes < ContentLength
             && state.GetEncryptedDeserializerState().empty())
         {
@@ -596,10 +595,8 @@ public:
 
         const bool started = HasLiveState();
         if (started) {
-            // Restart() reloads the last durable DataShard checkpoint even when
-            // this live engine is intentionally preserved after FailRange().
-            // Direct-part import does not persist per-batch progress, so that
-            // checkpoint may be older than the engine's local position.
+            // Restart() reloads the durable checkpoint, which direct-part import may have
+            // left behind the engine's position.
             if (processedBytes <= ProcessedBytes) {
                 return {};
             }
@@ -927,9 +924,8 @@ public:
             const bool rowGroupFinished = !parsedBatch.HasMore;
             const bool finalBatch = rowGroupFinished && CurrentRowGroup + 1 == RowGroupRanges.size();
 
-            // A row group is the resume unit: rows of a partially imported row
-            // group are replayed after a restart, so their counters are only
-            // reported with the batch that completes it.
+            // A row group is the resume unit: its rows are replayed after a restart, so they
+            // are counted with the batch that completes it.
             UncheckpointedDataBytes += parsedBatch.DataBytes;
             UncheckpointedRows += parsedBatch.Rows;
 
@@ -1014,11 +1010,8 @@ public:
         const auto& resume = state.GetParquet();
         const bool started = HasLiveState();
         if (started) {
-            // Restart() reloads the durable checkpoint even when this live
-            // engine is intentionally preserved after FailRange(); it must be
-            // the one this engine last committed, the place of the checksum
-            // included: a checkpoint of another place would show up only as a
-            // wrong checksum at the end of the import.
+            // The checkpoint must be the one this engine committed last, checksum place
+            // included; another would show only as a wrong checksum at the end.
             if (processedBytes == CheckpointProcessedBytes
                 && resume.GetCommittedRowGroups() == CheckpointState.GetCommittedRowGroups()
                 && resume.GetChecksumOffset() == CheckpointState.GetChecksumOffset()
@@ -1110,8 +1103,8 @@ private:
             return {};
         }
         if (resume.GetChecksumComplete()) {
-            // The persisted checksum state already covers the whole object, so
-            // there is nothing left to hash; row groups are fetched sparsely.
+            // The checksum state covers the whole object: nothing left to hash, the row groups
+            // are fetched sparsely.
             ChecksumComplete = true;
             ChecksumOffset = ContentLength;
             UseOnePassChecksum = false;
@@ -1232,9 +1225,8 @@ private:
         return {};
     }
 
-    // The footer is parsed into many times its size (see
-    // EstimateParquetFooterMemory), so it is bounded on its own, by its length
-    // in the last bytes of the file, before it is downloaded.
+    // A footer is parsed into many times its size, so its length is bounded before it is
+    // downloaded.
     ui64 FooterSizeLimit() const {
         static constexpr ui64 FooterTailBytes = 64 * 1024; // what is read anyway, see FooterTailRange()
         return Max(BufferSizeLimit / 8, FooterTailBytes);
@@ -1265,8 +1257,8 @@ private:
             return std::unexpected("Parquet metadata is not open");
         }
 
-        // The parsed footer stays for the whole import, so it is counted
-        // against the buffer: the row groups get what is left of it.
+        // The parsed footer stays for the whole import: the row groups get what is left of
+        // the buffer.
         auto footerLength = SparseFile->FooterMetadataLength();
         if (!footerLength) {
             Parser->ResetFile();
@@ -1313,24 +1305,16 @@ private:
         }
 
         if (!UseOnePassChecksum) {
-            // Metadata is decoded by Arrow. The normal path and the compatibility
-            // fallback can now evict the footer and fetch sparse row-group data.
+            // The footer is parsed: it can be evicted and the row groups fetched sparsely.
             SparseFile->Clear();
         }
 
         return PlanCurrentRowGroup();
     }
 
-    // A row group is handled as a whole piece: its bytes are held in the buffer
-    // while its rows are decoded. A row group above the limit of the buffer,
-    // in the file or uncompressed, is rejected by the footer, before any of its
-    // bytes are downloaded. The error is final, since a retry would meet the
-    // same file, but the limit is a setting: the file is imported once it is
-    // raised.
-    //
-    // The rows decoded from a row group are not limited as a whole: no file
-    // tells that size, and they are decoded and released in batches. The
-    // memory the decoding takes at a time is limited by the parser.
+    // A row group is held in the buffer as a whole while it is decoded, so one above the
+    // limit, in the file or uncompressed, is rejected by the footer before download. The
+    // decoded rows are not bounded by the file: the parser limits the memory of decoding.
     TString RowGroupIsTooBig(ui32 rowGroup, const TString& size) const {
         return TStringBuilder() << "Parquet row group " << rowGroup << " takes " << size
             << ", the limit is " << DataBufferLimit << " bytes (RestoreReadBufferSizeLimit less what the footer takes)";
@@ -1432,9 +1416,8 @@ private:
                 continue;
             }
             if (previousEnd && *groupStart < *previousEnd) {
-                // Some valid files (notably those written before PARQUET-816)
-                // have overlapping or interleaved row-group envelopes. They
-                // retain the legacy checksum pass and sparse row-group reads.
+                // Files written before PARQUET-816 may have overlapping row-group envelopes:
+                // they keep the legacy checksum pass.
                 return false;
             }
             previousEnd = groupEnd;
@@ -1485,8 +1468,7 @@ private:
         return Max(ChecksumOffset, CurrentRowGroupPrefixEnd());
     }
 
-    // In one-pass mode the sequential checksum scan is also the source of the
-    // current row group's bytes: keep the parts of the chunk that belong to it.
+    // In one-pass mode the checksum scan also supplies the row group's bytes.
     std::expected<void, TString> RouteChecksumChunkToCurrentRowGroup(ui64 offset, TStringBuf data) {
         if (!UseOnePassChecksum || CurrentRowGroup >= RowGroupRanges.size()) {
             return std::unexpected("Parquet checksum chunk routed outside a one-pass row group");

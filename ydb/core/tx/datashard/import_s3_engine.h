@@ -21,11 +21,8 @@
 
 namespace NKikimr::NDataShard {
 
-// A physical half-open byte range in the source object.
-//
-// Ranges are also the correlation token between NextRange() and PutRange():
-// the external-storage wrapper preserves the requested interval in its reply,
-// while actor event cookies are not preserved by that wrapper.
+// A half-open byte range of the source object. It also correlates NextRange() with
+// PutRange(): the storage wrapper keeps the requested interval in its reply, not the cookie.
 struct TImportRange {
     ui64 Offset = 0;
     ui64 Length = 0;
@@ -64,15 +61,12 @@ public:
     struct TDataBatch {
         ui64 Id = 0;
         ui64 ProcessedBytesAfter = 0;
-        // Deltas to add to the durable progress counters. For sequential
-        // transforms these may include rows emitted by earlier batches that
-        // could not yet advance to a restartable input boundary.
+        // Deltas to the durable progress counters; may include rows of earlier batches that
+        // waited for a restartable boundary.
         ui64 DataBytes = 0;
         ui64 Rows = 0;
-        // True when committing this batch moves the durable resume position
-        // (ProcessedBytesAfter and/or DownloadStateAfter). The coordinator
-        // snapshots the checksum state only for such batches, so the persisted
-        // checksum state always matches the persisted position.
+        // True when the commit moves the durable resume position; the checksum state is
+        // snapshotted only then, so it always matches the position.
         bool Checkpoint = false;
         NKikimrBackup::TS3DownloadState DownloadStateAfter;
     };
@@ -84,30 +78,25 @@ public:
 
     virtual ~IImportS3Engine() = default;
 
-    // Reserves and returns the next physical source range. Until PutRange()
-    // supplies that exact range, another call may return Blocked.
+    // Reserves the next source range; another call may return Blocked until PutRange()
+    // supplies it.
     virtual std::expected<TNextRangeResult, TString> NextRange() = 0;
 
-    // Supplies a completed range. Implementations validate that it was
-    // reserved and that the response length is exact.
+    // Supplies a completed range: the reserved one, with the exact length.
     virtual std::expected<void, TString> PutRange(const TImportRange& range, TString data) = 0;
 
-    // Releases a reservation after the transport gives up on this attempt, so
-    // a retry can request the same range without discarding parser state.
+    // Releases a reservation the transport gave up on, so a retry can request the range again.
     virtual std::expected<void, TString> FailRange(const TImportRange& range) = 0;
 
-    // Produces at most one bounded logical batch. TCell values passed to
-    // addRow are borrowed and are valid only for the duration of this call;
-    // the sink must serialize or copy them synchronously.
+    // Produces at most one batch. The cells passed to addRow are borrowed: the sink must
+    // consume them within the call.
     virtual std::expected<TDataResult, TString> GetData(
         TMemoryPool& pool,
         const TAddRowFn& addRow,
         const TAddChecksumChunkFn& addChecksumChunk) = 0;
 
-    // Releases the prepared batch after the output sink has accepted ownership
-    // of its rows. For UploadRows this happens after the rows and checkpoint are
-    // durable; the direct-part sink owns them in its writer until final attach.
-    // Engines do not produce a second batch while one is uncommitted.
+    // Releases the batch once the sink owns its rows: after they are durable for UploadRows,
+    // in the writer for direct part. No second batch while one is uncommitted.
     virtual std::expected<void, TString> Commit(ui64 batchId) = 0;
 
     virtual std::expected<void, TString> RestoreFromState(
@@ -116,9 +105,8 @@ public:
 
     virtual ui64 PendingBytes() const = 0;
 
-    // True when this live engine has made progress that is newer than the
-    // durable checkpoint. A transport retry must preserve the matching
-    // in-memory checksum state even when no source bytes are currently held.
+    // True when the engine is ahead of the durable checkpoint: a retry must keep its
+    // checksum state.
     virtual bool HasLiveState() const = 0;
 };
 

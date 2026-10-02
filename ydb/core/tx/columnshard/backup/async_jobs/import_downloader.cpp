@@ -82,10 +82,7 @@ public:
     }
 
     void Handle(NKikimr::TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev) {
-        // Nothing is stored here: the downloader gets back what it asks to
-        // store and goes on with it, whether that is the checkpoint of a
-        // Parquet file or the state of the decryption of an encrypted CSV one.
-        // After a restart of the tablet the import starts over anyway.
+        // Nothing is stored here: the downloader gets back what it asked to store.
         Send(ev->Sender, std::make_unique<NKikimr::TEvDataShard::TEvS3DownloadInfo>(ev->Get()->Info));
     }
 

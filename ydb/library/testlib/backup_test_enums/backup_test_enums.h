@@ -6,10 +6,7 @@
 
 namespace NKikimr {
 
-// Backup data formats a test can be parametrized with, e.g.
-// Y_UNIT_TEST(Name, EBackupTestDataFormat) { ... ToDataFormat(Arg<0>()) ... }.
-// Unlike NBackupRestoreTraits::EDataFormat it has no Invalid member, so the
-// parametrized test macro iterates only over real formats.
+// Formats a test can be parametrized with; unlike EDataFormat it has no Invalid member.
 enum class EBackupTestDataFormat {
     Csv /* "csv" */,
     Parquet /* "parquet" */,

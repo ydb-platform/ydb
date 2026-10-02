@@ -33,8 +33,7 @@ inline std::shared_ptr<arrow::Table> ReadParquet(const TString& data) {
     return combined.ValueOrDie();
 }
 
-// A Parquet file of the table, written the way the exporter does it: default
-// writer properties and the Arrow schema stored in the file.
+// A Parquet file of the table, written the way the exporter does it.
 inline TString WriteParquet(const std::shared_ptr<arrow::Table>& table, i64 rowGroupSize = 16) {
     auto sink = arrow::io::BufferOutputStream::Create(0).ValueOrDie();
     auto arrowProperties = parquet::ArrowWriterProperties::Builder();

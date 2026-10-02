@@ -322,8 +322,8 @@ namespace {
         }
     }
 
-    // A data file of a backup in Parquet: a Utf8 key and a Utf8 value, which
-    // may be NULL. The YSON is what ReadTable gives for the rows.
+    // A Parquet data file of a Utf8 key and a nullable Utf8 value; the YSON is what
+    // ReadTable gives.
     TTestData GenerateParquetTestData(
         const TVector<std::pair<TString, TMaybe<TString>>>& rows,
         i64 rowGroupSize = 16)
@@ -800,8 +800,7 @@ value {
         }
     }
 
-    // A CSV line cannot hold a NULL (the empty token is rejected), a Parquet
-    // file can.
+    // A CSV line cannot hold a NULL, a Parquet file can.
     Y_UNIT_TEST(ShouldRestoreNullValuesParquet) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
@@ -2057,8 +2056,7 @@ value {
         ExportImportOnSupportedDatatypesImpl(true, true, EnableDataShardDirectPartImport, true);
     }
 
-    // A Parquet backup holds cells in their stored form (DyNumber and
-    // JsonDocument are binary there), unlike the text of a CSV backup.
+    // A Parquet backup holds DyNumber and JsonDocument in binary, a CSV one as text.
     Y_UNIT_TEST_FLAG(ExportImportOnSupportedDatatypesParquet, EnableDataShardDirectPartImport) {
         ExportImportOnSupportedDatatypesImpl(false, false, EnableDataShardDirectPartImport, false, EBackupTestDataFormat::Parquet);
     }
@@ -3447,9 +3445,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
             runtime.GetAppData().FeatureFlags.SetEnableImportInParquet(true);
             runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
 
-            // several row groups, so that a reboot lands between them; the values are
-            // small because every reboot pass downloads the whole file again in
-            // ReadBatchSize (128 byte) pieces, and every piece costs an S3 round trip
+            // several row groups, so that a reboot lands between them; small values, since
+            // every reboot pass downloads the file again in 128-byte pieces
             TVector<std::pair<TString, TMaybe<TString>>> rows;
             for (ui32 i = 0; i < 6; ++i) {
                 rows.emplace_back(TStringBuilder() << "k" << i, TString(64, static_cast<char>('a' + i)));
@@ -3990,8 +3987,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    // The checksum of a Parquet file is checked when the whole file has been
-    // read, after its rows have been written: the import fails, the rows stay.
+    // A Parquet checksum is checked after the rows are written: the import fails, the
+    // rows stay.
     Y_UNIT_TEST(ShouldFailOnParquetChecksumAfterWritingRows) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -4018,8 +4015,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    // A row group that does not fit into the read buffer is rejected by the
-    // footer. The limit is a setting of the DataShard.
+    // A row group above the read buffer is rejected by the footer; the limit is a
+    // DataShard setting.
     Y_UNIT_TEST(ShouldFailOnParquetRowGroupAboveTheLimit) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -4042,9 +4039,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             "bytes (RestoreReadBufferSizeLimit less what the footer takes)");
     }
 
-    // A backup of the table has no NULL in a column that is NOT NULL, so such
-    // a file is of another origin. It is rejected, for any format, with the
-    // place of the row in the file.
+    // A backup has no NULL in a NOT NULL column, so such a file is rejected, for any
+    // format, with the row's place.
     Y_UNIT_TEST(ShouldFailOnNullInNotNullColumn, EBackupTestDataFormat) {
         const auto format = ToDataFormat(Arg<0>());
         const TString scheme = R"(
@@ -4082,9 +4078,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-    // The cells of a row come to the check by their place: the keys in the
-    // order of the key, the values in the order of the scheme. Here the order
-    // of the columns is neither.
+    // Cells are checked by their place: keys in key order, values in scheme order;
+    // here the column order is neither.
     Y_UNIT_TEST(ShouldFailOnNullInNotNullKey, EBackupTestDataFormat) {
         const auto format = ToDataFormat(Arg<0>());
         const TString scheme = R"(
@@ -4160,8 +4155,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         )";
     }
 
-    // A Parquet backup of three row groups, each fetched by a GetObject of its
-    // own: the file is bigger than the tail the footer is looked for in.
+    // Three row groups, each a GetObject of its own: the file is bigger than the footer tail.
     TTestData MultiRowGroupParquetTestData() {
         TVector<std::pair<TString, TMaybe<TString>>> rows;
         for (ui32 i = 0; i < 6; ++i) {
@@ -4170,10 +4164,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         return GenerateParquetTestData(rows, /*rowGroupSize=*/2);
     }
 
-    // A GetObject of a row group fails with a retriable error after the row
-    // groups before it were written. The downloader restarts with the engine
-    // it has, which keeps its place in the file, and the direct import keeps
-    // its part; the import completes with every row.
+    // A row group's GetObject fails once after earlier ones were written: the downloader
+    // restarts with its engine, which keeps its place, and the import completes.
     Y_UNIT_TEST_FLAG(ShouldRetryParquetReadWithLiveEngine, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());
@@ -4222,9 +4214,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    // The first upload of rows is answered with a retriable error. The
-    // downloader drops its engine, restarts from the last checkpoint and
-    // uploads again; the import completes with every row, once.
+    // The first upload fails with a retriable error: the downloader drops its engine,
+    // restarts from the checkpoint and uploads again; every row once.
     Y_UNIT_TEST(ShouldRetryParquetUploadAfterRetriableError) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions());

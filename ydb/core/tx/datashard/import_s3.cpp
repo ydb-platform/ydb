@@ -170,8 +170,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         ProcessTag = 1,
     };
 
-    // The columns that take no NULL, by the place of their cell in a row: the
-    // keys are in the order of the key, the values in the order of the scheme.
+    // Columns that take no NULL, by the cell's place: keys in key order, values in scheme order.
     class TNotNullColumns {
     public:
         TNotNullColumns(const TTableInfo& tableInfo, const NKikimrSchemeOp::TTableDescription& scheme) {
@@ -356,10 +355,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             {"logPrefix", LogPrefix()},
             {"attempt", Attempt});
 
-        // At most one external-storage request is ever outstanding, and every
-        // path into Restart() runs after that request's response was consumed,
-        // so no reply from the previous client can arrive later. (Replies are
-        // sent through the actor system and carry no Sender to correlate on.)
+        // At most one storage request is outstanding and Restart() runs after its response,
+        // so no stale reply can arrive.
         Y_DEBUG_ABORT_UNLESS(!ActiveHeadKey && !ActiveGetKey && !ActiveGetRange);
         ActiveHeadKey.Clear();
         ActiveGetKey.Clear();
@@ -426,9 +423,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         const auto* msg = ev->Get();
         const auto& interval = msg->GetReadInterval();
         const TImportRange range{interval.first, msg->GetReadIntervalLength()};
-        // A failed reply may carry the FS operator's (0, 0) sentinel instead of
-        // the requested interval; it still belongs to the only outstanding
-        // request (see Restart()).
+        // A failed reply may carry the (0, 0) sentinel; it still belongs to the only outstanding
+        // request.
         const bool sentinelInterval = interval.first == 0 && interval.second == 0;
         const bool matches = ActiveGetKey && ActiveGetRange
             && (!msg->Key || *msg->Key == *ActiveGetKey)
@@ -507,11 +503,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
 
-        // HEAD is repeated on every restart. The engine was made for the
-        // object of the first one, and the object may have been replaced since
-        // then. With nothing done with it yet, the engine is made anew for the
-        // new one; otherwise the import fails here, with the reason, rather
-        // than on the mismatch it would meet later.
+        // The object may have been replaced since the engine was made for it: with nothing
+        // done yet the engine is made anew, otherwise the import fails here.
         if (Engine && (ETag != previousETag || ContentLength != previousContentLength)) {
             if (Engine->HasLiveState()
                 || (DirectImport && DirectImport->State() != TDirectImportWriter::EState::Pending))
@@ -576,10 +569,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
 
         if (loadState && !preserveLiveDirectState) {
             DownloadState = info.DownloadState;
-            // FailRange()+Restart() intentionally keeps a live engine. It may
-            // already have emitted checksum bytes beyond the last restartable
-            // input boundary even when it currently holds no source buffers,
-            // so resetting only the checksum would make the states inconsistent.
+            // The live engine is kept on purpose: it may hold checksum state past the last
+            // restartable boundary.
             if (Checksum && !preserveLiveEngineState) {
                 Checksum->SetState(info.ProcessedChecksumState);
             }
@@ -718,8 +709,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             NotNullColumns.ConstructInPlace(TableInfo, Scheme);
         }
 
-        // A row is rejected here, where the table is known, for any format of
-        // the file. The parser adds the place of the row in the file.
+        // A row is rejected here, where the table is known; the parser adds its place in the file.
         auto addRow = [&](const TVector<TCell>& keys, const TVector<TCell>& values) -> std::expected<void, TString> {
             if (keys.empty()) {
                 return std::unexpected("row has no key columns");
@@ -778,12 +768,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             }
 
             if (DirectPartImportEnabled) {
-                // Direct mode persists nothing until the final attach:
-                // TTxS3DirectWriteFinish stores the download record together
-                // with the part. Commit() here only releases the engine's
-                // batch and advances the parser, so a restart before the
-                // attach replays the whole file and no acknowledged data is
-                // lost.
+                // Direct mode persists nothing until the final attach, so Commit() only releases
+                // the batch; a restart replays the whole file.
                 if (auto commitResult = Engine->Commit(std::exchange(PendingBatchId, 0)); !commitResult) {
                     return Finish(false, TStringBuilder() << Settings.GetDataKey(DataFormat, CompressionCodec)
                         << ": cannot commit import-engine batch: " << commitResult.error());
@@ -1006,8 +992,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader<TSettings>> {
             PendingBatchRows = 0;
             return ProcessDownloadInfo(ev->Get()->Info, TStringBuf("UploadResponse"));
         } else if (ev->Get()->IsRetriableError()) {
-            // The parser may already have advanced past the uncommitted batch.
-            // Recreate it from the last DataShard checkpoint after the retry.
+            // The parser may be past the uncommitted batch: recreate it from the last checkpoint.
             RollbackPendingBatchProgress();
             Engine.Reset();
             return RetryOrFinish(record.GetErrorDescription());
@@ -1334,8 +1319,8 @@ private:
         }
         Engine = std::move(*engineResult);
 
-        // Every engine feeds rows in the exporter's key order (CSV lines and
-        // Parquet row groups alike), which is all the direct-part writer needs.
+        // Every engine feeds rows in the exporter's key order, which is what the direct-part
+        // writer needs.
         if (DirectPartImportEnabled && !DirectImport) {
             DirectImport = MakeHolder<TDirectImportWriter>(TableInfo, Scheme);
         }

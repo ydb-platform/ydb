@@ -36,9 +36,8 @@ public:
         return BufferedBytes_;
     }
 
-    // Stores one byte range. Bytes already loaded at the start of the range
-    // are skipped (a retried or re-routed chunk may repeat them); overlapping
-    // loaded bytes anywhere else is an error.
+    // Stores a byte range. Loaded bytes at its start are skipped (a retried chunk repeats
+    // them); any other overlap is an error.
     std::expected<void, TString> PutRange(ui64 offset, TString data);
 
     bool HasBytes(ui64 offset, ui64 length) const;
@@ -48,8 +47,8 @@ public:
     // The bytes of the range, which must be loaded, copied to out.
     bool CopyBytes(ui64 offset, ui64 length, char* out) const;
 
-    // A file over the loaded bytes for Arrow. What Arrow reads from it is
-    // copied once, into memory of the pool, where it is counted.
+    // A file over the loaded bytes for Arrow; a read is copied once into the pool, where
+    // it is counted.
     std::shared_ptr<arrow::io::RandomAccessFile> MakeRandomAccessFile(
         const std::shared_ptr<TParquetSparseFile>& owner,
         arrow::MemoryPool* pool = arrow::default_memory_pool()) const;
@@ -58,32 +57,28 @@ public:
 
     std::expected<TMaybe<TParquetFetchRange>, TString> TryParseFooterMetadataRange() const;
 
-    // The length of the footer, by the last bytes of the file. They must be
-    // loaded.
+    // The footer length from the last bytes of the file, which must be loaded.
     std::expected<ui64, TString> FooterMetadataLength() const;
 
     std::expected<TVector<TParquetFetchRange>, TString> PlanColumnChunkRanges(
         const std::shared_ptr<TParquetSparseFile>& owner) const;
 
-    // The ranges of the file that hold the given columns, for every row group.
-    // The other columns are not read, so they are not downloaded either.
+    // The ranges of the given columns per row group; the other columns are not downloaded.
     std::expected<TVector<TVector<TParquetFetchRange>>, TString> PlanColumnChunkRangesByRowGroup(
         const parquet::FileMetaData& metadata,
         const std::vector<int>& columns) const;
 
     void Clear();
 
-    // Drops every buffered byte before offset while preserving a segment tail
-    // that crosses the boundary. This lets the import engine evict a completed
-    // row group without discarding the cached Parquet footer suffix.
+    // Drops the loaded bytes before offset, keeping a segment tail that crosses it: a
+    // finished row group is evicted, the footer kept.
     void ClearBefore(ui64 offset);
 
     TMaybe<TString> ReadBytes(ui64 offset, ui64 length) const;
 
 private:
-    // Loaded bytes, sorted by offset, pairwise disjoint and never adjacent:
-    // touching puts are merged, so a fully loaded range always lies within
-    // exactly one segment and lookups are a binary search.
+    // Loaded bytes: sorted, disjoint, never adjacent (touching puts merge), so a loaded
+    // range lies within one segment.
     struct TSegment {
         ui64 Offset = 0;
         TString Data;
@@ -103,12 +98,9 @@ private:
     TVector<TSegment> Segments;
 };
 
-// What a parsed footer takes in memory, by estimate. Arrow keeps it as thrift
-// structures: one per column chunk, one per row group and one per column, a
-// few hundred bytes each (sizeof is 560, 96 and 320 in this Arrow, before the
-// vectors they hold), while a column chunk takes as little as 3 bytes in the
-// footer. The strings they hold are copies of what is in the footer, so its
-// own size covers them.
+// What a parsed footer takes: thrift structures of a few hundred bytes per column chunk,
+// row group and column (sizeof 560, 96 and 320), while a chunk is as little as 3 bytes
+// in the footer.
 constexpr ui64 ParquetFooterBytesPerColumnChunk = 640;
 constexpr ui64 ParquetFooterBytesPerRowGroup = 128;
 constexpr ui64 ParquetFooterBytesPerColumn = 384;

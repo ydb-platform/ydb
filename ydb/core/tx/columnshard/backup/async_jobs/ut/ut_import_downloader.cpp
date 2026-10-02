@@ -390,9 +390,7 @@ Y_UNIT_TEST_SUITE(AsyncJobs) {
         ImportSchemaOrder(ToDataFormat(Arg<0>()));
     }
 
-    // Nothing is stored for an import into a column table: the downloader gets
-    // back what it asks to store. When it starts over after a failed read of a
-    // Parquet file, that is the checkpoint it has reached by then.
+    // Nothing is stored for a column table: the downloader gets back what it asked to store.
     Y_UNIT_TEST(ImportKeepsTheCheckpointOfTheDownloader) {
         const TString bucketName = "test-import-checkpoint";
         Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();

@@ -44,11 +44,8 @@ struct TColumnMeta {
     ui32 KeyOrder = Max<ui32>();
 };
 
-// Checks the restrictions a YDB type puts on its values and its Arrow type
-// does not carry: the range of a date, well-formed JSON and so on. CSV import
-// enforces them by parsing the text of a value and by CheckCellValue(). A
-// Parquet backup holds cells in their stored form, so the types that
-// CheckCellValue() leaves to the text parser are checked here in that form.
+// Checks what a YDB type restricts beyond its Arrow type. CSV checks it while parsing
+// text; a Parquet backup holds the stored form, so it is checked here.
 bool IsValidCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
     if (cell.IsNull()) {
         return true;
@@ -75,16 +72,8 @@ bool IsValidCellValue(const TCell& cell, const NScheme::TTypeInfo& typeInfo) {
     }
 }
 
-// Splits the converter's flat cell row into keys (in key order) and values (in
-// scheme order) and forwards them to the engine's addRow. A row with a value
-// that is invalid for its column is not forwarded, and neither is any row
-// after it or after a row that addRow has rejected: the import fails.
-//
-// The cells are borrowed from the converter (see IRowWriter::AddRow) and are
-// not copied here: IDataParser::TAddRowFn carries the same borrowed-cells
-// contract as for CSV, and both sinks (TUploadRowsRequestBuilder serializes,
-// TDirectPartWriter encodes into pages) consume the row synchronously inside
-// the call. addRow must never defer the cells.
+// Splits the converter's row into keys and values and forwards it to addRow. An invalid
+// or rejected row stops the import. The cells are borrowed: addRow must not defer them.
 class TImportParquetRowWriter final : public NArrow::IRowWriter {
 public:
     TImportParquetRowWriter(
@@ -144,8 +133,7 @@ public:
         };
     }
 
-    // Set once a row has an invalid value or is rejected. That row is the one
-    // after the rows counted by GetParsedData().
+    // Set once a row is invalid or rejected: the row after those counted by GetParsedData().
     const TMaybe<TString>& GetError() const {
         return Error;
     }
@@ -161,22 +149,14 @@ private:
     TMaybe<TString> Error;
 };
 
-// The Arrow writer stores some types differently from how it reads them back.
-// With Parquet format 1.0 (the writer default, used by the exporter) there is
-// no unsigned 32-bit annotation, so uint32 (YDB Uint32, Datetime) is written
-// as INT64 and comes back as int64. Such columns are cast back before
-// conversion; any other mismatch is an error.
+// Parquet format 1.0 has no unsigned 32-bit annotation: the exporter writes uint32 as
+// INT64, and such columns are cast back. Any other mismatch is an error.
 bool IsWriterCoercion(const arrow::DataType& fileType, const arrow::DataType& expectedType) {
     return fileType.id() == arrow::Type::INT64 && expectedType.id() == arrow::Type::UINT32;
 }
 
-// The bytes the rows of a decoded batch take in an upload. A row is uploaded
-// as two serialized cell vectors, the key and the value, where every cell has
-// a header, a NULL as well: that is rowOverhead, the same for every row. The
-// rest is the cell bytes, that is what the converter emits. Conversions are
-// off, so a cell is the Arrow value as it is: the width of the type for a
-// fixed-width column, the length of the value for a string or a binary one,
-// and nothing for a null.
+// The upload bytes of a batch's rows: rowOverhead (two cell vectors with a header per
+// cell, NULL included) plus the cell bytes.
 class TRowSizes {
 public:
     TRowSizes(const arrow::RecordBatch& batch, ui64 rowOverhead)
@@ -223,21 +203,11 @@ private:
     TVector<TColumn> Columns;
 };
 
-// The footer is checked before Arrow parses it. Thrift reads a footer into
-// structures many times the size of their bytes, a column chunk of 3 bytes
-// into 560, and it resizes a list to its declared length before it reads one
-// entry, so a crafted footer of a few MB takes GBs while it is parsed. And
-// Arrow builds the tree of the schema by recursion, one level per nested
-// group and with no limit, so a deep enough chain of groups overflows the
-// stack. So the footer is first walked once without building it: the schema
-// elements, the row groups and the column chunks are counted; every list is
-// checked against the bytes that follow it, since an entry takes a byte at
-// least; what the parsed footer takes in memory is added up as the walk goes
-// and checked against the limit; and the depth of the schema is checked on
-// the flat list the footer holds, which is in preorder, an element with
-// children followed by them. The walk allocates nothing but one buffer for
-// the strings it passes. A backup has one level of schema, and the import
-// takes only top-level columns.
+// Checks the footer before Arrow parses it. Thrift resizes a list to its declared length
+// before reading it, and a 3-byte column chunk becomes 560 bytes in memory, so a crafted
+// footer takes GBs; Arrow builds the schema tree by recursion, so a deep schema overflows
+// the stack. One pass that builds nothing: list lengths against the bytes left, the
+// memory of the parsed footer against the limit, and the schema depth.
 constexpr size_t MaxSchemaNesting = 32;
 
 namespace NThrift = apache::thrift::protocol;
@@ -252,9 +222,7 @@ class TFooterWalker {
     static constexpr int16_t RowGroupColumns = 1;
     static constexpr int16_t SchemaElementNumChildren = 5;
 
-    // What an entry of any other list takes once parsed: a key-value pair, a
-    // string of a path, an encoding, the statistics of a page's encoding, a
-    // sorting column.
+    // What an entry of any other list takes once parsed.
     static constexpr ui64 BytesPerOtherEntry = 64;
     static constexpr ui64 BytesPerString = 32;
     static constexpr ui64 BytesPerNumber = 8;
@@ -272,8 +240,7 @@ public:
     {
     }
 
-    // Throws TRejected for a footer the import does not take, and thrift's
-    // exceptions for one it cannot read.
+    // Throws TRejected for a footer the import refuses, thrift's exceptions for one it cannot read.
     void Walk() {
         NThrift::TInputRecursionTracker tracker(Reader);
         std::string name;
@@ -413,8 +380,7 @@ private:
         }
     }
 
-    // Thrift's skip, except that a list is checked and charged before its
-    // entries are passed, and that the strings land in one buffer.
+    // Thrift's skip, with lists checked and charged, and strings read into one buffer.
     void Skip(NThrift::TType type) {
         switch (type) {
         case NThrift::T_BOOL: {
@@ -552,9 +518,8 @@ std::expected<void, TString> CheckFooter(arrow::io::RandomAccessFile& source, ui
     try {
         using TTransport = apache::thrift::transport::TMemoryBuffer;
         auto transport = std::make_shared<TTransport>(const_cast<uint8_t*>((*footer)->data()), footerLength);
-        // The limits of a string and of a list are the bytes of the footer,
-        // since an entry takes a byte at least. Arrow reads the footer with
-        // 100 MB and a million; a footer within these is within those.
+        // A string or a list cannot exceed the footer's bytes (Arrow's limits: 100 MB and
+        // a million).
         const auto limit = static_cast<int32_t>(Min<ui64>(footerLength, Max<int32_t>()));
         NThrift::TCompactProtocolT<TTransport> reader(transport, limit, limit);
         TFooterWalker walker(*transport, reader, footerLength, bufferSizeLimit);
@@ -568,10 +533,8 @@ std::expected<void, TString> CheckFooter(arrow::io::RandomAccessFile& source, ui
     return {};
 }
 
-// Parquet reports some of its errors as exceptions, a column chunk index past
-// the chunks of a row group among them. The parser is called from an actor,
-// which an exception must not reach, so every entry point turns them into an
-// error.
+// Parquet throws for some errors; the parser runs in an actor, so every entry point
+// turns them into an error.
 template <class TResult, class TFn>
 TResult Guarded(TFn&& fn) {
     try {
@@ -596,11 +559,8 @@ ui64 DecodedBytes(const arrow::RecordBatch& batch) {
     return bytes;
 }
 
-// The memory Arrow takes to read a file: the pages it uncompresses, the
-// dictionaries and the rows it decodes. The file does not bound it: a page
-// states its own size, and a value of a dictionary is decoded for every row
-// that has it. So it is bounded here: an allocation above the limit is
-// refused, which fails the read that needs it.
+// Bounds the memory Arrow takes to read a file (pages, dictionaries, decoded rows), which
+// the file does not bound. An allocation above the limit is refused and fails the read.
 class TDecodeMemoryPool final : public arrow::MemoryPool {
 public:
     explicit TDecodeMemoryPool(ui64 limit)
@@ -677,8 +637,7 @@ struct TParquetFileSession {
     std::vector<std::pair<std::string, std::shared_ptr<arrow::DataType>>> CastColumns; // see IsWriterCoercion
     std::vector<int> RowGroups; // the row groups to read, in that order
     size_t CurrentGroup = 0; // the one of RowGroups that ColumnReaders read
-    // A reader for every column of the table, over the current row group. The
-    // columns are read one by one and put together in ReadBatch().
+    // A reader per column over the current row group; ReadBatch() puts the columns together.
     std::vector<std::unique_ptr<arrow::RecordBatchReader>> ColumnReaders;
     std::shared_ptr<arrow::Schema> BatchSchema; // of the batches ReadBatch() makes
     ui64 DecodedInGroup = 0; // the rows decoded from the current row group
@@ -692,18 +651,9 @@ struct TParquetFileSession {
 };
 
 class TParquetDataParser final : public IParquetStreamParser {
-    // A row group is decoded in batches, so that the memory of the decoded
-    // rows does not depend on how many rows it has or how well they are
-    // packed. Nothing in the file tells the size of the decoded rows (the
-    // sizes in its metadata are those of the encoded pages), so every batch is
-    // sized to a byte target by the rows of the one before it:
-    //  - the first batch of a row group is a single row;
-    //  - a batch is at most twice as long as the one before it, so a run of
-    //    wider rows is met by a batch of a limited length.
-    // The byte target is what a batch is expected to take, not a bound: rows
-    // far wider than those before them make a batch that takes far more. The
-    // bound is the memory limit of the decoding, see TDecodeMemoryPool and
-    // ReopenWithSmallerBatches().
+    // A row group is decoded in batches sized by the rows before them: one row first, then
+    // at most twice the previous batch, to a byte target. The target is not a bound; the
+    // bound is the decoding memory limit, see ReopenWithSmallerBatches().
     static constexpr i64 MaxBatchRows = 64 * 1024;
     // The byte target of a batch when the caller sets no byte budget.
     static constexpr ui64 DefaultDecodeBytes = 8_MB;
@@ -720,9 +670,8 @@ class TParquetDataParser final : public IParquetStreamParser {
         ui64 Bytes = 0;
     };
 
-    // The rows, out of count rows starting at offset, that fit into the byte
-    // budget. A row that does not fit into an empty batch is taken alone: that
-    // is the only way for a batch to exceed the budget.
+    // The rows from offset that fit the byte budget; a row that does not fit an empty batch
+    // is taken alone.
     static TFittingRows RowsWithinBudget(const TRowSizes& sizes, i64 offset, i64 count, ui64 budget, bool emptyBatch) {
         TFittingRows fitting;
         while (fitting.Rows < count) {
@@ -740,10 +689,8 @@ class TParquetDataParser final : public IParquetStreamParser {
     }
 
 public:
-    // The pages of a row group and the dictionaries decoded from them take up
-    // to its uncompressed size each, and the engine accepts a row group whose
-    // uncompressed size is below the limit of the read buffer. So with twice
-    // that limit a row group the engine accepts can be decoded.
+    // Pages and dictionaries of a row group take up to its uncompressed size each, so twice
+    // the buffer limit decodes any row group the engine accepts.
     explicit TParquetDataParser(ui64 bufferSizeLimit)
         : BufferSizeLimit(bufferSizeLimit)
         , DecodeMemoryLimit(bufferSizeLimit > Max<ui64>() / 2 ? Max<ui64>() : 2 * bufferSizeLimit)
@@ -776,9 +723,8 @@ public:
                 ++KeyCount;
             }
 
-            // The Arrow type the exporter writes for this YDB type. The
-            // converter static-casts every column to the array class implied
-            // by the YDB type, so the file must match exactly.
+            // The converter static-casts a column to the array class of its YDB type: the file
+            // must match exactly.
             auto arrowType = NArrow::GetArrowType(meta.TypeInfo);
             if (!arrowType.ok()) {
                 return std::unexpected(TStringBuilder() << "column '" << meta.Name
@@ -788,9 +734,8 @@ public:
                 ? arrow::int64() // mirrors the exporter's remap in export_parquet.cpp
                 : arrowType.ValueUnsafe();
 
-            // The converter casts a column to the Arrow array class of its YDB
-            // type. For Interval that is a duration array, and the file has an
-            // int64 one, so the converter is given Int64: the cell is the same.
+            // Interval is a duration array for the converter but int64 in the file: the converter
+            // is given Int64.
             YdbSchema.emplace_back(
                 meta.Name,
                 meta.TypeInfo.GetTypeId() == NScheme::NTypeIds::Interval
@@ -914,17 +859,12 @@ public:
             session->ColumnIndices.push_back(columnIndex);
         }
 
-        // A row group holds the same number of values in every column: its
-        // number of rows. Arrow trusts that, and reads out of bounds when a
-        // column of a crafted file turns out shorter than the first one, so
-        // the columns are read one by one here, see ReadBatch(). The footer
-        // is checked first: a file whose footer is wrong is rejected before
-        // any of its data is downloaded.
+        // Arrow trusts the footer's row counts and reads out of bounds when a column is shorter,
+        // so the columns are read one by one (ReadBatch) and the footer is checked first.
         const auto metadata = session->FileReader->parquet_reader()->metadata();
         for (int rowGroup = 0; rowGroup < metadata->num_row_groups(); ++rowGroup) {
             const auto rowGroupMeta = metadata->RowGroup(rowGroup);
-            // a chunk for every column of the schema, or the lookup of a
-            // chunk throws
+            // a chunk for every column, or a lookup throws
             if (rowGroupMeta->num_columns() != metadata->num_columns()) {
                 return std::unexpected(TStringBuilder() << "Parquet row group " << rowGroup << " has "
                     << rowGroupMeta->num_columns() << " column chunks, the schema has "
@@ -1043,11 +983,8 @@ public:
         }
 
         TImportParquetRowWriter rowWriter(addRow, ColumnMeta, KeyCount);
-        // A backup holds cells in their stored form: the exporter appends them
-        // to the Arrow builders as they are, so DyNumber and JsonDocument are
-        // binary in the file. The converter's text conversions are meant for
-        // user-supplied Arrow data (DyNumber as a numeric string, JsonDocument
-        // as JSON text) and must stay off here.
+        // A backup holds cells in their stored form (DyNumber and JsonDocument are binary):
+        // the converter's text conversions stay off.
         NArrow::TArrowToYdbConverter converter(
             YdbSchema, rowWriter, /*allowInfDouble=*/false, /*withConversion=*/false);
         const ui64 firstRow = Session->RowsRead;
@@ -1156,9 +1093,7 @@ public:
                 return makeResult(true); // the byte budget is used up
             }
 
-            // The batch is emitted and the budget is not used up: go on with
-            // the next one. If there is none, the rows emitted so far are the
-            // last ones of the row group.
+            // budget not used up: the next batch, or the end of the row group
             held.reset();
             Session->HeldSizes.Clear();
             Session->HeldOffset = 0;
@@ -1198,13 +1133,12 @@ public:
     }
 
 private:
-    // Restores the expected Arrow type of columns the writer coerced. The cast
-    // is checked: a value that does not fit the YDB type fails the import.
+    // Casts coerced columns back to the expected Arrow type; a value that does not fit
+    // fails the import.
     std::expected<std::shared_ptr<arrow::RecordBatch>, TString> CastCoercedColumns(
         std::shared_ptr<arrow::RecordBatch> batch) const
     {
-        // The memory of the columns the cast makes is within the limit of the
-        // decoding as well: a cast that is refused is a batch that is refused.
+        // the cast's memory is within the decoding limit too
         Session->Memory->ResetRefused();
         arrow::compute::ExecContext context(Session->Memory);
 
@@ -1231,8 +1165,7 @@ private:
         return batch;
     }
 
-    // Names a row of the open row groups by its position in the file. Both
-    // numbers are zero-based, the way Parquet tools count them.
+    // Names a row by its zero-based position in the file, the way Parquet tools count.
     TString DescribeRow(ui64 row) const {
         const auto metadata = Session->FileReader->parquet_reader()->metadata();
         for (const int rowGroup : Session->RowGroups) {
@@ -1281,9 +1214,8 @@ private:
         return {};
     }
 
-    // The rows the reader of a column gives for one decode: the given number
-    // of them, or fewer at the end of the column. Arrow splits a decode only
-    // for a column of more than 2 GiB in a batch; the pieces are joined.
+    // One decode of a column: the given rows, or fewer at its end. Arrow splits only a
+    // column above 2 GiB; the pieces are joined.
     std::expected<std::shared_ptr<arrow::Array>, TString> ReadColumn(size_t column, i64 rows) {
         arrow::ArrayVector pieces;
         i64 length = 0;
@@ -1316,11 +1248,8 @@ private:
         return std::move(*joined);
     }
 
-    // Decodes the next rows of the current row group, a column at a time, and
-    // puts the columns together. Arrow does not look at their lengths when it
-    // puts them together itself, and reads out of bounds when a column of a
-    // crafted file is shorter than the first one; here a difference is an
-    // error. The batch is null at the end of the row group.
+    // Decodes the next rows column by column and puts them together; columns of different
+    // lengths are an error (Arrow would read out of bounds). Null at the end of the row group.
     std::expected<std::shared_ptr<arrow::RecordBatch>, TString> ReadBatch(i64 rows) {
         Session->Memory->ResetRefused();
         // The readers take the batch size for every batch they decode.
@@ -1354,8 +1283,7 @@ private:
         return arrow::RecordBatch::Make(Session->BatchSchema, length, std::move(columns));
     }
 
-    // At the end of a row group its readers must have given all the rows the
-    // footer states. Fewer is a crafted file whose columns are all short.
+    // The readers must have given all the rows the footer states; fewer is a crafted file.
     std::expected<void, TString> CheckRowGroupRead() const {
         const ui64 rows = RowsOfGroup(Session->CurrentGroup);
         if (Session->DecodedInGroup != rows) {
@@ -1366,9 +1294,7 @@ private:
         return {};
     }
 
-    // Decodes the next rows of the open row groups: the given number of them,
-    // or fewer at the end of a row group. The batch is null once the last row
-    // group is read to its end.
+    // Decodes the next rows of the open row groups; null once the last one is read to its end.
     std::expected<std::shared_ptr<arrow::RecordBatch>, TString> DecodeNext(i64 rows) {
         while (true) {
             auto batch = ReadBatch(rows);
@@ -1394,12 +1320,9 @@ private:
         }
     }
 
-    // Called when a batch does not fit into the memory limit of the decoding.
-    // The readers cannot go on after a read that has failed, so the row groups
-    // are opened again, the rows that have been emitted are decoded once more,
-    // in the batches they were decoded in, and dropped. The reading goes on
-    // with a batch of one row. The batches of these row groups stay shorter
-    // than the one that has failed, so this happens a limited number of times.
+    // A batch did not fit the decoding memory. The readers cannot go on after a failed read,
+    // so the row groups are reopened, the rows already emitted are decoded again and dropped,
+    // and reading goes on with batches that stay below the failed one.
     std::expected<void, TString> ReopenWithSmallerBatches() {
         const i64 failedRows = Session->BatchRows;
         if (failedRows == 1) {

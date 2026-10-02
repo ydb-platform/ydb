@@ -251,11 +251,11 @@ public:
 
     explicit TCreateTestShardSetRequest(IRequestOpCtx* request)
         : TBase(request)
-        , Path(Request_->NormalizePath(GetProtoRequest()->path()))
     {}
 
     void Bootstrap(const TActorContext& ctx) {
         TBase::Bootstrap(ctx);
+        Path = Request_->GetDatabaseRelativePath(GetProtoRequest()->path());
         Become(&TCreateTestShardSetRequest::StateFunc);
         SendProposeRequest(ctx);
     }
@@ -360,7 +360,7 @@ public:
     }
 
 private:
-    const TString Path;
+    TString Path;
 };
 
 class TDeleteTestShardSetRequest : public TRpcSchemeRequestActor<TDeleteTestShardSetRequest, TEvDeleteTestShardSetRequest> {
@@ -379,7 +379,7 @@ public:
 
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->NormalizePath(req->path()));
+            pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return Reply(Ydb::StatusIds::BAD_REQUEST, ctx);

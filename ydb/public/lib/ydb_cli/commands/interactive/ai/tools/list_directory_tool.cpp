@@ -47,7 +47,7 @@ protected:
         Directory = CanonizePath(parser.GetKey(DIRECTORY_PROPERTY).GetString());
 
         TString message;
-        if (Directory == Database || Directory == Database + "/") {
+        if (Directory.empty() || (Database.StartsWith('/') && (Directory == Database || Directory == Database + "/"))) {
             message = "Listing database root directory";
         } else {
             message = TStringBuilder() << "Listing directory " << Directory;
@@ -64,6 +64,25 @@ protected:
         Y_DEFER { ResetInterrupted(); };
 
         NScheme::TSchemeClient client(LazyDriver->Get());
+        if (Directory.empty() && !Database.empty()) {
+            // Empty resource paths are rejected by the server. Resolve the relative
+            // database against the single domain returned by listing the cluster root.
+            auto rootFuture = client.ListDirectory("/");
+            if (!WaitInterruptable(rootFuture)) {
+                return TResponse::Error(TString("Resolving database root was interrupted by user"));
+            }
+
+            const auto& root = rootFuture.GetValue();
+            if (!root.IsSuccess()) {
+                Cout << Endl << Colors.Red() << "Resolving database root failed: " << Strip(root.GetIssues().ToString()) << Colors.OldColor() << Endl;
+                return TResponse::Error(TStringBuilder() << "Resolving database root failed with status " << root.GetStatus() << ", reason:\n" << root.GetIssues().ToString());
+            }
+            if (root.GetChildren().size() != 1) {
+                return TResponse::Error(TStringBuilder() << "Exactly one cluster root expected, found: " << root.GetChildren().size());
+            }
+            Directory = JoinYdbPath({TStringBuilder() << '/' << root.GetChildren().front().Name, Database});
+        }
+
         auto feature = client.ListDirectory(Directory);
         if (!WaitInterruptable(feature)) {
             return TResponse::Error(TStringBuilder() << "Listing directory \"" << Directory << "\" was interrupted by user");

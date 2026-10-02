@@ -400,8 +400,8 @@ TPackedTables PackOnce(const TNodeDatabaseMetricsAggregatorPtr& aggregator) {
 /**
  * @return The packed table entry of the given level (or nullptr if there is none)
  *
- * @note The entry carries the public metric values of its buckets only: it is tagged
- *       with the tablet type, and the low level counters are not packed at all.
+ * @note The entry carries the public metric values of its buckets, it is tagged
+ *       with the tablet type.
  */
 const NKikimrSysView::TDetailedTableCounters* FindPackedTable(
     const TPackedTables& tables, EDetailedMetricsLevel level, const TString& tablePath = TABLE_PATH)
@@ -409,9 +409,7 @@ const NKikimrSysView::TDetailedTableCounters* FindPackedTable(
     for (const auto& table : tables) {
         if (table.GetTablePath() == tablePath && table.GetLevel() == level) {
             UNIT_ASSERT_VALUES_EQUAL(table.GetTabletType(), TABLET_TYPE);
-            UNIT_ASSERT(!table.HasTableCounters());
             for (const auto& leaf : table.GetLeaves()) {
-                UNIT_ASSERT(!leaf.HasCounters());
                 UNIT_ASSERT(leaf.HasMetrics());
             }
             return &table;

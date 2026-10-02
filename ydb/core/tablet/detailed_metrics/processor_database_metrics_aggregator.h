@@ -2,7 +2,6 @@
 
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/sys_view.pb.h>
-#include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -41,19 +40,15 @@ namespace NKikimr {
      * Every TABLE partial and leaf feeds the public rollup, and leaves are published under tablet_id/follower_id.
      *
      * The aggregator keeps only the public metric values of every TABLE partial and leaf (see TPublicBucket),
-     * no low level counters. A table entry reported with its tablet type (TDetailedTableCounters.TabletType)
-     * carries the public metric values of the descriptor of the tablet type (see TDetailedMetricsDescriptor),
-     * which are applied as they are. A table entry without the tablet type carries the legacy low level
-     * counters, which are converted into the public metric values as they arrive.
+     * no low level counters. Every table entry of a report carries the public metric values of the descriptor
+     * of its tablet type (TDetailedTableCounters.TabletType, see TDetailedMetricsDescriptor), which are applied
+     * as they are. A table entry without the tablet type is ignored.
      *
      * @param[in] targetCounterGroup The counter group for the public counters
      * @param[in] databasePath The path of the database, the table paths of the reports are relative to it
-     * @param[in] executorCountersTemplate The Executor counters, whose layout the nodes report
-     *            (the application counters come from the tablet type), must not be null
      */
     TProcessorDatabaseMetricsAggregatorPtr CreateProcessorDatabaseMetricsAggregator(
         NMonitoring::TDynamicCounterPtr targetCounterGroup,
-        const TString& databasePath,
-        THolder<TTabletCountersBase> executorCountersTemplate);
+        const TString& databasePath);
 
 } // namespace NKikimr

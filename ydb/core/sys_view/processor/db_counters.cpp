@@ -347,10 +347,7 @@ TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() 
     // be built and fed on a plain db counters deployment.
     if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
         NProfiling::TMemoryTagScope memoryScope(NDetailedMetrics::ProcessorMemoryTag());
-        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(
-            DetailedGroup,
-            Database,
-            THolder<TTabletCountersBase>(new NTabletFlatExecutor::TExecutorCounters));
+        DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(DetailedGroup, Database);
     }
     return DetailedAggregator.Get();
 }

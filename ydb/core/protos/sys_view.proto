@@ -599,39 +599,36 @@ message TDbTabletCounters {
     optional TDbCounters MaxAppCounters = 5;
 }
 
-// The detailed metrics of one table reported by a node.
-// A node reports either the public metric values of its buckets (TabletType is set:
-// TableMetrics, TLeaf.Metrics), or the legacy low level counters (TabletType is not set:
-// TableCounters, TLeaf.Counters)
+// The detailed metrics of one table reported by a node:
+// the public metric values of its buckets (TableMetrics, TLeaf.Metrics)
 message TDetailedTableCounters {
     message TLeaf {
+        // 3 was Counters, the low level counters of the leaf
+        reserved 3;
+        reserved "Counters";
+
         optional uint64 TabletId = 1;
         optional uint32 FollowerId = 2;
 
-        // Legacy: the low level counters of the leaf, set iff TabletType is not set.
-        // To be removed together with TableCounters
-        optional TDbTabletCounters Counters = 3;
-
-        // The public metric values of the leaf (see TDbCounters), set iff TabletType is set
+        // The public metric values of the leaf (see TDbCounters)
         optional TDbCounters Metrics = 4;
     }
+
+    // 1 and 2 were never used, 5 was TableCounters, the low level counters of the table
+    reserved 1, 2, 5;
+    reserved "TableCounters";
 
     optional string TablePath = 3;
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
 
-    // Legacy: the low level counters of the table, set iff Level == MetricsLevelTable
-    // and TabletType is not set. To be removed together with TLeaf.Counters
-    optional TDbTabletCounters TableCounters = 5;
-
     // Set iff Level == MetricsLevelPartition
     repeated TLeaf Leaves = 6;
 
-    // The public metric values of the table (see TDbCounters),
-    // set iff Level == MetricsLevelTable and TabletType is set
+    // The public metric values of the table (see TDbCounters), set iff Level == MetricsLevelTable
     optional TDbCounters TableMetrics = 7;
 
     // The tablet type of the table, whose detailed metrics define the slots
-    // of TableMetrics and TLeaf.Metrics
+    // of TableMetrics and TLeaf.Metrics. Required: an entry without it is ignored
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 8;
 }
 

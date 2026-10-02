@@ -50,6 +50,7 @@ ydb/core/persqueue/ut TPQTest.TestReadSessions
 ydb/core/persqueue/ut TPQTest.TestSetClientOffset
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
 ydb/core/tablet_flat/ut TFlatTableExecutor_CutTabletHistory.TestDoNotCutHistoryEnabledAfterBoot
+ydb/core/tx/replication/service/ut_worker Worker.WriterRestartAfterAppliedReplaysRelease
 ydb/core/tx/schemeshard/ut_index_build_reboots FulltextIndexBuildTestReboots.BaseCase[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumns[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk

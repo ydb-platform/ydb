@@ -7,27 +7,70 @@
 #include <util/system/hp_timer.h>
 #include <util/system/types.h>
 
-#include <limits>
-#include <type_traits>
+#include <util/generic/yexception.h>
+
 #include <array>
+#include <limits>
+#include <tuple>
+#include <type_traits>
 
 namespace NActors {
 
     template<class TFrontend>
     class TLine;
 
-    // Fixed-order series share one timestamp and are published as one record.
-    // Readers must use TValueType; column names belong to the caller's schema.
-    template<size_t N, class TValue = ui64>
+    // TDescriptor::TFields is a tuple of field descriptors. Each field declares
+    // TValueType, static constexpr TStringBuf Name and a static constexpr array
+    // Labels of TLineLabelView (key=value). Snapshot labels identify the instance.
+    // All fields share one timestamp and are published as one record.
+    template<class TDescriptor>
     struct TGroupLineFrontend {
-        static_assert(N > 0);
-        static_assert(std::is_trivially_copyable_v<TValue>);
-        static_assert(sizeof(TValue) <= sizeof(ui64));
-        using TValueType = std::array<TValue, N>;
+        using TFields = typename TDescriptor::TFields;
+        static constexpr size_t FieldCount = std::tuple_size_v<TFields>;
+        static_assert(FieldCount > 0);
+
+    private:
+        template<size_t I>
+        using TField = std::tuple_element_t<I, TFields>;
+
+        template<size_t... I>
+        static auto ValueType(std::index_sequence<I...>)
+            -> std::tuple<typename TField<I>::TValueType...>;
+
+        template<size_t... I>
+        static constexpr auto FieldMetadata(std::index_sequence<I...>) {
+            static_assert((std::is_trivially_copyable_v<typename TField<I>::TValueType> && ...));
+            static_assert(((sizeof(typename TField<I>::TValueType) <= sizeof(ui64)) && ...));
+            static_assert(((!TField<I>::Name.empty()) && ...));
+            return std::array<TLineFieldMeta, FieldCount>{{
+                {TField<I>::Name, TField<I>::Labels}...
+            }};
+        }
+
+        static constexpr auto Indices = std::make_index_sequence<FieldCount>{};
+
+    public:
+        using TValueType = decltype(ValueType(Indices));
+        inline static constexpr auto Fields = FieldMetadata(Indices);
+
+        // These readers deduce the complete tuple and reject a different schema.
+        static TDeque<TGenericRecordView<TValueType>> ReadRecords(
+                const TLineSnapshot& snapshot,
+                TInstant beginTs = TInstant::Zero(), TInstant endTs = TInstant::Max()) {
+            Y_ENSURE(snapshot.Meta.Frontend == &Descriptor(), "Group line descriptor mismatch");
+            return snapshot.ReadRecordsAsInRange<TValueType>(beginTs, endTs);
+        }
+
+        static TDeque<TValueType> ReadValues(
+                const TLineSnapshot& snapshot,
+                TInstant beginTs = TInstant::Zero(), TInstant endTs = TInstant::Max()) {
+            Y_ENSURE(snapshot.Meta.Frontend == &Descriptor(), "Group line descriptor mismatch");
+            return snapshot.ReadValuesAsInRange<TValueType>(beginTs, endTs);
+        }
 
         struct TStorageRecord {
             NHPTimer::STime TimestampTs = 0;
-            std::array<ui64, N> Values = {};
+            std::array<ui64, FieldCount> Values = {};
         };
 
         struct alignas(TStorageRecord) TChunkHeader {
@@ -39,12 +82,9 @@ namespace NActors {
 
         struct TConfig {};
 
-        static TValueType DecodeValue(const std::array<ui64, N>& values) noexcept {
-            TValueType result;
-            for (size_t i = 0; i < N; ++i) {
-                result[i] = NInMemoryMetricsPrivate::DecodeLineValue<TValue>(values[i]);
-            }
-            return result;
+        template<size_t... I>
+        static TValueType DecodeValue(const std::array<ui64, FieldCount>& values, std::index_sequence<I...>) noexcept {
+            return TValueType{NInMemoryMetricsPrivate::DecodeLineValue<typename TField<I>::TValueType>(values[I])...};
         }
 
         static void ReadRange(const TLineSnapshot& snapshot,
@@ -71,7 +111,7 @@ namespace NActors {
                 for (size_t i = 0; i < recordsCount; ++i) {
                     cb(
                         NInMemoryMetricsPrivate::TLineSnapshotAccess::DecodeTimestampTs(snapshot, storedRecords[i].TimestampTs),
-                        DecodeValue(storedRecords[i].Values));
+                        DecodeValue(storedRecords[i].Values, Indices));
                 }
             });
         }
@@ -91,7 +131,8 @@ namespace NActors {
         static const TLineFrontendOps& Descriptor() noexcept {
             static const TLineFrontendOps descriptor{
                 .Name = "group",
-                .ReadRange = &TGroupLineFrontend<N, TValue>::ReadRange,
+                .ReadRange = &TGroupLineFrontend<TDescriptor>::ReadRange,
+                .Fields = Fields,
             };
             return descriptor;
         }
@@ -101,30 +142,30 @@ namespace NActors {
         }
 
     private:
-        friend class TLine<TGroupLineFrontend<N, TValue>>;
+        friend class TLine<TGroupLineFrontend<TDescriptor>>;
+
+        template<size_t... I>
+        static auto EncodeValue(const TValueType& value, std::index_sequence<I...>) noexcept {
+            return std::array<ui64, FieldCount>{NInMemoryMetricsPrivate::EncodeLineValue(std::get<I>(value))...};
+        }
 
         static bool Append(IMetricLine& line, const TValueType& value) noexcept;
         static bool WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept;
     };
 
-    template<size_t N, class TValue>
-    bool TGroupLineFrontend<N, TValue>::Append(IMetricLine& line, const typename TGroupLineFrontend<N, TValue>::TValueType& value) noexcept {
+    template<class TDescriptor>
+    bool TGroupLineFrontend<TDescriptor>::Append(IMetricLine& line, const typename TGroupLineFrontend<TDescriptor>::TValueType& value) noexcept {
         const NHPTimer::STime nowTs = line.CurrentTimestampTs();
 
         TStorageRecord record{
             .TimestampTs = nowTs,
+            .Values = EncodeValue(value, Indices),
         };
-        for (size_t i = 0; i < N; ++i) {
-            record.Values[i] = NInMemoryMetricsPrivate::EncodeLineValue(value[i]);
-        }
-        if (!line.AccessChunkMemory(&record, &TGroupLineFrontend<N, TValue>::WriteRecordToChunkMemory)) {
-            return false;
-        }
-        return true;
+        return line.AccessChunkMemory(&record, &TGroupLineFrontend<TDescriptor>::WriteRecordToChunkMemory);
     }
 
-    template<size_t N, class TValue>
-    bool TGroupLineFrontend<N, TValue>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
+    template<class TDescriptor>
+    bool TGroupLineFrontend<TDescriptor>::WriteRecordToChunkMemory(void* opaque, TWritableChunkMemory& chunkMemory) noexcept {
         const auto& record = *static_cast<const TStorageRecord*>(opaque);
         const ui32 oldCommittedBytes = chunkMemory.UsedPayloadBytes;
         const size_t requiredBytes = oldCommittedBytes == 0

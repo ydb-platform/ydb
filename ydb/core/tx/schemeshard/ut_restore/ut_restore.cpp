@@ -557,12 +557,17 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TRestoreTests) {
     void RestoreNoWait(TTestBasicRuntime& runtime, ui64& txId,
-            ui16 port, THolder<TS3Mock>& s3Mock, TVector<TTestData>&& data, ui32 readBatchSize = 128) {
+            ui16 port, THolder<TS3Mock>& s3Mock, TVector<TTestData>&& data, ui32 readBatchSize = 128,
+            bool validateChecksums = false, ui32 numberOfRetries = 0) {
 
         const auto desc = DescribePath(runtime, "/MyRoot/Table", true, true);
         UNIT_ASSERT_VALUES_EQUAL(desc.GetStatus(), NKikimrScheme::StatusSuccess);
 
-        s3Mock.Reset(new TS3Mock(ConvertTestData({GenerateScheme(desc), std::move(data)}), TS3Mock::TSettings(port)));
+        TTestDataWithScheme backup(GenerateScheme(desc), std::move(data));
+        if (validateChecksums) {
+            backup.Metadata = R"({"version": 1})"; // the mock serves the checksums
+        }
+        s3Mock.Reset(new TS3Mock(ConvertTestData(backup), TS3Mock::TSettings(port)));
         UNIT_ASSERT(s3Mock->Start());
 
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
@@ -572,6 +577,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             TableDescription {
                 %s
             }
+            NumberOfRetries: %u
             S3Settings {
                 Endpoint: "localhost:%d"
                 Scheme: HTTP
@@ -579,7 +585,9 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
                     ReadBatchSize: %d
                 }
             }
-        )", GenerateTableDescription(desc).data(), port, readBatchSize));
+            ValidateChecksums: %s
+        )", GenerateTableDescription(desc).data(), numberOfRetries, port, readBatchSize,
+            validateChecksums ? "true" : "false"));
     }
 
     void Restore(TTestBasicRuntime& runtime, TTestEnv& env, const TString& creationScheme, TVector<TTestData>&& data, ui32 readBatchSize = 128) {
@@ -882,6 +890,99 @@ value {
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnMultipleFramesTinyBatch, EnableDataShardDirectPartImport) {
         ShouldSucceedOnMultipleFrames(EnableDataShardDirectPartImport, 1);
+    }
+
+    // A zstd frame is read in several GetObjects, and the rows decoded from it are written
+    // before it ends, where there is no checkpoint. A GetObject inside the frame fails once:
+    // the downloader restarts through HEAD and the stored download info, keeps the live
+    // engine with its checksum state, and the import completes with the checksum validated.
+    Y_UNIT_TEST_FLAG(ShouldRetryZstdReadInsideAFrameWithChecksum, EnableDataShardDirectPartImport) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(EnableDataShardDirectPartImport);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // one frame of two rows; the second one spans several zstd blocks, so the
+        // first one is decoded and written while the frame is still being read
+        TString largeValue(256_KB, 0);
+        ui32 seed = 7;
+        for (auto& c : largeValue) {
+            seed = seed * 1103515245 + 12345;
+            c = "abcdefghijklmnopqrstuvwxyz0123456789"[(seed >> 16) % 36];
+        }
+        const TString csv = TStringBuilder() << "\"k0\",\"v0\"\n" << "\"k1\",\"" << largeValue << "\"\n";
+        TTestData data(csv, TStringBuilder()
+            << "[[[[[[\"k0\"];[\"v0\"]];[[\"k1\"];[\"" << largeValue << "\"]]];%false]]]", ECompressionCodec::Zstd);
+        data.Data = ZstdCompress(csv);
+        const ui64 contentLength = data.Data.size();
+        UNIT_ASSERT_GT(contentLength, 64_KB);
+
+        ui32 uploadsBeforeFailure = 0;
+        bool failed = false;
+        TMaybe<NKikimrTxDataShard::TShardOpResult> result;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvS3UploadRowsRequest:
+                if (!failed) {
+                    ++uploadsBeforeFailure;
+                }
+                break;
+            case TEvDataShard::EvSchemaChanged: {
+                const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+                if (record.HasOpResult()) {
+                    result = record.GetOpResult();
+                }
+                break;
+            }
+            case NWrappers::NExternalStorage::EvGetObjectResponse: {
+                const auto* response = ev->Get<NWrappers::NExternalStorage::TEvGetObjectResponse>();
+                if (failed || !response->Key || !response->Key->EndsWith(".csv.zst") || !response->Result.IsSuccess()) {
+                    break;
+                }
+                const auto interval = response->GetReadInterval();
+                if (interval.first < contentLength * 3 / 4) {
+                    break; // not yet past the first block of the frame
+                }
+                // fails once, inside the frame; the retry is a wakeup the downloader
+                // schedules for itself
+                failed = true;
+                runtime.EnableScheduleForActor(ev->Recipient);
+                Aws::Utils::Outcome<Aws::S3::Model::GetObjectResult, Aws::S3::S3Error> outcome(
+                    Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                        Aws::S3::S3Errors::INTERNAL_FAILURE, "InternalError", "injected failure", /*isRetryable=*/true)));
+                ev.Reset(new IEventHandle(ev->Recipient, ev->Sender,
+                    new NWrappers::NExternalStorage::TEvGetObjectResponse(response->Key, interval, outcome),
+                    ev->Flags, ev->Cookie));
+                break;
+            }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TPortManager portManager;
+        THolder<TS3Mock> s3Mock;
+        RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data}, /*readBatchSize=*/4_KB,
+            /*validateChecksums=*/true, /*numberOfRetries=*/3);
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_C(failed, "no GetObject inside the frame");
+        if (!EnableDataShardDirectPartImport) {
+            UNIT_ASSERT_C(uploadsBeforeFailure > 0, "no rows were written before the failure");
+        }
+        UNIT_ASSERT_C(result, "no result of the restore");
+        UNIT_ASSERT_VALUES_EQUAL(result->GetRowsProcessed(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetBytesProcessed(), largeValue.size() + 6);
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
+        NKqp::CompareYson(data.YsonStr, content);
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnSmallBuffer, EnableDataShardDirectPartImport) {

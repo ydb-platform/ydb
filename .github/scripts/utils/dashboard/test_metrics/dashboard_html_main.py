@@ -1872,6 +1872,35 @@ def build_html_dashboard(
         if (tip) tip.style.display = 'none';
       }}, 40);
     }}
+    function isSuiteContribution(name) {{
+      if (!name) return false;
+      if (name.includes('outline') || name.endsWith(' outline')) return false;
+      if (name.includes('(monitor)')) return false;
+      if (name.includes('limit (')) return false;
+      if (name.includes('ya.make cgroup')) return false;
+      return true;
+    }}
+    function sourceSecFromPoint(point) {{
+      if (!point) return null;
+      const idx = Number(point.pointNumber);
+      const xs = point.data && Array.isArray(point.data.x) ? point.data.x : null;
+      if (!xs || !Number.isFinite(idx) || idx < 0 || idx >= xs.length) return null;
+      const sec = xFromDisplay(xs[Math.floor(idx)]);
+      return Number.isFinite(Number(sec)) ? Number(sec) : null;
+    }}
+    function activeCountAtSec(tSec) {{
+      const xs = data.xs_active;
+      const ys = data.ys_active;
+      if (!Array.isArray(xs) || !Array.isArray(ys) || !Number.isFinite(Number(tSec))) return null;
+      let idx = -1;
+      for (let i = 0; i < xs.length; i++) {{
+        if (Number(xs[i]) <= Number(tSec)) idx = i;
+        else break;
+      }}
+      if (idx < 0) return 0;
+      const v = Number(ys[idx]);
+      return Number.isFinite(v) ? Math.round(v) : null;
+    }}
     function attachSortedHover(plotId, panelId, unit) {{
       const plot = document.getElementById(plotId);
       const panel = document.getElementById(panelId);
@@ -1882,11 +1911,9 @@ def build_html_dashboard(
         const point = ev.points[0];
         const label = formatPointTime(point);
         const eps = minVisibleValue(unit);
-        const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
-        const isMonitor = (n) => n && n.includes('(monitor)');
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
+          .filter(p => p.y > eps && isSuiteContribution(p.name))
           .sort((a, b) => b.y - a.y);
         const top = rows.slice(0, 40);
         const lines = top.map(r => `${{r.name}}: ${{formatValue(r.y, unit)}} ${{unit}}`);
@@ -1981,7 +2008,9 @@ def build_html_dashboard(
           '<b>Tests running at this time:</b> ' + Math.round(totalTests) +
           '</div>';
       }}
-      const runningCount = activeCountAtTime(t);
+      const runningCount = Number.isFinite(Number(tSecAtClick))
+        ? activeCountAtSec(Number(tSecAtClick))
+        : activeCountAtTime(t);
       const runningLine = (runningCount != null)
         ? '<div style="margin:4px 0 8px 0;font-size:12px;color:#374151;"><b>Tests (chunks) running at this time:</b> ' + runningCount + '</div>'
         : '';
@@ -2000,15 +2029,13 @@ def build_html_dashboard(
         if (!ev || !ev.points || !ev.points.length) return;
         const t = ev.points[0].x;
         const eps = minVisibleValue(unit);
-        const isOutline = (n) => n && (n.includes('outline') || n.endsWith(' outline'));
-        const isMonitor = (n) => n && n.includes('(monitor)');
         const monitorPoint = ev.points.find(p => p && p.data && typeof p.data.name === 'string' && p.data.name === (unit === 'GB' ? 'RAM total (monitor)' : 'CPU total (monitor)'));
         const monitorAtClick = monitorPoint ? Number(monitorPoint.y) : null;
         const rows = ev.points
           .map(p => ({{name: p.data.name, y: Number(p.y || 0)}}))
-          .filter(p => p.y > eps && !isOutline(p.name) && !isMonitor(p.name))
+          .filter(p => p.y > eps && isSuiteContribution(p.name))
           .sort((a, b) => b.y - a.y);
-        const tSecAtClick = sourceSecAtClick(plotId, ev.points[0]);
+        const tSecAtClick = sourceSecFromPoint(ev.points[0]);
         const totalAtClick = unit === 'active'
           ? rows.reduce((acc, r) => acc + Number(r.y || 0), 0)
           : Number(ev.points[0]?.y);

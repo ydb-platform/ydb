@@ -158,8 +158,9 @@ namespace NYql {
             MATCH_TYPE(Timestamp, TIMESTAMP);
             MATCH_TYPE(Interval, INTERVAL);
             MATCH_TYPE(Date, DATE);
+            // see also SerializeExpression/MATCH_ATOM
 
-            ctx.Err << "unknown data slot " << static_cast<ui64>(dataSlot) << " for safe cast";
+            ctx.Err << "unknown data slot " << NUdf::GetDataTypeInfo(dataSlot).Name << " for safe cast";
             return false;
         }
 
@@ -388,6 +389,7 @@ namespace NYql {
             // Proto value does not have ability to store
             // ui16 type that's why uint32 is used
             MATCH_ATOM(Date, DATE, uint32, ui16);
+            // see also SerializeCastExpression/MATCH_TYPE
             MATCH_ARITHMETICAL(Sub, SUB);
             MATCH_ARITHMETICAL(Add, ADD);
             MATCH_ARITHMETICAL(Mul, MUL);
@@ -774,7 +776,8 @@ namespace NYql {
                 switch (value.value_case()) {
                 case Ydb::Value::kInt64Value: {
                     auto intValue = value.int64_value();
-                    const auto duration = TDuration::MicroSeconds(intValue < 0 ? -static_cast<ui64>(intValue): static_cast<ui64>(intValue)); // c++20, avoid signed overflow, handles Min<i64>() (though it's outside of Timestamp range)
+                    Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TInterval>(intValue));
+                    const auto duration = TDuration::MicroSeconds(intValue < 0 ? -static_cast<ui64>(intValue): static_cast<ui64>(intValue)); // c++20, avoid signed overflow, handles Min<i64>() (though it's outside of Interval range)
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << (intValue < 0 ? "-" : "") << ToIso8601(duration) << "\")";
                 }
                 default:
@@ -786,7 +789,7 @@ namespace NYql {
                 switch (value.value_case()) {
                 case Ydb::Value::kInt64Value: {
                     auto intValue = value.int64_value();
-                    Y_ENSURE(intValue >= 0 && static_cast<ui64>(intValue) < NYql::NUdf::MAX_TIMESTAMP);
+                    Y_ENSURE(intValue >= 0 && NUdf::IsValidLayoutValue<NUdf::TTimestamp>(intValue));
                     const auto instant = TInstant::MicroSeconds(static_cast<ui64>(intValue));
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\"" << instant << "\")";
                 }
@@ -798,6 +801,7 @@ namespace NYql {
                 const auto& value = typedValue.value();
                 switch (value.value_case()) {
                 case Ydb::Value::kUint32Value:
+                    Y_ENSURE(NUdf::IsValidLayoutValue<NUdf::TDate>(value.uint32_value()));
                     return TStringBuilder() << FormatType(typedValue.type()) << "(\""
                         << TInstant::Days(value.uint32_value()).FormatGmTime("%Y-%m-%d") << "\")";
                 default:

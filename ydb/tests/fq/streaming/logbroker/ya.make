@@ -1,7 +1,8 @@
 PY3TEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/federation_recipe/recipe.inc)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner.inc)
+
+ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 TEST_SRCS(
     test_logbroker.py
@@ -25,11 +26,13 @@ PEERDIR(
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
     ydb/tests/fq/streaming_common
+    ydb/tests/library/logbroker_federation
     ydb/tests/tools/datastreams_helpers
 )
 
 DEPENDS(
     ydb/apps/ydb
+    ydb/public/tools/federation_recipe/bin
 )
 
 END()

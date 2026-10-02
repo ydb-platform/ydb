@@ -1,8 +1,11 @@
 #include "check_dlq_topics.h"
 
 #include <ydb/core/persqueue/public/describer/describer.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/pqconfig.pb.h>
+#include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
@@ -145,7 +148,15 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsHelpers) {
         UNIT_ASSERT(CollectDlqTopicPaths(config, "/Root").empty());
     }
 
-    Y_UNIT_TEST(CollectNormalizesRelativeAndAbsolutePaths) {
+    Y_UNIT_TEST_TWIN(CollectNormalizesRelativeAndAbsolutePaths, enableRelativePaths) {
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("", "/Root", enableRelativePaths), "");
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("sqs://account/queue", "/Root", enableRelativePaths), "sqs://account/queue");
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("Root/dlq", "/Root", enableRelativePaths), enableRelativePaths ? "/Root/Root/dlq" : "/Root/dlq");
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("/Other/dlq", "/Root", enableRelativePaths), enableRelativePaths ? "/Other/dlq" : "/Root/Other/dlq");
+        UNIT_ASSERT_VALUES_EQUAL(NormalizeDlqTopicPath("/Other/dlq", "/Root"), "/Root/Other/dlq");
+
+        TActorSystemStub actorSystem;
+        actorSystem.AppData.FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
         auto config = MakeConfigWithDlq("c1", "dlq");
         auto* c2 = config.AddConsumers();
         c2->SetName("c2");
@@ -157,6 +168,17 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsHelpers) {
         const auto paths = CollectDlqTopicPaths(config, "/Root");
         UNIT_ASSERT_VALUES_EQUAL(paths.size(), 1u);
         UNIT_ASSERT(paths.contains("/Root/dlq"));
+
+        // An absolute destination outside the source database must not be prefixed.
+        const auto absolutePaths = CollectDlqTopicPaths(MakeConfigWithDlq("c1", "/Other/dlq"), "/Root", true);
+        UNIT_ASSERT_VALUES_EQUAL(absolutePaths.size(), 1u);
+        UNIT_ASSERT(absolutePaths.contains(enableRelativePaths ? "/Other/dlq" : "/Root/Other/dlq"));
+        UNIT_ASSERT(CollectDlqTopicPaths(MakeConfigWithDlq("c1", "/Other/dlq"), "/Root").contains("/Root/Other/dlq"));
+
+        // Existing persisted relative paths retain legacy normalization.
+        const auto legacyPaths = CollectDlqTopicPaths(MakeConfigWithDlq("c1", "Root/dlq"), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(legacyPaths.size(), 1u);
+        UNIT_ASSERT(legacyPaths.contains("/Root/dlq"));
     }
 
     Y_UNIT_TEST(CollectNewPathsIgnoresUnchangedDlq) {

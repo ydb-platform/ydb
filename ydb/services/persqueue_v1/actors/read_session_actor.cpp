@@ -846,7 +846,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
             return settings.topic();
         } else {
             return TopicsHandler.GetConverterFactory()->GetNoDCMode()
-                ? Request->NormalizePath(settings.path())
+                ? Request->GetDatabaseRelativePath(settings.path())
                 : TString(settings.path());
         }
     };
@@ -885,7 +885,8 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database);
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, ReadOnlyLocal, database,
+        Protocol == EProtocol::Topic && AppData(ctx)->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason, ctx);
@@ -903,7 +904,7 @@ void TReadSessionActor<Protocol>::Handle(typename TEvReadInit::TPtr& ev, const T
             const auto internalName = converter->GetOriginalPath();
             if constexpr (Protocol != EProtocol::PQv1) {
                 auto [alias, inserted] = AliasedTopicPaths.emplace(internalName,
-                    topic.path() == path ? TString() : TString(topic.path()));
+                    TStringBuf(topic.path()).StartsWith('/') && topic.path() != path ? TString(topic.path()) : TString());
                 if (!inserted && alias->second != topic.path()) {
                     alias->second.clear(); // Ambiguous request: keep the existing response path.
                 }

@@ -425,6 +425,15 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const NHdrf::TDatabaseId& database
         query = std::make_shared<TQuery>(queryId, &DelayParams, allowMinFairShare, attrs);
         pool->AddQuery(query);
         Y_ENSURE(Queries.emplace(queryId, query).second);
+
+        // The fair-share of the pool is known from the latest snapshot - unless the pool is new itself.
+        if (const auto snapshot = Root->GetSnapshot()) {
+            if (const auto databaseSnapshot = snapshot->GetDatabase(databaseId)) {
+                if (const auto poolSnapshot = databaseSnapshot->GetPool(poolId)) {
+                    query->InitSnapshot(*std::static_pointer_cast<NHdrf::NSnapshot::TPool>(poolSnapshot));
+                }
+            }
+        }
     }
 
     return query;

@@ -146,7 +146,7 @@ Y_UNIT_TEST_SUITE(StorageStatsAccess) {
     }
 
     // Viewer+ retains its existing behavior when the database key is unavailable.
-    Y_UNIT_TEST(ViewerUseRequestWithoutDomainInfo) {
+    Y_UNIT_TEST(ViewerUserRequestWithoutDomainInfo) {
         for (bool useHive : {false, true}) {
             CheckTabletScope(/* strictDatabaseUser */ false, useHive, std::nullopt);
         }

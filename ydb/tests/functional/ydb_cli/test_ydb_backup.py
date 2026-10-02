@@ -1484,6 +1484,8 @@ class TestRestoreNoData(BaseTestBackupInFiles):
 
 
 class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
+    enable_relative_paths = False
+
     @classmethod
     def setup_class(cls):
         cls.cluster = cls._start_cluster(KikimrConfigGenerator(
@@ -1491,7 +1493,7 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
                 "enable_strict_acl_check",
                 "enable_strict_user_management",
                 "enable_database_admin"
-            ],
+            ] + (["enable_relative_paths"] if cls.enable_relative_paths else []),
             domain_login_only=False,
             enforce_user_token_requirement=True,
             default_clusteradmin="root@builtin",
@@ -1568,10 +1570,10 @@ class BaseTestClusterBackupInFiles(BaseCliTestWithDatabase):
         )
 
     @classmethod
-    def create_database_backup(cls, expected_files, output="backup_files_dir", additional_args=[]):
+    def create_database_backup(cls, expected_files, output="backup_files_dir", additional_args=[], database=None):
         cls.create_backup(
             [
-                "--database", cls.database,
+                "--database", cls.database if database is None else database,
                 "--user", "dbadmin1", "--no-password",
                 "admin", "database", "dump",
             ],
@@ -1629,7 +1631,7 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
     def test_database_backup(self):
         self.setup_sample_data()
 
-        self.create_database_backup(expected_files=[
+        expected_files = [
             # database metadata
             "database.pb",
             "permissions.pb",
@@ -1700,7 +1702,16 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
             ".sys/udf_modules/system_view.pb",
             ".sys/udf_modules/permissions.pb",
-        ])
+        ]
+        slashless_database = (
+            os.path.relpath(self.database, self.root_dir) if self.enable_relative_paths else self.database.lstrip("/")
+        )
+        for index, database in enumerate((self.database, slashless_database)):
+            self.create_database_backup(expected_files, output=f"backup_files_dir_{index}", database=database)
+
+
+class TestDatabaseBackupRelativePaths(TestDatabaseBackup):
+    enable_relative_paths = True
 
 
 class BaseTestMultipleClusterBackupInFiles(BaseTestClusterBackupInFiles):

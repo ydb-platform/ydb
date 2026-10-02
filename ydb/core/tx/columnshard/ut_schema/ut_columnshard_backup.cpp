@@ -684,6 +684,92 @@ Y_UNIT_TEST_SUITE(BackupWithRestart) {
 
         VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
+
+    // Prod hang: LastCompleted(success) + TxInfo zombie with PlanStep=0.
+    // After the first Progress, a retry propose (SS ConfigureParts after reboot)
+    // registers a new operator. NotifyTxCompletion then prefers the operator
+    // over LastCompleted and waits for a plan that will never arrive.
+    Y_UNIT_TEST(NotifyHangsAfterReproposeWhenLastCompletedExists) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+        ui64 writeId = 1;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        {
+            std::vector<ui64> writeIds;
+            UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 100 }, schema), schema, true, &writeIds));
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        NKikimrTxColumnShard::TBackupTxBody txBody;
+        NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);
+        auto& backupTask = *txBody.MutableBackupTask();
+        backupTask.SetTableName("abcde");
+        backupTask.SetTableId(tableId);
+        backupTask.SetSnapshotStep(backupSnapshot.GetPlanStep());
+        backupTask.SetSnapshotTxId(backupSnapshot.GetTxId());
+        backupTask.MutableS3Settings()->SetEndpoint(GetEnv("S3_ENDPOINT"));
+        backupTask.MutableS3Settings()->SetBucket("test");
+
+        auto& table = *backupTask.MutableTable();
+        auto& tableDescription = *table.MutableColumnTableDescription();
+        tableDescription.SetColumnShardCount(4);
+        auto& schemaBackup = *tableDescription.MutableSchema();
+
+        auto& col1 = *schemaBackup.MutableColumns()->Add();
+        col1.SetName("key1");
+        col1.SetType("Uint64");
+        auto& col2 = *schemaBackup.MutableColumns()->Add();
+        col2.SetName("key2");
+        col2.SetType("Uint64");
+        auto& col3 = *schemaBackup.MutableColumns()->Add();
+        col3.SetName("field");
+        col3.SetType("Utf8");
+        table.MutableSelf();
+
+        const ui64 backupTxId = ++txId;
+        const TString serializedTxBody = txBody.SerializeAsString();
+        planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, serializedTxBody, backupTxId);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, backupTxId), false, true);
+
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
+        UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(csControllerGuard->GetTxOperatorsCount(), 0u);
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+
+        // SS retry after ConfigureParts / pipe reconnect: same txId, LastCompleted already set.
+        Y_UNUSED(ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, serializedTxBody, backupTxId));
+        UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime), 1u);
+        UNIT_ASSERT(csControllerGuard->GetTxOperatorsCount() >= 1);
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+        UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime), 1u);
+        UNIT_ASSERT(csControllerGuard->GetTxOperatorsCount() >= 1);
+
+        auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(backupTxId);
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender, TDuration::Seconds(10));
+        UNIT_ASSERT_C(ev, "NotifyTxCompletionResult must come from LastCompleted even if a zombie operator exists");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        UNIT_ASSERT(ev->Get()->Record.HasOpResult());
+        UNIT_ASSERT(ev->Get()->Record.GetOpResult().GetSuccess());
+        UNIT_ASSERT_VALUES_EQUAL(CountTxInfoRows(runtime), 0u);
+    }
 }
 
 }   // namespace NKikimr

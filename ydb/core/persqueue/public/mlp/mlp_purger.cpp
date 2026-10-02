@@ -21,7 +21,8 @@ void TPurgerActor::DoDescribe() {
 
     NDescriber::TDescribeSettings settings = {
         .UserToken = Settings.UserToken,
-        .AccessRights = NACLib::EAccessRights::UpdateRow
+        .AccessRights = NACLib::EAccessRights::UpdateRow,
+        .EnableRelativePaths = true,
     };
     ChildActorId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.DatabasePath, { Settings.TopicName }, settings));
 }

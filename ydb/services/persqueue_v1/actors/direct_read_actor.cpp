@@ -263,7 +263,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         }
 
         TopicsToResolve.insert(TopicsHandler.GetConverterFactory()->GetNoDCMode()
-            ? Request->NormalizePath(path)
+            ? Request->GetDatabaseRelativePath(path)
             : path);
     }
 
@@ -278,7 +278,8 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
 
-    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, true, database);
+    TopicsList = TopicsHandler.GetReadTopicsList(TopicsToResolve, true, database,
+        AppData()->FeatureFlags.GetEnableRelativePaths());
 
     if (!TopicsList.IsValid) {
         return CloseSession(PersQueue::ErrorCode::BAD_REQUEST, TopicsList.Reason);

@@ -53,7 +53,7 @@ public:
         UsedSyncVersion = Settings.ForceSyncVersion;
 
         for (const auto& topic : TopicPaths) {
-            auto resolved = NNameResolver::ResolveName(DatabasePath, topic);
+            auto resolved = NNameResolver::ResolveName(DatabasePath, topic, {}, {}, Settings.EnableRelativePaths);
             if (!resolved) {
                 LOG_D("Name resolve failed",
                     {"topic", topic},

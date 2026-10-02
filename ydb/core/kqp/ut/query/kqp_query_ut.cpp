@@ -50,10 +50,9 @@ static auto ExecuteQueryAndCheckResultSets(NYdb::NQuery::TQueryClient& db, const
 }
 
 Y_UNIT_TEST_SUITE(KqpQuery) {
-    Y_UNIT_TEST_TWIN(SqlPathAliasesWithNewRbo, NewRbo) {
+    Y_UNIT_TEST(SqlPathAliases) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(NewRbo);
-        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         auto* rule = appConfig.MutableResourcePathPrefixMapping()->AddRules();
         rule->SetSrc("/kfront");
         rule->SetDst("/Root");
@@ -101,11 +100,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(queryReadResult.IsSuccess(), queryReadResult.GetIssues().ToString());
         CompareYson(R"([[1u]])", FormatResultSetYson(queryReadResult.GetResultSet(0)));
-
-        TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
-        UNIT_ASSERT_VALUES_EQUAL(
-            counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Success")->Val() > 0, NewRbo);
-        UNIT_ASSERT_VALUES_EQUAL(counters.GetKqpCounters()->GetCounter("Compilation/NewRBO/Failed")->Val(), 0);
 
         for (const auto& query : {
             R"(

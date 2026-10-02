@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 WriteTableData(runtime, t.TxId, "/MyRoot/TestTable", IsColumnTable);
-                UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable), 5);
+                UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, t.TestEnv->GetCoordinatorStep()), 5);
             }
 
             const ui64 truncateTxId = ++t.TxId;
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
 
             {
                 TInactiveZone inactive(activeZone);
-                VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable);
+                VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, t.TestEnv->GetCoordinatorStep());
             }
         });
     }

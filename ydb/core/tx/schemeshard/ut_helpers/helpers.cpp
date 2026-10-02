@@ -3452,14 +3452,15 @@ namespace NSchemeShardUT_Private {
         }
     }
 
-    ui64 CountTableRows(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable) {
+    ui64 CountTableRows(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep) {
         if (isColumnTable) {
             const auto describe = DescribePath(runtime, tablePath);
             const auto& path = describe.GetPathDescription();
-            const ui64 tabletId = path.GetColumnTableDescription().GetSharding().GetColumnShards(0);
             const ui64 pathId = path.GetSelf().GetPathId();
-            NTxUT::TShardReader reader(static_cast<TTestBasicRuntime&>(runtime), tabletId, pathId,
-                NOlap::TSnapshot::MaxForPlanStep(path.GetSelf().GetCreateStep()));
+            const auto& columnShards = path.GetColumnTableDescription().GetSharding().GetColumnShards();
+            UNIT_ASSERT_VALUES_EQUAL(columnShards.size(), 1);
+            NTxUT::TShardReader reader(static_cast<TTestBasicRuntime&>(runtime), columnShards.Get(0), pathId,
+                NOlap::TSnapshot::MaxForPlanStep(planStep));
             reader.SetReplyColumnIds({1, 2});
             auto rows = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -3468,13 +3469,8 @@ namespace NSchemeShardUT_Private {
         return CountRows(runtime, TTestTxConfig::SchemeShard, tablePath);
     }
 
-    void VerifyTableEmpty(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable) {
-        const auto rows = CountTableRows(runtime, tablePath, isColumnTable);
-        if (isColumnTable) {
-            //TODO fix me
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(rows, 0);
-        }
+    void VerifyTableEmpty(TTestActorRuntime& runtime, const TString& tablePath, bool isColumnTable, ui64 planStep) {
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, tablePath, isColumnTable, planStep), 0);
     }
 
     void WriteVectorTableRows(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, const TString & tablePath,

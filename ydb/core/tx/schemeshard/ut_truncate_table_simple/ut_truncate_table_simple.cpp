@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         env.TestWaitNotification(runtime, txId);
 
         WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
-        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable), 5);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         bool firstProposeTransactionResultHandled = false;
         const ui64 truncateTxId = ++txId;
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});
 
-        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable);
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
     }
 
     Y_UNIT_TEST_TWIN(TruncateTableWithConcurrentTruncate, IsColumnTable) {
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         env.TestWaitNotification(runtime, txId);
 
         WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
-        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable), 5);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         bool firstProposeTransactionResultHandled = false;
         const ui64 truncateTxId = ++txId;
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});
 
-        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable);
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
     }
 
     Y_UNIT_TEST_TWIN(TruncateTableSequentialOperations, IsColumnTable) {
@@ -101,20 +101,20 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         env.TestWaitNotification(runtime, txId);
 
         WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
-        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable), 5);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
         env.TestWaitNotification(runtime, txId);
 
-        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable);
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
 
         WriteTableData(runtime, txId, "/MyRoot/TestTable", IsColumnTable);
-        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable), 5);
+        UNIT_ASSERT_VALUES_EQUAL(CountTableRows(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep()), 5);
 
         TestTruncateTable(runtime, ++txId, "/MyRoot", "TestTable");
         env.TestWaitNotification(runtime, txId);
 
-        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable);
+        VerifyTableEmpty(runtime, "/MyRoot/TestTable", IsColumnTable, env.GetCoordinatorStep());
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
             {NLs::PathExist});

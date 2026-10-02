@@ -26,7 +26,7 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
         }
     }
 
-    void Collect() {
+    void HandleCollectWakeup() {
         TimerScheduled = false;
         RequestBatch();
     }
@@ -51,9 +51,12 @@ class TTabletStatsActor : public NActors::TActorBootstrapped<TTabletStatsActor> 
         }
         if (const auto deadline = ev->Get()->NextDeadline) {
             const auto now = NActors::TActivationContext::Monotonic();
-            TimerScheduled = true;
-            Schedule(*deadline > now ? *deadline - now : TDuration::MilliSeconds(1),
-                new NActors::TEvents::TEvWakeup());
+            if (*deadline <= now) {
+                RequestBatch();
+            } else {
+                TimerScheduled = true;
+                Schedule(*deadline - now, new NActors::TEvents::TEvWakeup());
+            }
         }
     }
 
@@ -89,7 +92,7 @@ public:
     STRICT_STFUNC(StateWork,
         hFunc(TEvTabletStatsChanged, Handle)
         hFunc(TEvTabletStatsBatch, Handle)
-        cFunc(NActors::TEvents::TSystem::Wakeup, Collect)
+        cFunc(NActors::TEvents::TSystem::Wakeup, HandleCollectWakeup)
         hFunc(TEvGetTabletStats, Handle)
         cFunc(NActors::TEvents::TSystem::Poison, PassAway)
     )

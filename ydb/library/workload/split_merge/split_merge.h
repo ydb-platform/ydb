@@ -99,22 +99,44 @@ private:
     TQueryInfoList UpsertSequential(size_t tableIdx = 0); // fresh rows, monotonically increasing keys
     TQueryInfoList UpsertStriped();          // fresh rows, round-robin across shard ranges
     TQueryInfoList UpdateHotKeys();          // in-place UPSERTs over the fixed hot key set
-    TQueryInfoList AlterPartitionSize(ui64 sizeMb, ui64 minPartitions, size_t tableIdx = 0); // merge/split phase ALTER
+    // merge/split phase ALTER. recordInitialPartitions: the ALTER's table
+    // operation first describes the table and records its pre-ALTER partition
+    // count as the cascade's "initial" value (used by the merge modes so the
+    // done-line's "initial" is the true pre-merge count, not the first poll's).
+    // failureLabel: when non-empty, a failed ALTER prints a
+    // "<label>\terror\t..." line so a one-shot ALTER that is never re-issued
+    // (flap phases, split-vs-merge-race) fails observably instead of only in
+    // the driver's --verbose output.
+    TQueryInfoList AlterPartitionSize(ui64 sizeMb, ui64 minPartitions, size_t tableIdx = 0, bool recordInitialPartitions = false, const TString& failureLabel = TString());
     TQueryInfoList StatusPoll();             // DescribeTable partition-count report
     TQueryInfoList WriteStep();              // routes write modes through --key-distribution
     TQueryInfoList PhaseWaitQuery(const TString& name); // no-op keepalive for wait phases
 
     // Mode state machines (state lives in the generator; the run driver calls GetWorkload repeatedly)
     TQueryInfoList FlapStep();
-    TQueryInfoList MergeByLoadStep();
+    // Shared "poll the merge cascade until drained" step for merge-by-size,
+    // merge-burst and merge-by-load; modeName names the queries and output
+    // lines (e.g. "merge-by-size", "merge-by-load").
+    TQueryInfoList MergeCascadePollStep(const TString& modeName);
     TQueryInfoList SplitByLoadStep();
+    // One-shot warning when a by-load mode runs against a table whose
+    // AUTO_PARTITIONING_BY_LOAD is disabled by the init defaults.
+    void WarnIfByLoadDisabled();
     TQueryInfoList ValidateExternalTables(); // one-shot schema validation (external mode)
 
     // Number of partitions used for hot-key-range and stride math. In external
-    // mode this is the actual partition count observed at validation time (the
-    // --initial-partitions default does not describe a user table); otherwise
-    // the init-time UNIFORM_PARTITIONS value.
-    ui64 HotKeySpacePartitions() const;
+    // mode this is the actual partition count of the given table observed at
+    // validation time (the --initial-partitions default does not describe a
+    // user table); otherwise the init-time UNIFORM_PARTITIONS value.
+    ui64 HotKeySpacePartitions(size_t tableIdx = 0) const;
+
+    // Atomically reserve up to rowsToWrite rows from the --max-rows budget;
+    // returns the number actually reserved (0 when the budget is exhausted).
+    // Callers must emit at most the returned count of VALUES rows so
+    // --max-rows is a true hard stop even on a partial reservation. The
+    // budget counts attempted rows: it is reserved before the query runs and
+    // is not refunded if the query fails.
+    ui64 TryReserveRows(ui64 rowsToWrite);
 
     TString FullTablePath(size_t tableIdx) const;
     size_t ExternalTableCount() const;
@@ -129,13 +151,32 @@ private:
 
     // External-table mode: one-shot schema validation state. The first worker
     // to arrive claims the validation; the others wait it out. The actual
-    // partition count observed during validation feeds the hot-key-range math.
-    // A failed validation latches: the run stops instead of degrading into
-    // keepalive traffic against a table the tool cannot write correctly.
+    // per-table partition counts observed during validation feed the
+    // hot-key-range math. A schema-validation failure latches: the run stops
+    // instead of degrading into keepalive traffic against a table the tool
+    // cannot write correctly. Transient (transport/session) failures do not
+    // latch: the claim is released and the next GetWorkload() call
+    // re-attempts the validation.
     std::atomic<bool> ExternalValidated = false;
     std::atomic<bool> ExternalValidationFailed = false;
-    std::atomic<bool> ValidationClaimed = false;
-    std::atomic<ui64> ExternalPartitionsCount = 0;
+    // A generation prevents stale claimants from releasing a newer claim.
+    // ValidationMutex serializes claim stealing and publishing so a claimant
+    // cannot publish after losing ownership; in-flight validations keep their
+    // counts private until that publication point.
+    std::mutex ValidationMutex;
+    std::atomic<i64> ValidationClaimGeneration = 0;
+    // When the current validation claim was taken (microseconds). Waiters
+    // whose wait exceeds ValidationClaimTimeoutSec steal the claim and
+    // re-attempt, so a dead claimant (worker lost to exhausted retries)
+    // cannot leave the run spinning on keepalives forever.
+    std::atomic<i64> ValidationClaimTimeUs = 0;
+    // Monotonic ticket source for claim generations.
+    std::atomic<i64> ValidationClaimTicket = 0;
+    static constexpr i64 ValidationClaimTimeoutSec = 30;
+    // Per-table partition counts observed during validation (index = table).
+    // Published once under ValidationMutex before ExternalValidated is
+    // release-stored. Readers acquire ExternalValidated before accessing it.
+    TVector<ui64> ExternalPartitionsCounts;
 
     TString BigString;
     std::atomic<ui64> NextFirstKey = 0;      // sequential fresh-key counter (upsert-seq pattern)
@@ -163,20 +204,46 @@ private:
     // Atomic exchange so exactly one worker issues the ALTER even under the
     // multi-threaded run driver.
     std::atomic<bool> MergeAlterIssued = false;
+    // True for modes whose cascade is driven by a one-shot ALTER
+    // (merge-by-size, merge-burst). MergeCascadePollStep must not poll until
+    // that ALTER has actually executed (the driver's rate limiter may delay
+    // it): polling in that window could report a "done" plateau for a
+    // cascade that has not started. MergeAlterDone is set by the ALTER's
+    // table operation on success.
+    std::atomic<bool> MergeAlterExpected = false;
+    std::atomic<bool> MergeAlterDone = false;
 
-    // Merge-by-load drain tracking. The run driver calls GetWorkload() from
-    // multiple worker threads concurrently, so all drain state is kept in
-    // atomics: the single poller thread updates them, and they are safe to
-    // read from any worker. 0 in InitialPartitions means "not polled yet".
-    std::atomic<ui64> MergeByLoadInitialPartitions = 0; // partition count on the first poll
-    std::atomic<ui64> MergeByLoadLastPartitions = 0;    // partition count on the previous poll
-    std::atomic<ui64> MergeByLoadStablePolls = 0;       // consecutive polls with an unchanged count
+    // Merge-cascade drain tracking, shared by merge-by-size, merge-burst and
+    // merge-by-load. The run driver calls GetWorkload() from multiple worker
+    // threads concurrently, so all drain state is kept in atomics: the single
+    // poller thread updates them, and they are safe to read from any worker.
+    // A value of 0 in MergeCascadeInitialPartitions means "not recorded yet"
+    // (for the merge modes it is recorded by the ALTER's table operation,
+    // before any merge can fire).
+    std::atomic<ui64> MergeCascadeInitialPartitions = 0; // partition count before the cascade started
+    std::atomic<ui64> MergeCascadeLastPartitions = 0;    // partition count on the previous poll
+    std::atomic<ui64> MergeCascadeStablePolls = 0;       // consecutive polls with an unchanged count
     // Partition count reported in the last printed "done" summary. 0 means
     // "no summary printed yet" (a table always has at least one partition).
     // The detector re-arms: a new "done" line is printed for every plateau
     // whose count differs from the previously reported one, so a delayed
     // split/merge tail after the first plateau is still reported.
-    std::atomic<ui64> MergeByLoadLastDonePartitions = 0;
+    std::atomic<ui64> MergeCascadeLastDonePartitions = 0;
+
+    // Single-poller rate limiting for the status and merge-cascade poll
+    // loops: at most one poll per second across all worker threads. A lease
+    // CAS on the last-poll timestamp picks a single winner per tick without
+    // thread-local or function-local static state (which would leak across
+    // generator instances). 0 means "no poll yet". The winner rolls the lease
+    // back if its poll operation fails, so a failing poll does not silence
+    // the timeline for a second.
+    std::atomic<i64> StatusLastPollUs = 0;
+    std::atomic<i64> MergeCascadeLastPollUs = 0;
+
+    // One-shot warning for by-load modes against a table whose
+    // AUTO_PARTITIONING_BY_LOAD is disabled by the init defaults: without
+    // the flag no by-load splits/merges ever fire and the mode tests nothing.
+    std::atomic<bool> ByLoadPrereqWarned = false;
 };
 
 } // namespace NYdbWorkload

@@ -3054,7 +3054,7 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
             return TNonNull(TNodePtr(new TInvalidBuiltin(pos, errorText)));
         }
 
-        if (isYqlSelect) {
+        if (isYqlSelect && !isFactory) {
             TYqlAggregationArgs aggregation = {
                 .FunctionName = realFunctionName,
                 .FactoryName = factoryName,

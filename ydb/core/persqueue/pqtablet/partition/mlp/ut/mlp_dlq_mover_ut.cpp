@@ -1,6 +1,7 @@
 #include <ydb/core/persqueue/pqtablet/partition/mlp/mlp_common.h>
 #include <ydb/core/persqueue/public/mlp/ut/common/common.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/library/testlib/helpers.h>
 
 namespace NKikimr::NPQ::NMLP {
 
@@ -82,27 +83,34 @@ void ExpectDlqContains(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString
 
 } // namespace
 
-void MoveToDLQ(const TString& msg, bool shortDlqName = false) {
+void MoveToDLQ(const TString& msg, bool shortDlqName = false, bool databasePrefixedDlqName = false, bool enableRelativePaths = true) {
     auto setup = CreateSetup();
     auto& runtime = setup->GetRuntime();
+    runtime.GetAppData().FeatureFlags.SetEnableRelativePaths(enableRelativePaths);
 
     auto driver = TDriver(setup->MakeDriverConfig());
     auto client = TTopicClient(driver);
 
-    client.CreateTopic("/Root/topic1-dlq", NYdb::NTopic::TCreateTopicSettings()
+    const TString dlq = databasePrefixedDlqName && enableRelativePaths ? "/Root/Root/topic1-dlq" : "/Root/topic1-dlq";
+    if (databasePrefixedDlqName && enableRelativePaths) {
+        setup->GetServer().AnnoyingClient->MkDir("/Root", "Root");
+    }
+    const auto dlqStatus = client.CreateTopic(dlq, NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer("mlp-consumer")
             .EndAddConsumer()).GetValueSync();
+    UNIT_ASSERT_C(dlqStatus.IsSuccess(), dlqStatus.GetIssues().ToString());
 
-    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+    const auto sourceStatus = client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer("mlp-consumer")
                 .BeginDeadLetterPolicy()
                     .Enable()
                     .BeginCondition()
                         .MaxProcessingAttempts(1)
                     .EndCondition()
-                    .MoveAction(shortDlqName ? "topic1-dlq" : "/Root/topic1-dlq")
+                    .MoveAction(databasePrefixedDlqName ? "Root/topic1-dlq" : shortDlqName ? "topic1-dlq" : "/Root/topic1-dlq")
                 .EndDeadLetterPolicy()
             .EndAddConsumer()).GetValueSync();
+    UNIT_ASSERT_C(sourceStatus.IsSuccess(), sourceStatus.GetIssues().ToString());
 
     setup->Write("/Root/topic1", msg, 0);
 
@@ -144,7 +152,7 @@ void MoveToDLQ(const TString& msg, bool shortDlqName = false) {
         // The message should appear in DLQ
         CreateReaderActor(runtime, TReaderSettings{
             .DatabasePath = "/Root",
-            .TopicName = "/Root/topic1-dlq",
+            .TopicName = dlq,
             .Consumer = "mlp-consumer",
         });
         auto response = GetReadResponse(runtime);
@@ -180,6 +188,10 @@ Y_UNIT_TEST(MoveToDLQ_ShortDlqTopicName) {
 
 Y_UNIT_TEST(MoveToDLQ_FullDlqTopicName) {
     MoveToDLQ(NUnitTest::RandomString(1_KB), false);
+}
+
+Y_UNIT_TEST_TWIN(MoveToDLQ_DatabasePrefixedDlqTopicName, enableRelativePaths) {
+    MoveToDLQ(NUnitTest::RandomString(1_KB), false, true, enableRelativePaths);
 }
 
 Y_UNIT_TEST(MoveToDLQ_BigMessage) {

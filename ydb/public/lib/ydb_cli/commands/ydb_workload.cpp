@@ -24,6 +24,7 @@
 #include <ydb/library/workload/vector/vector.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
+#include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
@@ -457,7 +458,8 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
     settings.CreateProgressBar(true);
     for (const auto& path : pathsToDelete) {
         Cout << "Remove path " << path << "..."  << Endl;
-        auto fullPath = config.Database + "/" + path.c_str();
+        TString fullPath(path);
+        NConsoleClient::AdjustPath(fullPath, config);
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
@@ -473,7 +475,8 @@ void TWorkloadCommandBase::RmParentIfEmpty(TStringBuf path, TConfig& config) {
     if (!path) {
         return;
     }
-    auto fullPath = std::string(config.Database.c_str()) + "/" + std::string(path.cbegin(), path.cend());
+    TString fullPath(path);
+    NConsoleClient::AdjustPath(fullPath, config);
     auto lsResult = SchemeClient->ListDirectory(fullPath).GetValueSync();
     if (lsResult.IsSuccess() && lsResult.GetChildren().empty() && lsResult.GetEntry().Type == NScheme::ESchemeEntryType::Directory) {
         Cout << "Folder " << path << " is empty, remove it..." << Endl;
@@ -542,7 +545,8 @@ int TWorkloadCommandInit::DoRun(NYdbWorkload::IWorkloadQueryGenerator& workloadG
         } else {
             TVector<TString> existPaths;
             for (const auto& path: workloadGen.GetCleanPaths()) {
-                const auto fullPath = config.Database + "/" + path.c_str();
+                TString fullPath(path);
+                NConsoleClient::AdjustPath(fullPath, config);
                 if (SchemeClient->DescribePath(fullPath).GetValueSync().IsSuccess()) {
                     existPaths.emplace_back(path);
                 }

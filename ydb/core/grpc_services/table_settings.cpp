@@ -1,6 +1,6 @@
 #include "table_settings.h"
 
-#include <ydb/core/grpc_services/base/iface.h>
+#include <ydb/core/grpc_services/base/base.h>
 
 namespace NKikimr {
 namespace NGRpcService {
@@ -30,7 +30,7 @@ bool FillCreateTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     return NKikimr::FillCreateTableSettingsDesc(out, in, code, error, warnings, tableProfileSet);
 }
 
-void NormalizeTtlStoragePaths(Ydb::Table::TtlSettings& settings, const IRequestCtxBaseMtSafe& request) {
+void ResolveTtlStoragePaths(Ydb::Table::TtlSettings& settings, const IAuditCtx& request) {
     if (!settings.has_tiered_ttl()) {
         return;
     }
@@ -38,7 +38,7 @@ void NormalizeTtlStoragePaths(Ydb::Table::TtlSettings& settings, const IRequestC
     for (auto& tier : *settings.mutable_tiered_ttl()->mutable_tiers()) {
         if (tier.has_evict_to_external_storage()) {
             auto* eviction = tier.mutable_evict_to_external_storage();
-            eviction->set_storage(request.NormalizePath(eviction->storage()));
+            eviction->set_storage(request.GetDatabaseRelativePath(eviction->storage()));
         }
     }
 }

@@ -376,33 +376,32 @@ function bucketLabel(item) {
     }
     const key = String(item.key || '');
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    function part(ms) {
+    function dayPart(ms) {
         const date = new Date(ms);
-        const hh = (date.getHours() < 10 ? '0' : '') + date.getHours();
-        const mm = (date.getMinutes() < 10 ? '0' : '') + date.getMinutes();
-        return date.getDate() + ' ' + months[date.getMonth()] + ' ' + hh + ':' + mm;
+        return date.getDate() + ' ' + months[date.getMonth()];
+    }
+    function timePart(ms) {
+        const date = new Date(ms);
+        return (date.getHours() < 10 ? '0' : '') + date.getHours() + ':00';
     }
     let fromMs;
     let toMs;
     if (p90Step === 'hour') {
         fromMs = new Date(key.slice(0, 10) + 'T' + key.slice(11) + ':00:00').getTime();
         toMs = fromMs + 3600 * 1000;
-    } else if (p90Step === 'week') {
-        fromMs = new Date(key.slice(0, 10) + 'T00:00:00').getTime();
-        toMs = fromMs + 7 * 24 * 3600 * 1000;
-    } else {
-        fromMs = new Date(key.slice(0, 10) + 'T00:00:00').getTime();
-        toMs = fromMs + 24 * 3600 * 1000;
+        return dayPart(fromMs) + ' ' + timePart(fromMs) + '-' + timePart(toMs);
     }
-    return part(fromMs) + ' – ' + part(toMs);
+    fromMs = new Date(key.slice(0, 10) + 'T00:00:00').getTime();
+    toMs = fromMs + (p90Step === 'week' ? 7 : 1) * 24 * 3600 * 1000;
+    return dayPart(fromMs) + '-' + dayPart(toMs);
 }
 
 const chartConfig = {
     pName: pName,
     window: p90Step,
     metricLabel: metricLabel,
-    startLabel: bucketLabel(first),
-    endLabel: bucketLabel(last),
+    startWindow: bucketLabel(first),
+    endWindow: bucketLabel(last),
     startValue: startValue,
     endValue: endValue,
     startN: first ? first.n : 0,
@@ -440,51 +439,44 @@ module.exports = {
             if (cfg.startValue === null || cfg.endValue === null) {
                 return Editor.generateHtml('<div style="padding:12px;font:13px ui-sans-serif,system-ui,sans-serif;color:#888">No ' + (cfg.pName || 'p') + ' for these filters.</div>');
             }
-            function rowChip(delta, flat, down, text) {
-                const color = flat ? '#555' : (down ? '#2f7d32' : '#c0392b');
-                const bg = flat ? '#f4f4f4' : (down ? '#eef8ef' : '#fdecea');
-                return '<span style="font-weight:600;color:' + color +
-                    ';padding:2px 8px;border-radius:999px;background:' + bg + '">' + text + '</span>';
-            }
             function pctShare(value) {
                 if (value === null || value === undefined || !Number.isFinite(value)) {
                     return '—';
                 }
                 return Math.round(value * 100) + '%';
             }
+            function chip(flat, down, text) {
+                const color = flat ? '#555' : (down ? '#2f7d32' : '#c0392b');
+                return '<b style="color:' + color + '">' + text + '</b>';
+            }
+            const title = String(cfg.metricLabel || '').replace(/^[\s\-]*(substep|step|job)\s*·\s*/i, '');
             const down = cfg.delta < 0;
             const flat = Math.abs(cfg.delta) < 0.05;
-            const sign = cfg.delta > 0 ? '+' : (cfg.delta < 0 ? '−' : '');
-            const absText = sign + formatMin(Math.abs(cfg.delta));
-            const pct = cfg.deltaPct === null ? '—' : sign + Math.abs(Math.round(cfg.deltaPct)) + '%';
+            const sign = cfg.delta > 0 ? '+' : (cfg.delta < 0 ? '-' : '');
+            const pDiff = sign + formatMin(Math.abs(cfg.delta)) +
+                (cfg.deltaPct === null ? '' : ' (' + sign + Math.abs(Math.round(cfg.deltaPct)) + '%)');
             const shareDown = (cfg.shareDelta || 0) < 0;
             const shareFlat = cfg.shareDelta === null || Math.abs(cfg.shareDelta) < 0.005;
-            const shareSign = (cfg.shareDelta || 0) > 0 ? '+' : ((cfg.shareDelta || 0) < 0 ? '−' : '');
+            const shareSign = (cfg.shareDelta || 0) > 0 ? '+' : ((cfg.shareDelta || 0) < 0 ? '-' : '');
             const shareDiff = cfg.shareDelta === null
                 ? '—'
                 : (shareSign + Math.abs(Math.round(cfg.shareDelta * 100)) + ' pp');
+            const startShare = pctShare(cfg.startShare) + ' (' + (cfg.startSlow || 0) + '/' + (cfg.startN || 0) + ')';
+            const endShare = pctShare(cfg.endShare) + ' (' + (cfg.endSlow || 0) + '/' + (cfg.endN || 0) + ')';
+            const startWindow = cfg.startWindow || '—';
+            const endWindow = cfg.endWindow || '—';
             const html = [
-                '<div style="display:flex;align-items:center;height:100%;padding:4px 12px;box-sizing:border-box">',
-                '<div style="display:flex;flex-direction:column;gap:4px;padding:4px 10px;border:1px solid #ececec;border-radius:8px;font:13px/1.2 ui-sans-serif,system-ui,sans-serif;color:#222">',
-                '<div style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">',
-                '<span style="color:#888">' + cfg.metricLabel + ' · ' + cfg.pName + '/' + cfg.window + '</span>',
-                '<b>' + formatMin(cfg.startValue) + '</b>',
-                '<span style="color:#999;font-size:12px">' + cfg.startLabel + '</span>',
-                '<span style="color:#bbb">→</span>',
-                '<b>' + formatMin(cfg.endValue) + '</b>',
-                '<span style="color:#999;font-size:12px">' + cfg.endLabel + '</span>',
-                rowChip(cfg.delta, flat, down, absText + ' · ' + pct),
+                '<div style="padding:8px 12px;font:13px/1.45 ui-sans-serif,system-ui,sans-serif;color:#222">',
+                '<div style="color:#888;margin-bottom:8px">' + title + ' · ' + (cfg.window || '') +
+                    ' · long >= ' + (cfg.slowLabel || '') + '</div>',
+                '<div><span style="color:#888">first window</span> <b>' + startWindow + '</b></div>',
+                '<div><span style="color:#888">last window</span> <b>' + endWindow + '</b></div>',
+                '<div style="margin-top:6px">' + (cfg.pName || 'p') + ': <b>' +
+                    formatMin(cfg.startValue) + '</b> -&gt; <b>' + formatMin(cfg.endValue) +
+                    '</b> ' + chip(flat, down, pDiff) + '</div>',
+                '<div>count share: <b>' + startShare + '</b> -&gt; <b>' + endShare +
+                    '</b> ' + chip(shareFlat, shareDown, shareDiff) + '</div>',
                 '</div>',
-                '<div style="display:inline-flex;align-items:center;gap:8px;white-space:nowrap">',
-                '<span style="color:#888">count share · ≥ ' + (cfg.slowLabel || '') + '</span>',
-                '<b>' + pctShare(cfg.startShare) + '</b>',
-                '<span style="color:#999;font-size:12px">' + (cfg.startSlow || 0) + '/' + (cfg.startN || 0) + ' ops</span>',
-                '<span style="color:#bbb">→</span>',
-                '<b>' + pctShare(cfg.endShare) + '</b>',
-                '<span style="color:#999;font-size:12px">' + (cfg.endSlow || 0) + '/' + (cfg.endN || 0) + ' ops</span>',
-                rowChip(cfg.shareDelta, shareFlat, shareDown, shareDiff),
-                '</div>',
-                '</div></div>',
             ].join('');
             return Editor.generateHtml(html);
         },

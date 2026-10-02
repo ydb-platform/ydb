@@ -7,10 +7,29 @@
 #include <ydb/library/actors/wilson/wilson_trace.h>
 #include <ydb/library/actors/util/rc_buf.h>
 
+<<<<<<< HEAD
 #include <deque>
 
 namespace NActors {
 
+=======
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
+
+#include <deque>
+
+namespace NActorsInterconnect {
+    class TSystemPayloadV2;
+}
+
+namespace NActors {
+
+    // Allocate a section buffer with the requested headroom/tailroom, aligning the payload pointer
+    // (TRcBuf::GetData()) to `alignment` when alignment > 1. Used by the v2 XDC receive path so
+    // GetPayloadWithHeader can take the reserved-headroom fast path.
+    TRcBuf AllocateXdcSectionBuffer(size_t size, size_t headroom, size_t tailroom, size_t alignment);
+
+>>>>>>> 77dd701dda6 (Revert "Fix XDC oversize (#53112)")
     class TEventSerializer {
     public:
 #pragma pack(push, 1)

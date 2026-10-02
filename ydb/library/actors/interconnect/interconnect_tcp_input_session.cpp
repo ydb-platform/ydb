@@ -1,5 +1,9 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_proxy.h"
+<<<<<<< HEAD
+=======
+#include "v2_event_serializer.h"
+>>>>>>> 77dd701dda6 (Revert "Fix XDC oversize (#53112)")
 #include "rdma/events.h"
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>

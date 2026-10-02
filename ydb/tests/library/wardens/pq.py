@@ -19,9 +19,10 @@ class PersQueueHasNoStuckTransactions(LivenessWarden):
     cluster without topics is not a violation.
     """
 
-    def __init__(self, cluster):
+    def __init__(self, cluster, counters=None):
         super(PersQueueHasNoStuckTransactions, self).__init__()
         self._cluster = cluster
+        self._counters = counters
 
     def _endpoints(self):
         endpoints = []
@@ -41,9 +42,14 @@ class PersQueueHasNoStuckTransactions(LivenessWarden):
         endpoints = self._endpoints()
         readable = 0
         for endpoint in endpoints:
-            monitor = endpoint.monitor
-            if not monitor.has_actual_data():
-                continue
+            if self._counters is None:
+                monitor = endpoint.monitor
+                if not monitor.has_actual_data():
+                    continue
+            else:
+                if not self._counters.readable(endpoint):
+                    continue
+                monitor = self._counters.monitor(endpoint)
             readable += 1
             for sensor_name in PQ_TX_SENSORS:
                 sensor_value = monitor.sensor(

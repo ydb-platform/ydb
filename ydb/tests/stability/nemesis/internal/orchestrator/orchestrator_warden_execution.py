@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import subprocess
@@ -9,6 +10,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
+from ydb.tests.library.wardens.fetched_counters import fetch_liveness_counters
 from ydb.tests.stability.nemesis.internal.models import WardenCheckResult
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_catalog import (
     ORCHESTRATOR_LIVENESS_CHECKS,
@@ -38,9 +40,23 @@ def log_liveness_subprocess_output(stdout: Any, stderr: Any, *, returncode: Any)
     )
 
 
-def liveness_check_result_dict(spec: OrchestratorLivenessCheck, cluster: ExternalKiKiMRCluster) -> Dict[str, Any]:
+def _build_liveness_warden(spec: OrchestratorLivenessCheck, cluster: ExternalKiKiMRCluster, counters: Any):
     try:
-        warden = spec.build(cluster)
+        parameter_count = len(inspect.signature(spec.build).parameters)
+    except (TypeError, ValueError):
+        parameter_count = 1
+    if counters is not None and parameter_count >= 2:
+        return spec.build(cluster, counters)
+    return spec.build(cluster)
+
+
+def liveness_check_result_dict(
+    spec: OrchestratorLivenessCheck,
+    cluster: ExternalKiKiMRCluster,
+    counters: Any = None,
+) -> Dict[str, Any]:
+    try:
+        warden = _build_liveness_warden(spec, cluster, counters)
         violations = warden.list_of_liveness_violations
         status = "violation" if violations else "ok"
         return {
@@ -59,8 +75,25 @@ def liveness_check_result_dict(spec: OrchestratorLivenessCheck, cluster: Externa
         }
 
 
+def unreachable_slots_check(unreachable_slots: List[str]) -> Optional[Dict[str, Any]]:
+    if not unreachable_slots:
+        return None
+    return {
+        "name": "UnreachableSlots",
+        "category": "liveness",
+        "status": "error",
+        "violations": list(unreachable_slots),
+        "error_message": "Slots did not respond: %s" % "; ".join(unreachable_slots),
+    }
+
+
 def run_orchestrator_liveness_cli_batch(cluster: ExternalKiKiMRCluster) -> List[Dict[str, Any]]:
-    return [liveness_check_result_dict(spec, cluster) for spec in ORCHESTRATOR_LIVENESS_CHECKS]
+    counters, unreachable_slots = fetch_liveness_counters(cluster)
+    rows = [liveness_check_result_dict(spec, cluster, counters) for spec in ORCHESTRATOR_LIVENESS_CHECKS]
+    slot_error = unreachable_slots_check(unreachable_slots)
+    if slot_error is not None:
+        rows.append(slot_error)
+    return rows
 
 
 def run_orchestrator_aggregated_safety(
@@ -82,7 +115,7 @@ def run_orchestrator_liveness_subprocess_sync(
     yaml_config: str,
     *,
     database_yaml_config: str | None = None,
-    timeout_seconds: int = 240,
+    timeout_seconds: int = 600,
 ) -> List[WardenCheckResult]:
     logger.info("Running liveness checks via subprocess with %ds timeout", timeout_seconds)
 

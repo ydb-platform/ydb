@@ -392,6 +392,7 @@ bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TSh
     context.OnComplete.UnbindMsgFromPipe(OperationId, batch.Hive, anchor);
     TVector<TShardIdx> retry;
     bool done = false;
+    bool madeProgress = false;
     for (const auto& shardIdx : batch.Shards) {
         if (!txState.ShardsInProgress.contains(shardIdx)) {
             continue;
@@ -432,10 +433,14 @@ bool TCreateParts::HandleBatchReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TSh
         }
         // These updates share the surrounding SchemeShard transaction; no per-item events.
         done |= HandleCreateReply(single, context);
+        madeProgress |= result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ALREADY;
     }
     if (retry.empty()) {
         CreateBatches.erase(anchor);
     } else {
+        if (madeProgress) {
+            batch.RetryDelay = TDuration::Seconds(1);
+        }
         batch.Shards = std::move(retry);
         batch.Request.ClearCount();
         batch.Request.ClearOwnerIdx();

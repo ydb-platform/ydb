@@ -3689,7 +3689,14 @@ void THive::Handle(TEvPrivate::TEvProcessIncomingEvent::TPtr&) {
     EventQueue.ProcessIncomingEvent();
 }
 
+void THive::NormalizeChannelBind(TChannelBind& bind) {
+    if (bind.GetStoragePoolName().empty()) {
+        bind.SetStoragePoolName(TLeaderTabletInfo::DEFAULT_STORAGE_POOL_NAME);
+    }
+}
+
 void THive::InitDefaultChannelBind(TChannelBind& bind) {
+    NormalizeChannelBind(bind);
     if (!bind.HasIOPS()) {
         bind.SetIOPS(GetDefaultUnitIOPS());
     }
@@ -3993,13 +4000,15 @@ void THive::RequestFreeSequence() {
         size_t sequenceIndex = Sequencer.NextFreeSequenceIndex();
         size_t sequenceSize = GetRequestSequenceSize();
 
-        if (PendingCreateTablets.size() > sequenceSize) {
-            size_t newSequenceSize = ((PendingCreateTablets.size() / sequenceSize) + 1) * sequenceSize;
+        const size_t pendingCreates = PendingCreateTablets.size() + PendingCreateTabletBatchIds;
+        if (pendingCreates > sequenceSize) {
+            size_t newSequenceSize = ((pendingCreates / sequenceSize) + 1) * sequenceSize;
             YDB_LOG_WARN("RequestFreeSequence: increasing sequence size due to pending creates",
                 {"logPrefix", GetLogPrefix()},
                 {"sequenceSize", sequenceSize},
                 {"newSequenceSize", newSequenceSize},
-                {"pendingCreateTabletsCount", PendingCreateTablets.size()});
+                {"pendingCreateTabletsCount", PendingCreateTablets.size()},
+                {"pendingBulkCreateTabletIds", PendingCreateTabletBatchIds});
             sequenceSize = newSequenceSize;
         }
 
@@ -4013,6 +4022,23 @@ void THive::RequestFreeSequence() {
     } else {
         YDB_LOG_ERROR("RequestFreeSequence: ran out of tablet ids",
             {"logPrefix", GetLogPrefix()});
+    }
+}
+
+void THive::CancelPendingCreateTabletBatches(ui64 owner, std::optional<ui64> ownerIdx) {
+    for (auto& [key, batch] : PendingCreateTabletBatches) {
+        if (key.first != owner) {
+            continue;
+        }
+        const auto& record = batch.CreateTablet;
+        const size_t count = record.HasCount() ? record.GetCount() : record.OwnerIdxsSize();
+        for (size_t i = 0; i < count; ++i) {
+            const ui64 idx = record.HasCount() ? record.GetOwnerIdx() + i : record.GetOwnerIdxs(i);
+            if ((!ownerIdx || idx == *ownerIdx) && batch.CancelledOwnerIdxs.insert(idx).second
+                    && batch.NeededOwnerIdxs.erase(idx)) {
+                --PendingCreateTabletBatchIds;
+            }
+        }
     }
 }
 

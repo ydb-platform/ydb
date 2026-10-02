@@ -29,6 +29,7 @@ public:
                     {"tabletId", tabletId});
                 return;
             }
+            Self->CancelPendingCreateTabletBatches(tablet->Owner.first, tablet->Owner.second);
             if (tablet->State != ETabletState::Deleting) {
                 if (tablet->IsStarting()) {
                     Self->UpdateCounterTabletsStarting(-1);
@@ -157,6 +158,9 @@ public:
                 }
             }
         }
+        for (ui64 idx : rec.GetShardLocalIdx()) {
+            Self->CancelPendingCreateTabletBatches(owner, idx);
+        }
         NIceDb::TNiceDb db(txc.DB);
         for (TTabletId tabletId : tablets) {
             DeleteTablet(tabletId, db);
@@ -170,6 +174,9 @@ public:
             {"logPrefix", GetLogPrefix()},
             {"sideEffects", SideEffects});
         SideEffects.Complete(ctx, Self->Requests);
+        if (!Self->PendingCreateTabletBatches.empty()) {
+            Self->ProcessPendingOperations();
+        }
     }
 };
 
@@ -230,6 +237,7 @@ public:
         }
         db.Table<Schema::BlockedOwner>().Key(rec.GetOwner()).Update();
         Self->BlockedOwners.emplace(Event->Get()->Record.GetOwner());
+        Self->CancelPendingCreateTabletBatches(owner);
         RespondToSender(NKikimrProto::OK);
         return true;
     }
@@ -240,6 +248,9 @@ public:
             {"ownerId", Event->Get()->Record.GetOwner()},
             {"sideEffects", SideEffects});
         SideEffects.Complete(ctx, Self->Requests);
+        if (!Self->PendingCreateTabletBatches.empty()) {
+            Self->ProcessPendingOperations();
+        }
     }
 };
 

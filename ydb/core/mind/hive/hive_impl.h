@@ -278,7 +278,8 @@ protected:
     ITransaction* CreateForceRestartTablet(TFullTabletId tabletId);
     ITransaction* CreateInitScheme();
     ITransaction* CreateAdoptTablet(NKikimrHive::TEvAdoptTablet &rec, const TActorId &sender, const ui64 cookie);
-    ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie);
+    ITransaction* CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie,
+        ui64 pendingBatchGeneration = 0);
     ITransaction* CreateLoadEverything();
     ITransaction* CreateRegisterNode(const TActorId& local, NKikimrLocal::TEvRegisterNode rec);
     ITransaction* CreateStatus(const TActorId& local, NKikimrLocal::TEvStatus rec);
@@ -467,6 +468,16 @@ protected:
     };
 
     std::unordered_map<std::pair<ui64, ui64>, TPendingCreateTablet> PendingCreateTablets;
+    struct TPendingCreateTabletBatch : TPendingCreateTablet {
+        THashSet<ui64> NeededOwnerIdxs;
+        ui64 Generation = 0;
+        bool Scheduled = false;
+        THashSet<ui64> CancelledOwnerIdxs;
+    };
+    // Keyed by owner and the first requested index; retries replace, not multiply, demand.
+    std::unordered_map<std::pair<ui64, ui64>, TPendingCreateTabletBatch> PendingCreateTabletBatches;
+    size_t PendingCreateTabletBatchIds = 0;
+    ui64 PendingCreateTabletBatchGeneration = 0;
     std::deque<THolder<IEventHandle>> PendingOperations;
 
     ui64 UpdateTabletMetricsInProgress = 0;
@@ -1157,9 +1168,12 @@ protected:
             const TTabletInfo* tablet);
     static void DivideMetrics(TMetrics& metrics, ui64 divider);
     TVector<TTabletId> UpdateStoragePools(const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TGroupMetrics::TGroupParameters>& groups);
+    // Canonicalize aliases without applying mutable resource defaults.
+    static void NormalizeChannelBind(TChannelBind& bind);
     void InitDefaultChannelBind(TChannelBind& bind);
     void RequestPoolsInformation();
     void RequestFreeSequence();
+    void CancelPendingCreateTabletBatches(ui64 owner, std::optional<ui64> ownerIdx = std::nullopt);
     void EnqueueIncomingEvent(STATEFN_SIG);
 
     bool SeenDomain(TSubDomainKey domain);

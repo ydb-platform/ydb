@@ -116,6 +116,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardBulkCreate) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Source"), {NLs::PathExist, NLs::IsTable});
     }
 
+    Y_UNIT_TEST(RetryBackoffResetsAfterProgress) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableHiveBulkCreate(true);
+        TVector<TInstant> requests;
+        TVector<TInstant> replies;
+        auto requestObserver = runtime.AddObserver<TEvHive::TEvCreateTablet>([&](auto& ev) {
+            if (TEvHive::TEvCreateTablet::IsBatch(ev->Get()->Record)) {
+                requests.push_back(runtime.GetCurrentTime());
+            }
+        });
+        auto replyObserver = runtime.AddObserver<TEvHive::TEvCreateTabletReply>([&](auto& ev) {
+            auto& record = ev->Get()->Record;
+            if (!record.GetIsBatch()) {
+                return;
+            }
+            replies.push_back(runtime.GetCurrentTime());
+            // Two attempts without progress, then one successful item, then success.
+            if (replies.size() <= 3) {
+                const size_t firstRetry = replies.size() == 3 ? 1 : 0;
+                for (size_t i = firstRetry; i < record.ResultsSize(); ++i) {
+                    auto* result = record.MutableResults(i);
+                    result->SetStatus(NKikimrProto::TRYLATER);
+                    result->ClearTabletID();
+                }
+            }
+        });
+        TestCreateTable(runtime, 100, "/MyRoot", TableDescription);
+        env.TestWaitNotification(runtime, 100);
+        UNIT_ASSERT_VALUES_EQUAL(requests.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(replies.size(), 4);
+        UNIT_ASSERT(requests[2] - replies[1] >= TDuration::Seconds(2));
+        const auto delayAfterProgress = requests[3] - replies[2];
+        UNIT_ASSERT(delayAfterProgress >= TDuration::Seconds(1));
+        UNIT_ASSERT(delayAfterProgress < TDuration::Seconds(2));
+    }
+
     Y_UNIT_TEST(LostReplyAndSchemeShardReboot) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

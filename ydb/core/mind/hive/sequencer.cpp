@@ -135,6 +135,8 @@ void TSequenceGenerator::Clear() {
     AllocatedSequences.clear();
     FreeSequences.clear();
     FreeSequencesIndex = 0;
+    FreeSize_ = 0;
+    AllocatedSize_ = 0;
 }
 
 bool TOwnershipKeeper::AddOwnedSequence(TOwnerType owner, TSequence sequence) {

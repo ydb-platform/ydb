@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#include <utility>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
 namespace NKikimr {
@@ -14,6 +16,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
 
     const TActorId Sender;
     const ui64 Cookie;
+    const ui64 PendingBatchGeneration;
 
     NKikimrHive::EErrorReason ErrorReason;
     ui64 TabletId;
@@ -38,7 +41,8 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     THashMap<std::pair<TTabletId, TFollowerGroupId>, std::pair<ui32, bool>> StoredFollowerCounts;
 
 public:
-    TTxCreateTablet(NKikimrHive::TEvCreateTablet record, const TActorId& sender, const ui64 cookie, THive* hive)
+    TTxCreateTablet(NKikimrHive::TEvCreateTablet record, const TActorId& sender, const ui64 cookie, THive* hive,
+            ui64 pendingBatchGeneration)
         : TBase(hive)
         , RequestData(std::move(record))
         , OwnerId(RequestData.GetOwner())
@@ -46,6 +50,7 @@ public:
         , TabletType((TTabletTypes::EType)RequestData.GetTabletType())
         , Sender(sender)
         , Cookie(cookie)
+        , PendingBatchGeneration(pendingBatchGeneration)
         , TabletId(0)
         , ObjectId(0)
         , ObjectDomain(RequestData.GetObjectDomain())
@@ -55,6 +60,9 @@ public:
         , BalancerPolicy(RequestData.GetBalancerPolicy())
         , IsBackup(RequestData.GetIsBackup())
     {
+        for (auto& bind : BoundChannels) {
+            Self->NormalizeChannelBind(bind);
+        }
         const ui32 allowedNodeIdsSize = RequestData.AllowedNodeIDsSize();
         AllowedNodeIds.reserve(allowedNodeIdsSize);
         for (ui32 idx = 0; idx < allowedNodeIdsSize; ++idx) {
@@ -236,9 +244,9 @@ public:
             || tablet.BoundChannels.size() != BoundChannels.size() || tablet.FollowerGroups.size() != FollowerGroups.size()) {
             return false;
         }
-        const auto categoryId = TabletCategory.HasTabletCategoryID() ? TabletCategory.GetTabletCategoryID()
-            : (Self->IsSystemTablet(TabletType) ? Self->CurrentConfig.GetSystemTabletCategoryId() : 0);
-        if ((tablet.Category ? tablet.Category->Id : 0) != categoryId) {
+        // An omitted category keeps the existing value, even if the Hive default has changed.
+        if (TabletCategory.HasTabletCategoryID()
+            && (tablet.Category ? tablet.Category->Id : 0) != TabletCategory.GetTabletCategoryID()) {
             return false;
         }
         if (tablet.Category && ((TabletCategory.HasMaxDisconnectTimeout()
@@ -267,7 +275,7 @@ public:
         auto requestedGroup = FollowerGroups.begin();
         for (const auto& existing : tablet.FollowerGroups) {
             const auto& requested = *requestedGroup++;
-            const auto& [count, perDataCenter] = StoredFollowerCounts.at({tablet.Id, existing.Id});
+            const auto& [count, perDataCenter] = StoredFollowerCounts.at(std::make_pair(tablet.Id, existing.Id));
             if (count != requested.GetFollowerCount()
                 || existing.AllowLeaderPromotion != requested.GetAllowLeaderPromotion()
                 || existing.AllowClientRead != requested.GetAllowClientRead()
@@ -293,6 +301,16 @@ public:
             return ExecuteOne(txc, ctx);
         }
         const ui32 count = RequestData.HasCount() ? RequestData.GetCount() : RequestData.OwnerIdxsSize();
+        const auto batchKey = std::make_pair(OwnerId,
+            RequestData.HasCount() ? RequestData.GetOwnerIdx() : RequestData.GetOwnerIdxs(0));
+        auto pending = Self->PendingCreateTabletBatches.find(batchKey);
+        if (PendingBatchGeneration && (pending == Self->PendingCreateTabletBatches.end()
+                || pending->second.Generation != PendingBatchGeneration)) {
+            return true; // A newer request replaced this queued attempt.
+        }
+        const THashSet<ui64> cancelled = pending == Self->PendingCreateTabletBatches.end()
+            ? THashSet<ui64>{} : pending->second.CancelledOwnerIdxs;
+        THashSet<ui64> neededOwnerIdxs;
         // Load normalizes old cross-DC follower counts in memory. Compare the stored
         // values, so an identical create remains idempotent across a Hive reboot.
         // All potentially page-faulting reads must precede changes to any batch item.
@@ -300,8 +318,12 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         for (ui32 i = 0; i < count; ++i) {
             const ui64 idx = RequestData.HasCount() ? RequestData.GetOwnerIdx() + i : RequestData.GetOwnerIdxs(i);
+            if (cancelled.contains(idx)) {
+                continue;
+            }
             const auto owner = Self->OwnerToTablet.find({OwnerId, idx});
             if (owner == Self->OwnerToTablet.end()) {
+                neededOwnerIdxs.insert(idx);
                 continue;
             }
             const auto* tablet = Self->FindTablet(owner->second);
@@ -315,10 +337,31 @@ public:
                     return false;
                 }
                 Y_ABORT_UNLESS(!row.EndOfSet());
-                StoredFollowerCounts[{tablet->Id, group.Id}] = {
+                StoredFollowerCounts[std::make_pair(tablet->Id, group.Id)] = {
                     row.GetValue<Schema::TabletFollowerGroup::FollowerCount>(),
                     row.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>()};
             }
+        }
+        // Wait before changing any batch item. ID replenishment resumes this exact
+        // request in Hive, without a partial TRYLATER reply and a caller-side timer.
+        if (Self->AreWeSubDomainHive() && neededOwnerIdxs.size() > Self->Sequencer.FreeSize()
+                && !Self->BlockedOwners.contains(OwnerId) && TabletType != TTabletTypes::BSController) {
+            auto& batch = Self->PendingCreateTabletBatches[batchKey];
+            Self->PendingCreateTabletBatchIds -= batch.NeededOwnerIdxs.size();
+            batch.CreateTablet = RequestData;
+            batch.Sender = Sender;
+            batch.Cookie = Cookie;
+            batch.NeededOwnerIdxs = std::move(neededOwnerIdxs);
+            batch.Generation = ++Self->PendingCreateTabletBatchGeneration;
+            batch.Scheduled = false;
+            batch.CancelledOwnerIdxs = cancelled;
+            Self->PendingCreateTabletBatchIds += batch.NeededOwnerIdxs.size();
+            RequestFreeSequence();
+            return true;
+        }
+        if (pending != Self->PendingCreateTabletBatches.end()) {
+            Self->PendingCreateTabletBatchIds -= pending->second.NeededOwnerIdxs.size();
+            Self->PendingCreateTabletBatches.erase(pending);
         }
         BatchReply = MakeHolder<TEvHive::TEvCreateTabletReply>();
         auto& reply = BatchReply->Record;
@@ -328,6 +371,14 @@ public:
         reply.SetOrigin(Self->TabletID());
         for (ui32 i = 0; i < count; ++i) {
             OwnerIdx = RequestData.HasCount() ? RequestData.GetOwnerIdx() + i : RequestData.GetOwnerIdxs(i);
+            if (cancelled.contains(OwnerIdx)) {
+                TabletId = 0;
+                ForwardRequest.Clear();
+                const bool blocked = Self->BlockedOwners.contains(OwnerId);
+                ErrorReason = blocked ? NKikimrHive::ERROR_REASON_UNKNOWN : NKikimrHive::ERROR_REASON_CREATE_CONFLICT;
+                ReplyToSender(blocked ? NKikimrProto::BLOCKED : NKikimrProto::ERROR);
+                continue;
+            }
             // ExecuteOne only uses Hive's in-memory metadata and does not page-fault.
             Y_ABORT_UNLESS(ExecuteOne(txc, ctx));
         }
@@ -703,8 +754,9 @@ public:
     }
 };
 
-ITransaction* THive::CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie) {
-    return new TTxCreateTablet(std::move(rec), sender, cookie, this);
+ITransaction* THive::CreateCreateTablet(NKikimrHive::TEvCreateTablet rec, const TActorId& sender, const ui64 cookie,
+        ui64 pendingBatchGeneration) {
+    return new TTxCreateTablet(std::move(rec), sender, cookie, this, pendingBatchGeneration);
 }
 
 } // NHive

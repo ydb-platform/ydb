@@ -325,7 +325,13 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
+<<<<<<< HEAD
                 kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetRawValue(), itColumn.IsColumnKey());
+=======
+                if (itColumn.HasValue()) {
+                    kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn, itColumn.IsColumnKey());
+                }
+>>>>>>> 3c4e733b85a (Fix subcolumn iterator correctness (#54740))
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

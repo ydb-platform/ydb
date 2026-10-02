@@ -60,11 +60,21 @@ void TColumnsData::TIterator::InitArrays() {
             FullArrayAddress = GlobalChunkedArray->GetArray(FullArrayAddress, CurrentIndex, GlobalChunkedArray);
             ChunkAddress = std::nullopt;
         }
+<<<<<<< HEAD
         const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
         ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
         AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::binary()->id());
         CurrentArrayData = static_cast<const arrow::BinaryArray*>(ChunkAddress->GetArray().get());
         if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
+=======
+        ChunkAddress = GlobalChunkedArray->GetChunk(ChunkAddress, CurrentIndex);
+        const ui32 localIndex = ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex);
+        CurrentArrayData = ChunkAddress->GetArray().get();
+        // Dictionary columns materialize (decode) to a dense array, so they are
+        // read exactly like a plain Array here.
+        if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array ||
+            FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Dictionary) {
+>>>>>>> 3c4e733b85a (Fix subcolumn iterator correctness (#54740))
             if (CurrentArrayData->IsNull(localIndex)) {
                 Next();
             }

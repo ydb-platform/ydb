@@ -1,4 +1,5 @@
 #include "tasks_runner_pipe.h"
+#include "tasks_runner_pipe_process.h"
 
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
 #include <ydb/library/yql/dq/runtime/dq_output_channel.h>
@@ -50,8 +51,6 @@ extern "C" int fork(void);
 extern "C" int dup2(int oldfd, int newfd);
 extern "C" int close(int);
 extern "C" int pipe(int pipefd[2]);
-extern "C" int kill(int pid, int sig);
-extern "C" int waitpid(int pid, int* status, int options);
 #endif
 
 namespace {
@@ -208,10 +207,10 @@ public:
         Y_ABORT_UNLESS(pipe(error) == 0);
 
         PrepareForExec();
-        Pid = fork();
-        Y_ABORT_UNLESS(Pid >= 0);
+        const int pid = fork();
+        Y_ABORT_UNLESS(pid >= 0);
 
-        if (Pid == 0) {
+        if (pid == 0) {
             try {
                 close(input[1]);
                 close(output[0]);
@@ -235,6 +234,7 @@ public:
             _exit(127);
         }
 
+        ProcessState.SetPid(pid);
         close(input[0]);
         close(output[1]);
         close(error[1]);
@@ -242,43 +242,21 @@ public:
         Stdin = MakeHolder<TPipedOutput>(input[1]);
         Stdout = MakeHolder<TPipedInput>(output[0]);
         Stderr = MakeHolder<TPipedInput>(error[0]);
-        YQL_CLOG(DEBUG, ProviderDq) << "Forked child, pid: " << Pid;
+        YQL_CLOG(DEBUG, ProviderDq) << "Forked child, pid: " << pid;
         OnStarted();
 #endif
     }
 
     virtual void Kill() {
-#ifndef _win_
-        // todo: investigate why ain't killed sometimes
-        YQL_CLOG(DEBUG, ProviderDq) << "Kill child, pid: " << Pid;
-        kill(Pid, 9);
-#endif
+        ProcessState.Kill();
     }
 
     bool IsAlive() {
-#ifdef _win_
-        return true;
-#else
-        int status;
-        YQL_CLOG(TRACE, ProviderDq) << "Check Pid " << Pid;
-        return waitpid(Pid, &status, WNOHANG) <= 0;
-#endif
+        return ProcessState.IsAlive();
     }
 
     int Wait(TDuration timeout = TDuration::Seconds(5)) {
-        int status;
-        int ret;
-#ifndef _win_
-        TInstant start = TInstant::Now();
-        while ((ret = waitpid(Pid, &status, WNOHANG)) == 0 && TInstant::Now() - start < timeout) {
-            Sleep(TDuration::MilliSeconds(10));
-        }
-        if (ret <= 0) {
-            kill(Pid, 9);
-            waitpid(Pid, &status, 0);
-        }
-#endif
-        return status;
+        return ProcessState.Wait(timeout);
     }
 
     IOutputStream& GetStdin() {
@@ -306,7 +284,7 @@ protected:
     TVector<char*> ExecArgs;
     TVector<char*> ExecEnv;
 
-    int Pid = -1;
+    NPrivate::TChildProcessState ProcessState;
 
     virtual void PrepareForExec() {
         ExecArgs.resize(Args.size() + 1, nullptr);
@@ -1516,9 +1494,19 @@ public:
         , TaskId(Task.GetId())
         , StageId(stageId)
     {
-        StderrReader->Start();
-        InitTaskMeta();
-        InitChannels();
+        try {
+            InitTaskMeta();
+            InitChannels();
+            StderrReader->Start();
+        } catch (...) {
+            try {
+                Command->Kill();
+            } catch (...) { }
+            try {
+                Command->Wait(TDuration::Zero());
+            } catch (...) { }
+            throw;
+        }
     }
 
     ~TTaskRunner() {

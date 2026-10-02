@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/providers/dq/task_runner)
 
+NO_BUILD_IF(OS_WINDOWS)
+
 PEERDIR(
     ydb/library/yql/providers/dq/common
     yql/essentials/public/udf/service/exception_policy
@@ -9,8 +11,10 @@ PEERDIR(
 
 YQL_LAST_ABI_VERSION()
 
-IF (NOT OS_WINDOWS)
-    SRCS(tasks_runner_pipe_metrics_ut.cpp)
-ENDIF()
+SRCS(
+    tasks_runner_pipe_constructor_ut.cpp
+    tasks_runner_pipe_metrics_ut.cpp
+    tasks_runner_pipe_process_ut.cpp
+)
 
 END()

@@ -23,6 +23,7 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery12
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery13
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery14
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery15
+ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery16
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery17
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery21
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
@@ -203,6 +204,7 @@ ydb/core/kqp/ut/scheme KqpAcl.AclTemporary+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporary-IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
+ydb/core/kqp/ut/scheme KqpAcl.AlterDatabasePrivilegesRequiredToChangeSchemeLimits-AsClusterAdmin
 ydb/core/kqp/ut/scheme KqpConstraints.AddSerialColumnForbidden
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableAddColumnDefaultNullIsNotAllowed
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableDefaultConstantExpression+EnableCompileTimeDefaults

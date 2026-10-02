@@ -1,4 +1,5 @@
 from .. import _utilities
+from ... import issues
 
 
 class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
@@ -11,6 +12,13 @@ class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
 
     async def __aenter__(self) -> "AsyncResponseContextIterator":
         return self
+
+    def cancel(self):
+        error = issues.Cancelled("Query stream was cancelled by client")
+        if self._on_error:
+            self._on_error(error)
+        self._call_on_finish(error)
+        return super().cancel()
 
     async def _next(self):
         try:
@@ -36,6 +44,7 @@ class AsyncResponseContextIterator(_utilities.AsyncResponseIterator):
         if self._on_finish is not None:
             self._on_finish(exception)
             self._on_finish = None
+        self._on_error = None
 
     def __del__(self):
         self._call_on_finish()

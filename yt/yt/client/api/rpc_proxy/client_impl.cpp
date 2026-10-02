@@ -770,6 +770,7 @@ TFuture<std::vector<TTabletInfo>> TClient::GetTabletInfos(
             auto& tabletInfo = tabletInfos.emplace_back();
             tabletInfo.TotalRowCount = protoTabletInfo.total_row_count();
             tabletInfo.TrimmedRowCount = protoTabletInfo.trimmed_row_count();
+            tabletInfo.FlushedRowCount = YT_OPTIONAL_FROM_PROTO(protoTabletInfo, flushed_row_count);
             tabletInfo.DelayedLocklessRowCount = protoTabletInfo.delayed_lockless_row_count();
             tabletInfo.BarrierTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.barrier_timestamp());
             tabletInfo.LastWriteTimestamp = FromProto<NTransactionClient::TTimestamp>(protoTabletInfo.last_write_timestamp());

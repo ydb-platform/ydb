@@ -1,5 +1,5 @@
-#include "dq_compute_actor_checkpoints.h"
 #include "dq_checkpoints.h"
+#include "dq_compute_actor_checkpoints.h"
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/dq/actors/dq.h>
@@ -134,7 +134,23 @@ TComputeActorState CombineForeignState(
     return state;
 }
 
-} // namespace
+NDqProto::ECheckpointingMode GetInputsCheckpointingMode(const google::protobuf::RepeatedPtrField<NDqProto::TTaskInput>& inputs) {
+    for (const auto& input : inputs) {
+        if (const TString& srcType = input.GetSource().GetType(); srcType && IsInfiniteSourceType(srcType)) {
+            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
+        }
+
+        for (const auto& channel : input.GetChannels()) {
+            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                return NDqProto::CHECKPOINTING_MODE_DEFAULT;
+            }
+        }
+    }
+
+    return NDqProto::CHECKPOINTING_MODE_DISABLED;
+}
+
+} // anonymous namespace
 
 //// TPendingCheckpointBase
 
@@ -753,22 +769,16 @@ void TDqComputeActorCheckpoints::PassAway() {
     NActors::TActor<TDqComputeActorCheckpoints>::PassAway();
 }
 
-static bool IsInfiniteSourceType(const TString& sourceType) {
+bool IsInfiniteSourceType(const TString& sourceType) {
     return sourceType == PqSource;
 }
 
+NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const NDqProto::TDqTask& task) {
+    return GetInputsCheckpointingMode(task.GetInputs());
+}
+
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {
-    for (const auto& input : task.GetInputs()) {
-        if (const TString& srcType = input.GetSource().GetType(); srcType && IsInfiniteSourceType(srcType)) {
-            return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-        }
-        for (const auto& channel : input.GetChannels()) {
-            if (channel.GetCheckpointingMode() != NDqProto::CHECKPOINTING_MODE_DISABLED) {
-                return NDqProto::CHECKPOINTING_MODE_DEFAULT;
-            }
-        }
-    }
-    return NDqProto::CHECKPOINTING_MODE_DISABLED;
+    return GetInputsCheckpointingMode(task.GetInputs());
 }
 
 bool IsIngress(const TDqTaskSettings& task) {

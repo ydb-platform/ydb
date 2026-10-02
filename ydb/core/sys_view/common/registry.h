@@ -357,6 +357,7 @@ struct Schema : NIceDb::Schema {
         struct BridgeSyncFirstErrorTimestamp : Column<27, NScheme::NTypeIds::Uint64> {};
         struct BridgeSyncErrorCount          : Column<28, NScheme::NTypeIds::Uint32> {};
         struct BridgeSyncRunning             : Column<29, NScheme::NTypeIds::Bool> {};
+        struct SpaceColor                    : Column<30, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -386,7 +387,8 @@ struct Schema : NIceDb::Schema {
             BridgeSyncLastErrorTimestamp,
             BridgeSyncFirstErrorTimestamp,
             BridgeSyncErrorCount,
-            BridgeSyncRunning>;
+            BridgeSyncRunning,
+            SpaceColor>;
     };
 
     struct StoragePools : Table<7> {
@@ -402,6 +404,9 @@ struct Schema : NIceDb::Schema {
         struct SchemeshardId           : Column<10, NScheme::NTypeIds::Uint64> {};
         struct PathId                  : Column<11, NScheme::NTypeIds::Uint64> {};
         struct DefaultGroupSizeInUnits : Column<12, NScheme::NTypeIds::Uint32> {};
+        struct BestSpaceColor          : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct WorstSpaceColor         : Column<14, NScheme::NTypeIds::Utf8> {};
+        struct SpaceExhausted          : Column<15, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<BoxId, StoragePoolId>;
         using TColumns = TableColumns<
@@ -416,7 +421,10 @@ struct Schema : NIceDb::Schema {
             EncryptionMode,
             SchemeshardId,
             PathId,
-            DefaultGroupSizeInUnits>;
+            DefaultGroupSizeInUnits,
+            BestSpaceColor,
+            WorstSpaceColor,
+            SpaceExhausted>;
     };
 
     struct Tablets : Table<8> {
@@ -820,15 +828,16 @@ struct Schema : NIceDb::Schema {
     };
 
     struct ResourcePools : Table<22> {
-        struct Name                           : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct ConcurrentQueryLimit           : Column<2, NScheme::NTypeIds::Int32> {};
-        struct QueueSize                      : Column<3, NScheme::NTypeIds::Int32> {};
-        struct DatabaseLoadCpuThreshold       : Column<4, NScheme::NTypeIds::Double> {};
-        struct ResourceWeight                 : Column<5, NScheme::NTypeIds::Double> {};
-        struct TotalCpuLimitPercentPerNode    : Column<6, NScheme::NTypeIds::Double> {};
-        struct QueryCpuLimitPercentPerNode    : Column<7, NScheme::NTypeIds::Double> {};
-        struct QueryMemoryLimitPercentPerNode : Column<8, NScheme::NTypeIds::Double> {};
-        struct TotalMemoryLimitPercentPerNode : Column<9, NScheme::NTypeIds::Double> {};
+        struct Name                            : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct ConcurrentQueryLimit            : Column<2, NScheme::NTypeIds::Int32> {};
+        struct QueueSize                       : Column<3, NScheme::NTypeIds::Int32> {};
+        struct DatabaseLoadCpuThreshold        : Column<4, NScheme::NTypeIds::Double> {};
+        struct ResourceWeight                  : Column<5, NScheme::NTypeIds::Double> {};
+        struct TotalCpuLimitPercentPerNode     : Column<6, NScheme::NTypeIds::Double> {};
+        struct QueryCpuLimitPercentPerNode     : Column<7, NScheme::NTypeIds::Double> {};
+        struct QueryMemoryLimitPercentPerNode  : Column<8, NScheme::NTypeIds::Double> {};
+        struct TotalMemoryLimitPercentPerNode  : Column<9, NScheme::NTypeIds::Double> {};
+        struct TotalCpuGuaranteePercentPerNode : Column<10, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -840,7 +849,8 @@ struct Schema : NIceDb::Schema {
             TotalCpuLimitPercentPerNode,
             QueryCpuLimitPercentPerNode,
             QueryMemoryLimitPercentPerNode,
-            TotalMemoryLimitPercentPerNode>;
+            TotalMemoryLimitPercentPerNode,
+            TotalCpuGuaranteePercentPerNode>;
     };
 
     struct TopPartitionsTli : Table<23> {

@@ -760,6 +760,13 @@ enum EDDiskTabletSortBy {
     DDISK_TABLET_SORT_BY_LAST_CHANGED_AT = 1;
     DDISK_TABLET_SORT_BY_GROUPS_COUNT = 2;
     DDISK_TABLET_SORT_BY_DEGRADE = 3;
+    DDISK_TABLET_SORT_BY_DISK_USAGE = 4;
+}
+
+enum EDDiskTabletGroupBy {
+    DDISK_TABLET_GROUP_BY_NONE = 0;
+    DDISK_TABLET_GROUP_BY_DEGRADE = 1;
+    DDISK_TABLET_GROUP_BY_DISK_USAGE = 2;
 }
 
 message TDDiskTabletListRequest {
@@ -777,9 +784,19 @@ message TDDiskTabletListRequest {
     optional bool OnlyProblems = 6 [default = false];
     // Group by worst DBG first, independently of the secondary sort direction.
     optional bool GroupByDegrade = 7 [default = false];
+    // Return counts for all matching groups, independently of page and FilterGroup.
+    optional EDDiskTabletGroupBy GroupBy = 8 [default = DDISK_TABLET_GROUP_BY_NONE];
+    // Group name: degrade count, usage range lower bound (0, 10, ..., 100), or "unknown".
+    optional string FilterGroup = 9;
 }
 
 message TDDiskTabletListResponse {
+    message TGroup {
+        optional string Name = 1;
+        optional uint32 Count = 2;
+    }
+    repeated TGroup Groups = 5;
+
     message TTabletRevision {
         optional uint64 TabletId = 1;
         optional uint64 Revision = 2;
@@ -789,6 +806,9 @@ message TDDiskTabletListResponse {
         optional uint32 UnavailablePersistentBufferCount = 6;
         // Maximum of unavailable DDisk and Persistent Buffer counts across all DBGs.
         optional uint32 Degrade = 7;
+        // Maximum underlying DDisk owner occupancy across all assigned DDisks.
+        // Absent if any assigned DDisk has no valid, available monitoring sample.
+        optional double DiskUsage = 8;
     }
 
     reserved 2;
@@ -818,6 +838,8 @@ message TDDiskDiskListRequest {
     // If set, only disks currently considered unavailable are returned
     // (evaluated on the CMS side, before paging).
     optional bool OnlyProblems = 7 [default = false];
+    // Preserve tablet lists for legacy clients; overview clients can request counts only.
+    optional bool IncludeTabletIds = 8 [default = true];
 }
 
 message TDDiskDiskListResponse {
@@ -834,6 +856,8 @@ message TDDiskDiskListResponse {
         // Fractions, absent when the role is unused or monitoring is unavailable.
         optional double DDiskOccupancy = 6; // underlying PDisk owner occupancy
         optional double PersistentBufferOccupancy = 7; // relative to MaxChunks
+        optional uint32 DDiskTabletCount = 8;
+        optional uint32 PersistentBufferTabletCount = 9;
 
     }
 

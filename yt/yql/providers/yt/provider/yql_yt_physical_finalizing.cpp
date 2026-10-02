@@ -520,9 +520,8 @@ private:
                     .Build();
 
             const auto queryCacheMode = State_->Configuration->QueryCacheMode.Get().GetOrElse(EQueryCacheMode::Disable);
-            if (State_->Configuration->QueryCacheCombineChunksReplace.Get().GetOrElse(DEFAULT_QUERY_CACHE_COMBINE_CHUNKS_REPLACE)
-                && queryCacheMode != EQueryCacheMode::Disable
-                && queryCacheMode != EQueryCacheMode::Readonly)
+            if (queryCacheMode != EQueryCacheMode::Disable &&
+                queryCacheMode != EQueryCacheMode::Readonly)
             {
                 settingsBuilder
                     .Add()

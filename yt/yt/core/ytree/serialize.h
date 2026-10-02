@@ -159,7 +159,6 @@ void Serialize(const std::array<T, N>& value, NYson::IYsonConsumer* consumer);
 template <class... T>
 void Serialize(const std::tuple<T...>& value, NYson::IYsonConsumer* consumer);
 
-// Helper struct for serializing/deserializing keys of associative containers.
 template <class T>
 struct TAssociativeContainerKeyHelper;
 

@@ -8,13 +8,6 @@
  */
 
 #line 1
-/*@targets
- ** $maxopt baseline
- ** sse2 sse42 avx2 avx512f avx512_skx
- ** vsx2 vsx3
- ** neon
- ** vx vxe
- **/
 #define _UMATHMODULE
 #define _MULTIARRAYMODULE
 #define NPY_NO_DEPRECATED_API NPY_API_VERSION
@@ -29,8 +22,8 @@
 /********************************************************************************
  ** Defining the SIMD kernels
  ********************************************************************************/
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 0)
 static void simd_binary_equal_u8(char **args, npy_intp len)
 {
@@ -207,7 +200,7 @@ static void simd_binary_scalar2_equal_u8(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 0)
 static void simd_binary_not_equal_u8(char **args, npy_intp len)
 {
@@ -384,7 +377,7 @@ static void simd_binary_scalar2_not_equal_u8(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_u8(char **args, npy_intp len)
 {
@@ -561,7 +554,7 @@ static void simd_binary_scalar2_less_u8(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_equal_u8(char **args, npy_intp len)
 {
@@ -739,8 +732,8 @@ static void simd_binary_scalar2_less_equal_u8(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 1)
 static void simd_binary_equal_s8(char **args, npy_intp len)
 {
@@ -917,7 +910,7 @@ static void simd_binary_scalar2_equal_s8(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 1)
 static void simd_binary_not_equal_s8(char **args, npy_intp len)
 {
@@ -1094,7 +1087,7 @@ static void simd_binary_scalar2_not_equal_s8(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_s8(char **args, npy_intp len)
 {
@@ -1271,7 +1264,7 @@ static void simd_binary_scalar2_less_s8(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_equal_s8(char **args, npy_intp len)
 {
@@ -1449,8 +1442,8 @@ static void simd_binary_scalar2_less_equal_s8(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 0)
 static void simd_binary_equal_u16(char **args, npy_intp len)
 {
@@ -1627,7 +1620,7 @@ static void simd_binary_scalar2_equal_u16(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 0)
 static void simd_binary_not_equal_u16(char **args, npy_intp len)
 {
@@ -1804,7 +1797,7 @@ static void simd_binary_scalar2_not_equal_u16(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_u16(char **args, npy_intp len)
 {
@@ -1981,7 +1974,7 @@ static void simd_binary_scalar2_less_u16(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_equal_u16(char **args, npy_intp len)
 {
@@ -2159,8 +2152,8 @@ static void simd_binary_scalar2_less_equal_u16(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 1)
 static void simd_binary_equal_s16(char **args, npy_intp len)
 {
@@ -2337,7 +2330,7 @@ static void simd_binary_scalar2_equal_s16(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 1)
 static void simd_binary_not_equal_s16(char **args, npy_intp len)
 {
@@ -2514,7 +2507,7 @@ static void simd_binary_scalar2_not_equal_s16(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_s16(char **args, npy_intp len)
 {
@@ -2691,7 +2684,7 @@ static void simd_binary_scalar2_less_s16(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_equal_s16(char **args, npy_intp len)
 {
@@ -2869,8 +2862,8 @@ static void simd_binary_scalar2_less_equal_s16(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 0)
 static void simd_binary_equal_u32(char **args, npy_intp len)
 {
@@ -3047,7 +3040,7 @@ static void simd_binary_scalar2_equal_u32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 0)
 static void simd_binary_not_equal_u32(char **args, npy_intp len)
 {
@@ -3224,7 +3217,7 @@ static void simd_binary_scalar2_not_equal_u32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_u32(char **args, npy_intp len)
 {
@@ -3401,7 +3394,7 @@ static void simd_binary_scalar2_less_u32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_equal_u32(char **args, npy_intp len)
 {
@@ -3579,8 +3572,8 @@ static void simd_binary_scalar2_less_equal_u32(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 1)
 static void simd_binary_equal_s32(char **args, npy_intp len)
 {
@@ -3757,7 +3750,7 @@ static void simd_binary_scalar2_equal_s32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 1)
 static void simd_binary_not_equal_s32(char **args, npy_intp len)
 {
@@ -3934,7 +3927,7 @@ static void simd_binary_scalar2_not_equal_s32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_s32(char **args, npy_intp len)
 {
@@ -4111,7 +4104,7 @@ static void simd_binary_scalar2_less_s32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_equal_s32(char **args, npy_intp len)
 {
@@ -4289,8 +4282,8 @@ static void simd_binary_scalar2_less_equal_s32(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 0)
 static void simd_binary_equal_u64(char **args, npy_intp len)
 {
@@ -4467,7 +4460,7 @@ static void simd_binary_scalar2_equal_u64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 0)
 static void simd_binary_not_equal_u64(char **args, npy_intp len)
 {
@@ -4644,7 +4637,7 @@ static void simd_binary_scalar2_not_equal_u64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_u64(char **args, npy_intp len)
 {
@@ -4821,7 +4814,7 @@ static void simd_binary_scalar2_less_u64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 0)
 static void simd_binary_less_equal_u64(char **args, npy_intp len)
 {
@@ -4999,8 +4992,8 @@ static void simd_binary_scalar2_less_equal_u64(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD && !((1 || 0) && 1)
 static void simd_binary_equal_s64(char **args, npy_intp len)
 {
@@ -5177,7 +5170,7 @@ static void simd_binary_scalar2_equal_s64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 1) && 1)
 static void simd_binary_not_equal_s64(char **args, npy_intp len)
 {
@@ -5354,7 +5347,7 @@ static void simd_binary_scalar2_not_equal_s64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_s64(char **args, npy_intp len)
 {
@@ -5531,7 +5524,7 @@ static void simd_binary_scalar2_less_s64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD && !((0 || 0) && 1)
 static void simd_binary_less_equal_s64(char **args, npy_intp len)
 {
@@ -5709,8 +5702,8 @@ static void simd_binary_scalar2_less_equal_s64(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD_F32 && !((1 || 0) && 0)
 static void simd_binary_equal_f32(char **args, npy_intp len)
 {
@@ -5887,7 +5880,7 @@ static void simd_binary_scalar2_equal_f32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD_F32 && !((0 || 1) && 0)
 static void simd_binary_not_equal_f32(char **args, npy_intp len)
 {
@@ -6064,7 +6057,7 @@ static void simd_binary_scalar2_not_equal_f32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD_F32 && !((0 || 0) && 0)
 static void simd_binary_less_f32(char **args, npy_intp len)
 {
@@ -6241,7 +6234,7 @@ static void simd_binary_scalar2_less_f32(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD_F32 && !((0 || 0) && 0)
 static void simd_binary_less_equal_f32(char **args, npy_intp len)
 {
@@ -6419,8 +6412,8 @@ static void simd_binary_scalar2_less_equal_f32(char **args, npy_intp len)
 
 
 
+#line 21
 #line 28
-#line 35
 #if NPY_SIMD_F64 && !((1 || 0) && 0)
 static void simd_binary_equal_f64(char **args, npy_intp len)
 {
@@ -6597,7 +6590,7 @@ static void simd_binary_scalar2_equal_f64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD_F64 && !((0 || 1) && 0)
 static void simd_binary_not_equal_f64(char **args, npy_intp len)
 {
@@ -6774,7 +6767,7 @@ static void simd_binary_scalar2_not_equal_f64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD_F64 && !((0 || 0) && 0)
 static void simd_binary_less_f64(char **args, npy_intp len)
 {
@@ -6951,7 +6944,7 @@ static void simd_binary_scalar2_less_f64(char **args, npy_intp len)
 #endif
 
 
-#line 35
+#line 28
 #if NPY_SIMD_F64 && !((0 || 0) && 0)
 static void simd_binary_less_equal_f64(char **args, npy_intp len)
 {
@@ -7130,7 +7123,7 @@ static void simd_binary_scalar2_less_equal_f64(char **args, npy_intp len)
 
 
 
-#line 220
+#line 213
 
 #if NPY_SIMD
 static void simd_binary_equal_b8(char **args, npy_intp len)
@@ -7205,7 +7198,7 @@ static void simd_binary_scalar2_equal_b8(char **args, npy_intp len)
 }
 #endif
 
-#line 220
+#line 213
 
 #if NPY_SIMD
 static void simd_binary_not_equal_b8(char **args, npy_intp len)
@@ -7280,7 +7273,7 @@ static void simd_binary_scalar2_not_equal_b8(char **args, npy_intp len)
 }
 #endif
 
-#line 220
+#line 213
 
 #if NPY_SIMD
 static void simd_binary_less_b8(char **args, npy_intp len)
@@ -7355,7 +7348,7 @@ static void simd_binary_scalar2_less_b8(char **args, npy_intp len)
 }
 #endif
 
-#line 220
+#line 213
 
 #if NPY_SIMD
 static void simd_binary_less_equal_b8(char **args, npy_intp len)
@@ -7431,8 +7424,8 @@ static void simd_binary_scalar2_less_equal_b8(char **args, npy_intp len)
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 0)
 static inline void
 run_binary_simd_equal_b8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7471,7 +7464,7 @@ run_binary_simd_equal_b8(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 0)
 static inline void
 run_binary_simd_not_equal_b8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7510,7 +7503,7 @@ run_binary_simd_not_equal_b8(char **args, npy_intp const *dimensions, npy_intp c
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_b8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7549,7 +7542,7 @@ run_binary_simd_less_b8(char **args, npy_intp const *dimensions, npy_intp const 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_equal_b8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7589,8 +7582,8 @@ run_binary_simd_less_equal_b8(char **args, npy_intp const *dimensions, npy_intp 
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 0)
 static inline void
 run_binary_simd_equal_u8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7629,7 +7622,7 @@ run_binary_simd_equal_u8(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 0)
 static inline void
 run_binary_simd_not_equal_u8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7668,7 +7661,7 @@ run_binary_simd_not_equal_u8(char **args, npy_intp const *dimensions, npy_intp c
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_u8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7707,7 +7700,7 @@ run_binary_simd_less_u8(char **args, npy_intp const *dimensions, npy_intp const 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_equal_u8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7747,8 +7740,8 @@ run_binary_simd_less_equal_u8(char **args, npy_intp const *dimensions, npy_intp 
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 1)
 static inline void
 run_binary_simd_equal_s8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7787,7 +7780,7 @@ run_binary_simd_equal_s8(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 1)
 static inline void
 run_binary_simd_not_equal_s8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7826,7 +7819,7 @@ run_binary_simd_not_equal_s8(char **args, npy_intp const *dimensions, npy_intp c
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_s8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7865,7 +7858,7 @@ run_binary_simd_less_s8(char **args, npy_intp const *dimensions, npy_intp const 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_equal_s8(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7905,8 +7898,8 @@ run_binary_simd_less_equal_s8(char **args, npy_intp const *dimensions, npy_intp 
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 0)
 static inline void
 run_binary_simd_equal_u16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7945,7 +7938,7 @@ run_binary_simd_equal_u16(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 0)
 static inline void
 run_binary_simd_not_equal_u16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -7984,7 +7977,7 @@ run_binary_simd_not_equal_u16(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_u16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8023,7 +8016,7 @@ run_binary_simd_less_u16(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_equal_u16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8063,8 +8056,8 @@ run_binary_simd_less_equal_u16(char **args, npy_intp const *dimensions, npy_intp
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 1)
 static inline void
 run_binary_simd_equal_s16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8103,7 +8096,7 @@ run_binary_simd_equal_s16(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 1)
 static inline void
 run_binary_simd_not_equal_s16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8142,7 +8135,7 @@ run_binary_simd_not_equal_s16(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_s16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8181,7 +8174,7 @@ run_binary_simd_less_s16(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_equal_s16(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8221,8 +8214,8 @@ run_binary_simd_less_equal_s16(char **args, npy_intp const *dimensions, npy_intp
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 0)
 static inline void
 run_binary_simd_equal_u32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8261,7 +8254,7 @@ run_binary_simd_equal_u32(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 0)
 static inline void
 run_binary_simd_not_equal_u32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8300,7 +8293,7 @@ run_binary_simd_not_equal_u32(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_u32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8339,7 +8332,7 @@ run_binary_simd_less_u32(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_equal_u32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8379,8 +8372,8 @@ run_binary_simd_less_equal_u32(char **args, npy_intp const *dimensions, npy_intp
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 1)
 static inline void
 run_binary_simd_equal_s32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8419,7 +8412,7 @@ run_binary_simd_equal_s32(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 1)
 static inline void
 run_binary_simd_not_equal_s32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8458,7 +8451,7 @@ run_binary_simd_not_equal_s32(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_s32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8497,7 +8490,7 @@ run_binary_simd_less_s32(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_equal_s32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8537,8 +8530,8 @@ run_binary_simd_less_equal_s32(char **args, npy_intp const *dimensions, npy_intp
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 0)
 static inline void
 run_binary_simd_equal_u64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8577,7 +8570,7 @@ run_binary_simd_equal_u64(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 0)
 static inline void
 run_binary_simd_not_equal_u64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8616,7 +8609,7 @@ run_binary_simd_not_equal_u64(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_u64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8655,7 +8648,7 @@ run_binary_simd_less_u64(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_equal_u64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8695,8 +8688,8 @@ run_binary_simd_less_equal_u64(char **args, npy_intp const *dimensions, npy_intp
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 1)
 static inline void
 run_binary_simd_equal_s64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8735,7 +8728,7 @@ run_binary_simd_equal_s64(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 1)
 static inline void
 run_binary_simd_not_equal_s64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8774,7 +8767,7 @@ run_binary_simd_not_equal_s64(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_s64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8813,7 +8806,7 @@ run_binary_simd_less_s64(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 1)
 static inline void
 run_binary_simd_less_equal_s64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8853,8 +8846,8 @@ run_binary_simd_less_equal_s64(char **args, npy_intp const *dimensions, npy_intp
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 0)
 static inline void
 run_binary_simd_equal_f32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8893,7 +8886,7 @@ run_binary_simd_equal_f32(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 0)
 static inline void
 run_binary_simd_not_equal_f32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8932,7 +8925,7 @@ run_binary_simd_not_equal_f32(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_f32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -8971,7 +8964,7 @@ run_binary_simd_less_f32(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_equal_f32(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -9011,8 +9004,8 @@ run_binary_simd_less_equal_f32(char **args, npy_intp const *dimensions, npy_intp
 #endif
 
 
-#line 304
-#line 310
+#line 297
+#line 303
 #if !((1 || 0) && 0)
 static inline void
 run_binary_simd_equal_f64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -9051,7 +9044,7 @@ run_binary_simd_equal_f64(char **args, npy_intp const *dimensions, npy_intp cons
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 1) && 0)
 static inline void
 run_binary_simd_not_equal_f64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -9090,7 +9083,7 @@ run_binary_simd_not_equal_f64(char **args, npy_intp const *dimensions, npy_intp 
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_f64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -9129,7 +9122,7 @@ run_binary_simd_less_f64(char **args, npy_intp const *dimensions, npy_intp const
 }
 #endif
 
-#line 310
+#line 303
 #if !((0 || 0) && 0)
 static inline void
 run_binary_simd_less_equal_f64(char **args, npy_intp const *dimensions, npy_intp const *steps)
@@ -9184,11 +9177,11 @@ run_binary_simd_less_equal_f64(char **args, npy_intp const *dimensions, npy_intp
  * 'not_equal' is used to implement both signed and unsigned types.
  */
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 0
@@ -9197,7 +9190,7 @@ run_binary_simd_less_equal_f64(char **args, npy_intp const *dimensions, npy_intp
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 0
@@ -9206,7 +9199,7 @@ run_binary_simd_less_equal_f64(char **args, npy_intp const *dimensions, npy_intp
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 0
@@ -9215,7 +9208,7 @@ run_binary_simd_less_equal_f64(char **args, npy_intp const *dimensions, npy_intp
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 0
@@ -9226,7 +9219,7 @@ run_binary_simd_less_equal_f64(char **args, npy_intp const *dimensions, npy_intp
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9235,7 +9228,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9245,14 +9238,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9260,14 +9253,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9275,11 +9268,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 0
@@ -9288,7 +9281,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 0
@@ -9297,7 +9290,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 0
@@ -9306,7 +9299,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 0
@@ -9317,7 +9310,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UBYTE_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9326,7 +9319,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9336,14 +9329,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9351,14 +9344,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9366,11 +9359,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 0
@@ -9379,7 +9372,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 0
@@ -9388,7 +9381,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 0
@@ -9397,7 +9390,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 0
@@ -9408,7 +9401,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(USHORT_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9417,7 +9410,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9427,14 +9420,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9442,14 +9435,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9457,11 +9450,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 0
@@ -9470,7 +9463,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 0
@@ -9479,7 +9472,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 0
@@ -9488,7 +9481,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 0
@@ -9499,7 +9492,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(UINT_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9508,7 +9501,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9518,14 +9511,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9533,14 +9526,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9548,11 +9541,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 0
@@ -9561,7 +9554,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 0
@@ -9570,7 +9563,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 0
@@ -9579,7 +9572,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 0
@@ -9590,7 +9583,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONG_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9599,7 +9592,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9609,14 +9602,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9624,14 +9617,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9639,11 +9632,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 1
@@ -9652,7 +9645,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 1
@@ -9661,7 +9654,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 1
@@ -9670,7 +9663,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_BYTE == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 1
@@ -9681,7 +9674,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(ULONGLONG_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9690,7 +9683,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9700,14 +9693,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9715,14 +9708,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9730,11 +9723,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 1
@@ -9743,7 +9736,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 1
@@ -9752,7 +9745,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 1
@@ -9761,7 +9754,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_SHORT == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 1
@@ -9772,7 +9765,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BYTE_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9781,7 +9774,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9791,14 +9784,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9806,14 +9799,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9821,11 +9814,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 1
@@ -9834,7 +9827,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 1
@@ -9843,7 +9836,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 1
@@ -9852,7 +9845,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_INT == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 1
@@ -9863,7 +9856,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(SHORT_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9872,7 +9865,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9882,14 +9875,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9897,14 +9890,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9912,11 +9905,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 1
@@ -9925,7 +9918,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 1
@@ -9934,7 +9927,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 1
@@ -9943,7 +9936,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONG == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 1
@@ -9954,7 +9947,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(INT_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9963,7 +9956,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9973,14 +9966,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -9988,14 +9981,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10003,11 +9996,11 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_not_equal)
 }
 
 
-#line 372
+#line 365
 #undef TO_SIMD_SFX
 #undef TO_SIMD_UTYPE
 #if 0
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 8
     #define TO_SIMD_UTYPE(X) X##_u8
     #if 1
@@ -10016,7 +10009,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u8
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 16
     #define TO_SIMD_UTYPE(X) X##_u16
     #if 1
@@ -10025,7 +10018,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u16
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 32
     #define TO_SIMD_UTYPE(X) X##_u32
     #if 1
@@ -10034,7 +10027,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_not_equal)
         #define TO_SIMD_SFX(X) X##_u32
     #endif
 
-#line 378
+#line 371
 #elif NPY_BITSOF_LONGLONG == 64
     #define TO_SIMD_UTYPE(X) X##_u64
     #if 1
@@ -10045,7 +10038,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONG_not_equal)
 
 #endif
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10054,7 +10047,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_greater)
     TO_SIMD_SFX(run_binary_simd_less)(nargs, dimensions, nsteps);
 }
 
-#line 392
+#line 385
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10064,14 +10057,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_greater_equal)
 }
 
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_SFX(run_binary_simd_less)(args, dimensions, steps);
 }
 
-#line 404
+#line 397
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10079,14 +10072,14 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_less_equal)
 }
 
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
     TO_SIMD_UTYPE(run_binary_simd_equal)(args, dimensions, steps);
 }
 
-#line 414
+#line 407
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10095,8 +10088,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(LONGLONG_not_equal)
 
 
 
-#line 428
-#line 432
+#line 421
+#line 425
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10108,7 +10101,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_greater)
 #endif
 }
 
-#line 432
+#line 425
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10121,7 +10114,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_greater_equal)
 }
 
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10131,7 +10124,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_equal)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10141,7 +10134,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_not_equal)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10151,7 +10144,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_less)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10162,8 +10155,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(BOOL_less_equal)
 }
 
 
-#line 428
-#line 432
+#line 421
+#line 425
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10175,7 +10168,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_greater)
 #endif
 }
 
-#line 432
+#line 425
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10188,7 +10181,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_greater_equal)
 }
 
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10198,7 +10191,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_equal)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10208,7 +10201,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_not_equal)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10218,7 +10211,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_less)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10229,8 +10222,8 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(FLOAT_less_equal)
 }
 
 
-#line 428
-#line 432
+#line 421
+#line 425
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_greater)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10242,7 +10235,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_greater)
 #endif
 }
 
-#line 432
+#line 425
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_greater_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10255,7 +10248,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_greater_equal)
 }
 
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10265,7 +10258,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_equal)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_not_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10275,7 +10268,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_not_equal)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_less)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {
@@ -10285,7 +10278,7 @@ NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_less)
 #endif
 }
 
-#line 447
+#line 440
 NPY_NO_EXPORT void NPY_CPU_DISPATCH_CURFX(DOUBLE_less_equal)
 (char **args, npy_intp const *dimensions, npy_intp const *steps, void *NPY_UNUSED(func))
 {

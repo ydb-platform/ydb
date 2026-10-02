@@ -1937,6 +1937,7 @@ STFUNC(TColumnShard::StateWork) {
         HFunc(TEvColumnShard::TEvInternalScan, Handle);
         HFunc(TEvTxProcessing::TEvPlanStep, Handle);
         HFunc(TEvPrivate::TEvWriteBlobsResult, Handle);
+        HFunc(TEvPrivate::TEvUpdateChannelApproximateFreeSpace, Handle);
         HFunc(TEvPrivate::TEvStartCompaction, Handle);
         HFunc(TEvPrivate::TEvMetadataAccessorsInfo, Handle);
         HFunc(NPrivateEvents::NWrite::TEvWritePortionResult, Handle);

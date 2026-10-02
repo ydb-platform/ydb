@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_lookup_join_builder.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <ydb/core/kqp/opt/rbo/kqp_plan_conversion_utils.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_transformer.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -15,6 +16,44 @@
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpRboIdLowering) {
+    Y_UNIT_TEST(UpsertKeepsDefaultColumnsThroughLowering) {
+        NTests::TIdTestContext f;
+        auto& ctx = f.ExprCtx;
+        const auto pos = f.Pos;
+        auto empty = ctx.NewCallable(pos, "KqpOpEmptySource", {});
+        auto constant = MakeConstant("Uint64", "1", pos, &ctx).Node;
+        const auto* type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+        constant->TailPtr()->SetTypeAnn(type);
+        auto columns = ctx.NewList(pos, {ctx.NewAtom(pos, "value")});
+        auto input = ctx.NewCallable(pos, "KqpOpMap", {empty, ctx.NewList(pos, {
+            ctx.NewCallable(pos, "KqpOpMapElementLambda",
+                {empty, ctx.NewAtom(pos, "value"), constant, ctx.NewAtom(pos, "false")})
+        })});
+        input->SetTypeAnn(ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{ctx.MakeType<TItemExprType>("value", type)})));
+        auto root = ctx.NewCallable(pos, "KqpOpRoot", {input, columns});
+        const auto table = NNodes::Build<NNodes::TKqpTable>(ctx, pos)
+            .Path().Build("/Root/table").PathId().Build("1:1")
+            .SysView().Build("").Version().Build("1").Done();
+        const auto upsert = NNodes::Build<NNodes::TKqlUpsertRows>(ctx, pos)
+            .Table(table)
+            .Input(root)
+            .Columns(columns)
+            .ReturningColumns().Build()
+            .IsBatch().Build("false")
+            .DefaultColumns(columns)
+            .Settings().Build()
+            .Done();
+
+        const auto rewritten = RewriteTableEffect(upsert.Ptr(), ctx, f.KqpCtx);
+        auto plan = PlanConverter(f.TypeCtx, ctx).ConvertRoot(rewritten, nullptr);
+        auto& effect = CastOperator<TOpTableEffect>(*plan->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(effect.GetExplainName(), "UpsertRows");
+        const NNodes::TKqpTableSinkSettings settings(effect.BuildSettings(ctx));
+        UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(settings.DefaultColumns().Item(0).StringValue(), "value");
+    }
+
     Y_UNIT_TEST(TypeAnnotationAllowsSharingOnlyThroughDistinctReplicatePorts) {
         // Extra local references are harmless. Reusing an ordinary subtree or
         // one output port in two plan slots violates the binding invariant.

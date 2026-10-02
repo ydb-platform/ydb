@@ -1470,9 +1470,11 @@ private:
 };
 
 class TS3ReadCoroActor : public TActorCoro {
+    static constexpr char ActorName[] = "S3_READ";
+
 public:
     explicit TS3ReadCoroActor(THolder<TS3ReadCoroImpl> impl)
-        : TActorCoro(std::move(impl))
+        : TActorCoro(std::move(impl), TStringBuf(ActorName))
     {}
 
 private:

@@ -31,7 +31,7 @@ bool IsValidSchemaChange(const NKikimrReplication::TSchemaChange& schema) {
             }
         }
 
-        if (!families.contains("default")) {
+        if (!families.contains(DefaultFamilyName)) {
             return false;
         }
     }

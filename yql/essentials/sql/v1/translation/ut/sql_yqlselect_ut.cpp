@@ -451,7 +451,38 @@ Y_UNIT_TEST(CallOverNamedSourceIsUnsupported) {
         SELECT a FROM $x();
     )sql", settings);
     UNIT_ASSERT(!result.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(result), "YqlSelect unsupported: bind_parameter call");
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(result),
+        "YqlSelect unsupported: bind_parameter call with an empty argument list as a table source");
+}
+
+Y_UNIT_TEST(EmptyCallOverNamedTablePathIsSupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $table = "Input";
+        SELECT * FROM $table();
+    )sql", settings);
+    UNIT_ASSERT_C(result.IsOk(), Err2Str(result));
+}
+
+Y_UNIT_TEST(CallWithArgumentsOverNamedTablePathIsUnsupported) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult result = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        $table = "Input";
+        SELECT * FROM $table(1);
+    )sql", settings);
+    UNIT_ASSERT(!result.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(result),
+        "YqlSelect unsupported: bind_parameter call with arguments as a table source");
 }
 
 Y_UNIT_TEST(ViewOnPathBindCallIsRejected) {
@@ -1540,7 +1571,7 @@ Y_UNIT_TEST(NamedNodeSubquerySource) {
     UNIT_ASSERT_VALUES_EQUAL(stat["YqlSubLink"], 0);
 }
 
-Y_UNIT_TEST(NamedNodeTableWithoutCluster) {
+Y_UNIT_TEST(NamedTablePathWithoutClusterIsUnsupportedInForceMode) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
     settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
@@ -1550,9 +1581,9 @@ Y_UNIT_TEST(NamedNodeTableWithoutCluster) {
         SELECT * FROM $table;
     )sql", settings);
     UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRINGS_EQUAL(
+    UNIT_ASSERT_STRING_CONTAINS(
         Err2Str(res),
-        "<main>:3:23: Error: No cluster name given and no default cluster is selected\n");
+        "YqlSelect unsupported: No cluster name given and no default cluster is selected");
 }
 
 Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
@@ -1627,6 +1658,75 @@ Y_UNIT_TEST(ColumnRefOrTypePeekErasedInSubquery) {
         SELECT (SELECT PeekErased(AsErased(1), Int64)) AS value
         FROM (VALUES (CAST(42 AS Int64))) AS src (Int64);
     )sql", 0, 1);
+}
+
+Y_UNIT_TEST(SubqueryParameterCallFallbackWithDefaultCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+          USE plato;
+
+          define subquery $dup($x) as
+              select * from $x(1)
+              union all
+              select * from $x(2);
+          end define;
+
+          define subquery $sub($n) as
+              select $n * 10;
+          end define;
+
+          select * from $dup($sub);
+      )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
+Y_UNIT_TEST(EmptySubqueryCallFallbackWithDefaultCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+          USE plato;
+
+          define subquery $sub() as
+              select 1 as value;
+          end define;
+
+          select * from $sub();
+      )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
+}
+
+Y_UNIT_TEST(EmptyCallOverSubqueryWithOptionalArgumentsTriggersFallback) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Auto;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+          USE plato;
+
+          define subquery $sub($unused?) as
+              select 1 as value;
+          end define;
+
+          select * from $sub();
+      )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 0);
 }
 
 Y_UNIT_TEST(NamedNodeSubqueryReuse) {

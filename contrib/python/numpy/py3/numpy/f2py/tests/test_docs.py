@@ -1,8 +1,12 @@
+from pathlib import Path
+
 import pytest
+
 import numpy as np
 from numpy.testing import assert_array_equal, assert_equal
+
 from . import util
-from pathlib import Path
+
 
 def get_docdir():
     parents = Path(__file__).resolve().parents
@@ -17,6 +21,7 @@ def get_docdir():
         return docdir
     # Assumes that an editable install is used to run tests
     return parents[3] / "doc" / "source" / "f2py" / "code"
+
 
 pytestmark = pytest.mark.skipif(
     not get_docdir().is_dir(),

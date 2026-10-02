@@ -54,6 +54,36 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TFilePartitionReader
+    : public IFileReader
+{
+public:
+    TFilePartitionReader(std::unique_ptr<IAbortableInputStream> input)
+        : Input_(std::move(input))
+    { }
+
+    void Abort() override
+    {
+        Input_->Abort();
+    }
+
+    bool IsAborted() const override
+    {
+        return Input_->IsAborted();
+    }
+
+protected:
+    size_t DoRead(void* buf, size_t len) override
+    {
+        return Input_->Read(buf, len);
+    }
+
+private:
+    std::unique_ptr<IAbortableInputStream> Input_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 TRawTableReaderPtr CreateTablePartitionReader(
     const IRawClientPtr& rawClient,
     const IRequestRetryPolicyPtr& retryPolicy,
@@ -68,6 +98,21 @@ TRawTableReaderPtr CreateTablePartitionReader(
         }
     );
     return MakeIntrusive<TPartitionTableReader>(std::move(stream));
+}
+
+IFileReaderPtr CreateFilePartitionReader(
+    const IRawClientPtr& rawClient,
+    const IRequestRetryPolicyPtr& retryPolicy,
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    auto stream = NDetail::RequestWithRetry<std::unique_ptr<IAbortableInputStream>>(
+        retryPolicy,
+        [&] (TMutationId /*mutationId*/) {
+            return rawClient->ReadFilePartition(cookie, options);
+        }
+    );
+    return MakeIntrusive<TFilePartitionReader>(std::move(stream));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

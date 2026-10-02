@@ -409,7 +409,7 @@ inline void* MKQLAllocFastWithSizeImpl(size_t sz, TAllocState* state, const EMem
     }
 
     auto currPage = state->CurrentPages[(TMemorySubPoolIdx)mPool];
-    if (Y_LIKELY(currPage->Offset + sz <= currPage->Capacity)) {
+    if (Y_LIKELY(currPage->Offset + sz < currPage->Capacity)) {
         void* ret = (char*)currPage + currPage->Offset;
         currPage->Offset = AlignUp(currPage->Offset + sz, MKQL_ALIGNMENT);
         ++currPage->UseCount;

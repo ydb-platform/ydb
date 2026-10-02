@@ -53,18 +53,13 @@ public:
 
     // Rejects NaN/Inf and values whose truncation would not fit in TDst (UB on float→int).
     template <typename TDst, typename TSrc>
-    bool IsSafeNumericCast(const TSrc& value) {
+    static bool IsSafeNumericCast(const TSrc& value) {
         if constexpr (std::is_floating_point_v<TSrc> && std::is_integral_v<TDst> && !std::is_same_v<TDst, bool>) {
             if (!std::isfinite(value)) {
                 return false;
             }
-            // signed: [-2^digits, 2^digits); unsigned: (-1, 2^digits)
-            const TSrc upper = std::ldexp(static_cast<TSrc>(1), std::numeric_limits<TDst>::digits);
-            if constexpr (std::is_signed_v<TDst>) {
-                return value >= -upper && value < upper;
-            } else {
-                return value > static_cast<TSrc>(-1) && value < upper;
-            }
+            return value >= static_cast<TSrc>(std::numeric_limits<TDst>::min()) &&
+                   value <= static_cast<TSrc>(std::numeric_limits<TDst>::max());
         } else {
             return true;
         }
@@ -92,5 +87,8 @@ protected:
 
 template <>
 class TNativeValueExtractor<TStringBuf> {};
+
+template <>
+class TNativeValueExtractor<std::string_view> {};
 
 }

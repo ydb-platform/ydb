@@ -661,28 +661,32 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         UNIT_ASSERT_NO_DIFF(json, expectedJson);
     }
 
-    void WriteEmptyLabels(IMetricEncoderPtr& e) {
-        e->OnStreamBegin();
-        e->OnMetricBegin(EMetricType::COUNTER);
+    Y_UNIT_TEST(EmptyLabelsRoundTrip) {
+        for (auto makeEncoder : {EncoderJson, BufferedEncoderJson}) {
+            TString json;
+            TStringOutput out(json);
+            auto e = makeEncoder(&out, 2);
+            e->OnStreamBegin();
+            e->OnLabelsBegin();
+            e->OnLabelsEnd();
+            e->OnMetricBegin(EMetricType::COUNTER);
+            e->OnLabelsBegin();
+            e->OnLabelsEnd();
+            e->OnUint64(now, 42);
+            e->OnMetricEnd();
+            e->OnStreamEnd();
+            e->Close();
 
-        e->OnLabelsBegin();
-        UNIT_ASSERT_EXCEPTION(e->OnLabelsEnd(), yexception);
-    }
+            NProto::TMultiSamplesList samples;
+            auto decoded = EncoderProtobuf(&samples);
+            DecodeJson(json, decoded.Get());
+            decoded->Close();
 
-    Y_UNIT_TEST(LabelsCannotBeEmpty) {
-        TString json;
-        TStringOutput out(json);
-
-        auto e = EncoderJson(&out, 2);
-        WriteEmptyLabels(e);
-    }
-
-    Y_UNIT_TEST(LabelsCannotBeEmptyBuffered) {
-        TString json;
-        TStringOutput out(json);
-
-        auto e = BufferedEncoderJson(&out, 2);
-        WriteEmptyLabels(e);
+            UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(samples.GetSamples(0).LabelsSize(), 0);
+            AssertPointEqual(samples.GetSamples(0).GetPoints(0), now, ui64(42));
+        }
     }
 
     Y_UNIT_TEST(EncodeEmptySeriesBuffered) {

@@ -662,6 +662,22 @@ std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFile(
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
 }
 
+std::unique_ptr<IAbortableInputStream> THttpRawClient::ReadFilePartition(
+    const TString& cookie,
+    const TFilePartitionReaderOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "api/v4/read_file_partition", /*isApi*/ false);
+    header.SetOutputFormat(TMaybe<TFormat>()); // Binary format
+    header.SetResponseCompression(ToString(Context_.Config->AcceptEncoding));
+    header.MergeParameters(NRawClient::SerializeParamsForReadFilePartition(cookie, options));
+
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
 TMaybe<TYPath> THttpRawClient::GetFileFromCache(
     const TTransactionId& transactionId,
     const TString& md5Signature,
@@ -1230,6 +1246,23 @@ TMultiTablePartitions THttpRawClient::GetTablePartitions(
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
     TMultiTablePartitions result;
+    Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
+    return result;
+}
+
+TFilePartitions THttpRawClient::GetFilePartitions(
+    const TTransactionId& transactionId,
+    const TYPath& path,
+    const TVector<TFileReadRange>& ranges,
+    const TGetFilePartitionsOptions& options)
+{
+    TMutationId mutationId;
+    THttpHeader header("GET", "partition_file");
+    header.MergeParameters(NRawClient::SerializeParamsForGetFilePartitions(transactionId, path, ranges, options));
+    TRequestConfig config;
+    config.IsHeavy = true;
+    auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
+    TFilePartitions result;
     Deserialize(result, NodeFromYsonString(responseInfo->GetResponse()));
     return result;
 }

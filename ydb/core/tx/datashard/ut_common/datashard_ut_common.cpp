@@ -1789,7 +1789,11 @@ ui64 AsyncAlterColumnFamily(
     if (family.Id) fam->SetId(*family.Id);
     if (family.ColumnCodec) fam->SetColumnCodec(*family.ColumnCodec);
     if (family.ColumnCacheMode) fam->SetColumnCacheMode(*family.ColumnCacheMode);
-    if (family.DataPoolKind) fam->MutableStorageConfig()->MutableData()->SetPreferredPoolKind(family.DataPoolKind);
+    if (family.DataPoolKind) {
+        auto* data = fam->MutableStorageConfig()->MutableData();
+        data->SetPreferredPoolKind(family.DataPoolKind);
+        data->SetAllowOtherKinds(family.AllowOtherDataPoolKinds);
+    }
     if (family.ResetDataPoolKind) fam->MutableStorageConfig()->MutableData();
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request));

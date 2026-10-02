@@ -304,6 +304,7 @@ message TGroupInfo {
     optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
     optional bool DDisk = 30; // is this a Direct Block Group?
+    optional string SpaceColor = 31; // space color of the group (the worst one among its VDisks)
 }
 
 message TGroupEntry {
@@ -343,6 +344,9 @@ message TStoragePoolInfo {
     optional string PDiskFilter = 13;
     optional bytes PDiskFilterData = 14;
     optional uint32 DefaultGroupSizeInUnits = 15;
+    optional string BestSpaceColor = 16; // the best space color among groups of the pool
+    optional string WorstSpaceColor = 17; // the worst space color among groups of the pool
+    optional bool SpaceExhausted = 18; // the pool blocks writes to its database (see DatabaseSpaceBlockColor)
     // metrics ?
 }
 
@@ -465,6 +469,8 @@ message TEvIntervalQuerySummary {
     optional TQuerySet TopByReadBytes = 6;
     optional TQuerySet TopByCpuTime = 7;
     optional TQuerySet TopByRequestUnits = 8;
+    optional uint64 QueryMetricsTotalCpuTimeUs = 9;
+    optional uint64 QueryMetricsRetainedCpuTimeUs = 10;
 }
 
 // sysview processor tablet -> node

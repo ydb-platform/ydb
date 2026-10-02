@@ -644,6 +644,7 @@ namespace NKikimr::NBsController {
             CommitSelfHealUpdates(state);
             CommitScrubUpdates(state, txc);
             CommitStoragePoolStatUpdates(state);
+            CommitDatabaseSpaceUpdates(state, db); // uses group status flags computed by CommitStoragePoolStatUpdates
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
             CommitShredUpdates(state);
@@ -828,6 +829,36 @@ namespace NKikimr::NBsController {
                     StoragePoolStat->DeleteStoragePool(TStoragePoolStat::ConvertId(prev->first));
                 }
             }
+        }
+
+        void TBlobStorageController::CommitDatabaseSpaceUpdates(TConfigState& state, NIceDb::TNiceDb& db) {
+            {
+                TDatabaseSpaceTracker::TBatch batch(DatabaseSpace);
+
+                // created/changed/deleted groups (group may change its storage pool or stop being a physical one);
+                // done first, so that deleted pools have no groups left
+                for (const auto& [base, overlay] : state.Groups.Diff()) {
+                    if (overlay->second) {
+                        UpdateDatabaseSpaceGroup(*overlay->second);
+                    } else {
+                        DatabaseSpace.RemoveGroup(overlay->first);
+                    }
+                }
+
+                // created/changed/deleted storage pools (name and scope may change)
+                for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
+                    if (cur) {
+                        UpdateDatabaseSpacePool(cur->first, cur->second);
+                    } else {
+                        DatabaseSpace.RemovePool(prev->first);
+                        // the persisted hysteresis latch goes away along with the pool
+                        const auto& [boxId, storagePoolId] = prev->first;
+                        db.Table<Schema::DatabaseSpaceExhaustedPool>().Key(boxId, storagePoolId).Delete();
+                    }
+                }
+            }
+
+            CommitDatabaseSpaceChanges(db);
         }
 
         void TBlobStorageController::CommitSysViewUpdates(TConfigState& state) {
@@ -1409,6 +1440,8 @@ namespace NKikimr::NBsController {
             settings->AddGroupReservePartPPM(GroupReservePart);
             settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
             settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->AddDatabaseSpaceBlockColor(DatabaseSpace.GetBlockColor());
+            settings->AddDatabaseSpaceUnblockColor(DatabaseSpace.GetUnblockColor());
             settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
             // TODO: settings->AddSerialManagementStage(SerialManagementStage);
             settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);

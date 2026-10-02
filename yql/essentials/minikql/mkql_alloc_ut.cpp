@@ -81,6 +81,34 @@ Y_UNIT_TEST(InitiallyAcquired) {
         UNIT_ASSERT_VALUES_EQUAL(false, alloc.IsAttached());
     }
 }
+
+Y_UNIT_TEST(ZeroSizeAllocationAtPageEnd) {
+    TScopedAlloc alloc(__LOCATION__);
+    for (const auto memoryPool : {EMemorySubPool::Default, EMemorySubPool::Temporary}) {
+        void* first = MKQLAllocFastWithSize(1, &alloc.Ref(), memoryPool);
+        auto* page = static_cast<TAllocPageHeader*>(TAllocState::GetPageStart(first));
+        const size_t fillerSize = page->Capacity - page->Offset - NYql::NUdf::SANITIZER_EXTRA_ALLOCATION_SPACE - 1;
+        void* filler = MKQLAllocFastWithSize(fillerSize, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(page->Offset, page->Capacity);
+
+        void* empty = MKQLAllocFastWithSize(0, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(TAllocState::GetPageStart(empty), alloc.Ref().CurrentPages[static_cast<TMemorySubPoolIdx>(memoryPool)]);
+        MKQLFreeFastWithSize(empty, 0, &alloc.Ref(), memoryPool);
+        MKQLFreeFastWithSize(filler, fillerSize, &alloc.Ref(), memoryPool);
+        MKQLFreeFastWithSize(first, 1, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
+    }
+}
+
+Y_UNIT_TEST(ZeroSizeAllocationOnEmptyPool) {
+    TScopedAlloc alloc(__LOCATION__);
+    for (const auto memoryPool : {EMemorySubPool::Default, EMemorySubPool::Temporary}) {
+        void* empty = MKQLAllocFastWithSize(0, &alloc.Ref(), memoryPool);
+        MKQLFreeFastWithSize(empty, 0, &alloc.Ref(), memoryPool);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);
+    }
+}
+
 #if !defined(_asan_enabled_)
 Y_UNIT_TEST(ArrowAllocateZeroSize) {
     // Choose small enough pieces to hit arena (using some internal knowledge)

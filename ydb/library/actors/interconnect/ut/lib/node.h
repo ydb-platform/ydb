@@ -11,6 +11,10 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+<<<<<<< HEAD
+=======
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
 #include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>

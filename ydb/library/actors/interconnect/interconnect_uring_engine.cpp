@@ -1,6 +1,7 @@
 #include "interconnect_uring_engine.h"
 
-#include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
+#include "uring_recv_buffer_pool.h"
+#include "uring_context.h" // for TUringContext::IsSupported() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
 #include "v2_probes.h"

@@ -81,11 +81,70 @@ namespace NActors {
         // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
         ui32 MaxRdmaRetryBackoffLevel = 8;
         bool CollectSubscriptionStackTrace = false;
+<<<<<<< HEAD
         bool UseUring = false;
         bool EnableUringSQPOLL = false; // only effective when UseUring is set
         // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
         // v2 is used only when both peers have this enabled and encryption is not in effect.
         bool EnableInterconnectSessionV2 = false;
+=======
+        TDuration SubscriberLivenessCheckInterval = TDuration::Hours(1);
+        bool UseUring = false;
+        bool EnableUringSQPOLL = false; // only effective when UseUring is set
+
+        struct TV2 {
+            // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
+            // v2 is used only when both peers have this enabled, encryption is not in effect, and the v2
+            // engine is running on this node (see Threads).
+            //
+            // This is the only v2 setting that can be changed at runtime: a cluster config update flips it
+            // (see TInterconnectConfigurator in ydb/core/cms/console) while handshake actors read it. It
+            // affects new handshakes only -- sessions already established keep the version they negotiated.
+            TAtomicFlag Enable = false;
+            bool ChecksumEvents = false;
+            // Use io_uring SQPOLL mode for the v2 data-plane rings (kernel-side submission polling).
+            // When the kernel poller is pegged (~100% CPU) while shard workers still have headroom, disable this
+            // so io_uring_submit/enter runs on the worker thread instead.
+            bool EnableSQPOLL = true;
+            // Preserialize outgoing events on the session mailbox before handing them to the v2 engine (moves
+            // serialization cost off the engine's shard worker thread).
+            bool EnablePreserializeEvents = false;
+            // Number of worker threads. Zero (the default) means the v2 engine is not started on this node
+            // at all, and v2 is never negotiated no matter what Enable says. Changing it requires a restart,
+            // so a cluster that wants to switch to v2 online is deployed with Threads set first, and flips
+            // Enable afterwards.
+            ui32 Threads = 0;
+            // io_uring rings per v2 shard worker (default 1). Each ring may have its own SQPOLL thread, so this
+            // scales kernel submission-polling independently of the number of serialization workers.
+            ui32 RingsPerShard = 1;
+            // SQPOLL kernel-thread idle window (ms) for v2 rings before it sleeps. Only used when EnableSQPOLLv2
+            // is on. Matches TUringContext::SqThreadIdleMs by default.
+            ui32 SqThreadIdleMs = 2000;
+            // Enable kernel threads sharing among different worker threads.
+            bool ShareRingsAmongThreads = false;
+            // Register session sockets into each ring's fixed-file table (IOSQE_FIXED_FILE) to avoid
+            // per-op process file-table refcount traffic. Falls back to plain fds if the kernel rejects
+            // the table or a ring runs out of slots. Requires sparse/update support (kernel >= 5.5; target 5.13+).
+            bool EnableFixedFiles = true;
+            // Size of the fixed-file table reserved per ring when EnableFixedFiles is on.
+            ui32 FixedFilesPerRing = 4096;
+            // Shared provided-buffer pool (buf_ring or provide_buffers) for sessions whose receive
+            // target is still at the minimum size. Falls back to per-session plain buffers.
+            bool EnableProvidedBuffers = true;
+            // Number of shared-pool buffers reserved per ring.
+            ui32 PoolBufCount = 128;
+            // Minimum and maximum write scratch size (copied bytes; aliased payloads do not use it).
+            ui32 MinWriteBufferSize = 4_KB;
+            ui32 MaxWriteBufferSize = 256_KB;
+            // Minimum and maximum main-socket read buffer size. Capped by TCPSocketBufferSize when set.
+            ui32 MinReadBufferSize = 4_KB;
+            ui32 MaxReadBufferSize = 256_KB;
+            // Per-socket cap on serialized-but-not-yet-CQE'd bytes. Max is clamped to TCPSocketBufferSize
+            // when that is set. Main is further capped when XDC is enabled (see TSerializeWindow).
+            ui32 MinSerializeWindowSize = 4_KB;
+            ui32 MaxSerializeWindowSize = 256_KB;
+        } V2;
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
     };
 
     struct TWhiteboardSessionStatus {

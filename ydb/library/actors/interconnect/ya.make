@@ -78,6 +78,14 @@ IF (OS_LINUX)
         uring_context.cpp
         uring_context.h
         uring_recv_buffer_pool.h
+<<<<<<< HEAD
+=======
+        interconnect_uring_engine.cpp
+    )
+ELSE()
+    SRCS(
+        interconnect_uring_engine_stub.cpp
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
     )
 ENDIF()
 

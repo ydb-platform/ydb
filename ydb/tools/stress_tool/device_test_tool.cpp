@@ -193,7 +193,11 @@ int main(int argc, char **argv) {
             << row("ic-port PORT",
                    "interconnect port for server to listen on (server only)")
             << row("num-server-devices N",
+<<<<<<< HEAD
                    "number of devices per server (default 1)")
+=======
+                   "number of devices per server (default 1); ignored for InterconnectTestList")
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
             << row("use-uring",
                    "use io_uring transport for interconnect instead of epoll (Linux 5.19+)");
 
@@ -289,8 +293,75 @@ int main(int argc, char **argv) {
 
     // Client-server mode dispatch
     if (serverMode || clientMode) {
+<<<<<<< HEAD
         if (protoTests.DDiskTestListSize() == 0) {
             Cerr << "Error: --server/--client mode requires DDiskTestList in config" << Endl;
+=======
+        const bool hasDDiskTests = protoTests.DDiskTestListSize() > 0;
+        const bool hasInterconnectTests = protoTests.InterconnectTestListSize() > 0;
+
+        if (!hasDDiskTests && !hasInterconnectTests) {
+            Cerr << "Error: --server/--client mode requires DDiskTestList or InterconnectTestList in config" << Endl;
+            return 1;
+        }
+        if (hasDDiskTests && hasInterconnectTests) {
+            Cerr << "Error: --server/--client mode requires exactly one of DDiskTestList or InterconnectTestList in config" << Endl;
+            return 1;
+        }
+
+        if (hasInterconnectTests) {
+            // Interconnect network test: no real device paths are used.
+            NDevicePerfTest::TInterconnectTest testProto = protoTests.GetInterconnectTestList(0);
+
+            if (serverMode) {
+                InstallInterconnectServerSignalHandler();
+                auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
+                THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectServer(config, serverNodeId, clientNodeId, icPort, useUring));
+                test->SetPrinter(printer);
+                test->RunTest();
+                return 0;
+            }
+
+            if (clientMode) {
+                // Build server peer list. Server with index i (0-based) gets NodeId = i + 1.
+                // Config's InterconnectLoad.NodeHops entries should reference these NodeIds
+                // to route traffic to the corresponding remote server.
+                TVector<NKikimr::TInterconnectPeer> serverPeers;
+                serverPeers.reserve(clientEndpoints.size());
+                for (size_t i = 0; i < clientEndpoints.size(); ++i) {
+                    try {
+                        auto [host, port] = ParseHostPort(clientEndpoints[i]);
+                        serverPeers.push_back({static_cast<ui32>(i + 1), host, port});
+                    } catch (const yexception& ex) {
+                        Cerr << "Error: --endpoint #" << (i + 1) << ": " << ex.what() << Endl;
+                        return 1;
+                    }
+                }
+                for (const auto& peer : serverPeers) {
+                    if (peer.NodeId == clientNodeId) {
+                        Cerr << "Error: --client NODE_ID (" << clientNodeId
+                             << ") collides with server NodeId " << peer.NodeId
+                             << "; client NodeId must differ from all server NodeIds" << Endl;
+                        return 1;
+                    }
+                }
+
+                auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
+                for (ui32 run = 0; run < config.RunCount; ++run) {
+                    THolder<NKikimr::TPerfTest> test(
+                        new NKikimr::TInterconnectClient(config, testProto, clientNodeId, serverPeers, useUring));
+                    test->SetPrinter(printer);
+                    test->RunTest();
+                }
+                printer->EndTest();
+                return 0;
+            }
+        }
+
+        // DDisk test: real device paths (--path) are required.
+        if (serverMode && !pathsProvided) {
+            Cerr << "Error: --server requires at least one --path (DDisk mode)" << Endl;
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
             return 1;
         }
         NDevicePerfTest::TDDiskTest testProto = protoTests.GetDDiskTestList(0);

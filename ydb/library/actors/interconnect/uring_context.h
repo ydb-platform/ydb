@@ -85,7 +85,18 @@ namespace NActors {
 
         struct io_uring* GetRing() { return Ring.get(); }
 
+<<<<<<< HEAD
         static bool IsSupported();
+=======
+        // True when the provided-buffer-ring API (io_uring_setup_buf_ring, kernel >= 5.19) works. This
+        // is the hard dependency of the v1 multishot-recv data path.
+        static bool IsSupported();
+
+        // True when io_uring is usable at all (a plain ring can be created). This is the minimum for the
+        // v2 data plane, which uses buffer rings when available (IsSupported) and falls back to ordinary
+        // per-recv buffers on older kernels (>= 5.1) where only IsAvailable() holds.
+        static bool IsAvailable();
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
 #else
         TUringContext(TActorId, TActorId) {}
         ~TUringContext() = default;
@@ -121,6 +132,47 @@ namespace NActors {
         void* GetRing() { return nullptr; }
 
         static bool IsSupported() { return false; }
+<<<<<<< HEAD
+#endif
+
+        using TPtr = TIntrusivePtr<TUringContext>;
+
+    private:
+#ifdef __linux__
+        // Translate a raw socket fd to its registered fixed-file index, or -1 if fixed
+        // files are not in use for this fd.
+        int FixedIndexForFd(int fd) const {
+            if (!FixedFiles) {
+                return -1;
+            }
+            if (fd == MainFd) {
+                return 0;
+            }
+            if (fd == XdcFd) {
+                return 1;
+            }
+            return -1;
+        }
+
+        std::unique_ptr<struct io_uring> Ring;
+        int EventFd = -1;
+        TActorId WriteActorId;
+        TActorId ReadActorId;
+        std::atomic<ui32> PendingWrites{0};
+        std::atomic<ui32> PendingRecvs{0};
+        // Diagnostic submit accounting (see getters above). Mutated only on the session mailbox
+        // thread; read elsewhere only for best-effort logging, so no synchronization is needed.
+        ui64 SubmitCalls = 0;     // number of io_uring_submit() calls via Flush()
+        ui64 SubmitErrors = 0;    // io_uring_submit() returned < 0
+        ui64 SubmitPartials = 0;  // io_uring_submit() returned fewer than the queued SQE count
+        i32 LastSubmitRet = 0;    // last io_uring_submit() return value
+        ui64 SqeFull = 0;         // io_uring_get_sqe() returned nullptr (SQ full) in a submit helper
+        int MainFd = -1;
+        int XdcFd = -1;
+        bool FixedFiles = false;
+=======
+        static bool IsAvailable() { return false; }
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
 #endif
 
         using TPtr = TIntrusivePtr<TUringContext>;
@@ -159,6 +211,20 @@ namespace NActors {
         int XdcFd = -1;
         bool FixedFiles = false;
 #endif
+    };
+
+    class TEventFdWrapper : public TSharedDescriptor {
+    public:
+        TEventFdWrapper(int fd)
+            : Fd(fd)
+        {}
+
+        int GetDescriptor() override {
+            return Fd;
+        }
+
+    private:
+        int Fd;
     };
 
     class TEventFdWrapper : public TSharedDescriptor {

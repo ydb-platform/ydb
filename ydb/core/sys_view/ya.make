@@ -42,6 +42,7 @@ RECURSE(
     resource_pool_classifiers
     resource_pools
     service
+    show_create
     storage
     streaming_queries
     tablets

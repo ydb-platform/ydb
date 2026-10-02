@@ -35,7 +35,6 @@ class StreamingTestBase:
             "enable_external_data_sources",
             "enable_streaming_queries",
             "enable_streaming_queries_counters",
-            "enable_shared_reading_in_streaming_queries",
         ]
 
         os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
@@ -278,3 +277,4 @@ class TestWatermarksRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgrade
                 [f'{{"error_count":1,"host":"host-{i}",' f'"ts":"{window_year}-01-01T00:00:00Z"}}' + suffix],
             )
             self.do_write_read(input_data, acceptor)
+            time.sleep(0.5)

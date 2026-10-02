@@ -436,4 +436,5 @@ message TFeatureFlags {
     // cluster root for database names, or the database for schema-object paths.
     optional bool EnableRelativePaths = 354 [default = false];
     optional bool EnableKillSession = 355 [default = false];
+    optional bool EnableUnsafeTruncateTable = 356 [default = false];
 }

@@ -76,11 +76,12 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
         return;
     }
     topicsToResolve.insert(TopicsHandler->GetConverterFactory()->GetNoDCMode()
-        ? Request_->NormalizePath(request->path())
+        ? Request_->GetDatabaseRelativePath(request->path())
         : request->path());
 
     auto topicsList = TopicsHandler->GetReadTopicsList(
-            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString())
+            topicsToResolve, true, Request().GetDatabaseName().GetOrElse(TString()),
+            AppData(ctx)->FeatureFlags.GetEnableRelativePaths()
     );
     if (!topicsList.IsValid) {
         return AnswerError(

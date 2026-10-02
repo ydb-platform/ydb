@@ -791,7 +791,8 @@ class TRcBuf {
             const EType type = static_cast<EType>(value.Data[0] & TypeMask);
             value.Data[0] = value.Data[0] & ValueMask;
             switch (type) {
-                case EType::STRING:             return CallDtorAs<TString>(value);
+                // a TString backend is always stored holder-wrapped (see IsInlineBackend)
+                case EType::STRING:             return CallDtor(reinterpret_cast<TObjectHolder<TString>&>(value));
                 case EType::SHARED_DATA:        return CallDtorAs<NActors::TSharedData>(value);
                 case EType::INTERNAL_BACKEND:   return CallDtorAs<TInternalBackend>(value);
                 case EType::EXTERNAL_BACKEND:   return CallDtorAs<IContiguousChunk::TPtr>(value);

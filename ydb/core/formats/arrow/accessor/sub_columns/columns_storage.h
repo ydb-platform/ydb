@@ -51,12 +51,8 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-<<<<<<< HEAD
         const arrow::BinaryArray* CurrentArrayData;
-=======
-        const arrow::Array* CurrentArrayData;
         // Currently iterated accessor relative to GlobalChunkedArray
->>>>>>> 3c4e733b85a (Fix subcolumn iterator correctness (#54740))
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         // Currently iterated arrow chunk relative to GlobalChunkedArray
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;

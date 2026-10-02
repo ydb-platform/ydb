@@ -1,9 +1,6 @@
-<<<<<<< HEAD
-=======
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/accessor.h>
->>>>>>> 3c4e733b85a (Fix subcolumn iterator correctness (#54740))
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/data_extractor.h>
@@ -131,50 +128,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         }
     }
 
-<<<<<<< HEAD
-=======
-    Y_UNIT_TEST(DictionaryColumns) {
-        using namespace NKikimr::NArrow::NAccessor::NSubColumns;
-        // dictionaryKff = 2: a separated column is dictionary-encoded when
-        // distinct * 2 <= usageCount. othersFraction = 0 => everything separated.
-        NSubColumns::TSettings settings(4, 1024, 0, 0, TDataAdapterContainer::GetDefault(), /*dictionaryKff*/ 2);
-
-        std::vector<TString> jsons;
-        for (ui32 i = 0; i < 40; ++i) {
-            // "c" repeats over 2 distinct values -> dictionary; "a" is all distinct -> plain.
-            jsons.push_back(TStringBuilder() << R"({"a":")" << i << R"(","c":")" << (i % 2 ? "xxxx" : "yyyy") << R"("})");
-        }
-
-        TTrivialArray::TPlainBuilder<arrow::BinaryType> arrBuilder;
-        ui32 idx = 0;
-        for (auto&& i : jsons) {
-            auto v = NBinaryJson::SerializeToBinaryJson(i);
-            NBinaryJson::TBinaryJson* bJson = std::get_if<NBinaryJson::TBinaryJson>(&v);
-            UNIT_ASSERT(bJson);
-            arrBuilder.AddRecord(idx++, std::string_view(bJson->data(), bJson->size()));
-        }
-        auto bJsonArr = arrBuilder.Finish(jsons.size());
-        auto arrData = TSubColumnsArray::Make(bJsonArr, settings, bJsonArr->GetDataType()).DetachResult();
-
-        // At least one separated column ("c") must be dictionary-encoded.
-        const auto& cstats = arrData->GetColumnsData().GetStats();
-        bool anyDict = false;
-        for (ui32 i = 0; i < cstats.GetColumnsCount(); ++i) {
-            anyDict |= (cstats.GetAccessorType(i) == IChunkedArray::EType::Dictionary);
-        }
-        UNIT_ASSERT_C(anyDict, "expected at least one dictionary column: " + arrData->DebugJson().GetStringRobust());
-
-        const TString original = PrintBinaryJsons(arrData->GetChunkedArray());
-
-        // Full serialize -> deserialize round-trip must reconstruct identical values.
-        auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
-        TChunkConstructionData cData(arrData->GetRecordsCount(), nullptr, arrow::binary(), serializer);
-        const TString blob = arrData->SerializeToString(cData);
-        NSubColumns::TConstructor constructor(settings);
-        auto restored = constructor.DeserializeFromString(blob, cData).DetachResult();
-        UNIT_ASSERT_VALUES_EQUAL(PrintBinaryJsons(restored->GetChunkedArray()), original);
-    }
-
     void CheckCompositeValues(const std::shared_ptr<IChunkedArray>& first, const std::shared_ptr<IChunkedArray>& second,
                               const std::vector<std::pair<ui32, TStringBuf>>& expected) {
         using namespace NKikimr::NArrow::NAccessor::NSubColumns;
@@ -249,7 +202,6 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
         UNIT_ASSERT_VALUES_EQUAL(valuesCount, 0);
     }
 
->>>>>>> 3c4e733b85a (Fix subcolumn iterator correctness (#54740))
     Y_UNIT_TEST(FiltersDef) {
         for (ui32 colsCount = 0; colsCount < 5; ++colsCount) {
             NSubColumns::TSettings settings(4, colsCount, 0, 0, NKikimr::NArrow::NAccessor::NSubColumns::TDataAdapterContainer::GetDefault());

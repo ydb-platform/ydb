@@ -7,7 +7,6 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
-#include <algorithm>
 #include <cmath>
 #include <set>
 
@@ -90,7 +89,6 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
             AFL_VERIFY(i.AddWorkerPool(schedulablePool.GetWorkersPoolId()));
         }
     }
-    schedulablePool.SetMaxBatchSize(defWorkersPool->GetMaxBatchSize() * std::max<size_t>(1, schedulablePool.GetLinks().size()));
     return TConclusionStatus::Success();
 }
 

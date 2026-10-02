@@ -90,7 +90,7 @@ private:
     YDB_READONLY(ui64, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
-    YDB_ACCESSOR(ui64, MaxBatchSize, 30);
+    YDB_READONLY(ui64, MaxBatchSize, 30);
     YDB_READONLY_DEF(std::vector<THeavyLimit>, HeavyLimits);
 
 public:

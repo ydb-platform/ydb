@@ -91,8 +91,10 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
     /* Scenario:
         Specialized and All pools cover each identity type independently.
         Both fallback pools always exist, including when every category is covered.
+        Fallback batch limits keep the common default regardless of link count.
      */
     Y_UNIT_TEST(SchedulingModeFallbackMatrix) {
+        const ui64 defaultBatchSize = NConfig::TWorkersPool(0).GetMaxBatchSize();
         const std::vector<std::vector<NConfig::TProtoWorkerPool::ESchedulingMode>> cases{
             {}, {NConfig::TProtoWorkerPool::NonSchedulable}, {NConfig::TProtoWorkerPool::Schedulable}, {NConfig::TProtoWorkerPool::All}, {NConfig::TProtoWorkerPool::NonSchedulable, NConfig::TProtoWorkerPool::Schedulable}};
         for (const auto& modes : cases) {
@@ -121,8 +123,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
                 UNIT_ASSERT(pools[1].GetSchedulingMode() == NConfig::TProtoWorkerPool::Schedulable);
                 UNIT_ASSERT_VALUES_EQUAL(*pools[1].GetWorkersCountInfo().GetFraction(), 1);
                 UNIT_ASSERT(pools[0].GetHeavyLimits() == pools[1].GetHeavyLimits());
-                UNIT_ASSERT_VALUES_EQUAL(pools[1].GetMaxBatchSize(),
-                    pools[0].GetMaxBatchSize() * std::max<size_t>(1, pools[1].GetLinks().size()));
+                UNIT_ASSERT_VALUES_EQUAL(pools[0].GetMaxBatchSize(), defaultBatchSize);
+                UNIT_ASSERT_VALUES_EQUAL(pools[1].GetMaxBatchSize(), defaultBatchSize);
                 for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
                     for (ui64 id : {0, 1}) {
                         const bool covered = (allCategories || category == ESpecialTaskCategory::Scan)

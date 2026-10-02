@@ -19,6 +19,7 @@ namespace NRedo {
         RemoveTx = 12,
         LockRowTx = 13,
         UpdateTxSavepointSeqNum = 14,
+        RemoveTxOps = 15,
     };
 
     #pragma pack(push, 1)
@@ -131,6 +132,17 @@ namespace NRedo {
         ui64 RowVersionTxId;
     } Y_PACKED;
 
+    // Operations of TxId with savepoint seq nums in [From, To] are rolled back
+    struct TEvRemoveTxOps {
+        TChunk Label;
+
+        ui32 Table;
+        ui32 Pad0_;
+        ui64 TxId;
+        ui32 From;
+        ui32 To;
+    } Y_PACKED;
+
     struct TEvLockRowTx {
         TChunk Label;
 
@@ -171,6 +183,7 @@ namespace NRedo {
     static_assert(sizeof(TEvRemoveTx) == 24);
     static_assert(sizeof(TEvCommitTx) == 40);
     static_assert(sizeof(TEvLockRowTx) == 24);
+    static_assert(sizeof(TEvRemoveTxOps) == 32);
 
 }
 }

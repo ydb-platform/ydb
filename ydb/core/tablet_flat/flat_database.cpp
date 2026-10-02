@@ -394,6 +394,15 @@ void TDatabase::RemoveTx(ui32 table, ui64 txId)
     RequireForUpdate(table)->RemoveTx(txId);
 }
 
+void TDatabase::RemoveTxOps(ui32 table, ui64 txId, ui32 from, ui32 to)
+{
+    // Seq num 0 means an operation without a savepoint seq num, it cannot be rolled back
+    Y_ENSURE(0 < from && from <= to, "Invalid savepoint seq num range [" << from << ", " << to << "]");
+
+    Redo->EvRemoveTxOps(table, txId, from, to);
+    RequireForUpdate(table)->RemoveTxOps(txId, from, to);
+}
+
 void TDatabase::CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
 {
     Redo->EvCommitTx(table, txId, rowVersion);
@@ -418,6 +427,11 @@ bool TDatabase::HasCommittedTx(ui32 table, ui64 txId) const
 bool TDatabase::HasRemovedTx(ui32 table, ui64 txId) const
 {
     return Require(table)->HasRemovedTx(txId);
+}
+
+const TSavepointSeqNumRanges* TDatabase::FindRolledBackTxOps(ui32 table, ui64 txId) const
+{
+    return Require(table)->FindRolledBackTxOps(txId);
 }
 
 const absl::flat_hash_set<ui64>& TDatabase::GetOpenTxs(ui32 table) const
@@ -448,6 +462,11 @@ size_t TDatabase::GetCommittedTxCount(ui32 table) const
 size_t TDatabase::GetRemovedTxCount(ui32 table) const
 {
     return Require(table)->GetRemovedTxCount();
+}
+
+size_t TDatabase::GetRolledBackTxCount(ui32 table) const
+{
+    return Require(table)->GetRolledBackTxCount();
 }
 
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)

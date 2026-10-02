@@ -144,6 +144,14 @@ namespace NTest {
             return *this;
         }
 
+        TDbExec& RemoveTxOps(ui32 table, ui64 txId, ui32 from, ui32 to) {
+            Y_ENSURE(OnTx != EOnTx::None);
+
+            Base->RemoveTxOps(table, txId, from, to);
+
+            return *this;
+        }
+
         TDbExec& RollbackChanges() {
             Y_ENSURE(OnTx != EOnTx::None);
 

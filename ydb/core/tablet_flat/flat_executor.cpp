@@ -5361,7 +5361,10 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
 
     bool compactTxStatus = false;
     for (const auto& memTableSnapshot : snapshot->Subset->Frozen) {
-        if (!memTableSnapshot->GetCommittedTransactions().empty() || !memTableSnapshot->GetRemovedTransactions().empty()) {
+        if (!memTableSnapshot->GetCommittedTransactions().empty() ||
+            !memTableSnapshot->GetRemovedTransactions().empty() ||
+            !memTableSnapshot->GetRolledBackTxOps().empty())
+        {
             // We must compact tx status when mem table has changes
             compactTxStatus = true;
             break;
@@ -5374,7 +5377,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
             break;
         }
     }
-    if (snapshot->Subset->TxStatus && snapshot->Subset->GarbageTransactions) {
+    if (snapshot->Subset->TxStatus && (snapshot->Subset->GarbageTransactions || snapshot->Subset->GarbageRolledBackTxOps)) {
         // We want to remove garbage transactions
         compactTxStatus = true;
     }
@@ -5386,6 +5389,7 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         }
         comp->TxStatus = snapshot->Subset->TxStatus;
         comp->GarbageTransactions = snapshot->Subset->GarbageTransactions;
+        comp->GarbageRolledBackTxOps = snapshot->Subset->GarbageRolledBackTxOps;
     } else {
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();

@@ -52,6 +52,8 @@ namespace NTabletFlatExecutor {
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         // Non-empty for transactions that no longer need their status maintained
         NTable::TTransactionSet GarbageTransactions;
+        // Non-empty for transactions that no longer need their rolled back savepoint seq nums maintained
+        NTable::TTransactionSet GarbageRolledBackTxOps;
     };
 
 }

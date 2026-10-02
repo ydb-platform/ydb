@@ -803,7 +803,29 @@ namespace NTabletFlatExecutor {
                 }
             }
 
-            if (status.empty()) {
+            NTable::TRolledBackTxOps rolledBack;
+            auto mergeRolledBack = [&](ui64 txId, ui32 from, ui32 to) {
+                if (Conf->GarbageRolledBackTxOps.Contains(txId)) {
+                    // We don't write rolled back seq nums of transactions without data
+                    return;
+                }
+                rolledBack[txId].Add(from, to);
+            };
+
+            for (const auto& memTable : Conf->Frozen) {
+                for (const auto& pr : memTable->GetRolledBackTxOps()) {
+                    for (const auto& range : pr.second.GetRanges()) {
+                        mergeRolledBack(pr.first, range.From, range.To);
+                    }
+                }
+            }
+            for (const auto& txStatus : Conf->TxStatus) {
+                for (const auto& item : txStatus->TxStatusPage->GetRolledBackItems()) {
+                    mergeRolledBack(item.GetTxId(), item.GetFrom(), item.GetTo());
+                }
+            }
+
+            if (status.empty() && rolledBack.empty()) {
                 // Nothing to write
                 return;
             }
@@ -815,6 +837,9 @@ namespace NTabletFlatExecutor {
                 } else {
                     builder.AddRemoved(pr.first);
                 }
+            }
+            for (const auto& pr : rolledBack) {
+                builder.AddRolledBack(pr.first, pr.second);
             }
 
             auto data = builder.Finish();

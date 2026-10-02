@@ -77,6 +77,8 @@ namespace NRedo {
                     return DoUpdateTx(chunk);
                 case ERedo::RemoveTx:
                     return DoRemoveTx(chunk);
+                case ERedo::RemoveTxOps:
+                    return DoRemoveTxOps(chunk);
                 case ERedo::CommitTx:
                     return DoCommitTx(chunk);
                 case ERedo::LockRowTx:
@@ -112,6 +114,7 @@ namespace NRedo {
                 case ERedo::CommitTx:
                 case ERedo::LockRowTx:
                 case ERedo::UpdateTxSavepointSeqNum:
+                case ERedo::RemoveTxOps:
                     // Not used in legacy log format
                     break;
             }
@@ -228,6 +231,17 @@ namespace NRedo {
 
             if (Base.NeedIn(ev->Table)) {
                 Base.DoRemoveTx(ev->Table, ev->TxId);
+            }
+        }
+
+        void DoRemoveTxOps(const TArrayRef<const char> chunk)
+        {
+            Y_ENSURE(chunk.size() >= sizeof(TEvRemoveTxOps));
+
+            auto *ev = reinterpret_cast<const TEvRemoveTxOps*>(chunk.data());
+
+            if (Base.NeedIn(ev->Table)) {
+                Base.DoRemoveTxOps(ev->Table, ev->TxId, ev->From, ev->To);
             }
         }
 

@@ -7,6 +7,7 @@
 #include "flat_dbase_misc.h"
 #include "flat_iterator.h"
 #include "flat_table_observer.h"
+#include "flat_table_savepoints.h"
 #include "util_basics.h"
 
 namespace NKikimr {
@@ -162,12 +163,22 @@ public:
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
 
     /**
+     * Marks operations of txId with savepoint seq nums in [from, to] as rolled back
+     */
+    void RemoveTxOps(ui32 table, ui64 txId, ui32 from, ui32 to);
+
+    /**
      * Returns true when table has an open transaction that is not committed or removed yet
      */
     bool HasOpenTx(ui32 table, ui64 txId) const;
     bool HasTxData(ui32 table, ui64 txId) const;
     bool HasCommittedTx(ui32 table, ui64 txId) const;
     bool HasRemovedTx(ui32 table, ui64 txId) const;
+
+    /**
+     * Returns rolled back savepoint seq nums of txId, nullptr when there are none
+     */
+    const TSavepointSeqNumRanges* FindRolledBackTxOps(ui32 table, ui64 txId) const;
 
     /**
      * Returns a set of open transactions in the provided table. This only
@@ -188,6 +199,7 @@ public:
     size_t GetTxsWithStatusCount(ui32 table) const;
     size_t GetCommittedTxCount(ui32 table) const;
     size_t GetRemovedTxCount(ui32 table) const;
+    size_t GetRolledBackTxCount(ui32 table) const;
 
     /**
      * Remove row versions [lower, upper) from the given table

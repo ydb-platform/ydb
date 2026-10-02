@@ -187,6 +187,7 @@ public:
     void LockRowTx(ELockMode, TRawVals key, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);
+    void RemoveTxOps(ui64 txId, ui32 from, ui32 to);
 
     /**
      * Returns true when table has an open transaction that is not committed or removed yet
@@ -195,6 +196,12 @@ public:
     bool HasTxData(ui64 txId) const;
     bool HasCommittedTx(ui64 txId) const;
     bool HasRemovedTx(ui64 txId) const;
+
+    /**
+     * Returns rolled back savepoint seq nums of txId, nullptr when there are none
+     */
+    const TSavepointSeqNumRanges* FindRolledBackTxOps(ui64 txId) const;
+    size_t GetRolledBackTxCount() const;
 
     const absl::flat_hash_set<ui64>& GetOpenTxs() const;
     size_t GetOpenTxCount() const;
@@ -358,6 +365,9 @@ private:
     void RemoveTxDataRef(ui64 txId);
     void AddTxStatusRef(ui64 txId);
     void RemoveTxStatusRef(ui64 txId);
+    void AddRolledBackTxOpsRef(ui64 txId);
+    void RemoveRolledBackTxOpsRef(ui64 txId);
+    TTransactionSet GetGarbageRolledBackTxOps() const;
 
 private:
     TEpoch Epoch; /* Monotonic table change number, with holes */
@@ -400,6 +410,14 @@ private:
     TTransactionSet GarbageTransactions;
     TIntrusivePtr<ITableObserver> TableObserver;
 
+    // The number of entities (memtable/txstatus) that have rolled back
+    // savepoint seq nums for a TxId. Separate from TxStatusRefs, since
+    // a transaction with rolled back seq nums is still open.
+    absl::flat_hash_map<ui64, size_t> RolledBackTxOpsRefs;
+
+    // A union of rolled back savepoint seq nums of all entities by TxId
+    TRolledBackTxOps RolledBackTxOps;
+
     ui64 RemovedCommittedTxs = 0;
 
 private:
@@ -428,13 +446,24 @@ private:
         ui64 TxId;
     };
 
+    struct TRollbackRemoveRolledBackTxOpsRef {
+        ui64 TxId;
+    };
+
+    struct TRollbackRestoreRolledBackTxOps {
+        ui64 TxId;
+        std::optional<TSavepointSeqNumRanges> Value;
+    };
+
     using TRollbackOp = std::variant<
         TRollbackRemoveTxDataRef,
         TRollbackRemoveTxStatusRef,
         TRollbackAddCommittedTx,
         TRollbackRemoveCommittedTx,
         TRollbackAddRemovedTx,
-        TRollbackRemoveRemovedTx>;
+        TRollbackRemoveRemovedTx,
+        TRollbackRemoveRolledBackTxOpsRef,
+        TRollbackRestoreRolledBackTxOps>;
 
     struct TCommitAddDecidedTx {
         ui64 TxId;

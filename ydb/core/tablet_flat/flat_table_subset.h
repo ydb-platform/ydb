@@ -119,6 +119,8 @@ namespace NTable {
         TTransactionMap CommittedTransactions;
         TTransactionSet RemovedTransactions;
         TTransactionSet GarbageTransactions;
+        // Transactions with rolled back savepoint seq nums and no data left
+        TTransactionSet GarbageRolledBackTxOps;
         TVector<TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
     };
 

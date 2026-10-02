@@ -790,6 +790,11 @@ public:
         Y_TABLET_ERROR("RemoveTx is unsupported");
     }
 
+    void DoRemoveTxOps(ui32, ui64, ui32, ui32)
+    {
+        Y_TABLET_ERROR("RemoveTxOps is unsupported");
+    }
+
     void DoFlush(ui32, ui64, TEpoch)
     {
         // ignore

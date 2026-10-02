@@ -241,7 +241,7 @@ void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui
         return;
     }
 
-    isLimitIncreased = limit > Limit;
+    isLimitIncreased = limit > Limit || unrestrictedSoft.value_or(0) > UnrestrictedSoft.value_or(0) || hardLimit.value_or(0) > HardLimit.value_or(0);
 
     Limit = limit;
     HardLimit = hardLimit;

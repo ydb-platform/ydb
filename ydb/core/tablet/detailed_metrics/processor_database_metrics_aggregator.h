@@ -41,8 +41,10 @@ namespace NKikimr {
      * Every TABLE partial and leaf feeds the public rollup, and leaves are published under tablet_id/follower_id.
      *
      * The aggregator keeps only the public metric values of every TABLE partial and leaf (see TPublicBucket),
-     * no low level counters: the low level counters reported by the nodes are converted into the public
-     * metric values of the descriptor of the tablet type (see TDetailedMetricsDescriptor) as they arrive.
+     * no low level counters. A table entry reported with its tablet type (TDetailedTableCounters.TabletType)
+     * carries the public metric values of the descriptor of the tablet type (see TDetailedMetricsDescriptor),
+     * which are applied as they are. A table entry without the tablet type carries the legacy low level
+     * counters, which are converted into the public metric values as they arrive.
      *
      * @param[in] targetCounterGroup The counter group for the public counters
      * @param[in] databasePath The path of the database, the table paths of the reports are relative to it

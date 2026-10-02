@@ -1,11 +1,17 @@
 #include "processor_database_metrics_aggregator.h"
+#include "detailed_metrics_descriptor.h"
 #include "node_database_metrics_aggregator.h"
+#include "ut_helpers.h"
 
 #include <ydb/core/protos/counters_datashard.pb.h>
+#include <ydb/core/protos/counters_detailed_datashard.pb.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 
+#include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/ylimits.h>
 
 using namespace NKikimr;
 using NTabletFlatExecutor::TExecutorCounters;
@@ -15,10 +21,22 @@ namespace {
     const TString DATABASE_PATH = "/Root/db";
     const TString RELATIVE_TABLE_PATH = "Table";
     const TString TABLE_PATH = DATABASE_PATH + "/" + RELATIVE_TABLE_PATH;
+    const TString RELATIVE_OTHER_TABLE_PATH = "Other";
+    const TString OTHER_TABLE_PATH = DATABASE_PATH + "/" + RELATIVE_OTHER_TABLE_PATH;
     const TInstant NOW = TInstant::Seconds(100);
     constexpr auto TABLET_TYPE = TTabletTypes::DataShard;
     constexpr auto DB_UNIQUE_ROWS_TOTAL = TExecutorCounters::DB_UNIQUE_ROWS_TOTAL;
     constexpr auto CONSUMED_CPU = TExecutorCounters::CONSUMED_CPU;
+
+    // The public DataShard metrics (the wire slots of the public metric values)
+    constexpr ui32 PUBLIC_ROW_COUNT = NDataShard::COUNTER_DATASHARD_ROW_COUNT;
+    constexpr ui32 PUBLIC_SIZE_BYTES = NDataShard::COUNTER_DATASHARD_SIZE_BYTES;
+    constexpr ui32 PUBLIC_WRITE_ROWS = NDataShard::COUNTER_DATASHARD_WRITE_ROWS;
+    constexpr ui32 PUBLIC_READ_ROWS = NDataShard::COUNTER_DATASHARD_READ_ROWS;
+    constexpr ui32 PUBLIC_CONSUMED_CPU_US = NDataShard::COUNTER_DATASHARD_CONSUMED_CPU_MICROSECONDS;
+    constexpr ui32 PUBLIC_USED_CORE_PERCENTS = NDataShard::COUNTER_DATASHARD_USED_CORE_PERCENTS;
+
+    using TTables = NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>;
 
     // Use the production positional layouts for both source categories.
     struct TFakeTablet {
@@ -67,6 +85,115 @@ namespace {
         TNodeDatabaseMetricsAggregatorPtr Followers = CreateNodeDatabaseMetricsAggregator(Root, DATABASE_PATH, true);
     };
 
+    const TDetailedMetricsDescriptor& GetDataShardDescriptor() {
+        const auto* descriptor = GetDetailedMetricsDescriptor(TABLET_TYPE);
+        UNIT_ASSERT(descriptor);
+        return *descriptor;
+    }
+
+    /**
+     * The public metric values of one DataShard bucket, as a node reports them on the detailed wire
+     * (see NKikimrSysView::TDbCounters): every gauge zero, no rate deltas and one empty histogram entry
+     * per histogram metric (a level one marked NonDerivative), until set otherwise.
+     */
+    class TPublicValues {
+    public:
+        TPublicValues() {
+            const auto& descriptor = GetDataShardDescriptor();
+            Values.MutableSimple()->Resize(static_cast<int>(descriptor.Gauges.size()), 0);
+            Values.SetCumulativeCount(descriptor.Rates.size());
+            for (const auto& spec : descriptor.Histograms) {
+                auto* histogram = Values.AddHistogram();
+                histogram->SetBucketsCount(spec.BucketCount());
+                if (spec.IsLevel) {
+                    histogram->SetNonDerivative(true);
+                }
+            }
+        }
+
+        TPublicValues& Gauge(ui32 metric, ui64 value) {
+            Values.SetSimple(metric, value);
+            return *this;
+        }
+
+        TPublicValues& Rate(ui32 metric, ui64 delta) {
+            Values.AddCumulative(metric);
+            Values.AddCumulative(delta);
+            return *this;
+        }
+
+        TPublicValues& Bucket(ui64 bucket, ui64 count, ui32 metric = PUBLIC_USED_CORE_PERCENTS) {
+            auto* histogram = Values.MutableHistogram(metric);
+            histogram->AddBuckets(bucket);
+            histogram->AddBuckets(count);
+            return *this;
+        }
+
+        NKikimrSysView::TDbCounters& Mutable() {
+            return Values;
+        }
+
+        const NKikimrSysView::TDbCounters& Get() const {
+            return Values;
+        }
+
+    private:
+        NKikimrSysView::TDbCounters Values;
+    };
+
+    /**
+     * A report of a node on the detailed wire, which carries the public metric values
+     * of its buckets (the table entries have TabletType set), built by hand.
+     */
+    class TPublicReport {
+    public:
+        // Add a TABLE level entry with the public values of the TABLE partial of the node
+        TPublicReport& Table(const TPublicValues& values, const TString& path = TABLE_PATH,
+                             TTabletTypes::EType type = TABLET_TYPE) {
+            auto* entry = AddEntry(path, TDetailedMetricsSettings::MetricsLevelTable, type);
+            *entry->MutableTableMetrics() = values.Get();
+            return *this;
+        }
+
+        // Add a leaf with its public values to the PARTITION level entry of the table
+        TPublicReport& Leaf(ui64 tabletId, ui32 followerId, const TPublicValues& values,
+                            const TString& path = TABLE_PATH, TTabletTypes::EType type = TABLET_TYPE) {
+            auto* leaf = GetOrAddPartitionEntry(path, type)->AddLeaves();
+            leaf->SetTabletId(tabletId);
+            leaf->SetFollowerId(followerId);
+            *leaf->MutableMetrics() = values.Get();
+            return *this;
+        }
+
+        const TTables& Get() const {
+            return Tables;
+        }
+
+    private:
+        NKikimrSysView::TDetailedTableCounters* AddEntry(
+            const TString& path, TDetailedMetricsSettings::EMetricsLevel level, TTabletTypes::EType type) {
+            auto* entry = Tables.Add();
+            entry->SetTablePath(path);
+            entry->SetLevel(level);
+            entry->SetTabletType(type);
+            return entry;
+        }
+
+        NKikimrSysView::TDetailedTableCounters* GetOrAddPartitionEntry(const TString& path, TTabletTypes::EType type) {
+            for (auto& entry : Tables) {
+                if (entry.GetTablePath() == path
+                    && entry.GetLevel() == TDetailedMetricsSettings::MetricsLevelPartition
+                    && entry.GetTabletType() == type)
+                {
+                    return &entry;
+                }
+            }
+            return AddEntry(path, TDetailedMetricsSettings::MetricsLevelPartition, type);
+        }
+
+        TTables Tables;
+    };
+
     struct TProcessorFixture {
         NMonitoring::TDynamicCounterPtr PublicRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
         TProcessorDatabaseMetricsAggregatorPtr Processor = CreateProcessorDatabaseMetricsAggregator(
@@ -79,6 +206,17 @@ namespace {
             tables.Clear();
             node.Followers->Pack(tables);
             Processor->ApplyFromNode(nodeId, true, tables);
+        }
+
+        // Apply the hand-built reports of both roles of the node, the same way as ApplyNode()
+        void ApplyPublicNode(ui32 nodeId, const TPublicReport& leaders, const TPublicReport& followers = TPublicReport()) {
+            Processor->ApplyFromNode(nodeId, false, leaders.Get());
+            Processor->ApplyFromNode(nodeId, true, followers.Get());
+        }
+
+        // The public series as JSON, with the keys sorted
+        TString DumpPublicSeries() const {
+            return NDetailedMetricsTests::NormalizeJson(NMonitoring::ToJson(*PublicRoot));
         }
     };
 
@@ -163,6 +301,28 @@ namespace {
             result << "b" << i << "=" << snapshot->Value(i);
         }
         return result;
+    }
+
+    // The non-empty buckets of the public histogram as "bucket:count" pairs, for example "0:1,3:2"
+    TString DumpNonEmptyBuckets(NMonitoring::TDynamicCounterPtr publicGroup,
+                                const TString& publicName = "table.datashard.used_core_percents") {
+        auto snapshot = GetPublicHistogramSnapshot(publicGroup, publicName);
+        TStringBuilder result;
+        for (ui32 i = 0; i < snapshot->Count(); ++i) {
+            if (snapshot->Value(i)) {
+                if (!result.empty()) {
+                    result << ",";
+                }
+                result << i << ":" << snapshot->Value(i);
+            }
+        }
+        return result;
+    }
+
+    // The number of the series in the group of a bucket (it has no subgroups)
+    size_t CountSeries(NMonitoring::TDynamicCounterPtr group) {
+        UNIT_ASSERT(group);
+        return group->ReadSnapshot().size();
     }
 
 } // namespace
@@ -1320,5 +1480,427 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
                 }
             }
         }
+    }
+
+    Y_UNIT_TEST(PublicValuesOfTablePartialsAreSummedOverNodes) {
+        TProcessorFixture fixture;
+        fixture.ApplyPublicNode(1, TPublicReport().Table(TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 10).Gauge(PUBLIC_SIZE_BYTES, 100)
+            .Rate(PUBLIC_CONSUMED_CPU_US, 5).Bucket(0, 1)));
+        fixture.ApplyPublicNode(2, TPublicReport().Table(TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 20).Gauge(PUBLIC_SIZE_BYTES, 200)
+            .Rate(PUBLIC_CONSUMED_CPU_US, 7).Bucket(1, 2)));
+        fixture.Processor->RecalculateAllCounters();
+
+        auto table = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 30);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.size_bytes"), 300);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(table), "0:1,1:2");
+
+        // The next report of a node replaces the gauges and the level histogram of that node only
+        fixture.ApplyPublicNode(2, TPublicReport().Table(TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 25).Bucket(3, 2)));
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 35);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.size_bytes"), 100);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(table), "0:1,3:2");
+
+        // A TABLE partial in the report of the follower role is dropped, as the legacy one
+        fixture.Processor->ApplyFromNode(3, true, TPublicReport().Table(TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 999).Rate(PUBLIC_CONSUMED_CPU_US, 999).Bucket(5, 9)).Get());
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 35);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 12);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(table), "0:1,3:2");
+    }
+
+    Y_UNIT_TEST(PublicValuesOfLeafTakeTheMaximumGaugeOverNodes) {
+        // A partition moves: both the old and the new node report its leaf for a while
+        TProcessorFixture fixture;
+        fixture.ApplyPublicNode(1, TPublicReport().Leaf(1000, 0, TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 55).Rate(PUBLIC_CONSUMED_CPU_US, 5).Bucket(1, 1)));
+        fixture.ApplyPublicNode(2, TPublicReport().Leaf(1000, 0, TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 50).Rate(PUBLIC_CONSUMED_CPU_US, 3).Bucket(2, 1)));
+        fixture.Processor->RecalculateAllCounters();
+
+        auto table = FindPublicTableGroup(fixture.PublicRoot);
+        auto leaf = FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT(leaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.row_count"), 55);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 55);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.consumed_cpu_us"), 8);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 8);
+        // The level histogram holds the observations of both nodes while they overlap
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(leaf, "table.datashard.partition.used_core_percents"), "1:1,2:1");
+
+        fixture.Processor->DropNode(1);
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0) == leaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.row_count"), 50);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 50);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.consumed_cpu_us"), 8);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 8);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(leaf, "table.datashard.partition.used_core_percents"), "2:1");
+    }
+
+    Y_UNIT_TEST(PublicRatesAccumulateOverReportsAndSurviveDropNode) {
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
+            TProcessorFixture fixture;
+            const auto report = [tableLevel](ui64 consumedCpu, ui64 readRows) {
+                TPublicValues values;
+                values.Rate(PUBLIC_CONSUMED_CPU_US, consumedCpu).Rate(PUBLIC_READ_ROWS, readRows);
+                return tableLevel ? TPublicReport().Table(values) : TPublicReport().Leaf(1000, 0, values);
+            };
+            const auto assertRates = [&](ui64 consumedCpu, ui64 readRows) {
+                fixture.Processor->RecalculateAllCounters();
+                auto table = FindPublicTableGroup(fixture.PublicRoot);
+                UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), consumedCpu);
+                UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.read.rows"), readRows);
+                if (!tableLevel) {
+                    auto leaf = FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+                    UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.consumed_cpu_us"), consumedCpu);
+                    UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.read.rows"), readRows);
+                }
+            };
+
+            fixture.ApplyPublicNode(1, report(5, 6));
+            fixture.ApplyPublicNode(2, report(7, 1));
+            assertRates(12, 7);
+
+            // Every report adds its deltas
+            fixture.ApplyPublicNode(1, report(3, 4));
+            assertRates(15, 11);
+
+            // The bucket, which another node still reports, keeps the deltas of the removed node
+            fixture.Processor->DropNode(1);
+            assertRates(15, 11);
+
+            fixture.ApplyPublicNode(2, report(4, 0));
+            assertRates(19, 11);
+        }
+    }
+
+    Y_UNIT_TEST(PublicLevelHistogramReplacesTheLevelOfTheNode) {
+        for (auto level : {TDetailedMetricsSettings::MetricsLevelTable, TDetailedMetricsSettings::MetricsLevelPartition}) {
+            const bool tableLevel = level == TDetailedMetricsSettings::MetricsLevelTable;
+            TProcessorFixture fixture;
+            const auto report = [tableLevel](const TPublicValues& values) {
+                return tableLevel ? TPublicReport().Table(values) : TPublicReport().Leaf(1000, 0, values);
+            };
+            const auto dumpHistogram = [&]() {
+                fixture.Processor->RecalculateAllCounters();
+                return tableLevel
+                    ? DumpNonEmptyBuckets(FindPublicTableGroup(fixture.PublicRoot))
+                    : DumpNonEmptyBuckets(FindPublicLeafGroup(fixture.PublicRoot, 1000, 0),
+                                          "table.datashard.partition.used_core_percents");
+            };
+
+            fixture.ApplyPublicNode(1, report(TPublicValues().Bucket(1, 2)));
+            fixture.ApplyPublicNode(2, report(TPublicValues().Bucket(0, 1)));
+            UNIT_ASSERT_VALUES_EQUAL(dumpHistogram(), "0:1,1:2");
+
+            // The next report of a node replaces the whole level of that node
+            fixture.ApplyPublicNode(1, report(TPublicValues().Bucket(3, 2)));
+            UNIT_ASSERT_VALUES_EQUAL(dumpHistogram(), "0:1,3:2");
+
+            // An unmarked level is a delta, which cannot be applied: the level of the node is cleared
+            TPublicValues unmarked;
+            unmarked.Bucket(5, 9).Mutable().MutableHistogram(PUBLIC_USED_CORE_PERCENTS)->ClearNonDerivative();
+            fixture.ApplyPublicNode(1, report(unmarked));
+            UNIT_ASSERT_VALUES_EQUAL(dumpHistogram(), "0:1");
+
+            // The next marked report of the node brings its level back
+            fixture.ApplyPublicNode(1, report(TPublicValues().Bucket(3, 2)));
+            UNIT_ASSERT_VALUES_EQUAL(dumpHistogram(), "0:1,3:2");
+
+            // A removed node takes its level away
+            fixture.Processor->DropNode(2);
+            UNIT_ASSERT_VALUES_EQUAL(dumpHistogram(), "3:2");
+
+            // A missing histogram entry is an empty level
+            TPublicValues missing;
+            missing.Mutable().ClearHistogram();
+            fixture.ApplyPublicNode(1, report(missing));
+            UNIT_ASSERT_VALUES_EQUAL(dumpHistogram(), "");
+        }
+    }
+
+    Y_UNIT_TEST(PublicValuesOfFollowerLeafHaveNoLeaderOnlySeries) {
+        TProcessorFixture fixture;
+        fixture.ApplyPublicNode(1,
+            TPublicReport().Leaf(1000, 0, TPublicValues()
+                .Gauge(PUBLIC_ROW_COUNT, 10).Rate(PUBLIC_WRITE_ROWS, 4).Rate(PUBLIC_READ_ROWS, 6).Bucket(0, 1)),
+            TPublicReport().Leaf(1000, 1, TPublicValues()
+                .Gauge(PUBLIC_ROW_COUNT, 999).Rate(PUBLIC_WRITE_ROWS, 999).Rate(PUBLIC_READ_ROWS, 11).Bucket(1, 1)));
+        fixture.Processor->RecalculateAllCounters();
+
+        auto leader = FindPublicLeafGroup(fixture.PublicRoot, 1000, 0);
+        auto follower = FindPublicLeafGroup(fixture.PublicRoot, 1000, 1);
+        UNIT_ASSERT(leader);
+        UNIT_ASSERT(follower);
+        // DataShard has 2 gauges, 13 rates and 1 histogram, 8 of them (both gauges and 6 rates) LeaderOnly
+        UNIT_ASSERT_VALUES_EQUAL(CountSeries(leader), 16);
+        UNIT_ASSERT_VALUES_EQUAL(CountSeries(follower), 8);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leader, "table.datashard.partition.row_count"), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leader, "table.datashard.partition.write.rows"), 4);
+        UNIT_ASSERT(!follower->FindNamedCounter("name", "table.datashard.partition.row_count"));
+        UNIT_ASSERT(!follower->FindNamedCounter("name", "table.datashard.partition.write.rows"));
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(follower, "table.datashard.partition.read.rows"), 11);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(follower, "table.datashard.partition.used_core_percents"), "1:1");
+
+        // The rollup takes the LeaderOnly metrics from the leaders only
+        auto table = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.write.rows"), 4);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.read.rows"), 17);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(table), "0:1,1:1");
+
+        // A follower leaf in the report of the leader role is ignored
+        fixture.Processor->ApplyFromNode(2, false, TPublicReport().Leaf(2000, 1, TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 999)).Get());
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT(!FindPublicLeafGroup(fixture.PublicRoot, 2000, 1));
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 10);
+    }
+
+    Y_UNIT_TEST(MalformedPublicValuesAreClampedWithoutAbort) {
+        TProcessorFixture fixture;
+
+        TPublicValues values;
+        auto& counters = values.Mutable();
+        // A short Simple: the missing gauges are zero
+        counters.ClearSimple();
+        counters.AddSimple(7);
+        // The pairs of an unknown rate and an odd tail are ignored, CumulativeCount sizes nothing
+        counters.SetCumulativeCount(Max<ui64>());
+        for (ui64 value : {ui64(PUBLIC_CONSUMED_CPU_US), ui64(5), ui64(1000), ui64(9), Max<ui64>(), ui64(1),
+                           ui64(PUBLIC_CONSUMED_CPU_US)}) {
+            counters.AddCumulative(value);
+        }
+        // A huge BucketsCount is clamped by the public bucket count: a bucket beyond it is ignored,
+        // and so are an odd tail and an extra histogram entry
+        auto* histogram = counters.MutableHistogram(PUBLIC_USED_CORE_PERCENTS);
+        histogram->SetBucketsCount(Max<ui64>());
+        for (ui64 value : {ui64(1000000), ui64(1), ui64(2), ui64(3), Max<ui64>()}) {
+            histogram->AddBuckets(value);
+        }
+        auto* extra = counters.AddHistogram();
+        extra->SetBucketsCount(Max<ui64>());
+        extra->SetNonDerivative(true);
+        extra->AddBuckets(0);
+        extra->AddBuckets(5);
+
+        fixture.ApplyPublicNode(1, TPublicReport()
+            .Table(values)
+            .Leaf(1000, 0, values, OTHER_TABLE_PATH));
+        fixture.Processor->RecalculateAllCounters();
+
+        auto table = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.size_bytes"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 5);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(table), "2:3");
+
+        auto leaf = FindPublicLeafGroup(fixture.PublicRoot, 1000, 0, RELATIVE_OTHER_TABLE_PATH);
+        UNIT_ASSERT(leaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.row_count"), 7);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.size_bytes"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.consumed_cpu_us"), 5);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(leaf, "table.datashard.partition.used_core_percents"), "2:3");
+
+        // A long Simple: the extra slots are ignored. A bucket beyond the BucketsCount
+        // of the payload is ignored as well
+        TPublicValues longValues;
+        longValues.Mutable().ClearSimple();
+        for (ui64 value : {1, 2, 3, 4}) {
+            longValues.Mutable().AddSimple(value);
+        }
+        auto* shortHistogram = longValues.Mutable().MutableHistogram(PUBLIC_USED_CORE_PERCENTS);
+        shortHistogram->SetBucketsCount(2);
+        for (ui64 value : {1, 4, 5, 6}) {
+            shortHistogram->AddBuckets(value);
+        }
+        fixture.ApplyPublicNode(2, TPublicReport().Table(longValues));
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 8);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.size_bytes"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(table), "1:4,2:3");
+
+        // A leaf without any values is all zero
+        TPublicValues empty;
+        empty.Mutable().Clear();
+        fixture.ApplyPublicNode(3, TPublicReport().Leaf(2000, 0, empty, OTHER_TABLE_PATH));
+        fixture.Processor->RecalculateAllCounters();
+        auto emptyLeaf = FindPublicLeafGroup(fixture.PublicRoot, 2000, 0, RELATIVE_OTHER_TABLE_PATH);
+        UNIT_ASSERT(emptyLeaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(emptyLeaf, "table.datashard.partition.row_count"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(emptyLeaf, "table.datashard.partition.consumed_cpu_us"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(emptyLeaf, "table.datashard.partition.used_core_percents"), "");
+    }
+
+    Y_UNIT_TEST(EntriesWithAndWithoutTabletTypeMixInOneReport) {
+        TSimulatedNode node;
+        TProcessorFixture fixture;
+        TFakeTablet legacyTablet(1000, 0);
+        legacyTablet.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 5)
+            .Report(node.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
+
+        // The node reports the legacy low level counters of one table (no tablet type),
+        // the same report carries the public values of another table
+        TTables tables;
+        node.Leaders->Pack(tables);
+        UNIT_ASSERT_VALUES_EQUAL(tables.size(), 1);
+        UNIT_ASSERT(!tables.Get(0).HasTabletType());
+        tables.MergeFrom(TPublicReport().Leaf(2000, 0, TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 20).Rate(PUBLIC_CONSUMED_CPU_US, 7).Bucket(2, 1), OTHER_TABLE_PATH).Get());
+
+        fixture.Processor->ApplyFromNode(1, false, tables);
+        fixture.Processor->RecalculateAllCounters();
+
+        auto table = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(table);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 5);
+        AssertCpuHistogram(table, 1);
+
+        auto other = FindPublicTableGroup(fixture.PublicRoot, RELATIVE_OTHER_TABLE_PATH);
+        auto leaf = FindPublicLeafGroup(fixture.PublicRoot, 2000, 0, RELATIVE_OTHER_TABLE_PATH);
+        UNIT_ASSERT(other);
+        UNIT_ASSERT(leaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(other, "table.datashard.row_count"), 20);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(other, "table.datashard.consumed_cpu_us"), 7);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(leaf, "table.datashard.partition.used_core_percents"), "2:1");
+
+        // An entry with the tablet type carries the public values only: its legacy counters
+        // are ignored, and without TableMetrics the TABLE partial of the node is all zero
+        tables.Mutable(0)->SetTabletType(TABLET_TYPE);
+        fixture.Processor->ApplyFromNode(1, false, tables);
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT(FindPublicTableGroup(fixture.PublicRoot) == table);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.row_count"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(table, "table.datashard.consumed_cpu_us"), 5);
+        AssertCpuHistogram(table, 0);
+        // Every report adds its deltas
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(other, "table.datashard.row_count"), 20);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(other, "table.datashard.consumed_cpu_us"), 14);
+        UNIT_ASSERT_VALUES_EQUAL(DumpNonEmptyBuckets(leaf, "table.datashard.partition.used_core_percents"), "2:1");
+    }
+
+    Y_UNIT_TEST(PublicValuesOfTabletTypeWithoutDetailedMetricsAreIgnored) {
+        constexpr auto unsupportedType = TTabletTypes::SchemeShard;
+        UNIT_ASSERT(!GetDetailedMetricsDescriptor(unsupportedType));
+
+        TProcessorFixture fixture;
+        fixture.ApplyPublicNode(1, TPublicReport()
+            .Table(TPublicValues().Gauge(PUBLIC_ROW_COUNT, 10).Rate(PUBLIC_CONSUMED_CPU_US, 5).Bucket(0, 1),
+                   TABLE_PATH, unsupportedType)
+            .Leaf(1000, 0, TPublicValues().Gauge(PUBLIC_ROW_COUNT, 20), OTHER_TABLE_PATH, unsupportedType));
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot));
+        UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot, RELATIVE_OTHER_TABLE_PATH));
+
+        // The entries of a supported tablet type in the same report are applied
+        fixture.ApplyPublicNode(1, TPublicReport()
+            .Table(TPublicValues().Gauge(PUBLIC_ROW_COUNT, 10), TABLE_PATH, unsupportedType)
+            .Leaf(1000, 0, TPublicValues().Gauge(PUBLIC_ROW_COUNT, 30), OTHER_TABLE_PATH));
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot));
+        auto leaf = FindPublicLeafGroup(fixture.PublicRoot, 1000, 0, RELATIVE_OTHER_TABLE_PATH);
+        UNIT_ASSERT(leaf);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(leaf, "table.datashard.partition.row_count"), 30);
+
+        // An entry of the unsupported tablet type for an existing table is ignored as well
+        fixture.ApplyPublicNode(2, TPublicReport()
+            .Leaf(2000, 0, TPublicValues().Gauge(PUBLIC_ROW_COUNT, 40), OTHER_TABLE_PATH, unsupportedType));
+        fixture.Processor->RecalculateAllCounters();
+        UNIT_ASSERT(!FindPublicLeafGroup(fixture.PublicRoot, 2000, 0, RELATIVE_OTHER_TABLE_PATH));
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicTableGroup(fixture.PublicRoot, RELATIVE_OTHER_TABLE_PATH),
+                                                       "table.datashard.row_count"), 30);
+    }
+
+    Y_UNIT_TEST(PublicAndLegacyPayloadsPublishTheSameSeries) {
+        // The same scenario, reported once as the legacy low level counters (packed by the node)
+        // and once as the public metric values (built by hand), publishes the same series
+        TSimulatedNode node1, node2;
+        TProcessorFixture legacy, published;
+        TFakeTablet leader(1000, 0), follower(1000, 1), first(2000, 0), second(2001, 0);
+
+        const auto assertSameSeries = [&]() {
+            legacy.Processor->RecalculateAllCounters();
+            published.Processor->RecalculateAllCounters();
+            UNIT_ASSERT_VALUES_EQUAL(published.DumpPublicSeries(), legacy.DumpPublicSeries());
+        };
+
+        // The first report of every tablet: the rate is zero, every tablet is in the bucket 0
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10)
+            .AddCumulative(CONSUMED_CPU, 50000)
+            .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 4)
+            .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 6)
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        follower.AddCumulative(CONSUMED_CPU, 20000)
+            .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW, 999)
+            .AddAppCumulative(NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW, 11)
+            .Report(node1.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        first.SetSimple(DB_UNIQUE_ROWS_TOTAL, 20).AddCumulative(CONSUMED_CPU, 70000)
+            .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW, OTHER_TABLE_PATH);
+        second.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5).AddCumulative(CONSUMED_CPU, 1000)
+            .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW, OTHER_TABLE_PATH);
+        legacy.ApplyNode(1, node1);
+        legacy.ApplyNode(2, node2);
+
+        published.ApplyPublicNode(1,
+            TPublicReport().Leaf(1000, 0, TPublicValues()
+                .Gauge(PUBLIC_ROW_COUNT, 10)
+                .Rate(PUBLIC_WRITE_ROWS, 4).Rate(PUBLIC_READ_ROWS, 6).Rate(PUBLIC_CONSUMED_CPU_US, 50000)
+                .Bucket(0, 1)),
+            TPublicReport().Leaf(1000, 1, TPublicValues()
+                .Rate(PUBLIC_WRITE_ROWS, 999).Rate(PUBLIC_READ_ROWS, 11).Rate(PUBLIC_CONSUMED_CPU_US, 20000)
+                .Bucket(0, 1)));
+        published.ApplyPublicNode(2, TPublicReport().Table(TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 25).Rate(PUBLIC_CONSUMED_CPU_US, 71000).Bucket(0, 2), OTHER_TABLE_PATH));
+        assertSameSeries();
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicTableGroup(published.PublicRoot), "table.datashard.read.rows"), 17);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(FindPublicTableGroup(published.PublicRoot, RELATIVE_OTHER_TABLE_PATH),
+                                                       "table.datashard.row_count"), 25);
+
+        // The tablets move to the buckets of their rates. The follower retires: its final report
+        // has the last deltas and an empty level
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 12).AddCumulative(CONSUMED_CPU, 50000)
+            .Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(1));
+        follower.AddCumulative(CONSUMED_CPU, 150000)
+            .Report(node1.Followers, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(1));
+        node1.Followers->ForgetTablet(follower.TabletId, follower.FollowerId);
+        first.AddCumulative(CONSUMED_CPU, 70000)
+            .Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(1), OTHER_TABLE_PATH);
+        second.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(1), OTHER_TABLE_PATH);
+        legacy.ApplyNode(1, node1);
+        legacy.ApplyNode(2, node2);
+
+        published.ApplyPublicNode(1,
+            TPublicReport().Leaf(1000, 0, TPublicValues()
+                .Gauge(PUBLIC_ROW_COUNT, 12).Rate(PUBLIC_CONSUMED_CPU_US, 50000).Bucket(1, 1)),
+            TPublicReport().Leaf(1000, 1, TPublicValues()
+                .Rate(PUBLIC_CONSUMED_CPU_US, 150000)));
+        published.ApplyPublicNode(2, TPublicReport().Table(TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 25).Rate(PUBLIC_CONSUMED_CPU_US, 70000).Bucket(0, 1).Bucket(1, 1), OTHER_TABLE_PATH));
+        assertSameSeries();
+
+        // Node 2 is gone. Node 1 repeats its leader leaf (gauges and the full level, no deltas),
+        // and no longer reports the retired follower leaf
+        legacy.Processor->DropNode(2);
+        published.Processor->DropNode(2);
+        legacy.ApplyNode(1, node1);
+        published.ApplyPublicNode(1, TPublicReport().Leaf(1000, 0, TPublicValues()
+            .Gauge(PUBLIC_ROW_COUNT, 12).Bucket(1, 1)));
+        assertSameSeries();
+        UNIT_ASSERT(FindPublicLeafGroup(published.PublicRoot, 1000, 0));
+        UNIT_ASSERT(!FindPublicLeafGroup(published.PublicRoot, 1000, 1));
+        UNIT_ASSERT(!FindPublicTableGroup(published.PublicRoot, RELATIVE_OTHER_TABLE_PATH));
     }
 } // Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest)

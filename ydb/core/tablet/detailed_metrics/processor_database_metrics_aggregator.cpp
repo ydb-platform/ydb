@@ -60,7 +60,8 @@ namespace NKikimr {
          * their slots are the slots of the reported layout, which only appends more counters
          * after them (for example, the DataShard transaction type counters).
          *
-         * @note Temporary: only until the nodes report the public metric values themselves.
+         * @note Temporary: only for the reports without the tablet type (TDetailedTableCounters.TabletType),
+         *       until every node reports the public metric values themselves.
          */
         class TLegacyConverter {
         public:
@@ -338,13 +339,25 @@ namespace NKikimr {
                 TContributions contributions;
                 for (const auto& table : tables) {
                     const TString path(MakeRelativeTablePath(DatabasePrefix, table.GetTablePath()));
+                    // An entry with the tablet type carries the public metric values of its buckets,
+                    // an entry without it carries the legacy low level counters
+                    const bool hasPublicValues = table.HasTabletType();
                     if (table.GetLevel() == TMetricsSettings::MetricsLevelTable && !isFollowerRole) {
-                        ApplyContribution(nodeId, {path, Nothing()}, table.GetTableCounters(), contributions);
+                        const TContribution contribution(path, Nothing());
+                        if (hasPublicValues) {
+                            ApplyContribution(nodeId, contribution, table.GetTabletType(), table.GetTableMetrics(), contributions);
+                        } else {
+                            ApplyLegacyContribution(nodeId, contribution, table.GetTableCounters(), contributions);
+                        }
                     } else if (table.GetLevel() == TMetricsSettings::MetricsLevelPartition) {
                         for (const auto& leaf : table.GetLeaves()) {
                             if ((leaf.GetFollowerId() != 0) == isFollowerRole) {
-                                ApplyContribution(nodeId, {path, TTabletKey(leaf.GetTabletId(), leaf.GetFollowerId())},
-                                                  leaf.GetCounters(), contributions);
+                                const TContribution contribution(path, TTabletKey(leaf.GetTabletId(), leaf.GetFollowerId()));
+                                if (hasPublicValues) {
+                                    ApplyContribution(nodeId, contribution, table.GetTabletType(), leaf.GetMetrics(), contributions);
+                                } else {
+                                    ApplyLegacyContribution(nodeId, contribution, leaf.GetCounters(), contributions);
+                                }
                             }
                         }
                     }
@@ -371,16 +384,57 @@ namespace NKikimr {
             }
 
         private:
+            /**
+             * Apply the public metric values of a bucket reported by a node.
+             */
             void ApplyContribution(
                 ui32 nodeId,
                 const TContribution& contribution,
-                const NKikimrSysView::TDbTabletCounters& diff,
+                TTabletTypes::EType type,
+                const NKikimrSysView::TDbCounters& values,
                 TContributions& contributions) {
+                TPublicBucket* bucket = GetOrCreateBucket(contribution, type);
+                if (!bucket) {
+                    return;
+                }
+                bucket->Apply(nodeId, values);
+                LogWarnings(nodeId, contribution.first, bucket->TakeWarnings());
+                contributions.insert(contribution);
+            }
+
+            /**
+             * Apply the legacy low level counters of a bucket reported by a node,
+             * converted into the public metric values of the bucket.
+             */
+            void ApplyLegacyContribution(
+                ui32 nodeId,
+                const TContribution& contribution,
+                const NKikimrSysView::TDbTabletCounters& legacy,
+                TContributions& contributions) {
+                TPublicBucket* bucket = GetOrCreateBucket(contribution, legacy.GetType());
+                if (!bucket) {
+                    return;
+                }
+                if (Converter.Convert(legacy, Converted)) {
+                    bucket->Apply(nodeId, Converted);
+                }
+                LogWarnings(nodeId, contribution.first, Converter.TakeWarnings());
+                LogWarnings(nodeId, contribution.first, bucket->TakeWarnings());
+                contributions.insert(contribution);
+            }
+
+            /**
+             * Get the bucket of the contribution, creating its table and the bucket as needed.
+             *
+             * @return The bucket, or nullptr if the contribution is ignored: no table path,
+             *         a tablet type without detailed metrics, or a tablet type other than
+             *         the one of the table
+             */
+            TPublicBucket* GetOrCreateBucket(const TContribution& contribution, TTabletTypes::EType type) {
                 const auto& [path, key] = contribution;
-                const auto type = diff.GetType();
                 const auto* descriptor = GetDetailedMetricsDescriptor(type);
                 if (path.empty() || !descriptor) {
-                    return;
+                    return nullptr;
                 }
                 auto& table = Tables[path];
                 if (table.Type == TTabletTypes::TypeInvalid) {
@@ -390,7 +444,7 @@ namespace NKikimr {
                     table.Aggregator = CreateYdbMetricsAggregatorByTabletType(
                         type, table.PublicGroup, ECumulativeHistoryPolicy::RetainOnSourceRemoval);
                 } else if (table.Type != type) {
-                    return;
+                    return nullptr;
                 }
                 auto& bucket = table.Buckets[key];
                 if (!bucket) {
@@ -407,12 +461,7 @@ namespace NKikimr {
                     bucket = MakeHolder<TPublicBucket>(*table.Desc, group, key.Defined(), isFollowerSource);
                     table.Aggregator->AddSourceCountersGroup(SourceId(key), group, isFollowerSource, nameScope);
                 }
-                if (Converter.Convert(diff, Converted)) {
-                    bucket->Apply(nodeId, Converted);
-                }
-                LogWarnings(nodeId, path, Converter.TakeWarnings());
-                LogWarnings(nodeId, path, bucket->TakeWarnings());
-                contributions.insert(contribution);
+                return bucket.Get();
             }
 
             void LogWarnings(ui32 nodeId, const TString& path, const TVector<TString>& warnings) const {

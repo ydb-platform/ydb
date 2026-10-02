@@ -300,6 +300,8 @@ message TWorkerIdentity {
 
 message TEvHandshake {
     optional TControllerIdentity Controller = 1;
+    // Older controllers compare complete serialized schema reports.
+    optional bool SupportsIndexMetadata = 2 [default = false];
 }
 
 message TEvStatus {
@@ -311,6 +313,8 @@ message TRemoteTopicReaderSettings {
     optional string TopicPath = 2;
     optional uint64 TopicPartitionId = 3;
     optional string ConsumerName = 4;
+    // Source index streams may disappear before the base-table DROP snapshot.
+    optional bool RetryOnSchemeError = 5 [default = false];
 }
 
 message TLocalTableWriterSettings {
@@ -467,12 +471,25 @@ message TSchemaChange {
         optional ECacheMode CacheMode = 4;
     }
 
+    message TIndex {
+        optional string Name = 1;
+        optional string Type = 2;
+        repeated string IndexColumns = 3;
+        repeated string DataColumns = 4;
+    }
+
+    message TIndexes {
+        repeated TIndex Items = 1;
+    }
+
     optional NKikimrProto.TRowVersion Version = 1;
     optional uint64 SourceSchemaVersion = 2;
     repeated TColumn Columns = 3;
     repeated string PrimaryKeyColumnNames = 4;
     // Empty for records written before family metadata was introduced.
     repeated TFamily Families = 5;
+    // Presence distinguishes a known empty set from legacy snapshots.
+    optional TIndexes Indexes = 6;
 }
 
 message TEvSchemaChangeReport {

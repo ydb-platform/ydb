@@ -122,9 +122,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct Name: Column<3, NScheme::NTypeIds::Utf8> {};
         struct State: Column<4, NScheme::NTypeIds::Uint8> { using Type = TReplication::EStreamState; };
         struct ConsumerName: Column<5, NScheme::NTypeIds::Utf8> {};
+        struct SchemaChanges: Column<6, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, TargetId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, Name, State, ConsumerName>;
+        using TColumns = TableColumns<ReplicationId, TargetId, Name, State, ConsumerName, SchemaChanges>;
     };
 
     struct TxIds: Table<5> {
@@ -157,9 +158,10 @@ struct TControllerSchema: NIceDb::Schema {
         struct Applied: Column<5, NScheme::NTypeIds::Bool> {};
         struct Completed: Column<6, NScheme::NTypeIds::Bool> {};
         struct Offset: Column<7, NScheme::NTypeIds::Uint64> {};
+        struct IndexMetadata: Column<8, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<ReplicationId, TargetId, WorkerId>;
-        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset>;
+        using TColumns = TableColumns<ReplicationId, TargetId, WorkerId, Reported, Applied, Completed, Offset, IndexMetadata>;
     };
 
     using TTables = SchemaTables<

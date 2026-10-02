@@ -3,6 +3,8 @@
 #include "logging.h"
 #include "private_events.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -14,6 +16,8 @@
 
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
+
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
 
@@ -67,17 +71,13 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             {"txId", ev->Get()->TxId});
 
         PipeCache = ev->Get()->Services.LeaderPipeCache;
-        if (TxId) {
-            if (Kind != TReplication::ETargetKind::Table || !DstPathId) {
-                return Error(NKikimrScheme::StatusInvalidParameter,
-                    "schema changes are supported only for existing table targets");
-            }
-            return DescribeDst();
+        if (Kind != TReplication::ETargetKind::Table || !DstPathId) {
+            return Error(NKikimrScheme::StatusInvalidParameter,
+                "schema changes are supported only for existing table targets");
         }
 
-        TxId = ev->Get()->TxId;
-        Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterTxId(ReplicationId, TargetId, TxId));
-        Become(&TThis::StatePersistTxId);
+        AllocatedTxId = ev->Get()->TxId;
+        DescribeDst();
     }
 
     STATEFN(StatePersistTxId) {
@@ -90,11 +90,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
 
     void Handle(TEvPrivate::TEvSchemaChangeDstAlterTxIdSaved::TPtr& ev) {
         TxId = ev->Get()->TxId;
-        if (Kind != TReplication::ETargetKind::Table || !DstPathId) {
-            return Error(NKikimrScheme::StatusInvalidParameter,
-                "schema changes are supported only for existing table targets");
-        }
-        DescribeDst();
+        ProposeAlter();
     }
 
     void DescribeDst() {
@@ -334,6 +330,84 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
         return true;
     }
 
+    bool CheckAndBuildDropIndex(const NKikimrSchemeOp::TTableDescription& current,
+            const TString& path, TString& error)
+    {
+        THashMap<TString, const NKikimrReplication::TSchemaChange::TIndex*> desired;
+        for (const auto& index : DesiredSchema.GetIndexes().GetItems()) {
+            if (!desired.emplace(index.GetName(), &index).second) {
+                error = "schema change contains duplicate indexes";
+                return false;
+            }
+        }
+
+        TString dropped;
+        for (const auto& index : current.GetTableIndexes()) {
+            const auto it = desired.find(index.GetName());
+            if (it == desired.end()) {
+                if (dropped) {
+                    error = "dropping multiple indexes in one schema change is not supported";
+                    return false;
+                }
+                dropped = index.GetName();
+                continue;
+            }
+
+            const auto& expected = *it->second;
+            const TString typeName = NKikimrSchemeOp::EIndexType_Name(index.GetType());
+            const TString type = index.GetType() == NKikimrSchemeOp::EIndexTypeGlobal
+                ? TString("GlobalSync") : typeName.substr(TStringBuf("EIndexType").size());
+            if (expected.GetType() != type
+                || !std::equal(expected.GetIndexColumns().begin(), expected.GetIndexColumns().end(),
+                    index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end())
+                || !std::equal(expected.GetDataColumns().begin(), expected.GetDataColumns().end(),
+                    index.GetDataColumnNames().begin(), index.GetDataColumnNames().end()))
+            {
+                error = TStringBuilder() << "destination index differs from source schema: " << index.GetName();
+                return false;
+            }
+            desired.erase(it);
+        }
+
+        for (const auto& [name, index] : desired) {
+            const auto& type = index->GetType();
+            // Keep the same filtering as initial destination creation. An
+            // index excluded there does not become an ADD on a later snapshot.
+            if (type == "GlobalSync" || type == "GlobalUnique"
+                || (type == "GlobalAsync" && AppData()->FeatureFlags.GetEnableAsyncIndexReplication()))
+            {
+                error = TStringBuilder() << "ADD INDEX replication is not supported: " << name;
+                return false;
+            }
+        }
+        if (!dropped) {
+            return true;
+        }
+        if (HasTableChanges()) {
+            error = "combined DROP INDEX and table alteration is not supported";
+            return false;
+        }
+
+        const auto parts = SplitPath(path);
+        if (parts.empty()) {
+            error = "destination table path is missing";
+            return false;
+        }
+        Alter.Clear();
+        Alter.SetOperationType(NKikimrSchemeOp::ESchemeOpDropIndex);
+        Alter.SetInternal(true);
+        Alter.SetWorkingDir(TString(ExtractParent(path)));
+        Alter.MutableDropIndex()->SetTableName(parts.back());
+        Alter.MutableDropIndex()->SetIndexName(dropped);
+        return true;
+    }
+
+    bool HasTableChanges() const {
+        const auto& alter = Alter.GetAlterTable();
+        return alter.ColumnsSize() || alter.DropColumnsSize()
+            || alter.GetPartitionConfig().ColumnFamiliesSize();
+    }
+
     void Handle(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& record = ev->Get()->GetRecord();
         switch (record.GetStatus()) {
@@ -354,15 +428,19 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             return Error(NKikimrScheme::StatusPreconditionFailed, error);
         }
 
-        const auto& alter = Alter.GetAlterTable();
-        const bool hasChanges = alter.ColumnsSize()
-            || alter.DropColumnsSize()
-            || alter.GetPartitionConfig().ColumnFamiliesSize();
+        if (DesiredSchema.HasIndexes()
+            && !CheckAndBuildDropIndex(record.GetPathDescription().GetTable(), record.GetPath(), error))
+        {
+            return Error(NKikimrScheme::StatusPreconditionFailed, error);
+        }
+
+        const bool hasChanges = HasTableChanges() || Alter.HasDropIndex();
         if (!hasChanges) {
             // SchemeShard publishes the new description at planning time,
             // before all destination shards finish ProposedWaitParts. The
             // persisted TxId may still own an in-flight DDL after recovery.
-            if (!AlterCompletionConfirmed) {
+            // A fresh TxId that was never proposed has nothing to wait for.
+            if (!AlterCompletionConfirmed && (StartedWithTxId || MayHaveProposedTxId)) {
                 return SubscribeTx(TxId);
             }
 
@@ -374,12 +452,28 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
                 TStringBuilder() << "destination schema differs after the DDL transaction completed: " << error);
         }
 
+        if (RequireTargetFlush && HasTableChanges()) {
+            auto result = MakeHolder<TEvPrivate::TEvSchemaChangeDstAlterResult>(ReplicationId, TargetId, TxId);
+            result->RequiresTargetFlush = true;
+            Send(Parent, result.Release());
+            return PassAway();
+        }
+
+        if (!TxId) {
+            // A no-op description must not leave an unproposed transaction id
+            // in durable barrier state: recovery would wait for it forever.
+            TxId = AllocatedTxId;
+            Send(Parent, new TEvPrivate::TEvSchemaChangeDstAlterTxId(ReplicationId, TargetId, TxId));
+            Become(&TThis::StatePersistTxId);
+            return;
+        }
         ProposeAlter();
     }
 
     void ProposeAlter() {
         auto ev = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
         *ev->Record.AddTransaction() = Alter;
+        MayHaveProposedTxId = true;
         Send(PipeCache, new TEvPipeCache::TEvForward(ev.Release(), SchemeShardId, true));
         Become(&TThis::StateProposeAlter);
     }
@@ -411,6 +505,7 @@ class TSchemaChangeDstAlterer: public TActorBootstrapped<TSchemaChangeDstAlterer
             // A lost proposal result can race its own completed DDL. Never
             // treat this as success blindly: re-describe and release workers
             // only if the destination exactly matches DesiredSchema.
+            MayHaveProposedTxId = true;
             return DescribeDst();
         default:
             if (record.GetReason().find("unable determine pool") != TString::npos) {
@@ -494,7 +589,7 @@ public:
 
     TSchemaChangeDstAlterer(const TActorId& parent, ui64 schemeShardId, ui64 rid, ui64 tid,
             TReplication::ETargetKind kind, const TPathId& dstPathId,
-            const NKikimrReplication::TSchemaChange& desiredSchema, ui64 txId)
+            const NKikimrReplication::TSchemaChange& desiredSchema, ui64 txId, bool requireTargetFlush)
         : Parent(parent)
         , SchemeShardId(schemeShardId)
         , ReplicationId(rid)
@@ -504,6 +599,8 @@ public:
         , DesiredSchema(desiredSchema)
         , LogPrefix(CreateActorLogPrefix("SchemaChangeDstAlterer", ReplicationId, TargetId))
         , TxId(txId)
+        , RequireTargetFlush(requireTargetFlush)
+        , StartedWithTxId(txId != 0)
     {
     }
 
@@ -533,6 +630,10 @@ private:
     NActors::NStructuredLog::TStructuredMessage LogPrefix;
 
     ui64 TxId = 0;
+    ui64 AllocatedTxId = 0;
+    const bool RequireTargetFlush;
+    const bool StartedWithTxId;
+    bool MayHaveProposedTxId = false;
     bool AlterCompletionConfirmed = false;
     TActorId PipeCache;
     NKikimrSchemeOp::TModifyScheme Alter;
@@ -541,9 +642,9 @@ private:
 
 IActor* CreateSchemaChangeDstAlterer(const TActorId& parent, ui64 schemeShardId,
     ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId,
-    const NKikimrReplication::TSchemaChange& desiredSchema, ui64 txId)
+    const NKikimrReplication::TSchemaChange& desiredSchema, ui64 txId, bool requireTargetFlush)
 {
-    return new TSchemaChangeDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredSchema, txId);
+    return new TSchemaChangeDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredSchema, txId, requireTargetFlush);
 }
 
 }

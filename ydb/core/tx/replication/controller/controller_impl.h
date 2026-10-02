@@ -67,6 +67,7 @@ private:
         NKikimrReplication::TSchemaChange Schema;
         THashSet<TWorkerId> ExpectedWorkers;
         THashSet<TWorkerId> ReportedWorkers;
+        THashSet<TWorkerId> IndexMetadataWorkers;
         THashSet<TWorkerId> AppliedWorkers;
         THashSet<TWorkerId> CompletedWorkers;
         THashMap<TWorkerId, ui64> WorkerOffsets;
@@ -179,6 +180,7 @@ private:
     void RemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     bool MaybeRemoveWorker(const TWorkerId& id, const TActorContext& ctx);
     TReplication::ITarget* FindTarget(const TWorkerId& id) const;
+    bool IsHeartbeatParticipant(const TWorkerId& id) const;
     void UpdateLag(const TWorkerId& id, TDuration lag);
     void UpdateStats(const TWorkerId& id, const NKikimrReplication::TWorkerStats& stats);
     void UpdateStats(const TWorkerId& id, NKikimrReplication::TEvWorkerStatus::EStatus status);

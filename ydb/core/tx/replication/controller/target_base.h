@@ -72,6 +72,9 @@ public:
     EStreamState GetStreamState() const override;
     void SetStreamState(EStreamState value) override;
 
+    std::optional<bool> GetStreamSchemaChanges() const override;
+    void SetStreamSchemaChanges(bool value) override;
+
     const TString& GetIssue() const override;
     void SetIssue(const TString& value) override;
 
@@ -98,6 +101,7 @@ private:
     TString StreamName;
     TString StreamConsumerName;
     EStreamState StreamState = EStreamState::Ready;
+    std::optional<bool> StreamSchemaChanges;
     TString Issue;
 
     TActorId DstCreator;

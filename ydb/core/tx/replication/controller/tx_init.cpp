@@ -178,6 +178,9 @@ class TController::TTxInit: public TTxBase {
             target->SetStreamName(name);
             target->SetStreamState(state);
             target->SetStreamConsumerName(consumerName);
+            if (rowset.HaveValue<Schema::SrcStreams::SchemaChanges>()) {
+                target->SetStreamSchemaChanges(rowset.GetValue<Schema::SrcStreams::SchemaChanges>());
+            }
 
             if (!rowset.Next()) {
                 return false;
@@ -231,7 +234,7 @@ class TController::TTxInit: public TTxBase {
             auto* worker = Self->GetOrCreateWorker(id);
             // Zero denotes a registered worker that has not reported a
             // heartbeat yet and must not join a recovered heartbeat quorum.
-            if (version != TRowVersion::Min()) {
+            if (version != TRowVersion::Min() && Self->IsHeartbeatParticipant(id)) {
                 worker->SetHeartbeat(version);
                 Self->WorkersWithHeartbeat.insert(id);
                 Self->WorkersByHeartbeat[version].insert(id);
@@ -262,6 +265,9 @@ class TController::TTxInit: public TTxBase {
             if (workers.GetValue<Schema::SchemaBarrierWorkers::Reported>()) {
                 it->second.ReportedWorkers.insert(id);
                 it->second.WorkerOffsets[id] = workers.GetValue<Schema::SchemaBarrierWorkers::Offset>();
+            }
+            if (workers.GetValueOrDefault<Schema::SchemaBarrierWorkers::IndexMetadata>(false)) {
+                it->second.IndexMetadataWorkers.insert(id);
             }
             if (workers.GetValue<Schema::SchemaBarrierWorkers::Applied>()) {
                 it->second.AppliedWorkers.insert(id);

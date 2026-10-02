@@ -47,6 +47,10 @@ public:
             return true;
         }
 
+        if (target->GetDstState() == TReplication::EDstState::Removing) {
+            return true;
+        }
+
         YDB_LOG_ERROR_CTX(ctx, "Worker error",
             {"rid", WorkerId.ReplicationId()},
             {"tid", WorkerId.TargetId()},

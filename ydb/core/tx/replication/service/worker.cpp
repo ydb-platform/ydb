@@ -5,6 +5,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/counters_replication.pb.h>
 #include <ydb/core/transfer/transfer_writer.h>
+#include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -331,7 +332,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         const auto offset = ev->Get()->Offset;
         if (PendingSchemaChange) {
             if (PendingSchemaChange->Offset != offset
-                || PendingSchemaChange->Schema.SerializeAsString() != ev->Get()->Schema.SerializeAsString())
+                || !IsSameSchemaChange(PendingSchemaChange->Schema, ev->Get()->Schema))
             {
                 YDB_LOG_WARN("Conflicting schema change from writer",
                     {"offset", offset});
@@ -433,12 +434,12 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
         const bool matchesPendingSchemaChange = PendingSchemaChange
             && PendingSchemaChange->Offset == ev->Get()->Record.GetOffset()
-            && PendingSchemaChange->Schema.SerializeAsString() == ev->Get()->Record.GetSchema().SerializeAsString();
+            && IsSameSchemaChange(PendingSchemaChange->Schema, ev->Get()->Record.GetSchema());
 
         if (ev->Get()->Record.GetCompleted()
             && RecoveredCompletionSchema
             && RecoveredCompletionOffset == ev->Get()->Record.GetOffset()
-            && RecoveredCompletionSchema->SerializeAsString() == ev->Get()->Record.GetSchema().SerializeAsString())
+            && IsSameSchemaChange(*RecoveredCompletionSchema, ev->Get()->Record.GetSchema()))
         {
             RecoveredCompletionSchema.Reset();
             RecoveredCompletionReported = false;
@@ -457,8 +458,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         {
             if (RecoveredCompletionSchema
                 && (RecoveredCompletionOffset != ev->Get()->Record.GetOffset()
-                    || RecoveredCompletionSchema->SerializeAsString()
-                        != ev->Get()->Record.GetSchema().SerializeAsString()))
+                    || !IsSameSchemaChange(*RecoveredCompletionSchema, ev->Get()->Record.GetSchema())))
             {
                 YDB_LOG_WARN("Conflicting recovered schema change result",
                     {"sender", ev->Sender});
@@ -552,7 +552,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
             {"ev", ev->Get()->ToString()});
 
         if (ev->Sender != Writer || !PendingSchemaChange
-            || ev->Get()->Schema.SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString())
+            || !IsSameSchemaChange(ev->Get()->Schema, PendingSchemaChange->Schema))
         {
             YDB_LOG_WARN("Unexpected schema change applied",
                 {"sender", ev->Sender});

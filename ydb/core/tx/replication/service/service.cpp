@@ -173,6 +173,7 @@ public:
 
         ActorId = ev->Sender;
         Generation = generation;
+        SupportsIndexMetadata = ev->Get()->Record.GetSupportsIndexMetadata();
 
         auto status = MakeHolder<TEvService::TEvStatus>();
         auto& record = status->Record;
@@ -442,6 +443,9 @@ public:
         }
 
         id.Serialize(*ev->Get()->Record.MutableWorker());
+        if (!SupportsIndexMetadata) {
+            ev->Get()->Record.MutableSchema()->ClearIndexes();
+        }
         ops->Send(ActorId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie);
     }
 
@@ -467,6 +471,7 @@ private:
 private:
     TActorId ActorId;
     ui64 Generation;
+    bool SupportsIndexMetadata = false;
     const ui64 ControllerTabletId;
     THashMap<TWorkerId, TWorkerInfo> Workers;
     THashMap<TActorId, TWorkerId> ActorIdToWorkerId;
@@ -619,6 +624,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto topicReaderSettings = TEvYdbProxy::TTopicReaderSettings()
             .MaxMemoryUsageBytes(1_MB)
             .ConsumerName(settings.GetConsumerName())
+            .RetryOnSchemeError(settings.GetRetryOnSchemeError())
             .AutoCommit(autoCommit)
             .ReportStats(reportStats)
             .AppendTopics(NYdb::NTopic::TTopicReadSettings()

@@ -437,6 +437,7 @@ void TController::CreateSession(ui32 nodeId, const TActorContext& ctx) {
     TabletCounters->Simple()[COUNTER_SESSIONS] = Sessions.size();
 
     auto ev = MakeHolder<TEvService::TEvHandshake>(TabletID(), Executor()->Generation());
+    ev->Record.SetSupportsIndexMetadata(true);
     ui32 flags = 0;
     if (SelfId().NodeId() != nodeId) {
         flags = IEventHandle::FlagSubscribeOnSession;
@@ -748,6 +749,16 @@ void TController::ProcessBootQueue(const TActorContext&) {
         auto replication = Find(id.ReplicationId());
         Y_ABORT_UNLESS(replication);
 
+        const auto* target = replication->FindTarget(id.TargetId());
+        const auto* base = FindBaseTableTarget(*replication, *target);
+        if (base && (base->GetStreamState() == TReplication::EStreamState::Creating
+            || !base->GetStreamSchemaChanges().has_value())) {
+            // Wait for the persisted base-stream capability before starting
+            // an index reader, which may encounter a concurrent source DROP.
+            ++iter;
+            continue;
+        }
+
         const auto& tenant = replication->GetDatabase();
         if (!tenant || !NodesManager.HasTenant(tenant) || !NodesManager.HasNodes(tenant)) {
             ++iter;
@@ -785,6 +796,11 @@ void TController::BootWorker(ui32 nodeId, const TWorkerId& id, const NKikimrRepl
     controller.SetGeneration(Executor()->Generation());
     id.Serialize(*record.MutableWorker());
     record.MutableCommand()->CopyFrom(cmd);
+    const auto replication = Find(id.ReplicationId());
+    const auto* target = replication->FindTarget(id.TargetId());
+    const auto* base = FindBaseTableTarget(*replication, *target);
+    record.MutableCommand()->MutableRemoteTopicReader()->SetRetryOnSchemeError(
+        base && base->GetStreamSchemaChanges().value_or(false));
 
     Send(MakeReplicationServiceId(nodeId), std::move(ev));
     session.AttachWorker(id);
@@ -810,6 +826,9 @@ void TController::ReplaySchemaChangeRecovery(ui32 nodeId, const TWorkerId& id) {
     auto result = MakeHolder<TEvService::TEvSchemaChangeResult>();
     id.Serialize(*result->Record.MutableWorker());
     result->Record.MutableSchema()->CopyFrom(barrier->second.Schema);
+    if (!barrier->second.IndexMetadataWorkers.contains(id)) {
+        result->Record.MutableSchema()->ClearIndexes();
+    }
     result->Record.SetOffset(offset->second);
 
     auto& controller = *result->Record.MutableController();

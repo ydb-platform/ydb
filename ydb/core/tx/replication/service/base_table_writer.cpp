@@ -8,6 +8,7 @@
 #include <ydb/core/change_exchange/util.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/replication/common/schema_change.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -686,13 +687,13 @@ class TLocalTableWriter
 
         const auto& schema = ev->Get()->Record.GetSchema();
         if (!PendingSchemaChange) {
-            if (LastAppliedSchema && schema.SerializeAsString() == LastAppliedSchema->SerializeAsString()) {
+            if (LastAppliedSchema && IsSameSchemaChange(schema, *LastAppliedSchema)) {
                 return;
             }
             return LogCritAndLeave("Unexpected schema change result");
         }
 
-        if (schema.SerializeAsString() != PendingSchemaChange->Schema.SerializeAsString()) {
+        if (!IsSameSchemaChange(schema, PendingSchemaChange->Schema)) {
             return LogCritAndLeave("Unexpected schema change result");
         }
 

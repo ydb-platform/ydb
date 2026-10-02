@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/testlib/tx_helpers.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/replication/service/service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -11,6 +13,7 @@
 #include <ydb/core/tx/replication/ut_helpers/test_env.h>
 #include <ydb/core/tx/replication/ut_helpers/test_table.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/join.h>
@@ -153,6 +156,54 @@ private:
     TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr PendingRequest;
 };
 
+class TSchemaDescribeGate: public TActorBootstrapped<TSchemaDescribeGate> {
+public:
+    TSchemaDescribeGate(const TActorId& pipeCache, const TActorId& notify, TPathId pathId)
+        : PipeCache(pipeCache), Notify(notify), PathId(pathId)
+    {}
+
+    void Bootstrap() { Become(&TThis::StateWork); }
+
+    static constexpr ui64 Blocked = 20;
+    static constexpr ui64 Release = 21;
+
+private:
+    void Handle(TEvPipeCache::TEvForward::TPtr& ev) {
+        if (ev->Get()->Ev->Type() == NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType) {
+            const auto& record = static_cast<NSchemeShard::TEvSchemeShard::TEvDescribeScheme*>(ev->Get()->Ev.Get())->Record;
+            if (record.GetSchemeshardId() == PathId.OwnerId && record.GetPathId() == PathId.LocalPathId) {
+                Pending.push_back(std::move(ev));
+                Send(Notify, new TEvents::TEvWakeup(Blocked));
+                return;
+            }
+        }
+        Send(ev->Forward(PipeCache));
+    }
+
+    void Handle(TEvents::TEvWakeup::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Tag, Release);
+        UNIT_ASSERT(!Pending.empty());
+        for (auto& request : Pending) {
+            Send(request->Forward(PipeCache));
+        }
+        Pending.clear();
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvPipeCache::TEvForward, Handle);
+            hFunc(TEvents::TEvWakeup, Handle);
+        default:
+            Send(ev->Forward(PipeCache));
+        }
+    }
+
+    const TActorId PipeCache;
+    const TActorId Notify;
+    const TPathId PathId;
+    TVector<TEvPipeCache::TEvForward::TPtr> Pending;
+};
+
 class TCommitWritesRequestGate: public TActorBootstrapped<TCommitWritesRequestGate> {
     static constexpr ui64 RequestBlocked = 3;
     static constexpr ui64 ReleaseRequests = 4;
@@ -220,6 +271,32 @@ private:
     const TActorId Notify;
     const TString TargetPath;
     TVector<TEvTxUserProxy::TEvProposeTransaction::TPtr> PendingRequests;
+};
+
+class TCommitWritesRecorder: public TActorBootstrapped<TCommitWritesRecorder> {
+public:
+    TCommitWritesRecorder(const TActorId& proxy, const TActorId& notify)
+        : Proxy(proxy), Notify(notify)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+        Send(Notify, new TEvents::TEvWakeup());
+    }
+
+    STFUNC(StateWork) {
+        if (ev->GetTypeRewrite() == TEvTxUserProxy::TEvProposeTransaction::EventType
+            && ev->Get<TEvTxUserProxy::TEvProposeTransaction>()->Record.GetTransaction().HasCommitWrites())
+        {
+            Send(ev->Forward(Notify));
+        } else {
+            Send(ev->Forward(Proxy));
+        }
+    }
+
+private:
+    const TActorId Proxy;
+    const TActorId Notify;
 };
 
 class TAttachAllocationGate: public TActorBootstrapped<TAttachAllocationGate> {
@@ -297,13 +374,30 @@ TReplicationTestInfo StartReplication(
         TTestEnv& env,
         int targetCount = 1,
         const TString& token = "root@builtin",
-        bool globalConsistency = false)
+        bool globalConsistency = false, bool withIndex = false,
+        NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool mockService = true)
 {
+    NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+        .DiscoveryEndpoint(env.GetEndpoint())
+        .Database(env.GetDatabase()));
+    auto session = client.CreateSession().GetValueSync().GetSession();
     for (int i = 1; i <= targetCount; ++i) {
-        CreateSourceTable(env, Sprintf("table%i", i));
+        if (withIndex) {
+            const auto status = session.ExecuteSchemeQuery(Sprintf(R"(
+                CREATE TABLE `/Root/table%i` (
+                    key Uint32, value Utf8, PRIMARY KEY (key),
+                    INDEX by_value GLOBAL %s ON (value)
+                );
+            )", i, indexType == NKikimrSchemeOp::EIndexTypeGlobalAsync ? "ASYNC" : "SYNC")).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        } else {
+            CreateSourceTable(env, Sprintf("table%i", i));
+        }
     }
 
-    const auto service = env.GetRuntime().Register(NTestHelpers::CreateReplicationMockService(env.GetSender()));
+    const auto service = env.GetRuntime().Register(mockService
+        ? NTestHelpers::CreateReplicationMockService(env.GetSender())
+        : CreateReplicationService());
     env.GetRuntime().RegisterService(MakeReplicationServiceId(env.GetRuntime().GetNodeId(0)), service);
 
     TVector<TString> targets(::Reserve(targetCount));
@@ -320,10 +414,6 @@ TReplicationTestInfo StartReplication(
         params.push_back(R"(COMMIT_INTERVAL = Interval("PT10S"))");
     }
 
-    NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
-        .DiscoveryEndpoint(env.GetEndpoint())
-        .Database(env.GetDatabase()));
-    auto session = client.CreateSession().GetValueSync().GetSession();
     const auto status = session.ExecuteSchemeQuery(Sprintf(R"(
         CREATE ASYNC REPLICATION `replication` FOR %s WITH (%s);
     )", JoinSeq(", ", targets).c_str(), JoinSeq(", ", params).c_str())).GetValueSync();
@@ -335,9 +425,11 @@ TReplicationTestInfo StartReplication(
     info.PathId = env.GetPathId("/Root/replication");
     info.Config.CopyFrom(desc.GetConfig());
 
-    const auto handshake = env.GetRuntime().GrabEdgeEvent<TEvService::TEvHandshake>(env.GetSender());
-    info.Generation = handshake->Get()->Record.GetController().GetGeneration();
-    env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
+    if (mockService) {
+        const auto handshake = env.GetRuntime().GrabEdgeEvent<TEvService::TEvHandshake>(env.GetSender());
+        info.Generation = handshake->Get()->Record.GetController().GetGeneration();
+        env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
+    }
     return info;
 }
 
@@ -421,6 +513,29 @@ void WaitForColumnCount(TTestEnv& env, const TString& path, ui32 expected) {
         env.GetDescription(path).GetPathDescription().GetTable().ColumnsSize(), expected);
 }
 
+std::optional<bool> ReadStreamSchemaChanges(TTestEnv& env, ui64 controllerId, const TWorkerId& worker) {
+    NKikimrMiniKQL::TResult result;
+    const auto status = LocalQuery(env.GetRuntime(), controllerId, Sprintf(R"((
+        (let key '('('ReplicationId (Uint64 '%lu)) '('TargetId (Uint64 '%lu))))
+        (return (AsList (SetResult 'Capability (SelectRow 'SrcStreams key '('SchemaChanges)))))
+    ))", worker.ReplicationId(), worker.TargetId()), result);
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+    const auto& row = result.GetValue().GetStruct(0).GetOptional();
+    UNIT_ASSERT_C(row.HasOptional(), result.DebugString());
+    const auto& capability = row.GetOptional().GetStruct(0);
+    return capability.HasOptional() ? std::make_optional(capability.GetOptional().GetBool()) : std::nullopt;
+}
+
+void ClearStreamSchemaChanges(TTestEnv& env, ui64 controllerId, const TWorkerId& worker) {
+    NKikimrMiniKQL::TResult result;
+    const auto status = LocalQuery(env.GetRuntime(), controllerId, Sprintf(R"((
+        (let key '('('ReplicationId (Uint64 '%lu)) '('TargetId (Uint64 '%lu))))
+        (return (AsList (UpdateRow 'SrcStreams key '('('SchemaChanges (Null))))))
+    ))", worker.ReplicationId(), worker.TargetId()), result);
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+    UNIT_ASSERT(!ReadStreamSchemaChanges(env, controllerId, worker).has_value());
+}
+
 ui32 RestartController(TTestEnv& env, ui64 controllerId) {
     env.SendAsync(controllerId, new TEvents::TEvPoisonPill());
     const auto handshake = env.GetRuntime().GrabEdgeEvent<TEvService::TEvHandshake>(env.GetSender());
@@ -436,7 +551,7 @@ struct TSchemaAltererTestEnv {
     TPathId DstPathId = TPathId(1, 1);
     NKikimrReplication::TSchemaChange Schema;
 
-    TSchemaAltererTestEnv(const NKikimrReplication::TSchemaChange& schema, ui64 dstAlterTxId)
+    TSchemaAltererTestEnv(const NKikimrReplication::TSchemaChange& schema, ui64 dstAlterTxId, bool requireTargetFlush = false)
         : Schema(schema)
     {
         Runtime.Initialize(TAppPrepare().Unwrap());
@@ -445,7 +560,7 @@ struct TSchemaAltererTestEnv {
         PipeCache = Runtime.AllocateEdgeActor();
         Runtime.RegisterService(MakeTxProxyID(), Allocator);
         Alterer = Runtime.Register(CreateSchemaChangeDstAlterer(Parent, DstPathId.OwnerId,
-            1, 1, TReplication::ETargetKind::Table, DstPathId, Schema, dstAlterTxId));
+            1, 1, TReplication::ETargetKind::Table, DstPathId, Schema, dstAlterTxId, requireTargetFlush));
 
         Runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(Allocator);
         NTxProxy::TTxProxyServices services;
@@ -454,15 +569,20 @@ struct TSchemaAltererTestEnv {
             new TEvTxUserProxy::TEvAllocateTxIdResult(dstAlterTxId + 1, services, {}));
     }
 
-    void ReplyMatchingDescription(bool withExtraFamily = false) {
+    void ReplyMatchingDescription(bool withExtraFamily = false, bool withIndex = false,
+            bool withoutExtraColumn = false) {
         const auto request = Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(PipeCache);
         UNIT_ASSERT_VALUES_EQUAL(request->Get()->Ev->Type(),
             NSchemeShard::TEvSchemeShard::TEvDescribeScheme::EventType);
 
         auto description = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResultBuilder>();
         description->Record.SetStatus(NKikimrScheme::StatusSuccess);
+        description->Record.SetPath("/Root/replica1");
         auto* table = description->Record.MutablePathDescription()->MutableTable();
         for (const auto& column : Schema.GetColumns()) {
+            if (withoutExtraColumn && column.GetName() == "extra") {
+                continue;
+            }
             auto* current = table->AddColumns();
             current->SetName(column.GetName());
             current->SetType(column.GetType());
@@ -474,6 +594,13 @@ struct TSchemaAltererTestEnv {
             auto* family = table->MutablePartitionConfig()->AddColumnFamilies();
             family->SetId(1);
             family->SetName("manual");
+        }
+        if (withIndex) {
+            auto* index = table->AddTableIndexes();
+            index->SetName("by_value");
+            index->SetType(NKikimrSchemeOp::EIndexTypeGlobal);
+            index->SetState(NKikimrSchemeOp::EIndexStateReady);
+            index->AddKeyColumnNames("value");
         }
         Runtime.Send(Alterer, PipeCache, description.Release());
     }
@@ -697,6 +824,77 @@ Y_UNIT_TEST_SUITE(AttachmentLifecycle) {
 Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
     using namespace NTestHelpers;
 
+    Y_UNIT_TEST(DropIndexUsesInternalDdlAndReconcilesAfterCompletion) {
+        auto schema = MakeSchemaChange(100, 10, 2, false);
+        schema.MutableIndexes();
+        TSchemaAltererTestEnv env(schema, 100, true);
+        env.ReplyMatchingDescription(false, true);
+        const auto proposal = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        const auto& transaction = static_cast<NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction*>(
+            proposal->Get()->Ev.Get())->Record.GetTransaction(0);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(transaction.GetOperationType()),
+            static_cast<int>(NKikimrSchemeOp::ESchemeOpDropIndex));
+        UNIT_ASSERT(transaction.GetInternal());
+        UNIT_ASSERT_VALUES_EQUAL(transaction.GetWorkingDir(), "/Root");
+        UNIT_ASSERT_VALUES_EQUAL(transaction.GetDropIndex().GetTableName(), "replica1");
+        UNIT_ASSERT_VALUES_EQUAL(transaction.GetDropIndex().GetIndexName(), "by_value");
+        env.Runtime.Send(env.Alterer, env.PipeCache,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult(100));
+        env.ReplyMatchingDescription();
+        const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterResult>(env.Parent);
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT(!result->Get()->RequiresTargetFlush);
+        env.ExpectUnlink();
+    }
+
+    Y_UNIT_TEST(LegacySchemaSnapshotPreservesIndexes) {
+        TSchemaAltererTestEnv env(MakeSchemaChange(100, 10, 2, false), 100);
+        env.ReplyMatchingDescription(false, true);
+        const auto subscription = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(subscription->Get()->Ev->Type(),
+            NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion::EventType);
+        env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvPoison());
+        env.ExpectUnlink();
+    }
+
+    Y_UNIT_TEST(IndexMetadataPreservesColumnFlushRequirement) {
+        auto schema = MakeFamilySchemaChange("ssd");
+        schema.MutableIndexes();
+        TSchemaAltererTestEnv env(schema, 100, true);
+        env.ReplyMatchingDescription();
+        const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterResult>(env.Parent);
+        UNIT_ASSERT(result->Get()->IsSuccess());
+        UNIT_ASSERT(result->Get()->RequiresTargetFlush);
+        env.ExpectUnlink();
+    }
+
+    Y_UNIT_TEST(IndexMetadataPreservesInitialIndexFiltering) {
+        for (const TString type : {"GlobalAsync", "GlobalSync"}) {
+            auto schema = MakeSchemaChange(100, 10, 2, false);
+            auto* index = schema.MutableIndexes()->AddItems();
+            index->SetName("by_value");
+            index->SetType(type);
+            index->AddIndexColumns("value");
+            TSchemaAltererTestEnv env(schema, 100);
+            env.Runtime.GetAppData().FeatureFlags.SetEnableAsyncIndexReplication(false);
+            env.ReplyMatchingDescription();
+            if (type == "GlobalSync") {
+                const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterResult>(env.Parent);
+                UNIT_ASSERT(!result->Get()->IsSuccess());
+            } else {
+                const auto subscription = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+                UNIT_ASSERT_VALUES_EQUAL(subscription->Get()->Ev->Type(),
+                    NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion::EventType);
+                env.Runtime.Send(env.Alterer, env.PipeCache,
+                    new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult(100));
+                env.ReplyMatchingDescription();
+                const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterResult>(env.Parent);
+                UNIT_ASSERT(result->Get()->IsSuccess());
+            }
+            env.ExpectUnlink();
+        }
+    }
+
     Y_UNIT_TEST(RecoveryWaitsForDestinationShardCompletion) {
         constexpr ui64 dstAlterTxId = 100;
         TSchemaAltererTestEnv env(MakeSchemaChange(), dstAlterTxId);
@@ -722,6 +920,43 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterResult>(env.Parent);
         UNIT_ASSERT(result->Get()->IsSuccess());
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->DstAlterTxId, dstAlterTxId);
+        env.ExpectUnlink();
+    }
+
+    Y_UNIT_TEST(FreshAlterWaitsForCompletionAfterPipeRetry) {
+        constexpr ui64 dstAlterTxId = 1;
+        TSchemaAltererTestEnv env(MakeSchemaChange(), 0);
+        env.ReplyMatchingDescription(false, false, true);
+        const auto save = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterTxId>(env.Parent);
+        UNIT_ASSERT_VALUES_EQUAL(save->Get()->TxId, dstAlterTxId);
+        env.Runtime.Send(env.Alterer, env.Parent,
+            new TEvPrivate::TEvSchemaChangeDstAlterTxIdSaved(dstAlterTxId));
+        const auto proposal = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(proposal->Get()->Ev->Type(),
+            NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction::EventType);
+
+        // SchemeShard can publish the desired schema before the DDL completes.
+        // Losing the proposal response must not release the worker on retry.
+        env.Runtime.Send(env.Alterer, env.PipeCache,
+            new TEvPipeCache::TEvDeliveryProblem(env.DstPathId.OwnerId, false));
+        env.Runtime.Send(env.Alterer, env.Parent, new TEvents::TEvWakeup());
+        env.Runtime.GrabEdgeEvent<TEvTxUserProxy::TEvAllocateTxId>(env.Allocator);
+        NTxProxy::TTxProxyServices services;
+        services.LeaderPipeCache = env.PipeCache;
+        env.Runtime.Send(env.Alterer, env.Allocator,
+            new TEvTxUserProxy::TEvAllocateTxIdResult(dstAlterTxId + 1, services, {}));
+        env.ReplyMatchingDescription();
+        const auto subscription = env.Runtime.GrabEdgeEvent<TEvPipeCache::TEvForward>(env.PipeCache);
+        UNIT_ASSERT_VALUES_EQUAL(subscription->Get()->Ev->Type(),
+            NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion*>(
+            subscription->Get()->Ev.Get())->Record.GetTxId(), dstAlterTxId);
+
+        env.Runtime.Send(env.Alterer, env.PipeCache,
+            new NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult(dstAlterTxId));
+        env.ReplyMatchingDescription();
+        const auto result = env.Runtime.GrabEdgeEvent<TEvPrivate::TEvSchemaChangeDstAlterResult>(env.Parent);
+        UNIT_ASSERT(result->Get()->IsSuccess());
         env.ExpectUnlink();
     }
 
@@ -1197,6 +1432,653 @@ Y_UNIT_TEST_SUITE(SchemaChangeBarrier) {
         env.SendAsync(controllerId, new TEvService::TEvWorkerStatus(worker,
             NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED));
         WaitForPaused(env, info);
+    }
+
+    void CheckSourceDropIndex(NKikimrSchemeOp::EIndexType type, bool globalConsistency,
+            bool schemaChanges = true, bool enableAfterCreation = false)
+    {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.SetEnableAsyncIndexReplication(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(schemaChanges);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", globalConsistency, true, type, false);
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto upsert = [&](ui32 key) {
+            const auto result = session.ExecuteDataQuery(Sprintf(
+                "UPSERT INTO `/Root/table1` (key, value) VALUES (%u, 'value');", key),
+                NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+        const auto waitForRow = [&](ui32 key) {
+            for (ui32 attempt = 0; attempt < 600; ++attempt) {
+                const auto result = session.ExecuteDataQuery(Sprintf(
+                    "SELECT key FROM `/Root/replica1` WHERE key = %u;", key),
+                    NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+                if (result.IsSuccess() && result.GetResultSet(0).RowsCount() == 1) {
+                    return;
+                }
+                const auto replication = DescribeReplication(env, info);
+                UNIT_ASSERT_C(!replication->Get()->Record.GetState().HasError(),
+                    replication->Get()->Record.DebugString());
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("Timed out waiting for replicated row");
+        };
+        upsert(1);
+        waitForRow(1);
+        if (enableAfterCreation) {
+            env.GetRuntime().GetAppData().FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 1);
+        const auto manualDrop = session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/replica1` DROP INDEX by_value;").GetValueSync();
+        UNIT_ASSERT(!manualDrop.IsSuccess());
+        const auto drop = session.ExecuteSchemeQuery(
+            "ALTER TABLE `/Root/table1` DROP INDEX by_value;").GetValueSync();
+        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+        if (!schemaChanges) {
+            for (ui32 attempt = 0; attempt < 600; ++attempt) {
+                if (DescribeReplication(env, info)->Get()->Record.GetState().HasError()) {
+                    return;
+                }
+                Sleep(TDuration::MilliSeconds(100));
+            }
+            UNIT_FAIL("Missing index stream did not produce a terminal error");
+        }
+        for (ui32 attempt = 0; attempt < 600; ++attempt) {
+            if (!env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize()) {
+                upsert(2);
+                waitForRow(2);
+                UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+                return;
+            }
+            const auto replication = DescribeReplication(env, info);
+            UNIT_ASSERT_C(!replication->Get()->Record.GetState().HasError(), replication->Get()->Record.DebugString());
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Timed out waiting for replicated DROP INDEX");
+    }
+
+    Y_UNIT_TEST(SourceDropSyncIndexWithGlobalConsistency) {
+        CheckSourceDropIndex(NKikimrSchemeOp::EIndexTypeGlobal, true);
+    }
+
+    Y_UNIT_TEST(SourceDropAsyncIndexWithRowConsistency) {
+        CheckSourceDropIndex(NKikimrSchemeOp::EIndexTypeGlobalAsync, false);
+    }
+
+    Y_UNIT_TEST(SourceDropIndexWithoutSchemaChangesReportsError) {
+        CheckSourceDropIndex(NKikimrSchemeOp::EIndexTypeGlobal, true, false);
+    }
+
+    Y_UNIT_TEST(SourceDropIndexWithSchemaChangesEnabledAfterCreationReportsError) {
+        CheckSourceDropIndex(NKikimrSchemeOp::EIndexTypeGlobal, true, false, true);
+    }
+
+    Y_UNIT_TEST(IndexRetryPolicySurvivesControllerRestartAndFlagChange) {
+        for (const bool schemaChanges : {false, true}) {
+            TFeatureFlags flags;
+            flags.SetEnableChangefeedsOnIndexTables(true);
+            flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(schemaChanges);
+            TEnv env(flags);
+            const auto info = StartReplication(env, 1, "root@builtin", true, true);
+            const auto checkWorkers = [&] {
+                bool foundIndex = false;
+                for (ui32 i = 0; i < 2; ++i) {
+                    const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+                    const auto& reader = run->Get()->Record.GetCommand().GetRemoteTopicReader();
+                    const bool isIndex = TString(reader.GetTopicPath()).Contains("/by_value/");
+                    foundIndex |= isIndex;
+                    UNIT_ASSERT_VALUES_EQUAL(reader.GetRetryOnSchemeError(), isIndex && schemaChanges);
+                }
+                UNIT_ASSERT(foundIndex);
+            };
+            checkWorkers();
+            env.GetRuntime().GetAppData().FeatureFlags.SetEnableAsyncReplicationSchemaChanges(!schemaChanges);
+            RestartController(env, info.ControllerId);
+            env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
+            checkWorkers();
+        }
+    }
+
+    Y_UNIT_TEST(DiscoversLegacyStreamCapabilityBeforeBootingIndexWorkers) {
+        for (const bool schemaChanges : {false, true}) {
+            TFeatureFlags flags;
+            flags.SetEnableChangefeedsOnIndexTables(true);
+            flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(schemaChanges);
+            TEnv env(flags);
+            const auto info = StartReplication(env, 1, "root@builtin", true, true);
+            const auto checkWorkers = [&] {
+                std::optional<TWorkerId> base;
+                bool foundIndex = false;
+                for (ui32 i = 0; i < 2; ++i) {
+                    const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+                    const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+                    const auto& reader = run->Get()->Record.GetCommand().GetRemoteTopicReader();
+                    const bool isIndex = TString(reader.GetTopicPath()).Contains("/by_value/");
+                    foundIndex |= isIndex;
+                    if (!isIndex) {
+                        base = worker;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(reader.GetRetryOnSchemeError(), isIndex && schemaChanges);
+                    if (isIndex && base) {
+                        // Discovery must be durable before an index starts.
+                        UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, *base) == schemaChanges);
+                    }
+                }
+                UNIT_ASSERT(base && foundIndex);
+                return *base;
+            };
+            const auto base = checkWorkers();
+            UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, base) == schemaChanges);
+            ClearStreamSchemaChanges(env, info.ControllerId, base);
+            // The current flag deliberately disagrees with the actual stream.
+            env.GetRuntime().GetAppData().FeatureFlags.SetEnableAsyncReplicationSchemaChanges(!schemaChanges);
+            RestartController(env, info.ControllerId);
+            env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
+            UNIT_ASSERT_VALUES_EQUAL(checkWorkers(), base);
+            UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, base) == schemaChanges);
+
+            // The discovered value survives another restart as a known value.
+            RestartController(env, info.ControllerId);
+            env.SendAsync(info.ControllerId, new TEvService::TEvStatus());
+            UNIT_ASSERT_VALUES_EQUAL(checkWorkers(), base);
+            UNIT_ASSERT(ReadStreamSchemaChanges(env, info.ControllerId, base) == schemaChanges);
+        }
+    }
+
+    Y_UNIT_TEST(LegacyStreamCapabilityDiscoveryFailureReportsError) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", true, true);
+        std::optional<TWorkerId> base;
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto run = env.GetRuntime().GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+            if (!TString(run->Get()->Record.GetCommand().GetRemoteTopicReader().GetTopicPath()).Contains("/by_value/")) {
+                base = TWorkerId::Parse(run->Get()->Record.GetWorker());
+            }
+        }
+        UNIT_ASSERT(base);
+        ClearStreamSchemaChanges(env, info.ControllerId, *base);
+        NYdb::NTable::TTableClient client(env.GetDriver(), NYdb::NTable::TClientSettings()
+            .DiscoveryEndpoint(env.GetEndpoint()).Database(env.GetDatabase()));
+        auto session = client.CreateSession().GetValueSync().GetSession();
+        const auto drop = session.ExecuteSchemeQuery("DROP TABLE `/Root/table1`;").GetValueSync();
+        UNIT_ASSERT_C(drop.IsSuccess(), drop.GetIssues().ToString());
+        RestartController(env, info.ControllerId);
+        for (ui32 attempt = 0; attempt < 50; ++attempt) {
+            if (DescribeReplication(env, info)->Get()->Record.GetState().HasError()) {
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+        UNIT_FAIL("Failed capability discovery did not report an error");
+    }
+
+    Y_UNIT_TEST(DropIndexDuringGlobalCommitRetriesOnlyRemainingTargets) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", true, true);
+        auto& runtime = env.GetRuntime();
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto first = TWorkerId::Parse(firstRun->Get()->Record.GetWorker());
+        const auto second = TWorkerId::Parse(secondRun->Get()->Record.GetWorker());
+        const bool firstIsIndex = firstRun->Get()->Record.GetCommand().GetRemoteTopicReader().GetRetryOnSchemeError();
+        const auto base = firstIsIndex ? second : first;
+        const auto index = firstIsIndex ? first : second;
+        AttachWorkers(env, info.ControllerId, {base, index});
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCompleteWorkerSet(base.ReplicationId(), base.TargetId()));
+        DescribeReplication(env, info);
+
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        const auto recorder = runtime.Register(new TCommitWritesRecorder(txProxy, env.GetSender()));
+        runtime.RegisterService(MakeTxProxyID(), recorder);
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        const auto assigned = env.Send<TEvService::TEvTxIdResult>(info.ControllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(5000, 0)}));
+        const auto writeTxId = assigned->Get()->Record.GetVersionTxIds(0).GetTxId();
+        SendHeartbeat(env, info.ControllerId, base, TRowVersion(10000, 0));
+        SendHeartbeat(env, info.ControllerId, index, TRowVersion(10000, 0));
+        const auto commit = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(commit->Get()->Record.GetTransaction().GetCommitWrites().TablesSize(), 2);
+
+        auto schema = MakeSchemaChange(11000, 10, 2, false);
+        schema.MutableIndexes();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, schema));
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), index);
+        // Leave the index worker registered: exclusion must not depend on its
+        // stop acknowledgement, and DDL must not wait for this active commit.
+        const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), base);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 0);
+
+        auto failure = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
+        failure->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError);
+        runtime.Send(new IEventHandle(commit->Sender, env.GetSender(), failure.Release(), 0, writeTxId));
+        const auto retry = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
+        const auto& retried = retry->Get()->Record.GetTransaction().GetCommitWrites();
+        UNIT_ASSERT_VALUES_EQUAL(retried.GetWriteTxId(), writeTxId);
+        UNIT_ASSERT_VALUES_EQUAL(retried.TablesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(retried.GetTables(0).GetTablePath(), "/Root/replica1");
+        auto success = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
+        success->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        runtime.Send(new IEventHandle(retry->Sender, env.GetSender(), success.Release(), 0, writeTxId));
+        CompleteSchemaChange(env, info.ControllerId, base, schema);
+        SendHeartbeat(env, info.ControllerId, base, TRowVersion(20000, 0));
+        // A late heartbeat from the stopped index must not rejoin the quorum.
+        SendHeartbeat(env, info.ControllerId, index, TRowVersion(1, 0));
+        DescribeReplication(env, info);
+        const auto next = env.Send<TEvService::TEvTxIdResult>(info.ControllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(15000, 0)}));
+        SendHeartbeat(env, info.ControllerId, base, TRowVersion(30000, 0));
+        const auto nextCommit = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(nextCommit->Get()->Record.GetTransaction().GetCommitWrites().GetWriteTxId(),
+            next->Get()->Record.GetVersionTxIds(0).GetTxId());
+        UNIT_ASSERT_VALUES_EQUAL(nextCommit->Get()->Record.GetTransaction().GetCommitWrites().TablesSize(), 1);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+        runtime.RegisterService(MakeTxProxyID(), txProxy);
+    }
+
+    void CheckLegacyIndexMetadataBarrier(bool emptyIndexes, bool legacyFirst) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", true, true);
+        auto& runtime = env.GetRuntime();
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const bool firstIsIndex = firstRun->Get()->Record.GetCommand().GetRemoteTopicReader().GetRetryOnSchemeError();
+        const auto base = TWorkerId::Parse((firstIsIndex ? secondRun : firstRun)->Get()->Record.GetWorker());
+        const auto index = TWorkerId::Parse((firstIsIndex ? firstRun : secondRun)->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {base, index});
+        const auto other = RegisterSecondWorkerAndCompleteSet(env, info.ControllerId, base);
+        auto schema = MakeSchemaChange(100, 10, 2, !emptyIndexes);
+        schema.MutableIndexes();
+        if (!emptyIndexes) {
+            auto* retained = schema.MutableIndexes()->AddItems();
+            retained->SetName("by_value");
+            retained->SetType("GlobalSync");
+            retained->AddIndexColumns("value");
+        }
+        auto legacy = schema;
+        legacy.ClearIndexes();
+
+        // Persist the same bytes that the previous parser produced, then
+        // recover a collecting barrier before the upgraded worker reports.
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, legacyFirst ? legacy : schema));
+        if (emptyIndexes && !legacyFirst) {
+            runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        }
+        DescribeReplication(env, info);
+        RestartController(env, info.ControllerId);
+        if (legacyFirst || !emptyIndexes) {
+            AttachWorkers(env, info.ControllerId, {base, other, index});
+        } else {
+            AttachWorkers(env, info.ControllerId, {base, other});
+        }
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(other, legacyFirst ? schema : legacy));
+        if (emptyIndexes && legacyFirst) {
+            runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        }
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+            const bool isBase = TWorkerId::Parse(release->Get()->Record.GetWorker()) == base;
+            UNIT_ASSERT_VALUES_EQUAL(release->Get()->Record.GetSchema().HasIndexes(), isBase != legacyFirst);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), !emptyIndexes);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().ColumnsSize(), emptyIndexes ? 2 : 3);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, legacyFirst ? legacy : schema, true));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        RestartController(env, info.ControllerId);
+        AttachWorkers(env, info.ControllerId, {base, other});
+        const auto recovered = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT(recovered->Get()->Record.GetApplied());
+        UNIT_ASSERT_VALUES_EQUAL(recovered->Get()->Record.GetSchema().HasIndexes(), !legacyFirst);
+        CompleteSchemaChange(env, info.ControllerId, other, legacyFirst ? schema : legacy);
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, legacyFirst ? legacy : schema, false, true));
+        const auto completed = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT(completed->Get()->Record.GetCompleted());
+    }
+
+    Y_UNIT_TEST(RecoversLegacyBarrierWithEmptyIndexMetadata) {
+        CheckLegacyIndexMetadataBarrier(true, true);
+    }
+
+    Y_UNIT_TEST(RecoversLegacyBarrierWithRetainedIndexMetadata) {
+        CheckLegacyIndexMetadataBarrier(false, true);
+    }
+
+    Y_UNIT_TEST(MixedWorkersAcceptLegacyReportAfterIndexMetadata) {
+        CheckLegacyIndexMetadataBarrier(true, false);
+    }
+
+    Y_UNIT_TEST(RecoversEstablishedLegacyDropIndexBarrier) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", true, true);
+        auto& runtime = env.GetRuntime();
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const bool firstIsIndex = firstRun->Get()->Record.GetCommand().GetRemoteTopicReader().GetRetryOnSchemeError();
+        const auto base = TWorkerId::Parse((firstIsIndex ? secondRun : firstRun)->Get()->Record.GetWorker());
+        const auto index = TWorkerId::Parse((firstIsIndex ? firstRun : secondRun)->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {base, index});
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCompleteWorkerSet(base.ReplicationId(), base.TargetId()));
+        DescribeReplication(env, info);
+
+        const auto pipeService = MakePipePerNodeCacheID(false);
+        const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+        const auto gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(), env.GetPathId("/Root/replica1")));
+        runtime.RegisterService(pipeService, gate);
+        auto schema = MakeSchemaChange(100, 10, 2, false);
+        schema.MutableIndexes();
+        auto legacy = schema;
+        legacy.ClearIndexes();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, legacy));
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 1);
+
+        // Recover after collection with a persisted legacy Altering barrier.
+        RestartController(env, info.ControllerId);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        AttachWorkers(env, info.ControllerId, {base, index});
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, schema));
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), index);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+
+        runtime.RegisterService(pipeService, pipeCache);
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), base);
+        UNIT_ASSERT(release->Get()->Record.GetSchema().HasIndexes());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 0);
+        CompleteSchemaChange(env, info.ControllerId, base, schema);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+    }
+
+    Y_UNIT_TEST(RecoversEstablishedLegacyAsyncIndexDrop) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.SetEnableAsyncIndexReplication(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", false, true,
+            NKikimrSchemeOp::EIndexTypeGlobalAsync);
+        auto& runtime = env.GetRuntime();
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        env.SendAsync(info.ControllerId, new TEvPrivate::TEvCompleteWorkerSet(worker.ReplicationId(), worker.TargetId()));
+        DescribeReplication(env, info);
+
+        const auto pipeService = MakePipePerNodeCacheID(false);
+        const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+        const auto gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(), env.GetPathId("/Root/replica1")));
+        runtime.RegisterService(pipeService, gate);
+        auto schema = MakeSchemaChange(100, 10, 2, false);
+        schema.MutableIndexes();
+        auto legacy = schema;
+        legacy.ClearIndexes();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, legacy));
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+
+        RestartController(env, info.ControllerId);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        AttachWorkers(env, info.ControllerId, {worker});
+        // There is no IndexTable target to remove for an async index.
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema));
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        runtime.RegisterService(pipeService, pipeCache);
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), worker);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 0);
+        CompleteSchemaChange(env, info.ControllerId, worker, schema);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+    }
+
+    Y_UNIT_TEST(EstablishedLegacyAsyncIndexMetadataAfterApply) {
+        for (const bool dropIndex : {false, true}) {
+            TFeatureFlags flags;
+            flags.SetEnableChangefeedsOnIndexTables(true);
+            flags.SetEnableAsyncIndexReplication(true);
+            flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+            TEnv env(flags);
+            const auto info = StartReplication(env, 1, "root@builtin", false, true,
+                NKikimrSchemeOp::EIndexTypeGlobalAsync);
+            auto& runtime = env.GetRuntime();
+            const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+            const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+            AttachWorkers(env, info.ControllerId, {worker});
+            env.SendAsync(info.ControllerId,
+                new TEvPrivate::TEvCompleteWorkerSet(worker.ReplicationId(), worker.TargetId()));
+            DescribeReplication(env, info);
+
+            auto schema = MakeSchemaChange();
+            schema.MutableIndexes();
+            if (!dropIndex) {
+                auto* retained = schema.MutableIndexes()->AddItems();
+                retained->SetName("by_value");
+                retained->SetType("GlobalAsync");
+                retained->AddIndexColumns("value");
+            }
+            auto legacy = schema;
+            legacy.ClearIndexes();
+            env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, legacy));
+            runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+            WaitForColumnCount(env, "/Root/replica1", 3);
+            UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+                .GetPathDescription().GetTable().TableIndexesSize(), 1);
+
+            const auto pipeService = MakePipePerNodeCacheID(false);
+            const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+            TActorId gate;
+            if (!dropIndex) {
+                gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(),
+                    env.GetPathId("/Root/replica1")));
+                runtime.RegisterService(pipeService, gate);
+            }
+            env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema));
+            if (!dropIndex) {
+                UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+                    TSchemaDescribeGate::Blocked);
+                NKikimrMiniKQL::TResult result;
+                UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, Sprintf(R"((
+                    (let key '('('ReplicationId (Uint64 '%lu)) '('Id (Uint64 '%lu))))
+                    (return (AsList (SetResult 'Barrier (SelectRow 'Targets key '('DstAlterTxId)))))
+                ))", worker.ReplicationId(), worker.TargetId()), result), NKikimrProto::OK);
+                UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetOptional()
+                    .GetStruct(0).GetOptional().GetUint64(), 0);
+                RestartController(env, info.ControllerId);
+                UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+                    TSchemaDescribeGate::Blocked);
+                AttachWorkers(env, info.ControllerId, {worker});
+                runtime.RegisterService(pipeService, pipeCache);
+                env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+            }
+            const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+            UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(release->Get()->Record.GetWorker()), worker);
+            UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1")
+                .GetPathDescription().GetTable().TableIndexesSize(), dropIndex ? 0 : 1);
+            CompleteSchemaChange(env, info.ControllerId, worker, schema);
+            UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
+        }
+    }
+
+    Y_UNIT_TEST(CompletedWorkersSurviveEstablishedDropReconciliation) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", false, true);
+        auto& runtime = env.GetRuntime();
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const bool firstIsIndex = firstRun->Get()->Record.GetCommand().GetRemoteTopicReader().GetRetryOnSchemeError();
+        const auto base = TWorkerId::Parse((firstIsIndex ? secondRun : firstRun)->Get()->Record.GetWorker());
+        const auto index = TWorkerId::Parse((firstIsIndex ? firstRun : secondRun)->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {base, index});
+        const auto other = RegisterSecondWorkerAndCompleteSet(env, info.ControllerId, base);
+
+        auto schema = MakeSchemaChange();
+        schema.MutableIndexes();
+        auto legacy = schema;
+        legacy.ClearIndexes();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, legacy));
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(other, legacy));
+        for (ui32 i = 0; i < 2; ++i) {
+            runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        }
+        WaitForColumnCount(env, "/Root/replica1", 3);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 1);
+
+        // One partition has discarded the barrier. The other has crossed its
+        // durable topic offset and can now replay only Completed, not Applied.
+        CompleteSchemaChange(env, info.ControllerId, base, legacy);
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(other, legacy, true));
+        const auto applied = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT(applied->Get()->Record.GetApplied());
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(other, schema, false, true));
+        const auto stop = runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(TWorkerId::Parse(stop->Get()->Record.GetWorker()), index);
+        for (ui32 i = 0; i < 2; ++i) {
+            const auto release = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+            UNIT_ASSERT(!release->Get()->Record.GetApplied());
+            UNIT_ASSERT(!release->Get()->Record.GetCompleted());
+        }
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 0);
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(other, schema, false, true));
+        const auto completed = runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT(completed->Get()->Record.GetCompleted());
+
+        auto next = MakeSchemaChange(200, 10, 3);
+        next.MutableIndexes();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, next));
+        DescribeReplication(env, info);
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '%lu)) '('Id (Uint64 '%lu))))
+            (return (AsList (SetResult 'Barrier (SelectRow 'Targets key '('SchemaBarrierPhase)))))
+        ))", base.ReplicationId(), base.TargetId()), result), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetOptional()
+            .GetStruct(0).GetOptional().GetUint32(), 1); // Collecting a newer barrier
+    }
+
+    Y_UNIT_TEST(DropIndexDecisionSurvivesRestartWhileCollectingReports) {
+        TFeatureFlags flags;
+        flags.SetEnableChangefeedsOnIndexTables(true);
+        flags.FeatureFlags.SetEnableAsyncReplicationSchemaChanges(true);
+        TEnv env(flags);
+        const auto info = StartReplication(env, 1, "root@builtin", true, true);
+        auto& runtime = env.GetRuntime();
+        const auto firstRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto secondRun = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto first = TWorkerId::Parse(firstRun->Get()->Record.GetWorker());
+        const auto second = TWorkerId::Parse(secondRun->Get()->Record.GetWorker());
+        const bool firstIsIndex = firstRun->Get()->Record.GetCommand().GetRemoteTopicReader().GetRetryOnSchemeError();
+        const auto base = firstIsIndex ? second : first;
+        const auto index = firstIsIndex ? first : second;
+        AttachWorkers(env, info.ControllerId, {base, index});
+        const auto other = RegisterSecondWorkerAndCompleteSet(env, info.ControllerId, base);
+        auto schema = MakeSchemaChange(100, 10, 2, false);
+        schema.MutableIndexes();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(base, schema));
+        runtime.GrabEdgeEvent<TEvService::TEvStopWorker>(env.GetSender());
+        DescribeReplication(env, info);
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 1);
+        RestartController(env, info.ControllerId);
+        AttachWorkers(env, info.ControllerId, {base, other});
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(other, schema));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(env.GetDescription("/Root/replica1").GetPathDescription().GetTable().TableIndexesSize(), 0);
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        runtime.RegisterService(MakeTxProxyID(), runtime.Register(new TCommitWritesRecorder(txProxy, env.GetSender())));
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        env.Send<TEvService::TEvTxIdResult>(info.ControllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(5000, 0)}));
+        SendHeartbeat(env, info.ControllerId, base, TRowVersion(10000, 0));
+        SendHeartbeat(env, info.ControllerId, other, TRowVersion(10000, 0));
+        const auto commit = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
+        UNIT_ASSERT_VALUES_EQUAL(commit->Get()->Record.GetTransaction().GetCommitWrites().TablesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(commit->Get()->Record.GetTransaction().GetCommitWrites().GetTables(0).GetTablePath(), "/Root/replica1");
+        runtime.RegisterService(MakeTxProxyID(), txProxy);
+    }
+
+    Y_UNIT_TEST(LastGlobalCommitCompletesBeforeTargetFlushAndRestart) {
+        TEnv env;
+        const auto info = StartReplication(env, 1, "root@builtin", true);
+        auto& runtime = env.GetRuntime();
+        const auto run = runtime.GrabEdgeEvent<TEvService::TEvRunWorker>(env.GetSender());
+        const auto worker = TWorkerId::Parse(run->Get()->Record.GetWorker());
+        AttachWorkers(env, info.ControllerId, {worker});
+        const auto txProxy = runtime.GetLocalServiceId(MakeTxProxyID());
+        runtime.RegisterService(MakeTxProxyID(), runtime.Register(new TCommitWritesRecorder(txProxy, env.GetSender())));
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender());
+        const auto assigned = env.Send<TEvService::TEvTxIdResult>(info.ControllerId,
+            new TEvService::TEvGetTxId(TVector<TRowVersion>{TRowVersion(5000, 0)}));
+        const auto writeTxId = assigned->Get()->Record.GetVersionTxIds(0).GetTxId();
+        SendHeartbeat(env, info.ControllerId, worker, TRowVersion(10000, 0));
+        const auto commit = runtime.GrabEdgeEvent<TEvTxUserProxy::TEvProposeTransaction>(env.GetSender());
+
+        const auto pipeService = MakePipePerNodeCacheID(false);
+        const auto pipeCache = runtime.GetLocalServiceId(pipeService);
+        const auto gate = runtime.Register(new TSchemaDescribeGate(pipeCache, env.GetSender(), env.GetPathId("/Root/replica1")));
+        runtime.RegisterService(pipeService, gate);
+        auto schema = MakeSchemaChange(11000, 10, 2);
+        schema.MutableIndexes();
+        env.SendAsync(info.ControllerId, MakeSchemaChangeReport(worker, schema));
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+
+        auto success = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>();
+        success->Record.SetStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
+        runtime.Send(new IEventHandle(commit->Sender, env.GetSender(), success.Release(), 0, writeTxId));
+        DescribeReplication(env, info);
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        // The preflight requested a flush, but the last assignment is gone.
+        // Stop its replacement before DDL to inspect and recover that state.
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        NKikimrMiniKQL::TResult result;
+        UNIT_ASSERT_VALUES_EQUAL(LocalQuery(runtime, info.ControllerId, Sprintf(R"((
+            (let key '('('ReplicationId (Uint64 '%lu)) '('Id (Uint64 '%lu))))
+            (return (AsList (SetResult 'Barrier (SelectRow 'Targets key '('SchemaBarrierPhase)))))
+        ))", worker.ReplicationId(), worker.TargetId()), result), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetValue().GetStruct(0).GetOptional().GetOptional()
+            .GetStruct(0).GetOptional().GetUint32(), 2); // Altering
+        RestartController(env, info.ControllerId);
+        UNIT_ASSERT_VALUES_EQUAL(runtime.GrabEdgeEvent<TEvents::TEvWakeup>(env.GetSender())->Get()->Tag,
+            TSchemaDescribeGate::Blocked);
+        AttachWorkers(env, info.ControllerId, {worker});
+        runtime.RegisterService(pipeService, pipeCache);
+        runtime.RegisterService(MakeTxProxyID(), txProxy);
+        env.SendAsync(gate, new TEvents::TEvWakeup(TSchemaDescribeGate::Release));
+        runtime.GrabEdgeEvent<TEvService::TEvSchemaChangeResult>(env.GetSender());
+        WaitForColumnCount(env, "/Root/replica1", 3);
+        CompleteSchemaChange(env, info.ControllerId, worker, schema);
+        UNIT_ASSERT(DescribeReplication(env, info)->Get()->Record.GetState().HasStandBy());
     }
 
     Y_UNIT_TEST(GlobalTargetFlushReplaysAfterControllerRestart) {

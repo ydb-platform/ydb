@@ -20,14 +20,19 @@ THolder<TEvTxUserProxy::TEvProposeTransaction> MakeCommitProposal(ui64 writeTxId
     return ev;
 }
 
+bool TController::IsHeartbeatParticipant(const TWorkerId& id) const {
+    const auto* target = FindTarget(id);
+    return target && target->GetDstState() != TReplication::EDstState::Removing;
+}
+
 bool TController::HasFreshHeartbeatQuorum(const TSchemaBarrier& barrier) const {
     if (Workers.empty()) {
         return false;
     }
 
     const auto barrierVersion = TRowVersion::FromProto(barrier.Schema.GetVersion());
-    return AllOf(Workers, [barrierVersion](const auto& item) {
-        return item.second.HasHeartbeat() && item.second.GetHeartbeat() > barrierVersion;
+    return AllOf(Workers, [this, barrierVersion](const auto& item) {
+        return !IsHeartbeatParticipant(item.first) || (item.second.HasHeartbeat() && item.second.GetHeartbeat() > barrierVersion);
     });
 }
 
@@ -40,8 +45,11 @@ bool TController::HasPendingTargetFlushTxId(const TSchemaBarrier& barrier) const
 bool TController::BlocksGlobalCommit(const TSchemaBarrier& barrier) const {
     switch (barrier.Phase) {
     case ESchemaBarrierPhase::FlushingTarget:
-    case ESchemaBarrierPhase::Altering:
         return true;
+    case ESchemaBarrierPhase::Altering:
+        // An index-only DROP does not need old writes flushed or an active
+        // global commit completed. Column changes still take the flush path.
+        return !barrier.Schema.HasIndexes() || !barrier.TargetFlushTxIds.empty();
     case ESchemaBarrierPhase::Verifying:
         return !HasFreshHeartbeatQuorum(barrier);
     case ESchemaBarrierPhase::Collecting:
@@ -107,7 +115,7 @@ public:
             const auto& id = it->first;
             const auto& version = it->second;
 
-            if (!Self->Workers.contains(id) || Self->RemoveQueue.contains(id)) {
+            if (!Self->Workers.contains(id) || Self->RemoveQueue.contains(id) || !Self->IsHeartbeatParticipant(id)) {
                 Self->PendingHeartbeats.erase(it);
                 continue;
             }
@@ -141,7 +149,10 @@ public:
             Self->PendingHeartbeats.erase(it);
         }
 
-        if (Self->Workers.size() != Self->WorkersWithHeartbeat.size()) {
+        const size_t participants = CountIf(Self->Workers, [this](const auto& item) {
+            return Self->IsHeartbeatParticipant(item.first);
+        });
+        if (!participants || participants != Self->WorkersWithHeartbeat.size()) {
             return true; // no quorum
         }
 

@@ -237,6 +237,14 @@ void TTargetWithStream::Progress(const TActorContext& ctx) {
         }
         return;
     case EStreamState::Ready:
+        if (GetKind() == TReplication::ETargetKind::Table && !GetStreamSchemaChanges().has_value()
+            && !StreamCreator)
+        {
+            // Streams created before capability persistence need one read-only
+            // description. Index workers wait until its result is durable.
+            StreamCreator = ctx.Register(CreateStreamCreator(replication, GetId(), ctx, true));
+        }
+        break;
     case EStreamState::Removed:
     case EStreamState::Error:
         break;

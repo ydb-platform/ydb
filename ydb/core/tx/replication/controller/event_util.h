@@ -6,6 +6,9 @@
 
 namespace NKikimr::NReplication::NController {
 
+const TReplication::ITarget* FindBaseTableTarget(
+    const TReplication& replication, const TReplication::ITarget& indexTarget);
+
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     const TReplication::TPtr replication,
     const TReplication::ITarget& target,

@@ -92,6 +92,8 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     UncommittedOnTarget.erase(portionId);
     // An aborted task returns the portion here; leaving it in flight past any check below freezes the gate.
     InFlightPortionIds.erase(portionId);
+    // An aborted move re-adds the portion, so it is live again rather than awaiting cleanup.
+    RetiredPortionIds.erase(portionId);
     if (!InitialPortionIds.contains(portionId)) {
         // Not ours: the session set is fixed at Seed and a later portion cannot hold a target blob.
         return;
@@ -108,6 +110,9 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
 void TMoveDataActualizer::DoRemovePortion(const ui64 portionId) {
     // Bookkeeping only: a seeded portion leaving the index (moved, compacted, cleaned up) leaves every queue, or the gate never drains.
     // InitialPortionIds is kept: a level move removes and re-adds the same portion, which stays ours.
+    if (InitialPortionIds.contains(portionId)) {
+        RetiredPortionIds.emplace(portionId);
+    }
     PendingPortionIds.erase(portionId);
     RequestedAt.erase(portionId);
     InFlightPortionIds.erase(portionId);
@@ -256,10 +261,15 @@ std::vector<TCSMetadataRequest> TMoveDataActualizer::BuildMoveDataMetadataReques
     return requests;
 }
 
-TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes() const {
+TMoveDataQueueSizes TMoveDataActualizer::GetMoveDataQueueSizes(
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) const {
+    const ui64 retired = CountIf(RetiredPortionIds, [&](const ui64 portionId) {
+        return portions.contains(portionId) || uncommitted.contains(portionId);
+    });
     return TMoveDataQueueSizes{ .Pending = PendingPortionIds.size(), .ConfirmedToMove = PortionAddress.size(),
         .InFlight = InFlightPortionIds.size(),
         .Uncommitted = UncommittedOnTarget.size(),
+        .Retired = retired,
         .Rejected = RejectedPortions };
 }
 
@@ -271,14 +281,24 @@ void TMoveDataActualizer::Seed(
             continue;
         }
         InitialPortionIds.emplace(portionId);
+        // Already retired: its blobs may sit in a target group until cleanup erases it, so the gate must wait for that.
+        if (portion->HasRemoveSnapshot()) {
+            RetiredPortionIds.emplace(portionId);
+            continue;
+        }
         AddPortion(portion, externalContext);
     }
     // Initial membership lets a write that commits after the session started still move.
     for (const auto& [portionId, portion] : uncommitted) {
-        if (portion->HasRemoveSnapshot() || !HasEntityInDefaultStorage(*portion, VersionedIndex)) {
+        if (!HasEntityInDefaultStorage(*portion, VersionedIndex)) {
             continue;
         }
         InitialPortionIds.emplace(portionId);
+        // Aborted before the session started: nothing to move, but its cleanup still gates the answer.
+        if (portion->HasRemoveSnapshot()) {
+            RetiredPortionIds.emplace(portionId);
+            continue;
+        }
         UncommittedPortionIds.emplace(portionId);
         PendingPortionIds.emplace(portionId);
     }

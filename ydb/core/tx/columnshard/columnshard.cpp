@@ -712,7 +712,6 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
 void TColumnShard::RestartMoveDataActualizer() {
     AFL_VERIFY(MoveDataState.Active);
     MoveDataState.TargetsChanged = false;
-    MoveDataState.CleanupWatermark.reset();
     // A fresh actualizer counts rejections from zero again.
     MoveDataState.ReportedRejections = 0;
     if (!HasIndex()) {
@@ -772,19 +771,6 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         Counters.GetCSCounters().OnMoveDataPortionsRejected(queues.Rejected - MoveDataState.ReportedRejections);
         MoveDataState.ReportedRejections = queues.Rejected;
     }
-    // Read running-cleanup state first: the boundary freeze below must include it.
-    const auto runningCleanupOldest = BackgroundController.GetActiveCleanupOldestRemove();
-    if (queues.GetTotal() != 0) {
-        MoveDataState.CleanupWatermark.reset();
-    } else if (!MoveDataState.CleanupWatermark) {
-        // Whoever retired a target portion sits in CleanupPortions, in the running cleanup, or is gone; include runningOldest so in-flight cleanup does not slip past.
-        const TInstant maxPending = HasIndex() ? GetIndexAs<NOlap::TColumnEngineForLogs>().GetMaxCleanupPortionInstant() : TInstant::Zero();
-        MoveDataState.CleanupWatermark = Max(maxPending, runningCleanupOldest.value_or(TInstant::Zero()));
-    }
-    // A running cleanup holds its portions outside CleanupPortions, but only one reaching back to the watermark can hold target data.
-    const bool hasCleanupPortions =
-        !MoveDataState.CleanupWatermark || (runningCleanupOldest && *runningCleanupOldest <= *MoveDataState.CleanupWatermark) ||
-        (HasIndex() && GetIndexAs<NOlap::TColumnEngineForLogs>().HasCleanupPortionsAtOrBefore(*MoveDataState.CleanupWatermark));
     if (!MoveDataState.VacuumCompleted) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByVacuum();
         return;
@@ -798,9 +784,11 @@ void TColumnShard::CheckMoveDataGate(const TActorContext& ctx) {
         }
         return;
     }
-    if (hasCleanupPortions) {
+    // A retired seeded portion still in the granule has not reached the GC queues, so its blobs can still sit in a target group.
+    if (queues.Retired != 0) {
         Counters.GetCSCounters().OnMoveDataGateBlockedByCleanup();
-        LOG_S_INFO("TColumnShard::CheckMoveDataGate: portions still awaiting cleanup, will re-check on next wakeup at tablet " << TabletID());
+        LOG_S_INFO("TColumnShard::CheckMoveDataGate: "
+                   << queues.Retired << " retired portions still awaiting cleanup, will re-check on next wakeup at tablet " << TabletID());
         return;
     }
     if (!GetStoragesManager()->GetDefaultOperator()->HasCollectedBeforeCurrentGeneration()) {

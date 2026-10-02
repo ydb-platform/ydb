@@ -268,15 +268,6 @@ public:
         CleanupPortions[info->GetRemoveSnapshotVerified().GetPlanInstant()].emplace_back(info);
     }
 
-    bool HasCleanupPortionsAtOrBefore(TInstant instant) const {
-        return !CleanupPortions.empty() && CleanupPortions.begin()->first <= instant;
-    }
-
-    // O(1): newest pending cleanup, used to seed the MoveData gate watermark.
-    TInstant GetMaxCleanupPortionInstant() const {
-        return CleanupPortions.empty() ? TInstant::Zero() : CleanupPortions.rbegin()->first;
-    }
-
     void AddShardingInfo(const TGranuleShardingInfo& shardingInfo) {
         VersionedSchemas.MutableDefaultVersionedIndex().AddShardingInfo(shardingInfo);
     }

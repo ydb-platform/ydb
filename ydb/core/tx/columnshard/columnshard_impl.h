@@ -558,8 +558,6 @@ private:
         bool VacuumCompleted = false;
         // The actualizer count is cumulative; track what was reported to keep the sensor a rate.
         ui64 ReportedRejections = 0;
-        // Newest pending cleanup when the queues last drained; the gate waits for cleanup to pass it.
-        std::optional<TInstant> CleanupWatermark;
         // The driver restarts the actualizer for the new set before any gate check may pass.
         bool TargetsChanged = false;
     };

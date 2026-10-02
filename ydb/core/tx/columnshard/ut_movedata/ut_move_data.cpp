@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
@@ -202,7 +203,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         actualizer.AddToInitialAndPendingForTest(PortionId);
         actualizer.ConfirmPortionForTest(PortionId);
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().ConfirmedToMove, 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes({}, {}).ConfirmedToMove, 1);
 
         actualizer.SimulateTaskSubmissionForTest(PortionId);
 
@@ -212,7 +213,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
             MakeDefaultTierPortion(PortionId), NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
         UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(PortionId), "a portion whose rewrite failed must re-enter PendingPortionIds");
         // Moved from in-flight back to pending: counted once, not twice.
-        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes().GetTotal(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes({}, {}).GetTotal(), 1);
     }
 
     // Keep leg: the group is resolved through TabletInfo->GroupFor(channel, generation).
@@ -287,7 +288,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
         actualizer.AddPortion(MakeDefaultTierPortion(1), NOlap::NActualizer::TAddExternalContext(start + TDuration::Minutes(1), noPortions));
         UNIT_ASSERT_C(!actualizer.IsInPendingPortionIds(1), "a portion the session did not start with must not be adopted");
-        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0, "adopting it would hold the response back");
+        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes({}, {}).GetTotal(), 0, "adopting it would hold the response back");
     }
 
     // A compaction-level move removes and re-adds the same portion; it stays ours however late it returns.
@@ -304,6 +305,51 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         actualizer.RemovePortion(1);
         actualizer.AddPortion(portion, NOlap::NActualizer::TAddExternalContext(start + TDuration::Hours(1), noPortions));
         UNIT_ASSERT_C(actualizer.IsInPendingPortionIds(1), "a portion the session started with must stay tracked across a level move");
+    }
+
+    // A seeded portion that compaction or the move retired keeps the gate closed until cleanup erases it from the granule.
+    Y_UNIT_TEST(RetiredSeededPortionHoldsTheGateUntilCleanupErasesIt) {
+        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
+        NOlap::NActualizer::TMoveDataActualizer actualizer(THashSet<ui32>{ 100 }, schema.Index);
+        const TInstant start = TInstant::Seconds(1000);
+        const THashMap<ui64, std::shared_ptr<NOlap::TWrittenPortionInfo>> noUncommitted;
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, MakeDefaultTierPortion(1) } };
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), noUncommitted);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes(portions, noUncommitted).Pending, 1);
+
+        // Retired but still in the granule: its blobs have not reached the GC queues.
+        actualizer.RemovePortion(1);
+        const auto retired = actualizer.GetMoveDataQueueSizes(portions, noUncommitted);
+        UNIT_ASSERT_VALUES_EQUAL_C(retired.GetTotal(), 0, "a retired portion is no longer waiting for a rewrite");
+        UNIT_ASSERT_VALUES_EQUAL_C(retired.Retired, 1, "a retired portion that cleanup has not erased must hold the gate");
+
+        // A portion the session did not seed is not ours, so its retirement holds nothing.
+        portions.emplace(2, MakeDefaultTierPortion(2));
+        actualizer.RemovePortion(2);
+        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes(portions, noUncommitted).Retired, 1, "an unseeded portion must not count");
+
+        portions.erase(1);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            actualizer.GetMoveDataQueueSizes(portions, noUncommitted).Retired, 0, "the gate must open once cleanup erased the portion");
+    }
+
+    // A portion seeded with a remove snapshot, as after an aborted write, waits for cleanup instead of a rewrite.
+    Y_UNIT_TEST(PortionSeededAlreadyRetiredHoldsTheGateUntilCleanupErasesIt) {
+        TActualizerSchema schema(NOlap::NTest::MakePortionTestIndexInfo());
+        NOlap::NActualizer::TMoveDataActualizer actualizer(THashSet<ui32>{ 100 }, schema.Index);
+        const TInstant start = TInstant::Seconds(1000);
+        const THashMap<ui64, std::shared_ptr<NOlap::TWrittenPortionInfo>> noUncommitted;
+        auto portion = MakeDefaultTierPortion(1);
+        portion->SetRemoveSnapshot(NOlap::TSnapshot(2, 1));
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions{ { 1, portion } };
+        actualizer.Seed(NOlap::NActualizer::TAddExternalContext(start, portions), noUncommitted);
+
+        const auto seeded = actualizer.GetMoveDataQueueSizes(portions, noUncommitted);
+        UNIT_ASSERT_VALUES_EQUAL_C(seeded.GetTotal(), 0, "a portion already retired has nothing to rewrite");
+        UNIT_ASSERT_VALUES_EQUAL_C(seeded.Retired, 1, "its cleanup must still hold the gate");
+
+        portions.erase(1);
+        UNIT_ASSERT_VALUES_EQUAL(actualizer.GetMoveDataQueueSizes(portions, noUncommitted).Retired, 0);
     }
 
     Y_UNIT_TEST(MoveDataMetadataRequestsBatching) {
@@ -503,7 +549,7 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         const THashMap<ui64, NOlap::TPortionInfo::TPtr> noPortions;
         actualizer.AddPortion(
             MakeTieredPortion(PortionId, "tier1", schema.GetIndexInfo()), NOlap::NActualizer::TAddExternalContext(start, noPortions));
-        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes().GetTotal(), 0,
+        UNIT_ASSERT_VALUES_EQUAL_C(actualizer.GetMoveDataQueueSizes({}, {}).GetTotal(), 0,
             "a returned portion that stopped qualifying must leave the queues, otherwise MoveDataResponse is never sent");
     }
 

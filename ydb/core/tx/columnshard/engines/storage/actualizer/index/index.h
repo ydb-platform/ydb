@@ -54,7 +54,8 @@ public:
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted);
     void StopMoveData();
     void OnUncommittedPortionAborted(const ui64 portionId);
-    TMoveDataQueueSizes GetMoveDataQueueSizes() const;
+    TMoveDataQueueSizes GetMoveDataQueueSizes(
+        const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);

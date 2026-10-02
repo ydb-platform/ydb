@@ -522,7 +522,7 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     SetupCleanupTables(*snapshotHolders);
     SetupMetadata();
     SetupTtl();
-    // The move is the driver's: a tablet wakeup only nudges it.
+    // The move is the driver's: a tablet wakeup only nudges it, and the gate must stay asynchronous since a removal is visible only after Complete publishes it.
     if (!!MoveDataDriverId) {
         Send(MoveDataDriverId, new TEvPrivate::TEvMoveDataPoke());
     }

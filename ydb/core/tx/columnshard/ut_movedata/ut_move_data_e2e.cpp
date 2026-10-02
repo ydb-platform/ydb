@@ -502,14 +502,14 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
     Y_UNIT_TEST(SuccessIgnoresCleanupOfLaterRetiredPortions) {
         TMoveDataFixture f;
         f.Controller->DisableBackground(EBackground::TTL);
-        // No portion written after the move starts is adopted, so the watermark stays frozen once the queues drain.
+        // No portion written after the move starts is seeded, so its retirement is not the move's to wait for.
         f.Write(1, 0, 1000);
         f.Controller->WaitCompactions(TDuration::Seconds(10));
         f.ReassignPastWrittenData();
 
         THashSet<ui64> rewritten;
         THashSet<ui64> laterRetired;
-        bool watermarkFrozen = false;
+        bool drained = false;
         bool targetCleanupSeen = false;
         std::vector<TAutoPtr<IEventHandle>> heldCleanups;
         auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
@@ -533,7 +533,7 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
                 if (targetCleanupSeen && onlyLater) {
                     heldCleanups.emplace_back(ev.Release());
                 }
-            } else if (const auto merge = std::dynamic_pointer_cast<NOlap::TChangesWithAppend>(changes); merge && watermarkFrozen) {
+            } else if (const auto merge = std::dynamic_pointer_cast<NOlap::TChangesWithAppend>(changes); merge && drained) {
                 const THashSet<ui64> ids = merge->GetPortionsToRemove().GetPortionIds();
                 laterRetired.insert(ids.begin(), ids.end());
             }
@@ -548,12 +548,12 @@ Y_UNIT_TEST_SUITE(TColumnShardMoveDataE2E) {
             return !rewritten.empty();
         }), "answered before MoveData rewrote the target portions");
         UNIT_ASSERT_C(!rewritten.empty(), "MoveData never rewrote the target portions");
-        // A gate check after the drain freezes the watermark; the write makes the target retirements cleanable.
+        // The write makes the target retirements cleanable.
         f.Write(2, 1000, 1001);
         f.DriveGate(60);
 
-        // Two overlapping writes give compaction portions to retire after the watermark froze.
-        watermarkFrozen = true;
+        // Two overlapping writes give compaction unseeded portions to retire after the drain.
+        drained = true;
         f.Write(3, 5000, 5100);
         f.Write(4, 5000, 5100);
         f.Controller->EnableBackground(EBackground::Compaction);

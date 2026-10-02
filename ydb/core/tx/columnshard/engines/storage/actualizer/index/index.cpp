@@ -83,11 +83,12 @@ void TGranuleActualizationIndex::StopMoveData() {
     MoveDataActualizer.reset();
 }
 
-TMoveDataQueueSizes TGranuleActualizationIndex::GetMoveDataQueueSizes() const {
+TMoveDataQueueSizes TGranuleActualizationIndex::GetMoveDataQueueSizes(
+    const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) const {
     if (!MoveDataActualizer) {
         return TMoveDataQueueSizes();
     }
-    return MoveDataActualizer->GetMoveDataQueueSizes();
+    return MoveDataActualizer->GetMoveDataQueueSizes(portions, uncommitted);
 }
 
 std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {

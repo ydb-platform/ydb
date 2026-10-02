@@ -30,6 +30,8 @@ private:
     THashMap<ui64, TRWAddress> PortionAddress;
     // Still counted: old blobs reach the delete queues only on commit, so the gate must wait.
     THashSet<ui64> InFlightPortionIds;
+    // Seeded portions that left the index; the gate waits until cleanup erases them from the granule.
+    THashSet<ui64> RetiredPortionIds;
     // Pending portions with an unanswered accessor request; the expiry re-asks for a request that got lost.
     THashMap<ui64, TInstant> RequestedAt;
     // Uncommitted at the session start: a commit hands them to the normal path, an abort drops them.
@@ -86,7 +88,9 @@ public:
         const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted, const std::shared_ptr<TMoveDataActualizer>& self,
         const TInstant now);
 
-    TMoveDataQueueSizes GetMoveDataQueueSizes() const;
+    // Retired is counted against the granule's maps: a retired id still present there awaits cleanup.
+    TMoveDataQueueSizes GetMoveDataQueueSizes(
+        const THashMap<ui64, TPortionInfo::TPtr>& portions, const THashMap<ui64, std::shared_ptr<TWrittenPortionInfo>>& uncommitted) const;
 
     static constexpr TDuration MetadataRequestExpiry = TDuration::Minutes(5);
 

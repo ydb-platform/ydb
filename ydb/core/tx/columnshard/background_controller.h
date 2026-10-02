@@ -21,8 +21,7 @@ private:
     std::shared_ptr<NPrioritiesQueue::TAllocationGuard> CompactionSessionGuard;
 
     std::shared_ptr<TBackgroundControllerCounters> Counters;
-    // Engaged while a cleanup runs; Zero when it also drops tables.
-    std::optional<TInstant> ActiveCleanupOldestRemove;
+    bool ActiveCleanupPortions = false;
     bool ActiveCleanupTables = false;
     bool ActiveCleanupInsertTable = false;
     bool ActiveCleanupSchemas = false;
@@ -103,22 +102,18 @@ public:
         MaxInflightCompactions = 1;
     }
 
-    void StartCleanupPortions(const TInstant oldestRemove) {
-        Y_ABORT_UNLESS(!ActiveCleanupOldestRemove);
-        ActiveCleanupOldestRemove = oldestRemove;
+    void StartCleanupPortions() {
+        Y_ABORT_UNLESS(!ActiveCleanupPortions);
+        ActiveCleanupPortions = true;
     }
 
     void FinishCleanupPortions() {
-        Y_ABORT_UNLESS(ActiveCleanupOldestRemove);
-        ActiveCleanupOldestRemove.reset();
+        Y_ABORT_UNLESS(ActiveCleanupPortions);
+        ActiveCleanupPortions = false;
     }
 
     bool IsCleanupPortionsActive() const {
-        return ActiveCleanupOldestRemove.has_value();
-    }
-
-    std::optional<TInstant> GetActiveCleanupOldestRemove() const {
-        return ActiveCleanupOldestRemove;
+        return ActiveCleanupPortions;
     }
 
     void StartCleanupTables() {

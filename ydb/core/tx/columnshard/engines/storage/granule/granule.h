@@ -284,7 +284,7 @@ public:
     }
 
     NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
-        return ActualizationIndex->GetMoveDataQueueSizes();
+        return ActualizationIndex->GetMoveDataQueueSizes(Portions, InsertedPortionsById);
     }
 
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {

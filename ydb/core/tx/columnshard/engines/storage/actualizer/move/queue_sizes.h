@@ -11,6 +11,8 @@ struct TMoveDataQueueSizes {
     ui64 InFlight = 0;
     // Uncommitted writes with blobs in the target groups: they cannot be rewritten, so the move waits for commit or abort.
     ui64 Uncommitted = 0;
+    // Not a queue: seeded portions removed from the index but not yet erased by cleanup, so their blobs are not queued for GC.
+    ui64 Retired = 0;
     // Not a queue: deliberately outside GetTotal(), it explains where a drained queue went.
     ui64 Rejected = 0;
 
@@ -23,6 +25,7 @@ struct TMoveDataQueueSizes {
         ConfirmedToMove += item.ConfirmedToMove;
         InFlight += item.InFlight;
         Uncommitted += item.Uncommitted;
+        Retired += item.Retired;
         Rejected += item.Rejected;
         return *this;
     }

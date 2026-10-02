@@ -271,7 +271,7 @@ public:
         bool IsShardEmpty = 0;
     };
 
-    virtual std::optional<TMessageAcknowledgedResult> OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
+    virtual TMessageAcknowledgedResult OnMessageAcknowledged(ui64 shardId, ui64 cookie) = 0;
     virtual void OnMessageSent(ui64 shardId, ui64 cookie) = 0;
 
     virtual void ResetRetries(ui64 shardId, ui64 cookie) = 0;

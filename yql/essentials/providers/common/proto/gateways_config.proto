@@ -857,6 +857,10 @@ message TGenericConnectorConfig {
     // Default = empty
     repeated EGenericDataSourceKind ForKinds = 8;
 
+    // YDB databases explicitly routed to this connector.
+    // Empty value in all configured connectors preserves routing by source type.
+    repeated string DatabaseNames = 9;
+
     reserved 1, 2;
 }
 

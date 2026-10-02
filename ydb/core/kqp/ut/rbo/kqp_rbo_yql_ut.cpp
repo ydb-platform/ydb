@@ -3481,6 +3481,20 @@ FROM (
                 PRAGMA YqlSelect = 'force';
                 select count(distinct t1.a) as r0, count(distinct t1.c) as r1, count(t1.d) as r2 from `/Root/t1` as t1 group by t1.b order by r0, r1, r2;
             )",
+            // GROUP BY without aggregation functions must still emit one row per distinct key.
+            R"(
+                PRAGMA YqlSelect = 'force';
+                select t1.b from `/Root/t1` as t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                PRAGMA AnsiImplicitCrossJoin;
+                select t1.b, t2.c from `/Root/t1` as t1, `/Root/t2` as t2 where t1.b = t2.b group by t1.b, t2.c order by t1.b limit 100;
+            )",
+            R"(
+                PRAGMA YqlSelectAllowUnnamedGroupByExpr;
+                select t1.d + 1 as k from `/Root/t1` as t1 group by t1.d + 1 order by k;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3538,7 +3552,10 @@ FROM (
                                             R"([[2.;[2.]];[2.;[2.]]])",
                                             R"([[0;2;2];[1;1;2];[2;2;2];[3;1;2];[4;2;2]])",
                                             R"([[5u;5u;5u]])",
-                                            R"([[2u;1u;2u];[3u;1u;3u]])"
+                                            R"([[2u;1u;2u];[3u;1u;3u]])",
+                                            R"([[[1]];[[2]]])",
+                                            R"([[[1];[2]];[[2];[2]]])",
+                                            R"([[[1]];[[2]];[[3]]])"
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -5858,6 +5875,7 @@ FROM (
                 e Int64,
                 f Decimal(22,9),
                 g Utf8,
+                h Double,
                 PRIMARY KEY (a)
             )
         )" << (columnStore ? " WITH (Store = Column);" : ";");
@@ -5919,6 +5937,12 @@ FROM (
                     rows.BeginOptional().Utf8(names.at(*c)).EndOptional();
                 } else {
                     rows.EmptyOptional(NYdb::EPrimitiveType::Utf8);
+                }
+                rows.AddMember("h");
+                if (c) {
+                    rows.BeginOptional().Double(*c / 8.0).EndOptional();
+                } else {
+                    rows.EmptyOptional(NYdb::EPrimitiveType::Double);
                 }
                 rows.EndStruct();
             }
@@ -6312,6 +6336,200 @@ FROM (
                 FROM `/Root/t1`
                 ORDER BY a;
             )"},
+            {"range frame around the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS around_sum,
+                    Count(e) OVER w AS around_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN 10 PRECEDING AND 10 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range frame ending at the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS recent_sum,
+                    Max(e) OVER w AS recent_max
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN 10 PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range frame ending before the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Count(e) OVER w AS earlier_count,
+                    Avg(e) OVER w AS earlier_avg
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND 10 PRECEDING
+                )
+                ORDER BY a;
+            )"},
+            {"range frame reaching ahead", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS ahead_sum,
+                    Rank() OVER w AS rank_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND 10 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range frame after the current value", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Count(e) OVER w AS later_count,
+                    Min(e) OVER w AS later_min
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN 5 FOLLOWING AND 15 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range suffix frame", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS suffix_sum,
+                    DenseRank() OVER w AS dense_rank_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c
+                    RANGE BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"descending range frame with offsets", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, e,
+                    Sum(e) OVER w AS recent_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY c DESC
+                    RANGE BETWEEN 10 PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"global range frame with offsets", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, e,
+                    Sum(e) OVER (ORDER BY a RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS nearby_sum
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"ranking over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d,
+                    Rank() OVER w AS rank_in_group,
+                    RowNumber() OVER w AS row_number_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d), a
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d, e,
+                    Sum(e) OVER w AS range_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d)
+                )
+                ORDER BY a;
+            )"},
+            {"rows frame over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d, e,
+                    Sum(e) OVER w AS centred_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d), a
+                    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range offsets over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d, e,
+                    Sum(e) OVER w AS nearby_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d)
+                    RANGE BETWEEN 50 PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range offsets over a double order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, h, e,
+                    Sum(e) OVER w AS nearby_sum,
+                    Count(e) OVER w AS nearby_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY h
+                    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range offsets ending before a double order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, h, e,
+                    Sum(e) OVER w AS earlier_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY h
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                )
+                ORDER BY a;
+            )"},
+            {"count star over different frames", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c,
+                    Count(*) OVER (PARTITION BY b) AS partition_rows,
+                    Count(*) OVER (PARTITION BY b ORDER BY c) AS rows_so_far,
+                    Count(*) OVER (PARTITION BY b ORDER BY c, a ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS nearby_rows,
+                    Count(*) OVER (PARTITION BY b ORDER BY c RANGE BETWEEN 10 PRECEDING AND CURRENT ROW) AS recent_rows
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
             {"range frame over a string order key", R"(
                 PRAGMA YqlSelect = "force";
 
@@ -6577,6 +6795,14 @@ FROM (
                     Rank() OVER (ORDER BY c DESC) AS desc_rank
                 FROM `/Root/t1`
                 ORDER BY a;
+            )"},
+            {"rank over group by without aggregates", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT b, c, Rank() OVER (PARTITION BY b ORDER BY c) AS rnk
+                FROM `/Root/t1`
+                GROUP BY b, c
+                ORDER BY b, c;
             )"},
         };
 
@@ -12081,6 +12307,11 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
                 group by rollup(t1.b)
                 order by b;
             )",
+            R"(
+                SELECT t1.b as b, t1.c as c FROM `/Root/t1` as t1
+                group by rollup(t1.b, t1.c)
+                order by b, c;
+            )",
         };
 
         const std::vector<std::string> results = {
@@ -12092,6 +12323,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             R"([[[10];[1];[4];[2.5];#;#];[[1];[1];[1];[1.];[0];#];[[1];[1];[1];[1.];[0];[2]];[[2];[2];[2];[2.];[1];#];[[2];[2];[2];[2.];[1];[3]];[[3];[3];[3];[3.];[2];#];[[3];[3];[3];[3.];[2];[4]];[[4];[4];[4];[4.];[3];#];[[4];[4];[4];[4.];[3];[5]]])",
             R"([[6u;#];[3u;[1]];[3u;[2]];[3u;[3]];[3u;[4]]])",
             R"([[4u;#];[1u;[1]];[1u;[2]];[1u;[3]];[1u;[4]]])",
+            R"([[#;#];[[1];#];[[1];[2]];[[2];#];[[2];[3]];[[3];#];[[3];[4]];[[4];#];[[4];[5]]])",
         };
 
         auto queryClient = kikimr.GetQueryClient();
@@ -12169,6 +12401,11 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
                 group by rollup(t1.b, t1.c)
                 order by gc, rnk;
             )",
+            R"(
+                SELECT t1.b as b, grouping(t1.b) as g FROM `/Root/t1` as t1
+                group by rollup(t1.b)
+                order by b;
+            )",
         };
 
         const std::vector<std::string> results = {
@@ -12180,6 +12417,7 @@ foo_0.join_id = foo_6.id AND foo_0.join_id = foo_7.id AND foo_0.join_id = foo_8.
             R"([[0];[1];[2];0u];[[1];[2];[3];0u];[[2];[3];[4];0u];[[3];[4];[5];0u]])",
             R"([[[4];[5];0u;1u];[[3];[4];0u;2u];[[2];[3];0u;3u];[[1];[2];0u;4u];)"
             R"([#;#;1u;1u];[[4];#;1u;2u];[[3];#;1u;3u];[[2];#;1u;4u];[[1];#;1u;5u]])",
+            R"([[#;1u];[[1];0u];[[2];0u];[[3];0u];[[4];0u]])",
         };
 
         auto queryClient = kikimr.GetQueryClient();

@@ -21,6 +21,7 @@ public:
     static bool UsesRangeCarry(const TOpWindow& window);
     static bool UsesRangePeerGroups(const TOpWindow& window);
     static bool UsesRowFrames(const TOpWindow& window);
+    static bool UsesRangeFrames(const TOpWindow& window);
 
 private:
     void Prepare(const TVector<TInfoUnitId>& inputs);
@@ -42,16 +43,20 @@ private:
     TExprNode::TPtr BuildPartitionList(TExprNode::TPtr flow) const;
     TExprNode::TPtr BuildQueue(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildFrameBounds(TExprNode::TListType rangeIncrementals, TExprNode::TListType rowIntervals,
-                                     TExprNode::TListType rowIncrementals) const;
+                                     TExprNode::TListType rowIncrementals, TExprNode::TListType rangeIntervals = {}) const;
     TExprNode::TPtr BuildCollector(TExprNode::TPtr outputs, TExprNode::TPtr queue, TExprNode::TPtr bounds, bool ascending) const;
     TExprNode::TPtr BuildIncrementalCarry(TExprNode::TPtr wideFlow, TExprNode::TPtr bounds, bool isRange, bool ascending,
                                           bool mayBeEmpty) const;
     TExprNode::TPtr BuildRangeCarry(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildRowIncremental(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildRangeIncremental(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildRowSuffix(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildRangePeerGroups(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildRowFrames(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildRangeFrames(TExprNode::TPtr wideFlow) const;
+    TExprNode::TPtr BuildFrameFold(TExprNode::TPtr wideFlow, TExprNode::TPtr bounds, bool isRange, bool ascending) const;
     TExprNode::TPtr BuildRowBound(EWindowFrameBound kind, ui64 value) const;
+    TExprNode::TPtr BuildRangeBound(EWindowFrameBound kind, ui64 value, const TString& sortedColumn) const;
     TExprNode::TPtr BuildPartitionHandler(TExprNode::TPtr wideFlow) const;
     TExprNode::TPtr BuildExpandFromStructs(TExprNode::TPtr list) const;
     TExprNode::TPtr BuildExpandFromChain(TExprNode::TPtr chained) const;
@@ -81,4 +86,6 @@ private:
     bool RowFrames = false;
     bool RowIncremental = false;
     bool RowSuffix = false;
+    bool RangeFrames = false;
+    bool RangeIncremental = false;
 };

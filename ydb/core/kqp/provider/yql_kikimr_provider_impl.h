@@ -55,6 +55,7 @@ private:
     virtual TStatus HandleCreateObject(NNodes::TKiCreateObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterObject(NNodes::TKiAlterObject node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropObject(NNodes::TKiDropObject node, TExprContext& ctx) = 0;
+    virtual TStatus HandleKillSession(NNodes::TKiKillSession node, TExprContext& ctx) = 0;
     virtual TStatus HandleCreateGroup(NNodes::TKiCreateGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterGroup(NNodes::TKiAlterGroup node, TExprContext& ctx) = 0;
     virtual TStatus HandleRenameGroup(NNodes::TKiRenameGroup node, TExprContext& ctx) = 0;
@@ -314,6 +315,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceLoadTableMetadataTransformer(TIntrusiv
     const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& sourceFactory,
     bool isInternalCall);
 TAutoPtr<IGraphTransformer> CreateKiSinkIntentDeterminationTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateSqlPathAliasesTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
+    TAutoPtr<IGraphTransformer> intents);
 
 TAutoPtr<IGraphTransformer> CreateKiSourceCallableExecutionTransformer(
     TIntrusivePtr<IKikimrGateway> gateway,

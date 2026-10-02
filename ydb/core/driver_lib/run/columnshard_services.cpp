@@ -8,7 +8,7 @@
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
-#include <ydb/core/tx/conveyor_composite/usage/config.h>
+#include <ydb/core/tx/conveyor_composite/common/config/config.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
 #include <ydb/core/tx/priorities/service/service.h>

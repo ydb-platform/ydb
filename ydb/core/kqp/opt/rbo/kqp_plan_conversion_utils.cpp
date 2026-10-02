@@ -931,6 +931,18 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpTableEffect(TExprNode::TPtr
         options.ReturningColumns = processColumns(returningColumns.Cast());
         options.IsBatch = isBatch.Cast().StringValue() == "true";
         options.Settings = processSettings(settings.Cast());
+    } else if (effectType == "KqlUpsertRows") {
+        type = EEffectType::UpsertRows;
+
+        options.Columns = processColumns(columns.Cast());
+        options.ReturningColumns = processColumns(returningColumns.Cast());
+        options.IsBatch = isBatch.Cast().StringValue() == "true";
+        if (auto defaultColumns = opTableEffect.DefaultColumns().Maybe<TCoAtomList>()) {
+            options.DefaultColumns = processColumns(defaultColumns.Cast());
+        }
+        if (settings) {
+            options.Settings = processSettings(settings.Cast());
+        }
     } else if (effectType == "KqlDeleteRows") {
         type = EEffectType::DeleteRows;
 

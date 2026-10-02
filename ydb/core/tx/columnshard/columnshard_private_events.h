@@ -93,6 +93,7 @@ struct TEvPrivate {
         EvBackupImportRecordBatchResult,
 
         EvRetryConfigSubscription,
+        EvUpdateChannelApproximateFreeSpace,
 
         EvEnd
     };
@@ -361,6 +362,17 @@ struct TEvPrivate {
 
     struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
         TEvPingSnapshotsUsage() = default;
+    };
+
+    struct TEvUpdateChannelApproximateFreeSpace: public TEventLocal<TEvUpdateChannelApproximateFreeSpace, EvUpdateChannelApproximateFreeSpace> {
+        const ui32 Channel;
+        const float ApproximateFreeSpaceShare;
+
+        TEvUpdateChannelApproximateFreeSpace(ui32 channel, float approximateFreeSpaceShare)
+            : Channel(channel)
+            , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
+        {
+        }
     };
 
     class TEvWriteBlobsResult: public TEventLocal<TEvWriteBlobsResult, EvWriteBlobsResult> {

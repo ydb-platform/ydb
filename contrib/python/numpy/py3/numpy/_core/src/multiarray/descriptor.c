@@ -122,16 +122,9 @@ _try_convert_from_dtype_attr(PyObject *obj)
         goto fail;
     }
 
-    /* Deprecated 2021-01-05, NumPy 1.21 */
-    if (DEPRECATE("in the future the `.dtype` attribute of a given data"
-                  "type object must be a valid dtype instance. "
-                  "`data_type.dtype` may need to be coerced using "
-                  "`np.dtype(data_type.dtype)`. (Deprecated NumPy 1.20)") < 0) {
-        Py_DECREF(newdescr);
-        return NULL;
-    }
-
-    return newdescr;
+    Py_DECREF(newdescr);
+    PyErr_SetString(PyExc_ValueError, "dtype attribute is not a valid dtype instance");
+    return NULL;
 
   fail:
     /* Ignore all but recursion errors, to give ctypes a full try. */
@@ -2123,6 +2116,10 @@ arraydescr_subdescr_get(PyArray_Descr *self, void *NPY_UNUSED(ignored))
 NPY_NO_EXPORT PyObject *
 arraydescr_protocol_typestr_get(PyArray_Descr *self, void *NPY_UNUSED(ignored))
 {
+    if (!PyDataType_ISLEGACY(NPY_DTYPE(self))) {
+        return (PyObject *) Py_TYPE(self)->tp_str((PyObject *)self);
+    }
+
     char basic_ = self->kind;
     char endian = self->byteorder;
     int size = self->elsize;
@@ -2386,20 +2383,6 @@ arraydescr_names_set(
                 "there are no fields defined");
         return -1;
     }
-
-    /*
-     * FIXME
-     *
-     * This deprecation has been temporarily removed for the NumPy 1.7
-     * release. It should be re-added after the 1.7 branch is done,
-     * and a convenience API to replace the typical use-cases for
-     * mutable names should be implemented.
-     *
-     * if (DEPRECATE("Setting NumPy dtype names is deprecated, the dtype "
-     *                "will become immutable in a future version") < 0) {
-     *     return -1;
-     * }
-     */
 
     N = PyTuple_GET_SIZE(self->names);
     if (!PySequence_Check(val) || PyObject_Size((PyObject *)val) != N) {
@@ -2671,8 +2654,10 @@ _get_pickleabletype_from_datetime_metadata(PyArray_Descr *dtype)
     if (dtype->metadata != NULL) {
         Py_INCREF(dtype->metadata);
         PyTuple_SET_ITEM(ret, 0, dtype->metadata);
-    } else {
-        PyTuple_SET_ITEM(ret, 0, PyDict_New());
+    }
+    else {
+        PyTuple_SET_ITEM(ret, 0, Py_None);
+        Py_INCREF(Py_None);
     }
 
     /* Convert the datetime metadata into a tuple */
@@ -3197,16 +3182,8 @@ arraydescr_setstate(_PyArray_LegacyDescr *self, PyObject *args)
         self->flags = _descr_find_object((PyArray_Descr *)self);
     }
 
-    /*
-     * We have a borrowed reference to metadata so no need
-     * to alter reference count when throwing away Py_None.
-     */
-    if (metadata == Py_None) {
-        metadata = NULL;
-    }
-
-    if (PyDataType_ISDATETIME(self) && (metadata != NULL)) {
-        PyObject *old_metadata;
+    PyObject *old_metadata, *new_metadata;
+    if (PyDataType_ISDATETIME(self)) {
         PyArray_DatetimeMetaData temp_dt_data;
 
         if ((! PyTuple_Check(metadata)) || (PyTuple_Size(metadata) != 2)) {
@@ -3223,20 +3200,26 @@ arraydescr_setstate(_PyArray_LegacyDescr *self, PyObject *args)
             return NULL;
         }
 
-        old_metadata = self->metadata;
-        self->metadata = PyTuple_GET_ITEM(metadata, 0);
+        new_metadata = PyTuple_GET_ITEM(metadata, 0);
         memcpy((char *) &((PyArray_DatetimeDTypeMetaData *)self->c_metadata)->meta,
-               (char *) &temp_dt_data,
-               sizeof(PyArray_DatetimeMetaData));
-        Py_XINCREF(self->metadata);
-        Py_XDECREF(old_metadata);
+            (char *) &temp_dt_data,
+            sizeof(PyArray_DatetimeMetaData));
     }
     else {
-        PyObject *old_metadata = self->metadata;
-        self->metadata = metadata;
-        Py_XINCREF(self->metadata);
-        Py_XDECREF(old_metadata);
+        new_metadata = metadata;
     }
+
+    old_metadata = self->metadata;
+    /*
+     * We have a borrowed reference to metadata so no need
+     * to alter reference count when throwing away Py_None.
+     */
+    if (new_metadata == Py_None) {
+        new_metadata = NULL;
+    }
+    self->metadata = new_metadata;
+    Py_XINCREF(new_metadata);
+    Py_XDECREF(old_metadata);
 
     Py_RETURN_NONE;
 }

@@ -49,7 +49,7 @@ namespace NKikimr::NBsController {
             }
 
             ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-                return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, SlotSizeInBytes);
+                return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
             }
 
             // the less the better
@@ -191,15 +191,20 @@ namespace NKikimr::NBsController {
                 if (Self.IgnoreVSlotQuotaCheck) {
                     return true;
                 }
-                if (pdisk.SpaceAvailable < RequiredSpace) {
+                if (RequiredSpace > 0 && pdisk.MaxSlotSizeInBytes
+                        && static_cast<ui64>(RequiredSpace) > *pdisk.MaxSlotSizeInBytes) {
+                    return false;
+                }
+                const i64 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(GroupSizeInUnits,
+                    pdisk.SlotSizeInUnits, pdisk.SlotSizeInBytes);
+                const i64 requiredPerUnit = RequiredSpace > 0
+                    ? RequiredSpace / quotaMultiplier + (RequiredSpace % quotaMultiplier != 0)
+                    : RequiredSpace;
+                if (pdisk.SpaceAvailable < (pdisk.SpaceAvailablePerUnit ? requiredPerUnit : RequiredSpace)) {
                     return false;
                 }
                 if (pdisk.SlotSizeInBytes && RequiredSpace > 0) {
-                    const ui64 slotsNeeded = GetSlotsNeeded(pdisk);
-                    if (slotsNeeded > Max<ui64>() / pdisk.SlotSizeInBytes) {
-                        return false;
-                    }
-                    if (pdisk.SlotSizeInBytes * slotsNeeded < static_cast<ui64>(RequiredSpace)) {
+                    if (pdisk.SlotSizeInBytes < static_cast<ui64>(requiredPerUnit)) {
                         return false;
                     }
                 }
@@ -223,6 +228,9 @@ namespace NKikimr::NBsController {
                     return false;
                 }
                 if (pdisk.FreeSlots() < i32(GetSlotsNeeded(pdisk))) {
+                    return false;
+                }
+                if (pdisk.AvailableCapacityInUnits && *pdisk.AvailableCapacityInUnits < Max(1u, GroupSizeInUnits)) {
                     return false;
                 }
                 return true;
@@ -1196,11 +1204,17 @@ namespace NKikimr::NBsController {
             if (previous != TPDiskId()) {
                 auto& pdisk = PDisks.at(previous);
                 pdisk.NumActiveSlots -= pdisk.GetOwnerWeight(groupSizeInUnits);
+                if (pdisk.AvailableCapacityInUnits) {
+                    *pdisk.AvailableCapacityInUnits += Max(1u, groupSizeInUnits);
+                }
                 pdisk.EraseGroup(groupId);
             }
             if (next != TPDiskId()) {
                 auto& pdisk = PDisks.at(next);
                 pdisk.NumActiveSlots += pdisk.GetOwnerWeight(groupSizeInUnits);
+                if (pdisk.AvailableCapacityInUnits) {
+                    *pdisk.AvailableCapacityInUnits -= Max(1u, groupSizeInUnits);
+                }
                 pdisk.InsertGroup(groupId);
             }
         }
@@ -1541,8 +1555,8 @@ namespace NKikimr::NBsController {
             const auto groupKey = std::make_pair(vslot.GroupId.value_or(0), vslot.GroupGeneration);
             const auto groupIt = State->GroupSizes.find(groupKey);
             const ui32 groupSizeInUnits = groupIt != State->GroupSizes.end() ? groupIt->second : 1;
-            pdisk.State.NumActiveSlots += TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk.State.SlotSizeInUnits,
-                                                                 pdisk.State.SlotSizeInBytes);
+            pdisk.State.NumActiveSlots += TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk.State.SlotSizeInUnits);
+            pdisk.State.NumActiveUnits += Max(1u, groupSizeInUnits);
         }
         if (vslot.OccupiedByGroup && vslot.GroupId) {
             pdisk.Groups.push_back(*vslot.GroupId);
@@ -1588,6 +1602,22 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            std::optional<ui64> maxSlotSizeInBytes;
+            std::optional<i64> availableCapacityInUnits;
+            if (disk.SlotSizeInBytes && disk.Space) {
+                maxSlotSizeInBytes = disk.Space->UserChunkPoolSize;
+                if (!maxSlotSizeInBytes && disk.Space->TotalSize) {
+                    maxSlotSizeInBytes = disk.Space->TotalSize;
+                }
+                if (maxSlotSizeInBytes) {
+                    // Reserve the full quota even for an empty or replicating VDisk.
+                    const ui64 totalUnits = *maxSlotSizeInBytes / disk.SlotSizeInBytes;
+                    availableCapacityInUnits = i64(Min(totalUnits, ui64(Max<i64>())))
+                        - i64(Min(disk.NumActiveUnits, ui64(Max<i64>())));
+                    *maxSlotSizeInBytes = *maxSlotSizeInBytes * (1000 - State->Mapper.Options.SpaceMarginPromille) / 1000;
+                }
+            }
+
             const bool registered = State->Mapper.RegisterPDisk({
                 .PDiskId = disk.PDiskId,
                 .Location = disk.Location,
@@ -1604,6 +1634,10 @@ namespace NKikimr::NBsController {
                 .WhyUnusable = std::move(disk.WhyUnusable),
                 .BridgePileId = disk.BridgePileId,
                 .DiskScope = std::move(disk.DiskScope),
+                .SpaceAvailablePerUnit = disk.SlotSizeInBytes && disk.Space
+                    && SlotSpaceEnforced(*disk.Space, State->Mapper.Options.SpaceColorBorder),
+                .MaxSlotSizeInBytes = maxSlotSizeInBytes,
+                .AvailableCapacityInUnits = availableCapacityInUnits,
             });
             Y_ABORT_UNLESS(registered);
             if (populateSlotTracker && disk.Usable) {
@@ -1621,6 +1655,9 @@ namespace NKikimr::NBsController {
         };
         if (metrics.HasEnforcedDynamicSlotSize()) {
             state.EnforcedDynamicSlotSize = metrics.GetEnforcedDynamicSlotSize();
+        }
+        if (metrics.HasUserChunkPoolSize()) {
+            state.UserChunkPoolSize = metrics.GetUserChunkPoolSize();
         }
         return state;
     }

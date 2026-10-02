@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
             .Location = MakeTestLocation(1),
             .Usable = true,
             .NumActiveSlots = 0,
-            .ExpectedSlotCount = 2,
+            .ExpectedSlotCount = 4,
             .SlotSizeInUnits = 1,
             .SlotSizeInBytes = 100,
             .Groups{},
@@ -843,7 +843,153 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
         TGroupMapper::TGroupDefinition group;
         TGroupMapperError error;
-        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 1, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 201, false, TBridgePileId(), error), error.ErrorMessage);
+        UNIT_ASSERT_C(mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        TGroupMapper::TGroupDefinition second;
+        UNIT_ASSERT_C(mapper.AllocateGroup(2, second, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
+        TGroupMapper::TGroupDefinition third;
+        UNIT_ASSERT_C(!mapper.AllocateGroup(3, third, {}, {}, 1, 50, false, TBridgePileId(), error), error.ErrorMessage);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeEnforcedSpaceScalesByGroupSize) {
+        auto canAllocate = [](bool enforced, ui64 freeBytes, ui32 groupSize, i64 requiredBytes,
+                std::optional<ui64> userChunkPoolSize = std::nullopt, ui32 marginPromille = 0) {
+            NKikimrBlobStorage::TPDiskMetrics metrics;
+            metrics.SetTotalSize(1000);
+            metrics.SetAvailableSize(freeBytes);
+            metrics.SetEnforcedDynamicSlotSize(100);
+            if (userChunkPoolSize) {
+                metrics.SetUserChunkPoolSize(*userChunkPoolSize);
+            }
+            TGroupMapper::TPlacementSnapshot state;
+            state.PDisks.push_back({
+                .PDiskId = TPDiskId(1, 1),
+                .Location = MakeTestLocation(1),
+                .ExpectedSlotCount = 100,
+                .SlotSizeInBytes = 100,
+                .Space = TGroupMapper::CapturePDiskSpace(metrics),
+                .Operational = true,
+            });
+            TGroupMapper::TReassignmentRequest request;
+            request.GroupId = 1;
+            request.GroupSizeInUnits = groupSize;
+            request.MinimumRequiredSpace = requiredBytes;
+            request.ExistingGroup = false;
+            TGroupMapper::TOptions options;
+            options.SpaceColorBorder = enforced ? NKikimrBlobStorage::TPDiskSpaceColor::YELLOW
+                                                : NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+            options.SpaceMarginPromille = marginPromille;
+            auto geometry = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1);
+            return TGroupMapper::PlanGroupReassignment(std::move(geometry), options,
+                std::move(state), std::move(request)).Success;
+        };
+        UNIT_ASSERT(canAllocate(true, 1000, 2, 150));
+        UNIT_ASSERT(!canAllocate(true, 1000, 1, 150));
+        UNIT_ASSERT(!canAllocate(true, 1000, 2, 201));
+        UNIT_ASSERT(canAllocate(false, 150, 2, 150));
+        UNIT_ASSERT(!canAllocate(false, 120, 2, 150));
+        // The pool caps each candidate's quota without reducing the base unit for smaller groups.
+        UNIT_ASSERT(canAllocate(true, 1000, 8, 800, 800));
+        UNIT_ASSERT(!canAllocate(true, 1000, 8, 801, 800));
+        UNIT_ASSERT(canAllocate(true, 1000, 1, 100, 800));
+        UNIT_ASSERT(canAllocate(true, 1000, 2, 200, 800));
+        UNIT_ASSERT(canAllocate(true, 1000, 8, 720, 800, 100));
+        UNIT_ASSERT(!canAllocate(true, 1000, 8, 721, 800, 100));
+        UNIT_ASSERT(!canAllocate(true, 1000, 1, 1, 0));
+        UNIT_ASSERT(!canAllocate(true, 1000, 100, 0, 800));
+        // Older metrics still provide a bound through the total device size.
+        UNIT_ASSERT(canAllocate(true, 1000, 10, 1000));
+        UNIT_ASSERT(!canAllocate(true, 1000, 10, 1001));
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeReservesCapacityForEmptyVDisks) {
+        for (const auto& [existingUnits, fitsSingle, expectedSlots, remainingUnits] :
+                std::vector<std::tuple<ui32, bool, ui32, i64>>{{2, true, 3, 0}, {5, false, 4, -2}}) {
+            for (bool ignoreQuotaCheck : {false, true}) {
+                NKikimrBlobStorage::TPDiskMetrics metrics;
+                metrics.SetTotalSize(500);
+                metrics.SetAvailableSize(500);
+                metrics.SetUserChunkPoolSize(400);
+                metrics.SetEnforcedDynamicSlotSize(100);
+                TGroupMapper::TPlacementSnapshot state;
+                state.PDisks.push_back({
+                    .PDiskId = TPDiskId(1, 1),
+                    .Location = MakeTestLocation(1),
+                    .NumActiveSlots = 1, // one static VDisk
+                    .ExpectedSlotCount = 8,
+                    .SlotSizeInUnits = 2,
+                    .SlotSizeInBytes = 100,
+                    .Space = TGroupMapper::CapturePDiskSpace(metrics),
+                    .Operational = true,
+                    .NumActiveUnits = 1,
+                });
+                state.Groups.push_back({.GroupId = 10, .GroupSizeInUnits = existingUnits});
+                state.VSlots.push_back({
+                    .VSlotId = TVSlotId(1, 1, 1),
+                    .PDiskId = TPDiskId(1, 1),
+                    .GroupId = 10,
+                    .Replicating = true, // capacity is reserved even before replication writes any data
+                });
+                TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1),
+                    {.IgnoreVSlotQuotaCheck = ignoreQuotaCheck});
+                mapper.Populate(std::move(state));
+                TGroupMapperError error;
+                TGroupMapper::TGroupDefinition group;
+                UNIT_ASSERT(!mapper.AllocateGroup(11, group, {}, {}, 2, 0, false, {}, error));
+                UNIT_ASSERT_VALUES_EQUAL(mapper.AllocateGroup(11, group, {}, {}, 1, 0, false, {}, error), fitsSingle);
+                TGroupMapper::TGroupDefinition excess;
+                UNIT_ASSERT(!mapper.AllocateGroup(12, excess, {}, {}, 1, 0, false, {}, error));
+                const auto disk = mapper.UnregisterPDisk(TPDiskId(1, 1));
+                UNIT_ASSERT_VALUES_EQUAL(disk.NumActiveSlots, expectedSlots);
+                UNIT_ASSERT(disk.AvailableCapacityInUnits);
+                UNIT_ASSERT_VALUES_EQUAL(*disk.AvailableCapacityInUnits, remainingUnits);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeReassignmentReservesCapacityOnlyOnSuccess) {
+        TGroupMapper::TPlacementSnapshot state;
+        for (ui32 nodeId : {1, 2, 3}) {
+            NKikimrBlobStorage::TPDiskMetrics metrics;
+            metrics.SetTotalSize(400);
+            metrics.SetAvailableSize(400);
+            metrics.SetUserChunkPoolSize(nodeId == 3 ? 200 : 300);
+            metrics.SetEnforcedDynamicSlotSize(100);
+            state.PDisks.push_back({
+                .PDiskId = TPDiskId(nodeId, 1),
+                .Location = MakeTestLocation(nodeId),
+                .NumActiveSlots = 1,
+                .ExpectedSlotCount = 4,
+                .SlotSizeInUnits = 2,
+                .SlotSizeInBytes = 100,
+                .Space = TGroupMapper::CapturePDiskSpace(metrics),
+                .Operational = true,
+                .NumActiveUnits = 1, // precomputed static occupancy
+            });
+        }
+        state.Groups.push_back({.GroupId = 10, .GroupSizeInUnits = 2});
+        state.VSlots.push_back({.VSlotId = TVSlotId(1, 1, 1), .PDiskId = TPDiskId(1, 1), .GroupId = 10});
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        mapper.Populate(std::move(state));
+        TGroupMapper::TReassignmentRequest request;
+        request.GroupId = 10;
+        request.GroupSizeInUnits = 2;
+        request.VDisks.push_back({.VDiskId = TVDiskIdShort(0, 0, 0), .PDiskId = TPDiskId(1, 1)});
+        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(3, 1)};
+        UNIT_ASSERT(!mapper.AllocateGroupReassignment(request).Success);
+        request.VDisks.front().Reassignment = TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(2, 1)};
+        const auto result = mapper.AllocateGroupReassignment(request);
+        UNIT_ASSERT_C(result.Success, result.Error.ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(result.Group[0][0][0], TPDiskId(2, 1));
+        const auto source = mapper.UnregisterPDisk(TPDiskId(1, 1));
+        const auto target = mapper.UnregisterPDisk(TPDiskId(2, 1));
+        const auto rejected = mapper.UnregisterPDisk(TPDiskId(3, 1));
+        UNIT_ASSERT_VALUES_EQUAL(*source.AvailableCapacityInUnits, 2);
+        UNIT_ASSERT_VALUES_EQUAL(*target.AvailableCapacityInUnits, 0);
+        UNIT_ASSERT_VALUES_EQUAL(*rejected.AvailableCapacityInUnits, 1);
+        UNIT_ASSERT_VALUES_EQUAL(source.NumActiveSlots, 1);
+        UNIT_ASSERT_VALUES_EQUAL(target.NumActiveSlots, 2);
     }
 
     Y_UNIT_TEST(PlacementSnapshotAppliesPDiskEligibilityAndSpacePolicies) {
@@ -1283,6 +1429,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                 .SlotSizeInBytes = 1000,
                 .Space = TGroupMapper::TPDiskSpaceState{.AvailableSize = 1000, .TotalSize = 2000},
                 .Operational = true,
+                .NumActiveUnits = nodeId <= 8 ? 1u : 0u,
             });
             if (nodeId <= 8) {
                 request.VDisks.push_back({

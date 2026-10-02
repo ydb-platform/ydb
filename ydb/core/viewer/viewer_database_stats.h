@@ -34,11 +34,11 @@ struct TDatabaseStorageStats {
             slotSize = pdisk.GetTotalSize() / slotCount;
         }
 
-        const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
+        const ui32 quotaMultiplier = TPDiskConfig::GetOwnerQuotaMultiplier(
             groupSizeInUnits,
             pdisk.GetSlotSizeInUnits(),
             pdisk.GetExpectedSlotSize());
-        Total += slotSize * ownerWeight;
+        Total += slotSize * quotaMultiplier;
     }
 };
 

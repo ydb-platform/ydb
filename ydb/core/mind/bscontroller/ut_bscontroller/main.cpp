@@ -2212,6 +2212,59 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 64);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeResourcesCappedPerGroup) {
+        using TPDiskInfo = TBlobStorageController::TPDiskInfo;
+        TPDiskInfo pdisk(
+            TBlobStorageController::THostId(TString("host"), 1),
+            TString("/dev/disk"), 0, 1, {}, {}, std::nullopt, 1, TString(), 0, 16,
+            NKikimrBlobStorage::EDriveStatus::ACTIVE, TInstant::Zero(),
+            NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, TPDiskMood::Normal,
+            TString(), TString(), TString(), 0, true, NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
+        pdisk.Metrics.SetExpectedSlotSize(100);
+        pdisk.Metrics.SetEnforcedDynamicSlotSize(100);
+        pdisk.Metrics.SetExpectedSlotCount(10);
+        pdisk.Metrics.SetTotalSize(1200);
+        pdisk.Metrics.SetUserChunkPoolSize(1000);
+
+        TBlobStorageController::TGroupInfo group(TGroupId::FromValue(0x8200000f), 1, 0,
+            TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default,
+            0, 0, TString(), TString(), 0, 0, false, true, 1, TBridgePileId(), TBoxStoragePoolId(1, 1),
+            1, 1, 1, false);
+        TBlobStorageController::TVSlotReadyTimestampQ readyTimestampQ;
+        TBlobStorageController::TVSlotInfo slot(TVSlotId(1, 1, 1), &pdisk, group.ID, 0, 1,
+            NKikimrBlobStorage::TVDiskKind::Default, 0, 0, 0, TMood::Normal, &group, &readyTimestampQ,
+            TInstant::Zero(), TDuration::Zero(), 0, 0);
+
+        auto checkResources = [&](ui32 groupSizeInUnits, ui64 expectedSize) {
+            group.GroupSizeInUnits = groupSizeInUnits;
+            for (bool assured : {false, true}) {
+                NKikimrBlobStorage::TGroupMetrics::TGroupParameters::TResources resources;
+                group.FillInResources(&resources, assured);
+                UNIT_ASSERT(resources.HasSpace());
+                UNIT_ASSERT_VALUES_EQUAL(resources.GetSpace(), expectedSize);
+            }
+        };
+        checkResources(1, 100);
+        checkResources(100, 1000);
+        checkResources(2, 200);
+        pdisk.Metrics.SetUserChunkPoolSize(0);
+        checkResources(100, 0);
+        pdisk.Metrics.ClearUserChunkPoolSize();
+        checkResources(100, 1200);
+        pdisk.Metrics.SetExpectedSlotSize(0);
+        checkResources(100, 10000);
+
+        // Reported slot units only affect occupied weights while fixed quotas are active.
+        pdisk.Metrics.SetSlotSizeInUnits(2);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
+        pdisk.Metrics.SetExpectedSlotSize(100);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 1);
+        pdisk.Metrics.SetSlotSizeInUnits(1);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
+        pdisk.Metrics.SetExpectedSlotSize(0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetOwnerWeight(2), 2);
+    }
+
     Y_UNIT_TEST(GroupUsagePrefersExpectedSlotSizeOverDynamicSlotSize) {
         NKikimrBlobStorage::TPDiskMetrics pdiskMetrics;
         pdiskMetrics.SetEnforcedDynamicSlotSize(1000);
@@ -2228,7 +2281,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
             2);
 
         UNIT_ASSERT_VALUES_EQUAL(info.GetAllocatedSize(), 25);
-        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 75);
+        UNIT_ASSERT_VALUES_EQUAL(info.GetAvailableSize(), 175);
     }
 
     Y_UNIT_TEST(ZeroExpectedSlotSizeDoesNotDisableDefaultExpectedSlotCount) {
@@ -2270,93 +2323,92 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
     }
 
     Y_UNIT_TEST(NumActiveDynamicSlotsStaysConsistentWhenExpectedSlotSizeMetricsArrive) {
-        // NumActiveDynamicSlots is maintained incrementally with the owner weight computed at the
-        // moment a vslot is added or removed. The weight depends on the *effective* expected
-        // slot size, which flips from 0 to nonzero when the PDisk starts reporting
-        // ExpectedSlotSize in its metrics (the infer_pdisk_slot_count.<type>.slot_size case,
-        // where PDiskConfig itself carries no ExpectedSlotSize). The counter must be kept
-        // consistent with the new weights when that happens.
-        TEnvironmentSetup env(1, 1);
-        RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
-            TFinalizer finalizer(env);
-            env.Prepare(dispatchName, setup, outActiveZone);
+        // Count a two-unit group as two single-unit slots or one double-unit slot.
+        for (ui32 slotSizeInUnits : {1u, 2u}) {
+            TEnvironmentSetup env(1, 1);
+            RunTestWithReboots(env.TabletIds, [&] { return env.PrepareInitialEventsFilter(); }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+                TFinalizer finalizer(env);
+                env.Prepare(dispatchName, setup, outActiveZone);
 
-            constexpr ui64 expectedSlotSize = 100ull << 30;
-            constexpr ui32 expectedSlotCount = 4;
+                constexpr ui64 expectedSlotSize = 100ull << 30;
+                constexpr ui32 expectedSlotCount = 4;
 
-            // A box with a single ROT drive without any explicit PDiskConfig.
-            NKikimrBlobStorage::TConfigRequest request;
-            env.DefineBox(1, "box", {
-                {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
-            }, env.GetNodes(), request);
+                // A box with a single ROT drive without any explicit PDiskConfig.
+                NKikimrBlobStorage::TConfigRequest request;
+                env.DefineBox(1, "box", {
+                    {"/dev/disk1", NKikimrBlobStorage::ROT, false, false, 0},
+                }, env.GetNodes(), request);
 
-            // Pool A: one group with GroupSizeInUnits=2. Its single vslot is accounted
-            // in NumActiveDynamicSlots with weight ceil(2/1) = 2 since no metrics arrived yet.
-            env.DefineStoragePool(1, 1, "pool-a", 1, NKikimrBlobStorage::ROT, {}, request, "none");
-            request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()
-                ->SetDefaultGroupSizeInUnits(2);
+                // Pool A: one group with GroupSizeInUnits=2. Its single vslot is accounted
+                // in NumActiveDynamicSlots with weight ceil(2/1) = 2 since no metrics arrived yet.
+                env.DefineStoragePool(1, 1, "pool-a", 1, NKikimrBlobStorage::ROT, {}, request, "none");
+                request.MutableCommand(request.CommandSize() - 1)->MutableDefineStoragePool()
+                    ->SetDefaultGroupSizeInUnits(2);
 
-            const size_t baseConfigIndex = request.CommandSize();
-            request.AddCommand()->MutableQueryBaseConfig();
+                const size_t baseConfigIndex = request.CommandSize();
+                request.AddCommand()->MutableQueryBaseConfig();
 
-            NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
-            UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+                NKikimrBlobStorage::TConfigResponse response = env.Invoke(request);
+                UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
-            const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
-            UNIT_ASSERT_VALUES_EQUAL(baseConfig.PDiskSize(), 1);
-            const ui32 pdiskNodeId = baseConfig.GetPDisk(0).GetNodeId();
-            const ui32 pdiskId = baseConfig.GetPDisk(0).GetPDiskId();
-            const ui32 configuredExpectedSlotCount = baseConfig.GetPDisk(0).GetExpectedSlotCount();
-            UNIT_ASSERT(configuredExpectedSlotCount != expectedSlotCount);
-            UNIT_ASSERT_VALUES_EQUAL(pdiskNodeId, env.Runtime->GetNodeId(0));
+                const auto& baseConfig = response.GetStatus(baseConfigIndex).GetBaseConfig();
+                UNIT_ASSERT_VALUES_EQUAL(baseConfig.PDiskSize(), 1);
+                const ui32 pdiskNodeId = baseConfig.GetPDisk(0).GetNodeId();
+                const ui32 pdiskId = baseConfig.GetPDisk(0).GetPDiskId();
+                const ui32 configuredExpectedSlotCount = baseConfig.GetPDisk(0).GetExpectedSlotCount();
+                UNIT_ASSERT(configuredExpectedSlotCount != expectedSlotCount);
+                UNIT_ASSERT_VALUES_EQUAL(pdiskNodeId, env.Runtime->GetNodeId(0));
 
-            // The PDisk starts reporting ExpectedSlotSize and the materialized ExpectedSlotCount in
-            // metrics, as it does when NodeWarden infers the slot count from a slot size.
-            // The effective expected slot size becomes nonzero and the owner weight of the
-            // already existing vslot flips from 2 to 1. BSC accepts disk status updates
-            // only over the pipe that carried TEvControllerRegisterNode of the same node,
-            // so register the node and send the metrics through one pipe.
-            {
-                const TActorId sender = env.Runtime->AllocateEdgeActor(0);
-                const TActorId pipeClient = env.Runtime->ConnectToPipe(env.TabletId, sender, 0,
-                    GetPipeConfigWithRetries());
-                env.Runtime->SendToPipe(pipeClient, sender, new TEvBlobStorage::TEvControllerRegisterNode(
-                    pdiskNodeId, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}));
-                env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
+                // Report fixed quotas over the same registered pipe as the NodeWarden.
+                {
+                    const TActorId sender = env.Runtime->AllocateEdgeActor(0);
+                    const TActorId pipeClient = env.Runtime->ConnectToPipe(env.TabletId, sender, 0,
+                        GetPipeConfigWithRetries());
+                    env.Runtime->SendToPipe(pipeClient, sender, new TEvBlobStorage::TEvControllerRegisterNode(
+                        pdiskNodeId, TVector<ui32>{}, TVector<ui32>{}, TVector<NPDisk::TDriveData>{}));
+                    env.Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(sender);
 
-                auto ev = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
-                auto* m = ev->Record.AddPDisksMetrics();
-                m->SetPDiskId(pdiskId);
-                m->SetExpectedSlotCount(expectedSlotCount);
-                m->SetExpectedSlotSize(expectedSlotSize);
-                env.Runtime->SendToPipe(pipeClient, sender, ev.Release());
-            }
+                    auto ev = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+                    auto* m = ev->Record.AddPDisksMetrics();
+                    m->SetPDiskId(pdiskId);
+                    m->SetExpectedSlotCount(expectedSlotCount);
+                    m->SetSlotSizeInUnits(slotSizeInUnits);
+                    m->SetExpectedSlotSize(expectedSlotSize);
+                    m->SetEnforcedDynamicSlotSize(expectedSlotSize);
+                    m->SetTotalSize(expectedSlotCount * slotSizeInUnits * expectedSlotSize);
+                    m->SetUserChunkPoolSize(expectedSlotCount * slotSizeInUnits * expectedSlotSize);
+                    env.Runtime->SendToPipe(pipeClient, sender, ev.Release());
+                }
 
-            // Make sure the metrics have been applied before proceeding.
-            {
-                NKikimrBlobStorage::TConfigRequest sync;
-                sync.AddCommand()->MutableQueryBaseConfig();
-                NKikimrBlobStorage::TConfigResponse syncResponse = env.Invoke(sync);
-                UNIT_ASSERT_C(syncResponse.GetSuccess(), syncResponse.GetErrorDescription());
-                const auto& syncBaseConfig = syncResponse.GetStatus(0).GetBaseConfig();
-                UNIT_ASSERT_VALUES_EQUAL(syncBaseConfig.PDiskSize(), 1);
-                const auto& syncPDisk = syncBaseConfig.GetPDisk(0);
-                UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetPDiskMetrics().GetExpectedSlotSize(), expectedSlotSize);
-                UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetPDiskMetrics().GetExpectedSlotCount(), expectedSlotCount);
-                UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotCount(), configuredExpectedSlotCount);
-                UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotSize(), expectedSlotSize);
-            }
+                // Make sure the metrics have been applied before proceeding.
+                {
+                    NKikimrBlobStorage::TConfigRequest sync;
+                    sync.AddCommand()->MutableQueryBaseConfig();
+                    NKikimrBlobStorage::TConfigResponse syncResponse = env.Invoke(sync);
+                    UNIT_ASSERT_C(syncResponse.GetSuccess(), syncResponse.GetErrorDescription());
+                    const auto& syncBaseConfig = syncResponse.GetStatus(0).GetBaseConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(syncBaseConfig.PDiskSize(), 1);
+                    const auto& syncPDisk = syncBaseConfig.GetPDisk(0);
+                    UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetPDiskMetrics().GetExpectedSlotSize(), expectedSlotSize);
+                    UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetPDiskMetrics().GetExpectedSlotCount(), expectedSlotCount);
+                    UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotCount(), configuredExpectedSlotCount);
+                    UNIT_ASSERT_VALUES_EQUAL(syncPDisk.GetExpectedSlotSize(), expectedSlotSize);
+                }
 
-            // The disk now has 4 fixed-size slots and the PDisk accounts the existing
-            // 2-unit group as a single owner, so exactly 3 more single-unit groups must
-            // fit. With a stale NumActiveDynamicSlots (still 2) the third group does not fit.
-            {
-                NKikimrBlobStorage::TConfigRequest more;
-                env.DefineStoragePool(1, 2, "pool-b", expectedSlotCount - 1, NKikimrBlobStorage::ROT, {}, more, "none");
-                NKikimrBlobStorage::TConfigResponse moreResponse = env.Invoke(more);
-                UNIT_ASSERT_C(moreResponse.GetSuccess(), moreResponse.GetErrorDescription());
-            }
-        });
+                // The existing group occupies ceil(2 / SlotSizeInUnits) slots.
+                {
+                    NKikimrBlobStorage::TConfigRequest more;
+                    env.DefineStoragePool(1, 2, "pool-b", expectedSlotCount - 2 / slotSizeInUnits, NKikimrBlobStorage::ROT, {}, more, "none");
+                    NKikimrBlobStorage::TConfigResponse moreResponse = env.Invoke(more);
+                    UNIT_ASSERT_C(moreResponse.GetSuccess(), moreResponse.GetErrorDescription());
+                }
+                {
+                    NKikimrBlobStorage::TConfigRequest excess;
+                    env.DefineStoragePool(1, 3, "pool-c", 1, NKikimrBlobStorage::ROT, {}, excess, "none");
+                    UNIT_ASSERT(!env.Invoke(excess).GetSuccess());
+                }
+            });
+        }
     }
 
     Y_UNIT_TEST(UnsupportedCommandError) {

@@ -467,6 +467,7 @@ public:
     void SendCompactionArbiterOutbox(TCompactionArbiter::TOutbox& out);
     void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
     void NormalizeExpectedSlotSettings();
+    bool ValidateExpectedSlotSize(ui64 expectedSlotSize, TString& errorReason) const;
     i64 GetExpectedOwnerSizeInChunks() const;
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) const;
 

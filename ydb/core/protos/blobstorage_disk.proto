@@ -83,8 +83,8 @@ message TPDiskMetrics {
     //optional uint64 SlowDeviceMs = 7; // ms per second of slow device, [0..1000]
     optional uint32 MaxIOPS = 8; // number of IOPS this device can carry out
 
-    // maximum expected slot size; if set, then it is guaranteed that EnforcedDynamicSlotSize bytes of space are
-    // available for every slot over this PDisk; if not set, then no space enforcement assumed
+    // Per-unit quota in bytes. With ExpectedSlotSize, scale by GroupSizeInUnits and cap by UserChunkPoolSize.
+    // Otherwise scale by the owner's slot weight. If absent, no space enforcement is assumed.
     optional uint64 EnforcedDynamicSlotSize = 9;
 
     optional TPDiskState.E State = 10;
@@ -95,4 +95,5 @@ message TPDiskMetrics {
     optional double PDiskUsage = 14;  // 100.0 * SharedQuota.Used / SharedQuota.HardLimit
     optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskCapacityAlert = 15;  // Max(SharedQuota.Color, CommonLog.Color)
     optional uint64 ExpectedSlotSize = 16; // expected slot size for space limit calculation, 0 if not set
+    optional uint64 UserChunkPoolSize = 17; // bytes in the user chunk pool; physical upper bound for one owner's quota
 }

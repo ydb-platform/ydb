@@ -502,11 +502,12 @@ struct TPDiskConfig : public TThrRefBase {
     }
 
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
-        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
     }
 
-    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
-        return expectedSlotSize ? 1 : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
+    // Scale an explicit slot size by group size; otherwise use the occupied slot count.
+    static ui32 GetOwnerQuotaMultiplier(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
+        return expectedSlotSize ? Max(1u, groupSizeInUnits) : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
     }
 
     static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {

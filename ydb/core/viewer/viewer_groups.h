@@ -249,8 +249,8 @@ public:
             }
         }
 
-        ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
-            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+        ui32 GetOwnerQuotaMultiplier(ui32 groupSizeInUnits) const {
+            return TPDiskConfig::GetOwnerQuotaMultiplier(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
         }
 
         float GetDiskSpaceUsage() const {
@@ -508,7 +508,7 @@ public:
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                     MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
-                    ui64 slotSize = itPDisk->second.GetSlotTotalSize() * itPDisk->second.GetOwnerWeight(GroupSizeInUnits);
+                    ui64 slotSize = itPDisk->second.GetSlotTotalSize() * itPDisk->second.GetOwnerQuotaMultiplier(GroupSizeInUnits);
                     // when a vdisk overgrows its nominal slot, keep its real AvailableSize
                     if (slotSize > vdisk.AllocatedSize) {
                         ui64 slotAvailable = slotSize - vdisk.AllocatedSize;

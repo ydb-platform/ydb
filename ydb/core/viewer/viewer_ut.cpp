@@ -1003,7 +1003,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         stats.AddVDisk(vdisk, pdisk, 4);
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 100);
+        UNIT_ASSERT_VALUES_EQUAL(stats.Total, 400);
         UNIT_ASSERT(!stats.UnknownSlotSize);
     }
 
@@ -1112,8 +1112,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         pdisk.SlotCount = 10;
 
         group.CalcAvailableAndDiskSpace({{TPDiskId(1, 1), pdisk}});
-        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 100);
-        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 25.0, 1e-6);
+        UNIT_ASSERT_VALUES_EQUAL(group.Limit, 200);
+        UNIT_ASSERT_VALUES_EQUAL(group.Available, 175);
+        UNIT_ASSERT_DOUBLES_EQUAL(group.Usage, 12.5, 1e-6);
     }
 
     Y_UNIT_TEST(StorageGroupUsageWithoutDynamicSlotSize)

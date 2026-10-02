@@ -74,9 +74,8 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }
 
-        slotSize *= disk.ExpectedSlotSize
-            ? 1
-            : TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits());
+        slotSize *= TPDiskConfig::GetOwnerQuotaMultiplier(
+            groupSizeInUnits, pdiskMetrics.GetSlotSizeInUnits(), disk.ExpectedSlotSize);
         if (slotSize) {
             totalSize = Min(totalSize ? totalSize : Max<ui64>(), slotSize);
         }

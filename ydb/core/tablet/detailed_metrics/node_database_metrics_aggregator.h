@@ -10,9 +10,12 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/system/mutex.h>
+
+#include <array>
 
 namespace NKikimr {
 
@@ -149,6 +152,24 @@ TNodeDatabaseMetricsAggregatorPtr CreateNodeDatabaseMetricsAggregator(
     NMonitoring::TDynamicCounterPtr targetCounterGroup,
     const TString& databasePath,
     bool isFollowerRole
+);
+
+/**
+ * Get the sizes of the simple, the cumulative and the percentile counter arrays of the layout,
+ * which the aggregate of the application counters of the TABLE bucket of the table is built on:
+ * the application counter template of the tablet type, if it is a prefix of the reported layout,
+ * which holds every published counter, the reported layout otherwise.
+ *
+ * @note For the tests, the published counters are the same either way.
+ *
+ * @param[in] aggregator The aggregator created by CreateNodeDatabaseMetricsAggregator()
+ * @param[in] tablePath The full path of the table, as the tablets report it
+ *
+ * @return The sizes, or Nothing() if the table has no TABLE bucket
+ */
+TMaybe<std::array<ui32, 3>> GetTableBucketAppLayoutSizes(
+    const TNodeDatabaseMetricsAggregator& aggregator,
+    const TString& tablePath
 );
 
 } // namespace NKikimr

@@ -4,9 +4,12 @@
 #include "detailed_values_accumulator.h"
 #include "ut_helpers.h"
 
+#include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/counters_detailed_datashard.pb.h>
 #include <ydb/core/sys_view/service/db_counters_codec.h>
+#include <ydb/core/tablet/private/aggregated_tablet_counters.h>
 #include <ydb/core/tablet/tablet_counters_app.h>
+#include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet_flat/flat_executor_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/encode.h>
@@ -24,6 +27,7 @@
 #include <util/system/align.h>
 #include <util/system/mutex.h>
 
+#include <array>
 #include <atomic>
 #include <thread>
 #include <tuple>
@@ -197,6 +201,69 @@ struct TFakeTablet {
     TTabletCountersBase ExecutorBaseline;
     TTabletCountersBase AppBaseline;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+// The production counter layouts of DataShard
+
+/**
+ * The full application counters of DataShard, the way TDataShard creates them
+ * (ydb/core/tx/datashard/datashard.cpp): the app counters followed by the counters
+ * of every transaction type.
+ */
+using TDataShardFullAppCounters = TProtobufTabletCounters<
+    NDataShard::ESimpleCounters_descriptor,
+    NDataShard::ECumulativeCounters_descriptor,
+    NDataShard::EPercentileCounters_descriptor,
+    NDataShard::ETxTypes_descriptor
+>;
+
+/**
+ * A single DataShard tablet, which reports the production counter layouts: the Executor
+ * counters and the full application counters, the same way as TFakeTablet does.
+ */
+struct TDataShardTablet {
+    explicit TDataShardTablet(ui64 tabletId)
+        : TabletId(tabletId)
+    {
+    }
+
+    /**
+     * Send everything accumulated since the previous report, the way the Executor does.
+     *
+     * @param[in] apply Called with the reported Executor and application counters
+     */
+    template <typename TApply>
+    void Report(TApply apply) {
+        auto appDiff = AppCounters.MakeDiffForAggr(AppBaseline);
+        auto executorDiff = ExecutorCounters.MakeDiffForAggr(ExecutorBaseline);
+
+        apply(*executorDiff, *appDiff);
+
+        AppCounters.RememberCurrentStateAsBaseline(AppBaseline);
+        ExecutorCounters.RememberCurrentStateAsBaseline(ExecutorBaseline);
+    }
+
+    const ui64 TabletId;
+
+    NTabletFlatExecutor::TExecutorCounters ExecutorCounters;
+    TDataShardFullAppCounters AppCounters;
+
+    // The state as of the previous report, subtracted from the cumulative counters
+    TTabletCountersBase ExecutorBaseline;
+    TTabletCountersBase AppBaseline;
+};
+
+/**
+ * @return The sizes of the simple, the cumulative and the percentile counter arrays
+ *         of the layout, slash separated
+ */
+TString FormatLayoutSizes(const std::array<ui32, 3>& sizes) {
+    return TStringBuilder() << sizes[0] << "/" << sizes[1] << "/" << sizes[2];
+}
+
+TString FormatLayoutSizes(const TTabletCountersBase& counters) {
+    return FormatLayoutSizes(std::array<ui32, 3>{counters.Simple().Size(), counters.Cumulative().Size(), counters.Percentile().Size()});
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3361,5 +3428,300 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             }
             UNIT_ASSERT_VALUES_EQUAL(measure(), bytes);
         }
+    }
+
+    /**
+     * Verify that the TABLE bucket of the production DataShard layouts builds the aggregate
+     * of its application counters on the application counter template of DataShard, which
+     * leaves out the slots of the counters of every transaction type (none of which is published),
+     * and that its low level counters are still the very same as those of the aggregates built
+     * on the reported layouts, the way the bucket used to build them.
+     */
+    Y_UNIT_TEST(TableBucketBuildsTheAppCountersOnTheTemplate) {
+        const auto* descriptor = GetDetailedMetricsDescriptor(TABLET_TYPE);
+        UNIT_ASSERT(descriptor);
+
+        const auto appCountersTemplate = CreateAppCountersByTabletType(TABLET_TYPE);
+        UNIT_ASSERT(appCountersTemplate);
+
+        auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(root, DATABASE_PATH, false /* isFollowerRole */);
+
+        // The reference: the aggregates of the TABLE bucket built on the reported layouts
+        auto referenceRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto referenceTypeGroup = NDetailedMetrics::GetOrCreateTypeGroup(
+            referenceRoot
+                ->GetSubgroup(NDetailedMetrics::DATABASE_LABEL, DATABASE_PATH)
+                ->GetSubgroup(NDetailedMetrics::TABLE_LABEL, RELATIVE_TABLE_PATH),
+            TABLET_TYPE);
+        ::NKikimr::NPrivate::TAggregatedTabletCounters referenceExecutorCounters(
+            referenceTypeGroup->GetSubgroup(NDetailedMetrics::CATEGORY_LABEL, NDetailedMetrics::EXECUTOR_CATEGORY),
+            referenceRoot->Visibility());
+        ::NKikimr::NPrivate::TAggregatedTabletCounters referenceAppCounters(
+            referenceTypeGroup->GetSubgroup(NDetailedMetrics::CATEGORY_LABEL, NDetailedMetrics::APP_CATEGORY),
+            referenceRoot->Visibility());
+
+        auto report = [&](TDataShardTablet& tablet, TInstant now) {
+            tablet.Report([&](const TTabletCountersBase& executorCounters, const TTabletCountersBase& appCounters) {
+                aggregator->AddCounters(
+                    TABLE_PATH, TDetailedMetricsSettings::MetricsLevelTable, tablet.TabletId, 0, TABLET_TYPE,
+                    executorCounters, appCounters, now);
+
+                if (!referenceExecutorCounters.IsInitialized) {
+                    referenceExecutorCounters.Initialize(&executorCounters, &descriptor->RawNames.ExecutorNames);
+                }
+                if (!referenceAppCounters.IsInitialized) {
+                    referenceAppCounters.Initialize(&appCounters, &descriptor->RawNames.AppNames);
+                }
+                referenceExecutorCounters.Apply(tablet.TabletId, &executorCounters, TABLET_TYPE, now);
+                referenceAppCounters.Apply(tablet.TabletId, &appCounters, TABLET_TYPE, now);
+            });
+        };
+
+        auto recalculateAllCounters = [&]() {
+            aggregator->RecalculateAllCounters();
+            referenceExecutorCounters.RecalcAll();
+            referenceAppCounters.RecalcAll();
+        };
+
+        // Every kind of the counters is filled: the published ones, the unpublished ones
+        // and the ones of the transaction types
+        auto fill = [](TDataShardTablet& tablet, ui64 value) {
+            auto& executor = tablet.ExecutorCounters;
+            executor.Simple()[NTabletFlatExecutor::TExecutorCounters::DB_UNIQUE_ROWS_TOTAL].Set(value);
+            executor.Simple()[NTabletFlatExecutor::TExecutorCounters::DB_UNIQUE_DATA_BYTES].Set(10 * value);
+            executor.Cumulative()[NTabletFlatExecutor::TExecutorCounters::CONSUMED_CPU] += 100000 * value;
+            executor.Cumulative()[NTabletFlatExecutor::TExecutorCounters::TX_BYTES_READ] += 1000 * value;
+
+            auto& app = tablet.AppCounters;
+            app.Simple()[NDataShard::COUNTER_TX_IN_FLY].Set(value);
+            app.Cumulative()[NDataShard::COUNTER_ENGINE_HOST_UPDATE_ROW] += value;
+            app.Cumulative()[NDataShard::COUNTER_ENGINE_HOST_SELECT_ROW] += 2 * value;
+            app.Cumulative()[NDataShard::COUNTER_SCANNED_ROWS] += 3 * value;
+            app.TxSimple(NDataShard::TXTYPE_PROPOSE_DATA, NKikimr::COUNTER_TT_INFLY).Set(value);
+            app.TxCumulative(NDataShard::TXTYPE_PROPOSE_DATA, NKikimr::COUNTER_TT_RW_COMPLETED) += value;
+        };
+
+        TDataShardTablet tablet1(1000);
+        TDataShardTablet tablet2(2000);
+
+        TInstant now = TInstant::Seconds(100);
+        for (ui64 round = 1; round <= 3; ++round) {
+            fill(tablet1, round);
+            fill(tablet2, 7 * round);
+            report(tablet1, now);
+            report(tablet2, now);
+            now += TDuration::Seconds(15);
+        }
+        recalculateAllCounters();
+
+        DumpCounters("The TABLE bucket of the production layouts", root);
+
+        // The aggregate of the application counters is built on the template, which is a prefix
+        // of the reported layout, rather than on the reported layout itself
+        const auto appLayoutSizes = GetTableBucketAppLayoutSizes(*aggregator, TABLE_PATH);
+        UNIT_ASSERT(appLayoutSizes);
+        UNIT_ASSERT_VALUES_EQUAL(FormatLayoutSizes(*appLayoutSizes), FormatLayoutSizes(*appCountersTemplate));
+        UNIT_ASSERT_VALUES_EQUAL(FormatLayoutSizes(referenceAppCounters.GetLayoutSizes()), FormatLayoutSizes(tablet1.AppCounters));
+        UNIT_ASSERT_LT(appCountersTemplate->Simple().Size(), tablet1.AppCounters.Simple().Size());
+        UNIT_ASSERT_LT(appCountersTemplate->Cumulative().Size(), tablet1.AppCounters.Cumulative().Size());
+        UNIT_ASSERT_LT(appCountersTemplate->Percentile().Size(), tablet1.AppCounters.Percentile().Size());
+
+        // Yet the low level counters are the very same
+        auto appCounters = FindAppTableBucketCounters(root);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(appCounters, "DataShard/EngineHostRowUpdates"), (1 + 2 + 3) * (1 + 7));
+        UNIT_ASSERT(!HasCounter(appCounters, "DataShard/TxProposeData/RwCompleted"));
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(FindTableBucketCounters(root), "HIST(ConsumedCPU)"), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizeJson(NMonitoring::ToJson(*root)),
+            NormalizeJson(NMonitoring::ToJson(*referenceRoot)));
+
+        // So they are after a tablet is forgotten
+        aggregator->ForgetTablet(tablet1.TabletId, 0);
+        referenceExecutorCounters.Forget(tablet1.TabletId);
+        referenceAppCounters.Forget(tablet1.TabletId);
+        fill(tablet2, 100);
+        report(tablet2, now);
+        recalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(appCounters, "DataShard/EngineHostRowUpdates"), (1 + 2 + 3) * (1 + 7) + 100);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NormalizeJson(NMonitoring::ToJson(*root)),
+            NormalizeJson(NMonitoring::ToJson(*referenceRoot)));
+
+        // The bucket goes with its last tablet
+        aggregator->ForgetTablet(tablet2.TabletId, 0);
+        UNIT_ASSERT(!GetTableBucketAppLayoutSizes(*aggregator, TABLE_PATH));
+        UNIT_ASSERT(IsEmptyTree(root));
+    }
+
+    /**
+     * Verify that the TABLE bucket of a layout, which the application counter template
+     * of the tablet type is not a prefix of (here, the much smaller synthetic layout
+     * of the tests), builds the aggregate of its application counters on the reported
+     * layout, the way it always did.
+     */
+    Y_UNIT_TEST(TableBucketBuildsTheAppCountersOnAnotherLayoutAsReported) {
+        TRoleTrees trees;
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        leader.AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 10).AddAppCumulative(ENGINE_HOST_ROW_UPDATE_BYTES, 100);
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelTable, now);
+        trees.RecalculateAllCounters();
+
+        const auto appLayoutSizes = GetTableBucketAppLayoutSizes(*trees.Leaders, TABLE_PATH);
+        UNIT_ASSERT(appLayoutSizes);
+        UNIT_ASSERT_VALUES_EQUAL(FormatLayoutSizes(*appLayoutSizes), FormatLayoutSizes(leader.AppCounters));
+
+        auto appCounters = FindAppTableBucketCounters(trees.Root);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(appCounters, "DataShard/EngineHostRowUpdates"), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(appCounters, "DataShard/EngineHostRowUpdateBytes"), 100);
+
+        // A table without a TABLE bucket has no such layout
+        TFakeTablet partitionLeader(2000, 0);
+        partitionLeader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now, OTHER_TABLE_PATH);
+        UNIT_ASSERT(!GetTableBucketAppLayoutSizes(*trees.Leaders, OTHER_TABLE_PATH));
+
+        // Neither has the aggregator of the followers, which drops a table level report
+        TFakeTablet follower(1000, 1);
+        follower.AddAppCumulative(ENGINE_HOST_ROW_UPDATES, 20).AddAppCumulative(ENGINE_HOST_ROW_UPDATE_BYTES, 200);
+        follower.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelTable, now);
+        UNIT_ASSERT(!GetTableBucketAppLayoutSizes(*trees.Followers, TABLE_PATH));
+    }
+
+    /**
+     * Verify that a layout stands for a longer one in NPrivate::TAggregatedTabletCounters::Initialize()
+     * only if the aggregates are the same: every slot of the layout holds the very same counter,
+     * and no slot past it holds a published one.
+     */
+    Y_UNIT_TEST(PrefixLayoutHoldsEveryPublishedCounter) {
+        using ::NKikimr::NPrivate::TAggregatedTabletCounters;
+
+        constexpr TTabletPercentileCounter::TRangeDef ranges[] = {{10, "10"}, {20, "20"}};
+        constexpr TTabletPercentileCounter::TRangeDef otherRanges[] = {{10, "10"}, {30, "30"}};
+
+        const THashSet<TString> nameFilter = {"a", "c", "HIST(c)", "p"};
+
+        // The layout: every published counter, and an unpublished one of every kind
+        auto makeLayout = [&]() {
+            TTestCounters layout(TTestNames{
+                .Simple = {"a", "b"},
+                .Cumulative = {"c", "d"},
+                .Percentile = {"HIST(c)", "p", nullptr},
+            });
+            layout.InitPercentile(0, ranges, true).InitPercentile(1, ranges, false);
+            return layout;
+        };
+        const auto layout = makeLayout();
+
+        UNIT_ASSERT(TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), makeLayout().Get(), &nameFilter));
+        UNIT_ASSERT(TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), makeLayout().Get()));
+
+        // More slots, unnamed or unpublished
+        {
+            TTestCounters counters(TTestNames{
+                .Simple = {"a", "b", "x", nullptr},
+                .Cumulative = {"c", "d", nullptr, "y"},
+                .Percentile = {"HIST(c)", "p", nullptr, "z"},
+            });
+            counters.InitPercentile(0, ranges, true).InitPercentile(1, ranges, false).InitPercentile(3, otherRanges, false);
+            UNIT_ASSERT(TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter));
+
+            // Without a name filter (or with an empty one) every named counter is published
+            const THashSet<TString> emptyFilter;
+            UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get()));
+            UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &emptyFilter));
+        }
+
+        // A published counter past the layout, of every kind
+        for (ui32 kind = 0; kind < 3; ++kind) {
+            TTestCounters counters(TTestNames{
+                .Simple = {"a", "b", kind == 0 ? "a" : nullptr},
+                .Cumulative = {"c", "d", kind == 1 ? "c" : nullptr},
+                .Percentile = {"HIST(c)", "p", nullptr, kind == 2 ? "p" : nullptr},
+            });
+            counters.InitPercentile(0, ranges, true).InitPercentile(1, ranges, false);
+            if (kind == 2) {
+                counters.InitPercentile(3, ranges, false);
+            }
+            UNIT_ASSERT_C(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter), kind);
+        }
+
+        // Fewer slots, of every kind
+        for (ui32 kind = 0; kind < 3; ++kind) {
+            TTestCounters counters(TTestNames{
+                .Simple = kind == 0 ? TVector<const char*>{"a"} : TVector<const char*>{"a", "b"},
+                .Cumulative = kind == 1 ? TVector<const char*>{"c"} : TVector<const char*>{"c", "d"},
+                .Percentile = kind == 2 ? TVector<const char*>{"HIST(c)", "p"} : TVector<const char*>{"HIST(c)", "p", nullptr},
+            });
+            counters.InitPercentile(0, ranges, true).InitPercentile(1, ranges, false);
+            UNIT_ASSERT_C(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter), kind);
+        }
+
+        // Another counter at a slot of the layout: another name, even an unpublished one, or none
+        for (const char* name : {"B", static_cast<const char*>(nullptr)}) {
+            TTestCounters counters(TTestNames{
+                .Simple = {"a", name},
+                .Cumulative = {"c", "d"},
+                .Percentile = {"HIST(c)", "p", nullptr},
+            });
+            counters.InitPercentile(0, ranges, true).InitPercentile(1, ranges, false);
+            UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter));
+        }
+
+        // A percentile counter of the same name with other buckets, another integral flag or no buckets at all
+        {
+            TTestCounters counters(TTestNames{
+                .Simple = {"a", "b"},
+                .Cumulative = {"c", "d"},
+                .Percentile = {"HIST(c)", "p", nullptr},
+            });
+            counters.InitPercentile(0, ranges, true).InitPercentile(1, otherRanges, false);
+            UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter));
+        }
+        {
+            TTestCounters counters(TTestNames{
+                .Simple = {"a", "b"},
+                .Cumulative = {"c", "d"},
+                .Percentile = {"HIST(c)", "p", nullptr},
+            });
+            counters.InitPercentile(0, ranges, true).InitPercentile(1, ranges, true);
+            UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter));
+        }
+        {
+            TTestCounters counters(TTestNames{
+                .Simple = {"a", "b"},
+                .Cumulative = {"c", "d"},
+                .Percentile = {"HIST(c)", "p", nullptr},
+            });
+            counters.InitPercentile(0, ranges, true);
+            UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter));
+        }
+
+        // The buckets of an unnamed percentile counter do not matter
+        {
+            TTestCounters counters(TTestNames{
+                .Simple = {"a", "b"},
+                .Cumulative = {"c", "d"},
+                .Percentile = {"HIST(c)", "p", nullptr},
+            });
+            counters.InitPercentile(0, ranges, true).InitPercentile(1, ranges, false).InitPercentile(2, otherRanges, true);
+            UNIT_ASSERT(TAggregatedTabletCounters::IsPrefixLayout(layout.Get(), counters.Get(), &nameFilter));
+        }
+
+        // The production layouts: the application counter template of DataShard stands for
+        // the full application counters, as long as only the allow-listed ones are published
+        const auto* descriptor = GetDetailedMetricsDescriptor(TABLET_TYPE);
+        UNIT_ASSERT(descriptor);
+        const auto appCountersTemplate = CreateAppCountersByTabletType(TABLET_TYPE);
+        UNIT_ASSERT(appCountersTemplate);
+        TDataShardFullAppCounters fullAppCounters;
+        const auto& appNames = descriptor->RawNames.AppNames;
+
+        UNIT_ASSERT(TAggregatedTabletCounters::IsPrefixLayout(*appCountersTemplate, fullAppCounters, &appNames));
+        UNIT_ASSERT(TAggregatedTabletCounters::IsPrefixLayout(*appCountersTemplate, *appCountersTemplate, &appNames));
+        UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(*appCountersTemplate, fullAppCounters));
+        UNIT_ASSERT(!TAggregatedTabletCounters::IsPrefixLayout(fullAppCounters, *appCountersTemplate, &appNames));
     }
 }

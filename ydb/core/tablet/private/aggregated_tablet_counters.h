@@ -6,6 +6,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
+#include <array>
+
 namespace NKikimrSysView {
 class TDbCounters;
 }
@@ -47,6 +49,11 @@ public:
      *
      * @note The layout of the counter set is a property of the tablet type,
      *       so it is defined once and for all by the very first reporting tablet.
+     *
+     * @note The layout may also be a prefix of the reported one (see IsPrefixLayout()),
+     *       e.g. the application counters of a tablet type without the counters
+     *       of its transaction types, which follow them: the aggregates are the same,
+     *       but nothing is kept for the slots past the prefix.
      */
     void Initialize(const TTabletCountersBase* counters, const THashSet<TString>* nameFilter = nullptr);
 
@@ -55,6 +62,12 @@ public:
      *
      * @note The cumulative counters are expected to be the delta since the previous call
      *       for this tablet (this is what the Executor sends).
+     *
+     * @note Only the slots of the layout the aggregate is initialized with are read
+     *       (see GetLayoutSizes()), so the counters must have at least as many slots
+     *       of each kind, the very same counters at them, and the slots past them are
+     *       ignored. The layout of Initialize() being a prefix of the layout
+     *       of the counters (see IsPrefixLayout()) is enough for that.
      *
      * @warning The counters are NOT recalculated by this function.
      *          RecalcAll() must be called explicitly afterwards.
@@ -78,6 +91,36 @@ public:
     void FromProto(NKikimrSysView::TDbCounters& sumCounters, NKikimrSysView::TDbCounters& maxCounters);
 
     bool Find(const TString& name, TVector<TTabletCounterValue>& results) const;
+
+    /**
+     * @return The sizes of the simple, the cumulative and the percentile counter arrays
+     *         of the layout the aggregate is initialized with (all zero before that)
+     */
+    std::array<ui32, 3> GetLayoutSizes() const;
+
+    /**
+     * Check whether the aggregate initialized with the given layout aggregates the given
+     * counters exactly the way the one initialized with the layout of the counters itself
+     * does (with the same name filter), so that the layout can stand for the layout
+     * of the counters in Initialize(), while Apply() is given the counters.
+     *
+     * That is the case if the layout is a prefix of the layout of the counters:
+     * - the counters have at least as many slots of each kind;
+     * - the very same counters are at every slot of the layout: the same names,
+     *   and the same bucket bounds and the same integral flag of the named
+     *   percentile counters;
+     * - no counter past the slots of the layout is published (passes the name filter).
+     *
+     * @param[in] layout The layout, which stands for the layout of the counters
+     * @param[in] counters The counters, which are reported
+     * @param[in] nameFilter The name filter of Initialize()
+     *
+     * @return Whether the layout is a prefix of the layout of the counters
+     */
+    static bool IsPrefixLayout(
+        const TTabletCountersBase& layout,
+        const TTabletCountersBase& counters,
+        const THashSet<TString>* nameFilter = nullptr);
 
 private:
     template <bool IsSaving>

@@ -8,6 +8,7 @@
 
 #include <ydb/core/sys_view/service/db_counters_codec.h>
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
+#include <ydb/core/tablet/tablet_counters_app.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
@@ -15,6 +16,7 @@
 #include <util/generic/vector.h>
 #include <util/system/mutex.h>
 
+#include <array>
 #include <utility>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TABLET_AGGREGATOR
@@ -73,6 +75,10 @@ namespace NKikimr {
         class TCountersBucket {
         public:
             /**
+             * @param[in] appCountersLayout The layout, which the aggregate of the application counters
+             *            is built on, if it is not the reported one: a prefix of it, which holds every
+             *            published counter (see TNodeDatabaseMetricsAggregatorImpl::GetRawAppCountersLayout()),
+             *            it must outlive the bucket; nullptr for the layout of the first report
              * @param[in] binding The binding of the public metrics of the tablet type to the counter
              *            layout of every tablet of the bucket, it must outlive the bucket
              *
@@ -83,6 +89,7 @@ namespace NKikimr {
                 NMonitoring::TDynamicCounterPtr bucketGroup,
                 TTabletTypes::EType tabletType,
                 const TDetailedMetricsCounterNames& counterNames,
+                const TTabletCountersBase* appCountersLayout,
                 NMonitoring::TCountableBase::EVisibility visibility,
                 const TDetailedMetricsBinding& binding)
                 : TabletType(tabletType)
@@ -90,6 +97,7 @@ namespace NKikimr {
                 , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
                 , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
                 , CounterNames(&counterNames)
+                , AppCountersLayout(appCountersLayout)
                 , Binding(&binding)
                 , Values(Binding, false /* skipLeaderOnly */)
             {
@@ -111,7 +119,9 @@ namespace NKikimr {
                     ExecutorCounters.Initialize(&executorCounters, &CounterNames->ExecutorNames);
                 }
                 if (!AppCounters.IsInitialized) {
-                    AppCounters.Initialize(&appCounters, &CounterNames->AppNames);
+                    // Every report is read up to the slots of the layout the aggregate is built on,
+                    // which are a prefix of the slots of the reported layout
+                    AppCounters.Initialize(AppCountersLayout ? AppCountersLayout : &appCounters, &CounterNames->AppNames);
                 }
 
                 ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
@@ -174,6 +184,14 @@ namespace NKikimr {
                 return Binding;
             }
 
+            /**
+             * @return The sizes of the layout the aggregate of the application counters is built on,
+             *         see NPrivate::TAggregatedTabletCounters::GetLayoutSizes()
+             */
+            std::array<ui32, 3> GetAppLayoutSizes() const {
+                return AppCounters.GetLayoutSizes();
+            }
+
         private:
             TTabletTypes::EType TabletType;
 
@@ -183,6 +201,9 @@ namespace NKikimr {
             NPrivate::TAggregatedTabletCounters AppCounters;
 
             const TDetailedMetricsCounterNames* CounterNames;
+
+            // nullptr for the layout of the first report
+            const TTabletCountersBase* AppCountersLayout;
 
             THashMap<TTabletKey, ui64> SourceIds;
             ui64 NextSourceId = 0;
@@ -334,7 +355,7 @@ namespace NKikimr {
                     }
 
                     if (!bucket) {
-                        CreateTableBucket(*entry, relativePath, tabletType, descriptor->RawNames, binding);
+                        CreateTableBucket(*entry, relativePath, tabletType, descriptor->RawNames, binding, appCounters);
                     }
                     bucket->Apply(tablet, executorCounters, appCounters, now);
                 } else {
@@ -437,6 +458,20 @@ namespace NKikimr {
                 if (!PendingCounters.empty()) {
                     AppendPendingCounters(out, firstAppendedTableIndex);
                 }
+            }
+
+            /**
+             * See NKikimr::GetTableBucketAppLayoutSizes().
+             */
+            TMaybe<std::array<ui32, 3>> GetTableBucketAppLayoutSizes(const TString& tablePath) const {
+                TGuard<TMutex> guard(DetailedMetricsLock());
+
+                auto it = Tables.find(MakeRelativeTablePath(DatabasePrefix, tablePath));
+                if (it == Tables.end() || !it->second.TableBucket) {
+                    return Nothing();
+                }
+
+                return it->second.TableBucket->GetAppLayoutSizes();
             }
 
         private:
@@ -642,15 +677,20 @@ namespace NKikimr {
              * Create the TABLE bucket of the table together with the groups of the counter tree,
              * which hold its low level counters: database= and table= are created on demand
              * by the very first bucket under them, and removed by the last one (see DropTableBucket()).
+             *
+             * @param[in] appCounters The application counters of the first report of the bucket
              */
             void CreateTableBucket(
                 TTableEntry& entry,
                 const TStringBuf relativePath,
                 TTabletTypes::EType tabletType,
                 const TDetailedMetricsCounterNames& counterNames,
-                const TDetailedMetricsBinding& binding)
+                const TDetailedMetricsBinding& binding,
+                const TTabletCountersBase& appCounters)
             {
                 Y_DEBUG_ABORT_UNLESS(!entry.TableBucket && !entry.TableGroup);
+
+                const TTabletCountersBase* appCountersLayout = GetRawAppCountersLayout(binding, appCounters, counterNames.AppNames);
 
                 entry.TableGroup = TargetCounterGroup
                     ->GetSubgroup(DATABASE_LABEL, DatabasePath)
@@ -659,8 +699,57 @@ namespace NKikimr {
                     entry.TableGroup,
                     tabletType,
                     counterNames,
+                    appCountersLayout,
                     CounterVisibility,
                     binding);
+            }
+
+            /**
+             * Get the layout, which the aggregate of the application counters of a TABLE bucket
+             * is built on: the application counter template of the tablet type
+             * (see CreateAppCountersByTabletType()), if it is a prefix of the reported layout,
+             * which holds every published counter (see NPrivate::TAggregatedTabletCounters::IsPrefixLayout()),
+             * the reported layout itself otherwise (e.g. the synthetic layouts of the tests).
+             *
+             * The aggregates are the same either way, but an aggregate keeps a little for every slot
+             * of its layout, the slots of the counters it does not publish included. DataShard reports
+             * its application counters followed by the counters of each of its transaction types,
+             * several times as many slots, none of which is published: built on the template,
+             * the aggregate skips them altogether.
+             *
+             * @note The check is done once per binding, i.e. per counter layout of the tablet type,
+             *       as the aggregator tells the layouts apart (see GetOrBind()): a TABLE bucket takes
+             *       the reports of its own binding alone (see AddCounters()). The template is created
+             *       once per tablet type, on the first TABLE bucket of that type.
+             *
+             * @param[in] binding The binding of the bucket, it identifies the layout
+             * @param[in] appCounters The application counters of a report of that layout
+             * @param[in] appNames The application counters, which the bucket publishes
+             *
+             * @return The layout to build the aggregate on, nullptr for the reported one
+             */
+            const TTabletCountersBase* GetRawAppCountersLayout(
+                const TDetailedMetricsBinding& binding,
+                const TTabletCountersBase& appCounters,
+                const THashSet<TString>& appNames)
+            {
+                auto [it, inserted] = RawAppCountersLayouts.try_emplace(&binding, nullptr);
+                if (!inserted) {
+                    return it->second;
+                }
+
+                const TTabletTypes::EType tabletType = binding.Descriptor->Type;
+                auto [templateIt, templateInserted] = AppCountersTemplates.try_emplace(tabletType);
+                if (templateInserted) {
+                    templateIt->second = CreateAppCountersByTabletType(tabletType);
+                }
+
+                const auto& appCountersTemplate = templateIt->second;
+                if (appCountersTemplate && NPrivate::TAggregatedTabletCounters::IsPrefixLayout(*appCountersTemplate, appCounters, &appNames)) {
+                    it->second = appCountersTemplate.Get();
+                }
+
+                return it->second;
             }
 
             /**
@@ -828,6 +917,21 @@ namespace NKikimr {
              */
             THashMap<std::pair<TTabletTypes::EType, TDetailedMetricsLayoutSignature>, TVector<THolder<TDetailedMetricsBinding>>> ExtraBindings;
 
+            /**
+             * The application counter template of every tablet type, which has a TABLE bucket
+             * (nullptr if the type has none), see GetRawAppCountersLayout(). The TABLE buckets
+             * point to the templates, so they are never destroyed or moved (THolder) while
+             * the instance lives.
+             */
+            THashMap<TTabletTypes::EType, THolder<TTabletCountersBase>> AppCountersTemplates;
+
+            /**
+             * The layout, which the aggregate of the application counters of a TABLE bucket
+             * of every binding is built on: a template in AppCountersTemplates, or nullptr for
+             * the reported layout, see GetRawAppCountersLayout().
+             */
+            THashMap<const TDetailedMetricsBinding*, const TTabletCountersBase*> RawAppCountersLayouts;
+
             bool WarnedBucketLayoutMismatch = false;
         };
 
@@ -842,6 +946,14 @@ namespace NKikimr {
             targetCounterGroup,
             databasePath,
             isFollowerRole);
+    }
+
+    TMaybe<std::array<ui32, 3>> GetTableBucketAppLayoutSizes(
+        const TNodeDatabaseMetricsAggregator& aggregator,
+        const TString& tablePath) {
+        const auto* impl = dynamic_cast<const TNodeDatabaseMetricsAggregatorImpl*>(&aggregator);
+        Y_ABORT_UNLESS(impl, "not an aggregator of CreateNodeDatabaseMetricsAggregator()");
+        return impl->GetTableBucketAppLayoutSizes(tablePath);
     }
 
 } // namespace NKikimr

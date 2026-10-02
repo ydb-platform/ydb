@@ -69,6 +69,22 @@ public:
 
     [[nodiscard]] bool Allocate(const bool isPriorityProcess, TProcessMemoryScope& process, const ui32 allocationsLimit);
 
+    template <typename TPred>
+    [[nodiscard]] std::vector<std::shared_ptr<TAllocationInfo>> ExtractIf(TPred&& pred) {
+        std::vector<std::shared_ptr<TAllocationInfo>> result;
+        for (auto it = Groups.begin(); it != Groups.end();) {
+            while (auto allocation = it->second.TakeOne(pred)) {
+                result.emplace_back(std::move(allocation));
+            }
+            if (it->second.IsEmpty()) {
+                it = Groups.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        return result;
+    }
+
     [[nodiscard]] std::vector<std::shared_ptr<TAllocationInfo>> ExtractGroupExt(const ui64 id) {
         auto it = Groups.find(id);
         if (it == Groups.end()) {

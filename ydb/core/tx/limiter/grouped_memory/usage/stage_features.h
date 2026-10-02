@@ -20,9 +20,15 @@ private:
     std::shared_ptr<TStageCounters> Counters;
     std::function<void(ui64)> MemoryConsumptionUpdate;
     const bool UseLimitFromConfig;
+    const bool UseHardLimitFromConfig;
     static constexpr ui64 DEFAULT_LIMIT = ui64(3) << 30;
 
     void UpdateConsumption(const TStageFeatures* current) const;
+
+    // The band never goes below the soft limit.
+    ui64 GetUnrestrictedLimit() const {
+        return std::max(UnrestrictedSoft.value_or(Limit), Limit);
+    }
 
 public:
     TString DebugString() const;
@@ -40,6 +46,11 @@ public:
     void UpdateVolume(const ui64 from, const ui64 to, const bool allocated);
     bool IsAllocatable(const ui64 volume, const ui64 additional) const;
     bool IsAllocatableUnrestricted(const ui64 volume, const ui64 additional) const;
+    // false: the volume exceeds a limit on the chain even at zero usage, so waiting cannot help.
+    // nullopt: the root stage has no band yet, so the answer is not known.
+    std::optional<bool> CanEverFitUnrestricted(const ui64 volume) const;
+    // Smallest unrestricted limit on the chain. Used for error messages.
+    ui64 GetEffectiveUnrestrictedLimit() const;
     void Add(const ui64 volume, const bool allocated);
 
     void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);

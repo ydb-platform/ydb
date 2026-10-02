@@ -167,6 +167,15 @@ private:
         return *it->second;
     }
 
+    // The allocation must already be out of WaitAllocations.
+    void FailNeverFitting(const std::shared_ptr<TAllocationInfo>& allocation) {
+        auto stage = allocation->GetStage();
+        LWPROBE(Allocated, "never_fits", allocation->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), allocation->GetAllocationTime(), false, false);
+        allocation->Fail(TStringBuilder() << stage->GetName() << "::(unrestricted_limit:" << stage->GetEffectiveUnrestrictedLimit()
+                                          << ";volume:" << allocation->GetAllocatedVolume() << ") exceeds the unrestricted limit;");
+        UnregisterAllocation(allocation->GetIdentifier());
+    }
+
     void UnregisterGroupImplExt(const ui64 externalGroupId) {
         auto data = WaitAllocations.ExtractGroupExt(externalGroupId);
         for (auto&& allocation : data) {
@@ -284,6 +293,11 @@ public:
             AFL_VERIFY(!AllocationInfo.contains(allocation->GetIdentifier()));
         } else {
             auto allocationInfo = RegisterAllocationImpl(externalGroupId, allocation, stage);
+            if (UnrestrictedEnabled && allocationInfo->GetAllocationStatus() == EAllocationStatus::Waiting && allocationInfo->NeverFitsUnrestricted()) {
+                // Nothing forces a request above the band any more. Waiting would never end and would hold the scope.
+                FailNeverFitting(allocationInfo);
+                return;
+            }
 
             const bool softOk = allocationInfo->IsAllocatable(0);
             const bool bandOk = UnrestrictedEnabled && AdmittedGroupIds.contains(externalGroupId) && allocationInfo->IsAllocatableUnrestricted(0);
@@ -318,6 +332,19 @@ public:
 
     bool TryAllocateWaiting(const bool isPriorityProcess, const ui32 allocationsCountLimit) {
         return WaitAllocations.Allocate(isPriorityProcess, *this, allocationsCountLimit);
+    }
+
+    // After the band shrank: waiting requests that no longer fit at zero usage.
+    void FailNeverFittingWaiting() {
+        if (!UnrestrictedEnabled) {
+            return;
+        }
+        auto never = WaitAllocations.ExtractIf([](const TAllocationInfo& info) {
+            return info.NeverFitsUnrestricted();
+        });
+        for (auto&& allocation : never) {
+            FailNeverFitting(allocation);
+        }
     }
 
     bool UnregisterAllocation(const ui64 allocationId) {
@@ -575,6 +602,13 @@ public:
         }
         UpdateWaitingScopes(&scope);
         return result;
+    }
+
+    void FailNeverFittingWaiting() {
+        for (auto&& [_, scope] : AllocationScopes) {
+            scope->FailNeverFittingWaiting();
+            UpdateWaitingScopes(scope.get());
+        }
     }
 
     bool TryAllocateWaiting(const ui32 allocationsCountLimit) {

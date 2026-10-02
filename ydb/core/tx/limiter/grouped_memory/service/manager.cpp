@@ -258,9 +258,16 @@ void TManager::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& h
     AFL_ENSURE(DefaultStage);
     bool isLimitIncreased = false;
     DefaultStage->UpdateMemoryLimits(limit, hardLimit, isLimitIncreased, unrestrictedSoft);
+    if (Config.IsUnrestrictedEnabled()) {
+        for (auto& [_, process] : Processes) {
+            auto g = BuildProcessOrderGuard(process);
+            process.FailNeverFittingWaiting();
+        }
+    }
     if (isLimitIncreased) {
         TryAllocateWaiting();
     }
+    RefreshSignals();
 }
 
 void TManager::UpdateWaitingProcesses(TProcessMemory* process) {

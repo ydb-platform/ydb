@@ -81,8 +81,11 @@ bool TAllocationGroups::Allocate(const bool isPriorityProcess, TProcessMemorySco
                 LWPROBE(Allocated, "delayed", i->GetIdentifier(), stage->GetName(), stage->GetLimit(), stage->GetHardLimit().value_or(std::numeric_limits<ui64>::max()), stage->GetUsage().Val(), stage->GetWaiting().Val(), i->GetAllocationTime(), forced, success);
                 if (!success) {
                     toRemove.emplace_back(i->GetIdentifier());
-                } else if (!forced) {
-                    AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
+                } else {
+                    scope.ReaccountAdmittedGroup(externalGroupId);
+                    if (!forced) {
+                        AFL_VERIFY(++allocationsCount <= allocationsLimit)("count", allocationsCount)("limit", allocationsLimit);
+                    }
                 }
                 if (!forced) {
                     AFL_VERIFY(groupedAllocations.Remove(i));

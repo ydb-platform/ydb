@@ -28,7 +28,8 @@ TStageFeatures::TStageFeatures(const TString& name, const std::optional<ui64>& l
     , UnrestrictedSoft(unrestrictedSoft)
     , Owner(owner)
     , Counters(counters)
-    , UseLimitFromConfig(limit.has_value()) {
+    , UseLimitFromConfig(limit.has_value())
+    , UseHardLimitFromConfig(hardLimit.has_value()) {
     if (Counters) {
         Counters->ValueSoftLimit->Set(Limit);
         if (HardLimit) {
@@ -148,14 +149,31 @@ bool TStageFeatures::IsAllocatable(const ui64 volume, const ui64 additional) con
 }
 
 bool TStageFeatures::IsAllocatableUnrestricted(const ui64 volume, const ui64 additional) const {
-    const ui64 limit = UnrestrictedSoft.value_or(Limit);
-    if (limit < additional + Usage.Val() + volume) {
+    if (GetUnrestrictedLimit() < additional + Usage.Val() + volume) {
         return false;
     }
     if (Owner) {
         return Owner->IsAllocatableUnrestricted(volume, additional);
     }
     return true;
+}
+
+std::optional<bool> TStageFeatures::CanEverFitUnrestricted(const ui64 volume) const {
+    if (Owner) {
+        if (GetUnrestrictedLimit() < volume) {
+            return false;
+        }
+        return Owner->CanEverFitUnrestricted(volume);
+    }
+    if (!UnrestrictedSoft) {
+        return std::nullopt;
+    }
+    return volume <= GetUnrestrictedLimit();
+}
+
+ui64 TStageFeatures::GetEffectiveUnrestrictedLimit() const {
+    const ui64 own = GetUnrestrictedLimit();
+    return Owner ? std::min(own, Owner->GetEffectiveUnrestrictedLimit()) : own;
 }
 
 void TStageFeatures::Add(const ui64 volume, const bool allocated) {
@@ -203,7 +221,8 @@ void TStageFeatures::AttachCounters(const std::shared_ptr<TStageCounters>& count
 
 void TStageFeatures::UpdateMemoryLimits(const ui64 limit, const std::optional<ui64>& hardLimit, bool& isLimitIncreased,
     const std::optional<ui64>& unrestrictedSoft) {
-    if (UseLimitFromConfig && !unrestrictedSoft) {
+    // A configured hard limit keeps its band from construction; a configured soft limit alone still takes the band.
+    if (UseLimitFromConfig && (!unrestrictedSoft || UseHardLimitFromConfig)) {
         isLimitIncreased = false;
         return;
     }

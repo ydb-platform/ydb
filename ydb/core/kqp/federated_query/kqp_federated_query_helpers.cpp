@@ -211,8 +211,7 @@ namespace {
     }
 
     bool IsValidExternalDataSourceType(const TString& type) {
-        static auto allTypes = NYql::GetAllExternalDataSourceTypes();
-        return allTypes.contains(type);
+        return NYql::IsValidAvailableExternalDataSourceType(type);
     }
 
     void IKqpFederatedQuerySetupFactory::Cleanup() {

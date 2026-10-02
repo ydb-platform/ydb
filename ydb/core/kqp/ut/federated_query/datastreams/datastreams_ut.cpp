@@ -113,7 +113,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             "database_name"_a = YDB_DATABASE
         ), EStatus::SCHEME_ERROR);
 
-        // YdbTopics is not allowed.
+        // "YdbTopics" is NOT a valid EDS source type for user creation.
+        // It was an internal type that is now removed. Users should use "Ydb" instead.
         ExecSchemeQuery(fmt::format(
             R"sql(
                 CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
@@ -123,7 +124,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     AUTH_METHOD="NONE"
                 );
             )sql",
-            "source_type"_a = ToString(NYql::EDatabaseType::YdbTopics),
+            "source_type"_a = "YdbTopics",
             "location"_a = YDB_ENDPOINT,
             "database_name"_a = YDB_DATABASE
         ), EStatus::SCHEME_ERROR);
@@ -150,26 +151,48 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ), EStatus::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(LegacyYdbTopicsInAvailableExternalDataSources, TStreamingTestFixture) {
+        // Test backward compatibility: "YdbTopics" in available_external_data_sources config
+        // should enable "Ydb" type (legacy config alias, not for EDS creation)
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("Ydb");
-        cfg.SetAllExternalDataSourcesAreAvailable(false);
-
-        CreatePqSource("sourceName");
-    }
-
-    Y_UNIT_TEST_F(ReadTopicFailedWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
-        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
-        cfg.AddAvailableExternalDataSources("Ydb");
+        cfg.AddAvailableExternalDataSources("YdbTopics");  // Legacy config value (ONLY YdbTopics, no "Ydb")
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";
-        CreatePqSource(sourceName);
-
         const std::string topicName = "topicName";
         CreateScopedTopic(topicName);
 
-        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
+        // 1. Schema validation: Should succeed - "YdbTopics" in config enables "Ydb" type
+        ExecSchemeQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `{source}` WITH (
+                    SOURCE_TYPE="Ydb",
+                    LOCATION="{location}",
+                    DATABASE_NAME="{database_name}",
+                    AUTH_METHOD="NONE"
+                );
+            )sql",
+            "source"_a = sourceName,
+            "location"_a = YDB_ENDPOINT,
+            "database_name"_a = YDB_DATABASE
+        ), EStatus::SUCCESS);
+
+        // 2. Schema validation: Users CANNOT create EDS with SOURCE_TYPE="YdbTopics"
+        ExecSchemeQuery(fmt::format(
+            R"sql(
+                CREATE EXTERNAL DATA SOURCE `sourceName2` WITH (
+                    SOURCE_TYPE="YdbTopics",
+                    LOCATION="{location}",
+                    DATABASE_NAME="{database_name}",
+                    AUTH_METHOD="NONE"
+                );
+            )sql",
+            "location"_a = YDB_ENDPOINT,
+            "database_name"_a = YDB_DATABASE
+        ), EStatus::SCHEME_ERROR);
+
+        // 3. E2E smoke test: Full streaming workflow should work
+        const auto scriptExecutionOperation = ExecScript(fmt::format(R"(
             SELECT * FROM `{source}`.`{topic}` WITH (
                 STREAMING = "TRUE",
                 FORMAT = "json_each_row",
@@ -178,35 +201,28 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                     value String NOT NULL
                 )
             )
-            LIMIT 1;
+            LIMIT 2;
             )",
             "source"_a=sourceName,
             "topic"_a=topicName
-        ), EExecStatus::Failed);
+        ));
 
-        const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "External source with type YdbTopics is disabled");
+        WriteTopicMessages(topicName, {
+            R"({"key": "key1", "value": "value1"})",
+            R"({"key": "key1", "value": "value1"})",
+        });
+        CheckScriptResult(scriptExecutionOperation, 2, 2, [](TResultSetParser& result) {
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
+            UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
+        });
     }
 
-    Y_UNIT_TEST_F(ReadTopicEndpointValidationWithoutAvailableExternalDataSourcesYdbTopics, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("Ydb");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
-        constexpr char sourceName[] = "sourceName";
-        CreatePqSource(sourceName);
-
-        // Execute script without existing topic
-        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
-            SELECT * FROM `{source}`.`topicName` WITH (STREAMING = "TRUE")
-            )",
-            "source"_a=sourceName
-        ), EExecStatus::Failed);
-
-        const auto& status = scriptExecutionOperation.Status();
-        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
-        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "Couldn't determine external YDB entity type");
+        CreatePqSource("sourceName");
     }
 
     Y_UNIT_TEST_F(ReadTopicEndpointValidation, TStreamingTestFixture) {
@@ -255,7 +271,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {
         auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
         cfg.AddAvailableExternalDataSources("Ydb");
-        cfg.AddAvailableExternalDataSources("YdbTopics");
         cfg.SetAllExternalDataSourcesAreAvailable(false);
 
         const std::string sourceName = "sourceName";
@@ -292,6 +307,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
         });
 
+        // Test batch query (table mode) for topics
         const auto batchResults = ExecQuery(fmt::format(R"(
             SELECT * FROM `{source}`.`{topic}` WITH (
                 FORMAT = "json_each_row",
@@ -305,6 +321,38 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(0).GetString(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(result.ColumnParser(1).GetString(), "value1");
         });
+    }
+
+    Y_UNIT_TEST_F(ReadTopicFailedWithoutYdbInConfig, TStreamingTestFixture) {
+        // Negative test: reading topics should fail without "Ydb" in available_external_data_sources
+        auto& cfg = *SetupAppConfig().MutableQueryServiceConfig();
+        cfg.AddAvailableExternalDataSources("ObjectStorage");  // Only ObjectStorage, no Ydb
+        cfg.SetAllExternalDataSourcesAreAvailable(false);
+
+        const std::string sourceName = "sourceName";
+        const std::string topicName = "topicName";
+
+        CreateTopic(topicName);
+        CreatePqSource(sourceName);
+
+        const auto scriptExecutionOperation = ExecAndWaitScript(fmt::format(R"(
+            SELECT * FROM `{source}`.`{topic}` WITH (
+                STREAMING = "TRUE",
+                FORMAT = "json_each_row",
+                SCHEMA = (
+                    key String NOT NULL,
+                    value String NOT NULL
+                )
+            )
+            LIMIT 1;
+            )",
+            "source"_a=sourceName,
+            "topic"_a=topicName
+        ), EExecStatus::Failed);
+
+        const auto& status = scriptExecutionOperation.Status();
+        UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::BAD_REQUEST, status.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS(status.GetIssues().ToString(), "is not available");
     }
 
     Y_UNIT_TEST_F(ReadTopicBasicNewSecrets, TStreamingWithSchemaSecretsTestFixture) {

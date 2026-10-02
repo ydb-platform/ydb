@@ -261,36 +261,54 @@ TExternalDataSource::TExternalDataSource(
 
 TExternalDataSource TExternalDataSource::CreateFromDescription(
     const NKikimrSchemeOp::TExternalDataSourceDescription& description,
-    const TString& dataSourcePath)
+    const TString& dataSourcePath,
+    EKind kind)
 {
-    return TExternalDataSource(description, dataSourcePath);
+    auto source = TExternalDataSource(description, dataSourcePath);
+    if (kind != EKind::Unknown) {
+        source.InitObjectKind(kind);
+    }
+    return source;
 }
 
 TExternalDataSource TExternalDataSource::CreateForLocalTopic(const TString& cluster,
     const TString& database, const TString& transientToken)
 {
     NKikimrSchemeOp::TExternalDataSourceDescription description;
-    description.SetSourceType(ToString(EDatabaseType::YdbTopics));
+    description.SetSourceType(ToString(EDatabaseType::Ydb));
     description.MutableAuth()->MutableNone();
     (*description.MutableProperties()->mutable_properties())["database_name"] = database;
     if (!transientToken.empty()) {
         (*description.MutableProperties()->mutable_properties())["transient_token"] = transientToken;
     }
-    return CreateFromDescription(description, cluster);
+    return CreateFromDescription(description, cluster, EKind::Topic);
 }
 
 void TExternalDataSource::ApplyInferredMetadata(const TString& type, const TString& dataSourcePath) {
     TExternalDataSource updated = *this;
     updated.Type = type;
+    if (updated.Kind == EKind::Unknown) {
+        updated.Kind = EKind::Table;
+    }
     updated.DataSourcePath = dataSourcePath;
     Y_ENSURE(!updated.Type.empty(), "TExternalDataSource: Type is required");
     Y_ENSURE(!updated.IsYdbBased() || !updated.Auth.IsAws(), "TExternalDataSource: YDB sources do not support AWS auth");
     *this = std::move(updated);
 }
 
-void TExternalDataSource::SetYdbTopicType() {
-    Y_ENSURE(IsYdb(), "TExternalDataSource: only a Ydb source can resolve to a topic");
-    Type = ToString(EDatabaseType::YdbTopics);
+void TExternalDataSource::InitObjectKind(EKind kind) {
+    Y_ENSURE(IsYdb() && Kind == EKind::Unknown, "TExternalDataSource: only an unresolved Ydb source can initialize object kind");
+    Y_ENSURE(kind == EKind::Table || kind == EKind::Topic, "TExternalDataSource: expected a table or topic object kind");
+    Kind = kind;
+}
+
+TString TExternalDataSource::GetProviderName(const NKikimr::NExternalSource::IExternalSourceFactory::TPtr& externalSourceFactory) const {
+    YQL_ENSURE(externalSourceFactory, "External source factory is null");
+    if (IsYdbTopics()) {
+        YQL_ENSURE(IsYdb(), "A topic must use a Ydb connection");
+        return TString{NYql::PqProviderName};
+    }
+    return externalSourceFactory->GetOrCreate(GetType())->GetName();
 }
 
 bool TExternalDataSource::IsYdb() const {
@@ -298,7 +316,7 @@ bool TExternalDataSource::IsYdb() const {
 }
 
 bool TExternalDataSource::IsYdbTopics() const {
-    return Type == ToString(EDatabaseType::YdbTopics);
+    return Kind == EKind::Topic;
 }
 
 TString TExternalDataSource::GetDatabaseName() const {

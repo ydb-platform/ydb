@@ -471,7 +471,16 @@ public:
 
         Strategy->Proccess(*desc.MutableConfig(), owner);
 
-        desc.MutableState()->MutableStandBy();
+        if (desc.GetConfig().HasTransferSpecific()) {
+            desc.MutableConfig()->ClearSkipInitialScan();
+        } else {
+            desc.MutableConfig()->SetSkipInitialScan(AppData()->ReplicationConfig.GetSkipInitialScan());
+        }
+        if (desc.GetConfig().GetSkipInitialScan()) {
+            desc.MutableState()->MutablePaused();
+        } else {
+            desc.MutableState()->MutableStandBy();
+        }
         auto replication = TReplicationInfo::Create(std::move(desc));
         context.SS->Replications.Set(path->PathId, replication);
         context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Add(1);

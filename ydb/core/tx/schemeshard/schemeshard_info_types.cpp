@@ -440,7 +440,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
     const TSubDomainInfo& subDomain,
     const TCreateAlterDataFeatureFlags& featureFlags,
     TString& errStr,
-    const THashSet<TString>& localSequences)
+    const THashSet<TString>& localSequences,
+    bool allowReplicationMode)
 {
     TAlterDataPtr alterData = new TTableInfo::TAlterTableInfo();
     alterData->TableDescriptionFull = NKikimrSchemeOp::TTableDescription();
@@ -1014,7 +1015,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             }
             break;
         case NKikimrSchemeOp::TTableReplicationConfig::REPLICATION_MODE_READ_ONLY:
-            if (source) {
+            if (source && !allowReplicationMode) {
                 errStr = "Cannot set replication mode";
                 return nullptr;
             }

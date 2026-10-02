@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/sub_columns/sub_column_name.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/digest/fnv.h>
@@ -20,16 +22,20 @@ enum class ENodeType: ui32 {
 class TOriginalDataAddress {
 private:
     YDB_READONLY(ui32, ColumnId, 0);
-    YDB_READONLY_DEF(TString, SubColumnName);
+    NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName SubColumnName;
 
 public:
+    const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& GetSubColumnName() const {
+        return SubColumnName;
+    }
+
     static ui64 CalcSubColumnHash(const std::string_view sv);
 
     static ui64 CalcSubColumnHash(const TString& path) {
         return CalcSubColumnHash(std::string_view(path.data(), path.size()));
     }
 
-    explicit TOriginalDataAddress(const ui32 columnId, const TString& subColumnName = "")
+    explicit TOriginalDataAddress(const ui32 columnId, const NArrow::NAccessor::NSubColumns::TCanonicalSubColumnName& subColumnName = {})
         : ColumnId(columnId)
         , SubColumnName(subColumnName)
     {
@@ -45,7 +51,7 @@ public:
 
     explicit operator size_t() const {
         if (SubColumnName) {
-            return CombineHashes<ui64>(ColumnId, FnvHash<ui64>(SubColumnName.data(), SubColumnName.size()));
+            return CombineHashes<ui64>(ColumnId, SubColumnName.GetHash());
         } else {
             return ColumnId;
         }
@@ -75,8 +81,6 @@ public:
         return ColumnId == item.ColumnId && GenerationId == item.GenerationId && NodeType == item.NodeType &&
                SubColumnName == item.SubColumnName;
     }
-
-    TOriginalDataAddress BuildOriginalDataAddress() const;
 
     TNodeId BuildCopy() const {
         return TNodeId(ColumnId, Counter.Inc(), NodeType);

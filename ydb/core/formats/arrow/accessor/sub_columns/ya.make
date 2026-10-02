@@ -26,6 +26,7 @@ SRCS(
     data_extractor.cpp
     json_extractors.cpp
     json_value_path.cpp
+    sub_column_name.cpp
     accessor.cpp
     dense_encoding/encoding.cpp
     dense_encoding/constructors.cpp

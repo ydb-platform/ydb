@@ -18,11 +18,6 @@ TNodeId TNodeId::Original(const ui32 columnId, const TString& subColumnName) {
     return result;
 }
 
-TOriginalDataAddress TNodeId::BuildOriginalDataAddress() const {
-    AFL_VERIFY(NodeType == ENodeType::OriginalColumn);
-    return TOriginalDataAddress(ColumnId, SubColumnName);
-}
-
 TString TOriginalDataAddress::DebugString() const {
     if (SubColumnName) {
         return TStringBuilder() << "{cId=" << ColumnId << ";sub=" << SubColumnName << "}";

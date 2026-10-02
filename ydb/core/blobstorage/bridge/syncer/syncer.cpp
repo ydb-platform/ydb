@@ -1,7 +1,8 @@
 #include "syncer.h"
 #include "syncer_impl.h"
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
-#include <ydb/core/util/stlog.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_BRIDGE_SYNC
 
 namespace NKikimr::NBridge {
 
@@ -50,7 +51,9 @@ namespace NKikimr::NBridge {
         LogId = TStringBuilder() << SelfId() << Info->GroupID << '{' << SourceGroupId << "->" << TargetGroupId << '#'
             << NKikimrBridge::TGroupState::EStage_Name(Stage) << '}';
 
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS00, "bootstrapping bridged blobstorage syncer", (LogId, LogId));
+        YDB_LOG_DEBUG("Bootstrapping bridged blobstorage syncer",
+            {"marker", "BRSS00"},
+            {"logId", LogId});
 
         Become(&TThis::StateFunc);
 
@@ -90,12 +93,17 @@ namespace NKikimr::NBridge {
     }
 
     void TSyncerActor::PassAway() {
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS15, "PassAway", (LogId, LogId));
+        YDB_LOG_DEBUG("PassAway",
+            {"marker", "BRSS15"},
+            {"logId", LogId});
         TActorBootstrapped::PassAway();
     }
 
     void TSyncerActor::Terminate(std::optional<TString> errorReason) {
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS04, "syncing finished", (LogId, LogId), (ErrorReason, errorReason));
+        YDB_LOG_DEBUG("Syncing finished",
+            {"marker", "BRSS04"},
+            {"logId", LogId},
+            {"errorReason", errorReason});
         Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NStorage::TEvNodeWardenNotifySyncerFinished(Info->GroupID,
             Info->GroupGeneration, SourceGroupId, TargetGroupId, std::move(errorReason)));
         PassAway();
@@ -103,7 +111,10 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
         auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS01, "TEvControllerConfigResponse", (LogId, LogId), (Record, record));
+        YDB_LOG_DEBUG("TEvControllerConfigResponse",
+            {"marker", "BRSS01"},
+            {"logId", LogId},
+            {"record", record});
         const auto& response = record.GetResponse();
         if (!response.GetSuccess()) {
             Terminate(TStringBuilder() << "failed to switch group state in BSC: " << response.GetErrorDescription());
@@ -112,7 +123,10 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
         auto& record = ev->Get()->Record;
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS12, "TEvNodeConfigInvokeOnRootResult", (LogId, LogId), (Record, record));
+        YDB_LOG_DEBUG("TEvNodeConfigInvokeOnRootResult",
+            {"marker", "BRSS12"},
+            {"logId", LogId},
+            {"record", record});
         if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             Terminate(TStringBuilder() << "failed to switch static group state: " << record.GetErrorReason());
         }
@@ -127,8 +141,11 @@ namespace NKikimr::NBridge {
         std::vector<TLogoBlobID> doNotKeepToIssue;
 
         auto mergeBlocks = [&](auto *sourceItem, auto *targetItem, const auto& key) {
-            STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS05, "merging block", (LogId, LogId), (SourceItem, sourceItem),
-                (TargetItem, targetItem));
+            YDB_LOG_DEBUG("Merging block",
+                {"marker", "BRSS05"},
+                {"logId", LogId},
+                {"sourceItem", sourceItem},
+                {"targetItem", targetItem});
             // this operation is only possible while syncing blocks, so enforce it
             Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::BLOCKS);
             const auto& [tabletId] = key;
@@ -151,8 +168,11 @@ namespace NKikimr::NBridge {
         };
 
         auto mergeBarriers = [&](auto *sourceItem, auto *targetItem, const auto& /*key*/) {
-            STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS06, "merging barrier", (LogId, LogId), (SourceItem, sourceItem),
-                (TargetItem, targetItem));
+            YDB_LOG_DEBUG("Merging barrier",
+                {"marker", "BRSS06"},
+                {"logId", LogId},
+                {"sourceItem", sourceItem},
+                {"targetItem", targetItem});
             Y_ABORT_UNLESS(Stage == NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP);
             if (!sourceItem) {
                 return;
@@ -173,17 +193,18 @@ namespace NKikimr::NBridge {
                         // we have newer key, maybe it was written just now
                         return;
                     } else {
-                        STLOG(PRI_CRIT, BS_BRIDGE_SYNC, BRSS13, "incorrect barrier",
-                            (LogId, LogId),
-                            (Target.RecordGeneration, existingItem->RecordGeneration),
-                            (Target.PerGenerationCounter, existingItem->PerGenerationCounter),
-                            (Target.CollectGeneration, existingItem->CollectGeneration),
-                            (Target.CollectStep, existingItem->CollectStep),
-                            (Source.RecordGeneration, item.RecordGeneration),
-                            (Source.PerGenerationCounter, item.PerGenerationCounter),
-                            (Source.CollectGeneration, item.CollectGeneration),
-                            (Source.CollectStep, item.CollectStep),
-                            (Hard, hard));
+                        YDB_LOG_CRIT("Incorrect barrier",
+                            {"marker", "BRSS13"},
+                            {"logId", LogId},
+                            {"#_Target.RecordGeneration", existingItem->RecordGeneration},
+                            {"#_Target.PerGenerationCounter", existingItem->PerGenerationCounter},
+                            {"#_Target.CollectGeneration", existingItem->CollectGeneration},
+                            {"#_Target.CollectStep", existingItem->CollectStep},
+                            {"#_Source.RecordGeneration", item.RecordGeneration},
+                            {"#_Source.PerGenerationCounter", item.PerGenerationCounter},
+                            {"#_Source.CollectGeneration", item.CollectGeneration},
+                            {"#_Source.CollectStep", item.CollectStep},
+                            {"hard", hard});
                     }
                 }
 
@@ -198,8 +219,11 @@ namespace NKikimr::NBridge {
         };
 
         auto mergeBlobs = [&](auto *sourceItem, auto *targetItem, const auto& key) {
-            STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS03, "merging blob", (LogId, LogId), (SourceItem, sourceItem),
-                (TargetItem, targetItem));
+            YDB_LOG_DEBUG("Merging blob",
+                {"marker", "BRSS03"},
+                {"logId", LogId},
+                {"sourceItem", sourceItem},
+                {"targetItem", targetItem});
 
             const auto& [blobId] = key;
 
@@ -377,10 +401,15 @@ namespace NKikimr::NBridge {
 #define MSG(TYPE) \
             case TEvBlobStorage::TYPE: { \
                 auto& msg = static_cast<TEvBlobStorage::T##TYPE&>(*ev); \
-                STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS07, #TYPE, (LogId, LogId), (ToTargetGroup, toTargetGroup), \
-                    (Msg, msg), (QueriesInFlight, QueriesInFlight), \
-                    (PendingQueries.size, PendingQueries.size()), (MaxQueriesInFlight, MaxQueriesInFlight), \
-                    (Payloads.size, Payloads.size())); \
+                YDB_LOG_DEBUG(#TYPE, \
+                    {"marker", "BRSS07"}, \
+                    {"logId", LogId}, \
+                    {"toTargetGroup", toTargetGroup}, \
+                    {"msg", msg}, \
+                    {"queriesInFlight", QueriesInFlight}, \
+                    {"#_PendingQueries.size", PendingQueries.size()}, \
+                    {"maxQueriesInFlight", MaxQueriesInFlight}, \
+                    {"#_Payloads.size", Payloads.size()}); \
                 msg.ForceGroupGeneration.emplace(toTargetGroup ? TargetGroupGeneration : SourceGroupGeneration); \
                 break; \
             }
@@ -423,7 +452,10 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS09, "TEvBlockResult", (LogId, LogId), (Msg, msg));
+        YDB_LOG_DEBUG("TEvBlockResult",
+            {"marker", "BRSS09"},
+            {"logId", LogId},
+            {"msg", msg});
         const NKikimrProto::EReplyStatus status = msg.Status;
         const bool success = status == NKikimrProto::OK
             || status == NKikimrProto::ALREADY
@@ -434,7 +466,10 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS10, "TEvCollectGarbageResult", (LogId, LogId), (Msg, msg));
+        YDB_LOG_DEBUG("TEvCollectGarbageResult",
+            {"marker", "BRSS10"},
+            {"logId", LogId},
+            {"msg", msg});
         const NKikimrProto::EReplyStatus status = msg.Status;
         const bool success = status == NKikimrProto::OK;
         OnQueryFinished(ev->Cookie, success);
@@ -443,7 +478,10 @@ namespace NKikimr::NBridge {
 
     void TSyncerActor::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS11, "TEvPutResult", (LogId, LogId), (Msg, msg));
+        YDB_LOG_DEBUG("TEvPutResult",
+            {"marker", "BRSS11"},
+            {"logId", LogId},
+            {"msg", msg});
         const NKikimrProto::EReplyStatus status = msg.Status;
         const bool success = status == NKikimrProto::OK;
         OnQueryFinished(ev->Cookie, success);
@@ -519,8 +557,11 @@ namespace NKikimr::NBridge {
             Y_DEBUG_ABORT();
             errorReason = "TEvGetResult from unexpected group";
         }
-        STLOG(errorReason ? PRI_NOTICE : PRI_DEBUG, BS_BRIDGE_SYNC, BRSS08, "TEvGetResult", (LogId, LogId), (Msg, msg),
-            (ErrorReason, errorReason));
+        YDB_LOG(errorReason ? PRI_NOTICE : PRI_DEBUG, "TEvGetResult",
+            {"marker", "BRSS08"},
+            {"logId", LogId},
+            {"msg", msg},
+            {"errorReason", errorReason});
         OnQueryFinished(ev->Cookie, !errorReason);
         CheckIfDone();
     }
@@ -560,11 +601,13 @@ namespace NKikimr::NBridge {
         Y_ABORT_UNLESS(state.BarriersFinished >= state.BlobsFinished);
         Y_ABORT_UNLESS(!state.BlobsFinished);
 
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS02, "issuing assimilate request", (LogId, LogId), (ToTargetGroup, toTargetGroup),
-            (SkipBlocksUpTo, state.SkipBlocksUpTo ? ToString(*state.SkipBlocksUpTo) : "<none>"),
-            (SkipBarriersUpTo, state.SkipBarriersUpTo ? TString(TStringBuilder() << '[' <<
-                std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"),
-            (SkipBlobsUpTo, state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"));
+        YDB_LOG_DEBUG("Issuing assimilate request",
+            {"marker", "BRSS02"},
+            {"logId", LogId},
+            {"toTargetGroup", toTargetGroup},
+            {"skipBlocksUpTo", state.SkipBlocksUpTo ? ToString(*state.SkipBlocksUpTo) : "<none>"},
+            {"skipBarriersUpTo", state.SkipBarriersUpTo ? TString(TStringBuilder() << '[' <<                 std::get<0>(*state.SkipBarriersUpTo) << ':' << (int)std::get<1>(*state.SkipBarriersUpTo) << ']') : "<none>"},
+            {"skipBlobsUpTo", state.SkipBlobsUpTo ? state.SkipBlobsUpTo->ToString() : "<none>"});
 
         IssueQuery(toTargetGroup, std::make_unique<TEvBlobStorage::TEvAssimilate>(
             state.SkipBlocksUpTo, state.SkipBarriersUpTo, state.SkipBlobsUpTo,
@@ -587,9 +630,14 @@ namespace NKikimr::NBridge {
         TQueryPayload payload = OnQueryFinished(ev->Cookie, true);
         TAssimilateState& state = GroupAssimilateState[payload.ToTargetGroup];
 
-        STLOG(PRI_DEBUG, BS_BRIDGE_SYNC, BRSS14, "got assimilate result", (LogId, LogId), (Status, msg.Status),
-            (Blocks.size, msg.Blocks.size()), (Barriers.size, msg.Barriers.size()), (Blobs.size, msg.Blobs.size()),
-            (ToTargetGroup, payload.ToTargetGroup));
+        YDB_LOG_DEBUG("Got assimilate result",
+            {"marker", "BRSS14"},
+            {"logId", LogId},
+            {"status", msg.Status},
+            {"#_Blocks.size", msg.Blocks.size()},
+            {"#_Barriers.size", msg.Barriers.size()},
+            {"#_Blobs.size", msg.Blobs.size()},
+            {"toTargetGroup", payload.ToTargetGroup});
 
         Y_ABORT_UNLESS(state.RequestInFlight);
         state.RequestInFlight = false;

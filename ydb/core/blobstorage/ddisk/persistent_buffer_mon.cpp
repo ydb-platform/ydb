@@ -15,7 +15,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
-#include <ydb/core/util/stlog.h>
 
 #include <util/generic/queue.h>
 #include <util/generic/hash_set.h>

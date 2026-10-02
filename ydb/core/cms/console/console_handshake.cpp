@@ -6,8 +6,7 @@
 #include <ydb/public/api/grpc/draft/ydb_dynamic_config_v1.grpc.pb.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 
-#include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/util/stlog.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/core/util/pb.h>
 
 #include <ydb/library/actors/core/hfunc.h>

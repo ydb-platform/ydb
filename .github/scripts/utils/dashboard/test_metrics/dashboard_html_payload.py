@@ -54,12 +54,42 @@ def _series_total_values(tracks: dict[str, list[float]]) -> list[float]:
 def _describe_distribution(values: list[float]) -> dict[str, float]:
     vals = [float(v or 0.0) for v in values]
     if not vals:
-        return {"max": 0.0, "p95": 0.0, "median": 0.0}
+        return {"max": 0.0, "p90": 0.0, "p95": 0.0, "median": 0.0, "samples": 0.0}
     return {
         "max": float(max(vals)),
+        "p90": _percentile(vals, 0.90),
         "p95": _percentile(vals, 0.95),
         "median": _percentile(vals, 0.5),
+        "samples": float(len(vals)),
     }
+
+
+def _numeric_series(values: Any) -> list[float]:
+    out: list[float] = []
+    for value in values or []:
+        try:
+            out.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _host_resource_stats(resources_overlay: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """max / p90 / p95 / median of /proc samples (host), not the stacked test model."""
+    if not resources_overlay:
+        return {}
+    series = {
+        "cpu_host": resources_overlay.get("cpu_total_cores"),
+        "ram_host": resources_overlay.get("ram_gb"),
+        "disk_read_host": resources_overlay.get("disk_read_mb"),
+        "disk_write_host": resources_overlay.get("disk_write_mb"),
+    }
+    out: dict[str, Any] = {}
+    for key, values in series.items():
+        nums = _numeric_series(values)
+        if nums:
+            out[key] = _describe_distribution(nums)
+    return out
 
 
 def _build_headline_stats(
@@ -71,6 +101,7 @@ def _build_headline_stats(
     tests_per_suite: Optional[dict[str, int]],
     issues_summary: Optional[dict[str, int]],
     suite_chunk_issues_summary: Optional[dict[str, int]],
+    resources_overlay: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     starts = [float(r.get("start_us", 0.0) or 0.0) for r in runs if float(r.get("start_us", 0.0) or 0.0) > 0.0]
     ends = [float(r.get("end_us", 0.0) or 0.0) for r in runs if float(r.get("end_us", 0.0) or 0.0) > 0.0]
@@ -125,6 +156,7 @@ def _build_headline_stats(
         "active_chunks": _describe_distribution([float(v or 0.0) for v in ys_active]),
         "tests": _describe_distribution(_series_total_values(tests_tracks_suite)),
         "total_duration_sec": duration_sec,
+        **_host_resource_stats(resources_overlay),
     }
 
 
@@ -197,6 +229,7 @@ def build_dashboard_payload(
         tests_per_suite=tests_per_suite,
         issues_summary=issues_summary,
         suite_chunk_issues_summary=suite_chunk_issues_summary,
+        resources_overlay=resources_overlay,
     )
 
     xs_cpu_suite, cpu_tracks_suite = downsample_step_series(xs_cpu_suite, cpu_tracks_suite, max_points)

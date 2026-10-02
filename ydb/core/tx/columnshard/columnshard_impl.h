@@ -636,6 +636,7 @@ private:
     ui64 NormalizeSmallBlobsCount(const ui64 rawCount);
 
 public:
+    void ResumePostponedCutHistory(const TActorContext& ctx);
     ui64 TabletTxCounter = 0;
 
     std::shared_ptr<const TAtomicCounter> GetTabletActivity() const {

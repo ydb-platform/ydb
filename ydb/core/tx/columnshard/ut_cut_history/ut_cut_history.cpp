@@ -421,6 +421,92 @@ Y_UNIT_TEST_SUITE(TColumnShardCutHistory) {
         UNIT_ASSERT_VALUES_EQUAL_C(cuts, 1u, "GC drained before the scan finishes must not require another reboot");
     }
 
+    Y_UNIT_TEST(ScanFinishedDuringGCResumesAfterGC) {
+        TFixture f;
+        f.Schema();
+        f.Restart(NewGroup);
+        std::vector<TAutoPtr<IEventHandle>> gcResults;
+        bool holdGC = true;
+        ui32 cuts = 0;
+        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            if (!ev->HasEvent()) {
+                return;
+            }
+            if (const auto* gc = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->GetBase());
+                holdGC && gc && gc->Channel == FirstDataChannel) {
+                gcResults.emplace_back(ev.Release());
+            } else if (dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
+                ++cuts;
+                ev.Reset();
+            }
+        });
+        f.Restart();
+        f.Drive();
+        UNIT_ASSERT(!gcResults.empty());
+        UNIT_ASSERT_VALUES_EQUAL(f.Samples("Scan"), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
+        holdGC = false;
+        for (auto& result : gcResults) {
+            f.Runtime.Send(result.Release(), 0, true);
+        }
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
+    }
+
+    Y_UNIT_TEST(JournalCommittedDuringGCResumesAfterGC) {
+        TFixture f;
+        f.Schema();
+        f.Restart(NewGroup);
+        f.Controller->DisableBackground(EBackground::GC);
+        TAutoPtr<IEventHandle> continuation;
+        TAutoPtr<IEventHandle> commit;
+        std::vector<TAutoPtr<IEventHandle>> gcResults;
+        bool holdScan = true;
+        bool holdCommit = false;
+        bool holdGC = true;
+        ui32 cuts = 0;
+        auto observer = f.Runtime.AddObserver<IEventHandle>([&](IEventHandle::TPtr& ev) {
+            if (!ev->HasEvent()) {
+                return;
+            }
+            if (holdScan && dynamic_cast<TEvPrivate::TEvContinueCutHistory*>(ev->GetBase())) {
+                continuation = ev.Release();
+            } else if (const auto* log = dynamic_cast<TEvTabletBase::TEvWriteLogResult*>(ev->GetBase());
+                       holdCommit && log && log->EntryId.TabletID() == TabletId && log->EntryId.Cookie() == 0) {
+                commit = ev.Release();
+                holdCommit = false;
+            } else if (const auto* gc = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->GetBase());
+                       holdGC && gc && gc->Channel == FirstDataChannel) {
+                gcResults.emplace_back(ev.Release());
+            } else if (dynamic_cast<TEvTablet::TEvCutTabletHistory*>(ev->GetBase())) {
+                ++cuts;
+                ev.Reset();
+            }
+        });
+        f.Restart();
+        f.Drive();
+        UNIT_ASSERT(continuation);
+        holdScan = false;
+        holdCommit = true;
+        f.Runtime.Send(continuation.Release(), 0, true);
+        f.Drive();
+        UNIT_ASSERT(commit);
+        f.Controller->EnableBackground(EBackground::GC);
+        f.Drive();
+        UNIT_ASSERT(f.Controller->GetTheOnlyShard()->GetStoragesManager()->GetDefaultOperator()->HasGCInFlight());
+        f.Runtime.Send(commit.Release(), 0, true);
+        f.Drive();
+        UNIT_ASSERT(!gcResults.empty());
+        UNIT_ASSERT_STRING_CONTAINS(f.Journal(), "GroupID: " + ToString(OldGroup));
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 0u);
+        holdGC = false;
+        for (auto& result : gcResults) {
+            f.Runtime.Send(result.Release(), 0, true);
+        }
+        f.Drive();
+        UNIT_ASSERT_VALUES_EQUAL(cuts, 1u);
+    }
+
     Y_UNIT_TEST(ColdCacheBatchingAndMetadataFailure) {
         constexpr ui64 portionCount = 7;
         TFixture f;

@@ -12,6 +12,7 @@
 #include <util/random/random.h>
 
 #include <iterator>
+#include <utility>
 
 namespace NKikimr::NColumnShard {
 namespace {
@@ -116,30 +117,17 @@ public:
             Self->CutHistoryScan.reset();
             return;
         }
-        const auto storage =
-            std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(Self->StoragesManager->GetDefaultOperator());
-        AFL_VERIFY(storage);
-        if (storage->HasGCInFlight()) {
-            return;
-        }
-        const auto pendingGenerations = storage->GetPendingGCBlobGenerations();
+        auto& scan = *Self->CutHistoryScan;
         for (const auto& request : ReadyToSendRequests) {
-            auto& scan = *Self->CutHistoryScan;
             const auto it = FindIf(scan.Intervals, [&](const auto& interval) {
                 return interval.Channel == request.GetChannel() && interval.From == request.GetFromGeneration() &&
                        interval.To == request.GetToGeneration() && interval.Group == request.GetGroupID();
             });
-            if (it == scan.Intervals.end() || !CanCutHistoryInterval(*Self, *it, pendingGenerations)) {
-                continue;
+            if (it != scan.Intervals.end()) {
+                it->ReadyToSend = true;
             }
-            auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
-            event->Record.SetTabletID(request.GetTabletID());
-            event->Record.SetChannel(request.GetChannel());
-            event->Record.SetFromGeneration(request.GetFromGeneration());
-            event->Record.SetGroupID(request.GetGroupID());
-            Self->Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *scan.Finished);
-            ctx.Send(Self->LauncherID(), event.release(), IEventHandle::FlagTrackDelivery, std::distance(scan.Intervals.begin(), it) + 1);
         }
+        Self->TryCutHistory(ctx);
     }
 };
 
@@ -311,6 +299,12 @@ void TColumnShard::FinishCutHistoryBatch(const NOlap::TDataAccessorsResult& resu
     ScheduleCutHistoryContinuation(*ColumnShardConfig, TActivationContext::AsActorContext());
 }
 
+void TColumnShard::ResumePostponedCutHistory(const TActorContext& ctx) {
+    if (CutHistoryScan && CutHistoryScan->WaitingForGC) {
+        TryCutHistory(ctx);
+    }
+}
+
 void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     if (!CutHistoryScan || !CutHistoryScan->Finished || CutHistoryScan->SavePending) {
         return;
@@ -321,19 +315,35 @@ void TColumnShard::TryCutHistory(const TActorContext& ctx) {
     }
     const auto storage = std::dynamic_pointer_cast<NOlap::NBlobOperations::NBlobStorage::TOperator>(StoragesManager->GetDefaultOperator());
     AFL_VERIFY(storage);
+    CutHistoryScan->WaitingForGC = storage->HasGCInFlight();
+    if (CutHistoryScan->WaitingForGC) {
+        return;
+    }
     NOlap::TPendingGCBlobGenerations pendingGenerations;
-    if (!storage->HasGCInFlight() && AnyOf(CutHistoryScan->Intervals, [](const auto& interval) {
-            return !interval.Attempted && !interval.HasBlobs;
+    if (AnyOf(CutHistoryScan->Intervals, [](const auto& interval) {
+            return interval.ReadyToSend || (!interval.Attempted && !interval.HasBlobs);
         })) {
         pendingGenerations = storage->GetPendingGCBlobGenerations();
     }
     std::vector<NKikimrTxColumnShard::TCutHistoryRequest> requests;
-    for (auto& interval : CutHistoryScan->Intervals) {
-        if (interval.Attempted) {
+    for (size_t i = 0; i < CutHistoryScan->Intervals.size(); ++i) {
+        auto& interval = CutHistoryScan->Intervals[i];
+        if (interval.Attempted && !interval.ReadyToSend) {
             continue;
         }
         interval.Attempted = true;
+        const bool readyToSend = std::exchange(interval.ReadyToSend, false);
         if (!CanCutHistoryInterval(*this, interval, pendingGenerations)) {
+            continue;
+        }
+        if (readyToSend) {
+            auto event = std::make_unique<TEvTablet::TEvCutTabletHistory>();
+            event->Record.SetTabletID(TabletID());
+            event->Record.SetChannel(interval.Channel);
+            event->Record.SetFromGeneration(interval.From);
+            event->Record.SetGroupID(interval.Group);
+            Counters.GetCSCounters().OnCutHistoryRequestSent(ctx.Now() - *CutHistoryScan->Finished);
+            ctx.Send(LauncherID(), event.release(), IEventHandle::FlagTrackDelivery, i + 1);
             continue;
         }
         auto& request = requests.emplace_back();

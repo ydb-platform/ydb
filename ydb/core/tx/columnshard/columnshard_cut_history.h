@@ -23,6 +23,7 @@ struct TCutHistoryInterval {
     ui32 Group = 0;
     bool HasBlobs = false;
     bool Attempted = false;
+    bool ReadyToSend = false;
 };
 
 struct TCutHistoryScan {
@@ -33,6 +34,7 @@ struct TCutHistoryScan {
     NActors::TActorId PreparationActor;
     bool SavePending = false;
     bool RetryDelivery = false;
+    bool WaitingForGC = false;
     TInstant Started;
     std::optional<TInstant> Finished;
 };

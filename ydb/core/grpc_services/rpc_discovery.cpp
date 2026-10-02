@@ -3,7 +3,9 @@
 #include "rpc_calls.h"
 #include "rpc_kqp_base.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/location.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/discovery/discovery.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -43,10 +45,14 @@ public:
     {}
 
     void Bootstrap() {
-        const TString database = Request->NormalizePath(Request->GetProtoRequest()->database());
         // request endpoints
+        const TString& database = Request->GetProtoRequest()->database();
+        const TString resolvedDatabase = AppData()->FeatureFlags.GetEnableRelativePaths()
+            ? PrependDomainIfNeeded(TString("/") + AppData()->DomainsInfo->GetDomain()->Name, database)
+            : database;
         Discoverer = Register(CreateDiscoverer(&MakeEndpointsBoardPath,
-            database, Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
+            Request->NormalizePath(resolvedDatabase),
+            Request->GetEndpointId().empty() && Request->GetProtoRequest()->Getservice().empty(),
             SelfId(), CacheId));
 
         // request self node info

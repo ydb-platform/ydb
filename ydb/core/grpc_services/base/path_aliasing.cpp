@@ -42,7 +42,7 @@ namespace NKikimr::NGRpcService {
             return;
         }
 
-        auto database = GetDatabaseNameFromRequest();
+        auto database = GetDatabaseName();
         SetPathNormalizer(std::move(normalizer));
         if (database) {
             database = NormalizePath(*database);

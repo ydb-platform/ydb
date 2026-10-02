@@ -992,7 +992,8 @@ NYdb::TDriverConfig CreateDriverConfig(const TGrpcSslSettings& grpcSettings, con
             config.UseClientCertificate(certificate.c_str(), privateKey.c_str());
         }
     }
-    config.SetDatabase(database);
+    // Bootstrap clients address a known domain; domain_path in the RPC remains its bare name.
+    config.SetDatabase(CanonizePath(TString(database)));
     if (authToken) {
         config.SetAuthToken(authToken.value());
     }

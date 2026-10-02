@@ -122,7 +122,9 @@ private:
     template <typename TEvent>
     void PreHandle(TAutoPtr<TEventHandle<TEvent>>& event, const TActorContext& ctx) {
         IRequestProxyCtx* requestBaseCtx = event->Get();
+        requestBaseCtx->InitRootPath(AppData(ctx));
         requestBaseCtx->InitializePathNormalization(PathNormalizer);
+        requestBaseCtx->GetDatabaseName();
         requestBaseCtx->CountRequestPaths();
 
         LogRequest(event);

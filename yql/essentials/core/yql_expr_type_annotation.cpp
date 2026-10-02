@@ -5872,7 +5872,7 @@ bool IsPureIsolatedLambdaImpl(const TExprNode& lambdaBody, TNodeSet& visited, TS
 
         if (lambdaBody.IsCallable("WithWorld")) {
             syncList->emplace(lambdaBody.ChildPtr(1), syncList->size());
-            return true;
+            return IsPureIsolatedLambdaImpl(lambdaBody.Head(), visited, syncList);
         }
     }
 

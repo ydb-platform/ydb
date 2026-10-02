@@ -147,6 +147,17 @@ def yql_binary_path(*args, **kwargs):
         return find_file(args[0])
 
 
+def yql_binary_path_with_impl(path):
+    directory, binary = os.path.split(path)
+    try:
+        impl_path = yql_binary_path(os.path.join(directory, 'impl', binary))
+        if impl_path:
+            return impl_path
+    except Exception:
+        pass
+    return yql_binary_path(path)
+
+
 def yql_source_path(*args, **kwargs):
     if not get_param('LOCAL_BENCH_XX'):
         return yatest.common.source_path(*args, **kwargs)

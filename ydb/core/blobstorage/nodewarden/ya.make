@@ -34,6 +34,7 @@ SRCS(
     node_warden.h
     node_warden_blob_depot_s3.cpp
     node_warden_cache.cpp
+    node_warden_database_space.cpp
     node_warden_events.h
     node_warden_group.cpp
     node_warden_group_resolver.cpp

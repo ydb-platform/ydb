@@ -2464,6 +2464,8 @@ public:
         Send(MakeTxProxyID(), ev.release());
         if (!isRollback) {
             YQL_ENSURE(!ExecuterId);
+        } else {
+            FinishCurrentExecutionStats();
         }
         ExecuterId = exId;
     }
@@ -2548,6 +2550,67 @@ public:
                 QueryState->CompileResult->Uid, Settings.DbCounters);
 
             Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
+        }
+    }
+
+    void ScheduleCurrentQueryStatsPublish() {
+        if (QueryState->RuntimeStats.SchedulePublish()) {
+            Schedule(QueryState->RuntimeStats.GetNextPublishDelay(), new TEvents::TEvWakeup(QueryState->QueryId));
+        }
+    }
+
+    void UpdateCurrentQueryStats(const TCurrentExecStatsReport& report) {
+        if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
+        if (QueryState->RuntimeStats.Update(report)) {
+            ScheduleCurrentQueryStatsPublish();
+        }
+    }
+
+    void PublishCurrentQueryStats(TEvents::TEvWakeup::TPtr& ev) {
+        if (!QueryState) {
+            return;
+        }
+        // A timer can outlive its query and arrive during the next one.
+        if (ev->Get()->Tag != QueryState->QueryId) {
+            if (!ev->Get()->Tag) {
+                TAutoPtr<NActors::IEventHandle> event = ev.Release();
+                UnexpectedEvent(CurrentStateFuncName(), event);
+            }
+            return;
+        }
+        if (QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
+        if (auto publish = QueryState->RuntimeStats.Publish(AppData()->MonotonicTimeProvider->Now())) {
+            Send(QueryState->Sender, new TEvKqp::TEvCurrentQueryStats(SessionId, QueryState->ProxyRequestId,
+                publish->SequenceNo, std::move(publish->Stats)));
+            if (publish->ScheduleNextPublish) {
+                Schedule(QueryState->RuntimeStats.GetNextPublishDelay(), new TEvents::TEvWakeup(QueryState->QueryId));
+            }
+        }
+    }
+
+    void FinishCurrentExecutionStats() {
+        if (!QueryState || QueryState->UserRequestContext->CurrentQueryStatsInterval == TDuration::Zero()) {
+            return;
+        }
+        if (QueryState->RuntimeStats.Finish()) {
+            ScheduleCurrentQueryStatsPublish();
+        }
+    }
+
+    void FinishCurrentExecutionStats(const TEvKqpExecuter::TEvTxResponse& response) {
+        if (response.CurrentExecutionStats) {
+            UpdateCurrentQueryStats(*response.CurrentExecutionStats);
+        }
+        FinishCurrentExecutionStats();
+    }
+
+    void HandleExecute(TEvKqpExecuter::TEvCurrentExecutionStats::TPtr& ev) {
+        if (QueryState && ExecuterId == ev->Sender) {
+            UpdateCurrentQueryStats(ev->Get()->Report);
         }
     }
 
@@ -2834,6 +2897,7 @@ public:
     }
 
     void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
+        FinishCurrentExecutionStats(*ev);
         QueryState->Orbit = std::move(ev->Orbit);
 
         auto* response = ev->Record.MutableResponse();
@@ -3832,6 +3896,7 @@ public:
             return;
         }
         if (QueryState) {
+            FinishCurrentExecutionStats(*ev->Get());
             QueryState->Orbit = std::move(ev->Get()->Orbit);
         }
         ExecuterId = {};
@@ -3981,6 +4046,7 @@ public:
         FillTxInfo(response);
         FillPoolId(response);
 
+        FinishCurrentExecutionStats();
         ExecuterId = TActorId{};
         Cleanup(IsFatalError(ydbStatus));
     }
@@ -4024,6 +4090,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 // common event handles for all states.
+                hFunc(TEvents::TEvWakeup, PublishCurrentQueryStats);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
@@ -4037,6 +4104,7 @@ public:
                 hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
+                hFunc(TEvKqpExecuter::TEvCurrentExecutionStats, HandleNoop);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(NWorkloadManager::TEvContinueRequest, HandleNoop);
@@ -4067,6 +4135,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 // common event handles for all states.
+                hFunc(TEvents::TEvWakeup, PublishCurrentQueryStats);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
@@ -4077,6 +4146,7 @@ public:
                 hFunc(NWorkloadManager::TEvContinueRequest, Handle);
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute)
+                hFunc(TEvKqpExecuter::TEvCurrentExecutionStats, HandleExecute);
 
                 hFunc(TEvKqpExecuter::TEvStreamData, HandleExecute);
                 hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
@@ -4114,6 +4184,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 // common event handles for all states.
+                hFunc(TEvents::TEvWakeup, PublishCurrentQueryStats);
                 hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
                 hFunc(TEvKqp::TEvContinueShutdown, Handle);
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
@@ -4141,6 +4212,7 @@ public:
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
                 hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
+                hFunc(TEvKqpExecuter::TEvCurrentExecutionStats, HandleExecute);
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

@@ -1,6 +1,5 @@
 #include "database.h"
 
-#include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/events.h>
 
 #include <ydb/library/table_creator/table_creator.h>
@@ -100,100 +99,99 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 class TSaveStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
 private:
     const TPathId PathId;
-    const std::vector<TStatisticsItem> Items;
+    std::vector<TStatisticsItem> SampledItems;
+    std::vector<TStatisticsItem> FullItems;
+    bool SavingSampledRows = true;
 
 public:
     TSaveStatisticsQuery(
         const TString& database, const TPathId& pathId, std::vector<TStatisticsItem> items)
         : NKikimr::TQueryBase(NKikimrServices::STATISTICS, {}, database, true)
         , PathId(pathId)
-        , Items(std::move(items))
     {
-        RequestType = TString(NRequestTypes::Analyze);
+        for (auto& item : items) {
+            if (item.Sampling) {
+                SampledItems.push_back(std::move(item));
+            } else {
+                FullItems.push_back(std::move(item));
+            }
+        }
     }
 
     void OnRunQuery() override {
+        if (SavingSampledRows && SampledItems.empty()) {
+            SavingSampledRows = false;
+        }
+        const auto& items = SavingSampledRows ? SampledItems : FullItems;
+        if (items.empty()) {
+            Finish();
+            return;
+        }
+
         TStringBuilder sql;
         sql << R"(
-            DECLARE $owner_id AS Uint64;
-            DECLARE $local_path_id AS Uint64;
-            DECLARE $stat_types AS List<Uint32>;
-            DECLARE $column_tags AS List<String>;
-            DECLARE $data AS List<String>;
-            DECLARE $sampled AS List<Bool>;
-
-            $to_struct = ($t) -> {
-                RETURN <|
-                    owner_id:$owner_id,
-                    local_path_id:$local_path_id,
-                    stat_type:$t.0,
-                    column_tags:$t.1,
-                    data:$t.2,
-                    sampled:$t.3,
-                |>;
-            };
-
-            $rows = ListMap(ListZip($stat_types, $column_tags, $data, $sampled), $to_struct);
+            DECLARE $rows AS List<Struct<
+                column_tags: String,
+                data: String,
+                local_path_id: Uint64,
+                owner_id: Uint64,
+                stat_type: Uint32
+            >>;
 
             UPSERT INTO `)" << StatisticsTablePath << R"(`
-                (owner_id, local_path_id, stat_type, column_tags, sampled_data)
-            SELECT owner_id, local_path_id, stat_type, column_tags, data AS sampled_data
-            FROM AS_TABLE($rows) WHERE sampled;
-
-            UPSERT INTO `)" << StatisticsTablePath << R"(`
-                (owner_id, local_path_id, stat_type, column_tags, data, sampled_data)
-            SELECT owner_id, local_path_id, stat_type, column_tags, data, NULL AS sampled_data
-            FROM AS_TABLE($rows) WHERE NOT sampled;
         )";
+        if (SavingSampledRows) {
+            sql << R"(
+                (column_tags, local_path_id, owner_id, sampled_data, stat_type)
+            SELECT column_tags, local_path_id, owner_id, data AS sampled_data, stat_type
+            FROM AS_TABLE($rows);
+            )";
+        } else {
+            sql << R"(
+                (column_tags, data, local_path_id, owner_id, sampled_data, stat_type)
+            SELECT column_tags, data, local_path_id, owner_id, NULL AS sampled_data, stat_type
+            FROM AS_TABLE($rows);
+            )";
+        }
 
         NYdb::TParamsBuilder params;
-        params
-            .AddParam("$owner_id")
-                .Uint64(PathId.OwnerId)
-                .Build()
-            .AddParam("$local_path_id")
-                .Uint64(PathId.LocalPathId)
-                .Build();
-
-        auto& statTypes = params.AddParam("$stat_types").BeginList();
-        for (const auto& item : Items) {
-            statTypes
-                .AddListItem()
-                .Uint32(static_cast<ui32>(item.Type));
-        }
-        statTypes.EndList().Build();
-
-        auto& columnTags = params.AddParam("$column_tags").BeginList();
-        for (const auto& item : Items) {
-            columnTags
-                .AddListItem()
-                .String(SerializeColumnTags(item.ColumnTags));
-        }
-        columnTags.EndList().Build();
-
-        auto& data = params.AddParam("$data").BeginList();
-        for (const auto& item : Items) {
-            if (!item.Sampling) {
-                data.AddListItem().String(item.Data);
-                continue;
+        auto& rows = params.AddParam("$rows").BeginList();
+        for (const auto& item : items) {
+            auto& row = rows.AddListItem().BeginStruct();
+            row.AddMember("column_tags").String(SerializeColumnTags(item.ColumnTags));
+            row.AddMember("local_path_id").Uint64(PathId.LocalPathId);
+            row.AddMember("owner_id").Uint64(PathId.OwnerId);
+            row.AddMember("stat_type").Uint32(static_cast<ui32>(item.Type));
+            if (item.Sampling) {
+                NKikimrStat::TSampledStatistic payload;
+                *payload.MutableSampling() = *item.Sampling;
+                payload.SetData(item.Data);
+                row.AddMember("data").String(payload.SerializeAsString());
+            } else {
+                row.AddMember("data").String(item.Data);
             }
-            NKikimrStat::TSampledStatistic payload;
-            *payload.MutableSampling() = *item.Sampling;
-            payload.SetData(item.Data);
-            data.AddListItem().String(payload.SerializeAsString());
+            row.EndStruct();
         }
-        data.EndList().Build();
+        rows.EndList().Build();
 
-        auto& sampled = params.AddParam("$sampled").BeginList();
-        for (const auto& item : Items) {
-            sampled.AddListItem().Bool(item.Sampling.has_value());
+        // Separate statements avoid multiple write effects in RBO; one transaction keeps the batch atomic.
+        TTxControl txControl = TTxControl::BeginAndCommitTx();
+        if (SavingSampledRows && !FullItems.empty()) {
+            txControl = TTxControl::BeginTx();
+        } else if (!SavingSampledRows && !SampledItems.empty()) {
+            txControl = TTxControl::ContinueAndCommitTx();
         }
-        sampled.EndList().Build();
-
-        RunDataQuery(sql, &params);
+        RunDataQuery(sql, &params, txControl);
     }
 
     void OnQueryResult() override {
+        if (SavingSampledRows) {
+            SavingSampledRows = false;
+            if (!FullItems.empty()) {
+                OnRunQuery();
+                return;
+            }
+        }
         Finish();
     }
 

@@ -31,6 +31,7 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/blob_depot/events.h>
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -504,7 +505,7 @@ public:
     };
     TTablePartitionsFormatSweepState TablePartitionsFormatSweep;
 
-    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TOperationContext& context);
+    THolder<TEvSchemeShard::TEvModifySchemeTransactionResult> IgniteOperation(TEvSchemeShard::TEvModifySchemeTransaction& request, TProposeContext& context);
     bool ProcessOperationParts(
         const TVector<ISubOperation::TPtr>& parts,
         const TTxId& txId,
@@ -512,8 +513,8 @@ public:
         bool prevProposeUndoSafe,
         TOperation::TPtr& operation,
         THolder<TEvSchemeShard::TEvModifySchemeTransactionResult>& response,
-        TOperationContext& context);
-    void AbortOperationPropose(const TTxId txId, TOperationContext& context);
+        TProposeContext& context);
+    void AbortOperationPropose(const TTxId txId, TProposeContext& context);
 
     THolder<TEvDataShard::TEvProposeTransaction> MakeDataShardProposal(const TPathId& pathId, const TOperationId& opId,
         const TString& body, const TActorContext& ctx) const;
@@ -1051,6 +1052,7 @@ public:
     // StreamingQuery
     void PersistStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
     void PersistRemoveStreamingQuery(NIceDb::TNiceDb& db, TPathId pathId);
+    void ResumeStreamingQueriesOperations(const TVector<TPathId>& ids);
 
     // TestShardSet
     void PersistTestShardSet(NIceDb::TNiceDb& db, TPathId pathId);
@@ -1109,6 +1111,7 @@ public:
         TVector<TPathId> RestoreTablesToUnmark;
         TVector<ui64> IncrementalBackupIds;
         TVector<ui64> FullBackupIds;
+        TVector<TPathId> StreamingQueriesOperations;
     };
 
     void SubscribeToTempTableOwners();
@@ -1902,6 +1905,7 @@ public:
     bool PersistBuildIndexSampleForgetAll(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexSampleToClusters(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersToSample(NIceDb::TNiceDb& db, TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexClusterSize(NIceDb::TNiceDb& db, const TIndexBuildInfo& info, ui32 i);
     void PersistBuildIndexClustersUpdate(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexClustersForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     bool PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -2211,7 +2215,17 @@ public:
     void InitRootShred();
     void RunRootShred();
 
+    // storage space state of the database's storage pools, reported by BS_CONTROLLER through the local NodeWarden
+    std::map<TPathId, std::set<TPathId>> DatabaseSpaceScopes; // database key -> hosted domains with this key
+    bool DatabaseSpaceSubscriptionsActive = false; // subscriptions are maintained once the schemeshard is active
+    struct TTxUpdateStorageSpaceState;
+    void UnsubscribeFromDatabaseSpace();
+    void Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr& ev, const TActorContext& ctx);
+
 public:
+    // to be called when the set of hosted domains changes (subscribes to space state of the databases)
+    void UpdateDatabaseSpaceSubscriptions();
+
     void ChangeStreamShardsCount(i64 delta) override;
     void ChangeStreamShardsQuota(i64 delta) override;
     void ChangeStreamReservedStorageCount(i64 delta) override;

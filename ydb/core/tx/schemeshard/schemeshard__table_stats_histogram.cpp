@@ -457,7 +457,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     TMemoryChanges memChanges;
     TStorageChanges dbChanges;
-    TOperationContext context{Self, txc, ctx, SplitOpSideEffects, memChanges, dbChanges};
+    TProposeContext context{Self, txc, ctx, SplitOpSideEffects, memChanges, dbChanges};
 
     auto response = Self->IgniteOperation(*request, context);
 

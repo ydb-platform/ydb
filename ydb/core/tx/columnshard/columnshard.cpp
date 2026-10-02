@@ -678,8 +678,7 @@ void TColumnShard::Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext&
     for (const auto groupId : record.GetGroups()) {
         requested.emplace(groupId);
     }
-    // Same contract as keyvalue and blob_depot: the caller reassigns channel history first, so a
-    // group that is still the latest entry would keep taking writes and the move could never converge.
+    // Same contract as keyvalue and blob_depot: a group that is still the latest entry keeps taking writes, so the move could never converge.
     if (const auto liveGroup = FindLiveMoveDataGroup(requested)) {
         const TString reason = TStringBuilder() << "group " << *liveGroup << " is still the latest history entry at tablet " << TabletID();
         LOG_S_WARN("TColumnShard::Handle TEvMoveData: " << reason);

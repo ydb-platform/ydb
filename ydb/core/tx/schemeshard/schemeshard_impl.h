@@ -2222,6 +2222,21 @@ public:
     void UnsubscribeFromDatabaseSpace();
     void Handle(TEvBlobStorage::TEvControllerDatabaseSpaceState::TPtr& ev, const TActorContext& ctx);
 
+    // A serverless database stores its data in the storage pools of its shared (resources) database, so instead of
+    // BS_CONTROLLER it follows the storage space state the shared database's schemeshard publishes. That is two scheme
+    // cache watches: the shared database's path in the root schemeshard (by resources domain key) tells its own
+    // schemeshard, and the root path of that schemeshard carries the state.
+    struct TResourcesDomainSpaceWatch {
+        TPathId ResourcesDomainId; // the shared database's domain key (its path in the root schemeshard)
+        std::set<TPathId> Domains; // hosted domains running on its resources
+        TPathId StatePathId; // root path of the shared database's own schemeshard, once known
+    };
+    std::optional<TResourcesDomainSpaceWatch> ResourcesDomainSpaceWatch;
+    void UpdateResourcesDomainSpaceWatch(std::map<TPathId, std::set<TPathId>> resourcesDomains);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx);
+
 public:
     // to be called when the set of hosted domains changes (subscribes to space state of the databases)
     void UpdateDatabaseSpaceSubscriptions();

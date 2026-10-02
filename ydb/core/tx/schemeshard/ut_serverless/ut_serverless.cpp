@@ -1,3 +1,4 @@
+#include <ydb/core/blobstorage/base/blobstorage_database_space_events.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -783,5 +784,186 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
               }
             }
         )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
+    }
+
+    // a shared database and a serverless one running on its resources, each with its own schemeshard
+    struct TSharedAndServerless {
+        TPathId SharedDomainKey;
+        ui64 SharedSchemeShard = 0;
+        TPathId ServerlessDomainKey;
+        ui64 ServerlessSchemeShard = 0;
+
+        TSharedAndServerless(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(Name: "SharedDB")");
+            env.TestWaitNotification(runtime, txId);
+            TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                StoragePools { Name: "pool-1" Kind: "pool-kind-1" }
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                Name: "SharedDB"
+            )");
+            env.TestWaitNotification(runtime, txId);
+            SharedDomainKey = TPathId(TTestTxConfig::SchemeShard, DescribePath(runtime, "/MyRoot/SharedDB").GetPathId());
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/SharedDB"), {NLs::ExtractTenantSchemeshard(&SharedSchemeShard)});
+
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder()
+                << "ResourcesDomainKey { SchemeShard: " << SharedDomainKey.OwnerId << " PathId: " << SharedDomainKey.LocalPathId << " } "
+                << "Name: \"ServerlessDB\"");
+            env.TestWaitNotification(runtime, txId);
+            TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                StoragePools { Name: "pool-1" Kind: "pool-kind-1" }
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                ExternalHive: false
+                Name: "ServerlessDB"
+            )");
+            env.TestWaitNotification(runtime, txId);
+            ServerlessDomainKey = TPathId(TTestTxConfig::SchemeShard, DescribePath(runtime, "/MyRoot/ServerlessDB").GetPathId());
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/ServerlessDB"), {NLs::ExtractTenantSchemeshard(&ServerlessSchemeShard)});
+        }
+
+        // BS_CONTROLLER reports storage state of the shared database
+        void SetExhausted(TTestBasicRuntime& runtime, bool exhausted) const {
+            ForwardToTablet(runtime, SharedSchemeShard, runtime.AllocateEdgeActor(),
+                new TEvBlobStorage::TEvControllerDatabaseSpaceState(SharedDomainKey, exhausted));
+        }
+
+        static void WaitState(TTestBasicRuntime& runtime, TTestEnv& env, ui64 schemeShard, const TString& path,
+                bool exhausted) {
+            auto getState = [&] {
+                return DescribePath(runtime, schemeShard, path).GetPathDescription().GetDomainDescription().GetDomainState();
+            };
+            for (int i = 0; i < 100 && getState().GetStorageSpaceExhausted() != exhausted; ++i) {
+                env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+            }
+            const auto state = getState();
+            UNIT_ASSERT_VALUES_EQUAL_C(state.GetStorageSpaceExhausted(), exhausted, path);
+            UNIT_ASSERT_VALUES_EQUAL_C(state.GetDiskQuotaExceeded(), exhausted, path);
+        }
+    };
+
+    // subscriptions to BS_CONTROLLER (through the local NodeWarden) are dropped, so that no state from the real
+    // BS_CONTROLLER interferes with the injected ones
+    auto DropDatabaseSpaceSubscriptions(TTestBasicRuntime& runtime,
+            std::vector<std::pair<TActorId, TPathId>> *subscriptions = nullptr) {
+        return runtime.AddObserver<TEvBlobStorage::TEvControllerSubscribeDatabaseSpace>([=](auto& ev) {
+            if (subscriptions) {
+                for (const auto& scope : ev->Get()->Record.GetSubscribe()) {
+                    subscriptions->emplace_back(ev->Sender, TPathId::FromProto(scope));
+                }
+            }
+            ev.Reset();
+        });
+    }
+
+    Y_UNIT_TEST(StorageSpaceStateOfSharedDatabase) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        std::vector<std::pair<TActorId, TPathId>> subscriptions; // subscriber, database key
+        auto observer = DropDatabaseSpaceSubscriptions(runtime, &subscriptions);
+
+        const TSharedAndServerless dbs(runtime, env, txId);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // only the shared database subscribes to its storage space state at BS_CONTROLLER; the serverless one has no
+        // storage of its own and follows the shared database
+        std::set<TActorId> sharedSubscribers;
+        for (const auto& [subscriber, scope] : subscriptions) {
+            UNIT_ASSERT_C(scope != dbs.ServerlessDomainKey, "serverless database subscribed to its own key");
+            if (scope == dbs.SharedDomainKey) {
+                sharedSubscribers.insert(subscriber);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(sharedSubscribers.size(), 1);
+
+        // BS_CONTROLLER reports the shared database's storage exhausted: both databases get blocked
+        dbs.SetExhausted(runtime, true);
+        dbs.WaitState(runtime, env, dbs.SharedSchemeShard, "/MyRoot/SharedDB", true);
+        dbs.WaitState(runtime, env, dbs.ServerlessSchemeShard, "/MyRoot/ServerlessDB", true);
+
+        // the flag survives restart of the serverless database's schemeshard, and so does following the shared one
+        RebootTablet(runtime, dbs.ServerlessSchemeShard, runtime.AllocateEdgeActor());
+        dbs.WaitState(runtime, env, dbs.ServerlessSchemeShard, "/MyRoot/ServerlessDB", true);
+
+        // and both get unblocked
+        dbs.SetExhausted(runtime, false);
+        dbs.WaitState(runtime, env, dbs.SharedSchemeShard, "/MyRoot/SharedDB", false);
+        dbs.WaitState(runtime, env, dbs.ServerlessSchemeShard, "/MyRoot/ServerlessDB", false);
+    }
+
+    // Shared database's state flips and flips back while transactions of the serverless database's schemeshard are
+    // deferred: the flip back must win, although it equals the state applied at the moment it arrives.
+    Y_UNIT_TEST_FLAG(StorageSpaceStateFlipsWhileDeferred, InitiallyExhausted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().DisableStatsBatching(true));
+        ui64 txId = 100;
+
+        auto observer = DropDatabaseSpaceSubscriptions(runtime);
+        const TSharedAndServerless dbs(runtime, env, txId);
+        if (InitiallyExhausted) {
+            dbs.SetExhausted(runtime, true);
+            dbs.WaitState(runtime, env, dbs.ServerlessSchemeShard, "/MyRoot/ServerlessDB", true);
+        }
+
+        // events of the serverless database's schemeshard; its executor shares the mailbox with the tablet actor
+        const TActorId schemeShardActor = ResolveTablet(runtime, dbs.ServerlessSchemeShard);
+        auto toSchemeShard = [=](const IEventHandle& ev) {
+            const TActorId& recipient = ev.GetRecipientRewrite();
+            return recipient.NodeId() == schemeShardActor.NodeId() && recipient.Hint() == schemeShardActor.Hint();
+        };
+
+        // statistics of a table make the schemeshard enqueue a transaction, which defers execution of the following
+        // ones until the executor activates them
+        TBlockEvents<TEvDataShard::TEvPeriodicTableStats> blockedStats(runtime, [&](const auto& ev) {
+            return toSchemeShard(*ev);
+        });
+        TestCreateTable(runtime, dbs.ServerlessSchemeShard, ++txId, "/MyRoot/ServerlessDB", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, dbs.ServerlessSchemeShard);
+        runtime.WaitFor("table statistics", [&] { return !blockedStats.empty(); });
+
+        // the shared database's state flips and flips back
+        TBlockEvents<TEvTxProxySchemeCache::TEvWatchNotifyUpdated> blockedStates(runtime, [&](const auto& ev) {
+            return toSchemeShard(*ev);
+        });
+        auto lastBlockedState = [&]() -> std::optional<bool> {
+            if (blockedStates.empty()) {
+                return std::nullopt;
+            }
+            return blockedStates.back()->Get()->Result->GetPathDescription().GetDomainDescription().GetDomainState()
+                .GetStorageSpaceExhausted();
+        };
+        dbs.SetExhausted(runtime, !InitiallyExhausted);
+        runtime.WaitFor("flip", [&] { return lastBlockedState() == !InitiallyExhausted; });
+        dbs.SetExhausted(runtime, InitiallyExhausted);
+        runtime.WaitFor("flip back", [&] { return lastBlockedState() == InitiallyExhausted; });
+
+        // deliver it all in this order into the same mailbox: the statistics transaction is enqueued first, so the
+        // storage state transactions are enqueued after it, and none is executed until its activation
+        TBlockEvents<IEventHandle> blockedActivations(runtime, [&](const IEventHandle::TPtr& ev) {
+            return ev->GetTypeName().Contains("TEvActivateExecution") && toSchemeShard(*ev);
+        });
+        blockedStats.Unblock().Stop();
+        blockedStates.Unblock().Stop();
+        runtime.WaitFor("deferred statistics transaction", [&] { return !blockedActivations.empty(); });
+        env.SimulateSleep(runtime, TDuration::MilliSeconds(100)); // let the state notifications be handled meanwhile
+        UNIT_ASSERT_C(blockedActivations.size() >= 2, "storage state transaction has not been deferred");
+        blockedActivations.Unblock().Stop();
+
+        dbs.WaitState(runtime, env, dbs.ServerlessSchemeShard, "/MyRoot/ServerlessDB", InitiallyExhausted);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        dbs.WaitState(runtime, env, dbs.ServerlessSchemeShard, "/MyRoot/ServerlessDB", InitiallyExhausted);
     }
 }

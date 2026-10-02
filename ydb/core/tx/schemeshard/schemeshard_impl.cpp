@@ -6299,6 +6299,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         // storage space state
         HFuncTraced(TEvBlobStorage::TEvControllerDatabaseSpaceState, Handle);
+        HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyDeleted, Handle);
+        HFuncTraced(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
 
         HFuncTraced(NKikimr::NTestShard::TEvControlResponse, Handle);
 

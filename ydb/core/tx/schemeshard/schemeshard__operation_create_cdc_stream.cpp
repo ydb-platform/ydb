@@ -693,12 +693,18 @@ TCdcPqPartParams MakeCdcPqPartParams(const NKikimrSchemeOp::TCreateCdcStream& op
 
     ui64 minParts = std::min<ui64>(std::max<ui64>(tablePartitionCount / 16, 1), minPartitionCountLimit);
     ui64 maxParts = std::min<ui64>(std::max<ui64>(tablePartitionCount * 16, 50), maxPartitionCountLimit);
-    if (minParts > maxParts) {
-        minParts = maxParts;
-    }
 
     ui64 total = params.TotalGroupCount;
-    if (total < minParts) {
+    if (op.HasTopicPartitions()) {
+        // An explicit topic size is kept. Only the path shard ceiling applies,
+        // and the strategy minimum must not grow the topic back up.
+        if (total > maxParts) {
+            total = maxParts;
+        }
+        if (minParts > total) {
+            minParts = total;
+        }
+    } else if (total < minParts) {
         total = minParts;
     } else if (total > maxParts) {
         total = maxParts;

@@ -721,6 +721,24 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(params.TotalGroupCount, 1'000);
     }
 
+    Y_UNIT_TEST(ReplicationTopicExplicitPartitionsStayRequested) {
+        const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
+        auto small = ReplicationStream(true);
+        small.SetTopicPartitions(5);
+        const auto smallParams = NCdc::MakeCdcPqPartParams(small, 50'000, maxShardsInPath);
+        UNIT_ASSERT(smallParams.ReplicationAutoPartitioning);
+        UNIT_ASSERT_VALUES_EQUAL(smallParams.TotalGroupCount, 5);
+        UNIT_ASSERT_VALUES_EQUAL(smallParams.MinPartitionCount, 5);
+        UNIT_ASSERT_VALUES_EQUAL(smallParams.MaxPartitionCount, maxShardsInPath);
+
+        auto aboveLimit = ReplicationStream(true);
+        aboveLimit.SetTopicPartitions(100'000);
+        const auto capped = NCdc::MakeCdcPqPartParams(aboveLimit, 50'000, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(capped.TotalGroupCount, maxShardsInPath);
+        UNIT_ASSERT_VALUES_EQUAL(capped.MinPartitionCount, 50'000 / 16);
+        UNIT_ASSERT_VALUES_EQUAL(capped.MaxPartitionCount, maxShardsInPath);
+    }
+
     Y_UNIT_TEST(ReplicationTopicWithoutAutopartitioning) {
         const ui64 maxShardsInPath = TSchemeLimits{}.MaxShardsInPath;
         const auto params = NCdc::MakeCdcPqPartParams(ReplicationStream(false), 50'000, maxShardsInPath);

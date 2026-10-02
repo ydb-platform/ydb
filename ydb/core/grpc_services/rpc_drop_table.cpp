@@ -35,7 +35,7 @@ private:
         const auto req = GetProtoRequest();
         std::pair<TString, TString> pathPair;
         try {
-            pathPair = SplitPath(Request_->NormalizePath(req->path()));
+            pathPair = SplitPath(Request_->GetDatabaseRelativePath(req->path()));
         } catch (const std::exception& ex) {
             Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
             return ReplyWithResult(StatusIds::BAD_REQUEST, ctx);

@@ -2745,7 +2745,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     // TO DO: test index impl table split boundaries restoration from a backup
 
     Y_UNIT_TEST(RestoreViewQueryText) {
-        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server(config);
         // note: tenant is needed to work around the issue of "/Root" having a dir scheme entry type when described on restore
         CreateDatabase(*server.Tenants_, "/Root/tenant", "ssd");
         auto driver = TDriver(TDriverConfig()
@@ -2768,6 +2770,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup, "/Root/tenant", "/Root/tenant"),
             CreateRestoreLambda(driver, pathToBackup, "/Root/tenant")
         );
+
+        auto relativeConfig = driver.GetConfig();
+        relativeConfig.SetDatabase("tenant");
+        auto relativeDriver = TDriver(relativeConfig);
+        CreateRestoreLambda(relativeDriver, pathToBackup, "restoration/point")();
+        CompareResults(
+            ExecuteQuery(session, "SELECT * FROM `/Root/tenant/view`;"),
+            ExecuteQuery(session, "SELECT * FROM `/Root/tenant/restoration/point/view`;")
+        );
+        CreateRestoreLambda(relativeDriver, pathToBackup, "/Root/tenant")();
+
+        NDump::TClient backupClient(relativeDriver);
+        UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "").GetStatus(), EStatus::BAD_REQUEST);
+        UNIT_ASSERT_VALUES_EQUAL(backupClient.Restore(pathToBackup, "/").GetStatus(), EStatus::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(RestoreViewWithNamedExpressions) {
@@ -3327,6 +3343,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestExternalDataSourceBackupRestore(const TMaybe<ESecretType>& secretType, EAuthType authType) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableSchemaSecrets(secretType == ESecretType::SecretTypeScheme);
@@ -3365,6 +3382,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             secretType,
             authType
         );
+        UNIT_ASSERT_VALUES_EQUAL(DescribeExternalDataSource(tableSession, "externalDataSource"),
+            DescribeExternalDataSource(tableSession, path));
     }
 
     Y_UNIT_TEST_TWIN(RestoreExternalDataSourceWithoutSecret, UseSchemeSecret) {
@@ -3426,6 +3445,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     void TestExternalTableBackupRestore() {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableFeatureFlags()->SetEnableRelativePaths(true);
         TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
@@ -3447,6 +3467,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+        const auto relativeDescription = DescribeExternalTable(tableSession, "externalTable");
+        UNIT_ASSERT_VALUES_EQUAL(relativeDescription, DescribeExternalTable(tableSession, path));
+        UNIT_ASSERT_VALUES_EQUAL(relativeDescription.data_source_path(), externalDataSource);
+        UNIT_ASSERT_VALUES_EQUAL(relativeDescription.location(), "folder");
     }
 
     void TestSystemViewBackupRestore() {

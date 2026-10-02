@@ -2,6 +2,7 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -130,6 +131,16 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         consumer->SetReadFromTimestampsMs(0);
         consumer->SetImportant(true);
     }
+}
+
+TString NormalizeDlqTopicPath(const TString& dlq, const TString& database, bool enableRelativePaths) {
+    if (dlq.empty() || dlq.StartsWith("sqs://")) {
+        return dlq;
+    }
+    if (enableRelativePaths) {
+        return CanonizePath(ResolvePathToDatabase(database, dlq));
+    }
+    return NormalizePath(CanonizePath(database), CanonizePath(dlq));
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

@@ -119,6 +119,7 @@ private:
             {
                 .UserToken = userToken,
                 .AccessRights = NACLib::EAccessRights::DescribeSchema,
+                .EnableRelativePaths = true,
             }));
     }
 

@@ -80,6 +80,7 @@ void TAllocationInfo::Fail(const TString& errorMessage) {
         {"stage", Stage->GetName()},
         {"error", errorMessage});
     Stage->Free(AllocatedVolume, false);
+    Stage->OnCannotAllocate();
     AllocationFailed = true;
     Allocation->OnAllocationImpossible(errorMessage);
     Allocation = nullptr;

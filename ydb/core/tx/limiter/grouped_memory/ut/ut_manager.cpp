@@ -338,7 +338,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
     };
 
     TBandLimiter MakeBandLimiter(const ui64 soft, const std::optional<ui64> hard, const std::optional<double> coefficient,
-        const std::optional<ui64> unrestrictedOverride = {}, const std::optional<ui64> hardOverride = {}) {
+        const std::optional<ui64> unrestrictedOverride = {}, const std::optional<ui64> hardOverride = {}, const ui32 maxGroups = 1) {
         NOlap::NGroupedMemoryManager::TConfig config;
         NKikimrConfig::TGroupedMemoryLimiterConfig protoConfig;
         protoConfig.SetMemoryLimit(soft);
@@ -348,6 +348,7 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         if (coefficient) {
             protoConfig.SetUnrestrictedSoftLimitCoefficient(*coefficient);
         }
+        protoConfig.SetMaxUnrestrictedGroupsPerScope(maxGroups);
         UNIT_ASSERT(config.DeserializeFromProto(protoConfig));
         auto counters = std::make_shared<NOlap::NGroupedMemoryManager::TCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>(), "test");
         const std::optional<ui64> unrestricted = unrestrictedOverride ? unrestrictedOverride : config.MakeUnrestrictedSoftBytes(config.GetHardMemoryLimit());
@@ -572,6 +573,118 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT_VALUES_EQUAL(stage->GetLimit(), 100u);
         UNIT_ASSERT_VALUES_EQUAL(stage->GetHardLimit().value_or(0), 200u);
         UNIT_ASSERT_VALUES_EQUAL(stage->GetUnrestrictedSoft().value_or(0), 100u);
+    }
+
+    Y_UNIT_TEST(TwoAdmissionSlotsShareTheBand) {
+        auto limiter = MakeBandLimiter(100, 1000, 0.5, {}, {}, 2);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnrestrictedSoft().value_or(0), 500u);
+
+        limiter.Manager->RegisterProcess(0, {});
+        limiter.Manager->RegisterProcessScope(0, 0);
+        limiter.Manager->RegisterGroup(0, 0, 1);
+        limiter.Manager->RegisterGroup(0, 0, 2);
+        limiter.Manager->RegisterGroup(0, 0, 3);
+
+        auto g1 = std::make_shared<TAllocation>(150);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1, {});
+        UNIT_ASSERT(g1->IsAllocated());
+        auto g2 = std::make_shared<TAllocation>(150);
+        limiter.Manager->RegisterAllocation(0, 0, 2, g2, {});
+        UNIT_ASSERT(g2->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 300u);
+
+        // Fits the band, but both slots are taken and neither holder is stuck.
+        auto g3 = std::make_shared<TAllocation>(100);
+        limiter.Manager->RegisterAllocation(0, 0, 3, g3, {});
+        UNIT_ASSERT(!g3->IsAllocated());
+
+        // G1 asks for more than the band can give. Its slot is released to G3 while G2 keeps its slot.
+        auto g1Next = std::make_shared<TAllocation>(300);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1Next, {});
+        UNIT_ASSERT(!g1Next->IsAllocated());
+        UNIT_ASSERT(g3->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 400u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 250u);
+
+        g3->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, g3->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 3);
+        UNIT_ASSERT(!g1Next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+
+        g2->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, g2->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 2);
+        UNIT_ASSERT(g1Next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 450u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 450u);
+
+        g1->Guard.reset();
+        g1Next->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, g1->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, g1Next->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 1);
+        limiter.Manager->UnregisterProcessScope(0, 0);
+        limiter.Manager->UnregisterProcess(0);
+        g1.reset();
+        g1Next.reset();
+        g2.reset();
+        g3.reset();
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(limiter.Manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
+    }
+
+    Y_UNIT_TEST(ProcessStageLimitCapsTheBand) {
+        auto limiter = MakeBandLimiter(100, 1000, 0.5);
+        auto stage = std::make_shared<NOlap::NGroupedMemoryManager::TStageFeatures>("STAGE", 200, std::nullopt, nullptr, nullptr);
+        stage->AttachOwner(limiter.Stage);
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetEffectiveUnrestrictedLimit(), 200u);
+
+        limiter.Manager->RegisterProcess(0, {stage});
+        limiter.Manager->RegisterProcessScope(0, 0);
+        limiter.Manager->RegisterGroup(0, 0, 1);
+        limiter.Manager->RegisterGroup(0, 0, 2);
+
+        // Above the global soft limit, inside the stage limit and the band.
+        auto head = std::make_shared<TAllocation>(150);
+        limiter.Manager->RegisterAllocation(0, 0, 1, head, 0);
+        UNIT_ASSERT(head->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 150u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 150u);
+
+        // Inside the band, above the stage limit: can never fit.
+        auto tooBig = std::make_shared<TFallibleAllocation>(250);
+        limiter.Manager->RegisterAllocation(0, 0, 2, tooBig, 0);
+        UNIT_ASSERT(!tooBig->IsAllocated());
+        UNIT_ASSERT(!tooBig->Error.empty());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetWaiting().Val(), 0u);
+
+        // Fits the stage limit alone, waits for the head to release.
+        auto next = std::make_shared<TAllocation>(100);
+        limiter.Manager->RegisterAllocation(0, 0, 1, next, 0);
+        UNIT_ASSERT(!next->IsAllocated());
+
+        head->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, head->GetIdentifier());
+        UNIT_ASSERT(next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 100u);
+
+        next->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, next->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 1);
+        limiter.Manager->UnregisterGroup(0, 0, 2);
+        limiter.Manager->UnregisterProcessScope(0, 0);
+        limiter.Manager->UnregisterProcess(0);
+        head.reset();
+        next.reset();
+        UNIT_ASSERT_VALUES_EQUAL(stage->GetUsage().Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(limiter.Manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
 
     Y_UNIT_TEST(RequestInsideUnrestrictedSoftAboveHardFails) {

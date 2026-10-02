@@ -51,6 +51,12 @@ public:
     std::optional<bool> CanEverFitUnrestricted(const ui64 volume) const;
     // Smallest unrestricted limit on the chain. Used for error messages.
     ui64 GetEffectiveUnrestrictedLimit() const;
+    // A waiting request was rejected without going through Allocate.
+    void OnCannotAllocate() {
+        if (Counters) {
+            Counters->OnCannotAllocate();
+        }
+    }
     void Add(const ui64 volume, const bool allocated);
 
     void SetMemoryConsumptionUpdateFunction(std::function<void(ui64)> func);

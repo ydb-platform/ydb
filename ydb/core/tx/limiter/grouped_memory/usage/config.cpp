@@ -7,6 +7,19 @@
 namespace NKikimr::NOlap::NGroupedMemoryManager {
 
 bool TConfig::DeserializeFromProto(const NKikimrConfig::TGroupedMemoryLimiterConfig& config) {
+    // Validate first so a failed call leaves the object untouched.
+    std::optional<double> coefficient;
+    if (config.HasUnrestrictedSoftLimitCoefficient()) {
+        const double value = config.GetUnrestrictedSoftLimitCoefficient();
+        if (!(value >= TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient && value <= 1.0)) {
+            return false;
+        }
+        if (config.GetMaxUnrestrictedGroupsPerScope() == 0) {
+            return false;
+        }
+        coefficient = value;
+    }
+
     CountBuckets = config.GetCountBuckets() ? config.GetCountBuckets() : 1;
 
     if (config.HasMemoryLimit()) {
@@ -19,16 +32,7 @@ bool TConfig::DeserializeFromProto(const NKikimrConfig::TGroupedMemoryLimiterCon
 
     Enabled = config.GetEnabled();
     MaxUnrestrictedGroupsPerScope = config.GetMaxUnrestrictedGroupsPerScope();
-    if (config.HasUnrestrictedSoftLimitCoefficient()) {
-        const double coefficient = config.GetUnrestrictedSoftLimitCoefficient();
-        if (!(coefficient >= TGlobalLimits::GroupedMemoryLimiterSoftLimitCoefficient && coefficient <= 1.0)) {
-            return false;
-        }
-        if (MaxUnrestrictedGroupsPerScope == 0) {
-            return false;
-        }
-        UnrestrictedSoftLimitCoefficient = coefficient;
-    }
+    UnrestrictedSoftLimitCoefficient = coefficient;
 
     return true;
 }

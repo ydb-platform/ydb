@@ -1,3 +1,5 @@
+* Added database-relative resource paths for gRPC APIs, the CLI, and C++ SDK. Paths starting with `/` remain absolute.
+
 ## v3.24.0
 
 * Added `NValueHelpers::Embedding` to create FloatVector `Bytes` query parameters from numeric ranges.

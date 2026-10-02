@@ -18,6 +18,7 @@ struct TCreatePartitionWriterCacheActorParams {
     TString SourceId = "source_id";
     bool WithDeduplication = true;
     TString Database = "database";
+    TString TopicPath;
     bool WaitForInitResult = true;
 };
 
@@ -78,6 +79,7 @@ protected:
     THashMap<ui64, NWilson::TTraceId> CookieToWriteRequestTraceId;
     THashMap<TTxId, TActorId> TxIdToPartitionWriter;
     THashMap<TActorId, TTxId> PartitionWriterToTxId;
+    THashMap<TTxId, TString> KqpTopicPaths;
 
     size_t CreatePartitionWriterCount = 0;
     size_t DeletePartitionWriterCount = 0;

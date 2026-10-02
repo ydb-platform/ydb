@@ -66,7 +66,7 @@ class TStreamingTestFixture : public NUnitTest::TBaseFixture {
 public:
     // External YDB recipe
     inline static const std::string YDB_ENDPOINT = GetEnv("YDB_ENDPOINT");
-    inline static const std::string YDB_DATABASE = GetEnv("YDB_DATABASE");
+    inline static const std::string YDB_DATABASE = "/" + GetEnv("YDB_DATABASE");
 
     // Local kikimr test cluster
     inline static constexpr char TEST_DATABASE[] = "/Root";

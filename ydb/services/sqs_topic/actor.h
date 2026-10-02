@@ -77,6 +77,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 {
                     .UserToken = this->GetUserToken(),
                     .AccessRights = accessRights,
+                    .EnableRelativePaths = true,
                 }
             ));
         }

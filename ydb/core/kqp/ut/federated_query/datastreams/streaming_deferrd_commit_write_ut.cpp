@@ -35,7 +35,9 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
 
     Y_UNIT_TEST_QUAD_F(PqGatewayApiForDeferredCommits, LocalTopics, Cancel, TStreamingTestFixture) {
         LogSettings.AddLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
-        SetupAppConfig().MutableFeatureFlags()->SetEnableTopicDeferredPublish(true);
+        auto* flags = SetupAppConfig().MutableFeatureFlags();
+        flags->SetEnableTopicDeferredPublish(true);
+        flags->SetEnableRelativePaths(true);
 
         const auto outputTopicName = TStringBuilder() << Name_ << "OutputTopicName";
         CreateScopedTopicExt(outputTopicName, std::nullopt, LocalTopics);
@@ -49,7 +51,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
         if constexpr (LocalTopics) {
             ExecQuery(TStringBuilder() << "GRANT ALL ON `/Root` TO `" << testUser << "`");
         } else {
-            ExecExternalQuery(TStringBuilder() << "GRANT ALL ON `/" << YDB_DATABASE << "` TO `" << testUser << "`");
+            ExecExternalQuery(TStringBuilder() << "GRANT ALL ON `" << YDB_DATABASE << "` TO `" << testUser << "`");
         }
 
         TTopicClientSettings settings;
@@ -160,7 +162,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesWithDeferredCommits) {
             UNIT_ASSERT_VALUES_EQUAL(info.ExtPublicationId, publicationExtId);
             UNIT_ASSERT_VALUES_EQUAL(info.WriterIdentity, publicationWriter);
             UNIT_ASSERT_VALUES_EQUAL(info.Destinations.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(info.Destinations[0].TopicPath, outputTopicName);
+            UNIT_ASSERT_VALUES_EQUAL(info.Destinations[0].TopicPath,
+                TStringBuilder() << (LocalTopics ? TEST_DATABASE : YDB_DATABASE) << "/" << outputTopicName);
         }
 
         Sleep(TDuration::Seconds(1));

@@ -87,6 +87,16 @@ public:
         }
     }
 
+    // Waiting groups are ordered by id. fn returns true to continue.
+    template <typename TFn>
+    void ForEachGroup(TFn&& fn) const {
+        for (auto it = Groups.begin(); it != Groups.end(); ++it) {
+            if (!fn(it->first)) {
+                return;
+            }
+        }
+    }
+
     [[nodiscard]] bool RemoveAllocationExt(const ui64 externalGroupId, const std::shared_ptr<TAllocationInfo>& allocation) {
         auto groupIt = Groups.find(externalGroupId);
         if (groupIt == Groups.end()) {

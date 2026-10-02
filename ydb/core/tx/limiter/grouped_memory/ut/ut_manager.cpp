@@ -659,4 +659,62 @@ Y_UNIT_TEST_SUITE(GroupedMemoryLimiter) {
         UNIT_ASSERT(limiter.Manager->IsEmpty());
         UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
     }
+
+    Y_UNIT_TEST(StuckAdmissionYieldsToLaterGroup) {
+        auto limiter = MakeBandLimiter(100, 1000, 0.5);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUnrestrictedSoft().value_or(0), 500u);
+
+        limiter.Manager->RegisterProcess(0, {});
+        limiter.Manager->RegisterProcessScope(0, 0);
+        limiter.Manager->RegisterGroup(0, 0, 1);
+        limiter.Manager->RegisterGroup(0, 0, 2);
+
+        auto g2 = std::make_shared<TAllocation>(80);
+        limiter.Manager->RegisterAllocation(0, 0, 2, g2, {});
+        UNIT_ASSERT(g2->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 0u);
+
+        auto g1 = std::make_shared<TAllocation>(40);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1, {});
+        UNIT_ASSERT(g1->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 120u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 40u);
+
+        auto g2Next = std::make_shared<TAllocation>(30);
+        limiter.Manager->RegisterAllocation(0, 0, 2, g2Next, {});
+        UNIT_ASSERT(!g2Next->IsAllocated());
+
+        auto g1Next = std::make_shared<TAllocation>(400);
+        limiter.Manager->RegisterAllocation(0, 0, 1, g1Next, {});
+        UNIT_ASSERT(g2Next->IsAllocated());
+        UNIT_ASSERT(!g1Next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 150u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 110u);
+
+        g2->Guard.reset();
+        g2Next->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, g2->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, g2Next->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 2);
+        UNIT_ASSERT(g1Next->IsAllocated());
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->UnrestrictedAdmittedGroupsCount->Val(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Counters->AdmittedBytes->Val(), 440u);
+
+        g1->Guard.reset();
+        g1Next->Guard.reset();
+        limiter.Manager->UnregisterAllocation(0, 0, g1->GetIdentifier());
+        limiter.Manager->UnregisterAllocation(0, 0, g1Next->GetIdentifier());
+        limiter.Manager->UnregisterGroup(0, 0, 1);
+        limiter.Manager->UnregisterProcessScope(0, 0);
+        limiter.Manager->UnregisterProcess(0);
+        g1.reset();
+        g1Next.reset();
+        g2.reset();
+        g2Next.reset();
+        UNIT_ASSERT_VALUES_EQUAL(limiter.Stage->GetUsage().Val(), 0);
+        UNIT_ASSERT(limiter.Manager->IsEmpty());
+        UNIT_ASSERT_VALUES_EQUAL(TObjectCounter<TAllocation>::ObjectCount(), 0);
+    }
 };

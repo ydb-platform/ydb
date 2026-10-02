@@ -47,19 +47,25 @@ private:
         return false;
     }
 
-    bool CanAdmitMinWaitingGroup() const {
-        if (!UnrestrictedEnabled || AdmittedGroupIds.size() >= MaxUnrestrictedGroups) {
-            return false;
-        }
-        return MinWaitingGroupFits();
+    bool HasFreeAdmissionSlot() const {
+        return AdmittedGroupIds.size() < MaxUnrestrictedGroups;
     }
 
-    bool MinWaitingGroupFits() const {
-        const auto minGroupId = WaitAllocations.GetMinExternalGroupId();
-        if (!minGroupId || AdmittedGroupIds.contains(*minGroupId)) {
+    // Smallest waiting group that is not already admitted and whose request fits.
+    // An admitted group whose request does not fit is skipped: it holds a slot it cannot use.
+    // A smaller group that is not admitted and does not fit still blocks later groups.
+    std::optional<ui64> NextUnadmittedFittingGroup() const {
+        std::optional<ui64> found;
+        WaitAllocations.ForEachGroup([&](const ui64 groupId) {
+            if (AdmittedGroupIds.contains(groupId)) {
+                return true;
+            }
+            if (WaitAllocations.ContainsIf(groupId, FitsUnrestricted)) {
+                found = groupId;
+            }
             return false;
-        }
-        return WaitAllocations.ContainsIf(*minGroupId, FitsUnrestricted);
+        });
+        return found;
     }
 
     bool HasStuckAdmission() const {
@@ -71,8 +77,11 @@ private:
         return false;
     }
 
-    bool CanReleaseStuckAdmission() const {
-        return HasStuckAdmission() && MinWaitingGroupFits();
+    bool CanGiveSlotToWaitingGroup() const {
+        if (!NextUnadmittedFittingGroup()) {
+            return false;
+        }
+        return HasFreeAdmissionSlot() || HasStuckAdmission();
     }
 
     ui64 AllocatedBytesOfGroup(const ui64 groupId) const {
@@ -200,7 +209,7 @@ public:
     }
 
     bool CanScheduleUnrestricted() const {
-        return UnrestrictedEnabled && (AdmittedGroupHasFittingAllocation() || CanAdmitMinWaitingGroup() || CanReleaseStuckAdmission());
+        return UnrestrictedEnabled && (AdmittedGroupHasFittingAllocation() || CanGiveSlotToWaitingGroup());
     }
 
     EUnrestrictedScheduleResult ScheduleOneUnrestricted() {
@@ -213,22 +222,27 @@ public:
                 return AllocateTaken(allocation, groupId);
             }
         }
-        // The admitted group holds the slot and waits on a request that does not fit the band.
-        // A smaller group is waiting on a request that does fit, and it keeps its bytes until that
-        // request is granted. Release the stuck slot so the smaller group can run.
-        if (CanReleaseStuckAdmission()) {
-            ReleaseStuckAdmissions();
-        }
-        if (!CanAdmitMinWaitingGroup()) {
+        const auto candidate = NextUnadmittedFittingGroup();
+        if (!candidate) {
             return EUnrestrictedScheduleResult::Idle;
         }
-        const ui64 groupId = *WaitAllocations.GetMinExternalGroupId();
-        auto allocation = WaitAllocations.TakeOne(groupId, FitsUnrestricted);
+        // The admitted group is waiting on a request that does not fit, and it keeps its bytes until
+        // that request is granted. Another group is waiting on a request that does fit. Free the slot.
+        if (!HasFreeAdmissionSlot()) {
+            if (!HasStuckAdmission()) {
+                return EUnrestrictedScheduleResult::Idle;
+            }
+            ReleaseStuckAdmissions();
+            if (!HasFreeAdmissionSlot()) {
+                return EUnrestrictedScheduleResult::Idle;
+            }
+        }
+        auto allocation = WaitAllocations.TakeOne(*candidate, FitsUnrestricted);
         if (!allocation) {
             return EUnrestrictedScheduleResult::Idle;
         }
-        AdmittedGroupIds.insert(groupId);
-        return AllocateTaken(allocation, groupId);
+        AdmittedGroupIds.insert(*candidate);
+        return AllocateTaken(allocation, *candidate);
     }
 
     void CollectAdmitted(ui64& groups, ui64& bytes) const {

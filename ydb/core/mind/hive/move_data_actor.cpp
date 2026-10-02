@@ -112,6 +112,7 @@ public:
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
+                PipeClients[i].Tablet = 0;
                 --MoveDataInFlight;
                 Hive->OnShrinkMoveDataAnswered(MoveDataInFlight, Queued());
                 YDB_LOG_NOTICE("ShrinkPool: MoveData answered",
@@ -141,10 +142,10 @@ public:
                 if (FastFail) {
                     return ReplyAndPassAway(false);
                 } else {
-                    --MoveDataInFlight;
                     for (size_t i = 0; i < PipeClients.size(); ++i) {
                         if (PipeClients[i].Tablet == ev->Get()->TabletId) {
                             NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
+                            PipeClients[i].Tablet = 0;
                             --MoveDataInFlight;
                             if (NextTablet != Tablets.end()) {
                                 SendMoveData(i, *(NextTablet++));

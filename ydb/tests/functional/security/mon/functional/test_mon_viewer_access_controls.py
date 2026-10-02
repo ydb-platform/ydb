@@ -385,24 +385,6 @@ def test_out_of_scope_path_nodes_gives_400(mon_base_url_with_extra_sids_control)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
 
 
-# Without pools assigned to /Root, strict database users get 403 instead of cluster groups; viewer+ still gets 200.
-def test_storage_groups_without_root_storage_pools_forbidden_for_strict_database_token(
-    ydb_cluster_with_extra_sids_controls_without_root_storage_pools,
-):
-    base = mon_base_url(ydb_cluster_with_extra_sids_controls_without_root_storage_pools)
-    wait_for_viewer_ready(base, database=DATABASE)
-    with grant_describe_schema_provided(base):
-        for whiteboard_only in (0, 1):
-            path = _build_endpoint_path(
-                '/storage/groups',
-                with_database_cgi=True,
-                extra_params={'whiteboard_only': whiteboard_only},
-            )
-            _assert_status(base, path, 'database@builtin', 403)
-            for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
-                _assert_status(base, path, token, 200)
-
-
 def test_storage_groups_scope_params_forbidden_for_strict_database_token(
     mon_base_url_with_extra_sids_control,
     tenant_database,

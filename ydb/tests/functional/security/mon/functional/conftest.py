@@ -194,21 +194,6 @@ def ydb_cluster_with_extra_sids_controls(certificates):
     cluster.stop()
 
 
-@pytest.fixture(scope='module')
-def ydb_cluster_with_extra_sids_controls_without_root_storage_pools(certificates):
-    configurator = create_ydb_configurator(
-        certificates,
-        enforce_user_token_requirement=True,
-        extra_feature_flags=['enable_extra_sids_control_for_http_viewer'],
-    )
-    # Root has no storage pools, but the cluster still has its static storage group.
-    configurator.dynamic_storage_pools = []
-    cluster = KiKiMR(configurator)
-    cluster.start()
-    yield cluster
-    cluster.stop()
-
-
 TENANT_DATABASE = '/Root/Tenant'
 
 

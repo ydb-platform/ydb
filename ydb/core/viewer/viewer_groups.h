@@ -971,16 +971,15 @@ public:
             // Database-only users normally don't fetch NodeId/PDiskId (see CheckAccessViewer above),
             // but we need that data from BSC to validate the scope of node_id/pdisk_id/group_id params.
             // Required fields should be set *after* FieldsRequested, so they are not rendered in the response.
+            if (!FilterGroupIds.Requested.empty() || !FilterNodeIds.Requested.empty() || !FilterPDiskIds.Requested.empty()) {
+                FieldsRequired.set(+EGroupFields::PoolName);
+            }
             if (!FilterNodeIds.Requested.empty()) {
                 FieldsRequired.set(+EGroupFields::NodeId);
             }
             if (!FilterPDiskIds.Requested.empty()) {
                 FieldsRequired.set(+EGroupFields::PDiskId);
             }
-
-            // Every response must be restricted to the database, even without explicit ids.
-            FieldsRequired.set(+EGroupFields::PoolName);
-            NeedFilter = true;
         }
         for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
             if (FieldsRequired.test(field)) {
@@ -1067,10 +1066,12 @@ public:
         return scope;
     }
 
-    // Strict database-only users must have a known storage scope, even without explicit ids,
-    // and must not be able to address storage objects outside their database.
+    // Strict database-only users must not be able to address storage objects outside their database.
     // Returns true if the response has been already sent.
     bool DenyRequestIfStorageIdsAreOutOfDatabase() {
+        if (FilterGroupIds.Requested.empty() && FilterNodeIds.Requested.empty() && FilterPDiskIds.Requested.empty()) {
+            return false;
+        }
         const std::optional<TDatabaseStorageScope> scope = GetDatabaseStorageScope();
         if (!scope) {
             YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: the storage of the database is unknown",
@@ -1110,14 +1111,6 @@ public:
     }
 
     void ApplyFilter() {
-        if (IsStrictDatabaseOnlyRequest() &&
-            (DatabaseStoragePools.empty() || !FieldsAvailable.test(+EGroupFields::PoolName))
-        ) {
-            // Keep grouping and pagination pending until the database pre-filter can be applied.
-            // ReplyAndPassAway denies the request if the scope is still unknown at the deadline.
-            NeedFilter = true;
-            return;
-        }
         // database pre-filter, affects TotalGroups count
         if (!DatabaseStoragePools.empty() && !DatabaseStoragePoolsApplied) {
             if (FieldsAvailable.test(+EGroupFields::PoolName)) {

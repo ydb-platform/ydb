@@ -5719,7 +5719,7 @@
                     "TablesMetricsLevel": 0
                 },
                 "Self": {
-                    "ACL": "text",
+                    "ACL": "",
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -5731,7 +5731,7 @@
                     "PathState": 2,
                     "PathSubType": 0,
                     "PathType": 4,
-                    "PathVersion": "11",
+                    "PathVersion": "9",
                     "SchemeshardId": "72075186224038900"
                 }
             },

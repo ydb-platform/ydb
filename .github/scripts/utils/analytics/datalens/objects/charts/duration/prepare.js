@@ -50,36 +50,6 @@ const METRIC_LABEL = {
     upload_tests_results: '- step · upload_tests_results',
     ydbd_cached_build: '- step · ydbd_cached_build',
 };
-const SLOW = {
-    job: 30,
-    checkout: 15,
-    queue: 10,
-    'Build and test': 60,
-    ya_make_try_1: 15,
-    ya_make_try_2: 15,
-    ya_make_try_3: 15,
-    ya_build_try_1: 20,
-    ya_build_rebuild_try_1: 20,
-    ya_tests_try_1: 15,
-    ya_build_try_2: 20,
-    ya_build_rebuild_try_2: 20,
-    ya_tests_try_2: 15,
-    ya_build_try_3: 20,
-    ya_build_rebuild_try_3: 20,
-    ya_tests_try_3: 15,
-    ya_cache_download_try_1: 3,
-    ya_cache_download_try_2: 3,
-    ya_cache_download_try_3: 3,
-    ya_cache_upload_try_1: 2,
-    ya_cache_upload_try_2: 2,
-    ya_cache_upload_try_3: 2,
-    ydbd_cached_build: 30,
-    graph_compare: 5,
-    prepare_ya_make: 1,
-    checkout_head: 1,
-    postprocess_try: 1,
-    transform_build_results: 2,
-};
 function perTryStep(metricName) {
     const match = /^(prepare_ya_make|postprocess_try|transform_build_results|fail_checker|generate_summary|upload_tests_results|s3_sync)_try_([0-9]+)$/.exec(String(metricName || ''));
     if (!match) {
@@ -98,7 +68,6 @@ function perTryStep(metricName) {
 }
 const perTry = perTryStep(metric);
 const metricLabel = perTry ? ('-- substep · ' + perTry.title + ' try ' + perTry.n) : (METRIC_LABEL[metric] || metric);
-const SLOW_MIN = perTry ? (SLOW[perTry.base] || 5) : (SLOW[metric] || 5);
 const p90StepRaw = firstParam('p90_step', 'hour');
 const p90Step = p90StepRaw === 'day' || p90StepRaw === 'week' ? p90StepRaw : 'hour';
 const pChoices = {50: 0.5, 75: 0.75, 90: 0.9, 95: 0.95, 99: 0.99};
@@ -107,7 +76,7 @@ const pQuantile = pChoices[pKey];
 const pName = 'p' + pKey;
 const viewRaw = firstParam('tl_view', 'all');
 const viewMode = (
-    viewRaw === 'points' || viewRaw === 'p' || viewRaw === 'dist_count' || viewRaw === 'dist_time'
+    viewRaw === 'points' || viewRaw === 'p' || viewRaw === 'share_count' || viewRaw === 'share_time'
 ) ? viewRaw : 'all';
 
 function parseLoadedRows(loaded, sourceName) {
@@ -376,6 +345,9 @@ timelineRows.forEach(function(row, index) {
     });
 });
 
+const p90All = percentile(points.map(function(p) { return p.minutes; }), pQuantile);
+const SLOW_MIN = p90All === null ? Infinity : p90All;
+
 const byBucket = {};
 points.forEach(function(p) {
     const key = bucketKey(p.start);
@@ -423,7 +395,6 @@ const slowMinutes = points.filter(function(p) { return p.minutes >= SLOW_MIN; })
     .reduce(function(sum, p) { return sum + p.minutes; }, 0);
 const slowShareCount = points.length ? slowCount / points.length : 0;
 const slowShareTime = totalMinutes ? slowMinutes / totalMinutes : 0;
-const p90All = percentile(points.map(function(p) { return p.minutes; }), pQuantile);
 
 if (typeof Editor !== 'undefined' && typeof Editor.updateConfig === 'function') {
     try {
@@ -588,15 +559,14 @@ module.exports = {
                     }
                     return Math.round(p) + '%';
                 }
-                const shareCaption = allPoints.length + ' ops  ·  ' +
-                    cfg.slowCount + ' ≥ ' + cfg.slowMin + 'm (' +
-                    pct(cfg.slowShareCount) + ' count, ' + pct(cfg.slowShareTime) + ' time)  ·  ' +
-                    (cfg.pName || 'p90') + ' ' + formatMin(cfg.p90All);
+                const shareCaption = 'total ' + allPoints.length + ' ops  ·  ' +
+                    cfg.slowCount + ' ops ≥ ' + (cfg.pName || 'p90') + ' ' + formatMin(cfg.slowMin) + ' (' +
+                    pct(cfg.slowShareCount) + ' count, ' + pct(cfg.slowShareTime) + ' time)';
 
                 let showPoints = cfg.viewMode !== 'p';
                 const showLine = cfg.viewMode !== 'points';
-                const showDist = cfg.viewMode === 'dist_count' || cfg.viewMode === 'dist_time';
-                const distByTime = cfg.viewMode === 'dist_time';
+                const showDist = cfg.viewMode === 'share_count' || cfg.viewMode === 'share_time';
+                const distByTime = cfg.viewMode === 'share_time';
                 const MAX_DOTS = 8000;
                 if (showPoints && allPoints.length > MAX_DOTS) {
                     if (!showDist) {
@@ -691,7 +661,7 @@ module.exports = {
                     g.append('text')
                         .attr('x', 4).attr('y', y(cfg.slowMin) - 6)
                         .attr('fill', '#E15759').attr('font-size', '11px')
-                        .text(cfg.slowMin + ' min');
+                        .text((cfg.pName || 'p90') + ' ' + formatMin(cfg.slowMin));
                 }
 
                 const series = cfg.series || [];
@@ -840,7 +810,7 @@ module.exports = {
                         .attr('fill', '#E15759').attr('opacity', 0.45);
                     legend.append('text').attr('x', legendX + 24).attr('y', legendY + 4).attr('font-size', '11px')
                         .attr('fill', '#888')
-                        .text((distByTime ? 'long time / ' : 'long count / ') + (cfg.p90Step || 'hour'));
+                        .text((distByTime ? 'time share / ' : 'count share / ') + (cfg.p90Step || 'hour'));
                     legendX += 118;
                 }
                 if (showLine) {
@@ -1005,7 +975,7 @@ module.exports = {
                     }
                     const countShare = bucket.n ? bucket.slow / bucket.n : 0;
                     const timeShare = bucket.totalMinutes ? bucket.slowMinutes / bucket.totalMinutes : 0;
-                    const byTime = cfg.viewMode === 'dist_time';
+                    const byTime = cfg.viewMode === 'share_time';
                     const hasFast = bucket.slow < bucket.n;
                     const headline = byTime
                         ? (pctShare(timeShare, hasFast) + ' time')
@@ -1017,7 +987,8 @@ module.exports = {
                         '<div style="padding:8px 10px;font:13px/1.35 ui-sans-serif,system-ui,sans-serif;color:#222;max-width:300px">' +
                         '<div style="color:#333;font-size:13px;font-weight:600">' + bucketInterval(bucket) + '</div>' +
                         '<div style="color:#777;font-size:12px;margin-top:2px">' +
-                        (byTime ? 'dist time' : 'dist count') + ' · long ≥ ' + cfg.slowMin + 'm</div>' +
+                        (byTime ? 'time share' : 'count share') + ' · long ≥ ' +
+                        (cfg.pName || 'p90') + ' ' + formatMin(cfg.slowMin) + '</div>' +
                         '<b style="display:block;margin-top:6px;font-size:18px">' + headline + '</b>' +
                         '<div style="margin-top:6px;color:#444">long ' + formatMin(bucket.slowMinutes) +
                         ' · total ' + formatMin(bucket.totalMinutes) + '</div>' +

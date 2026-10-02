@@ -446,7 +446,7 @@
                 {
                   "id": "selview",
                   "title": "view",
-                  "width": "170px",
+                  "width": "180px",
                   "source": {
                     "required": false,
                     "showHint": false,
@@ -460,7 +460,7 @@
                     "multiselectable": false,
                     "acceptableValues": [
                       {
-                        "title": "All",
+                        "title": "Points + p",
                         "value": "all"
                       },
                       {
@@ -468,16 +468,16 @@
                         "value": "points"
                       },
                       {
-                        "title": "p only",
+                        "title": "Percentile",
                         "value": "p"
                       },
                       {
-                        "title": "dist count",
-                        "value": "dist_count"
+                        "title": "Count share",
+                        "value": "share_count"
                       },
                       {
-                        "title": "dist time",
-                        "value": "dist_time"
+                        "title": "Time share",
+                        "value": "share_time"
                       }
                     ]
                   },

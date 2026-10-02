@@ -145,6 +145,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistFullBackup(db, id);
     }
 
+    for (const auto& key : SchemeOperationUidKeys) {
+        ss->PersistSchemeOperationUidKey(db, key);
+    }
+
     for (const auto& pId : StreamingQueries) {
         ss->PersistStreamingQuery(db, pId);
     }

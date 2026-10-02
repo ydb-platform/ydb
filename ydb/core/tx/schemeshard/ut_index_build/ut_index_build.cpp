@@ -77,6 +77,43 @@ static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 
 }
 
 Y_UNIT_TEST_SUITE(IndexBuildTest) {
+    Y_UNIT_TEST(UidIdempotencyKeepsLegacyRejectionAfterReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto create = [&](const TString& indexName, Ydb::StatusIds::StatusCode expected) {
+            auto* request = CreateBuildIndexRequest(++txId, "/MyRoot", "/MyRoot/Table",
+                TBuildIndexConfig{indexName, NKikimrSchemeOp::EIndexTypeGlobal, {"value"}, {}, {}});
+            (*request->Record.MutableOperationParams()->mutable_labels())["uid"] = "legacy UID / ключ";
+            const auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, request);
+            TAutoPtr<IEventHandle> handle;
+            const auto* response = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Record.GetStatus(), expected, response->Record.ShortDebugString());
+        };
+        create("Index", Ydb::StatusIds::SUCCESS);
+        const ui64 operationId = txId;
+        env.TestWaitNotification(runtime, operationId);
+
+        // The legacy index record, including its UID, is the only persisted identity.
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        create("OtherIndex", Ydb::StatusIds::ALREADY_EXISTS);
+        TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", operationId);
+
+        TestForgetBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", operationId);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+        create("OtherIndex", Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(ShadowDataNotAllowedByDefault) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

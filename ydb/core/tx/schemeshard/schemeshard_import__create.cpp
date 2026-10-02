@@ -20,6 +20,7 @@
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
 
+#include <ydb/core/tx/schemeshard/common/operation_idempotency.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 #include <ydb/core/tx/schemeshard/schemeshard_path_describer.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -238,20 +239,22 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             );
         }
 
-        const TString& uid = GetUid(request.GetRequest().GetOperationParams());
-        if (uid) {
-            if (auto it = Self->ImportsByUid.find(uid); it != Self->ImportsByUid.end()) {
-                if (IsSameDomain(it->second, request.GetDatabaseName())) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *it->second);
-                    return Reply(std::move(response));
-                } else {
-                    return Reply(
-                        std::move(response),
-                        Ydb::StatusIds::ALREADY_EXISTS,
-                        TStringBuilder() << "Import with uid '" << uid << "' already exists"
-                    );
-                }
-            }
+        const TString& uid = GetUid(EOperationUidKind::Import, request.GetRequest().GetOperationParams());
+        const auto admission = TOperationUidAdmission::Prepare({EOperationUidKind::Import, uid},
+            TOperationUidAdmission::EDuplicatePolicy::Replay,
+            [&](const auto& key) { return Self->FindOperationByUid(key); },
+            [&](const auto& stored) {
+                return IsSameDomain(Self->Imports.at(stored.OperationId), request.GetDatabaseName())
+                    ? TOperationUidAdmission::EDecision::Replay : TOperationUidAdmission::EDecision::DomainMismatch;
+            });
+        if (admission.GetDecision() == TOperationUidAdmission::EDecision::Replay) {
+            Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(),
+                *Self->Imports.at(admission.GetOperationId()));
+            return Reply(std::move(response));
+        }
+        if (admission.GetDecision() != TOperationUidAdmission::EDecision::Proceed) {
+            return Reply(std::move(response), Ydb::StatusIds::ALREADY_EXISTS,
+                TStringBuilder() << "Import with uid '" << uid << "' already exists");
         }
 
         const TPath domainPath = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -1009,12 +1012,8 @@ private:
         Y_ABORT_UNLESS(item.State == EState::BuildIndexes);
 
         const auto uid = MakeIndexBuildUid(importInfo, itemIdx);
-        const auto* infoPtr = Self->IndexBuildsByUid.FindPtr(uid);
-        if (!infoPtr) {
-            return InvalidTxId;
-        }
-
-        return TTxId(ui64((*infoPtr)->Id));
+        const auto* id = Self->OperationsByUid.FindPtr(TOperationUidKey{EOperationUidKind::IndexBuild, uid});
+        return id ? TTxId(*id) : InvalidTxId;
     }
 
     TTxId GetActiveCreateChangefeedTxId(const TImportInfo& importInfo, ui32 itemIdx) {

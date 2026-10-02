@@ -10,15 +10,6 @@
 
 namespace NKikimr::NSchemeShard {
 
-TString GetUid(const Ydb::Operations::OperationParams& operationParams) {
-    const auto& labels = operationParams.labels();
-    auto it = labels.find("uid");
-    if (it != labels.end()) {
-        return it->second;
-    }
-    return {};
-}
-
 template <class TInfo>
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransactionImpl(TSchemeShard* ss, TTxId txId, const TInfo& xxportInfo) {
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());

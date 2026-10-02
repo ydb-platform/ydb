@@ -47,6 +47,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx
     ydb/core/tx/datashard
+    ydb/core/tx/schemeshard/common
 )
 
 YQL_LAST_ABI_VERSION()

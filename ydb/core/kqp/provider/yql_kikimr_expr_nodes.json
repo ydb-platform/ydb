@@ -306,6 +306,16 @@
             ]
         },
         {
+            "Name": "TKiKillSession",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiKillSession!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "SessionId", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKiDropObject",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KiDropObject!"},

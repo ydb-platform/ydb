@@ -185,6 +185,7 @@ struct TKqpSessionInfo {
     std::optional<TCurrentQueryStats::TPublishedSnapshot> CurrentQueryStats;
     ui64 CurrentQueryStatsSequenceNo = 0;
     TString ClientApplicationName;
+    // Set when the session is created; not the identity of a later query.
     TString ClientSID;
     TString ClientHost;
     TString UserAgent;
@@ -198,6 +199,7 @@ struct TKqpSessionInfo {
 
     ESessionState State = ESessionState::IDLE;
     bool Closing = false;
+    TString TerminationReason;
 
     struct TFieldsMap {
         ui64 bitmap = 0;
@@ -347,8 +349,15 @@ public:
         info->Closing = true;
     }
 
+    void SetSessionTerminating(const TKqpSessionInfo* sessionInfo, const TString& reason) {
+        TKqpSessionInfo* info = const_cast<TKqpSessionInfo*>(sessionInfo);
+        info->Closing = true;
+        info->TerminationReason = reason;
+        StopIdleCheck(sessionInfo);
+    }
+
     void StartIdleCheck(const TKqpSessionInfo* sessionInfo, const TDuration idleDuration) {
-        if (!sessionInfo) {
+        if (!sessionInfo || !sessionInfo->TerminationReason.empty()) {
             return;
         }
 

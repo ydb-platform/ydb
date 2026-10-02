@@ -48,28 +48,6 @@ bool HasThreeSegments(TStringBuf name) {
 }
 
 /**
- * The kind of a public metric, which decides the validation rules for its sources.
- */
-enum class EMetricKind {
-    Gauge,
-    Rate,
-    Histogram,
-};
-
-TStringBuf GetMetricKindName(EMetricKind kind) {
-    switch (kind) {
-    case EMetricKind::Gauge:
-        return "gauge";
-    case EMetricKind::Rate:
-        return "rate";
-    case EMetricKind::Histogram:
-        return "histogram";
-    }
-
-    Y_ABORT("unexpected metric kind %d", static_cast<int>(kind));
-}
-
-/**
  * Validate the specification of one metric.
  *
  * @return The reason why the metric is invalid, or an empty string if it is valid
@@ -197,8 +175,19 @@ void FinalizeMetrics(
             return true;
         };
 
+        const auto anyWrapped = [&spec](ESourceWrapper wrapper) {
+            for (const auto& source : spec.Sources) {
+                if (source.Wrapper == wrapper) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
         spec.CombineByMax = kind == EMetricKind::Gauge && allWrapped(ESourceWrapper::Max);
         spec.StaticLevel = kind == EMetricKind::Histogram && allWrapped(ESourceWrapper::Hist);
+        spec.IsLevel = kind == EMetricKind::Histogram && (anyWrapped(ESourceWrapper::Hist) || spec.Integral);
     }
 }
 
@@ -286,6 +275,19 @@ std::optional<TSourceRef> ParseSourceRef(TStringBuf text, ESourceCounterCategory
     return TSourceRef{category, ESourceWrapper::None, TString(text)};
 }
 
+TStringBuf GetMetricKindName(EMetricKind kind) {
+    switch (kind) {
+    case EMetricKind::Gauge:
+        return "gauge";
+    case EMetricKind::Rate:
+        return "rate";
+    case EMetricKind::Histogram:
+        return "histogram";
+    }
+
+    Y_ABORT("unexpected metric kind %d", static_cast<int>(kind));
+}
+
 TString FormatSourceRef(const TSourceRef& source) {
     switch (source.Wrapper) {
     case ESourceWrapper::None:
@@ -318,6 +320,19 @@ bool FinalizeDescriptor(TDetailedMetricsDescriptor& descriptor, TString* error) 
     }
 
     return descriptor.Errors.empty();
+}
+
+const TVector<TMetricSpec>& TDetailedMetricsDescriptor::GetMetrics(EMetricKind kind) const {
+    switch (kind) {
+    case EMetricKind::Gauge:
+        return Gauges;
+    case EMetricKind::Rate:
+        return Rates;
+    case EMetricKind::Histogram:
+        return Histograms;
+    }
+
+    Y_ABORT("unexpected metric kind %d", static_cast<int>(kind));
 }
 
 const TDetailedMetricsDescriptor* GetDetailedMetricsDescriptor(TTabletTypes::EType tabletType) {

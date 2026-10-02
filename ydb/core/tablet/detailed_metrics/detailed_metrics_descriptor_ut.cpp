@@ -233,12 +233,16 @@ Y_UNIT_TEST_SUITE(TDetailedMetricsDescriptorTest) {
         for (const auto& spec : descriptor.Gauges) {
             UNIT_ASSERT_C(!spec.CombineByMax, spec.Name);
             UNIT_ASSERT_C(!spec.StaticLevel, spec.Name);
+            UNIT_ASSERT_C(!spec.Integral, spec.Name);
+            UNIT_ASSERT_C(!spec.IsLevel, spec.Name);
             UNIT_ASSERT_C(spec.Bounds.empty(), spec.Name);
         }
 
         for (const auto& spec : descriptor.Rates) {
             UNIT_ASSERT_C(!spec.CombineByMax, spec.Name);
             UNIT_ASSERT_C(!spec.StaticLevel, spec.Name);
+            UNIT_ASSERT_C(!spec.Integral, spec.Name);
+            UNIT_ASSERT_C(!spec.IsLevel, spec.Name);
             UNIT_ASSERT_C(spec.Bounds.empty(), spec.Name);
         }
     }
@@ -253,6 +257,11 @@ Y_UNIT_TEST_SUITE(TDetailedMetricsDescriptorTest) {
         UNIT_ASSERT(spec.Sources[0] == MakeSource(SCC_EXECUTOR, ESourceWrapper::Hist, "ConsumedCPU"));
         UNIT_ASSERT(spec.StaticLevel);
         UNIT_ASSERT(!spec.CombineByMax);
+
+        // A level because of HIST(x), the enum entry itself is not Integral
+        UNIT_ASSERT(spec.IsLevel);
+        UNIT_ASSERT(!spec.Integral);
+
         UNIT_ASSERT_VALUES_EQUAL(spec.Bounds, TVector<ui64>({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100}));
         UNIT_ASSERT_VALUES_EQUAL(spec.BucketCount(), 12);
     }
@@ -372,6 +381,8 @@ Y_UNIT_TEST_SUITE(TDetailedMetricsDescriptorTest) {
         UNIT_ASSERT(!descriptor.Rates[0].CombineByMax);
         UNIT_ASSERT(descriptor.Histograms[0].StaticLevel);
         UNIT_ASSERT(!descriptor.Histograms[1].StaticLevel);
+        UNIT_ASSERT(descriptor.Histograms[0].IsLevel);
+        UNIT_ASSERT(!descriptor.Histograms[1].IsLevel);
         UNIT_ASSERT_VALUES_EQUAL(descriptor.Histograms[0].BucketCount(), 4);
 
         UNIT_ASSERT_VALUES_EQUAL(SortedNames(descriptor.RawNames.ExecutorNames), TVector<TString>({
@@ -392,6 +403,38 @@ Y_UNIT_TEST_SUITE(TDetailedMetricsDescriptorTest) {
         // A null error is allowed
         auto other = MakeValidDescriptor();
         UNIT_ASSERT(FinalizeDescriptor(other, nullptr));
+    }
+
+    Y_UNIT_TEST(FinalizeDerivesIsLevelOfHistograms) {
+        auto descriptor = MakeValidDescriptor();
+
+        // An Integral histogram over a plain percentile counter is a level
+        descriptor.Histograms[1].Integral = true;
+
+        // The Integral option means nothing for gauges and rates
+        descriptor.Gauges[0].Integral = true;
+        descriptor.Rates[0].Integral = true;
+
+        UNIT_ASSERT(FinalizeDescriptor(descriptor, nullptr));
+        UNIT_ASSERT(descriptor.Histograms[0].IsLevel);
+        UNIT_ASSERT(descriptor.Histograms[1].IsLevel);
+        UNIT_ASSERT(!descriptor.Histograms[1].StaticLevel);
+        UNIT_ASSERT(!descriptor.Gauges[0].IsLevel);
+        UNIT_ASSERT(!descriptor.Rates[0].IsLevel);
+
+        // A histogram, which combines HIST(x) with a plain percentile counter,
+        // is a level even if it is not Integral: HIST(x) is always a level
+        auto mixed = MakeValidDescriptor();
+        mixed.Histograms[1].Sources.push_back(MakeSource(SCC_EXECUTOR, ESourceWrapper::Hist, "ExecGauge"));
+        UNIT_ASSERT(FinalizeDescriptor(mixed, nullptr));
+        UNIT_ASSERT(!mixed.Histograms[1].StaticLevel);
+        UNIT_ASSERT(!mixed.Histograms[1].Integral);
+        UNIT_ASSERT(mixed.Histograms[1].IsLevel);
+
+        // A plain percentile histogram without the Integral option holds increments
+        auto increments = MakeValidDescriptor();
+        UNIT_ASSERT(FinalizeDescriptor(increments, nullptr));
+        UNIT_ASSERT(!increments.Histograms[1].IsLevel);
     }
 
     Y_UNIT_TEST(FinalizeRejectsMixedSumAndMaxGauge) {

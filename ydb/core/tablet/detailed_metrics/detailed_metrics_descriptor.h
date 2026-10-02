@@ -77,6 +77,29 @@ std::optional<TSourceRef> ParseSourceRef(TStringBuf text, ESourceCounterCategory
 TString FormatSourceRef(const TSourceRef& source);
 
 /**
+ * The kind of a public detailed metric, which decides the rules for its sources.
+ */
+enum class EMetricKind {
+    /**
+     * A gauge (the ESimpleDetailedCounters enum).
+     */
+    Gauge,
+    /**
+     * A rate (the ECumulativeDetailedCounters enum).
+     */
+    Rate,
+    /**
+     * A histogram (the EPercentileDetailedCounters enum).
+     */
+    Histogram,
+};
+
+/**
+ * @return The lower case name of the metric kind (for example, "gauge")
+ */
+TStringBuf GetMetricKindName(EMetricKind kind);
+
+/**
  * The specification of one public detailed metric.
  */
 struct TMetricSpec {
@@ -122,6 +145,25 @@ struct TMetricSpec {
     bool StaticLevel = false;
 
     /**
+     * Histograms only: the Integral option (CounterOpts) of the enum entry of the metric,
+     * which declares a histogram over plain percentile sources a level.
+     */
+    bool Integral = false;
+
+    /**
+     * Histograms only: the histogram holds a level (the current state of the source
+     * tablets, which goes up and down) rather than increments, which only accumulate:
+     * any source is HIST(x), or the metric is Integral.
+     *
+     * @note Every source must agree: HIST(x) and an integral percentile counter are
+     *       levels, a derivative (non-integral) percentile counter is increments.
+     *       The kind of a plain percentile counter is known only from the counter layout,
+     *       so a source, which disagrees, is rejected when the metrics are bound
+     *       to the layout (see TDetailedMetricsBinding), not here.
+     */
+    bool IsLevel = false;
+
+    /**
      * Histograms only: the number of buckets, including the implicit +Inf one.
      */
     size_t BucketCount() const {
@@ -161,11 +203,16 @@ struct TDetailedMetricsDescriptor {
      * (built without an actor context), so the users log these errors themselves.
      */
     TVector<TString> Errors;
+
+    /**
+     * @return The public metrics of the given kind (Gauges, Rates or Histograms)
+     */
+    const TVector<TMetricSpec>& GetMetrics(EMetricKind kind) const;
 };
 
 /**
  * Validate the descriptor and fill the derived fields: PartitionName, CombineByMax,
- * StaticLevel and RawNames.
+ * StaticLevel, IsLevel and RawNames.
  *
  * Validation rules:
  * - a metric name has at least three segments (as MakeYdbMetricName requires),
@@ -192,6 +239,8 @@ namespace NDetailedMetricsDescriptorImpl {
 /**
  * Append the specifications of all metrics of one kind, parsed from the given
  * enum options, to the given list.
+ *
+ * @note withBounds is set for histograms only: it also takes their Integral option.
  */
 template <const NProtoBuf::EnumDescriptor* Desc()>
 void AppendMetricSpecs(TVector<TMetricSpec>& specs, TVector<TString>& errors, bool withBounds) {
@@ -205,6 +254,7 @@ void AppendMetricSpecs(TVector<TMetricSpec>& specs, TVector<TString>& errors, bo
         auto& spec = specs.emplace_back();
         spec.Name = opts->GetNames()[i];
         spec.LeaderOnly = opts->GetLeaderOnly(i);
+        spec.Integral = withBounds && opts->GetIntegral(i);
 
         for (const auto& source : opts->GetSourceCounters(i)) {
             auto ref = ParseSourceRef(source.GetName(), source.GetCategory());

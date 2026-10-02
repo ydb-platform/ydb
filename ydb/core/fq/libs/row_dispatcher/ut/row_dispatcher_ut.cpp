@@ -297,6 +297,7 @@ public:
 
         NFq::TTopicSessionClientStatistic clientStat;
         clientStat.ReadActorId = readActorId;
+        clientStat.Generation = 1;
         clientStat.PartitionId = partitionId;
         clientStat.QueuedBytes = queuedBytes;
         stat.Clients.push_back(clientStat);

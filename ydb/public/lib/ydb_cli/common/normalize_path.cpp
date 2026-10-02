@@ -1,4 +1,8 @@
 #include "normalize_path.h"
+#include "scoped_driver.h"
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -45,21 +49,31 @@ namespace NConsoleClient {
     }
 
     void AdjustPath(TString& path, const TClientCommand::TConfig& config) {
-        if (path.StartsWith('/')) {
-            if (!path.StartsWith(config.Database)) {
-                throw TMisuseException() << "Provided path \"" << path << "\" starts with '/'. "
-                    << "That means you are using an absolute path that should start with the path "
-                    << "to your database \"" << config.Database << "\", but it doesn't. " << Endl
-                    << "Please, provide full path starting from the domain root "
-                    << "(example: \"/domain/my_base/dir1/table1\"). " << Endl
-                    << "Or consider using relative path from your database (example: \"dir1/table1\").";
-            }
-        } else {
-            // allow relative path
-            path = (config.Path ? config.Path : config.Database) + '/' + path;
+        const auto& base = config.Path ? config.Path : config.Database;
+        if (!path.StartsWith('/') && (config.Path || base.StartsWith('/'))) {
+            path = base + '/' + path;
         }
 
-        path = NormalizePath(path);
+        // Retain the existing CLI normalization without making a relative path absolute.
+        if (path != "/") {
+            const bool relative = !path.StartsWith('/');
+            path = NormalizePath(relative ? "/" + path : path);
+            if (relative && !path.empty()) {
+                path.erase(0, 1);
+            }
+        }
+    }
+
+    void AdjustPathToDatabase(TString& path, TClientCommand::TConfig& config) {
+        AdjustPath(path, config);
+        if (path.empty() && !config.Database.empty() && !config.Database.StartsWith('/')) {
+            TScopedDriver driver{TDriver(config.CreateDriverConfigWithBuildInfo())};
+            NScheme::TSchemeClient client(driver);
+            auto root = client.ListDirectory("/").GetValueSync();
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(root);
+            Y_ENSURE(root.GetChildren().size() == 1, "Exactly one cluster root expected");
+            path = "/" + root.GetChildren().front().Name + "/" + config.Database;
+        }
     }
 
 }

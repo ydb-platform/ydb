@@ -119,7 +119,7 @@ public:
                 continue;
             }
             tx->AddTables()->SetTablePath(
-                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->NormalizePath(path));
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
         if (proto->ignore_system_views()) {
@@ -256,7 +256,7 @@ public:
                 continue;
             }
             tx->AddTables()->SetTablePath(
-                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->NormalizePath(path));
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);
@@ -398,7 +398,7 @@ public:
                 continue;
             }
             tx->AddTables()->SetTablePath(
-                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->NormalizePath(path));
+                TryParseLocalDbPath(::NKikimr::SplitPath(path)) ? path : Request_->GetDatabaseRelativePath(path));
         }
         tx->SetSnapshotStep(SnapshotId.Step);
         tx->SetSnapshotTxId(SnapshotId.TxId);

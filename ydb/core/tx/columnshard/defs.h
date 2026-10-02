@@ -13,8 +13,11 @@
 
 namespace NKikimr::NColumnShard {
 
+<<<<<<< HEAD
 inline constexpr ui32 FirstDataChannel = 2;
 
+=======
+>>>>>>> 237762cf815 ([YDB_LOG_ Remove LOG_S_ macroses (#54259))
 struct TLimits {
 private:
     static constexpr ui64 MAX_BLOB_SIZE_LIMIT = 8 * 1024 * 1024;

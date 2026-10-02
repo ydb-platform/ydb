@@ -7,7 +7,6 @@ RECURSE(
     pq
     s3
     solomon
-    ydb
     yt
 )
 

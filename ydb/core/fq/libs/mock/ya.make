@@ -33,7 +33,6 @@ PEERDIR(
     yql/essentials/providers/common/udf_resolve
     ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/worker_manager/interface
-    ydb/library/yql/providers/ydb/provider
     yql/essentials/public/issue
     yql/essentials/public/issue/protos
     yql/essentials/sql/settings

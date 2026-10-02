@@ -324,7 +324,7 @@ private:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in CompileState");
             }
         } catch (const yexception& e) {
-            Reply(Ydb::StatusIds::INTERNAL_ERROR, e.what());
+            ReplyInternalError(e.what());
         }
     }
 
@@ -524,6 +524,19 @@ private:
     void Reply(const Ydb::StatusIds::StatusCode& status, const TString& message) {
         NYql::TIssue issue(NYql::TPosition(), message);
         Reply(status, {issue});
+    }
+
+    // Aborts of the replay tool itself (YQL_ENSURE / yexception caught in a STATEFN)
+    // must not be classified as product compile errors. Product failures arrive as a
+    // result status via TEvContinueProcess, never as an exception.
+    void ReplyInternalError(const TString& message) {
+        auto ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(false);
+        ev->Status = TQueryReplayEvents::QrInternalError;
+        ev->Message = message;
+        Cerr << "Query replay internal error: " << ev->Message << Endl;
+        WriteJsonData("-repro.txt", ReplayDetails);
+        Send(Owner, ev.release());
+        PassAway();
     }
 
     void Reply(const Ydb::StatusIds::StatusCode& status, const TIssues& issues, const std::optional<TString>& queryPlan = std::nullopt) {

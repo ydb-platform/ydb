@@ -1,8 +1,8 @@
-# Cluster Disk Subsystem Management Overview
+# Overview of cluster disk subsystem management
 
-Managing a cluster's disk subsystem includes the following actions:
+Managing the cluster disk subsystem includes the following actions:
 
-* Configuration changes:
+* Changing the configuration:
 
   * [{#T}](../../devops/configuration-management/configuration-v2/cluster-expansion.md).
   * [{#T}](adding_storage_groups.md).

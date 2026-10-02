@@ -1,25 +1,25 @@
 items:
-- name: Adding storage groups
-  href: adding_storage_groups.md
-- name: Safe restart and shutdown of nodes
-  href: node_restarting.md
-- name: Enabling/disabling Scrubbing
-  href: scrubbing.md
-- name: Data Center Decommissioning
-  href: ../../devops/deployment-options/manual/decommissioning.md
-- name: Decommissioning groups using virtual groups
-  href: virtual_storage_groups_decommit.md
-- name: Moving VDisks
-  href: moving_vdisks.md
-- name: Staying within the failure model
-  href: failure_model.md
-- name: Disk load balancing
-  href: balancing_load.md
-- name: Freeing up space on physical devices
-  href: disk_end_space.md
-- name: Replacing a node's FQDN
-  href: replacing_nodes.md
-- name: BlobDepot
-  href: blobdepot.md
-- name: BlobDepot decommit
-  href: blobdepot_decommit.md
+- href: adding_storage_groups.md
+  name: Adding storage groups
+- href: node_restarting.md
+  name: Safe restart and shutdown of nodes
+- href: scrubbing.md
+  name: Enabling/disabling Scrubbing
+- href: ../../devops/deployment-options/manual/decommissioning.md
+  name: Data Center Decommissioning
+- href: virtual_storage_groups_decommit.md
+  name: Decommissioning groups using virtual groups
+- href: moving_vdisks.md
+  name: Moving VDisks
+- href: failure_model.md
+  name: Staying within the failure model
+- href: balancing_load.md
+  name: Disk load balancing
+- href: disk_end_space.md
+  name: Freeing up space on physical devices
+- href: replacing_nodes.md
+  name: Replacing a node's FQDN
+- href: blobdepot.md
+  name: BlobDepot
+- href: blobdepot_decommit.md
+  name: BlobDepot decommissioning

@@ -5070,6 +5070,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "ddd", 123, 7) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "eee", 123, 7) });
         env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(2, "fff", 234, 3) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "qqq", 123, 11) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(3, "www", 123, 11) });
 
         {
             TString data;
@@ -5081,17 +5083,21 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
                 "Key 1 = Upsert value = Set aaa value2 = Empty NULL txId 123\n"
                 "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
                 "Key 2 = Upsert value = Set fff value2 = Empty NULL txId 234 savepointSeqNum 3\n"
-                "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n");
+                "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n"
+                "Key 3 = Upsert value = Set www value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 3 = Upsert value = Set qqq value2 = Empty NULL txId 123 savepointSeqNum 11\n");
         }
 
-        // Deltas of the same transaction are only merged when they have the same savepoint seq num
+        // Deltas of the same transaction are only merged when they have the same savepoint seq num,
+        // a newer value of the same column overwrites an older one (key 3)
         const TString compacted =
             "Key 1 = Upsert value = Empty NULL value2 = Set ddd txId 123 savepointSeqNum 7\n"
             "Key 1 = Upsert value = Set ccc value2 = Set bbb txId 123 savepointSeqNum 5\n"
             "Key 1 = Upsert value = Set aaa value2 = Empty NULL txId 123\n"
             "Key 1 = Upsert value = Set foo value2 = Empty NULL\n"
             "Key 2 = Upsert value = Set fff value2 = Empty NULL txId 234 savepointSeqNum 3\n"
-            "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n";
+            "Key 2 = Upsert value = Set eee value2 = Empty NULL txId 123 savepointSeqNum 7\n"
+            "Key 3 = Upsert value = Set www value2 = Empty NULL txId 123 savepointSeqNum 11\n";
 
         Cerr << "...compacting mem table" << Endl;
         env.SendSync(new NFake::TEvCompact(TableId, true));
@@ -5135,7 +5141,107 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LongTx) {
             env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
             UNIT_ASSERT_VALUES_EQUAL(data,
                 "Key 1 = Upsert value = Set ccc value2 = Set ddd\n"
-                "Key 2 = Upsert value = Set eee value2 = Empty NULL\n");
+                "Key 2 = Upsert value = Set eee value2 = Empty NULL\n"
+                "Key 3 = Upsert value = Set www value2 = Empty NULL\n");
+        }
+    }
+
+    Y_UNIT_TEST(CompactSavepointSeqNumAcrossParts) {
+        TMyEnvBase env;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::OPS_COMPACT, NActors::NLog::PRI_DEBUG);
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema });
+
+        // The first part
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "ppp", 123, 5) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "qqq", 123, 11) });
+
+        Cerr << "...compacting mem table into the first part" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set qqq value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set ppp txId 123 savepointSeqNum 5\n");
+        }
+
+        // The mem table
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "www", 123, 11) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<Value2ColumnId>(1, "xxx", 123, 11) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow<ValueColumnId>(1, "zzz", 123, 12) });
+
+        {
+            // Mem table deltas first, then deltas of the first part
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set zzz value2 = Empty NULL txId 123 savepointSeqNum 12\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set xxx txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Set www value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Set qqq value2 = Empty NULL txId 123 savepointSeqNum 11\n"
+                "Key 1 = Upsert value = Empty NULL value2 = Set ppp txId 123 savepointSeqNum 5\n");
+        }
+
+        // Now "qqq" (savepoint seq num 11) is in the first part, while "www" and "xxx" with
+        // the same seq num are in the mem table. Compacting the mem table merges it with
+        // the first part, and merging deltas with the same savepoint seq num across layers
+        // keeps the newest value of each column. Deltas with other seq nums stay separate.
+        const TString compacted =
+            "Key 1 = Upsert value = Set zzz value2 = Empty NULL txId 123 savepointSeqNum 12\n"
+            "Key 1 = Upsert value = Set www value2 = Set xxx txId 123 savepointSeqNum 11\n"
+            "Key 1 = Upsert value = Empty NULL value2 = Set ppp txId 123 savepointSeqNum 5\n";
+
+        Cerr << "...compacting mem table together with the first part" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId, true));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...compacting parts" << Endl;
+        env.SendSync(new NFake::TEvCompact(TableId));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        Cerr << "...restarting tablet" << Endl;
+        env.SendSync(new TEvents::TEvPoison, false, true);
+        env.WaitForGone();
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRowsUncommitted(data) }, /* retry */ true);
+            UNIT_ASSERT_VALUES_EQUAL(data, compacted);
+        }
+
+        env.SendSync(new NFake::TEvExecute{ new TTxCommitLongTx(123) });
+
+        {
+            TString data;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows(data) });
+            UNIT_ASSERT_VALUES_EQUAL(data,
+                "Key 1 = Upsert value = Set zzz value2 = Set xxx\n");
         }
     }
 

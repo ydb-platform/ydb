@@ -1617,8 +1617,9 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
 
     TExprNode::TPtr newInput;
 
-    if (TCoMap::Match(tableEffectInput.Get()) && TKqpOpRoot::Match(tableEffectInput->ChildPtr(0).Get())) {
-        TCoMap map(tableEffectInput);
+    if ((TCoMap::Match(tableEffectInput.Get()) || TCoOrderedMap::Match(tableEffectInput.Get()))
+        && TKqpOpRoot::Match(tableEffectInput->ChildPtr(0).Get())) {
+        TCoMapBase map(tableEffectInput);
         auto root = map.Input().Cast<TKqpOpRoot>();
 
         auto lambda = map.Lambda();
@@ -1736,7 +1737,7 @@ TExprNode::TPtr RewriteTableEffect(const TExprNode::TPtr& node, TExprContext& ct
                 .Columns(upsert.Columns())
                 .ReturningColumns(upsert.ReturningColumns())
                 .IsBatch(upsert.IsBatch())
-                .DefaultColumns().Build()
+                .DefaultColumns(upsert.DefaultColumns())
                 .Settings(upsert.Settings())
                 .OnConflict().Build()
             .Build()

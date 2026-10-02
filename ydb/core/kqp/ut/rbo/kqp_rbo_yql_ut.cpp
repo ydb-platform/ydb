@@ -5858,6 +5858,7 @@ FROM (
                 e Int64,
                 f Decimal(22,9),
                 g Utf8,
+                h Double,
                 PRIMARY KEY (a)
             )
         )" << (columnStore ? " WITH (Store = Column);" : ";");
@@ -5919,6 +5920,12 @@ FROM (
                     rows.BeginOptional().Utf8(names.at(*c)).EndOptional();
                 } else {
                     rows.EmptyOptional(NYdb::EPrimitiveType::Utf8);
+                }
+                rows.AddMember("h");
+                if (c) {
+                    rows.BeginOptional().Double(*c / 8.0).EndOptional();
+                } else {
+                    rows.EmptyOptional(NYdb::EPrimitiveType::Double);
                 }
                 rows.EndStruct();
             }
@@ -6414,6 +6421,95 @@ FROM (
 
                 SELECT a, e,
                     Sum(e) OVER (ORDER BY a RANGE BETWEEN 2 PRECEDING AND 2 FOLLOWING) AS nearby_sum
+                FROM `/Root/t1`
+                ORDER BY a;
+            )"},
+            {"ranking over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d,
+                    Rank() OVER w AS rank_in_group,
+                    RowNumber() OVER w AS row_number_in_group
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d), a
+                )
+                ORDER BY a;
+            )"},
+            {"range frame over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d, e,
+                    Sum(e) OVER w AS range_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d)
+                )
+                ORDER BY a;
+            )"},
+            {"rows frame over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d, e,
+                    Sum(e) OVER w AS centred_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d), a
+                    ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range offsets over an order expression", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c, d, e,
+                    Sum(e) OVER w AS nearby_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY Abs(c - d)
+                    RANGE BETWEEN 50 PRECEDING AND CURRENT ROW
+                )
+                ORDER BY a;
+            )"},
+            {"range offsets over a double order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, h, e,
+                    Sum(e) OVER w AS nearby_sum,
+                    Count(e) OVER w AS nearby_count
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY h
+                    RANGE BETWEEN 1 PRECEDING AND 1 FOLLOWING
+                )
+                ORDER BY a;
+            )"},
+            {"range offsets ending before a double order key", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, h, e,
+                    Sum(e) OVER w AS earlier_sum
+                FROM `/Root/t1`
+                WINDOW w AS (
+                    PARTITION BY b
+                    ORDER BY h
+                    RANGE BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+                )
+                ORDER BY a;
+            )"},
+            {"count star over different frames", R"(
+                PRAGMA YqlSelect = "force";
+
+                SELECT a, b, c,
+                    Count(*) OVER (PARTITION BY b) AS partition_rows,
+                    Count(*) OVER (PARTITION BY b ORDER BY c) AS rows_so_far,
+                    Count(*) OVER (PARTITION BY b ORDER BY c, a ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) AS nearby_rows,
+                    Count(*) OVER (PARTITION BY b ORDER BY c RANGE BETWEEN 10 PRECEDING AND CURRENT ROW) AS recent_rows
                 FROM `/Root/t1`
                 ORDER BY a;
             )"},

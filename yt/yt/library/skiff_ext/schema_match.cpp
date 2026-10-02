@@ -272,35 +272,41 @@ std::shared_ptr<TSkiffSchema> ParseSchema(
     } else if (schemaNodeType == ENodeType::Map) {
         auto schemaMapNode = schemaNode->AsMap();
         auto schemaRepresentation = ConvertTo<TSkiffSchemaRepresentationPtr>(schemaMapNode);
-        if (IsSimpleType(schemaRepresentation->WireType)) {
-            return CreateSimpleTypeSchema(schemaRepresentation->WireType)->SetName(schemaRepresentation->Name);
-        } else {
-            if (!schemaRepresentation->Children) {
+        switch (GetSchemaKind(schemaRepresentation->WireType)) {
+            case ESchemaKind::Simple:
+                return CreateSimpleTypeSchema(schemaRepresentation->WireType)->SetName(schemaRepresentation->Name);
+            case ESchemaKind::StringFixed:
                 THROW_ERROR_EXCEPTION(
-                    "Complex type %Qlv lacks children",
+                    "Wire type %Qlv is not yet supported in Skiff schema",
                     schemaRepresentation->WireType);
-            }
-            std::vector<std::shared_ptr<TSkiffSchema>> childSchemaList;
-            for (const auto& childNode : *schemaRepresentation->Children) {
-                auto childSchema = ParseSchema(childNode, registry, parsedRegistry, parseInProgressNames);
-                childSchemaList.push_back(childSchema);
-            }
-
-            switch (schemaRepresentation->WireType) {
-                case EWireType::Variant8:
-                    return CreateVariant8Schema(childSchemaList)->SetName(schemaRepresentation->Name);
-                case EWireType::Variant16:
-                    return CreateVariant16Schema(childSchemaList)->SetName(schemaRepresentation->Name);
-                case EWireType::RepeatedVariant8:
-                    return CreateRepeatedVariant8Schema(childSchemaList)->SetName(schemaRepresentation->Name);
-                case EWireType::RepeatedVariant16:
-                    return CreateRepeatedVariant16Schema(childSchemaList)->SetName(schemaRepresentation->Name);
-                case EWireType::Tuple:
-                    return CreateTupleSchema(childSchemaList)->SetName(schemaRepresentation->Name);
-                default:
+            case ESchemaKind::Complex: {
+                if (!schemaRepresentation->Children) {
                     THROW_ERROR_EXCEPTION(
-                        "Wire type %Qlv is not yet supported in Skiff schema",
+                        "Complex type %Qlv lacks children",
                         schemaRepresentation->WireType);
+                }
+                std::vector<std::shared_ptr<TSkiffSchema>> childSchemaList;
+                for (const auto& childNode : *schemaRepresentation->Children) {
+                    auto childSchema = ParseSchema(childNode, registry, parsedRegistry, parseInProgressNames);
+                    childSchemaList.push_back(childSchema);
+                }
+
+                switch (schemaRepresentation->WireType) {
+                    case EWireType::Variant8:
+                        return CreateVariant8Schema(childSchemaList)->SetName(schemaRepresentation->Name);
+                    case EWireType::Variant16:
+                        return CreateVariant16Schema(childSchemaList)->SetName(schemaRepresentation->Name);
+                    case EWireType::RepeatedVariant8:
+                        return CreateRepeatedVariant8Schema(childSchemaList)->SetName(schemaRepresentation->Name);
+                    case EWireType::RepeatedVariant16:
+                        return CreateRepeatedVariant16Schema(childSchemaList)->SetName(schemaRepresentation->Name);
+                    case EWireType::Tuple:
+                        return CreateTupleSchema(childSchemaList)->SetName(schemaRepresentation->Name);
+                    default:
+                        THROW_ERROR_EXCEPTION(
+                            "Wire type %Qlv is not yet supported in Skiff schema",
+                            schemaRepresentation->WireType);
+                }
             }
         }
     } else {
@@ -360,7 +366,7 @@ std::optional<EWireType> TFieldDescription::GetDeoptionalizeType(bool simplify) 
     const auto& [deoptionalized, required] = DeoptionalizeSchema(Schema_);
     auto wireType = deoptionalized->GetWireType();
     if (wireType != EWireType::Nothing || required) {
-        if (!simplify || IsSimpleType(wireType)) {
+        if (!simplify || GetSchemaKind(wireType) == ESchemaKind::Simple) {
             return wireType;
         }
     }

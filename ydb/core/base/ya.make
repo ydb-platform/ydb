@@ -1,25 +1,25 @@
 LIBRARY()
 
 SRCS(
-    auth.h
-    auth.cpp
     actor_activity_names.cpp
-    appdata.h
     appdata.cpp
-    backtrace.h
+    appdata.h
+    auth.cpp
+    auth.h
     backtrace.cpp
-    board_lookup.cpp
-    board_publish.cpp
-    board_replica.cpp
-    bridge.h
-    bridge.cpp
-    blobstorage.h
+    backtrace.h
     blobstorage.cpp
+    blobstorage.h
     blobstorage_data_kind.h
     blobstorage_grouptype.cpp
     blobstorage_relevance.cpp
-    boot_type.h
+    board_lookup.cpp
+    board_publish.cpp
+    board_replica.cpp
     boot_type.cpp
+    boot_type.h
+    bridge.cpp
+    bridge.h
     channel_profiles.h
     counters.cpp
     counters.h
@@ -28,7 +28,6 @@ SRCS(
     defs.h
     domain.cpp
     domain.h
-    storage_pool_kinds.h
     event_filter.cpp
     event_filter.h
     events.h
@@ -75,10 +74,11 @@ SRCS(
     statestorage_proxy.cpp
     statestorage_replica.cpp
     statestorage_ringwalker.h
+    storage_pool_kinds.h
     storage_pools.cpp
     storage_pools.h
-    subdomain.h
     subdomain.cpp
+    subdomain.h
     superlemmer.h
     table_index.cpp
     tablet.cpp
@@ -89,27 +89,23 @@ SRCS(
     tablet_pipecache.h
     tablet_resolver.h
     tablet_status_checker.cpp
-    tabletid.h
     tablet_types.h
+    tabletid.h
     traceid.cpp
     traceid.h
     tracing.h
-    tx_processing.h
     tx_processing.cpp
+    tx_processing.h
     user_registry.h
     wilson_tracing_control.cpp
 )
 
 PEERDIR(
     contrib/libs/snowball
-    ydb/library/actors/core
-    ydb/library/actors/helpers
-    ydb/library/actors/interconnect
-    ydb/library/actors/protos
-    ydb/library/actors/wilson
-    ydb/library/aclib
+    library/cpp/deprecated/atomic
     library/cpp/deprecated/enum_codegen
     library/cpp/dot_product
+    library/cpp/json
     library/cpp/l1_distance
     library/cpp/l2_distance
     library/cpp/logger
@@ -128,7 +124,14 @@ PEERDIR(
     ydb/core/jaeger_tracing
     ydb/core/protos
     ydb/core/protos/out
+    ydb/core/scheme
+    ydb/library/accessor
     ydb/library/aclib
+    ydb/library/actors/core
+    ydb/library/actors/helpers
+    ydb/library/actors/interconnect
+    ydb/library/actors/protos
+    ydb/library/actors/wilson
     ydb/library/login
     ydb/library/pdisk_io
     ydb/library/pretty_types_print/protobuf
@@ -136,8 +139,6 @@ PEERDIR(
     ydb/library/ydb_issue
     ydb/public/api/protos/out
     yql/essentials/minikql
-    library/cpp/deprecated/atomic
-    library/cpp/json
 )
 
 PEERDIR(

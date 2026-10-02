@@ -311,7 +311,7 @@ struct TKqpTableWriterStatistics {
     ui64 WriteBytes = 0;
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
-    ui64 AffectedRows = 0;
+    std::optional<ui64> AffectedRows;
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;
     TVector<ui64> BreakerQuerySpanIds;
@@ -332,7 +332,9 @@ struct TKqpTableWriterStatistics {
             WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
             EraseRows += tableAccessStats.GetEraseRow().GetRows();
             EraseBytes += tableAccessStats.GetEraseRow().GetBytes();
-            AffectedRows += tableAccessStats.GetAffectedRows();
+            if (tableAccessStats.HasAffectedRows()) {
+                AffectedRows = AffectedRows.value_or(0) + tableAccessStats.GetAffectedRows();
+            }
         }
 
         for (const auto& perShardStats : txStats.GetPerShardStats()) {
@@ -410,7 +412,9 @@ struct TKqpTableWriterStatistics {
         tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
         tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
         tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
-        tableStats->SetAffectedRows(tableStats->GetAffectedRows() + AffectedRows);
+        if (AffectedRows) {
+            tableStats->SetAffectedRows(tableStats->GetAffectedRows() + *AffectedRows);
+        }
 
         ReadRows = 0;
         ReadBytes = 0;
@@ -418,7 +422,7 @@ struct TKqpTableWriterStatistics {
         WriteBytes = 0;
         EraseRows = 0;
         EraseBytes = 0;
-        AffectedRows = 0;
+        AffectedRows.reset();
 
         tableStats->SetAffectedPartitions(
             tableStats->GetAffectedPartitions() + AffectedPartitions.size());
@@ -4186,48 +4190,24 @@ public:
             const bool isRelevance = (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance);
 
             // Ensure write actor exists for this index table
-            if (!writeInfo.Actors.contains(indexSettings.TableId.PathId)) {
-                if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
-                    return false;
-                }
-            } else {
-                if (!CheckSchemaVersion(
-                        writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
-                        indexSettings.TableId,
-                        indexSettings.TablePath)) {
-                    return false;
-                }
+            if (!EnsureWriteActor(settings, writeInfo, indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns)) {
+                return false;
             }
 
             // Fulltext relevance: ensure docs/dict/stats tables
             if (indexSettings.IndexType == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance) {
-                if (!writeInfo.Actors.contains(indexSettings.DocsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
-                            indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DocsTableId.PathId).WriteActor,
-                    indexSettings.DocsTableId, indexSettings.DocsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.DocsTableId,
+                        indexSettings.DocsTablePath, {indexSettings.DocsColumns.at(0)})) {
                     return false;
                 }
                 if (indexSettings.DictTableId.PathId != TPathId()) {
-                    if (!writeInfo.Actors.contains(indexSettings.DictTableId.PathId)) {
-                        if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
-                                indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
-                            return false;
-                        }
-                    } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.DictTableId.PathId).WriteActor,
-                        indexSettings.DictTableId, indexSettings.DictTablePath)) {
+                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.DictTableId,
+                            indexSettings.DictTablePath, {indexSettings.DictColumns.at(0)})) {
                         return false;
                     }
                 }
-                if (!writeInfo.Actors.contains(indexSettings.StatsTableId.PathId)) {
-                    if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
-                            indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
-                        return false;
-                    }
-                } else if (!CheckSchemaVersion(writeInfo.Actors.at(indexSettings.StatsTableId.PathId).WriteActor,
-                    indexSettings.StatsTableId, indexSettings.StatsTablePath)) {
+                if (!EnsureWriteActor(settings, writeInfo, indexSettings.StatsTableId,
+                        indexSettings.StatsTablePath, {indexSettings.StatsColumns.at(0)})) {
                     return false;
                 }
             }

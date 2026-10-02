@@ -92,7 +92,7 @@ void TUserTable::SwitchIndexState(const TPathId& indexPathId, TTableIndex::EStat
 
     it->second.State = state;
 
-    // This isn't really necessary now, because no one rely on index state
+    // CDC schema events read index state from the serialized table description.
     NKikimrSchemeOp::TTableDescription schema;
     GetSchema(schema);
 

@@ -22,6 +22,7 @@ SRCS(
     cancellation.cpp
     counting_events.cpp
     corrupted_reads.cpp
+    database_space.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp

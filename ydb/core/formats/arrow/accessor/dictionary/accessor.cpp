@@ -48,7 +48,7 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         return false;
     }));
     if (markCount == mask.size()) {
-        return std::make_shared<TDictionaryArray>(ArrayDictionary, positionsNew);
+        return std::make_shared<TDictionaryArray>(ArrayDictionary, positionsNew, NeedNullsCountCalculation);
     }
     // Build old dictionary index -> new (filtered) dictionary index.
     std::vector<ui32> oldToNew(ArrayDictionary->length(), 0);
@@ -101,7 +101,7 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
         return false;
     }));
     auto positionsRemapped = NArrow::FinishBuilder(std::move(positionsBuilder));
-    return std::make_shared<TDictionaryArray>(dictArray, positionsRemapped);
+    return std::make_shared<TDictionaryArray>(dictArray, positionsRemapped, NeedNullsCountCalculation);
 }
 
 NJson::TJsonValue TDictionaryArray::DoDebugJson() const {

@@ -691,9 +691,11 @@ HWY_INLINE size_t PartitionRightmost(D d, Traits st, T* const keys,
   }
 
   const size_t numWrittenR = bufR - max_buf;
-  // MSan seems not to understand CompressStore.
+// Prior to 2022-10, Clang MSAN did not understand AVX-512 CompressStore.
+#if HWY_COMPILER_CLANG && HWY_COMPILER_CLANG < 1600
   detail::MaybeUnpoison(buf, bufL);
   detail::MaybeUnpoison(buf + max_buf, numWrittenR);
+#endif
 
   // Overwrite already-read end of keys with bufR.
   writeR = num - numWrittenR;
@@ -1197,19 +1199,6 @@ HWY_INLINE V MedianOf3(Traits st, V v0, V v1, V v2) {
   v1 = st.Last(d, v0, v1);
   v1 = st.First(d, v1, v2);
   return v1;
-}
-
-// Based on https://github.com/numpy/numpy/issues/16313#issuecomment-641897028
-HWY_INLINE uint64_t RandomBits(uint64_t* HWY_RESTRICT state) {
-  const uint64_t a = state[0];
-  const uint64_t b = state[1];
-  const uint64_t w = state[2] + 1;
-  const uint64_t next = a ^ w;
-  state[0] = (b + (b << 3)) ^ (b >> 11);
-  const uint64_t rot = (b << 24) | (b >> 40);
-  state[1] = rot + next;
-  state[2] = w;
-  return next;
 }
 
 // Returns slightly biased random index of a chunk in [0, num_chunks).
@@ -2189,50 +2178,30 @@ using MakeTraits =
 // SortAscending or SortDescending.
 template <typename Key, class Order>
 void VQSortStatic(Key* HWY_RESTRICT keys, const size_t num_keys, Order) {
-#if VQSORT_ENABLED
   const detail::MakeTraits<Key, Order> st;
   using LaneType = typename decltype(st)::LaneType;
   const SortTag<LaneType> d;
   Sort(d, st, reinterpret_cast<LaneType*>(keys), num_keys * st.LanesPerKey());
-#else
-  (void)keys;
-  (void)num_keys;
-  HWY_ASSERT(0);
-#endif  // VQSORT_ENABLED
 }
 
 template <typename Key, class Order>
 void VQPartialSortStatic(Key* HWY_RESTRICT keys, const size_t num_keys,
                          const size_t k_keys, Order) {
-#if VQSORT_ENABLED
   const detail::MakeTraits<Key, Order> st;
   using LaneType = typename decltype(st)::LaneType;
   const SortTag<LaneType> d;
   PartialSort(d, st, reinterpret_cast<LaneType*>(keys),
               num_keys * st.LanesPerKey(), k_keys * st.LanesPerKey());
-#else
-  (void)keys;
-  (void)num_keys;
-  (void)k_keys;
-  HWY_ASSERT(0);
-#endif  // VQSORT_ENABLED
 }
 
 template <typename Key, class Order>
 void VQSelectStatic(Key* HWY_RESTRICT keys, const size_t num_keys,
                     const size_t k_keys, Order) {
-#if VQSORT_ENABLED
   const detail::MakeTraits<Key, Order> st;
   using LaneType = typename decltype(st)::LaneType;
   const SortTag<LaneType> d;
   Select(d, st, reinterpret_cast<LaneType*>(keys), num_keys * st.LanesPerKey(),
          k_keys * st.LanesPerKey());
-#else
-  (void)keys;
-  (void)num_keys;
-  (void)k_keys;
-  HWY_ASSERT(0);
-#endif  // VQSORT_ENABLED
 }
 
 // NOLINTNEXTLINE(google-readability-namespace-comments)

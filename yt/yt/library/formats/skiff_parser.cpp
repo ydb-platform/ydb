@@ -8,7 +8,6 @@
 #include <yt/yt/library/decimal/decimal.h>
 
 #include <yt/yt/library/skiff_ext/schema_match.h>
-#include <yt/yt/library/skiff_ext/parser.h>
 
 #include <yt/yt/library/tz_types/tz_types.h>
 
@@ -18,6 +17,8 @@
 #include <yt/yt/client/table_client/name_table.h>
 #include <yt/yt/client/table_client/table_consumer.h>
 #include <yt/yt/client/table_client/value_consumer.h>
+
+#include <yt/yt/core/misc/coro_pipe.h>
 
 #include <yt/yt/core/yson/parser.h>
 #include <yt/yt/core/yson/token_writer.h>

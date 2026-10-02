@@ -37,7 +37,7 @@ private:
         SetAuthToken(ev, *Request_);
         SetDatabase(ev.get(), *Request_);
         ev->Record.MutableDescribePath()->SetPath(
-            Request_->NormalizePath(GetProtoRequest()->path()));
+            Request_->GetDatabaseRelativePath(GetProtoRequest()->path()));
 
         Send(MakeTxProxyID(), ev.release());
         Become(&TDescribeExternalTableRPC::StateDescribeScheme);

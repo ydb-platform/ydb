@@ -2268,6 +2268,7 @@ class TestViewer(object):
 
     @classmethod
     def test_storage_stats_tablet_type_response(cls):
+        # Use path=table1 to check grouping by tablet type for a single table.
         for database in (cls.dedicated_db, cls.serverless_db):
             params = {'database': database, 'path': 'table1', 'everything': 'true', 'debug': 'true'}
 

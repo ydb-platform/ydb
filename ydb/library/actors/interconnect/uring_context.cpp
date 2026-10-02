@@ -220,6 +220,32 @@ namespace NActors {
             // capability check) and require the provided-buffer-ring API, which is the hard
             // dependency of the multishot recv data path. If SQPOLL is enabled but the kernel
             // refuses the SQPOLL ring at Init time, the session falls back to epoll.
+<<<<<<< HEAD
+=======
+            struct io_uring ring;
+            struct io_uring_params params = {};
+            int ret = io_uring_queue_init_params(8, &ring, &params);
+            if (ret != 0) {
+                return false;
+            }
+            int probeErr = 0;
+            struct io_uring_buf_ring* br = io_uring_setup_buf_ring(&ring, 1, /*bgid=*/0, 0, &probeErr);
+            const bool ok = (br != nullptr);
+            if (ok) {
+                io_uring_free_buf_ring(&ring, br, 1, /*bgid=*/0);
+            }
+            io_uring_queue_exit(&ring);
+            return ok;
+        }();
+        return supported;
+    }
+
+    bool TUringContext::IsAvailable() {
+        static const bool available = [] {
+            // Minimal capability: can we create a plain ring at all? The v2 data plane needs only this;
+            // it uses provided buffer rings when IsSupported() also holds, and falls back to ordinary
+            // per-recv buffers otherwise.
+>>>>>>> 4d6d61260a7 (Revert "Revert IC v1 with io_uring prototype (#48250)")
             struct io_uring ring;
             struct io_uring_params params = {};
             int ret = io_uring_queue_init_params(8, &ring, &params);

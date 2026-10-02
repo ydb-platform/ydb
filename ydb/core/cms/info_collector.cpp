@@ -297,15 +297,6 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
     } else {
         BaseConfigReceived = true;
 
-        // Pool identity remains available even when a DDisk or its node is down.
-        for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
-            if (!group.GetStoragePoolName().empty()) {
-                for (const auto& slot : group.GetVSlotId()) {
-                    Info->SetDDiskPoolName(slot.GetNodeId(), slot.GetPDiskId(), slot.GetVSlotId(), group.GetStoragePoolName());
-                }
-            }
-        }
-
         for (const auto& pdisk : record.GetStatus(0).GetBaseConfig().GetPDisk()) {
             Info->AddPDisk(pdisk);
         }
@@ -315,6 +306,12 @@ void TInfoCollector::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr& e
         }
 
         for (const auto& group : record.GetStatus(0).GetBaseConfig().GetGroup()) {
+            // Pool identity remains available even when a DDisk or its node is down.
+            if (!group.GetStoragePoolName().empty()) {
+                for (const auto& slot : group.GetVSlotId()) {
+                    Info->SetDDiskPoolName(slot.GetNodeId(), slot.GetPDiskId(), slot.GetVSlotId(), group.GetStoragePoolName());
+                }
+            }
             if (!group.GetIsProxyGroup()) {
                 Info->AddBSGroup(group);
             }

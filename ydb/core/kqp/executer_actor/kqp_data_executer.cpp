@@ -735,27 +735,6 @@ private:
         if (!graphRestored) {
             const bool mayRunTasksLocally = !HasExternalSources && !HasOlapTable && !HasDatashardSourceScan;
             sourceScanPartitionsCount = TasksGraph.BuildAllTasks({}, ResourcesSnapshot, Stats.get(), BuildPlacementParams(mayRunTasksLocally));
-
-            // TODO test only
-
-            // if (hasPqSources && Request.SaveQueryPhysicalGraph && AppData()->FeatureFlags.GetEnablePqSourceRescaling()) {
-            //     const auto preparedQuery = Request.Transactions[0].Body->GetPreparedQuery();
-            //     YQL_ENSURE(preparedQuery);
-
-            //     NKikimrKqp::TQueryPhysicalGraph physicalGraph;
-            //     *physicalGraph.MutablePreparedQuery() = *preparedQuery;
-            //     TasksGraph.PersistTasksGraphInfo(physicalGraph);
-
-            //     const auto taskCount = physicalGraph.TasksSize();
-            //     PatchQueryPhysicalGraphForRescaling(physicalGraph, ResourcesSnapshot);
-            //     RescalingChangedTaskCount = physicalGraph.TasksSize() != taskCount;
-
-            //     Request.QueryPhysicalGraph = std::make_shared<NKikimrKqp::TQueryPhysicalGraph>(std::move(physicalGraph));
-            //     if (RescalingChangedTaskCount) {
-            //         TasksGraph.ClearRuntimeTasks();
-            //         TasksGraph.RestoreTasksGraphInfo(ResourcesSnapshot, *Request.QueryPhysicalGraph);
-            //     }
-            // }
         }
 
         TIssue validateIssue;

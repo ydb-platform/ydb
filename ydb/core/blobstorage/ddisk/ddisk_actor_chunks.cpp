@@ -237,7 +237,7 @@ namespace NKikimr::NDDisk {
                         DrainIntegrityManager(/*kickReserve=*/ false);
                     } else {
                         TChunkRef& chunkRef = ChunkRefs[tabletId][vChunkIndex];
-                        chunkRef.ChunkIdx = chunkIdx;
+                        SetDataChunkMapping(tabletId, &chunkRef, chunkIdx);
                         IssueDataChunkIncrement(tabletId, vChunkIndex);
                         if (!chunkRef.PendingEventsForChunk.empty()) {
                             Send(SelfId(), new TEvPrivate::TEvHandleEventForChunk(tabletId, vChunkIndex));
@@ -424,7 +424,7 @@ namespace NKikimr::NDDisk {
             Y_ABORT_UNLESS(it != DataChunkAllocationsInFlight.end());
             TChunkRef& chunkRef = ChunkRefs[key.TabletId][key.VChunkIndex];
             if (!chunkRef.ChunkIdx) {
-                chunkRef.ChunkIdx = it->second.ChunkIdx;
+                SetDataChunkMapping(key.TabletId, &chunkRef, it->second.ChunkIdx);
             }
             Y_ABORT_UNLESS(chunkRef.ChunkIdx == it->second.ChunkIdx);
             if (!chunkRef.PendingEventsForChunk.empty()) {
@@ -926,6 +926,7 @@ namespace NKikimr::NDDisk {
         if (Config.EnableChecksums) {
             IntegrityManager->PrepareTabletChunksDeletion(tabletId);
         }
+        CountTabletChunks(tabletId, -static_cast<i64>(chunksToDelete.size()));
         ChunkRefs.erase(tabletIt);
 
         *Counters.Chunks.ChunksOwned -= chunksToDelete.size();

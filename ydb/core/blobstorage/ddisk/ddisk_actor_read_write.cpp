@@ -64,6 +64,7 @@ namespace NKikimr::NDDisk {
 
         if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
             Counters.Interface.Write.Request(selector.Size);
+            CountTabletIo(creds.TabletId, ETabletOperation::Write, 1, selector.Size);
             Counters.Interface.Write.Reply(false, selector.Size);
             SendReply(*ev, std::make_unique<TEvWriteResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
@@ -83,6 +84,7 @@ namespace NKikimr::NDDisk {
 
         if (selector.OffsetInBytes % IntegrityUnitSize || selector.Size % IntegrityUnitSize) {
             Counters.Interface.Write.Request(selector.Size);
+            CountTabletIo(creds.TabletId, ETabletOperation::Write, 1, selector.Size);
             Counters.Interface.Write.Reply(false, selector.Size);
             SendReply(*ev, std::make_unique<TEvWriteResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
@@ -96,6 +98,7 @@ namespace NKikimr::NDDisk {
                     Counters.Checksums.WritesWithoutChecksums->Inc();
                 }
                 Counters.Interface.Write.Request(selector.Size);
+                CountTabletIo(creds.TabletId, ETabletOperation::Write, 1, selector.Size);
                 Counters.Interface.Write.Reply(false, selector.Size);
                 SendReply(*ev, std::make_unique<TEvWriteResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
@@ -110,6 +113,7 @@ namespace NKikimr::NDDisk {
                 if (const auto result = ValidatePayloadChecksums(record, payload)) {
                     const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;
                     Counters.Interface.Write.Request(selector.Size);
+                    CountTabletIo(creds.TabletId, ETabletOperation::Write, 1, selector.Size);
                     Counters.Interface.Write.Reply(false, selector.Size);
                     if (isCorrupted) {
                         Counters.Checksums.ChecksumMismatch->Inc();
@@ -153,6 +157,7 @@ namespace NKikimr::NDDisk {
         }
 
         Counters.Interface.Write.Request(selector.Size);
+        CountTabletIo(creds.TabletId, ETabletOperation::Write, 1, selector.Size);
         const auto requestStartTs = HPNow();
 
         auto span = NWilson::TSpan(TWilson::DDiskTopLevel, std::move(ev->TraceId), "DDisk.Write",
@@ -275,6 +280,7 @@ namespace NKikimr::NDDisk {
         if (selector.OffsetInBytes % IntegrityUnitSize != 0
                 || selector.Size % IntegrityUnitSize != 0) {
             Counters.Interface.Read.Request(selector.Size);
+            CountTabletIo(creds.TabletId, ETabletOperation::Read, 1, selector.Size);
             Counters.Interface.Read.Reply(false, selector.Size);
             SendReply(*ev, std::make_unique<TEvReadResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
@@ -284,6 +290,7 @@ namespace NKikimr::NDDisk {
 
         if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
             Counters.Interface.Read.Request(selector.Size);
+            CountTabletIo(creds.TabletId, ETabletOperation::Read, 1, selector.Size);
             Counters.Interface.Read.Reply(false, selector.Size);
             SendReply(*ev, std::make_unique<TEvReadResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
@@ -298,6 +305,7 @@ namespace NKikimr::NDDisk {
         }
 
         Counters.Interface.Read.Request(selector.Size);
+        CountTabletIo(creds.TabletId, ETabletOperation::Read, 1, selector.Size);
 
         // No chunk allocated: the whole range was never written.
         if (!chunkRef.ChunkIdx) {
@@ -806,6 +814,9 @@ namespace NKikimr::NDDisk {
 
     void TDDiskActor::HandleWakeup(TEvents::TEvWakeup::TPtr &ev) {
         switch (ev->Get()->Tag) {
+            case EWakeupTag::WakeupCollectTabletStats:
+                CollectTabletStats();
+                break;
             case EWakeupTag::WakeupUpdateFreeSpaceInfo: {
                 UpdateFreeSpaceInfo();
                 break;

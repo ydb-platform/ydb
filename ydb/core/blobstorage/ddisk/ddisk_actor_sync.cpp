@@ -23,6 +23,7 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         TSyncIt syncIt = SyncsInFlight.end();
         counters.Request(0);
+        CountTabletIo(creds.TabletId, ETabletOperation::Sync, 1, 0);
 
         if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
             counters.Reply(false);
@@ -188,6 +189,7 @@ namespace NKikimr::NDDisk {
                     Y_ABORT_UNLESS(requestId == sync.FirstRequestId + sync.Requests.size());
                 }
 
+                CountTabletIo(creds.TabletId, ETabletOperation::Sync, 0, selector.Size);
                 sync.Requests.emplace_back(TSyncReadRequest{
                     .Status=NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN,
                     .Selector=selector

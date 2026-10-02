@@ -348,6 +348,7 @@ namespace {
             StartRestorePersistentBuffer();
         } else {
             Become(&TThis::StateFuncDDisk);
+            TabletStatsActor = Register(CreateTabletStatsActor(SelfId()));
             RegisterMonPage();
             if (!Config.EnableChecksums) {
                 YDB_LOG_NOTICE("TDDiskActor booting with integrity checksums disabled",
@@ -612,6 +613,8 @@ namespace {
 
             IgnoreFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate)
 
+            hFunc(TEvTabletStatsAck, Handle)
+            hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
 
             hFunc(TEvents::TEvWakeup, HandleWakeup);
@@ -882,6 +885,8 @@ namespace {
             cFunc(TEvPrivate::EvCompleteStop, CompleteStop)
             cFunc(TEvPrivate::EvStopIoTimeout, HandleStopIoTimeout)
             hFunc(NPDisk::TEvChunkReserveResult, HandleStopping)
+            hFunc(TEvTabletStatsAck, Handle)
+            hFunc(TEvGetTabletStats, Handle)
             hFunc(NMon::TEvHttpInfo, Handle)
             hFunc(TEvGetPersistentBufferInfo, Handle)
             default:
@@ -960,6 +965,9 @@ namespace {
             }
         } else {
             Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvents::TEvGone());
+        }
+        if (TabletStatsActor) {
+            Send(TabletStatsActor, new TEvents::TEvPoison());
         }
         TActorBootstrapped::PassAway();
     }

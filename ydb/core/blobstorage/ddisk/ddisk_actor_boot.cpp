@@ -126,7 +126,7 @@ namespace NKikimr::NDDisk {
             for (const auto& tabletRecord : snapshot.GetTabletRecords()) {
                 auto& tabletChunkMap = ChunkRefs[tabletRecord.GetTabletId()];
                 for (const auto& chunkRef : tabletRecord.GetChunkRefs()) {
-                    tabletChunkMap[chunkRef.GetVChunkIndex()].ChunkIdx = chunkRef.GetChunkIdx();
+                    SetDataChunkMapping(tabletRecord.GetTabletId(), &tabletChunkMap[chunkRef.GetVChunkIndex()], chunkRef.GetChunkIdx());
                     ++*Counters.Chunks.ChunksOwned;
                     if (chunkRef.HasExtentRef()) {
                         const auto& ref = chunkRef.GetExtentRef();
@@ -195,8 +195,8 @@ namespace NKikimr::NDDisk {
                                     ++*Counters.Chunks.ChunksOwned;
                                 }
                                 const auto& data = increment.GetDataChunk();
-                                ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()].ChunkIdx =
-                                    data.GetChunkIdx();
+                                SetDataChunkMapping(data.GetTabletId(), &ChunkRefs[data.GetTabletId()][data.GetVChunkIndex()],
+                                    data.GetChunkIdx());
                                 ++*Counters.Chunks.ChunksOwned;
                                 if (data.HasExtentRef()) {
                                     const auto& ref = data.GetExtentRef();

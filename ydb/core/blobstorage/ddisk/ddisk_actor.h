@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include "ddisk.h"
+#include "tablet_stats_actor.h"
 #include "integrity_manager.h"
 #include "persistent_buffer.h"
 #include "persistent_buffer_header.h"
@@ -509,6 +510,7 @@ namespace NKikimr::NDDisk {
             WakeupCollectPbStats = 3,
             WakeupProcessPersistentBufferBatchWrite = 4,
             WakeupProcessDeallocatePersistentBufferChunk = 5,
+            WakeupCollectTabletStats = 8,
         };
 
         struct TPbOpSnapshot {
@@ -630,6 +632,17 @@ namespace NKikimr::NDDisk {
             std::queue<TPendingEvent> PendingSerializedWrites;
         };
 
+        TTabletStatsTracker TabletStats;
+        TActorId TabletStatsActor;
+        bool TabletStatsScheduled = false;
+        bool TabletStatsAwaitingAck = false;
+        void ScheduleTabletStats();
+        void CollectTabletStats();
+        void Handle(TEvTabletStatsAck::TPtr ev);
+        void Handle(TEvGetTabletStats::TPtr ev);
+        void CountTabletIo(ui64 tabletId, ETabletOperation operation, ui64 requests, ui64 bytes);
+        void CountTabletChunks(ui64 tabletId, i64 delta);
+        void SetDataChunkMapping(ui64 tabletId, TChunkRef* ref, TChunkIdx chunkIdx);
         THashMap<ui64, THashMap<ui64, TChunkRef>> ChunkRefs; // TabletId -> (VChunkIndex -> ChunkIdx)
         TIntrusivePtr<TPDiskParams> PDiskParams;
         std::vector<TChunkIdx> OwnedChunksOnBoot;

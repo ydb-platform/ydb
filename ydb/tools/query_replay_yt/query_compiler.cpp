@@ -227,7 +227,7 @@ private:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in StateInit");
             }
         } catch (const yexception& e) {
-            Reply(Ydb::StatusIds::INTERNAL_ERROR, e.what());
+            ReplyInternalError(e.what());
         }
     }
     STATEFN(StateCompile) {
@@ -239,7 +239,7 @@ private:
                     Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected event in CompileState");
             }
         } catch (const yexception& e) {
-            Reply(Ydb::StatusIds::INTERNAL_ERROR, e.what());
+            ReplyInternalError(e.what());
         }
     }
 
@@ -474,13 +474,28 @@ private:
         Reply(status, {issue});
     }
 
+    // Aborts of the replay tool itself (YQL_ENSURE / yexception caught in a STATEFN)
+    // must not be classified as product compile errors. Product failures arrive as a
+    // result status via TEvContinueProcess, never as an exception.
+    void ReplyInternalError(const TString& message) {
+        auto ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(false);
+        ev->Status = TQueryReplayEvents::QrInternalError;
+        ev->Message = message;
+        Cerr << "Query replay internal error: " << ev->Message << Endl;
+        WriteJsonData("-repro.txt", ReplayDetails);
+        Send(Owner, ev.release());
+        PassAway();
+    }
+
     void Reply(const Ydb::StatusIds::StatusCode& status, const TIssues& issues, const std::optional<TString>& queryPlan = std::nullopt) {
         std::unique_ptr<TQueryReplayEvents::TEvCompileResponse> ev = std::make_unique<TQueryReplayEvents::TEvCompileResponse>(true);
         Y_UNUSED(queryPlan);
         if (status != Ydb::StatusIds::SUCCESS) {
             ev->Success = false;
             if (!MetadataLoader) {
-                ev->Status = TQueryReplayEvents::UncategorizedFailure;
+                // Metadata loader is created at the very end of request handling; a failure
+                // before that point is an internal problem of the tool, not of the product.
+                ev->Status = TQueryReplayEvents::QrInternalError;
             } else if (MetadataLoader->HasMissingTableMetadata()) {
                 ev->Status = TQueryReplayEvents::MissingTableMetadata;
             } else if (status == Ydb::StatusIds::TIMEOUT) {

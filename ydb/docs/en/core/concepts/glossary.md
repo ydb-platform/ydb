@@ -76,7 +76,7 @@ Ordinary storage groups that are not [static](#static-group) are called **dynami
 
 #### BlobDepot {#blob-depot}
 
-**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups. The component name is always written as **BlobDepot**.
+**BlobDepot** is a system [tablet](#tablet) in [distributed storage](#distributed-storage) that serves [virtual storage groups](#virtual-storage-groups). It stores a virtual group's data in other storage groups and is also used when decommissioning physical groups. 
 
 ### Storage pool {#storage-pool}
 

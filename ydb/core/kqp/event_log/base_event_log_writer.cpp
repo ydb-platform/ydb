@@ -8,8 +8,9 @@
 namespace NKikimr::NKqp::NEventLog {
 
 TBaseEventLogWriter::TBaseEventLogWriter(
-    TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
-    : Columns(std::move(columns))
+    TVector<std::shared_ptr<TSchematizedLogColumn>> columns, const TDuration& flushInterval)
+    : Columns(std::move(columns)),
+    FlushInterval(flushInterval)
 {
     for (std::size_t i = 0; i < Columns.size(); ++i) {
         ErrorColumn = std::dynamic_pointer_cast<TDBLogMessageErrorColumn>(Columns[i]);
@@ -29,6 +30,11 @@ bool TBaseEventLogWriter::Write(const NActors::NStructuredLog::TLogMessage& mess
 
     if (CreationState.load() == TCreationState::Unknown) {
         CreationState.store(TCreationState::Creating);
+
+        if (FlushInterval) {
+            NActors::TActivationContext::Register(
+                new TBaseEventLogAutoFlushActor(shared_from_this(), FlushInterval));
+        }
         CreateOrUpdateStorage();
     }
 
@@ -110,6 +116,41 @@ std::shared_ptr<arrow::RecordBatch> TBaseEventLogWriter::CreateCurrentBatch() {
     auto batch = arrow::RecordBatch::Make(GetArrowSchema(), CurrentBatchSize, arrays);
     CurrentBatchSize = 0;
     return batch;
+}
+
+TBaseEventLogAutoFlushActor::TBaseEventLogAutoFlushActor(
+    std::shared_ptr<TBaseEventLogWriter> writer,
+    TDuration flushInterval)
+    : Writer(std::move(writer))
+    , FlushInterval(flushInterval)
+{
+}
+
+void TBaseEventLogAutoFlushActor::Bootstrap() {
+    Become(&TThis::StateWork);
+    ScheduleNextFlush();
+}
+
+void TBaseEventLogAutoFlushActor::ScheduleNextFlush() {
+    if (FlushInterval > TDuration::Zero()) {
+        Schedule(FlushInterval, new NActors::TEvents::TEvWakeup());
+    }
+}
+
+void TBaseEventLogAutoFlushActor::HandleWakeup(NActors::TEvents::TEvWakeup::TPtr&, const NActors::TActorContext&) {
+    if (Writer) {
+        if (Writer->GetCurrentBatchSize() > 0) {
+            Writer->Flush();
+        }
+
+        if (Writer->IsAlive()) {
+            ScheduleNextFlush();
+        } else {
+            PassAway();
+        }
+    } else {
+        PassAway();
+    }
 }
 
 } // namespace NKikimr::NKqp::NEventLog

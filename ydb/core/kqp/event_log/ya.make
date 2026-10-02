@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tx/columnshard
     ydb/core/wrappers
+    ydb/library/actors/core
 )
 
 

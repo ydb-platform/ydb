@@ -69,7 +69,7 @@ std::optional<Ydb::Table::DescribeTableResult> DescribeTable(
 TColumnShardLogWriter::TColumnShardLogWriter(
     TDatabaseSettings settings,
     TVector<std::shared_ptr<TSchematizedLogColumn>> columns)
-    : TBaseEventLogWriter(std::move(columns))
+    : TBaseEventLogWriter(std::move(columns), settings.FlushTimeout)
     , Settings(std::move(settings))
 {
 }

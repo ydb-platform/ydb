@@ -21,8 +21,9 @@ public:
         TString StoreName;
         TString TableName;
         TString OptionalStorageId = "__MEMORY";
-        ui32 StoreShardsCount = 4;
-        ui32 TableShardsCount = 3;
+        ui32 StoreShardsCount = 5;
+        ui32 TableShardsCount = 5;
+        TDuration FlushTimeout;
         std::optional<ui32> MaxBatchSize;
 
         NKikimrSchemeOp::TColumnTableSharding::THashSharding::EHashFunction ShardingMethod =

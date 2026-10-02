@@ -62,6 +62,21 @@ namespace NActors {
     private:
         friend class TActor<TInterconnectSessionTCPv2>;
 
+<<<<<<< HEAD
+=======
+        struct TEvPrivate {
+            enum {
+                EvTerminate = EventSpaceBegin(TEvents::ES_PRIVATE),
+            };
+
+            struct TEvTerminate : TEventLocal<TEvTerminate, EvTerminate> {
+                TDisconnectReason Reason;
+
+                TEvTerminate(TDisconnectReason reason) : Reason(reason) {}
+            };
+        };
+
+>>>>>>> 4649022ab86 (Revert "Add IC subscriber liveness checks (#47746)")
         STATEFN(StateFunc) {
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
@@ -81,6 +96,11 @@ namespace NActors {
         void HandlePoison();
         void IgnoreForwardDelayed() {}
 
+<<<<<<< HEAD
+=======
+        void EnqueueOutgoing(TAutoPtr<IEventHandle> ev);
+
+>>>>>>> 4649022ab86 (Revert "Add IC subscriber liveness checks (#47746)")
         void AddSubscriber(const TActorId& actorId, ui64 cookie);
         IEventBase* MakeNodeConnectedEvent() const;
 
@@ -93,8 +113,19 @@ namespace NActors {
         // thread-safe direct send/receive handle shared with users via TEvNodeConnected
         std::shared_ptr<TDirectSessionV2> DirectSession;
 
+<<<<<<< HEAD
         // subscribers awaiting connection state notifications (actor id -> cookie)
         std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
+=======
+        // io_uring data plane
+        ui64 EngineHandle = 0;
+
+        // subscribers awaiting connection state notifications (actor id -> cookie)
+        THashMap<TActorId, ui64> Subscribers;
+
+        std::shared_ptr<std::atomic<int64_t>> ClockSkew = std::make_shared<std::atomic<int64_t>>();
+        std::shared_ptr<std::atomic<uint64_t>> PingRTT = std::make_shared<std::atomic<uint64_t>>();
+>>>>>>> 4649022ab86 (Revert "Add IC subscriber liveness checks (#47746)")
     };
 
 }

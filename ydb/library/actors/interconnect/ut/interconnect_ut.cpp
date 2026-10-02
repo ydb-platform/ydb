@@ -1082,6 +1082,7 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
 }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
     if (useSessionV2 && !TUringContext::IsAvailable()) {
@@ -1158,6 +1159,8 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
 }
 
 >>>>>>> 8ac7e0aa637 (Revert "Fix Interconnect liveness test after ICv2 settings rename (#48001)")
+=======
+>>>>>>> 4649022ab86 (Revert "Add IC subscriber liveness checks (#47746)")
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {

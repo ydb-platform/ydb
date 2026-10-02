@@ -117,6 +117,7 @@ END DO;
 
 ## См. также
 
+* [Подключение внешней базы YDB с делегированием IAM: пошаговое руководство](../../recipes/iam-delegation-external-source.md)
 * [{#T}](secrets.md)
 * [CREATE SECRET](../../yql/reference/syntax/create-secret.md)
 * [ALTER SECRET](../../yql/reference/syntax/alter-secret.md)

@@ -2,6 +2,13 @@ items:
 - { name: Обзор,                        href: index.md }
 - { name: Лексическая структура,        href: lexer.md }
 - { name: Выражения,                    href: expressions.md }
+<<<<<<< HEAD
+=======
+- name: Ограничения
+  items:
+  - { name: Неподдерживаемые конструкции, href: not_yet_supported.md }
+  - { name: Коррелированные подзапросы, EXISTS и NOT EXISTS, href: correlated-subqueries.md }
+>>>>>>> 8b398c7e853 (docs: improve unsupported constructs navigation (#54419))
 - { name: ACTION,                       href: action.md }
 - { name: ALTER ASYNC REPLICATION,      href: alter-async-replication.md }
 - { name: ALTER DATABASE,                   include: { mode: link, path: alter_database/toc_p.yaml },                                                                                }

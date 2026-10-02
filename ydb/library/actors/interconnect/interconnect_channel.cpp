@@ -310,14 +310,7 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                Y_ABORT_UNLESS(event.EventActuallySerialized <= MaxSerializedEventSize);
-                const size_t limitRemain = MaxSerializedEventSize - event.EventActuallySerialized;
-                if (!limitRemain) {
-                    throw TExSerializedEventTooLarge(event.Descr.Type);
-                }
-
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>()
-                    .SubSpan(0, Min(PartLenRemain, limitRemain));
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
                 if (!out.size()) {
                     break;
                 }

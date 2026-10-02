@@ -92,7 +92,7 @@ void TMoveDataActualizer::DoAddPortion(const TPortionInfo& info, const TAddExter
     // An aborted task returns the portion here; leaving it in flight past any check below freezes the gate.
     InFlightPortionIds.erase(portionId);
     if (!InitialPortionIds.contains(portionId)) {
-        // Not ours: the session set is fixed at Refresh and a later portion cannot hold a target blob.
+        // Not ours: the session set is fixed at Seed and a later portion cannot hold a target blob.
         return;
     }
     if (PortionAddress.contains(portionId) || PendingPortionIds.contains(portionId)) {

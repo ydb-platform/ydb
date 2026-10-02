@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     yql_yt_file_coordinator_service.cpp
@@ -10,8 +10,6 @@ PEERDIR(
     yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/interface
     yt/yql/providers/yt/gateway/file
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

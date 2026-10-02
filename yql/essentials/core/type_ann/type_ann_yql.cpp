@@ -1243,6 +1243,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
         }
     }
 
+    if (input->Child(2)->IsCallable("Void")) {
+        ctx.Expr.AddError(TIssue(input->Pos(ctx.Expr), "Aggregate functions are not allowed in this context"));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     if (auto status = TryFinishYqlTypeSlot(input->ChildPtr(2), input, ctx)) {
         return *status;
     }

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     kqp_arrow_memory_pool.cpp
@@ -84,8 +84,6 @@ PEERDIR(
     yql/essentials/minikql/computation/llvm16
     yql/essentials/utils
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     inline_join_filters.cpp
@@ -89,7 +89,5 @@ PEERDIR(
     ydb/core/kqp/opt/cbo
     ydb/core/kqp/opt/cbo/solver
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     channel_storage_actor.cpp
@@ -22,8 +22,6 @@ PEERDIR(
     library/cpp/monlib/dynamic_counters
     library/cpp/monlib/service/pages
 )
-
-YQL_LAST_ABI_VERSION()
 
 END()
 

@@ -1,4 +1,4 @@
-LIBRARY()
+YQL_LIBRARY()
 
 SRCS(
     datashard.h
@@ -496,8 +496,6 @@ PEERDIR(
     ydb/core/io_formats/cell_maker
     ydb/core/io_formats/json
 )
-
-YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     CFLAGS(

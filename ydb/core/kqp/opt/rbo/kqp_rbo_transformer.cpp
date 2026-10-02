@@ -660,8 +660,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TGlobalInliningStage>("Inline definitions"));
 
     TVector<std::unique_ptr<IRule>> pushMapRules;
-    pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     pushMapRules.emplace_back(std::make_unique<TPushMapElementsThroughInputRule>());
+    pushMapRules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Push map elements", std::move(pushMapRules)));
 
     // Logical state I

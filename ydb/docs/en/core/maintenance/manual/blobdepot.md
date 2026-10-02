@@ -4,7 +4,7 @@ BlobDepot extends the functionality of the storage subsystem by adding virtual g
 
 A virtual group, along with a physical group, is a unit of fault tolerance of the storage subsystem in a cluster, but a virtual group stores its data in other groups (unlike a physical group, which stores data on VDisks).
 
-This method of data storage makes it possible to use the storage subsystem more flexibly {{ ydb-name }}, in particular:
+This method of data storage makes it possible to use the storage subsystem of {{ ydb-name }} more flexibly, in particular:
 
 * use "heavier" tablets in conditions where the size of one physical group is limited;
 * provide tablets with a wider write bandwidth by balancing writes across all groups on top of which BlobDepot is running;
@@ -31,7 +31,7 @@ Command line parameters:
 * --name unique name for the virtual group (or several virtual groups with similar parameters);
 * --hive-id=N number of the Hive tablet that will manage this BlobDepot; you must specify the Hive of the tenant within which BlobDepot is running;
 * --storage-pool-name=POOL\_NAME name of the Storage Pool within which BlobDepot must be created;
-* --storage-pool-id=BOX:POOL alternative `--storage-pool-name`in which you can specify an explicit numeric pool identifier;
+* --storage-pool-id=BOX:POOL alternative to `--storage-pool-name` in which you can specify an explicit numeric pool identifier;
 * --log-channel-sp=POOL\_NAME name of the pool in which channel 0 of the BlobDepot tablet will be placed;
 * --snapshot-channel-sp=POOL\_NAME name of the pool in which channel 0 of the BlobDepot tablet will be placed; if not specified, the value from --log-channel-sp is used;
 * --data-channel-sp=POOL\_NAME[\*COUNT] name of the pool in which data channels are placed; if the COUNT parameter is specified (after the "asterisk" sign), then COUNT data channels are created in the specified pool; it is recommended to create a large number of data channels for BlobDepot in virtual group mode (64..250) to use storage most efficiently;
@@ -178,7 +178,6 @@ The blocks table contains a list of locks of client tablets and consists of the 
 #### storage {#mon-storage}
 
 ![storage tab](_assets/blobdepot-storage.png "storage tab")
-
 
 The storage table shows statistics on stored data for each group in which BlobDepot stores data. This table contains the following columns:
 

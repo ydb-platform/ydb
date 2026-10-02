@@ -6,11 +6,11 @@ This can lead to a situation where there are not enough resources to create a ne
 
 To solve this problem, you can create a virtual group with channels on top of the remaining groups in the pool, copy data from the physical group into it, and then free up the resources occupied by the physical group. This task is handled by the group decommissioning process.
 
-Group decommissioning allows you to remove redundant VDisks from PDIsks while preserving the data of that group. This mode is implemented by creating a blob storage tablet that starts serving the decommissioned group instead of the DS proxy. In parallel, the blob storage tablet copies data from the physical decommissioned group. Once all data has been copied, the physical VDisks are deleted and resources are freed, with all data of the decommissioned group distributed across other groups.
+Group decommissioning allows you to remove redundant VDisks from PDIsks while preserving the data of that group. This mode is implemented by creating a BlobDepot that starts serving the decommissioned group instead of the DS proxy. In parallel, the BlobDepot copies data from the physical decommissioned group. Once all data has been copied, the physical VDisks are deleted and resources are freed, with all data of the decommissioned group distributed across other groups.
 
 The decommissioning process is completely transparent to tablets and the user and consists of several stages:
 
-1. Creating a blob storage tablet and distributing the group configuration to block writes to the disks of the physical group.
+1. Creating a BlobDepot tablet and distributing the group configuration to block writes to the disks of the physical group.
 2. Copying lock metadata from the physical group. After this point, the decommissioned group becomes available for operation. Until the locks are copied, working with the group is impossible. However, this process takes a very short time, so it is practically unnoticeable to the client. Requests arriving at this moment are queued and wait for the stage to complete.
 3. Copying barrier metadata from the physical group.
 4. Copying blob metadata from the physical group.
@@ -21,7 +21,7 @@ It is worth noting again that from the moment writes to the physical group are b
 
 ## How to run
 
-To start decommissioning, run the BS\_CONTROLLER command, specifying the list of groups to decommission, as well as the tablet ID of Hive that will manage the blob storage tablets of the decommissioned groups. You can also specify a list of pools where the blob storage tablet will store its data. If this list is not specified, BS\_CONTROLLER automatically selects the same pools where the decommissioned groups are located for data storage, and the number of data channels is set equal to the number of physical groups in these pools (but no more than 250).
+To start decommissioning, run the BS\_CONTROLLER command, specifying the list of groups to decommission, as well as the tablet ID of Hive that will manage the BlobDepots of the decommissioned groups. You can also specify a list of pools where the BlobDepot will store its data. If this list is not specified, BS\_CONTROLLER automatically selects the same pools where the decommissioned groups are located for data storage, and the number of data channels is set equal to the number of physical groups in these pools (but no more than 250).
 
 ```bash
 dstool -e ... --direct group decommit --group-ids 2181038080 --database=/Root/db1 --wait
@@ -32,19 +32,19 @@ Command line parameters:
 * --wait wait for decommissioning to start; if a startup error occurs, the error is displayed on the screen and decommissioning is automatically canceled (only when this option is specified);
 * --group-ids GROUP\_ID GROUP\_ID list of groups for which decommissioning can be performed;
 * --database=DB specify the tenant in which decommissioning should be performed (or the domain, if decommissioning is performed for groups within the domain);
-* --log-channel-sp=POOL\_NAME name of the pool where channel 0 of the blob storage tablet will be placed;
-* --snapshot-channel-sp=POOL\_NAME name of the pool where channel 1 of the blob storage tablet will be placed; if not specified, the value from --log-channel-sp is used;
+* --log-channel-sp=POOL\_NAME name of the pool where channel 0 of the BlobDepot tablet will be placed;
+* --snapshot-channel-sp=POOL\_NAME name of the pool where channel 1 of the BlobDepot tablet will be placed; if not specified, the value from --log-channel-sp is used;
 * --data-channel-sp=POOL\_NAME[\*COUNT] name of the pool where data channels are placed; if the COUNT parameter is specified (after the "asterisk" sign), COUNT data channels are created in the specified pool.
 
-If neither --log-channel-sp, nor --snapshot-channel-sp, nor --data-channel-sp are specified, the storage pool to which the decommissioned group belongs is automatically found, and channel zero and channel one of the blob storage tablet are created in it, as well as N data channels, where N is the number of remaining physical groups in that pool.
+If neither --log-channel-sp, nor --snapshot-channel-sp, nor --data-channel-sp are specified, the storage pool to which the decommissioned group belongs is automatically found, and channel zero and channel one of the BlobDepot are created in it, as well as N data channels, where N is the number of remaining physical groups in that pool.
 
 ## How to verify that everything has started {#decommit-check-running}
 
 You can view the decommissioning result similarly to creating virtual groups. For decommissioned groups, an additional field DecommitStatus appears, which can take one of the following values:
 
 * NONE — decommissioning is not performed for the specified group;
-* PENDING — group decommissioning is expected but not yet running (a blob storage tablet is being created);
-* IN\_PROGRESS — group decommissioning is in progress (all writes already go to the blob storage tablet, reads go to both the blob storage tablet and the old group);
+* PENDING — group decommissioning is expected but not yet running (a BlobDepot is being created);
+* IN\_PROGRESS — group decommissioning is in progress (all writes already go to the BlobDepot, reads go to both the BlobDepot and the old group);
 * DONE — decommissioning is fully complete.
 
 ```bash

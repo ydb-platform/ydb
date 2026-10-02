@@ -17,8 +17,6 @@ items:
   name: Disk load balancing
 - href: disk_end_space.md
   name: Freeing up space on physical devices
-- href: replacing_nodes.md
-  name: Replacing a node's FQDN
 - href: blobdepot.md
   name: BlobDepot
 - href: blobdepot_decommit.md

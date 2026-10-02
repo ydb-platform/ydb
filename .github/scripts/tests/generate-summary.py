@@ -453,6 +453,9 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
     
     if workflow_run_id:
         workflow_url = f"{github_server_url}/{github_repository}/actions/runs/{workflow_run_id}"
+
+    dashboard_rel = "tests_metrics/dashboard.html"
+    dashboard_url = dashboard_rel if os.path.isfile(os.path.join(os.path.dirname(fn), dashboard_rel)) else None
     
     # Load owner to area mapping
     owner_area_mapping = load_owner_area_mapping()
@@ -528,6 +531,7 @@ def render_testlist_html(rows, fn, build_preset, branch, pr_number=None, workflo
         pr_url=pr_url,
         workflow_run_id=workflow_run_id,
         workflow_url=workflow_url,
+        dashboard_url=dashboard_url,
         owner_area_mapping=owner_area_mapping,
         commit_sha=github_sha
     )

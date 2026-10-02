@@ -24,6 +24,7 @@ class RunnerFootprint:
     build_preset: Optional[str] = None
     footprint_key: Optional[str] = None
     source: str = "config"
+    disk_gb: Optional[float] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -37,6 +38,7 @@ class RunnerFootprint:
             "build_preset": self.build_preset,
             "footprint_key": self.footprint_key,
             "source": self.source,
+            "disk_gb": None if self.disk_gb is None else round(self.disk_gb, 1),
         }
 
 
@@ -140,6 +142,11 @@ def resolve_runner_footprint(
 
     vcpu = int(fp_entry.get("vcpu") or 1)
     ram_gb = float(fp_entry.get("ram_gb") or 1.0)
+    raw_disk = fp_entry.get("nrd_ssd_gb")
+    try:
+        disk_gb = float(raw_disk) if raw_disk is not None else None
+    except (TypeError, ValueError):
+        disk_gb = None
     mem_budget_gb = ram_gb * float(dash["mem_budget_fraction"])
     ya_make_mem_limit_gb = ram_gb * float(dash["ya_make_mem_fraction"])
 
@@ -155,6 +162,7 @@ def resolve_runner_footprint(
         build_preset=(build_preset or None),
         footprint_key=fp_key,
         source=source,
+        disk_gb=disk_gb,
     )
 
 
@@ -171,6 +179,7 @@ def enrich_resources_overlay(
     out["runner_limits"] = {
         "cpu_cores_max": footprint.vcpu,
         "ram_gb_max": footprint.ram_gb,
+        "disk_gb": None if footprint.disk_gb is None else round(footprint.disk_gb, 1),
         "mem_budget_gb": round(footprint.mem_budget_gb, 1),
         "ya_make_mem_limit_gb": round(footprint.ya_make_mem_limit_gb, 1),
     }

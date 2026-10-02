@@ -147,10 +147,42 @@ def build_html_dashboard(
       font-weight: 600;
       margin-bottom: 8px;
     }}
-    .headline-stats-grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 8px;
+    .headline-run {{
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 10px;
+    }}
+    .headline-block {{
+      margin-top: 10px;
+    }}
+    .headline-block h4 {{
+      margin: 0 0 4px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+    }}
+    .headline-table {{
+      width: 100%;
+      max-width: 640px;
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }}
+    .headline-table th, .headline-table td {{
+      border: 1px solid #e2e8f0;
+      padding: 4px 10px;
+      text-align: right;
+      white-space: nowrap;
+    }}
+    .headline-table th:first-child, .headline-table td:first-child {{
+      text-align: left;
+      font-weight: 600;
+    }}
+    .headline-table th {{
+      background: #fff;
+      color: #64748b;
+      font-weight: 600;
     }}
     .headline-card {{
       border: 1px solid #e2e8f0;
@@ -216,7 +248,7 @@ def build_html_dashboard(
     <div id="overlayStatus" style="margin-top:4px;font-size:12px;"></div>
   </div>
   <div id="headlineStats" class="headline-stats" style="display:none;">
-    <div class="headline-stats-title">Resource summary — tests from the report model, host from /proc samples</div>
+    <div class="headline-stats-title">Resource summary</div>
     <div id="headlineStatsGrid" class="headline-stats-grid"></div>
   </div>
   <details style="margin: 8px 0 12px 0;">
@@ -445,6 +477,12 @@ def build_html_dashboard(
     const data = {payload_js};
     const UTC_OFFSET_SEC = Number(data.utc_offset_sec || 0);
     const _fmtCache = {{}};
+    function formatHeadlineNumber(metric, value) {{
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '—';
+      if (metric === 'cpu' || metric === 'ram' || metric === 'disk') return n.toFixed(1);
+      return String(Math.round(n));
+    }}
     function formatHeadlineValue(metric, value) {{
       const n = Number(value);
       if (!Number.isFinite(n)) return '—';
@@ -485,21 +523,6 @@ def build_html_dashboard(
       const skippedTotal = Math.round(Number(issues.skipped || 0));
       const failedTotal = timeoutTotal + regularTotal;
       const failedMuted = timeoutMuted + regularMuted;
-      const totalCard =
-        '<div class="headline-card" title="Total suites, chunks and tests in this run (from report).">' +
-          '<div class="headline-card-name">Total</div>' +
-          '<div><b>suites:</b> ' + String(Math.round(Number(total.suites || 0))) + '</div>' +
-          '<div><b>chunks:</b> ' + String(Math.round(Number(total.chunks || 0))) + '</div>' +
-          '<div><b>tests:</b> ' + String(Math.round(Number(total.tests || 0))) + '</div>' +
-        '</div>';
-      const issuesCard =
-        '<div class="headline-card" title="Test-level failures: timeout = exceeded SIZE limit; regular = other errors; muted = known failures.">' +
-          '<div class="headline-card-name">Test issues</div>' +
-          '<div><b>failed:</b> ' + String(failedTotal) + ' (muted ' + String(failedMuted) + ')</div>' +
-          '<div><b>timeout:</b> ' + String(timeoutTotal) + ' (muted ' + String(timeoutMuted) + ')</div>' +
-          '<div><b>regular:</b> ' + String(regularTotal) + ' (muted ' + String(regularMuted) + ')</div>' +
-          '<div><b>skipped:</b> ' + String(skippedTotal) + '</div>' +
-        '</div>';
       const cTimeoutTotal = Math.round(Number(chunkIssues.timeout || 0));
       const cTimeoutMuted = Math.round(Number(chunkIssues.timeout_muted || 0));
       const cRegularBase = Math.round(Number(chunkIssues.regular || 0));
@@ -510,74 +533,65 @@ def build_html_dashboard(
       const cRegularMuted = cRegularMutedBase + cMutedOther;
       const cFailedTotal = cTimeoutTotal + cRegularTotal;
       const cFailedMuted = cTimeoutMuted + cRegularMuted;
-      const suiteChunkIssuesCard =
-        '<div class="headline-card" title="Chunk-level failures: one timeout often means too many slow tests in one chunk (raise SPLIT_FACTOR).">' +
-          '<div class="headline-card-name">Chunk issues</div>' +
-          '<div><b>failed:</b> ' + String(cFailedTotal) + ' (muted ' + String(cFailedMuted) + ')</div>' +
-          '<div><b>timeout:</b> ' + String(cTimeoutTotal) + ' (muted ' + String(cTimeoutMuted) + ')</div>' +
-          '<div><b>regular:</b> ' + String(cRegularTotal) + ' (muted ' + String(cRegularMuted) + ')</div>' +
+      const durLabel = formatHeadlineValue('total_duration_sec', hs.total_duration_sec).split(' (')[0];
+      const runLine =
+        '<div class="headline-run">' +
+          '<b>' + String(Math.round(Number(total.suites || 0))) + '</b> suites · ' +
+          '<b>' + String(Math.round(Number(total.chunks || 0))) + '</b> chunks · ' +
+          '<b>' + String(Math.round(Number(total.tests || 0))) + '</b> tests · ' +
+          '<b>' + durLabel + '</b>' +
+          '<br>tests failed <b>' + String(failedTotal) + '</b> (muted ' + String(failedMuted) + ')' +
+          ', timeout <b>' + String(timeoutTotal) + '</b>' +
+          ', skipped <b>' + String(skippedTotal) + '</b>' +
+          '<br>chunks failed <b>' + String(cFailedTotal) + '</b> (muted ' + String(cFailedMuted) + ')' +
+          ', timeout <b>' + String(cTimeoutTotal) + '</b>' +
         '</div>';
-      const metrics = [
-        ['cpu', 'CPU (tests)', 'cpu'],
-        ['ram', 'RAM (tests)', 'ram'],
-        ['active_chunks', 'Active chunks', 'count'],
-        ['tests', 'Tests running in parallel', 'count'],
-      ];
-      function distLines(s, metric, keys) {{
-        return keys.map(([label, field]) => (
-          '<div><b>' + label + ':</b> ' + formatHeadlineValue(metric, s[field]) + '</div>'
-        )).join('');
+      function statCell(metric, stats, field) {{
+        const s = (stats && typeof stats === 'object') ? stats : {{}};
+        return '<td>' + formatHeadlineNumber(metric, s[field]) + '</td>';
       }}
-      const metricCards = metrics.map(([key, title, metric]) => {{
-        const s = (hs[key] && typeof hs[key] === 'object') ? hs[key] : {{}};
+      function statTable(rows) {{
+        const body = rows.map(([label, metric, stats]) => (
+          '<tr><td>' + label + '</td>' +
+            statCell(metric, stats, 'max') +
+            statCell(metric, stats, 'p95') +
+            statCell(metric, stats, 'median') +
+          '</tr>'
+        )).join('');
         return (
-          '<div class="headline-card" title="Stacked from report chunk cpu_sec/ram, not the host. max / p95 / median over the timeline.">' +
-            '<div class="headline-card-name">' + title + '</div>' +
-            distLines(s, metric, [['max', 'max'], ['p95', 'p95'], ['median', 'median']]) +
-          '</div>'
-        );
-      }}).join('');
-      const hostOrder = [['max', 'max'], ['p95', 'p95'], ['median', 'median']];
-      const cpuHost = (hs.cpu_host && typeof hs.cpu_host === 'object') ? hs.cpu_host : null;
-      const ramHost = (hs.ram_host && typeof hs.ram_host === 'object') ? hs.ram_host : null;
-      const diskRead = (hs.disk_read_host && typeof hs.disk_read_host === 'object') ? hs.disk_read_host : null;
-      const diskWrite = (hs.disk_write_host && typeof hs.disk_write_host === 'object') ? hs.disk_write_host : null;
-      const hostSampleNote = (s) => (s && s.samples ? ' (' + String(Math.round(Number(s.samples))) + ' samples)' : '');
-      let hostCards = '';
-      if (cpuHost) {{
-        hostCards += (
-          '<div class="headline-card" title="Host CPU from /proc samples during the test window' + hostSampleNote(cpuHost) + '.">' +
-            '<div class="headline-card-name">CPU (host)</div>' +
-            distLines(cpuHost, 'cpu_host', hostOrder) +
-          '</div>'
+          '<table class="headline-table"><thead><tr>' +
+            '<th></th><th>max</th><th>p95</th><th>median</th>' +
+          '</tr></thead><tbody>' + body + '</tbody></table>'
         );
       }}
-      if (ramHost) {{
-        hostCards += (
-          '<div class="headline-card" title="Host RAM used (MemTotal − MemAvailable) from /proc samples' + hostSampleNote(ramHost) + '.">' +
-            '<div class="headline-card-name">RAM (host)</div>' +
-            distLines(ramHost, 'ram_host', hostOrder) +
-          '</div>'
-        );
+      const testsTable = statTable([
+        ['CPU, cores', 'cpu', hs.cpu],
+        ['RAM, GB', 'ram', hs.ram],
+        ['Active chunks', 'count', hs.active_chunks],
+        ['Tests in parallel', 'count', hs.tests],
+      ]);
+      const cpuHost = hs.cpu_host;
+      const ramHost = hs.ram_host;
+      const diskRead = hs.disk_read_host;
+      const diskWrite = hs.disk_write_host;
+      let hostBlock = '';
+      if (cpuHost || ramHost || diskRead || diskWrite) {{
+        const samples = Math.round(Number((cpuHost || ramHost || diskRead || {{}}).samples || 0));
+        const sampleNote = samples ? ' · ' + String(samples) + ' samples' : '';
+        hostBlock =
+          '<div class="headline-block"><h4>Host · /proc' + sampleNote + '</h4>' +
+          statTable([
+            ['CPU, cores', 'cpu', cpuHost],
+            ['RAM, GB', 'ram', ramHost],
+            ['Disk read, MB/s', 'disk', diskRead],
+            ['Disk write, MB/s', 'disk', diskWrite],
+          ]) +
+          '</div>';
       }}
-      if (diskRead || diskWrite) {{
-        const diskLines = hostOrder.map(([label, field]) => (
-          '<div><b>' + label + ':</b> r ' + formatHeadlineValue('disk', diskRead ? diskRead[field] : null) +
-          ' · w ' + formatHeadlineValue('disk', diskWrite ? diskWrite[field] : null) + '</div>'
-        )).join('');
-        hostCards += (
-          '<div class="headline-card" title="Host disk throughput from /proc/diskstats, MB/s per sample' + hostSampleNote(diskRead || diskWrite) + '.">' +
-            '<div class="headline-card-name">Disk (host)</div>' +
-            diskLines +
-          '</div>'
-        );
-      }}
-      const durationCard =
-        '<div class="headline-card" title="Wall-clock span from first to last test event in report.">' +
-          '<div class="headline-card-name">Total duration (start → end)</div>' +
-          '<div><b>duration:</b> ' + formatHeadlineValue('total_duration_sec', hs.total_duration_sec) + '</div>' +
-        '</div>';
-      grid.innerHTML = totalCard + issuesCard + suiteChunkIssuesCard + metricCards + hostCards + durationCard;
+      grid.innerHTML =
+        runLine +
+        '<div class="headline-block"><h4>Tests · report</h4>' + testsTable + '</div>' +
+        hostBlock;
       wrap.style.display = 'block';
     }}
     renderHeadlineStats();

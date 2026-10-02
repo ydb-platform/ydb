@@ -1117,7 +1117,7 @@ public:
         if (IsStrictDatabaseOnlyRequest() &&
             (DatabaseStoragePools.empty() || !FieldsAvailable.test(+EGroupFields::PoolName))
         ) {
-            // Keep grouping and pagination pending until the database pre-filter can be applied.
+            // Defer all other filters, grouping and pagination until the database pre-filter can be applied.
             // ReplyAndPassAway denies the request if the scope is still unknown at the deadline.
             NeedFilter = true;
             return;
